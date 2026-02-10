@@ -4,11 +4,5 @@ dist
 out
 coverage
 .turbo
-
-.env
-.env.*
-!.env.example
-
-*.log
-.DS_Store
+pnpm-lock.yaml
 

@@ -1,0 +1,21 @@
+name: wishlist-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wishlist
+      POSTGRES_PASSWORD: wishlist
+      POSTGRES_DB: wishlist
+    ports:
+      - '5432:5432'
+    volumes:
+      - wishlist_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wishlist -d wishlist']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  wishlist_pg_data:

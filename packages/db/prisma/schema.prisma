@@ -7,105 +7,43 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum ItemPriority {
-  LOW
-  MEDIUM
-  HIGH
-}
-
-enum ItemStatus {
-  AVAILABLE
-  RESERVED
-  PURCHASED
-}
-
-enum ReservationEventType {
-  RESERVED
-  UNRESERVED
-  PURCHASED
-}
-
 model User {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  telegramId String?  @unique
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
+  id        String     @id @default(cuid())
+  email     String     @unique
+  createdAt DateTime   @default(now())
   wishlists Wishlist[]
 }
 
 model Wishlist {
-  id          String   @id @default(cuid())
-  slug        String   @unique @default(cuid())
-  ownerId     String
-  title       String
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String         @id @default(cuid())
+  name      String
 
-  owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  items Item[]
-  tags  Tag[]
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([ownerId])
+  items     WishlistItem[]
+
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([userId])
 }
 
-model Item {
-  id           String       @id @default(cuid())
-  wishlistId   String
-  title        String
-  url          String
-  priceText    String?
-  commentOwner String?
-  priority     ItemPriority @default(MEDIUM)
-  deadline     DateTime?
-  imageUrl     String?
-  status       ItemStatus   @default(AVAILABLE)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+model WishlistItem {
+  id         String    @id @default(cuid())
 
-  wishlist Wishlist           @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  itemTags ItemTag[]
-  events   ReservationEvent[]
-
-  @@index([wishlistId])
-}
-
-model Tag {
-  id         String   @id @default(cuid())
   wishlistId String
-  name       String
-  createdAt  DateTime @default(now())
+  wishlist   Wishlist  @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
 
-  wishlist Wishlist  @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  itemTags ItemTag[]
+  title      String
+  url        String?
+  note       String?
+  price      Int?
+  currency   String?
 
-  @@unique([wishlistId, name])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
   @@index([wishlistId])
 }
 
-model ItemTag {
-  itemId String
-  tagId  String
-
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@id([itemId, tagId])
-  @@index([tagId])
-}
-
-model ReservationEvent {
-  id        String               @id @default(cuid())
-  itemId    String
-  type      ReservationEventType
-  actorHash String
-  comment   String?
-  createdAt DateTime             @default(now())
-
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
-
-  @@index([itemId])
-  @@index([itemId, createdAt])
-}
