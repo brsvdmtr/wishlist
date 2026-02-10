@@ -1,6 +1,8 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
+let didLogDev = false;
+
 function getCanonicalHost() {
   const raw = process.env.NEXT_PUBLIC_SITE_URL;
   if (!raw) return null;
@@ -14,17 +16,22 @@ function getCanonicalHost() {
 }
 
 export function middleware(req: NextRequest) {
-  if (process.env.NODE_ENV !== 'production') return NextResponse.next();
+  if (process.env.NODE_ENV !== 'production') {
+    if (!didLogDev) {
+      didLogDev = true;
+      // eslint-disable-next-line no-console
+      console.log('[middleware] dev: pass-through');
+    }
+    return NextResponse.next();
+  }
 
-  const canonical = getCanonicalHost();
-  if (!canonical) return NextResponse.next();
+  const requestHost = req.headers.get('host') ?? req.nextUrl.host; // may include port
+  const [hostnameRaw, port] = requestHost.split(':');
+  const hostname = hostnameRaw ?? '';
 
-  const requestHost = req.nextUrl.host; // may include port
-  const [hostname, port] = requestHost.split(':');
-
-  if (hostname === `www.${canonical}`) {
+  if (hostname.startsWith('www.')) {
     const url = req.nextUrl.clone();
-    url.hostname = canonical;
+    url.hostname = getCanonicalHost() ?? hostname.replace(/^www\./, '');
     if (port) url.port = port;
     return NextResponse.redirect(url, 301);
   }
@@ -35,4 +42,3 @@ export function middleware(req: NextRequest) {
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
-
