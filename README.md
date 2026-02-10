@@ -32,6 +32,10 @@ pnpm seed
 
 # start web+api+bot in parallel
 pnpm dev
+
+# open demo
+# IMPORTANT (Safari): use the full URL with `http://` prefix.
+open http://localhost:3000/w/demo
 ```
 
 Notes:
