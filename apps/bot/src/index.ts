@@ -26,6 +26,9 @@ bot.catch((err) => {
   console.error("Bot error:", err);
 });
 
+const me = await bot.telegram.getMe();
+console.log(`Bot identity: @${me.username} (${me.id})`);
+
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled rejection:", err);
 });
