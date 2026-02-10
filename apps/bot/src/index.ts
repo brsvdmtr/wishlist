@@ -22,6 +22,18 @@ if (!token) {
 
 const bot = new Telegraf(token);
 
+bot.catch((err) => {
+  console.error("Bot error:", err);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled rejection:", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err);
+});
+
 bot.start(async (ctx) => {
   await ctx.reply("Wishlist bot is running");
 });
@@ -34,8 +46,9 @@ bot.on("text", async (ctx) => {
   await ctx.reply("OK");
 });
 
+console.log("Launching bot (long polling)...");
 await bot.launch();
-console.log("Bot started (long polling)");
+console.log("Bot launched");
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
