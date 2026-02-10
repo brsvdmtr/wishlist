@@ -64,6 +64,21 @@ npm run dev
 - App: http://localhost:3000
 - Health: http://localhost:3000/health
 
+## Telegram Bot (Local)
+
+1) Put bot token into `.env` (never commit it):
+
+```bash
+cp .env.example .env
+# edit TELEGRAM_BOT_TOKEN=...
+```
+
+2) Run bot:
+
+```bash
+npm run dev -w apps/bot
+```
+
 ## Deploy (GitHub Actions)
 
 CI runs on pull requests and on push to `develop`.
