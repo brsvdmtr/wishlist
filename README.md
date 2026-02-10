@@ -37,10 +37,23 @@ Notes:
 - `apps/api` private endpoints require header `X-ADMIN-KEY` equal to `ADMIN_KEY`.
 - Default ports: web `3000`, api `3001`, postgres `5432`.
 
+## Production env
+
+`apps/web`:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=https://api.wishlistik.ru
+NEXT_PUBLIC_SITE_URL=https://wishlistik.ru
+```
+
 ## Commands
 
 - `pnpm dev`: run `web` + `api` + `bot` in parallel
+- `pnpm dev:web`: run `apps/web`
+- `pnpm dev:api`: run `apps/api`
 - `pnpm build`: build everything
+- `pnpm build:web`: build `apps/web`
+- `pnpm build:api`: build `apps/api`
 - `pnpm lint`: run ESLint from repo root
 - `pnpm db:migrate`: `prisma migrate dev` (dev)
 - `pnpm db:studio`: `prisma studio`
