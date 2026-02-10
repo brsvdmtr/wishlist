@@ -15,6 +15,12 @@ const prismaBin = process.platform === 'win32' ? `${binBase}.cmd` : binBase;
 // "end of options", so we strip it.
 const args = process.argv.slice(2).filter((arg) => arg !== '--');
 
+// Avoid interactive prompt on first migrate in a fresh repo/DB.
+// You can override by passing `--name your_migration` or setting PRISMA_MIGRATION_NAME.
+if (args[0] === 'migrate' && args[1] === 'dev' && !args.includes('--name')) {
+  args.push('--name', process.env.PRISMA_MIGRATION_NAME ?? 'init');
+}
+
 const result = spawnSync(prismaBin, args, {
   stdio: 'inherit',
   env: process.env,

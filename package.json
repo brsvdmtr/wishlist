@@ -7,7 +7,9 @@
     "build": "pnpm -r --sort build",
     "lint": "eslint .",
     "format": "prettier -w .",
-    "db:migrate": "pnpm -C packages/db db:migrate",
+    "db:generate": "pnpm -C packages/db db:generate",
+    "db:migrate": "pnpm -C packages/db db:migrate:dev",
+    "db:deploy": "pnpm -C packages/db db:migrate:deploy",
     "db:studio": "pnpm -C packages/db db:studio"
   },
   "devDependencies": {

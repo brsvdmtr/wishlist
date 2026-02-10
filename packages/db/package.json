@@ -5,7 +5,8 @@
   "scripts": {
     "build": "node scripts/prisma.cjs generate",
     "db:generate": "node scripts/prisma.cjs generate",
-    "db:migrate": "node scripts/prisma.cjs migrate dev",
+    "db:migrate:dev": "node scripts/prisma.cjs migrate dev",
+    "db:migrate:deploy": "node scripts/prisma.cjs migrate deploy",
     "db:studio": "node scripts/prisma.cjs studio"
   },
   "dependencies": {
