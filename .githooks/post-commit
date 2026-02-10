@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+set -eu
+
+# Auto-push develop branch after each commit.
+# Disable with: SKIP_AUTO_PUSH=1
+
+if [ "${SKIP_AUTO_PUSH:-}" = "1" ]; then
+  exit 0
+fi
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+if [ "$branch" != "develop" ]; then
+  exit 0
+fi
+
+if ! git remote get-url origin >/dev/null 2>&1; then
+  echo "[auto-push] origin remote is not configured; skipping" >&2
+  exit 0
+fi
+
+echo "[auto-push] git push origin develop" >&2
+if ! git push origin develop; then
+  echo "[auto-push] push failed; run: git push origin develop" >&2
+fi

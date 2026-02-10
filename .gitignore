@@ -5,6 +5,16 @@ node_modules
 .next
 out
 
+# vercel / turborepo
+.vercel
+.turbo
+
+# coverage
+coverage
+
+# typescript
+*.tsbuildinfo
+
 # logs
 npm-debug.log*
 yarn-debug.log*

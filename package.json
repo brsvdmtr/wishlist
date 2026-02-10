@@ -6,6 +6,8 @@
     "packages/*"
   ],
   "scripts": {
+    "prepare": "node scripts/setup-githooks.mjs",
+    "hooks:install": "node scripts/setup-githooks.mjs",
     "dev": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web",
     "start": "npm run start -w apps/web",
