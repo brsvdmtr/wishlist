@@ -34,7 +34,8 @@ pnpm dev
 Notes:
 
 - `apps/bot` requires `BOT_TOKEN`. If it's missing, the bot will stay disabled (web+api still run).
-- Default ports: web `3000`, api `4000`, postgres `5432`.
+- `apps/api` private endpoints require header `X-ADMIN-KEY` equal to `ADMIN_KEY`.
+- Default ports: web `3000`, api `3001`, postgres `5432`.
 
 ## Commands
 

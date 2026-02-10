@@ -4,7 +4,9 @@
   "packageManager": "pnpm@10.15.0",
   "scripts": {
     "dev": "pnpm -r --parallel --filter @wishlist/web --filter @wishlist/api --filter @wishlist/bot dev",
+    "dev:api": "pnpm --filter @wishlist/api dev",
     "build": "pnpm -r --sort build",
+    "build:api": "pnpm --filter @wishlist/api build",
     "lint": "eslint .",
     "format": "prettier -w .",
     "db:generate": "pnpm -C packages/db db:generate",

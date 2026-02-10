@@ -4,14 +4,18 @@
   "version": "0.0.0",
   "main": "dist/index.js",
   "scripts": {
+    "predev": "pnpm -C ../../packages/db build",
     "dev": "tsx watch src/index.ts",
+    "prebuild": "pnpm -C ../../packages/db build",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@wishlist/db": "workspace:*",
     "cors": "2.8.5",
     "dotenv": "16.4.5",
-    "express": "4.19.2"
+    "express": "4.19.2",
+    "zod": "3.23.8"
   },
   "devDependencies": {
     "@types/cors": "2.8.17",
