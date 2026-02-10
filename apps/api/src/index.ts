@@ -11,8 +11,8 @@ import { prisma } from '@wishlist/db';
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/api (pnpm -C apps/api dev).
 const envCandidates = [
-  path.resolve(process.cwd(), 'apps/api/.env'),
-  path.resolve(process.cwd(), '.env'),
+  path.resolve(__dirname, '../.env'),
+  path.resolve(__dirname, '../../..', '.env'),
 ];
 for (const p of envCandidates) {
   if (fs.existsSync(p)) {

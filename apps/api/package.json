@@ -8,7 +8,8 @@
     "dev": "tsx watch src/index.ts",
     "prebuild": "pnpm -C ../../packages/db build",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "seed": "pnpm -C ../../packages/db build && tsx src/seed.ts"
   },
   "dependencies": {
     "@wishlist/db": "workspace:*",

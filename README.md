@@ -27,6 +27,9 @@ docker compose -f docker-compose.dev.yml up -d
 # prisma (applies existing migrations, generates client)
 pnpm db:migrate
 
+# seed demo data
+pnpm seed
+
 # start web+api+bot in parallel
 pnpm dev
 ```
