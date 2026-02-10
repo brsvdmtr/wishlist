@@ -102,12 +102,18 @@ importers:
         specifier: 5.18.0
         version: 5.18.0(prisma@5.18.0)
     devDependencies:
+      '@types/node':
+        specifier: 20.14.11
+        version: 20.14.11
       dotenv:
         specifier: 16.4.5
         version: 16.4.5
       prisma:
         specifier: 5.18.0
         version: 5.18.0
+      typescript:
+        specifier: 5.5.4
+        version: 5.5.4
 
   packages/shared:
     dependencies:

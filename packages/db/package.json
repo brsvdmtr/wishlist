@@ -2,8 +2,11 @@
   "name": "@wishlist/db",
   "private": true,
   "version": "0.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "node scripts/prisma.cjs generate",
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json -w",
     "db:generate": "node scripts/prisma.cjs generate",
     "db:migrate:dev": "node scripts/prisma.cjs migrate dev",
     "db:migrate:deploy": "node scripts/prisma.cjs migrate deploy",
@@ -13,8 +16,10 @@
     "@prisma/client": "5.18.0"
   },
   "devDependencies": {
+    "@types/node": "20.14.11",
     "dotenv": "16.4.5",
-    "prisma": "5.18.0"
+    "prisma": "5.18.0",
+    "typescript": "5.5.4"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
