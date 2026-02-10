@@ -37,16 +37,36 @@ process.on("uncaughtException", (err) => {
   console.error("Uncaught exception:", err);
 });
 
+bot.use(async (ctx, next) => {
+  console.log(`Update ${ctx.update.update_id} (${ctx.updateType})`);
+  return next();
+});
+
 bot.start(async (ctx) => {
-  await ctx.reply("Wishlist bot is running");
+  try {
+    const msg = await ctx.reply("Wishlist bot is running");
+    console.log(`Replied to /start (message_id=${msg.message_id})`);
+  } catch (err) {
+    console.error("Failed to reply to /start:", err);
+  }
 });
 
 bot.command("health", async (ctx) => {
-  await ctx.reply(JSON.stringify({ ok: true }));
+  try {
+    const msg = await ctx.reply(JSON.stringify({ ok: true }));
+    console.log(`Replied to /health (message_id=${msg.message_id})`);
+  } catch (err) {
+    console.error("Failed to reply to /health:", err);
+  }
 });
 
 bot.on("text", async (ctx) => {
-  await ctx.reply("OK");
+  try {
+    const msg = await ctx.reply("OK");
+    console.log(`Replied to text (message_id=${msg.message_id})`);
+  } catch (err) {
+    console.error("Failed to reply to text:", err);
+  }
 });
 
 console.log("Launching bot (long polling)...");
