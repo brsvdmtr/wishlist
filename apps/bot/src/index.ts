@@ -47,8 +47,17 @@ bot.on("text", async (ctx) => {
 });
 
 console.log("Launching bot (long polling)...");
-await bot.launch();
-console.log("Bot launched");
+bot
+  .launch()
+  .then(() => {
+    console.log("Bot launched");
+  })
+  .catch((err) => {
+    console.error("Bot launch failed:", err);
+    process.exitCode = 1;
+  });
+
+console.log("Bot process started");
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
