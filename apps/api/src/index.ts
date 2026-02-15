@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import pino from 'pino';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
 
@@ -24,6 +25,15 @@ for (const p of envCandidates) {
 
 const PORT = Number(process.env.PORT ?? 3001);
 const WEB_ORIGIN = (process.env.WEB_ORIGIN ?? '').trim() || 'http://localhost:3000';
+
+// Logger setup
+const logger = pino({
+  level: process.env.LOG_LEVEL ?? 'info',
+  transport:
+    process.env.NODE_ENV !== 'production'
+      ? { target: 'pino-pretty', options: { colorize: true } }
+      : undefined,
+});
 
 const app = express();
 
@@ -77,15 +87,77 @@ const actorBodySchema = z.object({
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const adminKey = process.env.ADMIN_KEY;
   if (!adminKey) {
+    logger.error({ path: req.path }, 'ADMIN_KEY is not configured');
     return res.status(500).json({ error: 'ADMIN_KEY is not configured' });
   }
 
   const provided = req.get('X-ADMIN-KEY');
   if (!provided || provided !== adminKey) {
+    logger.warn({ path: req.path, method: req.method }, 'Unauthorized admin access attempt');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   return next();
+}
+
+/**
+ * Audit logging middleware for private endpoints
+ */
+function auditLog(req: Request, res: Response, next: NextFunction) {
+  const startTime = Date.now();
+
+  // Capture original send
+  const originalSend = res.send;
+  res.send = function (body) {
+    const duration = Date.now() - startTime;
+
+    // Extract IDs from path params
+    const wishlistId = req.params.id || req.params.wishlistId;
+    const itemId = req.params.itemId;
+    const tagId = req.params.tagId;
+
+    const logData: {
+      method: string;
+      path: string;
+      statusCode: number;
+      duration: number;
+      wishlistId?: string;
+      itemId?: string;
+      tagId?: string;
+      error?: string;
+    } = {
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      duration,
+    };
+
+    if (wishlistId) logData.wishlistId = wishlistId;
+    if (itemId) logData.itemId = itemId;
+    if (tagId) logData.tagId = tagId;
+
+    // Log error details if status >= 400
+    if (res.statusCode >= 400) {
+      try {
+        const parsed = JSON.parse(body as string);
+        if (parsed.error) logData.error = parsed.error;
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
+    if (res.statusCode >= 500) {
+      logger.error(logData, 'Admin operation failed');
+    } else if (res.statusCode >= 400) {
+      logger.warn(logData, 'Admin operation client error');
+    } else {
+      logger.info(logData, 'Admin operation');
+    }
+
+    return originalSend.call(this, body);
+  };
+
+  next();
 }
 
 function asyncHandler(
@@ -380,6 +452,7 @@ publicRouter.post(
 
 // --- Private endpoints (admin auth)
 privateRouter.use(requireAdmin);
+privateRouter.use(auditLog);
 
 privateRouter.get(
   '/wishlists',
@@ -665,14 +738,12 @@ app.use(privateRouter);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-  // eslint-disable-next-line no-console
-  console.error(err);
+  logger.error({ err: err instanceof Error ? err.message : err }, 'Unhandled error');
 
   // Keep error output predictable for the client.
   return res.status(500).json({ error: 'Internal server error' });
 });
 
 app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`[api] listening on http://localhost:${PORT}`);
+  logger.info({ port: PORT }, 'API server started');
 });
