@@ -2,6 +2,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -39,6 +40,26 @@ app.use(
   }),
 );
 app.use(express.json());
+
+// Rate limiting
+const readLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 120, // 120 requests per minute
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !req.path.startsWith('/public'), // Only apply to public routes
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 10, // 10 requests per minute
+  message: { error: 'Too many reservation requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(readLimiter);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -227,6 +248,7 @@ publicRouter.get(
 
 publicRouter.post(
   '/items/:id/reserve',
+  writeLimiter,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -268,6 +290,7 @@ publicRouter.post(
 
 publicRouter.post(
   '/items/:id/unreserve',
+  writeLimiter,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -316,6 +339,7 @@ publicRouter.post(
 
 publicRouter.post(
   '/items/:id/purchase',
+  writeLimiter,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
