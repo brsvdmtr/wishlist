@@ -246,11 +246,14 @@ publicRouter.get(
     const slug = req.params.slug ?? '';
     if (!slug) return res.status(400).json({ error: 'Missing slug' });
 
-    // NOTE: `tag` query param expects Tag.id (not name).
+    // Parse query params: status, tag (ID), tagName, limit, offset
     const queryParsed = z
       .object({
         status: ItemStatusSchema.optional(),
         tag: z.string().min(1).optional(),
+        tagName: z.string().min(1).optional(),
+        limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+        offset: z.coerce.number().int().min(0).optional().default(0),
       })
       .safeParse(req.query);
     if (!queryParsed.success) return zodError(res, queryParsed.error);
@@ -261,22 +264,41 @@ publicRouter.get(
     });
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
 
+    // Build where clause
     const where: {
       wishlistId: string;
       status?: 'AVAILABLE' | 'RESERVED' | 'PURCHASED';
-      itemTags?: { some: { tagId: string } };
+      itemTags?: { some: { tagId?: string; tag?: { name: string } } };
     } = { wishlistId: wishlist.id };
 
     if (queryParsed.data.status) where.status = queryParsed.data.status;
-    if (queryParsed.data.tag) where.itemTags = { some: { tagId: queryParsed.data.tag } };
+
+    // Support both tag (ID) and tagName filters
+    if (queryParsed.data.tag) {
+      where.itemTags = { some: { tagId: queryParsed.data.tag } };
+    } else if (queryParsed.data.tagName) {
+      where.itemTags = { some: { tag: { name: queryParsed.data.tagName } } };
+    }
+
+    // Get total count for pagination metadata
+    const total = await prisma.item.count({ where });
 
     const items = await prisma.item.findMany({
       where,
       orderBy: [{ createdAt: 'desc' }],
+      skip: queryParsed.data.offset,
+      take: queryParsed.data.limit,
       include: { itemTags: { include: { tag: { select: { id: true, name: true } } } } },
     });
 
-    return res.json({ items: items.map(mapItemForPublic) });
+    return res.json({
+      items: items.map(mapItemForPublic),
+      pagination: {
+        limit: queryParsed.data.limit,
+        offset: queryParsed.data.offset,
+        total,
+      },
+    });
   }),
 );
 
