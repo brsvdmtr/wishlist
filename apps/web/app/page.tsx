@@ -22,6 +22,12 @@ export default function Home() {
           >
             Открыть демо
           </Link>
+          <Link
+            href="/admin"
+            className="inline-flex items-center justify-center rounded-xl border border-cyan-200 bg-cyan-50 px-5 py-3 text-sm font-semibold text-cyan-900 shadow-sm transition hover:bg-cyan-100 focus:outline-none focus:ring-2 focus:ring-cyan-600/30"
+          >
+            Admin Panel
+          </Link>
           <a
             href={`${apiBaseUrl}/health`}
             className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-cyan-600/30"

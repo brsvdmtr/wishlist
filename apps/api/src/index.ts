@@ -357,6 +357,29 @@ publicRouter.post(
 // --- Private endpoints (admin auth)
 privateRouter.use(requireAdmin);
 
+privateRouter.get(
+  '/wishlists',
+  asyncHandler(async (req, res) => {
+    const owner = await getSystemUser();
+
+    const wishlists = await prisma.wishlist.findMany({
+      where: { ownerId: owner.id },
+      orderBy: [{ createdAt: 'desc' }],
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { items: true, tags: true } },
+      },
+    });
+
+    return res.json({ wishlists });
+  }),
+);
+
 privateRouter.post(
   '/wishlists',
   asyncHandler(async (req, res) => {
