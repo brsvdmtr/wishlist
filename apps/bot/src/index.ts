@@ -44,7 +44,7 @@ if (!token) {
 
   bot.command('demo', (ctx) => {
     const demoUrl = `${SITE_URL}/w/demo`;
-    return ctx.reply(`📋 Demo Wishlist\n\n${demoUrl}`, { disable_web_page_preview: false });
+    return ctx.reply(`📋 Demo Wishlist\n\n${demoUrl}`);
   });
 
   bot.command('w', (ctx) => {
@@ -55,9 +55,7 @@ if (!token) {
     }
 
     const wishlistUrl = `${SITE_URL}/w/${slug}`;
-    return ctx.reply(`🎁 Wishlist: ${slug}\n\n${wishlistUrl}`, {
-      disable_web_page_preview: false,
-    });
+    return ctx.reply(`🎁 Wishlist: ${slug}\n\n${wishlistUrl}`);
   });
 
   bot.command('health', async (ctx) => {

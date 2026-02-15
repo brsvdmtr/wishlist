@@ -4,8 +4,8 @@ import { getWishlists } from '@/lib/admin-api-client';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminPage() {
-  let wishlists;
-  let error = null;
+  let wishlists: Awaited<ReturnType<typeof getWishlists>>['wishlists'] = [];
+  let error: string | null = null;
 
   try {
     const data = await getWishlists();
