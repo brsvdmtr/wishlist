@@ -1,0 +1,31 @@
+# Simple production build for apps/bot
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/bot/package.json ./apps/bot/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --filter @wishlist/bot...
+
+# Copy source code
+COPY apps/bot ./apps/bot
+
+# Build TypeScript
+RUN pnpm --filter @wishlist/bot build
+
+# Create non-root user
+RUN addgroup --system --gid 1001 botuser && \
+    adduser --system --uid 1001 botuser && \
+    chown -R botuser:botuser /app
+
+USER botuser
+
+ENV NODE_ENV=production
+
+CMD ["node", "apps/bot/dist/index.js"]

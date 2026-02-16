@@ -61,6 +61,22 @@ services:
     networks:
       - wishlist-network
 
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      BOT_TOKEN: ${BOT_TOKEN}
+      API_BASE_URL: http://api:3001
+      SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - wishlist-network
+
 networks:
   wishlist-network:
     driver: bridge
