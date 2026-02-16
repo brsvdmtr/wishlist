@@ -3,8 +3,12 @@ import { Telegraf } from 'telegraf';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Prefer app-local .env when running from repo root (pnpm dev),
-// but also support running from within apps/bot (pnpm -C apps/bot start).
+import { getSession, clearWizard } from './session';
+import { mainMenuKeyboard, openWebAppKeyboard } from './menu';
+import { handleStart } from './handlers/start';
+import { handleMyList, handleShare, handleSettings, handleBackToMenu, handleCreateListText } from './handlers/list';
+import { handleAddWish, handleAddItemText } from './handlers/addItem';
+
 const envCandidates = [
   path.resolve(process.cwd(), 'apps/bot/.env'),
   path.resolve(process.cwd(), '.env'),
@@ -17,7 +21,6 @@ for (const p of envCandidates) {
 }
 
 const token = process.env.BOT_TOKEN;
-const API_BASE_URL = (process.env.API_BASE_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
 const SITE_URL = (
   process.env.SITE_URL ??
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -27,95 +30,92 @@ const SITE_URL = (
 if (!token) {
   // eslint-disable-next-line no-console
   console.warn('[bot] BOT_TOKEN is missing. Bot is disabled (see apps/bot/.env.example).');
-  // Keep process alive so `pnpm dev` can still run web+api without a bot token.
   setInterval(() => {}, 60_000);
 } else {
   const bot = new Telegraf(token);
 
-  bot.start((ctx) =>
-    ctx.reply(
-      `Welcome to Wishlist Bot! 🎁\n\n` +
-        `Available commands:\n` +
-        `/demo - View demo wishlist\n` +
-        `/w <slug> - View wishlist by slug\n` +
-        `/health - Check API status`,
-    ),
-  );
+  bot.start(handleStart);
 
-  bot.command('demo', (ctx) => {
-    const demoUrl = `${SITE_URL}/w/demo`;
-    return ctx.reply(`📋 Demo Wishlist\n\n${demoUrl}`);
+  bot.hears('➕ Добавить желание', handleAddWish);
+  bot.hears('📋 Мой список', handleMyList);
+  bot.hears('🔗 Поделиться', handleShare);
+  bot.hears('⚙️ Настройки', handleSettings);
+  bot.hears('◀️ В меню', handleBackToMenu);
+  bot.hears('❌ Отмена', (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (chatId) clearWizard(chatId);
+    return ctx.reply('Отменено.', mainMenuKeyboard());
   });
 
-  bot.command('w', (ctx) => {
-    const slug = ctx.message.text.split(/\s+/)[1];
+  bot.on('text', async (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (!chatId) return;
+    const session = getSession(chatId);
 
-    if (!slug) {
-      return ctx.reply('Usage: /w <slug>\nExample: /w demo');
+    if (session.wizard === 'create_list') {
+      await handleCreateListText(ctx);
+      return;
+    }
+    if (session.wizard === 'add_item') {
+      await handleAddItemText(ctx);
+      return;
     }
 
-    const wishlistUrl = `${SITE_URL}/w/${slug}`;
-    return ctx.reply(`🎁 Wishlist: ${slug}\n\n${wishlistUrl}`);
-  });
-
-  bot.command('health', async (ctx) => {
-    const healthUrl = `${API_BASE_URL}/health`;
-
-    let status;
-    let statusEmoji;
-
-    try {
-      const response = await fetch(healthUrl);
-      const data = (await response.json()) as { ok?: boolean };
-
-      if (data.ok === true) {
-        status = '✅ API is healthy';
-        statusEmoji = '✅';
-      } else {
-        status = `⚠️ API returned: ${JSON.stringify(data)}`;
-        statusEmoji = '⚠️';
-      }
-    } catch (fetchError) {
-      status = `❌ API is unreachable: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`;
-      statusEmoji = '❌';
-    }
-
-    return ctx.reply(`${statusEmoji} Health Check\n\n${status}\n\nAPI: ${API_BASE_URL}`);
-  });
-
-  bot.command('help', (ctx) =>
-    ctx.reply(
-      'Available commands:\n\n' +
-        '/demo - Demo wishlist\n' +
-        '/w <slug> - View wishlist\n' +
-        '/health - API status',
-    ),
-  );
-
-  bot.on('text', (ctx) => {
-    const text = ctx.message.text;
-
-    // Check if it looks like a wishlist URL or slug
+    const text = ctx.message?.text ?? '';
     if (text.includes('/w/')) {
       const match = text.match(/\/w\/([a-z0-9-]+)/i);
       if (match) {
         const slug = match[1];
-        const wishlistUrl = `${SITE_URL}/w/${slug}`;
-        return ctx.reply(`🎁 Wishlist: ${slug}\n\n${wishlistUrl}`);
+        return ctx.reply(`🎁 Вишлист: ${slug}\n\n${SITE_URL}/w/${slug}`, openWebAppKeyboard());
       }
     }
 
-    return ctx.reply(
-      'Use /help to see available commands:\n\n' +
-        '/demo - Demo wishlist\n' +
-        '/w <slug> - View wishlist\n' +
-        '/health - API status',
-    );
+    return ctx.reply('Используй кнопки меню: ➕ Добавить желание, 📋 Мой список, 🔗 Поделиться.', mainMenuKeyboard());
   });
 
-  bot.launch().then(() => {
+  bot.command('demo', (ctx) => {
+    const demoUrl = `${SITE_URL}/w/demo`;
+    return ctx.reply(`📋 Демо-вишлист\n\n${demoUrl}`, openWebAppKeyboard());
+  });
+  bot.command('w', (ctx) => {
+    const slug = ctx.message.text.split(/\s+/)[1];
+    if (!slug) return ctx.reply('Использование: /w <slug>\nПример: /w demo');
+    return ctx.reply(`🎁 Вишлист: ${slug}\n\n${SITE_URL}/w/${slug}`, openWebAppKeyboard());
+  });
+  bot.command('health', async (ctx) => {
+    const API_BASE_URL = (process.env.API_BASE_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
+    try {
+      const res = await fetch(`${API_BASE_URL}/health`);
+      const data = (await res.json()) as { ok?: boolean };
+      const status = data.ok === true ? '✅ API работает' : `⚠️ ${JSON.stringify(data)}`;
+      return ctx.reply(`Health: ${status}`);
+    } catch (e) {
+      return ctx.reply(`❌ API недоступен: ${e instanceof Error ? e.message : 'Unknown'}`);
+    }
+  });
+  bot.command('help', (ctx) =>
+    ctx.reply(
+      'Кнопки:\n➕ Добавить желание — добавить пункт в список\n📋 Мой список — посмотреть и поделиться\n🔗 Поделиться — ссылка на вишлист',
+      mainMenuKeyboard(),
+    ),
+  );
+
+  bot.launch().then(async () => {
     // eslint-disable-next-line no-console
     console.log('[bot] started');
+    const menuButton = {
+      type: 'web_app' as const,
+      text: 'Вишлист',
+      web_app: { url: SITE_URL },
+    };
+    try {
+      await bot.telegram.setChatMenuButton({ menuButton });
+      // eslint-disable-next-line no-console
+      console.log('[bot] menu button set');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[bot] setChatMenuButton failed:', err);
+    }
   });
 
   process.once('SIGINT', () => bot.stop('SIGINT'));

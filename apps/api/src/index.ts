@@ -46,7 +46,7 @@ app.use(
       return cb(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'X-ADMIN-KEY'],
+    allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-Telegram-User-Id'],
   }),
 );
 app.use(express.json());
@@ -207,6 +207,20 @@ async function getSystemUser() {
     update: {},
     create: { email },
   });
+}
+
+/** For bot: resolve owner by Telegram ID (when X-Telegram-User-Id + ADMIN_KEY). Else system user. */
+async function getRequestOwner(req: Request) {
+  const telegramIdRaw = req.get('X-Telegram-User-Id');
+  if (telegramIdRaw?.trim()) {
+    const telegramId = telegramIdRaw.trim();
+    return prisma.user.upsert({
+      where: { telegramId },
+      update: {},
+      create: { telegramId },
+    });
+  }
+  return getSystemUser();
 }
 
 function mapItemForPublic(item: {
@@ -479,7 +493,7 @@ privateRouter.use(auditLog);
 privateRouter.get(
   '/wishlists',
   asyncHandler(async (req, res) => {
-    const owner = await getSystemUser();
+    const owner = await getRequestOwner(req);
 
     const wishlists = await prisma.wishlist.findMany({
       where: { ownerId: owner.id },
@@ -506,12 +520,27 @@ privateRouter.post(
       .object({
         title: z.string().min(1).max(200),
         description: z.string().max(2000).optional(),
+        slug: z.string().min(1).max(80).optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
 
-    const owner = await getSystemUser();
-    const slug = await generateUniqueSlug(parsed.data.title);
+    const owner = await getRequestOwner(req);
+    const slug = parsed.data.slug
+      ? slugify(parsed.data.slug).slice(0, 80) || `list-${randomSuffix(6)}`
+      : await generateUniqueSlug(parsed.data.title);
+    const existing = await prisma.wishlist.findUnique({ where: { slug } });
+    if (existing) {
+      if (existing.ownerId !== owner.id) return res.status(409).json({ error: 'Slug already taken' });
+      return res.status(200).json({
+        wishlist: {
+          id: existing.id,
+          slug: existing.slug,
+          title: existing.title,
+          description: existing.description,
+        },
+      });
+    }
 
     const wishlist = await prisma.wishlist.create({
       data: {
@@ -524,6 +553,19 @@ privateRouter.post(
     });
 
     return res.status(201).json({ wishlist });
+  }),
+);
+
+// PATCH/DELETE wishlists and POST :id/items - allow only if owner matches (for bot: telegram user)
+privateRouter.use(
+  '/wishlists/:id',
+  asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const id = req.params.id ?? '';
+    if (!id) return next();
+    const owner = await getRequestOwner(req);
+    const list = await prisma.wishlist.findUnique({ where: { id }, select: { ownerId: true } });
+    if (list && list.ownerId !== owner.id) return res.status(403).json({ error: 'Forbidden' });
+    return next();
   }),
 );
 

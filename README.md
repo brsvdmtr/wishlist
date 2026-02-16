@@ -81,9 +81,10 @@ ADMIN_BASIC_USER=admin               # Basic Auth username
 ADMIN_BASIC_PASS=change_me           # Basic Auth password
 ```
 
-**`apps/bot/.env` (optional):**
+**`apps/bot/.env` (optional, для сценариев «Мой список» / «Добавить желание» нужен `ADMIN_KEY`):**
 ```bash
 BOT_TOKEN=your_telegram_bot_token    # Get from @BotFather
+ADMIN_KEY=dev_admin_key              # Same as in apps/api (for API calls as Telegram user)
 API_BASE_URL=http://localhost:3001
 SITE_URL=http://localhost:3000
 ```
@@ -158,6 +159,13 @@ SITE_URL=http://localhost:3000
    - Send message: "Check this /w/demo"
    - Bot should recognize and send formatted link
 
+4. **Bot — «Мой список» и добавление желаний (Iteration 1):**
+   - `/start` — главное меню (➕ Добавить желание, 📋 Мой список, 🔗 Поделиться, ⚙️ Настройки).
+   - «📋 Мой список» — если списка нет, бот попросит название и создаст список с slug `tg_<telegram_id>`; иначе покажет пункты и кнопку «Поделиться».
+   - «➕ Добавить желание» — ввод названия (и опционально ссылки на второй строке); пункт добавляется в текущий список.
+   - «🔗 Поделиться» — ссылка на публичную страницу `/w/<slug>`.
+   - В API запросы от бота идут с заголовками `X-ADMIN-KEY` и `X-Telegram-User-Id`; владелец списка определяется по Telegram ID.
+
 ## Production Environment
 
 ### `apps/web` (.env.local in production):
@@ -189,6 +197,20 @@ LOG_LEVEL=info
 BOT_TOKEN=your_production_bot_token
 API_BASE_URL=https://api.wishlistik.ru
 SITE_URL=https://wishlistik.ru
+```
+
+#### Шаг 3: SITE_URL в боте
+
+В `.env` бота задайте:
+
+```bash
+SITE_URL=https://wishlistik.ru
+```
+
+И перезапуск бота (как запускаешь: pm2 / docker / systemd). На сервере (в каталоге проекта, с настроенным `.env`):
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --force-recreate bot
 ```
 
 ## Security Features
