@@ -1,10 +1,5 @@
 import { Markup } from 'telegraf';
-
-const SITE_URL = (
-  process.env.SITE_URL ??
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  'http://localhost:3000'
-).replace(/\/+$/, '');
+import { SITE_URL, getMenuButtonBaseUrl, getMenuButtonUrlForSlug } from './config';
 
 export function mainMenuKeyboard() {
   return Markup.keyboard(
@@ -17,12 +12,17 @@ export function mainMenuKeyboard() {
   );
 }
 
+/** Primary CTA: one button "Открыть WishList" (WebApp). URL = base /app or /w/<slug>. */
+export function openWishListWebAppKeyboard(webAppUrl: string) {
+  return Markup.inlineKeyboard([[Markup.button.webApp('Открыть WishList', webAppUrl)]]);
+}
+
 export function openWebAppKeyboard() {
   return Markup.inlineKeyboard([[Markup.button.webApp('🎁 Открыть в браузере', SITE_URL)]]);
 }
 
 export function shareLinkKeyboard(slug: string) {
-  const url = `${SITE_URL}/w/${slug}`;
+  const url = getMenuButtonUrlForSlug(slug);
   return Markup.inlineKeyboard([
     [Markup.button.webApp('🎁 Открыть вишлист', url)],
     [Markup.button.url('Копировать ссылку', `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent('Мой вишлист')}`)],

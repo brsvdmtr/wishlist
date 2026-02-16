@@ -46,7 +46,7 @@ app.use(
       return cb(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-Telegram-User-Id'],
+    allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-Telegram-User-Id', 'Authorization'],
   }),
 );
 app.use(express.json());
@@ -72,6 +72,69 @@ const writeLimiter = rateLimit({
 app.use(readLimiter);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// --- Telegram WebApp auth (validate initData, return token)
+const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN ?? process.env.BOT_TOKEN ?? '').trim();
+const AUTH_SECRET = (process.env.AUTH_SECRET ?? process.env.ADMIN_KEY ?? '').trim();
+
+function validateTelegramInitData(initData: string): { user?: { id: number }; error?: string } {
+  if (!BOT_TOKEN) return { error: 'BOT_TOKEN not configured' };
+  if (!initData || typeof initData !== 'string') return { error: 'Missing initData' };
+  const params = new URLSearchParams(initData);
+  const hash = params.get('hash');
+  if (!hash) return { error: 'Missing hash' };
+  const dataCheckString = [...params.entries()]
+    .filter(([k]) => k !== 'hash')
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join('\n');
+  const secretKey = crypto.createHash('sha256').update(BOT_TOKEN).digest();
+  const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+  if (computedHash !== hash) return { error: 'Invalid signature' };
+  const userStr = params.get('user');
+  if (!userStr) return { error: 'Missing user' };
+  try {
+    const user = JSON.parse(userStr) as { id?: number };
+    if (typeof user?.id !== 'number') return { error: 'Invalid user' };
+    return { user: { id: user.id } };
+  } catch {
+    return { error: 'Invalid user JSON' };
+  }
+}
+
+function createAuthToken(userId: string): string {
+  const secret = AUTH_SECRET || 'dev-secret-change-in-production';
+  const payload = { sub: userId, exp: Math.floor(Date.now() / 1000) + 7 * 24 * 3600 };
+  const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const sig = crypto.createHmac('sha256', secret).update(payloadB64).digest('base64url');
+  return `${payloadB64}.${sig}`;
+}
+
+app.post(
+  '/auth/telegram',
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = z.object({ initData: z.string().min(1) }).safeParse(req.body);
+    if (!body.success) return res.status(400).json({ error: 'initData required' });
+    const validated = validateTelegramInitData(body.data.initData);
+    if (validated.error) {
+      logger.warn({ path: '/auth/telegram', reason: validated.error }, 'auth/telegram validation failed');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const telegramId = String(validated.user!.id);
+    const user = await prisma.user.upsert({
+      where: { telegramId },
+      update: {},
+      create: { telegramId },
+      select: { id: true, telegramId: true },
+    });
+    const token = createAuthToken(user.id);
+    logger.info({ path: '/auth/telegram', userId: user.id }, 'auth/telegram success');
+    return res.json({
+      token,
+      user: { id: user.id, telegramId: user.telegramId },
+    });
+  }),
+);
 
 const publicRouter = express.Router();
 const privateRouter = express.Router();

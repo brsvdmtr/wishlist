@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { getSession, clearWizard } from './session';
 import { mainMenuKeyboard, openWebAppKeyboard } from './menu';
+import { getMenuButtonBaseUrl } from './config';
 import { handleStart } from './handlers/start';
 import { handleMyList, handleShare, handleSettings, handleBackToMenu, handleCreateListText } from './handlers/list';
 import { handleAddWish, handleAddItemText } from './handlers/addItem';
@@ -21,11 +22,6 @@ for (const p of envCandidates) {
 }
 
 const token = process.env.BOT_TOKEN;
-const SITE_URL = (
-  process.env.SITE_URL ??
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  'http://localhost:3000'
-).replace(/\/+$/, '');
 
 if (!token) {
   // eslint-disable-next-line no-console
@@ -64,23 +60,31 @@ if (!token) {
     const text = ctx.message?.text ?? '';
     if (text.includes('/w/')) {
       const match = text.match(/\/w\/([a-z0-9-]+)/i);
-      if (match) {
+      if (match?.[1]) {
         const slug = match[1];
-        return ctx.reply(`🎁 Вишлист: ${slug}\n\n${SITE_URL}/w/${slug}`, openWebAppKeyboard());
+        const { openWishListWebAppKeyboard } = await import('./menu');
+        const { getMenuButtonUrlForSlug } = await import('./config');
+        return ctx.reply(
+          `🎁 Вишлист: ${slug}`,
+          openWishListWebAppKeyboard(getMenuButtonUrlForSlug(slug)),
+        );
       }
     }
 
     return ctx.reply('Используй кнопки меню: ➕ Добавить желание, 📋 Мой список, 🔗 Поделиться.', mainMenuKeyboard());
   });
 
-  bot.command('demo', (ctx) => {
-    const demoUrl = `${SITE_URL}/w/demo`;
-    return ctx.reply(`📋 Демо-вишлист\n\n${demoUrl}`, openWebAppKeyboard());
+  bot.command('demo', async (ctx) => {
+    const { openWishListWebAppKeyboard } = await import('./menu');
+    const { getMenuButtonUrlForSlug } = await import('./config');
+    return ctx.reply('📋 Демо-вишлист', openWishListWebAppKeyboard(getMenuButtonUrlForSlug('demo')));
   });
-  bot.command('w', (ctx) => {
+  bot.command('w', async (ctx) => {
     const slug = ctx.message.text.split(/\s+/)[1];
     if (!slug) return ctx.reply('Использование: /w <slug>\nПример: /w demo');
-    return ctx.reply(`🎁 Вишлист: ${slug}\n\n${SITE_URL}/w/${slug}`, openWebAppKeyboard());
+    const { openWishListWebAppKeyboard } = await import('./menu');
+    const { getMenuButtonUrlForSlug } = await import('./config');
+    return ctx.reply(`🎁 Вишлист: ${slug}`, openWishListWebAppKeyboard(getMenuButtonUrlForSlug(slug)));
   });
   bot.command('health', async (ctx) => {
     const API_BASE_URL = (process.env.API_BASE_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
@@ -103,15 +107,16 @@ if (!token) {
   bot.launch().then(async () => {
     // eslint-disable-next-line no-console
     console.log('[bot] started');
+    const baseUrl = getMenuButtonBaseUrl();
     const menuButton = {
       type: 'web_app' as const,
-      text: 'Вишлист',
-      web_app: { url: SITE_URL },
+      text: 'WishList',
+      web_app: { url: baseUrl },
     };
     try {
       await bot.telegram.setChatMenuButton({ menuButton });
       // eslint-disable-next-line no-console
-      console.log('[bot] menu button set');
+      console.log('[bot] menu button set (global)', { menu_button_url: baseUrl });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn('[bot] setChatMenuButton failed:', err);

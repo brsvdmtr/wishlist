@@ -29,6 +29,8 @@ services:
       PORT: 3001
       WEB_ORIGIN: ${WEB_ORIGIN}
       ADMIN_KEY: ${ADMIN_KEY}
+      BOT_TOKEN: ${BOT_TOKEN}
+      AUTH_SECRET: ${AUTH_SECRET:-}
       SYSTEM_USER_EMAIL: ${SYSTEM_USER_EMAIL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:

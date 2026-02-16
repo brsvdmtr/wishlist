@@ -1,7 +1,10 @@
 import type { Context } from 'telegraf';
 import { getMyWishlists } from '../api';
 import { getSession, setSession, clearWizard } from '../session';
-import { mainMenuKeyboard, openWebAppKeyboard } from '../menu';
+import { mainMenuKeyboard, openWishListWebAppKeyboard } from '../menu';
+import { getMenuButtonBaseUrl, getMenuButtonUrlForSlug } from '../config';
+
+const MENU_BUTTON_TEXT = 'WishList';
 
 export async function handleStart(ctx: Context) {
   const chatId = ctx.chat?.id;
@@ -11,35 +14,54 @@ export async function handleStart(ctx: Context) {
   clearWizard(chatId);
 
   const startText = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
-  const payload = (typeof startText === 'string' ? startText.replace(/^\/start\s*/i, '').trim() : '') || (ctx as unknown as { startPayload?: string }).startPayload?.trim();
+  const payload = (typeof startText === 'string' ? startText.replace(/^\/start\s*/i, '').trim() : '') ||
+    (ctx as unknown as { startPayload?: string }).startPayload?.trim();
+
+  let webAppUrl: string;
+  let menuButtonUrl: string;
+
   if (payload?.startsWith('w_')) {
     const slug = payload.slice(2).trim();
     if (slug) {
-      const siteUrl = (process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
-      return ctx.reply(
-        `📋 Вишлист по ссылке:\n\n${siteUrl}/w/${slug}`,
-        openWebAppKeyboard(),
-      );
+      webAppUrl = getMenuButtonUrlForSlug(slug);
+      menuButtonUrl = webAppUrl;
+    } else {
+      webAppUrl = getMenuButtonBaseUrl();
+      menuButtonUrl = webAppUrl;
     }
+  } else {
+    webAppUrl = getMenuButtonBaseUrl();
+    menuButtonUrl = webAppUrl;
   }
+
+  const menuButton = {
+    type: 'web_app' as const,
+    text: MENU_BUTTON_TEXT,
+    web_app: { url: menuButtonUrl },
+  };
+  try {
+    await ctx.telegram.setChatMenuButton({ chatId, menuButton });
+    // eslint-disable-next-line no-console
+    console.log('[bot] /start', { chat_id: chatId, menu_button_url: menuButtonUrl });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[bot] setChatMenuButton for chat failed:', err);
+  }
+
+  const shortMessage = payload?.startsWith('w_') && payload.slice(2).trim()
+    ? 'Откройте вишлист в приложении.'
+    : 'Откройте WishList — списки желаний в одном месте.';
+
+  await ctx.reply(shortMessage, openWishListWebAppKeyboard(webAppUrl));
+  await ctx.reply('Или используйте кнопки ниже:', mainMenuKeyboard());
 
   const result = await getMyWishlists(telegramId);
   if ('error' in result) {
-    return ctx.reply(
-      `Не удалось загрузить списки: ${result.error}. Проверьте, что API и ADMIN_KEY настроены.`,
-      mainMenuKeyboard(),
-    );
+    return;
   }
-
   const wishlists = result.wishlists;
   const first = wishlists[0];
   if (first) {
     setSession(chatId, { listId: first.id, listSlug: first.slug, listTitle: first.title });
   }
-
-  const text = first
-    ? `Привет! 🎁 У тебя есть вишлист «${first.title}». Добавляй желания, делись ссылкой с гостями.`
-    : `Привет! 🎁 Создай свой первый вишлист — нажми «📋 Мой список» и затем создай список, или сразу «➕ Добавить желание» (создам список автоматически).`;
-
-  return ctx.reply(text, mainMenuKeyboard());
 }
