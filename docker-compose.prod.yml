@@ -1,38 +1,87 @@
+name: wishlist-prod
+
 services:
   postgres:
-    image: postgres:16
-    container_name: wishlist-postgres
+    image: postgres:16-alpine
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-wishlist}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wishlist}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-wishlist}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - wishlist_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wishlist} -d ${POSTGRES_DB:-wishlist}"]
-      interval: 5s
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-wishlist} -d ${POSTGRES_DB:-wishlist}']
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
+    networks:
+      - wishlist-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: 3001
+      WEB_ORIGIN: ${WEB_ORIGIN}
+      ADMIN_KEY: ${ADMIN_KEY}
+      BOT_TOKEN: ${BOT_TOKEN}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      SYSTEM_USER_EMAIL: ${SYSTEM_USER_EMAIL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - wishlist-network
+    ports:
+      - "3001:3001"
 
   web:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: wishlist-web
+      dockerfile: Dockerfile.web
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      INTERNAL_API_BASE_URL: http://api:3001
+      ADMIN_KEY: ${ADMIN_KEY}
+      ADMIN_BASIC_USER: ${ADMIN_BASIC_USER}
+      ADMIN_BASIC_PASS: ${ADMIN_BASIC_PASS}
+    depends_on:
+      api:
+        condition: service_started
     ports:
       - "3000:3000"
+    networks:
+      - wishlist-network
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      BOT_TOKEN: ${BOT_TOKEN}
+      API_BASE_URL: http://api:3001
+      SITE_URL: ${SITE_URL:-${NEXT_PUBLIC_SITE_URL:-https://wishlistik.ru}}
     depends_on:
-      postgres:
-        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+      - wishlist-network
+
+networks:
+  wishlist-network:
+    driver: bridge
 
 volumes:
-  postgres_data:
+  wishlist_pg_data:

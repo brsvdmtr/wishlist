@@ -1,86 +1,128 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import dotenv from 'dotenv';
+import { Telegraf } from 'telegraf';
+import fs from 'node:fs';
+import path from 'node:path';
 
-import dotenv from "dotenv";
-import { Telegraf } from "telegraf";
+import { getSession, clearWizard } from './session';
+import { mainMenuKeyboard, openWebAppKeyboard } from './menu';
+import { getMenuButtonBaseUrl } from './config';
+import { handleStart } from './handlers/start';
+import { handleMyList, handleShare, handleSettings, handleBackToMenu, handleCreateListText } from './handlers/list';
+import { handleAddWish, handleAddItemText } from './handlers/addItem';
 
-const thisFile = fileURLToPath(import.meta.url);
-const srcDir = path.dirname(thisFile);
-const botDir = path.resolve(srcDir, "..");
-const repoDir = path.resolve(botDir, "..", "..");
-
-// Load env from repo root (preferred) and current dir (fallback).
-// Never commit secrets; keep TELEGRAM_BOT_TOKEN only in .env / GitHub Secrets.
-dotenv.config({ path: path.join(repoDir, ".env") });
-dotenv.config();
-
-const token = process.env.TELEGRAM_BOT_TOKEN;
-if (!token) {
-  console.error("Missing TELEGRAM_BOT_TOKEN. Add it to .env (gitignored) or export it in the shell.");
-  process.exit(1);
+const envCandidates = [
+  path.resolve(process.cwd(), 'apps/bot/.env'),
+  path.resolve(process.cwd(), '.env'),
+];
+for (const p of envCandidates) {
+  if (fs.existsSync(p)) {
+    dotenv.config({ path: p });
+    break;
+  }
 }
 
-const bot = new Telegraf(token);
+const token = process.env.BOT_TOKEN;
 
-bot.catch((err) => {
-  console.error("Bot error:", err);
-});
+if (!token) {
+  // eslint-disable-next-line no-console
+  console.warn('[bot] BOT_TOKEN is missing. Bot is disabled (see apps/bot/.env.example).');
+  setInterval(() => {}, 60_000);
+} else {
+  const bot = new Telegraf(token);
 
-const me = await bot.telegram.getMe();
-console.log(`Bot identity: @${me.username} (${me.id})`);
+  bot.start(handleStart);
 
-process.on("unhandledRejection", (err) => {
-  console.error("Unhandled rejection:", err);
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("Uncaught exception:", err);
-});
-
-bot.use(async (ctx, next) => {
-  console.log(`Update ${ctx.update.update_id} (${ctx.updateType})`);
-  return next();
-});
-
-bot.start(async (ctx) => {
-  try {
-    const msg = await ctx.reply("Wishlist bot is running");
-    console.log(`Replied to /start (message_id=${msg.message_id})`);
-  } catch (err) {
-    console.error("Failed to reply to /start:", err);
-  }
-});
-
-bot.command("health", async (ctx) => {
-  try {
-    const msg = await ctx.reply(JSON.stringify({ ok: true }));
-    console.log(`Replied to /health (message_id=${msg.message_id})`);
-  } catch (err) {
-    console.error("Failed to reply to /health:", err);
-  }
-});
-
-bot.on("text", async (ctx) => {
-  try {
-    const msg = await ctx.reply("OK");
-    console.log(`Replied to text (message_id=${msg.message_id})`);
-  } catch (err) {
-    console.error("Failed to reply to text:", err);
-  }
-});
-
-console.log("Launching bot (long polling)...");
-bot
-  .launch()
-  .then(() => {
-    console.log("Bot launched");
-  })
-  .catch((err) => {
-    console.error("Bot launch failed:", err);
-    process.exitCode = 1;
+  bot.hears('➕ Добавить желание', handleAddWish);
+  bot.hears('📋 Мой список', handleMyList);
+  bot.hears('🔗 Поделиться', handleShare);
+  bot.hears('⚙️ Настройки', handleSettings);
+  bot.hears('◀️ В меню', handleBackToMenu);
+  bot.hears('❌ Отмена', (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (chatId) clearWizard(chatId);
+    return ctx.reply('Отменено.', mainMenuKeyboard());
   });
 
-console.log("Bot process started");
+  bot.on('text', async (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (!chatId) return;
+    const session = getSession(chatId);
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+    if (session.wizard === 'create_list') {
+      await handleCreateListText(ctx);
+      return;
+    }
+    if (session.wizard === 'add_item') {
+      await handleAddItemText(ctx);
+      return;
+    }
+
+    const text = ctx.message?.text ?? '';
+    if (text.includes('/w/')) {
+      const match = text.match(/\/w\/([a-z0-9-]+)/i);
+      if (match?.[1]) {
+        const slug = match[1];
+        const { openWishListWebAppKeyboard } = await import('./menu');
+        const { getMenuButtonUrlForSlug } = await import('./config');
+        return ctx.reply(
+          `🎁 Вишлист: ${slug}`,
+          openWishListWebAppKeyboard(getMenuButtonUrlForSlug(slug)),
+        );
+      }
+    }
+
+    return ctx.reply('Используй кнопки меню: ➕ Добавить желание, 📋 Мой список, 🔗 Поделиться.', mainMenuKeyboard());
+  });
+
+  bot.command('demo', async (ctx) => {
+    const { openWishListWebAppKeyboard } = await import('./menu');
+    const { getMenuButtonUrlForSlug } = await import('./config');
+    return ctx.reply('📋 Демо-вишлист', openWishListWebAppKeyboard(getMenuButtonUrlForSlug('demo')));
+  });
+  bot.command('w', async (ctx) => {
+    const slug = ctx.message.text.split(/\s+/)[1];
+    if (!slug) return ctx.reply('Использование: /w <slug>\nПример: /w demo');
+    const { openWishListWebAppKeyboard } = await import('./menu');
+    const { getMenuButtonUrlForSlug } = await import('./config');
+    return ctx.reply(`🎁 Вишлист: ${slug}`, openWishListWebAppKeyboard(getMenuButtonUrlForSlug(slug)));
+  });
+  bot.command('health', async (ctx) => {
+    const API_BASE_URL = (process.env.API_BASE_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
+    try {
+      const res = await fetch(`${API_BASE_URL}/health`);
+      const data = (await res.json()) as { ok?: boolean };
+      const status = data.ok === true ? '✅ API работает' : `⚠️ ${JSON.stringify(data)}`;
+      return ctx.reply(`Health: ${status}`);
+    } catch (e) {
+      return ctx.reply(`❌ API недоступен: ${e instanceof Error ? e.message : 'Unknown'}`);
+    }
+  });
+  bot.command('help', (ctx) =>
+    ctx.reply(
+      'Кнопки:\n➕ Добавить желание — добавить пункт в список\n📋 Мой список — посмотреть и поделиться\n🔗 Поделиться — ссылка на вишлист',
+      mainMenuKeyboard(),
+    ),
+  );
+
+  bot.launch().then(async () => {
+    // eslint-disable-next-line no-console
+    console.log('[bot] started');
+    const baseUrl = getMenuButtonBaseUrl();
+    const menuButton = {
+      type: 'web_app' as const,
+      text: 'WishList',
+      web_app: { url: baseUrl },
+    };
+    try {
+      await bot.telegram.setChatMenuButton({ menuButton });
+      // eslint-disable-next-line no-console
+      console.log('[bot] menu button set (global)', { menu_button_url: baseUrl });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[bot] setChatMenuButton failed:', err);
+    }
+  });
+
+  process.once('SIGINT', () => bot.stop('SIGINT'));
+  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+}

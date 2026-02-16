@@ -1,16 +1,13 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from '@prisma/client';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+const globalForPrisma = globalThis as unknown as { __wishlistPrisma?: PrismaClient };
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
-  });
+// Ensure a single PrismaClient instance in dev (hot reload, ts-node-dev).
+export const prisma = globalForPrisma.__wishlistPrisma ?? new PrismaClient();
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.__wishlistPrisma = prisma;
+}
 
-export * from "@prisma/client";
+export { PrismaClient };
+

@@ -1,0 +1,40 @@
+# Simple production build for apps/api
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+# Install OpenSSL for Prisma
+RUN apt-get update && apt-get install -y openssl libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json ./apps/api/
+COPY packages/db/package.json ./packages/db/
+COPY packages/shared/package.json ./packages/shared/
+
+# Install all dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY . .
+
+# Generate Prisma and build
+RUN pnpm db:generate
+RUN pnpm build:api
+
+# Create non-root user
+RUN addgroup --system --gid 1001 apiuser && \
+    adduser --system --uid 1001 apiuser && \
+    chown -R apiuser:apiuser /app
+
+USER apiuser
+
+ENV NODE_ENV=production
+ENV PORT=3001
+
+EXPOSE 3001
+
+CMD ["node", "apps/api/dist/index.js"]

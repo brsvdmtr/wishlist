@@ -1,1 +1,31 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 248 246 242;
+  --fg: 15 23 42;
+  --muted: 71 85 105;
+  --card: 255 255 255;
+  --line: 226 232 240;
+  --brand: 14 116 144;
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 20% 0%, rgba(14, 116, 144, 0.12), transparent 60%),
+    radial-gradient(1000px 600px at 80% 0%, rgba(234, 88, 12, 0.10), transparent 55%),
+    rgb(var(--bg));
+  color: rgb(var(--fg));
+}
+
+::selection {
+  background: rgba(14, 116, 144, 0.25);
+}
