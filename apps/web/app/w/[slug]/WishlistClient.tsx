@@ -59,7 +59,11 @@ function statusClasses(status: ItemStatus) {
 }
 
 function createToast(message: string, kind: Toast['kind']): Toast {
-  return { id: crypto.randomUUID(), message, kind };
+  const id =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2, 15);
+  return { id, message, kind };
 }
 
 function Modal({
@@ -151,7 +155,19 @@ export default function WishlistClient({
       return;
     }
 
-    const created = crypto.randomUUID();
+    // Fallback for non-secure contexts (HTTP without SSL)
+    let created: string;
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      created = crypto.randomUUID();
+    } else {
+      // Simple UUID v4 fallback for non-HTTPS contexts
+      created = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    }
+    
     localStorage.setItem(ACTOR_KEY, created);
     setActorHash(created);
   }, []);
