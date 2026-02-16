@@ -1,49 +1,37 @@
-# Production Dockerfile for apps/api (Express)
-FROM node:20-alpine AS base
-RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
+# Simple production build for apps/api
+FROM node:20-alpine
+
 WORKDIR /app
 
-# Dependencies
-FROM base AS deps
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
+
+# Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/
 COPY packages/db/package.json ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
+
+# Install all dependencies
 RUN pnpm install --frozen-lockfile
 
-# Builder
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-COPY --from=deps /app/apps/api/package.json ./apps/api/
-COPY --from=deps /app/packages/db/package.json ./packages/db/
-COPY --from=deps /app/packages/shared/package.json ./packages/shared/
+# Copy source code
 COPY . .
-RUN cd packages/db && pnpm install && cd ../..
+
+# Generate Prisma and build
 RUN pnpm db:generate
 RUN pnpm build:api
 
-# Runner
-FROM base AS runner
-ENV NODE_ENV=production
-
+# Create non-root user
 RUN addgroup --system --gid 1001 apiuser && \
-    adduser --system --uid 1001 apiuser
-
-# Copy built application
-COPY --from=builder --chown=apiuser:apiuser /app/apps/api/dist ./apps/api/dist
-COPY --from=builder --chown=apiuser:apiuser /app/packages/db/dist ./packages/db/dist
-
-# Copy node_modules (production dependencies)
-COPY --from=builder --chown=apiuser:apiuser /app/node_modules ./node_modules
-
-# Copy package.json files for proper module resolution
-COPY --from=builder --chown=apiuser:apiuser /app/package.json ./package.json
-COPY --from=builder --chown=apiuser:apiuser /app/apps/api/package.json ./apps/api/package.json
-COPY --from=builder --chown=apiuser:apiuser /app/packages/db/package.json ./packages/db/package.json
+    adduser --system --uid 1001 apiuser && \
+    chown -R apiuser:apiuser /app
 
 USER apiuser
-EXPOSE 3001
+
+ENV NODE_ENV=production
 ENV PORT=3001
+
+EXPOSE 3001
 
 CMD ["node", "apps/api/dist/index.js"]
