@@ -14,7 +14,12 @@ RUN pnpm install --frozen-lockfile
 # Builder
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+COPY --from=deps /app/apps/api/package.json ./apps/api/
+COPY --from=deps /app/packages/db/package.json ./packages/db/
+COPY --from=deps /app/packages/shared/package.json ./packages/shared/
 COPY . .
+RUN cd packages/db && pnpm install && cd ../..
 RUN pnpm db:generate
 RUN pnpm build:api
 
