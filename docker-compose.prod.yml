@@ -36,8 +36,8 @@ services:
         condition: service_healthy
     networks:
       - wishlist-network
-    expose:
-      - "3001"
+    ports:
+      - "3001:3001"
 
   web:
     build:
