@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { Telegraf } from 'telegraf';
+import { Telegraf, Markup } from 'telegraf';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -17,6 +17,8 @@ for (const p of envCandidates) {
 }
 
 const token = process.env.BOT_TOKEN;
+const MINI_APP_URL = process.env.MINI_APP_URL ?? 'https://example.com/miniapp';
+
 if (!token) {
   // eslint-disable-next-line no-console
   console.warn('[bot] BOT_TOKEN is missing. Bot is disabled (see apps/bot/.env.example).');
@@ -25,9 +27,34 @@ if (!token) {
 } else {
   const bot = new Telegraf(token);
 
-  bot.start((ctx) => ctx.reply('WishList bot is running. Try /ping'));
-  bot.command('ping', (ctx) => ctx.reply('pong'));
-  bot.command('help', (ctx) => ctx.reply('Commands: /ping'));
+  bot.start((ctx) => {
+    const payload = ctx.startPayload; // slug passed via ?start=SLUG deep link
+    if (payload) {
+      return ctx.reply(
+        `Смотри вишлист 🎁`,
+        Markup.inlineKeyboard([
+          Markup.button.webApp('Смотреть вишлист 🎁', `${MINI_APP_URL}?startapp=${payload}`),
+        ]),
+      );
+    }
+    return ctx.reply(
+      'Привет! WishBoard — твой персональный список желаний 🎁\nОткрой приложение, чтобы создать вишлист и поделиться им с друзьями.',
+      Markup.inlineKeyboard([Markup.button.webApp('Открыть WishBoard 🎁', MINI_APP_URL)]),
+    );
+  });
+
+  bot.command('help', (ctx) =>
+    ctx.reply(
+      'WishBoard — создавай вишлисты и делись ими с друзьями.\n\n/start — открыть приложение',
+    ),
+  );
+
+  bot.telegram
+    .setMyCommands([{ command: 'start', description: 'Открыть WishBoard' }])
+    .catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error('[bot] failed to set commands', err);
+    });
 
   bot
     .launch()
