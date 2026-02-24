@@ -29,10 +29,17 @@ if (!token) {
   bot.command('ping', (ctx) => ctx.reply('pong'));
   bot.command('help', (ctx) => ctx.reply('Commands: /ping'));
 
-  bot.launch().then(() => {
-    // eslint-disable-next-line no-console
-    console.log('[bot] started');
-  });
+  bot
+    .launch()
+    .then(() => {
+      // eslint-disable-next-line no-console
+      console.log('[bot] started');
+    })
+    .catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error('[bot] failed to start', err);
+      process.exitCode = 1;
+    });
 
   process.once('SIGINT', () => bot.stop('SIGINT'));
   process.once('SIGTERM', () => bot.stop('SIGTERM'));

@@ -28,9 +28,41 @@ type PublicWishlistResponse = {
 type Toast = { id: string; message: string; kind: 'error' | 'success' };
 
 const ACTOR_KEY = 'wishlist_actor_hash';
+const MY_RESERVATIONS_KEY = 'wishlist_my_reservations';
 
 function apiBaseUrl() {
   return (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
+}
+
+/** Returns the URL only if it uses http: or https:. Blocks javascript: and other schemes. */
+function safeUrl(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return url;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function loadMyReservations(): Set<string> {
+  try {
+    const raw = localStorage.getItem(MY_RESERVATIONS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return new Set(parsed as string[]);
+    return new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveMyReservations(set: Set<string>) {
+  try {
+    localStorage.setItem(MY_RESERVATIONS_KEY, JSON.stringify([...set]));
+  } catch {
+    // Ignore storage errors.
+  }
 }
 
 function formatDeadline(value: string | null) {
@@ -130,6 +162,7 @@ export default function WishlistClient({
 }) {
   const [data, setData] = useState<PublicWishlistResponse>(() => initialData as PublicWishlistResponse);
   const [actorHash, setActorHash] = useState<string | null>(null);
+  const [myReservations, setMyReservations] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<'all' | ItemStatus>('all');
   const [tagFilter, setTagFilter] = useState<string | null>(null); // Tag.id
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -148,12 +181,12 @@ export default function WishlistClient({
     const existing = localStorage.getItem(ACTOR_KEY);
     if (existing) {
       setActorHash(existing);
-      return;
+    } else {
+      const created = crypto.randomUUID();
+      localStorage.setItem(ACTOR_KEY, created);
+      setActorHash(created);
     }
-
-    const created = crypto.randomUUID();
-    localStorage.setItem(ACTOR_KEY, created);
-    setActorHash(created);
+    setMyReservations(loadMyReservations());
   }, []);
 
   const pushToast = useCallback((message: string, kind: Toast['kind']) => {
@@ -193,18 +226,24 @@ export default function WishlistClient({
 
       setActionLoading(true);
       try {
-        const endpoint =
-          kind === 'reserve' ? 'reserve' : kind === 'purchase' ? 'purchase' : 'reserve';
         const body: { actorHash: string; comment?: string } = { actorHash };
         if (comment) body.comment = comment;
 
-        const res = await fetch(`${apiBaseUrl()}/public/items/${itemId}/${endpoint}`, {
+        const res = await fetch(`${apiBaseUrl()}/public/items/${itemId}/${kind}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
 
         if (res.ok) {
+          if (kind === 'reserve') {
+            setMyReservations((prev) => {
+              const next = new Set(prev);
+              next.add(itemId);
+              saveMyReservations(next);
+              return next;
+            });
+          }
           pushToast(kind === 'reserve' ? 'Забронировано' : 'Отмечено как купленное', 'success');
           await load();
           return;
@@ -222,6 +261,51 @@ export default function WishlistClient({
       } finally {
         setActionLoading(false);
         setModal(null);
+      }
+    },
+    [actorHash, load, pushToast],
+  );
+
+  const unreserve = useCallback(
+    async (itemId: string) => {
+      if (!actorHash) return;
+
+      setActionLoading(true);
+      try {
+        const res = await fetch(`${apiBaseUrl()}/public/items/${itemId}/unreserve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actorHash }),
+        });
+
+        if (res.ok) {
+          setMyReservations((prev) => {
+            const next = new Set(prev);
+            next.delete(itemId);
+            saveMyReservations(next);
+            return next;
+          });
+          pushToast('Бронь снята', 'success');
+          await load();
+          return;
+        }
+
+        if (res.status === 403) {
+          pushToast('Снять бронь может только тот, кто бронировал.', 'error');
+          return;
+        }
+
+        if (res.status === 409) {
+          pushToast('Невозможно снять бронь для этого товара.', 'error');
+          await load();
+          return;
+        }
+
+        pushToast('Что-то пошло не так. Попробуйте еще раз.', 'error');
+      } catch {
+        pushToast('Не удалось связаться с API.', 'error');
+      } finally {
+        setActionLoading(false);
       }
     },
     [actorHash, load, pushToast],
@@ -284,9 +368,6 @@ export default function WishlistClient({
           <h2 className="font-display text-2xl tracking-tight text-slate-900">
             Подарки <span className="text-slate-500">({filteredItems.length})</span>
           </h2>
-          <p className="text-sm text-slate-600">
-            Ваш идентификатор гостя: <span className="font-mono">{actorHash ?? '...'}</span>
-          </p>
         </div>
 
         {filteredItems.length === 0 ? (
@@ -297,7 +378,9 @@ export default function WishlistClient({
           <div className="grid gap-4 md:grid-cols-2">
             {filteredItems.map((item) => {
               const deadline = formatDeadline(item.deadline);
+              const href = safeUrl(item.url);
               const canReserve = item.status === 'AVAILABLE';
+              const canUnreserve = item.status === 'RESERVED' && myReservations.has(item.id);
               const canPurchase = item.status !== 'PURCHASED';
 
               return (
@@ -307,14 +390,20 @@ export default function WishlistClient({
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block truncate text-lg font-semibold text-slate-900 underline-offset-4 hover:underline"
-                      >
-                        {item.title}
-                      </a>
+                      {href ? (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block truncate text-lg font-semibold text-slate-900 underline-offset-4 hover:underline"
+                        >
+                          {item.title}
+                        </a>
+                      ) : (
+                        <span className="block truncate text-lg font-semibold text-slate-900">
+                          {item.title}
+                        </span>
+                      )}
                       {item.priceText ? (
                         <p className="mt-1 text-sm text-slate-600">{item.priceText}</p>
                       ) : null}
@@ -362,6 +451,15 @@ export default function WishlistClient({
                         disabled={!actorHash || actionLoading}
                       >
                         Забронировать
+                      </button>
+                    ) : canUnreserve ? (
+                      <button
+                        type="button"
+                        className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-60"
+                        onClick={() => void unreserve(item.id)}
+                        disabled={!actorHash || actionLoading}
+                      >
+                        Снять бронь
                       </button>
                     ) : (
                       <button
@@ -430,4 +528,3 @@ export default function WishlistClient({
     </main>
   );
 }
-

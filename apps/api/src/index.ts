@@ -2,6 +2,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -45,13 +46,37 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 const publicRouter = express.Router();
 const privateRouter = express.Router();
 
+// --- Rate limiters
+const publicReadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 120,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const publicActionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
 // --- Helpers
 const ItemStatusSchema = z.enum(['AVAILABLE', 'RESERVED', 'PURCHASED']);
 const PrioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH']);
 
 const actorBodySchema = z.object({
-  actorHash: z.string().min(1).max(128),
+  actorHash: z.string().uuid(),
 });
+
+/** Timing-safe string comparison via SHA-256 digests to prevent timing attacks. */
+function secureCompare(a: string, b: string): boolean {
+  const aHash = crypto.createHash('sha256').update(a).digest();
+  const bHash = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(aHash, bHash);
+}
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const adminKey = process.env.ADMIN_KEY;
@@ -60,7 +85,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   }
 
   const provided = req.get('X-ADMIN-KEY');
-  if (!provided || provided !== adminKey) {
+  if (!provided || !secureCompare(provided, adminKey)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -106,8 +131,7 @@ async function generateUniqueSlug(title: string) {
 }
 
 async function getSystemUser() {
-  const email = (process.env.SYSTEM_USER_EMAIL ?? 'owner@local').trim();
-  if (!email) throw new Error('SYSTEM_USER_EMAIL is not configured');
+  const email = (process.env.SYSTEM_USER_EMAIL ?? 'owner@local').trim() || 'owner@local';
 
   return prisma.user.upsert({
     where: { email },
@@ -149,6 +173,7 @@ function mapItemForPublic(item: {
 // --- Public endpoints (no auth)
 publicRouter.get(
   '/wishlists/:slug/items',
+  publicReadLimiter,
   asyncHandler(async (req, res) => {
     const slug = req.params.slug ?? '';
     if (!slug) return res.status(400).json({ error: 'Missing slug' });
@@ -189,6 +214,7 @@ publicRouter.get(
 
 publicRouter.get(
   '/wishlists/:slug',
+  publicReadLimiter,
   asyncHandler(async (req, res) => {
     const slug = req.params.slug ?? '';
     if (!slug) return res.status(400).json({ error: 'Missing slug' });
@@ -227,6 +253,7 @@ publicRouter.get(
 
 publicRouter.post(
   '/items/:id/reserve',
+  publicActionLimiter,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -268,6 +295,7 @@ publicRouter.post(
 
 publicRouter.post(
   '/items/:id/unreserve',
+  publicActionLimiter,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -286,7 +314,8 @@ publicRouter.post(
       });
       if (!lastEvent) return { kind: 'conflict' as const };
       if (lastEvent.type !== 'RESERVED') return { kind: 'conflict' as const };
-      if (lastEvent.actorHash !== parsed.data.actorHash) return { kind: 'forbidden' as const };
+      if (!secureCompare(lastEvent.actorHash, parsed.data.actorHash))
+        return { kind: 'forbidden' as const };
 
       const updated = await tx.item.update({
         where: { id },
@@ -316,6 +345,7 @@ publicRouter.post(
 
 publicRouter.post(
   '/items/:id/purchase',
+  publicActionLimiter,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -574,6 +604,50 @@ privateRouter.delete(
   }),
 );
 
+// --- Item-tag association endpoints
+privateRouter.post(
+  '/items/:itemId/tags/:tagId',
+  asyncHandler(async (req, res) => {
+    const { itemId, tagId } = req.params as { itemId: string; tagId: string };
+    if (!itemId) return res.status(400).json({ error: 'Missing item id' });
+    if (!tagId) return res.status(400).json({ error: 'Missing tag id' });
+
+    const [item, tag] = await Promise.all([
+      prisma.item.findUnique({ where: { id: itemId }, select: { id: true, wishlistId: true } }),
+      prisma.tag.findUnique({ where: { id: tagId }, select: { id: true, wishlistId: true } }),
+    ]);
+
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (!tag) return res.status(404).json({ error: 'Tag not found' });
+    if (item.wishlistId !== tag.wishlistId)
+      return res.status(422).json({ error: 'Item and tag belong to different wishlists' });
+
+    try {
+      await prisma.itemTag.create({ data: { itemId, tagId } });
+      return res.status(201).json({ ok: true });
+    } catch {
+      // Unique constraint violation — already associated.
+      return res.status(409).json({ error: 'Tag already assigned to item' });
+    }
+  }),
+);
+
+privateRouter.delete(
+  '/items/:itemId/tags/:tagId',
+  asyncHandler(async (req, res) => {
+    const { itemId, tagId } = req.params as { itemId: string; tagId: string };
+    if (!itemId) return res.status(400).json({ error: 'Missing item id' });
+    if (!tagId) return res.status(400).json({ error: 'Missing tag id' });
+
+    try {
+      await prisma.itemTag.delete({ where: { itemId_tagId: { itemId, tagId } } });
+      return res.json({ ok: true });
+    } catch {
+      return res.status(404).json({ error: 'Association not found' });
+    }
+  }),
+);
+
 privateRouter.post(
   '/wishlists/:id/tags',
   asyncHandler(async (req, res) => {
@@ -596,6 +670,30 @@ privateRouter.post(
     });
 
     return res.status(201).json({ tag });
+  }),
+);
+
+privateRouter.patch(
+  '/tags/:id',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing tag id' });
+
+    const parsed = z
+      .object({ name: z.string().min(1).max(64) })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    try {
+      const tag = await prisma.tag.update({
+        where: { id },
+        data: { name: parsed.data.name },
+        select: { id: true, wishlistId: true, name: true, createdAt: true },
+      });
+      return res.json({ tag });
+    } catch {
+      return res.status(404).json({ error: 'Tag not found' });
+    }
   }),
 );
 

@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import WishlistClient from './WishlistClient';
@@ -11,7 +12,8 @@ function apiBaseUrl() {
   return raw.replace(/\/+$/, '');
 }
 
-async function fetchWishlist(slug: string) {
+// Memoised per request — generateMetadata and WishlistPage share the same fetch result.
+const fetchWishlist = cache(async (slug: string) => {
   const res = await fetch(`${apiBaseUrl()}/public/wishlists/${encodeURIComponent(slug)}`, {
     cache: 'no-store',
   });
@@ -20,7 +22,7 @@ async function fetchWishlist(slug: string) {
   if (!res.ok) throw new Error(`Failed to load wishlist: ${res.status}`);
 
   return (await res.json()) as unknown;
-}
+});
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const slug = params.slug;
@@ -47,4 +49,3 @@ export default async function WishlistPage({ params }: PageProps) {
 
   return <WishlistClient slug={slug} initialData={data} />;
 }
-
