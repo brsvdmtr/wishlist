@@ -1112,8 +1112,8 @@ tgRouter.post(
 );
 
 app.use('/public', publicRouter);
-app.use(privateRouter);
 app.use('/tg', tgRouter);
+app.use(privateRouter);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
