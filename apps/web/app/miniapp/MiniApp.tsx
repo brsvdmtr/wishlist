@@ -293,20 +293,29 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
   }, []);
 
   const tgFetch = useCallback(async (path: string, init?: RequestInit) => {
-    return fetch(`${apiBase}${path}`, {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-TG-INIT-DATA': initDataRef.current,
-        ...(init?.headers as Record<string, string> | undefined),
-      },
-    });
+    const url = `${apiBase}${path}`;
+    try {
+      const res = await fetch(url, {
+        ...init,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-TG-INIT-DATA': initDataRef.current,
+          ...(init?.headers as Record<string, string> | undefined),
+        },
+      });
+      return res;
+    } catch (err) {
+      throw new Error(`Fetch ${url}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }, [apiBase]);
 
   // --- Owner API calls
   const loadWishlists = useCallback(async () => {
     const res = await tgFetch('/tg/wishlists');
-    if (!res.ok) throw new Error('Failed to load wishlists');
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`API ${res.status}: ${text || res.statusText}`);
+    }
     const json = await res.json() as { wishlists: Wishlist[]; plan: { wishlists: number; items: number } };
     setWishlists(json.wishlists);
     setPlanLimits(json.plan);
@@ -314,7 +323,10 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
 
   const loadItems = useCallback(async (wishlistId: string) => {
     const res = await tgFetch(`/tg/wishlists/${wishlistId}/items`);
-    if (!res.ok) throw new Error('Failed to load items');
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`API ${res.status}: ${text || res.statusText}`);
+    }
     const json = await res.json() as { items: Item[] };
     setItems(json.items);
   }, [tgFetch]);
@@ -388,33 +400,37 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
         return;
       }
 
-      tgRef.current = window.Telegram;
-      initDataRef.current = tg.initData;
-      tg.ready();
-      tg.expand();
-      tg.setHeaderColor(C.bg);
-      tg.setBackgroundColor(C.bg);
+      try {
+        tgRef.current = window.Telegram;
+        initDataRef.current = tg.initData;
+        tg.ready();
+        tg.expand();
+        try { tg.setHeaderColor(C.bg); } catch { /* some versions don't support */ }
+        try { tg.setBackgroundColor(C.bg); } catch { /* some versions don't support */ }
+      } catch (sdkErr) {
+        setErrorMsg(`SDK error: ${sdkErr instanceof Error ? sdkErr.message : String(sdkErr)}`);
+        setScreen('error');
+        return;
+      }
 
       const startParam = tg.initDataUnsafe.start_param;
       const user = tg.initDataUnsafe.user;
       if (user) setTgUser(user);
 
+      const handleErr = (e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        setErrorMsg(`${msg}\n\napiBase: ${apiBase}\ninitData: ${tg.initData ? tg.initData.substring(0, 50) + '…' : 'EMPTY'}`);
+        setScreen('error');
+      };
+
       if (startParam) {
-        // Guest view
         loadGuestWishlist(startParam)
           .then(() => setScreen('guest-view'))
-          .catch((e: unknown) => {
-            setErrorMsg(e instanceof Error ? e.message : 'Ошибка загрузки');
-            setScreen('error');
-          });
+          .catch(handleErr);
       } else {
-        // Owner view
         loadWishlists()
           .then(() => setScreen('my-wishlists'))
-          .catch((e: unknown) => {
-            setErrorMsg(e instanceof Error ? e.message : 'Ошибка загрузки');
-            setScreen('error');
-          });
+          .catch(handleErr);
       }
     };
     tryInit();
@@ -583,8 +599,8 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
       {screen === 'error' && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
           <div style={{ fontSize: 48 }}>😕</div>
-          <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center' }}>{errorMsg || 'Что-то пошло не так'}</div>
-          <div style={{ fontSize: 14, color: C.textMuted, textAlign: 'center' }}>Открой WishBoard через Telegram бота</div>
+          <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center' }}>Ошибка загрузки</div>
+          <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'left', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxWidth: '100%', background: C.surface, padding: 12, borderRadius: 8 }}>{errorMsg || 'Неизвестная ошибка'}</div>
         </div>
       )}
 
