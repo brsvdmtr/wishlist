@@ -10,7 +10,7 @@ export default function MiniAppLayout({ children }: { children: React.ReactNode 
   return (
     <>
       {/* Telegram WebApp SDK must load before React hydrates */}
-      <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+      <Script src="https://telegram.org/js/telegram-web-app.js" strategy="afterInteractive" />
       {children}
     </>
   );

@@ -375,12 +375,18 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
 
   // --- Init
   useEffect(() => {
-    const tg = window.Telegram?.WebApp;
-    if (!tg) {
-      setErrorMsg('Открой в Telegram');
-      setScreen('error');
-      return;
-    }
+    let attempts = 0;
+    const tryInit = () => {
+      const tg = window.Telegram?.WebApp;
+      if (!tg) {
+        if (attempts++ < 40) {
+          setTimeout(tryInit, 100); // retry up to 4s while SDK loads
+        } else {
+          setErrorMsg('Открой в Telegram');
+          setScreen('error');
+        }
+        return;
+      }
 
     tgRef.current = window.Telegram;
     initDataRef.current = tg.initData;
@@ -410,6 +416,7 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
           setScreen('error');
         });
     }
+    tryInit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
