@@ -1,5 +1,7 @@
 import MiniApp from './MiniApp';
 
+export const dynamic = 'force-dynamic';
+
 export default function MiniAppPage() {
   return (
     <MiniApp
