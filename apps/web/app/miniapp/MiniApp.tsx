@@ -388,34 +388,35 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
         return;
       }
 
-    tgRef.current = window.Telegram;
-    initDataRef.current = tg.initData;
-    tg.ready();
-    tg.expand();
-    tg.setHeaderColor(C.bg);
-    tg.setBackgroundColor(C.bg);
+      tgRef.current = window.Telegram;
+      initDataRef.current = tg.initData;
+      tg.ready();
+      tg.expand();
+      tg.setHeaderColor(C.bg);
+      tg.setBackgroundColor(C.bg);
 
-    const startParam = tg.initDataUnsafe.start_param;
-    const user = tg.initDataUnsafe.user;
-    if (user) setTgUser(user);
+      const startParam = tg.initDataUnsafe.start_param;
+      const user = tg.initDataUnsafe.user;
+      if (user) setTgUser(user);
 
-    if (startParam) {
-      // Guest view
-      loadGuestWishlist(startParam)
-        .then(() => setScreen('guest-view'))
-        .catch((e: unknown) => {
-          setErrorMsg(e instanceof Error ? e.message : 'Ошибка загрузки');
-          setScreen('error');
-        });
-    } else {
-      // Owner view
-      loadWishlists()
-        .then(() => setScreen('my-wishlists'))
-        .catch((e: unknown) => {
-          setErrorMsg(e instanceof Error ? e.message : 'Ошибка загрузки');
-          setScreen('error');
-        });
-    }
+      if (startParam) {
+        // Guest view
+        loadGuestWishlist(startParam)
+          .then(() => setScreen('guest-view'))
+          .catch((e: unknown) => {
+            setErrorMsg(e instanceof Error ? e.message : 'Ошибка загрузки');
+            setScreen('error');
+          });
+      } else {
+        // Owner view
+        loadWishlists()
+          .then(() => setScreen('my-wishlists'))
+          .catch((e: unknown) => {
+            setErrorMsg(e instanceof Error ? e.message : 'Ошибка загрузки');
+            setScreen('error');
+          });
+      }
+    };
     tryInit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
