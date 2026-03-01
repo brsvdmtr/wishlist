@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mockups",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "/Users/dmitriy/Wishlist/mockups", "-l", "4444", "--no-clipboard"],
+      "port": 4444
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@wishlist/web", "dev"],
+      "port": 3000
+    }
+  ]
+}
