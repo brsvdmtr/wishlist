@@ -41,7 +41,16 @@ if (!token) {
       console.error('[bot] failed to set menu button', err);
     });
 
-  bot.start((ctx) => {
+  const menuButton = {
+    type: 'web_app' as const,
+    text: 'Вишлист',
+    web_app: { url: MINI_APP_URL },
+  };
+
+  bot.start(async (ctx) => {
+    // Override any stale per-chat menu button left by previous bot versions
+    await ctx.setChatMenuButton(menuButton).catch(() => {});
+
     const payload = ctx.startPayload; // slug passed via ?start=SLUG deep link
     if (payload) {
       // Guest deep link — open specific wishlist in mini app
