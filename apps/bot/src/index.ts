@@ -27,9 +27,24 @@ if (!token) {
 } else {
   const bot = new Telegraf(token);
 
+  // Set the persistent menu button (bottom-left "Вишлист" button)
+  bot.telegram
+    .setChatMenuButton({
+      menuButton: {
+        type: 'web_app',
+        text: 'Вишлист',
+        web_app: { url: MINI_APP_URL },
+      },
+    })
+    .catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error('[bot] failed to set menu button', err);
+    });
+
   bot.start((ctx) => {
     const payload = ctx.startPayload; // slug passed via ?start=SLUG deep link
     if (payload) {
+      // Guest deep link — open specific wishlist in mini app
       return ctx.reply(
         `Смотри вишлист 🎁`,
         Markup.inlineKeyboard([
@@ -37,15 +52,15 @@ if (!token) {
         ]),
       );
     }
+    // Regular start — no inline button, user uses the menu button
     return ctx.reply(
-      'Привет! WishBoard — твой персональный список желаний 🎁\nОткрой приложение, чтобы создать вишлист и поделиться им с друзьями.',
-      Markup.inlineKeyboard([Markup.button.webApp('Открыть WishBoard 🎁', MINI_APP_URL)]),
+      'Привет! WishBoard — твой персональный список желаний 🎁\nНажми кнопку «Вишлист» внизу, чтобы открыть приложение.',
     );
   });
 
   bot.command('help', (ctx) =>
     ctx.reply(
-      'WishBoard — создавай вишлисты и делись ими с друзьями.\n\n/start — открыть приложение',
+      'WishBoard — создавай вишлисты и делись ими с друзьями.\n\n/start — начать',
     ),
   );
 
