@@ -298,7 +298,16 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
   const [itemUrl, setItemUrl] = useState('');
   const [itemPrice, setItemPrice] = useState('');
   const [itemPriority, setItemPriority] = useState<1 | 2 | 3>(2);
-  const [itemImageUrl, setItemImageUrl] = useState('');
+  const [itemImageUrl, setItemImageUrl] = useState(''); // existing/saved URL from DB
+
+  // Photo upload state
+  const [itemPhotoFile, setItemPhotoFile] = useState<File | null>(null);
+  const [itemPhotoLocalUrl, setItemPhotoLocalUrl] = useState<string | null>(null);
+  const [itemPhotoDeleted, setItemPhotoDeleted] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoPickerImgErr, setPhotoPickerImgErr] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Delete confirmation
   const [deletingItem, setDeletingItem] = useState<Item | null>(null);
@@ -505,7 +514,14 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
 
   const resetItemForm = () => {
     setItemTitle(''); setItemUrl(''); setItemPrice(''); setItemPriority(2); setItemImageUrl('');
+    setItemPhotoFile(null);
+    if (itemPhotoLocalUrl) URL.revokeObjectURL(itemPhotoLocalUrl);
+    setItemPhotoLocalUrl(null);
+    setItemPhotoDeleted(false);
+    setPhotoError(null);
+    setPhotoPickerImgErr(false);
     setEditingItem(null);
+    if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
   const openEditItem = (item: Item) => {
@@ -515,33 +531,115 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
     setItemPrice(item.price != null ? String(item.price) : '');
     setItemPriority(item.priority);
     setItemImageUrl(item.imageUrl ?? '');
+    setItemPhotoFile(null);
+    if (itemPhotoLocalUrl) URL.revokeObjectURL(itemPhotoLocalUrl);
+    setItemPhotoLocalUrl(null);
+    setItemPhotoDeleted(false);
+    setPhotoError(null);
+    setPhotoPickerImgErr(false);
+    if (photoInputRef.current) photoInputRef.current.value = '';
     setShowItemForm(true);
   };
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoError(null);
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Только изображения (JPEG, PNG, WebP, GIF)');
+      if (photoInputRef.current) photoInputRef.current.value = '';
+      return;
+    }
+    if (file.size > 30 * 1024 * 1024) {
+      setPhotoError('Файл слишком большой. Максимум 30 МБ');
+      if (photoInputRef.current) photoInputRef.current.value = '';
+      return;
+    }
+    if (itemPhotoLocalUrl) URL.revokeObjectURL(itemPhotoLocalUrl);
+    const localUrl = URL.createObjectURL(file);
+    setItemPhotoFile(file);
+    setItemPhotoLocalUrl(localUrl);
+    setItemPhotoDeleted(false);
+  };
+
+  const handlePhotoDelete = () => {
+    if (itemPhotoLocalUrl) URL.revokeObjectURL(itemPhotoLocalUrl);
+    setItemPhotoFile(null);
+    setItemPhotoLocalUrl(null);
+    setItemPhotoDeleted(true);
+    setPhotoError(null);
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  const uploadPhoto = useCallback(async (itemId: string, file: File): Promise<string | null> => {
+    const formData = new FormData();
+    formData.append('photo', file);
+    try {
+      const res = await fetch(`${apiBase}/tg/items/${itemId}/photo`, {
+        method: 'POST',
+        headers: { 'X-TG-INIT-DATA': initDataRef.current },
+        body: formData,
+      });
+      if (!res.ok) {
+        let msg = 'Ошибка загрузки фото';
+        try { const j = await res.json() as { error?: string }; if (j.error) msg = j.error; } catch { /* */ }
+        setPhotoError(msg);
+        return null;
+      }
+      const json = await res.json() as { photoUrl: string };
+      return json.photoUrl;
+    } catch {
+      setPhotoError('Ошибка сети при загрузке фото');
+      return null;
+    }
+  }, [apiBase, initDataRef]);
 
   const handleSaveItem = async () => {
     if (!itemTitle.trim() || !currentWl) return;
     setLoading(true);
+    setPhotoError(null);
     try {
       const body = {
         title: itemTitle.trim(),
         url: itemUrl.trim() || undefined,
         price: itemPrice ? Number(itemPrice) : null,
         priority: itemPriority,
-        imageUrl: itemImageUrl.trim() || undefined,
+        // imageUrl is managed via dedicated photo endpoints — not sent here
       };
 
       if (editingItem) {
         const res = await tgFetch(`/tg/items/${editingItem.id}`, { method: 'PATCH', body: JSON.stringify(body) });
         if (!res.ok) { pushToast('Ошибка сохранения', 'error'); return; }
         const json = await res.json() as { item: Item };
-        setItems((prev) => prev.map((i) => i.id === editingItem.id ? json.item : i));
+        let finalItem = json.item;
+
+        if (itemPhotoFile) {
+          setPhotoUploading(true);
+          const photoUrl = await uploadPhoto(editingItem.id, itemPhotoFile);
+          setPhotoUploading(false);
+          if (photoUrl) finalItem = { ...finalItem, imageUrl: photoUrl };
+        } else if (itemPhotoDeleted && editingItem.imageUrl) {
+          const delRes = await tgFetch(`/tg/items/${editingItem.id}/photo`, { method: 'DELETE' });
+          if (delRes.ok) finalItem = { ...finalItem, imageUrl: null };
+        }
+
+        setItems((prev) => prev.map((i) => i.id === editingItem.id ? finalItem : i));
         pushToast('✅ Сохранено!', 'success');
       } else {
         const res = await tgFetch(`/tg/wishlists/${currentWl.id}/items`, { method: 'POST', body: JSON.stringify(body) });
         if (res.status === 402) { pushToast(`Лимит Free: ${planLimits.items} желаний ⭐`, 'error'); return; }
         if (!res.ok) { pushToast('Ошибка добавления', 'error'); return; }
         const json = await res.json() as { item: Item };
-        setItems((prev) => [json.item, ...prev]);
+        let finalItem = json.item;
+
+        if (itemPhotoFile) {
+          setPhotoUploading(true);
+          const photoUrl = await uploadPhoto(json.item.id, itemPhotoFile);
+          setPhotoUploading(false);
+          if (photoUrl) finalItem = { ...finalItem, imageUrl: photoUrl };
+        }
+
+        setItems((prev) => [finalItem, ...prev]);
         setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
         pushToast('✅ Желание добавлено!', 'success');
       }
@@ -549,6 +647,7 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
       resetItemForm();
     } finally {
       setLoading(false);
+      setPhotoUploading(false);
     }
   };
 
@@ -853,10 +952,81 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
                 <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Ссылка (необязательно)</label>
                 <input style={inputStyle} placeholder="https://…" value={itemUrl} onChange={(e) => setItemUrl(e.target.value)} />
               </div>
+              {/* ── Photo picker ── */}
+              {(() => {
+                const photoPreviewSrc = itemPhotoDeleted ? null : (itemPhotoLocalUrl ?? (itemImageUrl || null));
+                const hasPhoto = !!(itemPhotoLocalUrl || (!itemPhotoDeleted && itemImageUrl));
+                return (
               <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Фото (ссылка, необязательно)</label>
-                <input style={inputStyle} placeholder="https://example.com/photo.jpg" value={itemImageUrl} onChange={(e) => setItemImageUrl(e.target.value)} />
+                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 8 }}>Фото</label>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                  {/* Preview square */}
+                  <div style={{
+                    width: 80, height: 80, borderRadius: 12, overflow: 'hidden', flexShrink: 0,
+                    background: C.card, border: `1px solid ${C.borderLight}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {photoPreviewSrc && !photoPickerImgErr ? (
+                      <img
+                        src={photoPreviewSrc}
+                        onError={() => setPhotoPickerImgErr(true)}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        alt=""
+                      />
+                    ) : (
+                      <span style={{ fontSize: 28, opacity: 0.35 }}>🖼</span>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                    <button
+                      type="button"
+                      onClick={() => { setPhotoError(null); setPhotoPickerImgErr(false); photoInputRef.current?.click(); }}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        background: 'none', border: 'none', padding: 0,
+                        fontSize: 14, fontWeight: 500, color: C.green, cursor: 'pointer', fontFamily: font,
+                      }}
+                    >
+                      <span>📎</span>
+                      <span>{hasPhoto ? 'Заменить фото' : 'Выбрать фото'}</span>
+                    </button>
+
+                    {hasPhoto && (
+                      <button
+                        type="button"
+                        onClick={handlePhotoDelete}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          background: 'none', border: 'none', padding: 0,
+                          fontSize: 14, fontWeight: 500, color: C.red, cursor: 'pointer', fontFamily: font,
+                        }}
+                      >
+                        <span>🗑</span>
+                        <span>Удалить фото</span>
+                      </button>
+                    )}
+
+                    {photoError && (
+                      <span style={{ fontSize: 12, color: C.red, lineHeight: 1.4 }}>{photoError}</span>
+                    )}
+                    {photoUploading && (
+                      <span style={{ fontSize: 12, color: C.textMuted }}>Загружаю...</span>
+                    )}
+                  </div>
+                </div>
+
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  style={{ display: 'none' }}
+                  onChange={handlePhotoSelect}
+                />
               </div>
+                );
+              })()}
               <div>
                 <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Цена (необязательно)</label>
                 <input style={inputStyle} placeholder="0 ₽" type="number" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} />

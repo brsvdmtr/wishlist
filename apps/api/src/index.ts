@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -40,6 +41,48 @@ app.use(
   }),
 );
 app.use(express.json());
+
+// ─── File uploads ─────────────────────────────────────────────────────────────
+const UPLOAD_DIR = (process.env.UPLOAD_DIR ?? '').trim() || path.join(process.cwd(), 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+const multerStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '');
+    cb(null, `${crypto.randomUUID()}${ext || '.bin'}`);
+  },
+});
+
+const upload = multer({
+  storage: multerStorage,
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      return cb(new Error('Unsupported file type. Use JPEG, PNG, WebP, or GIF.'));
+    }
+    cb(null, true);
+  },
+});
+
+/** Delete a local upload file. Silently ignores missing files and non-local URLs. */
+function deleteUploadFile(imageUrl: string | null): void {
+  if (!imageUrl) return;
+  // Only delete files we own (relative /api/uploads/ paths or bare filenames).
+  // External URLs (http/https) are left untouched.
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) return;
+  const filename = path.basename(imageUrl); // strips any leading /api/uploads/ etc.
+  if (!filename || filename.includes('..') || filename.includes('/')) return;
+  const filepath = path.join(UPLOAD_DIR, filename);
+  fs.unlink(filepath, () => {}); // best-effort
+}
+
+// Serve uploaded files as static assets at /uploads/*
+// In production: nginx /api/* → port 3001, so GET /api/uploads/x → /uploads/x here.
+app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '30d' }));
+// ──────────────────────────────────────────────────────────────────────────────
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -1192,12 +1235,82 @@ tgRouter.post(
   }),
 );
 
+// POST /tg/items/:id/photo — upload or replace item photo
+tgRouter.post(
+  '/items/:id/photo',
+  upload.single('photo'),
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+    if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: { id: true, imageUrl: true, wishlist: { select: { ownerId: true } } },
+    });
+    if (!item) {
+      // Clean up orphaned upload before returning.
+      deleteUploadFile(req.file.filename);
+      return res.status(404).json({ error: 'Item not found' });
+    }
+    if (item.wishlist.ownerId !== user.id) {
+      deleteUploadFile(req.file.filename);
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Delete the previous local upload if it exists.
+    deleteUploadFile(item.imageUrl);
+
+    const photoUrl = `/api/uploads/${req.file.filename}`;
+    await prisma.item.update({ where: { id }, data: { imageUrl: photoUrl } });
+
+    return res.json({ photoUrl });
+  }),
+);
+
+// DELETE /tg/items/:id/photo — remove item photo
+tgRouter.delete(
+  '/items/:id/photo',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: { id: true, imageUrl: true, wishlist: { select: { ownerId: true } } },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    deleteUploadFile(item.imageUrl);
+    await prisma.item.update({ where: { id }, data: { imageUrl: null } });
+
+    return res.json({ ok: true });
+  }),
+);
+
 app.use('/public', publicRouter);
 app.use('/tg', tgRouter);
 app.use(privateRouter);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  // Multer errors (file too large, wrong type, etc.)
+  if (err && typeof err === 'object' && 'code' in err) {
+    const multerErr = err as { code: string; message: string };
+    if (multerErr.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'Файл слишком большой. Максимум 30 МБ.' });
+    }
+    if (multerErr.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ error: 'Unexpected field name. Use "photo".' });
+    }
+  }
+  if (err instanceof Error && err.message.startsWith('Unsupported file type')) {
+    return res.status(415).json({ error: err.message });
+  }
+
   // eslint-disable-next-line no-console
   console.error(err);
   return res.status(500).json({ error: 'Internal server error' });
