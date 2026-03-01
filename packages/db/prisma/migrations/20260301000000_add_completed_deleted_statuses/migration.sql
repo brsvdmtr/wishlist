@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "ItemStatus" ADD VALUE 'COMPLETED';
+ALTER TYPE "ItemStatus" ADD VALUE 'DELETED';

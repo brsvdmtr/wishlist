@@ -17,6 +17,8 @@ enum ItemStatus {
   AVAILABLE
   RESERVED
   PURCHASED
+  COMPLETED
+  DELETED
 }
 
 enum ReservationType {
