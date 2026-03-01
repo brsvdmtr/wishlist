@@ -1,15 +1,10 @@
 import dotenv from 'dotenv';
-import { Telegraf } from 'telegraf';
+import { Telegraf, Markup } from 'telegraf';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { getSession, clearWizard } from './session';
-import { mainMenuKeyboard, openWebAppKeyboard } from './menu';
-import { getMenuButtonBaseUrl } from './config';
-import { handleStart } from './handlers/start';
-import { handleMyList, handleShare, handleSettings, handleBackToMenu, handleCreateListText } from './handlers/list';
-import { handleAddWish, handleAddItemText } from './handlers/addItem';
-
+// Prefer app-local .env when running from repo root (pnpm dev),
+// but also support running from within apps/bot (pnpm -C apps/bot start).
 const envCandidates = [
   path.resolve(process.cwd(), 'apps/bot/.env'),
   path.resolve(process.cwd(), '.env'),
@@ -22,106 +17,71 @@ for (const p of envCandidates) {
 }
 
 const token = process.env.BOT_TOKEN;
+const MINI_APP_URL = process.env.MINI_APP_URL ?? 'https://example.com/miniapp';
 
 if (!token) {
   // eslint-disable-next-line no-console
   console.warn('[bot] BOT_TOKEN is missing. Bot is disabled (see apps/bot/.env.example).');
+  // Keep process alive so `pnpm dev` can still run web+api without a bot token.
   setInterval(() => {}, 60_000);
 } else {
   const bot = new Telegraf(token);
 
-  bot.start(handleStart);
+  // Set the persistent menu button (bottom-left "Вишлист" button)
+  bot.telegram
+    .setChatMenuButton({
+      menuButton: {
+        type: 'web_app',
+        text: 'Вишлист',
+        web_app: { url: MINI_APP_URL },
+      },
+    })
+    .catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error('[bot] failed to set menu button', err);
+    });
 
-  bot.hears('➕ Добавить желание', handleAddWish);
-  bot.hears('📋 Мой список', handleMyList);
-  bot.hears('🔗 Поделиться', handleShare);
-  bot.hears('⚙️ Настройки', handleSettings);
-  bot.hears('◀️ В меню', handleBackToMenu);
-  bot.hears('❌ Отмена', (ctx) => {
-    const chatId = ctx.chat?.id;
-    if (chatId) clearWizard(chatId);
-    return ctx.reply('Отменено.', mainMenuKeyboard());
-  });
-
-  bot.on('text', async (ctx) => {
-    const chatId = ctx.chat?.id;
-    if (!chatId) return;
-    const session = getSession(chatId);
-
-    if (session.wizard === 'create_list') {
-      await handleCreateListText(ctx);
-      return;
+  bot.start((ctx) => {
+    const payload = ctx.startPayload; // slug passed via ?start=SLUG deep link
+    if (payload) {
+      // Guest deep link — open specific wishlist in mini app
+      return ctx.reply(
+        `Смотри вишлист 🎁`,
+        Markup.inlineKeyboard([
+          Markup.button.webApp('Смотреть вишлист 🎁', `${MINI_APP_URL}?startapp=${payload}`),
+        ]),
+      );
     }
-    if (session.wizard === 'add_item') {
-      await handleAddItemText(ctx);
-      return;
-    }
-
-    const text = ctx.message?.text ?? '';
-    if (text.includes('/w/')) {
-      const match = text.match(/\/w\/([a-z0-9-]+)/i);
-      if (match?.[1]) {
-        const slug = match[1];
-        const { openWishListWebAppKeyboard } = await import('./menu');
-        const { getMenuButtonUrlForSlug } = await import('./config');
-        return ctx.reply(
-          `🎁 Вишлист: ${slug}`,
-          openWishListWebAppKeyboard(getMenuButtonUrlForSlug(slug)),
-        );
-      }
-    }
-
-    return ctx.reply('Используй кнопки меню: ➕ Добавить желание, 📋 Мой список, 🔗 Поделиться.', mainMenuKeyboard());
+    // Regular start — no inline button, user uses the menu button
+    return ctx.reply(
+      'Привет! WishBoard — твой персональный список желаний 🎁\nНажми кнопку «Вишлист» внизу, чтобы открыть приложение.',
+    );
   });
 
-  bot.command('demo', async (ctx) => {
-    const { openWishListWebAppKeyboard } = await import('./menu');
-    const { getMenuButtonUrlForSlug } = await import('./config');
-    return ctx.reply('📋 Демо-вишлист', openWishListWebAppKeyboard(getMenuButtonUrlForSlug('demo')));
-  });
-  bot.command('w', async (ctx) => {
-    const slug = ctx.message.text.split(/\s+/)[1];
-    if (!slug) return ctx.reply('Использование: /w <slug>\nПример: /w demo');
-    const { openWishListWebAppKeyboard } = await import('./menu');
-    const { getMenuButtonUrlForSlug } = await import('./config');
-    return ctx.reply(`🎁 Вишлист: ${slug}`, openWishListWebAppKeyboard(getMenuButtonUrlForSlug(slug)));
-  });
-  bot.command('health', async (ctx) => {
-    const API_BASE_URL = (process.env.API_BASE_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
-    try {
-      const res = await fetch(`${API_BASE_URL}/health`);
-      const data = (await res.json()) as { ok?: boolean };
-      const status = data.ok === true ? '✅ API работает' : `⚠️ ${JSON.stringify(data)}`;
-      return ctx.reply(`Health: ${status}`);
-    } catch (e) {
-      return ctx.reply(`❌ API недоступен: ${e instanceof Error ? e.message : 'Unknown'}`);
-    }
-  });
   bot.command('help', (ctx) =>
     ctx.reply(
-      'Кнопки:\n➕ Добавить желание — добавить пункт в список\n📋 Мой список — посмотреть и поделиться\n🔗 Поделиться — ссылка на вишлист',
-      mainMenuKeyboard(),
+      'WishBoard — создавай вишлисты и делись ими с друзьями.\n\n/start — начать',
     ),
   );
 
-  bot.launch().then(async () => {
-    // eslint-disable-next-line no-console
-    console.log('[bot] started');
-    const baseUrl = getMenuButtonBaseUrl();
-    const menuButton = {
-      type: 'web_app' as const,
-      text: 'WishList',
-      web_app: { url: baseUrl },
-    };
-    try {
-      await bot.telegram.setChatMenuButton({ menuButton });
+  bot.telegram
+    .setMyCommands([{ command: 'start', description: 'Открыть WishBoard' }])
+    .catch((err: unknown) => {
       // eslint-disable-next-line no-console
-      console.log('[bot] menu button set (global)', { menu_button_url: baseUrl });
-    } catch (err) {
+      console.error('[bot] failed to set commands', err);
+    });
+
+  bot
+    .launch()
+    .then(() => {
       // eslint-disable-next-line no-console
-      console.warn('[bot] setChatMenuButton failed:', err);
-    }
-  });
+      console.log('[bot] started');
+    })
+    .catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error('[bot] failed to start', err);
+      process.exitCode = 1;
+    });
 
   process.once('SIGINT', () => bot.stop('SIGINT'));
   process.once('SIGTERM', () => bot.stop('SIGTERM'));
