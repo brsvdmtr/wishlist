@@ -3,13 +3,26 @@
 import Script from 'next/script';
 import { useEffect } from 'react';
 
+type TgWebAppUser = { id: number; first_name: string; last_name?: string; username?: string };
+
 declare global {
   interface Window {
     Telegram?: {
       WebApp: {
-        ready: () => void;
-        expand: () => void;
+        ready(): void;
+        expand(): void;
+        close(): void;
+        initData: string;
+        initDataUnsafe: { user?: TgWebAppUser; start_param?: string };
+        setHeaderColor(color: string): void;
+        setBackgroundColor(color: string): void;
+        colorScheme: 'light' | 'dark';
         enableClosingConfirmation?: (enable: boolean) => void;
+        BackButton: { show(): void; hide(): void; onClick(fn: () => void): void; offClick(fn: () => void): void };
+        HapticFeedback: {
+          impactOccurred(style: 'light' | 'medium' | 'heavy'): void;
+          notificationOccurred(type: 'error' | 'success' | 'warning'): void;
+        };
       };
     };
   }

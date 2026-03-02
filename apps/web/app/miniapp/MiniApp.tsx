@@ -6,28 +6,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 // TELEGRAM TYPES
 // ═══════════════════════════════════════════════════════
 
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp: {
-        ready(): void;
-        expand(): void;
-        close(): void;
-        initData: string;
-        initDataUnsafe: { user?: TgUser; start_param?: string };
-        setHeaderColor(color: string): void;
-        setBackgroundColor(color: string): void;
-        colorScheme: 'light' | 'dark';
-        BackButton: { show(): void; hide(): void; onClick(fn: () => void): void; offClick(fn: () => void): void };
-        HapticFeedback: {
-          impactOccurred(style: 'light' | 'medium' | 'heavy'): void;
-          notificationOccurred(type: 'error' | 'success' | 'warning'): void;
-        };
-      };
-    };
-  }
-}
-
 type TgUser = { id: number; first_name: string; last_name?: string; username?: string };
 
 // ═══════════════════════════════════════════════════════
