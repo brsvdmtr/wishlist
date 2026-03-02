@@ -112,6 +112,10 @@ const ItemStatusSchema = z.enum(['AVAILABLE', 'RESERVED', 'PURCHASED', 'COMPLETE
 const ACTIVE_STATUSES = ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const;
 const PrioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH']);
 
+// Sort logic lives in sort.ts (no external deps → easy to unit-test)
+import { ITEM_ORDER_BY, sortItemsJs, type SortableItem } from './sort.js';
+export { ITEM_ORDER_BY, sortItemsJs, type SortableItem };
+
 const actorBodySchema = z.object({
   actorHash: z.string().uuid(),
 });
@@ -244,7 +248,7 @@ publicRouter.get(
 
     const items = await prisma.item.findMany({
       where,
-      orderBy: [{ createdAt: 'desc' }],
+      orderBy: ITEM_ORDER_BY,
       include: {
         itemTags: { include: { tag: { select: { id: true, name: true } } } },
         reservationEvents: {
@@ -277,7 +281,7 @@ publicRouter.get(
         deadline: true,
         items: {
           where: { status: { in: [...ACTIVE_STATUSES] } },
-          orderBy: [{ createdAt: 'desc' }],
+          orderBy: ITEM_ORDER_BY,
           include: {
             itemTags: { include: { tag: { select: { id: true, name: true } } } },
             reservationEvents: {
@@ -818,6 +822,7 @@ function numToPriority(n: number): 'LOW' | 'MEDIUM' | 'HIGH' {
 
 function mapTgItem(item: {
   id: string;
+  wishlistId: string;
   title: string;
   url: string;
   priceText: string | null;
@@ -827,6 +832,7 @@ function mapTgItem(item: {
 }) {
   return {
     id: item.id,
+    wishlistId: item.wishlistId,
     title: item.title,
     url: item.url || null,
     price: item.priceText ? (Number(item.priceText) || null) : null,
@@ -975,8 +981,8 @@ tgRouter.get(
 
     const items = await prisma.item.findMany({
       where: { wishlistId: id, status: { in: [...ACTIVE_STATUSES] } },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      orderBy: ITEM_ORDER_BY,
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
     });
 
     return res.json({ items: items.map(mapTgItem) });
@@ -1020,7 +1026,7 @@ tgRouter.post(
         priority: numToPriority(parsed.data.priority ?? 2),
         imageUrl: parsed.data.imageUrl ?? null,
       },
-      select: { id: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
     });
 
     return res.status(201).json({ item: mapTgItem(item) });
@@ -1064,7 +1070,7 @@ tgRouter.patch(
         ...(parsed.data.priority !== undefined ? { priority: numToPriority(parsed.data.priority) } : {}),
         ...(parsed.data.imageUrl !== undefined ? { imageUrl: parsed.data.imageUrl } : {}),
       },
-      select: { id: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
     });
 
     return res.json({ item: mapTgItem(updated) });
@@ -1109,7 +1115,7 @@ tgRouter.post(
     const updated = await prisma.item.update({
       where: { id },
       data: { status: 'COMPLETED' },
-      select: { id: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
     });
     return res.json({ item: mapTgItem(updated) });
   }),
@@ -1136,7 +1142,7 @@ tgRouter.post(
     const updated = await prisma.item.update({
       where: { id },
       data: { status: 'AVAILABLE' },
-      select: { id: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
     });
     return res.json({ item: mapTgItem(updated) });
   }),
@@ -1156,8 +1162,8 @@ tgRouter.get(
 
     const items = await prisma.item.findMany({
       where: { wishlistId: id, status: { in: ['DELETED', 'COMPLETED'] } },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      orderBy: ITEM_ORDER_BY,
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
     });
 
     return res.json({ items: items.map(mapTgItem) });

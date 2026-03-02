@@ -49,9 +49,9 @@ const PRICE_FILTERS = [
 ];
 
 const PRIORITIES = [
-  { value: 1, emoji: '👍', label: 'Неплохо' },
-  { value: 2, emoji: '❤️', label: 'Хочу' },
-  { value: 3, emoji: '🔥', label: 'Мечтаю!' },
+  { value: 1, emoji: '👍', label: 'Неплохо',  sub: 'Низкий приоритет' },
+  { value: 2, emoji: '❤️', label: 'Хочу',     sub: 'Средний приоритет' },
+  { value: 3, emoji: '🔥', label: 'Мечтаю',   sub: 'Высокий приоритет' },
 ];
 
 const prioEmoji = (p: number) => ({ 1: '👍', 2: '❤️', 3: '🔥' } as Record<number, string>)[p] ?? '👍';
@@ -73,6 +73,7 @@ type Wishlist = {
 
 type Item = {
   id: string;
+  wishlistId?: string;
   title: string;
   url: string | null;
   price: number | null;
@@ -601,24 +602,24 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
           if (delRes.ok) finalItem = { ...finalItem, imageUrl: null };
         }
 
-        setItems((prev) => prev.map((i) => i.id === editingItem.id ? finalItem : i));
+        // Reload from API so list order reflects server-side sort (priority DESC)
+        await loadItems(editingItem.wishlistId ?? currentWl.id);
         pushToast('✅ Сохранено!', 'success');
       } else {
         const res = await tgFetch(`/tg/wishlists/${currentWl.id}/items`, { method: 'POST', body: JSON.stringify(body) });
         if (res.status === 402) { pushToast(`Лимит Free: ${planLimits.items} желаний ⭐`, 'error'); return; }
         if (!res.ok) { pushToast('Ошибка добавления', 'error'); return; }
         const json = await res.json() as { item: Item };
-        let finalItem = json.item;
 
         if (itemPhotoFile) {
           setPhotoUploading(true);
-          const photoUrl = await uploadPhoto(json.item.id, itemPhotoFile);
+          await uploadPhoto(json.item.id, itemPhotoFile);
           setPhotoUploading(false);
-          if (photoUrl) finalItem = { ...finalItem, imageUrl: photoUrl };
         }
 
-        setItems((prev) => [finalItem, ...prev]);
+        // Reload from API to get correct sorted position
         setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
+        await loadItems(currentWl.id);
         pushToast('✅ Желание добавлено!', 'success');
       }
       setShowItemForm(false);
@@ -1019,7 +1020,8 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
                       border: `1px solid ${itemPriority === p.value ? C.accentGlow : C.border}`,
                     }}>
                       <div style={{ fontSize: 22, marginBottom: 4 }}>{p.emoji}</div>
-                      <div style={{ fontSize: 11, color: itemPriority === p.value ? C.accent : C.textMuted }}>{p.label}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: itemPriority === p.value ? C.accent : C.text, marginBottom: 2 }}>{p.label}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.2 }}>{p.sub}</div>
                     </div>
                   ))}
                 </div>
