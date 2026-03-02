@@ -459,7 +459,7 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
     try {
       const res = await tgFetch('/tg/wishlists', {
         method: 'POST',
-        body: JSON.stringify({ title: wlTitle.trim(), deadline: wlDeadline || null }),
+        body: JSON.stringify({ title: wlTitle.trim(), deadline: wlDeadline ? new Date(wlDeadline).toISOString() : null }),
       });
       if (res.status === 402) { pushToast(`Лимит Free: ${planLimits.wishlists} вишлиста ⭐`, 'error'); return; }
       if (!res.ok) { pushToast('Ошибка создания', 'error'); return; }
