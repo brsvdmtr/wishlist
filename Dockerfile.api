@@ -37,5 +37,5 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-# Run DB migrations then start the server
-CMD ["sh", "-c", "pnpm db:deploy && node apps/api/dist/index.js"]
+# Run DB migrations (non-fatal — server starts even if migration fails)
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=packages/db/prisma/schema.prisma 2>&1 || echo '[api] migration skipped'; exec node apps/api/dist/index.js"]
