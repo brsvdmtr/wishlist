@@ -704,6 +704,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       }
       setShowItemForm(false);
       resetItemForm();
+      // If we were viewing item-detail, navigate back to list after save
+      if (screen === 'item-detail') {
+        setViewingItem(null);
+        setScreen('wishlist-detail');
+      }
     } finally {
       setLoading(false);
       setPhotoUploading(false);
@@ -719,6 +724,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
       pushToast('🗑 Удалено', 'success');
+      // If we were viewing item-detail, navigate back to list after delete
+      if (screen === 'item-detail') {
+        setViewingItem(null);
+        setScreen('wishlist-detail');
+      }
     } finally {
       setLoading(false);
     }
@@ -1019,137 +1029,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <button style={btnSecondary} onClick={() => { resetItemForm(); setShowItemForm(true); }}>＋ Добавить желание</button>
           </div>
 
-          <BottomSheet isOpen={showItemForm} onClose={() => { setShowItemForm(false); resetItemForm(); }} title={editingItem ? 'Редактировать' : 'Новое желание'}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Название</label>
-                <input style={inputStyle} placeholder="Например: AirPods Pro 3" value={itemTitle} onChange={(e) => setItemTitle(e.target.value)} autoFocus />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Ссылка (необязательно)</label>
-                <input style={inputStyle} placeholder="https://…" value={itemUrl} onChange={(e) => setItemUrl(e.target.value)} />
-              </div>
-              {/* ── Photo picker ── */}
-              {(() => {
-                const photoPreviewSrc = itemPhotoDeleted ? null : (itemPhotoLocalUrl ?? (itemImageUrl || null));
-                const hasPhoto = !!(itemPhotoLocalUrl || (!itemPhotoDeleted && itemImageUrl));
-                return (
-              <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 8 }}>Фото</label>
-                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                  {/* Preview square */}
-                  <div style={{
-                    width: 80, height: 80, borderRadius: 12, overflow: 'hidden', flexShrink: 0,
-                    background: C.card, border: `1px solid ${C.borderLight}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {photoPreviewSrc && !photoPickerImgErr ? (
-                      <img
-                        src={photoPreviewSrc}
-                        onError={() => setPhotoPickerImgErr(true)}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        alt=""
-                      />
-                    ) : (
-                      <span style={{ fontSize: 28, opacity: 0.35 }}>🖼</span>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
-                    <button
-                      type="button"
-                      onClick={() => { setPhotoError(null); setPhotoPickerImgErr(false); photoInputRef.current?.click(); }}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        background: 'none', border: 'none', padding: 0,
-                        fontSize: 14, fontWeight: 500, color: C.green, cursor: 'pointer', fontFamily: font,
-                      }}
-                    >
-                      <span>📎</span>
-                      <span>{hasPhoto ? 'Заменить фото' : 'Выбрать фото'}</span>
-                    </button>
-
-                    {hasPhoto && (
-                      <button
-                        type="button"
-                        onClick={handlePhotoDelete}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6,
-                          background: 'none', border: 'none', padding: 0,
-                          fontSize: 14, fontWeight: 500, color: C.red, cursor: 'pointer', fontFamily: font,
-                        }}
-                      >
-                        <span>🗑</span>
-                        <span>Удалить фото</span>
-                      </button>
-                    )}
-
-                    {photoError && (
-                      <span style={{ fontSize: 12, color: C.red, lineHeight: 1.4 }}>{photoError}</span>
-                    )}
-                    {photoUploading && (
-                      <span style={{ fontSize: 12, color: C.textMuted }}>Загружаю...</span>
-                    )}
-                  </div>
-                </div>
-
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  style={{ display: 'none' }}
-                  onChange={handlePhotoSelect}
-                />
-              </div>
-                );
-              })()}
-              <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Цена (необязательно)</label>
-                <input style={inputStyle} placeholder="0 ₽" type="number" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Приоритет</label>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  {PRIORITIES.map((p) => (
-                    <div key={p.value} onClick={() => setItemPriority(p.value as 1 | 2 | 3)} style={{
-                      flex: 1, padding: '12px 8px', borderRadius: 12, textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
-                      background: itemPriority === p.value ? C.accentSoft : C.surface,
-                      border: `1px solid ${itemPriority === p.value ? C.accentGlow : C.border}`,
-                    }}>
-                      <div style={{ fontSize: 22, marginBottom: 4 }}>{p.emoji}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: itemPriority === p.value ? C.accent : C.text, marginBottom: 2 }}>{p.label}</div>
-                      <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.2 }}>{p.sub}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <button style={{ ...btnPrimary, opacity: itemTitle.trim() ? 1 : 0.5 }} onClick={() => void handleSaveItem()} disabled={!itemTitle.trim() || loading}>
-                {loading ? '…' : editingItem ? '💾 Сохранить' : '✨ Добавить'}
-              </button>
-            </div>
-          </BottomSheet>
-
-          {/* Delete confirmation */}
-          <BottomSheet isOpen={!!deletingItem} onClose={() => setDeletingItem(null)} title="Удалить желание?">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.5 }}>{deletingItem?.title}</div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button style={{ ...btnGhost, flex: 1 }} onClick={() => setDeletingItem(null)}>Отмена</button>
-                <button
-                  style={{ ...btnPrimary, flex: 2, background: C.red }}
-                  onClick={() => {
-                    if (deletingItem) {
-                      void handleDeleteItem(deletingItem);
-                      setDeletingItem(null);
-                    }
-                  }}
-                >
-                  🗑 Удалить
-                </button>
-              </div>
-            </div>
-          </BottomSheet>
         </div>
       )}
 
@@ -1186,20 +1065,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {viewingItem.status !== 'purchased' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button onClick={() => {
-                // Navigate back to wishlist-detail FIRST so the BottomSheet (edit form)
-                // can actually render — it lives inside the wishlist-detail block.
-                const item = viewingItem as Item;
-                setViewingItem(null);
-                setScreen('wishlist-detail');
-                openEditItem(item);
+                // BottomSheet is now at the top level (position:fixed), so it renders
+                // on any screen. Just open the edit form directly.
+                openEditItem(viewingItem as Item);
               }} style={{ ...btnPrimary, width: '100%' }}>✏️ Редактировать</button>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => {
-                  // Navigate back so delete confirmation BottomSheet can render.
-                  const item = viewingItem as Item;
-                  setViewingItem(null);
-                  setScreen('wishlist-detail');
-                  setDeletingItem(item);
+                  setDeletingItem(viewingItem as Item);
                 }} style={{ ...btnGhost, flex: 1, color: C.red }}>🗑 Удалить</button>
                 <button onClick={() => {
                   handleCompleteItem(viewingItem as Item);
@@ -1394,6 +1266,139 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
         </div>
       )}
+
+      {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
+      <BottomSheet isOpen={showItemForm} onClose={() => { setShowItemForm(false); resetItemForm(); }} title={editingItem ? 'Редактировать' : 'Новое желание'}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Название</label>
+            <input style={inputStyle} placeholder="Например: AirPods Pro 3" value={itemTitle} onChange={(e) => setItemTitle(e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Ссылка (необязательно)</label>
+            <input style={inputStyle} placeholder="https://…" value={itemUrl} onChange={(e) => setItemUrl(e.target.value)} />
+          </div>
+          {/* ── Photo picker ── */}
+          {(() => {
+            const photoPreviewSrc = itemPhotoDeleted ? null : (itemPhotoLocalUrl ?? (itemImageUrl || null));
+            const hasPhoto = !!(itemPhotoLocalUrl || (!itemPhotoDeleted && itemImageUrl));
+            return (
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 8 }}>Фото</label>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+              {/* Preview square */}
+              <div style={{
+                width: 80, height: 80, borderRadius: 12, overflow: 'hidden', flexShrink: 0,
+                background: C.card, border: `1px solid ${C.borderLight}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {photoPreviewSrc && !photoPickerImgErr ? (
+                  <img
+                    src={photoPreviewSrc}
+                    onError={() => setPhotoPickerImgErr(true)}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    alt=""
+                  />
+                ) : (
+                  <span style={{ fontSize: 28, opacity: 0.35 }}>🖼</span>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                <button
+                  type="button"
+                  onClick={() => { setPhotoError(null); setPhotoPickerImgErr(false); photoInputRef.current?.click(); }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    background: 'none', border: 'none', padding: 0,
+                    fontSize: 14, fontWeight: 500, color: C.green, cursor: 'pointer', fontFamily: font,
+                  }}
+                >
+                  <span>📎</span>
+                  <span>{hasPhoto ? 'Заменить фото' : 'Выбрать фото'}</span>
+                </button>
+
+                {hasPhoto && (
+                  <button
+                    type="button"
+                    onClick={handlePhotoDelete}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      background: 'none', border: 'none', padding: 0,
+                      fontSize: 14, fontWeight: 500, color: C.red, cursor: 'pointer', fontFamily: font,
+                    }}
+                  >
+                    <span>🗑</span>
+                    <span>Удалить фото</span>
+                  </button>
+                )}
+
+                {photoError && (
+                  <span style={{ fontSize: 12, color: C.red, lineHeight: 1.4 }}>{photoError}</span>
+                )}
+                {photoUploading && (
+                  <span style={{ fontSize: 12, color: C.textMuted }}>Загружаю...</span>
+                )}
+              </div>
+            </div>
+
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              style={{ display: 'none' }}
+              onChange={handlePhotoSelect}
+            />
+          </div>
+            );
+          })()}
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Цена (необязательно)</label>
+            <input style={inputStyle} placeholder="0 ₽" type="number" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Приоритет</label>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {PRIORITIES.map((p) => (
+                <div key={p.value} onClick={() => setItemPriority(p.value as 1 | 2 | 3)} style={{
+                  flex: 1, padding: '12px 8px', borderRadius: 12, textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
+                  background: itemPriority === p.value ? C.accentSoft : C.surface,
+                  border: `1px solid ${itemPriority === p.value ? C.accentGlow : C.border}`,
+                }}>
+                  <div style={{ fontSize: 22, marginBottom: 4 }}>{p.emoji}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: itemPriority === p.value ? C.accent : C.text, marginBottom: 2 }}>{p.label}</div>
+                  <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.2 }}>{p.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <button style={{ ...btnPrimary, opacity: itemTitle.trim() ? 1 : 0.5 }} onClick={() => void handleSaveItem()} disabled={!itemTitle.trim() || loading}>
+            {loading ? '…' : editingItem ? '💾 Сохранить' : '✨ Добавить'}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Delete confirmation */}
+      <BottomSheet isOpen={!!deletingItem} onClose={() => setDeletingItem(null)} title="Удалить желание?">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.5 }}>{deletingItem?.title}</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button style={{ ...btnGhost, flex: 1 }} onClick={() => setDeletingItem(null)}>Отмена</button>
+            <button
+              style={{ ...btnPrimary, flex: 2, background: C.red }}
+              onClick={() => {
+                if (deletingItem) {
+                  void handleDeleteItem(deletingItem);
+                  setDeletingItem(null);
+                }
+              }}
+            >
+              🗑 Удалить
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
 
       {/* ── TOASTS ── */}
       <div style={{ position: 'fixed', bottom: 24, left: 16, right: 16, zIndex: 200, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
