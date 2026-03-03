@@ -241,7 +241,14 @@ function WishCardGuest({ item, onReserve }: { item: GuestItem; onReserve: (item:
 // MAIN APP
 // ═══════════════════════════════════════════════════════
 
-export default function MiniApp({ apiBase, botUsername }: { apiBase: string; botUsername: string }) {
+export default function MiniApp({ apiBase, botUsername, miniappShortName }: { apiBase: string; botUsername: string; miniappShortName: string }) {
+  /** Build t.me deep link: https://t.me/<BOT>/<SHORT_NAME>?startapp=<payload> */
+  const buildTgDeepLink = (payload?: string) => {
+    if (!botUsername || !miniappShortName) return null;
+    const base = `https://t.me/${botUsername}/${miniappShortName}`;
+    return payload ? `${base}?startapp=${encodeURIComponent(payload)}` : base;
+  };
+
   const tgRef = useRef<Window['Telegram']>( undefined);
   const initDataRef = useRef<string>('');
   const urlStartParamRef = useRef<string>(''); // captured for "Open in Telegram" fallback
@@ -778,9 +785,7 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
       {/* ── ERROR ── */}
       {screen === 'error' && (() => {
         const isTgRequired = errorMsg === 'Открой в Telegram';
-        const tgDeepLink = botUsername
-          ? `https://t.me/${botUsername}/app${urlStartParamRef.current ? `?startapp=${encodeURIComponent(urlStartParamRef.current)}` : ''}`
-          : null;
+        const tgDeepLink = buildTgDeepLink(urlStartParamRef.current || undefined);
         return (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
             <div style={{ fontSize: 48 }}>{isTgRequired ? '✈️' : '😕'}</div>
@@ -1106,12 +1111,11 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
       {screen === 'share' && currentWl && (
         <ShareScreen
           wishlist={currentWl}
-          botUsername={botUsername}
           itemCount={items.length}
           tgUser={tgUser}
           onCopied={() => pushToast('📨 Ссылка скопирована', 'success')}
-          apiBase={apiBase}
           tgFetch={tgFetch}
+          buildTgDeepLink={buildTgDeepLink}
         />
       )}
 
@@ -1271,16 +1275,14 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
 // SHARE SCREEN (extracted to keep main component tidy)
 // ─────────────────────────────────────────────────
 
-function ShareScreen({ wishlist, botUsername, itemCount, tgUser, onCopied, apiBase, tgFetch }: {
+function ShareScreen({ wishlist, itemCount, tgUser, onCopied, tgFetch, buildTgDeepLink }: {
   wishlist: Wishlist;
-  botUsername: string;
   itemCount: number;
   tgUser: TgUser | null;
   onCopied: () => void;
-  apiBase: string;
   tgFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  buildTgDeepLink: (payload?: string) => string | null;
 }) {
-  void apiBase; // reserved for future use
   const [copied, setCopied] = useState(false);
   const [shareToken, setShareToken] = useState<string | null>(null);
 
@@ -1289,13 +1291,11 @@ function ShareScreen({ wishlist, botUsername, itemCount, tgUser, onCopied, apiBa
     tgFetch(`/tg/wishlists/${wishlist.id}/share-token`, { method: 'POST' })
       .then((res) => res.ok ? res.json() : Promise.reject())
       .then((data: { shareToken: string }) => setShareToken(data.shareToken))
-      .catch(() => setShareToken(wishlist.slug)); // fallback to slug on error
-  }, [wishlist.id, wishlist.slug, tgFetch]);
+      .catch(() => { /* token unavailable, buttons stay disabled */ });
+  }, [wishlist.id, tgFetch]);
 
-  const token = shareToken ?? wishlist.slug;
-  const shareLink = botUsername
-    ? `https://t.me/${botUsername}/app?startapp=${token}`
-    : `${typeof window !== 'undefined' ? window.location.origin : ''}/miniapp?startapp=${token}`;
+  // Always t.me deep link, never wishlistik.ru
+  const shareLink = shareToken ? buildTgDeepLink(shareToken) : null;
 
   const fmtDeadline = (d: string | null) => {
     if (!d) return null;
@@ -1303,6 +1303,7 @@ function ShareScreen({ wishlist, botUsername, itemCount, tgUser, onCopied, apiBa
   };
 
   const copy = () => {
+    if (!shareLink) return;
     navigator.clipboard?.writeText(shareLink).catch(() => undefined);
     setCopied(true);
     onCopied();
@@ -1310,6 +1311,7 @@ function ShareScreen({ wishlist, botUsername, itemCount, tgUser, onCopied, apiBa
   };
 
   const shareToTelegram = () => {
+    if (!shareLink) return;
     const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(`🎁 ${wishlist.title}`)}`;
     window.Telegram?.WebApp.openTelegramLink(tgShareUrl);
   };
@@ -1348,19 +1350,19 @@ function ShareScreen({ wishlist, botUsername, itemCount, tgUser, onCopied, apiBa
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           width: '100%', border: `1px solid ${C_local.border}`, boxSizing: 'border-box',
         }}>
-          <span style={{ fontSize: 13, color: shareToken ? C_local.textMuted : C_local.textMuted + '60', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {shareToken ? shareLink : 'Генерация ссылки…'}
+          <span style={{ fontSize: 13, color: shareLink ? C_local.textMuted : C_local.textMuted + '60', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {shareLink ?? 'Генерация ссылки…'}
           </span>
           <span onClick={copy} style={{ fontSize: 12, color: copied ? C_local.green : C_local.accent, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 10 }}>
             {copied ? '✅' : 'Копировать'}
           </span>
         </div>
 
-        <button onClick={shareToTelegram} disabled={!shareToken} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none', fontSize: 15, fontWeight: 600, cursor: shareToken ? 'pointer' : 'default', fontFamily: font, transition: 'all 0.15s', width: '100%', background: C_local.blue, color: '#fff', opacity: shareToken ? 1 : 0.5 }}>
+        <button onClick={shareToTelegram} disabled={!shareLink} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none', fontSize: 15, fontWeight: 600, cursor: shareLink ? 'pointer' : 'default', fontFamily: font, transition: 'all 0.15s', width: '100%', background: C_local.blue, color: '#fff', opacity: shareLink ? 1 : 0.5 }}>
           ✈️ Поделиться в Telegram
         </button>
 
-        <button onClick={copy} disabled={!shareToken} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none', fontSize: 15, fontWeight: 600, cursor: shareToken ? 'pointer' : 'default', fontFamily: font, transition: 'all 0.15s', width: '100%', background: C_local.accent, color: '#fff', opacity: shareToken ? 1 : 0.5 }}>
+        <button onClick={copy} disabled={!shareLink} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none', fontSize: 15, fontWeight: 600, cursor: shareLink ? 'pointer' : 'default', fontFamily: font, transition: 'all 0.15s', width: '100%', background: C_local.accent, color: '#fff', opacity: shareLink ? 1 : 0.5 }}>
           📋 Скопировать ссылку
         </button>
 
