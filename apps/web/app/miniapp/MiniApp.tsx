@@ -243,15 +243,14 @@ function WishCardGuest({ item, onReserve }: { item: GuestItem; onReserve: (item:
 
 export default function MiniApp({ apiBase, botUsername, miniappShortName }: { apiBase: string; botUsername: string; miniappShortName: string }) {
   /** Build t.me deep link.
-   *  With miniappShortName: https://t.me/<BOT>/<SHORT_NAME>?startapp=<payload>  (named /newapp)
-   *  Without:               https://t.me/<BOT>?startapp=<payload>               (Configure Mini App)
+   *  Uses ?start= format which triggers the bot's /start handler — no BotFather Mini App
+   *  configuration required. The bot replies with a WebApp inline button that opens the app.
+   *  Format: https://t.me/<BOT>?start=<payload>
    */
   const buildTgDeepLink = (payload?: string) => {
     if (!botUsername) return null;
-    const base = miniappShortName
-      ? `https://t.me/${botUsername}/${miniappShortName}`
-      : `https://t.me/${botUsername}`;
-    return payload ? `${base}?startapp=${encodeURIComponent(payload)}` : base;
+    const base = `https://t.me/${botUsername}`;
+    return payload ? `${base}?start=${encodeURIComponent(payload)}` : base;
   };
 
   const tgRef = useRef<Window['Telegram']>( undefined);
@@ -456,7 +455,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         return;
       }
 
-      const startParam = tg.initDataUnsafe.start_param;
+      // start_param from deep link (?startapp=) OR from URL query (?startapp=)
+      // The URL query fallback handles WebApp-button opens from bot messages
+      // (when bot replies to /start with an inline webApp button, start_param is not set
+      //  but the URL contains ?startapp=<payload>)
+      const startParam = tg.initDataUnsafe.start_param
+        || new URLSearchParams(window.location.search).get('startapp')
+        || '';
       const user = tg.initDataUnsafe.user;
       if (user) setTgUser(user);
 

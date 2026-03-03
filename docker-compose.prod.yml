@@ -51,6 +51,8 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      NEXT_PUBLIC_BOT_USERNAME: ${NEXT_PUBLIC_BOT_USERNAME:-WishHub_bot}
+      NEXT_PUBLIC_MINIAPP_SHORT_NAME: ${NEXT_PUBLIC_MINIAPP_SHORT_NAME:-}
       INTERNAL_API_BASE_URL: http://api:3001
       ADMIN_KEY: ${ADMIN_KEY}
       ADMIN_BASIC_USER: ${ADMIN_BASIC_USER}
@@ -72,6 +74,7 @@ services:
       NODE_ENV: production
       BOT_TOKEN: ${BOT_TOKEN}
       API_BASE_URL: http://api:3001
+      MINI_APP_URL: ${MINI_APP_URL:-https://wishlistik.ru/miniapp}
       SITE_URL: ${SITE_URL:-${NEXT_PUBLIC_SITE_URL:-https://wishlistik.ru}}
     depends_on:
       api:
