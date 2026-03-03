@@ -37,4 +37,5 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-CMD ["node", "apps/api/dist/index.js"]
+# Run DB migrations then start the server
+CMD ["sh", "-c", "pnpm db:deploy && node apps/api/dist/index.js"]

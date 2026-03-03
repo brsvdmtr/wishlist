@@ -918,7 +918,12 @@ tgRouter.get(
     const wishlists = await prisma.wishlist.findMany({
       where: { ownerId: user.id },
       orderBy: { createdAt: 'desc' },
-      include: { items: { select: { status: true } } },
+      // Explicit select to avoid fetching shareToken (and any future nullable columns)
+      // which would crash if the DB migration hasn't been applied yet.
+      select: {
+        id: true, slug: true, title: true, description: true, deadline: true,
+        items: { select: { status: true } },
+      },
     });
     return res.json({
       wishlists: wishlists.map((wl) => {
