@@ -23,6 +23,8 @@ declare global {
           impactOccurred(style: 'light' | 'medium' | 'heavy'): void;
           notificationOccurred(type: 'error' | 'success' | 'warning'): void;
         };
+        openTelegramLink(url: string): void;
+        openLink(url: string, options?: { try_instant_view?: boolean }): void;
       };
     };
   }

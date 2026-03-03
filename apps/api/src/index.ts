@@ -177,6 +177,15 @@ async function generateUniqueSlug(title: string) {
   return `${base}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+async function generateUniqueShareToken(): Promise<string> {
+  for (let i = 0; i < 10; i++) {
+    const token = crypto.randomBytes(9).toString('base64url'); // 12-char URL-safe token
+    const existing = await prisma.wishlist.findUnique({ where: { shareToken: token } });
+    if (!existing) return token;
+  }
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+}
+
 async function getSystemUser() {
   const email = (process.env.SYSTEM_USER_EMAIL ?? 'owner@local').trim() || 'owner@local';
   return prisma.user.upsert({ where: { email }, update: {}, create: { email } });
@@ -273,6 +282,55 @@ publicRouter.get(
 
     const wishlist = await prisma.wishlist.findUnique({
       where: { slug },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        description: true,
+        deadline: true,
+        items: {
+          where: { status: { in: [...ACTIVE_STATUSES] } },
+          orderBy: ITEM_ORDER_BY,
+          include: {
+            itemTags: { include: { tag: { select: { id: true, name: true } } } },
+            reservationEvents: {
+              where: { type: 'RESERVED' },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { comment: true },
+            },
+          },
+        },
+        tags: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+
+    return res.json({
+      wishlist: {
+        id: wishlist.id,
+        slug: wishlist.slug,
+        title: wishlist.title,
+        description: wishlist.description,
+        deadline: wishlist.deadline,
+      },
+      items: wishlist.items.map(mapItemForPublic),
+      tags: wishlist.tags,
+    });
+  }),
+);
+
+// GET /public/share/:token — resolve share token → wishlist (same shape as /public/wishlists/:slug)
+publicRouter.get(
+  '/share/:token',
+  publicReadLimiter,
+  asyncHandler(async (req, res) => {
+    const token = req.params.token ?? '';
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+
+    const wishlist = await prisma.wishlist.findUnique({
+      where: { shareToken: token },
       select: {
         id: true,
         slug: true,
@@ -877,6 +935,37 @@ tgRouter.get(
       }),
       plan: { wishlists: PLAN.WISHLISTS, items: PLAN.ITEMS },
     });
+  }),
+);
+
+// POST /tg/wishlists/:id/share-token — get or create share token for a wishlist (owner only)
+tgRouter.post(
+  '/wishlists/:id/share-token',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const wishlist = await prisma.wishlist.findUnique({
+      where: { id },
+      select: { id: true, ownerId: true, shareToken: true },
+    });
+    if (!wishlist || wishlist.ownerId !== user.id) {
+      return res.status(404).json({ error: 'Wishlist not found' });
+    }
+
+    if (wishlist.shareToken) {
+      return res.json({ shareToken: wishlist.shareToken });
+    }
+
+    const token = await generateUniqueShareToken();
+    const updated = await prisma.wishlist.update({
+      where: { id },
+      data: { shareToken: token },
+      select: { shareToken: true },
+    });
+
+    return res.json({ shareToken: updated.shareToken });
   }),
 );
 
