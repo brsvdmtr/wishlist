@@ -15,7 +15,8 @@
     "db:generate": "pnpm -C packages/db db:generate",
     "db:migrate": "pnpm -C packages/db db:migrate:dev",
     "db:deploy": "pnpm -C packages/db db:migrate:deploy",
-    "db:studio": "pnpm -C packages/db db:studio"
+    "db:studio": "pnpm -C packages/db db:studio",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/node": "20.14.11",
@@ -25,6 +26,7 @@
     "eslint-config-next": "14.2.0",
     "eslint-config-prettier": "9.1.0",
     "prettier": "3.3.3",
-    "typescript": "5.5.4"
+    "typescript": "5.5.4",
+    "vitest": "^2.1.9"
   }
 }
