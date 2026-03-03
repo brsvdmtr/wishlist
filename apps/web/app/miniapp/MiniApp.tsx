@@ -405,10 +405,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     if (screen === 'wishlist-detail' || screen === 'guest-view') {
       setCurrentWl(null);
       setScreen('my-wishlists');
+      // Refetch owner wishlists when leaving guest-view to ensure fresh data.
+      // This covers the case where the initial parallel loadWishlists() during
+      // deep-link init hasn't completed yet, or the data has become stale.
+      if (screen === 'guest-view') {
+        loadWishlists().catch(() => { /* silent — screen already set */ });
+      }
     } else if (screen === 'share' || screen === 'archive') {
       setScreen('wishlist-detail');
     }
-  }, [screen]);
+  }, [screen, loadWishlists]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -489,9 +495,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       };
 
       if (startParam) {
+        // Load guest wishlist AND owner wishlists in parallel.
+        // Owner wishlists are needed so that "back" from guest-view shows
+        // the user's own data instead of an empty "Пока пусто" screen.
         loadGuestWishlist(startParam)
           .then(() => setScreen('guest-view'))
           .catch(handleErr);
+        loadWishlists().catch(() => { /* non-critical for guest flow */ });
       } else {
         loadWishlists()
           .then(() => setScreen('my-wishlists'))
