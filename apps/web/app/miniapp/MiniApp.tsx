@@ -84,7 +84,7 @@ type Item = {
 
 type GuestItem = Item & { reservedByDisplayName: string | null };
 
-type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'share' | 'guest-view' | 'archive';
+type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive';
 type Toast = { id: string; message: string; kind: 'success' | 'error' };
 
 // ═══════════════════════════════════════════════════════
@@ -153,9 +153,9 @@ function ItemThumb({ item }: { item: Item | GuestItem }) {
   );
 }
 
-function WishCardOwner({ item, onEdit, onDelete, onComplete }: {
+function WishCardOwner({ item, onTap, onDelete, onComplete }: {
   item: Item;
-  onEdit: (item: Item) => void;
+  onTap: (item: Item) => void;
   onDelete: (item: Item) => void;
   onComplete?: (item: Item) => void;
 }) {
@@ -163,12 +163,12 @@ function WishCardOwner({ item, onEdit, onDelete, onComplete }: {
   const isReserved = item.status === 'reserved';
   return (
     <div
-      onClick={() => !isPurchased && onEdit(item)}
+      onClick={() => onTap(item)}
       style={{
         background: C.card, borderRadius: 14, padding: 16,
         display: 'flex', gap: 14, alignItems: 'flex-start',
         border: `1px solid ${C.border}`, opacity: isPurchased ? 0.5 : 1,
-        cursor: isPurchased ? 'default' : 'pointer',
+        cursor: 'pointer',
         WebkitTapHighlightColor: 'transparent',
       }}
     >
@@ -190,30 +190,27 @@ function WishCardOwner({ item, onEdit, onDelete, onComplete }: {
           {item.url && <span style={{ fontSize: 11, color: C.textMuted, background: C.surface, padding: '2px 8px', borderRadius: 6 }}>🔗 ссылка</span>}
         </div>
         <div style={{ marginTop: 10 }}>
-          {isReserved && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Кто-то выбрал этот подарок ✨</span>}
+          {isReserved && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600 }}>Кто-то выбрал этот подарок ✨</span>}
           {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>✅ Подарено</span>}
-          {!isPurchased && (
-            <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => onEdit(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px' }}>✏️ Изменить</button>
-              <button onClick={() => onDelete(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.red }}>🗑</button>
-              {onComplete && <button onClick={() => onComplete(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.green }}>Получено ✓</button>}
-            </div>
-          )}
         </div>
       </div>
     </div>
   );
 }
 
-function WishCardGuest({ item, onReserve }: { item: GuestItem; onReserve: (item: GuestItem) => void }) {
+function WishCardGuest({ item, onTap, onReserve }: { item: GuestItem; onTap: (item: GuestItem) => void; onReserve: (item: GuestItem) => void }) {
   const isPurchased = item.status === 'purchased';
   const isReserved = item.status === 'reserved';
   return (
-    <div style={{
-      background: C.card, borderRadius: 14, padding: 16,
-      display: 'flex', gap: 14, alignItems: 'flex-start',
-      border: `1px solid ${C.border}`, opacity: isPurchased ? 0.5 : 1,
-    }}>
+    <div
+      onClick={() => onTap(item)}
+      style={{
+        background: C.card, borderRadius: 14, padding: 16,
+        display: 'flex', gap: 14, alignItems: 'flex-start',
+        border: `1px solid ${C.border}`, opacity: isPurchased ? 0.5 : 1,
+        cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+      }}
+    >
       <ItemThumb item={item} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -224,11 +221,11 @@ function WishCardGuest({ item, onReserve }: { item: GuestItem; onReserve: (item:
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price)}</span>}
-          {item.url && <a href={item.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.accent, background: C.accentSoft, padding: '2px 8px', borderRadius: 6, textDecoration: 'none' }}>🔗 ссылка</a>}
+          {item.url && <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, color: C.accent, background: C.accentSoft, padding: '2px 8px', borderRadius: 6, textDecoration: 'none' }}>🔗 ссылка</a>}
         </div>
         <div style={{ marginTop: 10 }}>
           {item.status === 'available' && (
-            <button onClick={() => onReserve(item)} style={{ ...btnPrimary, width: 'auto', padding: '8px 16px', fontSize: 13 }}>🎁 Забронировать</button>
+            <button onClick={(e) => { e.stopPropagation(); onReserve(item); }} style={{ ...btnPrimary, width: 'auto', padding: '8px 16px', fontSize: 13 }}>🎁 Забронировать</button>
           )}
           {isReserved && (
             <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.orangeSoft, color: C.orange, fontSize: 13, fontWeight: 600 }}>
@@ -278,6 +275,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Guest state
   const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null } | null>(null);
   const [guestItems, setGuestItems] = useState<GuestItem[]>([]);
+
+  // Item detail view (for both owner and guest)
+  const [viewingItem, setViewingItem] = useState<(Item | GuestItem) | null>(null);
 
   // UI state
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -407,12 +407,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(() => {
-    if (screen === 'wishlist-detail' || screen === 'guest-view') {
+    if (screen === 'item-detail') {
+      setViewingItem(null);
+      setScreen('wishlist-detail');
+    } else if (screen === 'guest-item-detail') {
+      setViewingItem(null);
+      setScreen('guest-view');
+    } else if (screen === 'wishlist-detail' || screen === 'guest-view') {
       setCurrentWl(null);
       setScreen('my-wishlists');
-      // Refetch owner wishlists when leaving guest-view to ensure fresh data.
-      // This covers the case where the initial parallel loadWishlists() during
-      // deep-link init hasn't completed yet, or the data has become stale.
       if (screen === 'guest-view') {
         loadWishlists().catch(() => { /* silent — screen already set */ });
       }
@@ -988,7 +991,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             {items.map((item, i) => (
               <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                <WishCardOwner item={item} onEdit={openEditItem} onDelete={setDeletingItem} onComplete={handleCompleteItem} />
+                <WishCardOwner item={item} onTap={(it) => { setViewingItem(it); setScreen('item-detail'); }} onDelete={setDeletingItem} onComplete={handleCompleteItem} />
               </div>
             ))}
 
@@ -1138,6 +1141,85 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       )}
 
       {/* ══════════════════════════════════════════════
+          OWNER — ITEM DETAIL (view + actions)
+          ══════════════════════════════════════════════ */}
+      {screen === 'item-detail' && viewingItem && (
+        <div style={{ padding: '16px 20px 120px' }}>
+          {/* Large image */}
+          {viewingItem.imageUrl ? (
+            <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 16, marginBottom: 20, background: C.surface }} />
+          ) : (
+            <div style={{ width: '100%', height: 140, borderRadius: 16, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56, marginBottom: 20 }}>
+              {getEmoji(viewingItem.title)}
+            </div>
+          )}
+          <h1 style={{ fontSize: 22, fontWeight: 700, fontFamily: font, color: C.text, margin: '0 0 8px' }}>{viewingItem.title}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{viewingItem.price != null ? fmtPrice(viewingItem.price) : ''}</span>
+            <span style={{ fontSize: 16 }}>{prioEmoji(viewingItem.priority)}</span>
+            <span style={{ fontSize: 12, color: C.textMuted }}>{PRIORITIES.find((p) => p.value === viewingItem!.priority)?.label}</span>
+          </div>
+          {viewingItem.url && (
+            <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.accent, background: C.accentSoft, padding: '8px 14px', borderRadius: 10, textDecoration: 'none', marginBottom: 16, wordBreak: 'break-all' }}>
+              🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
+            </a>
+          )}
+          {/* Status badge */}
+          <div style={{ marginTop: 8, marginBottom: 20 }}>
+            {viewingItem.status === 'reserved' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 14, fontWeight: 600 }}>Кто-то выбрал этот подарок ✨</span>}
+            {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
+          </div>
+          {/* Owner actions */}
+          {viewingItem.status !== 'purchased' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button onClick={() => { openEditItem(viewingItem as Item); }} style={{ ...btnPrimary, width: '100%' }}>✏️ Редактировать</button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => { setDeletingItem(viewingItem as Item); }} style={{ ...btnGhost, flex: 1, color: C.red }}>🗑 Удалить</button>
+                <button onClick={() => { handleCompleteItem(viewingItem as Item); setViewingItem(null); setScreen('wishlist-detail'); }} style={{ ...btnGhost, flex: 1, color: C.green }}>Получено ✓</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          GUEST — ITEM DETAIL (view only)
+          ══════════════════════════════════════════════ */}
+      {screen === 'guest-item-detail' && viewingItem && (
+        <div style={{ padding: '16px 20px 120px' }}>
+          {viewingItem.imageUrl ? (
+            <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 16, marginBottom: 20, background: C.surface }} />
+          ) : (
+            <div style={{ width: '100%', height: 140, borderRadius: 16, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56, marginBottom: 20 }}>
+              {getEmoji(viewingItem.title)}
+            </div>
+          )}
+          <h1 style={{ fontSize: 22, fontWeight: 700, fontFamily: font, color: C.text, margin: '0 0 8px' }}>{viewingItem.title}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{viewingItem.price != null ? fmtPrice(viewingItem.price) : ''}</span>
+            <span style={{ fontSize: 16 }}>{prioEmoji(viewingItem.priority)}</span>
+            <span style={{ fontSize: 12, color: C.textMuted }}>{PRIORITIES.find((p) => p.value === viewingItem!.priority)?.label}</span>
+          </div>
+          {viewingItem.url && (
+            <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.accent, background: C.accentSoft, padding: '8px 14px', borderRadius: 10, textDecoration: 'none', marginBottom: 16, wordBreak: 'break-all' }}>
+              🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
+            </a>
+          )}
+          <div style={{ marginTop: 8, marginBottom: 20 }}>
+            {viewingItem.status === 'available' && (
+              <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }} style={{ ...btnPrimary, width: '100%' }}>🎁 Забронировать</button>
+            )}
+            {viewingItem.status === 'reserved' && (
+              <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
+                🎁 {(viewingItem as GuestItem).reservedByDisplayName ? `Дарит ${(viewingItem as GuestItem).reservedByDisplayName}` : 'Кто-то уже дарит'}
+              </span>
+            )}
+            {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
           OWNER — SHARE
           ══════════════════════════════════════════════ */}
       {screen === 'share' && currentWl && (
@@ -1189,7 +1271,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               .filter((i) => !PRICE_FILTERS[priceFilter]?.max || !i.price || i.price <= (PRICE_FILTERS[priceFilter]?.max ?? Infinity))
               .map((item, i) => (
                 <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                  <WishCardGuest item={item} onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }} />
+                  <WishCardGuest item={item} onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }} onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }} />
                 </div>
               ))}
           </div>
