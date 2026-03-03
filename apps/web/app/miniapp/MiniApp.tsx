@@ -185,9 +185,9 @@ function WishCardOwner({ item, onEdit, onDelete, onComplete }: {
           {item.url && <span style={{ fontSize: 11, color: C.textMuted, background: C.surface, padding: '2px 8px', borderRadius: 6 }}>🔗 ссылка</span>}
         </div>
         <div style={{ marginTop: 10 }}>
-          {isReserved && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600 }}>Кто-то выбрал этот подарок ✨</span>}
+          {isReserved && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Кто-то выбрал этот подарок ✨</span>}
           {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>✅ Подарено</span>}
-          {!isPurchased && !isReserved && (
+          {!isPurchased && (
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => onEdit(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px' }}>✏️ Изменить</button>
               <button onClick={() => onDelete(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.red }}>🗑</button>
