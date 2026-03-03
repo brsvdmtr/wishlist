@@ -322,6 +322,8 @@ publicRouter.get(
 );
 
 // GET /public/share/:token — resolve share token → wishlist (same shape as /public/wishlists/:slug)
+// Wrapped in try-catch: if shareToken column doesn't exist (migration not applied), returns 404
+// instead of crashing with 500, so the client can fall back to the slug endpoint gracefully.
 publicRouter.get(
   '/share/:token',
   publicReadLimiter,
@@ -329,30 +331,36 @@ publicRouter.get(
     const token = req.params.token ?? '';
     if (!token) return res.status(400).json({ error: 'Missing token' });
 
-    const wishlist = await prisma.wishlist.findUnique({
-      where: { shareToken: token },
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        description: true,
-        deadline: true,
-        items: {
-          where: { status: { in: [...ACTIVE_STATUSES] } },
-          orderBy: ITEM_ORDER_BY,
-          include: {
-            itemTags: { include: { tag: { select: { id: true, name: true } } } },
-            reservationEvents: {
-              where: { type: 'RESERVED' },
-              orderBy: { createdAt: 'desc' },
-              take: 1,
-              select: { comment: true },
+    let wishlist;
+    try {
+      wishlist = await prisma.wishlist.findUnique({
+        where: { shareToken: token },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          description: true,
+          deadline: true,
+          items: {
+            where: { status: { in: [...ACTIVE_STATUSES] } },
+            orderBy: ITEM_ORDER_BY,
+            include: {
+              itemTags: { include: { tag: { select: { id: true, name: true } } } },
+              reservationEvents: {
+                where: { type: 'RESERVED' },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: { comment: true },
+              },
             },
           },
+          tags: { select: { id: true, name: true } },
         },
-        tags: { select: { id: true, name: true } },
-      },
-    });
+      });
+    } catch {
+      // shareToken column may not exist if migration hasn't been applied yet
+      return res.status(404).json({ error: 'Wishlist not found' });
+    }
 
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
 

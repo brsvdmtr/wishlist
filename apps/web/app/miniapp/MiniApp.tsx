@@ -365,19 +365,26 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       }>;
     };
 
-    // Try new share-token endpoint first; fall back to old slug endpoint for backward compat
+    // Try share-token endpoint first; fall back to slug endpoint on ANY non-ok response
+    // (the share endpoint may 500 if shareToken column doesn't exist yet in DB)
     let json: GuestResponse | null = null;
-    const tokenRes = await fetch(`${apiBase}/public/share/${encodeURIComponent(param)}`, { cache: 'no-store' });
-    if (tokenRes.ok) {
-      json = await tokenRes.json() as GuestResponse;
-    } else if (tokenRes.status === 404) {
+    let resolved = false;
+    try {
+      const tokenRes = await fetch(`${apiBase}/public/share/${encodeURIComponent(param)}`, { cache: 'no-store' });
+      if (tokenRes.ok) {
+        json = await tokenRes.json() as GuestResponse;
+        resolved = true;
+      }
+    } catch { /* network error — fall through to slug */ }
+
+    if (!resolved) {
       const slugRes = await fetch(`${apiBase}/public/wishlists/${encodeURIComponent(param)}`, { cache: 'no-store' });
       if (slugRes.status === 404) throw new Error('Вишлист не найден');
       if (!slugRes.ok) throw new Error('Не удалось загрузить вишлист');
       json = await slugRes.json() as GuestResponse;
-    } else {
-      throw new Error('Не удалось загрузить вишлист');
     }
+
+    if (!json) throw new Error('Не удалось загрузить вишлист');
 
     const priorityMap: Record<string, 1 | 2 | 3> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
     setGuestWl(json.wishlist);
