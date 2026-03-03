@@ -162,11 +162,16 @@ function WishCardOwner({ item, onEdit, onDelete, onComplete }: {
   const isPurchased = item.status === 'purchased';
   const isReserved = item.status === 'reserved';
   return (
-    <div style={{
-      background: C.card, borderRadius: 14, padding: 16,
-      display: 'flex', gap: 14, alignItems: 'flex-start',
-      border: `1px solid ${C.border}`, opacity: isPurchased ? 0.5 : 1,
-    }}>
+    <div
+      onClick={() => !isPurchased && onEdit(item)}
+      style={{
+        background: C.card, borderRadius: 14, padding: 16,
+        display: 'flex', gap: 14, alignItems: 'flex-start',
+        border: `1px solid ${C.border}`, opacity: isPurchased ? 0.5 : 1,
+        cursor: isPurchased ? 'default' : 'pointer',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
       <ItemThumb item={item} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -188,7 +193,7 @@ function WishCardOwner({ item, onEdit, onDelete, onComplete }: {
           {isReserved && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Кто-то выбрал этот подарок ✨</span>}
           {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>✅ Подарено</span>}
           {!isPurchased && (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
               <button onClick={() => onEdit(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px' }}>✏️ Изменить</button>
               <button onClick={() => onDelete(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.red }}>🗑</button>
               {onComplete && <button onClick={() => onComplete(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.green }}>Получено ✓</button>}
