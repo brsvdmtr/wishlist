@@ -1185,10 +1185,27 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {/* Owner actions */}
           {viewingItem.status !== 'purchased' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button onClick={() => { openEditItem(viewingItem as Item); }} style={{ ...btnPrimary, width: '100%' }}>✏️ Редактировать</button>
+              <button onClick={() => {
+                // Navigate back to wishlist-detail FIRST so the BottomSheet (edit form)
+                // can actually render — it lives inside the wishlist-detail block.
+                const item = viewingItem as Item;
+                setViewingItem(null);
+                setScreen('wishlist-detail');
+                openEditItem(item);
+              }} style={{ ...btnPrimary, width: '100%' }}>✏️ Редактировать</button>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => { setDeletingItem(viewingItem as Item); }} style={{ ...btnGhost, flex: 1, color: C.red }}>🗑 Удалить</button>
-                <button onClick={() => { handleCompleteItem(viewingItem as Item); setViewingItem(null); setScreen('wishlist-detail'); }} style={{ ...btnGhost, flex: 1, color: C.green }}>Получено ✓</button>
+                <button onClick={() => {
+                  // Navigate back so delete confirmation BottomSheet can render.
+                  const item = viewingItem as Item;
+                  setViewingItem(null);
+                  setScreen('wishlist-detail');
+                  setDeletingItem(item);
+                }} style={{ ...btnGhost, flex: 1, color: C.red }}>🗑 Удалить</button>
+                <button onClick={() => {
+                  handleCompleteItem(viewingItem as Item);
+                  setViewingItem(null);
+                  setScreen('wishlist-detail');
+                }} style={{ ...btnGhost, flex: 1, color: C.green }}>Получено ✓</button>
               </div>
             </div>
           )}
