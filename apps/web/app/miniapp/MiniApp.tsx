@@ -242,10 +242,15 @@ function WishCardGuest({ item, onReserve }: { item: GuestItem; onReserve: (item:
 // ═══════════════════════════════════════════════════════
 
 export default function MiniApp({ apiBase, botUsername, miniappShortName }: { apiBase: string; botUsername: string; miniappShortName: string }) {
-  /** Build t.me deep link: https://t.me/<BOT>/<SHORT_NAME>?startapp=<payload> */
+  /** Build t.me deep link.
+   *  With miniappShortName: https://t.me/<BOT>/<SHORT_NAME>?startapp=<payload>  (named /newapp)
+   *  Without:               https://t.me/<BOT>?startapp=<payload>               (Configure Mini App)
+   */
   const buildTgDeepLink = (payload?: string) => {
-    if (!botUsername || !miniappShortName) return null;
-    const base = `https://t.me/${botUsername}/${miniappShortName}`;
+    if (!botUsername) return null;
+    const base = miniappShortName
+      ? `https://t.me/${botUsername}/${miniappShortName}`
+      : `https://t.me/${botUsername}`;
     return payload ? `${base}?startapp=${encodeURIComponent(payload)}` : base;
   };
 
