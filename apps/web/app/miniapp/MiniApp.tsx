@@ -448,6 +448,14 @@ export default function MiniApp({ apiBase, botUsername }: { apiBase: string; bot
       const user = tg.initDataUnsafe.user;
       if (user) setTgUser(user);
 
+      // If opened in a real browser (no Telegram context) with ?startapp= in URL,
+      // show "Open in Telegram" instead of attempting a doomed auth flow.
+      if (!tg.initData && urlStartParamRef.current) {
+        setErrorMsg('Открой в Telegram');
+        setScreen('error');
+        return;
+      }
+
       const handleErr = (e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
         // eslint-disable-next-line no-console
