@@ -520,6 +520,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // --- Ownership detection: if user opens their OWN wishlist via a shared link,
+  // switch from guest-view to owner wishlist-detail automatically.
+  useEffect(() => {
+    if (screen === 'guest-view' && guestWl && wishlists.length > 0) {
+      const ownWl = wishlists.find((w) => w.id === guestWl.id || w.slug === guestWl.slug);
+      if (ownWl) {
+        setCurrentWl(ownWl);
+        loadItems(ownWl.id).catch(() => { /* silent */ });
+        setScreen('wishlist-detail');
+      }
+    }
+  }, [screen, guestWl, wishlists, loadItems]);
+
   // --- Owner actions
   const handleCreateWishlist = async () => {
     if (!wlTitle.trim()) return;
