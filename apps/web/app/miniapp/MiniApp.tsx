@@ -1228,36 +1228,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               ))}
           </div>
 
-          <BottomSheet isOpen={!!reservingItem} onClose={() => setReservingItem(null)} title="Забронировать подарок?">
-            {reservingItem && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, background: C.bg, borderRadius: 12 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 10, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎁</div>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>{reservingItem.title}</div>
-                    {reservingItem.price != null && <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{fmtPrice(reservingItem.price)}</div>}
-                  </div>
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Твоё имя (видят другие гости)</label>
-                  <input style={inputStyle} placeholder="Как тебя зовут?" value={guestName} onChange={(e) => setGuestName(e.target.value)} autoFocus />
-                </div>
-                <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5 }}>
-                  🔒 Владелец вишлиста <b>не увидит</b>, кто какой подарок забронировал.
-                </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button style={{ ...btnGhost, flex: 1, width: '100%' }} onClick={() => setReservingItem(null)}>Отмена</button>
-                  <button
-                    style={{ ...btnPrimary, flex: 2, opacity: guestName.trim() ? 1 : 0.5 }}
-                    onClick={() => void handleReserve()}
-                    disabled={!guestName.trim() || loading}
-                  >
-                    {loading ? '…' : '🎁 Забронировать'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </BottomSheet>
         </div>
       )}
 
@@ -1318,6 +1288,36 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       )}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
+      <BottomSheet isOpen={!!reservingItem} onClose={() => setReservingItem(null)} title="Забронировать подарок?">
+        {reservingItem && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, background: C.bg, borderRadius: 12 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 10, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎁</div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>{reservingItem.title}</div>
+                {reservingItem.price != null && <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{fmtPrice(reservingItem.price)}</div>}
+              </div>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Твоё имя (видят другие гости)</label>
+              <input style={inputStyle} placeholder="Как тебя зовут?" value={guestName} onChange={(e) => setGuestName(e.target.value)} autoFocus />
+            </div>
+            <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5 }}>
+              🔒 Владелец вишлиста <b>не увидит</b>, кто какой подарок забронировал.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button style={{ ...btnGhost, flex: 1, width: '100%' }} onClick={() => setReservingItem(null)}>Отмена</button>
+              <button
+                style={{ ...btnPrimary, flex: 2, opacity: guestName.trim() ? 1 : 0.5 }}
+                onClick={() => void handleReserve()}
+                disabled={!guestName.trim() || loading}
+              >
+                {loading ? '…' : '🎁 Забронировать'}
+              </button>
+            </div>
+          </div>
+        )}
+      </BottomSheet>
       <BottomSheet isOpen={showItemForm} onClose={() => { setShowItemForm(false); resetItemForm(); }} title={editingItem ? 'Редактировать' : 'Новое желание'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
