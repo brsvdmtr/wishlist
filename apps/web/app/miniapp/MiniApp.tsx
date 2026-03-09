@@ -124,9 +124,10 @@ const inputStyle: React.CSSProperties = {
   color: C.text, fontSize: 16, fontFamily: font, outline: 'none', boxSizing: 'border-box',
 };
 
-/** onFocus: scroll textarea to upper part of screen — above any keyboard.
- *  Telegram WebView doesn't resize visualViewport when keyboard opens,
- *  so we skip detection entirely and just position the textarea high enough. */
+/** onFocus: adds a temp spacer so scrollTop has room, then scrolls textarea above keyboard.
+ *  Telegram WebView doesn't shrink viewport when keyboard opens, AND the container
+ *  has limited bottom padding — scrollTop hits its max before the textarea can reach
+ *  the visible area. The spacer creates the extra scroll room needed. */
 function handleTextareaFocus(textarea: HTMLElement) {
   let scrollParent: HTMLElement | null = textarea.parentElement;
   while (scrollParent) {
@@ -135,14 +136,32 @@ function handleTextareaFocus(textarea: HTMLElement) {
     scrollParent = scrollParent.parentElement;
   }
   if (!scrollParent) return;
+  const sp = scrollParent;
 
-  // Position textarea at ~35% from screen top — always above any keyboard
-  const rect = textarea.getBoundingClientRect();
-  const target = window.innerHeight * 0.35;
-  const delta = rect.top - target;
-  if (delta > 10) {
-    scrollParent.scrollTop += delta;
-  }
+  // Remove any leftover spacer from previous focus
+  sp.querySelector('[data-kb-spacer]')?.remove();
+
+  // Add temporary spacer — creates enough scrollable space
+  const spacer = document.createElement('div');
+  spacer.setAttribute('data-kb-spacer', '1');
+  spacer.style.height = '50vh';
+  spacer.style.pointerEvents = 'none';
+  sp.appendChild(spacer);
+
+  // Wait one frame for layout recalc with spacer, then scroll
+  requestAnimationFrame(() => {
+    const rect = textarea.getBoundingClientRect();
+    const target = window.innerHeight * 0.35;
+    const delta = rect.top - target;
+    if (delta > 10) sp.scrollTop += delta;
+  });
+
+  // Remove spacer when keyboard closes (blur)
+  const cleanup = () => {
+    spacer.remove();
+    textarea.removeEventListener('blur', cleanup);
+  };
+  textarea.addEventListener('blur', cleanup);
 }
 
 // ═══════════════════════════════════════════════════════
