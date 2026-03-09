@@ -124,9 +124,8 @@ const inputStyle: React.CSSProperties = {
   color: C.text, fontSize: 16, fontFamily: font, outline: 'none', boxSizing: 'border-box',
 };
 
-/** onFocus handler: tracks keyboard via visualViewport resize and scrolls in real-time. */
+/** onFocus: rAF loop keeps textarea visible while keyboard animates in. */
 function handleTextareaFocus(textarea: HTMLElement) {
-  const vv = window.visualViewport;
   // Find the overflow:auto scroll container once
   let scrollParent: HTMLElement | null = textarea.parentElement;
   while (scrollParent) {
@@ -137,20 +136,27 @@ function handleTextareaFocus(textarea: HTMLElement) {
   if (!scrollParent) return;
   const sp = scrollParent;
 
-  const doScroll = () => {
-    const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  let frames = 0;
+  let stableFrames = 0;
+  let lastVH = 0;
+
+  const tick = () => {
+    frames++;
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    // Track viewport stability (keyboard done animating?)
+    if (Math.abs(vh - lastVH) < 1) stableFrames++; else stableFrames = 0;
+    lastVH = vh;
+
     const rect = textarea.getBoundingClientRect();
-    if (rect.bottom > visibleBottom - 16) {
-      sp.scrollTop += rect.bottom - visibleBottom + 24;
+    if (rect.bottom > vh - 20) {
+      sp.scrollTop += rect.bottom - vh + 24;
     }
+
+    // Stop when stable for 15 frames (~250ms) or after 2s
+    if (stableFrames < 15 && frames < 120) requestAnimationFrame(tick);
   };
 
-  if (!vv) { setTimeout(doScroll, 400); return; }
-  // Scroll on every resize frame — tracks keyboard in real-time, no lag
-  const onResize = () => doScroll();
-  vv.addEventListener('resize', onResize);
-  // Clean up after keyboard animation is done
-  setTimeout(() => vv.removeEventListener('resize', onResize), 2000);
+  requestAnimationFrame(tick);
 }
 
 // ═══════════════════════════════════════════════════════
