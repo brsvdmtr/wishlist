@@ -387,6 +387,7 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
               value={commentText}
               onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
               maxLength={300}
+              onFocus={(e) => { const el = e.currentTarget; setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 350); }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSendComment(); } }}
             />
             <span style={{
