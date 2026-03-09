@@ -1007,7 +1007,7 @@ async function getItemRole(
   tgUser: TelegramUser,
 ): Promise<{
   role: ItemRole;
-  item: { id: string; status: string; reservationEpoch: number; reserverUserId: string | null; title: string; wishlist: { ownerId: string } };
+  item: { id: string; status: string; reservationEpoch: number; reserverUserId: string | null; title: string; wishlist: { ownerId: string }; reservationEvents: { actorHash: string; comment: string | null }[] };
   actorHash: string;
   user: { id: string; telegramChatId: string | null };
 } | null> {
@@ -1023,7 +1023,7 @@ async function getItemRole(
         where: { type: 'RESERVED' },
         orderBy: { createdAt: 'desc' },
         take: 1,
-        select: { actorHash: true },
+        select: { actorHash: true, comment: true },
       },
     },
   });
@@ -1659,8 +1659,10 @@ tgRouter.post(
       return res.status(429).json({ error: 'Достигнут лимит комментариев' });
     }
 
-    // Determine display name
-    const displayName = req.tgUser!.first_name;
+    // Determine display name: use reservation display name for reserver, Telegram name for owner
+    const displayName = ctx.role === 'reserver'
+      ? (ctx.item.reservationEvents[0]?.comment ?? req.tgUser!.first_name)
+      : req.tgUser!.first_name;
 
     const comment = await prisma.comment.create({
       data: {
