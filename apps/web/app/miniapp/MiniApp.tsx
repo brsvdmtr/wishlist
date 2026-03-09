@@ -527,6 +527,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Delete confirmation
   const [deletingItem, setDeletingItem] = useState<Item | null>(null);
 
+  // Rename wishlist
+  const [showRenameWl, setShowRenameWl] = useState(false);
+  const [renameWlTitle, setRenameWlTitle] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
+
   // Guest forms
   const [priceFilter, setPriceFilter] = useState(0);
   const [reservingItem, setReservingItem] = useState<GuestItem | null>(null);
@@ -891,6 +896,28 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('wishlist-detail');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRenameWishlist = async () => {
+    if (!currentWl) return;
+    const trimmed = renameWlTitle.trim();
+    if (!trimmed || trimmed === currentWl.title) return;
+    setRenameSaving(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (!res.ok) { pushToast('Ошибка сохранения', 'error'); return; }
+      const json = await res.json() as { wishlist: { title: string } };
+      const newTitle = json.wishlist.title;
+      setCurrentWl((prev) => prev ? { ...prev, title: newTitle } : prev);
+      setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, title: newTitle } : wl));
+      setShowRenameWl(false);
+      pushToast('Название обновлено', 'success');
+    } finally {
+      setRenameSaving(false);
     }
   };
 
@@ -1319,7 +1346,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         <div style={{ padding: '16px 20px 120px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
             <div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0 }}>{currentWl.title}</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0 }}>{currentWl.title}</h1>
+                <button
+                  onClick={() => { setRenameWlTitle(currentWl.title); setShowRenameWl(true); }}
+                  style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', fontSize: 14, color: C.textMuted, lineHeight: 1, flexShrink: 0 }}
+                  aria-label="Переименовать"
+                >✏️</button>
+              </div>
               <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0' }}>
                 {items.length} желаний
                 {currentWl.deadline && ` • до ${fmtDeadline(currentWl.deadline)}`}
@@ -1769,6 +1803,33 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       )}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
+      <BottomSheet isOpen={showRenameWl} onClose={() => setShowRenameWl(false)} title="Переименовать вишлист">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Название</label>
+            <input
+              style={inputStyle}
+              value={renameWlTitle}
+              onChange={(e) => setRenameWlTitle(e.target.value.slice(0, 80))}
+              autoFocus
+              placeholder="Название вишлиста"
+              maxLength={80}
+            />
+            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textAlign: 'right' }}>{renameWlTitle.length}/80</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              style={{ ...btnSecondary, flex: 1 }}
+              onClick={() => setShowRenameWl(false)}
+            >Отмена</button>
+            <button
+              style={{ ...btnPrimary, flex: 1, opacity: renameWlTitle.trim() && renameWlTitle.trim() !== currentWl?.title ? 1 : 0.5 }}
+              onClick={() => void handleRenameWishlist()}
+              disabled={!renameWlTitle.trim() || renameWlTitle.trim() === currentWl?.title || renameSaving}
+            >{renameSaving ? '…' : 'Сохранить'}</button>
+          </div>
+        </div>
+      </BottomSheet>
       <BottomSheet isOpen={editingDescription} onClose={() => setEditingDescription(false)} title="Описание">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
