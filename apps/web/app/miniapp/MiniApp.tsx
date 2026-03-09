@@ -124,6 +124,42 @@ const inputStyle: React.CSSProperties = {
   color: C.text, fontSize: 16, fontFamily: font, outline: 'none', boxSizing: 'border-box',
 };
 
+/** Scroll the nearest overflow-auto ancestor so `el` is visible above the keyboard. */
+function scrollAboveKeyboard(el: HTMLElement) {
+  const vv = window.visualViewport;
+  const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  const rect = el.getBoundingClientRect();
+  if (rect.bottom <= visibleBottom - 16) return;
+  let p: HTMLElement | null = el.parentElement;
+  while (p) {
+    const ov = window.getComputedStyle(p).overflowY;
+    if (ov === 'auto' || ov === 'scroll') {
+      p.scrollBy({ top: rect.bottom - visibleBottom + 24, behavior: 'smooth' });
+      return;
+    }
+    p = p.parentElement;
+  }
+}
+
+/** onFocus handler: waits for keyboard to fully appear via visualViewport resize, then scrolls. */
+function handleTextareaFocus(textarea: HTMLElement) {
+  const vv = window.visualViewport;
+  if (!vv) { setTimeout(() => scrollAboveKeyboard(textarea), 500); return; }
+  let done = false;
+  let debounce: ReturnType<typeof setTimeout>;
+  const onResize = () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      done = true;
+      vv.removeEventListener('resize', onResize);
+      scrollAboveKeyboard(textarea);
+    }, 120);
+  };
+  vv.addEventListener('resize', onResize);
+  // Fallback if keyboard was already open or resize doesn't fire
+  setTimeout(() => { if (!done) { done = true; vv.removeEventListener('resize', onResize); scrollAboveKeyboard(textarea); } }, 600);
+}
+
 // ═══════════════════════════════════════════════════════
 // COMPONENTS
 // ═══════════════════════════════════════════════════════
@@ -387,26 +423,7 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
               value={commentText}
               onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
               maxLength={300}
-              onFocus={(e) => {
-                const textarea = e.currentTarget;
-                setTimeout(() => {
-                  // visualViewport.height shrinks when keyboard opens
-                  const vvHeight = window.visualViewport?.height ?? window.innerHeight;
-                  const rect = textarea.getBoundingClientRect();
-                  if (rect.bottom > vvHeight - 16) {
-                    // Walk up to find the overflow:auto scroll container
-                    let el: HTMLElement | null = textarea.parentElement;
-                    while (el) {
-                      const ov = window.getComputedStyle(el).overflowY;
-                      if (ov === 'auto' || ov === 'scroll') {
-                        el.scrollTop += rect.bottom - vvHeight + 24;
-                        break;
-                      }
-                      el = el.parentElement;
-                    }
-                  }
-                }, 350);
-              }}
+              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSendComment(); } }}
             />
             <span style={{
