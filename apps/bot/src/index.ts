@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { Telegraf, Markup } from 'telegraf';
 import fs from 'node:fs';
 import path from 'node:path';
+import { prisma } from '@wishlist/db';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/bot (pnpm -C apps/bot start).
@@ -50,6 +51,15 @@ if (!token) {
   bot.start(async (ctx) => {
     // Override any stale per-chat menu button left by previous bot versions
     await ctx.setChatMenuButton(menuButton).catch(() => {});
+
+    // Store chat ID for notifications
+    const telegramId = String(ctx.from.id);
+    const chatId = String(ctx.chat.id);
+    await prisma.user.upsert({
+      where: { telegramId },
+      update: { telegramChatId: chatId },
+      create: { telegramId, telegramChatId: chatId },
+    }).catch(() => { /* user may not exist yet — will be created by API later */ });
 
     const payload = ctx.startPayload; // slug passed via ?start=SLUG deep link
     if (payload) {

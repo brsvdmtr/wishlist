@@ -75,6 +75,7 @@ type Item = {
   id: string;
   wishlistId?: string;
   title: string;
+  description: string | null;
   url: string | null;
   price: number | null;
   imageUrl: string | null;
@@ -83,6 +84,16 @@ type Item = {
 };
 
 type GuestItem = Item & { reservedByDisplayName: string | null; reservedByActorHash: string | null };
+
+type CommentDTO = {
+  id: string;
+  type: 'USER' | 'SYSTEM';
+  authorActorHash: string | null;
+  authorDisplayName: string | null;
+  text: string;
+  reservationEpoch: number;
+  createdAt: string;
+};
 
 type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive';
 type Toast = { id: string; message: string; kind: 'success' | 'error' };
@@ -309,6 +320,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [itemTitle, setItemTitle] = useState('');
+  const [itemDescription, setItemDescription] = useState('');
   const [itemUrl, setItemUrl] = useState('');
   const [itemPrice, setItemPrice] = useState('');
   const [itemPriority, setItemPriority] = useState<1 | 2 | 3>(2);
@@ -330,6 +342,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [priceFilter, setPriceFilter] = useState(0);
   const [reservingItem, setReservingItem] = useState<GuestItem | null>(null);
   const [guestName, setGuestName] = useState('');
+
+  // Comments
+  const [comments, setComments] = useState<CommentDTO[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [commentRole, setCommentRole] = useState<'owner' | 'reserver' | null>(null);
+  const [commentSending, setCommentSending] = useState(false);
+
+  // Description editing
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionText, setDescriptionText] = useState('');
 
   const pushToast = useCallback((message: string, kind: Toast['kind']) => {
     const toast: Toast = { id: crypto.randomUUID(), message, kind };
@@ -381,7 +403,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     type GuestResponse = {
       wishlist: { id: string; slug: string; title: string; description: string | null; deadline: string | null };
       items: Array<{
-        id: string; title: string; url: string; priceText: string | null;
+        id: string; title: string; description: string | null; url: string; priceText: string | null;
         imageUrl: string | null;
         priority: 'LOW' | 'MEDIUM' | 'HIGH'; status: 'AVAILABLE' | 'RESERVED' | 'PURCHASED';
         reservedByDisplayName: string | null;
@@ -415,6 +437,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setGuestItems(json.items.map((i) => ({
       id: i.id,
       title: i.title,
+      description: i.description ?? null,
       url: i.url || null,
       price: i.priceText ? Number(i.priceText) || null : null,
       imageUrl: i.imageUrl ?? null,
@@ -424,6 +447,85 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       reservedByActorHash: i.reservedByActorHash ?? null,
     })));
   }, [apiBase]);
+
+  const loadComments = useCallback(async (itemId: string) => {
+    try {
+      const res = await tgFetch(`/tg/items/${itemId}/comments`);
+      if (res.status === 403) {
+        setCommentRole(null);
+        setComments([]);
+        return;
+      }
+      if (!res.ok) {
+        setCommentRole(null);
+        setComments([]);
+        return;
+      }
+      const json = await res.json() as { comments: CommentDTO[]; role: 'owner' | 'reserver' };
+      setComments(json.comments);
+      setCommentRole(json.role);
+    } catch {
+      setCommentRole(null);
+      setComments([]);
+    }
+  }, [tgFetch]);
+
+  const handleSendComment = useCallback(async () => {
+    if (!viewingItem || !commentText.trim() || commentSending) return;
+    const text = commentText.trim();
+    // Client-side validation
+    if (text.length > 300) { pushToast('Максимум 300 символов', 'error'); return; }
+    const stripped = text.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s.…]+/gu, '');
+    if (stripped.length === 0) { pushToast('Напиши что-нибудь содержательное', 'error'); return; }
+
+    setCommentSending(true);
+    try {
+      const res = await tgFetch(`/tg/items/${viewingItem.id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({})) as { error?: string };
+        pushToast(json.error || 'Ошибка отправки', 'error');
+        return;
+      }
+      const json = await res.json() as { comment: CommentDTO };
+      setComments(prev => [...prev, json.comment]);
+      setCommentText('');
+    } finally {
+      setCommentSending(false);
+    }
+  }, [viewingItem, commentText, commentSending, tgFetch, pushToast]);
+
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    if (!viewingItem) return;
+    const res = await tgFetch(`/tg/items/${viewingItem.id}/comments/${commentId}`, { method: 'DELETE' });
+    if (res.ok) {
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    } else {
+      pushToast('Ошибка удаления', 'error');
+    }
+  }, [viewingItem, tgFetch, pushToast]);
+
+  const handleSaveDescription = useCallback(async () => {
+    if (!viewingItem) return;
+    setLoading(true);
+    try {
+      const desc = descriptionText.trim() || null;
+      const res = await tgFetch(`/tg/items/${viewingItem.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ description: desc }),
+      });
+      if (!res.ok) { pushToast('Ошибка сохранения', 'error'); return; }
+      const updated = { ...viewingItem, description: desc };
+      setViewingItem(updated);
+      setItems(prev => prev.map(i => i.id === viewingItem.id ? { ...i, description: desc } : i));
+      setEditingDescription(false);
+      pushToast('Описание сохранено', 'success');
+    } finally {
+      setLoading(false);
+    }
+  }, [viewingItem, descriptionText, tgFetch, pushToast]);
 
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(() => {
@@ -567,6 +669,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingEditItem, screen]);
 
+  // Load comments when viewing an item detail screen
+  useEffect(() => {
+    if (viewingItem && (screen === 'item-detail' || screen === 'guest-item-detail')) {
+      loadComments(viewingItem.id);
+    } else {
+      setComments([]);
+      setCommentRole(null);
+      setCommentText('');
+    }
+  }, [viewingItem, screen, loadComments]);
+
   // --- Owner actions
   const handleCreateWishlist = async () => {
     if (!wlTitle.trim()) return;
@@ -606,7 +719,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   };
 
   const resetItemForm = () => {
-    setItemTitle(''); setItemUrl(''); setItemPrice(''); setItemPriority(2); setItemImageUrl('');
+    setItemTitle(''); setItemDescription(''); setItemUrl(''); setItemPrice(''); setItemPriority(2); setItemImageUrl('');
     setItemPhotoFile(null);
     if (itemPhotoLocalUrl) URL.revokeObjectURL(itemPhotoLocalUrl);
     setItemPhotoLocalUrl(null);
@@ -620,6 +733,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const openEditItem = (item: Item) => {
     setEditingItem(item);
     setItemTitle(item.title);
+    setItemDescription(item.description ?? '');
     setItemUrl(item.url ?? '');
     setItemPrice(item.price != null ? String(item.price) : '');
     setItemPriority(item.priority);
@@ -694,6 +808,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     try {
       const body = {
         title: itemTitle.trim(),
+        description: itemDescription.trim() || null,
         url: itemUrl.trim() || undefined,
         price: itemPrice ? Number(itemPrice) : null,
         priority: itemPriority,
@@ -849,6 +964,130 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // ─────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────
+
+  const CommentsThread = ({ isArchive }: { isArchive?: boolean }) => {
+    if (!commentRole) return null;
+
+    const canDelete = (c: CommentDTO) => {
+      if (c.type === 'SYSTEM') return false;
+      if (commentRole === 'owner') return true; // owner can delete any USER
+      return c.authorActorHash === myActorHashRef.current; // reserver: own only
+    };
+
+    return (
+      <div style={{ marginTop: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 8, fontFamily: font }}>
+          💬 Комментарии
+        </div>
+        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12, lineHeight: 1.4 }}>
+          🔒 Комментарии видны только автору и тому, кто забронировал
+        </div>
+
+        {isArchive && (
+          <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 12px', borderRadius: 10, marginBottom: 12 }}>
+            Комментарии будут удалены через 30 дней
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {comments.length === 0 && (
+            <div style={{ textAlign: 'center', fontSize: 13, color: C.textMuted, padding: '16px 0' }}>
+              Пока нет комментариев
+            </div>
+          )}
+          {comments.map(c => (
+            c.type === 'SYSTEM' ? (
+              <div key={c.id} style={{
+                textAlign: 'center', fontSize: 11, color: C.textMuted,
+                padding: '6px 12px', background: C.surface, borderRadius: 10, margin: '4px 0',
+              }}>
+                {c.text} · {new Date(c.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </div>
+            ) : (
+              <div key={c.id} style={{
+                alignSelf: c.authorActorHash === myActorHashRef.current ? 'flex-end' : 'flex-start',
+                maxWidth: '80%', position: 'relative',
+              }}>
+                {c.authorActorHash !== myActorHashRef.current && (
+                  <div style={{ fontSize: 11, color: C.accent, marginBottom: 2, fontWeight: 600, fontFamily: font }}>
+                    {c.authorDisplayName ?? 'Аноним'}
+                  </div>
+                )}
+                {c.authorActorHash === myActorHashRef.current && (
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 2, fontWeight: 600, fontFamily: font, textAlign: 'right' }}>
+                    Я
+                  </div>
+                )}
+                <div style={{
+                  padding: '10px 14px', borderRadius: 14,
+                  background: c.authorActorHash === myActorHashRef.current ? C.accent : C.card,
+                  color: c.authorActorHash === myActorHashRef.current ? '#fff' : C.text,
+                  fontSize: 14, lineHeight: 1.4,
+                  border: c.authorActorHash === myActorHashRef.current ? 'none' : `1px solid ${C.border}`,
+                }}>
+                  {c.text}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    marginTop: 4, gap: 8,
+                  }}>
+                    <span style={{
+                      fontSize: 10,
+                      color: c.authorActorHash === myActorHashRef.current ? 'rgba(255,255,255,0.5)' : C.textMuted,
+                    }}>
+                      {new Date(c.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {canDelete(c) && !isArchive && (
+                      <button
+                        onClick={() => void handleDeleteComment(c.id)}
+                        style={{
+                          background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer',
+                          fontSize: 10, color: c.authorActorHash === myActorHashRef.current ? 'rgba(255,255,255,0.4)' : C.textMuted,
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          ))}
+        </div>
+
+        {/* Comment input — only for active items */}
+        {!isArchive && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <textarea
+                style={{ ...inputStyle, minHeight: 44, maxHeight: 120, resize: 'none', paddingRight: 50 }}
+                placeholder="Написать комментарий..."
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
+                maxLength={300}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSendComment(); } }}
+              />
+              <span style={{
+                position: 'absolute', right: 12, bottom: 8,
+                fontSize: 10, color: commentText.length > 280 ? C.orange : C.textMuted,
+              }}>
+                {commentText.length}/300
+              </span>
+            </div>
+            <button
+              onClick={() => void handleSendComment()}
+              disabled={!commentText.trim() || commentSending}
+              style={{
+                ...btnPrimary, width: 44, height: 44, padding: 0, borderRadius: 12,
+                opacity: commentText.trim() ? 1 : 0.4, flexShrink: 0,
+              }}
+            >
+              {commentSending ? '…' : '↑'}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const totalReserved = Object.values(wishlists).reduce((n, wl) => n + wl.reservedCount, 0);
   const totalItems = wishlists.reduce((n, wl) => n + wl.itemCount, 0);
@@ -1090,11 +1329,42 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
             </a>
           )}
+          {/* Description */}
+          <div style={{ marginTop: 12, marginBottom: 16 }}>
+            {viewingItem.description ? (
+              <div style={{
+                fontSize: 14, color: C.textSec, lineHeight: 1.6,
+                padding: '12px 16px', background: C.surface, borderRadius: 12,
+                border: `1px solid ${C.border}`,
+              }}>
+                {viewingItem.description}
+                <div
+                  onClick={() => { setDescriptionText(viewingItem.description ?? ''); setEditingDescription(true); }}
+                  style={{ fontSize: 12, color: C.accent, marginTop: 8, cursor: 'pointer', fontFamily: font }}
+                >
+                  ✏️ Изменить описание
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => { setDescriptionText(''); setEditingDescription(true); }}
+                style={{
+                  fontSize: 13, color: C.textMuted, padding: '12px 16px',
+                  background: C.surface, borderRadius: 12, cursor: 'pointer',
+                  border: `1px dashed ${C.borderLight}`, lineHeight: 1.5,
+                }}
+              >
+                ＋ Добавь описание, чтобы друзьям было проще выбрать подарок
+              </div>
+            )}
+          </div>
           {/* Status badge */}
           <div style={{ marginTop: 8, marginBottom: 20 }}>
             {viewingItem.status === 'reserved' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 14, fontWeight: 600 }}>Кто-то выбрал этот подарок ✨</span>}
             {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
           </div>
+          {/* Comments */}
+          <CommentsThread isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'} />
           {/* Owner actions */}
           {viewingItem.status !== 'purchased' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1149,6 +1419,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
             </a>
           )}
+          {/* Description — read-only for guests */}
+          {viewingItem.description && (
+            <div style={{
+              fontSize: 14, color: C.textSec, lineHeight: 1.6,
+              padding: '12px 16px', background: C.surface, borderRadius: 12,
+              border: `1px solid ${C.border}`, marginTop: 12,
+            }}>
+              {viewingItem.description}
+            </div>
+          )}
           <div style={{ marginTop: 8, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {viewingItem.status === 'available' && (
               <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }} style={{ ...btnPrimary, width: '100%' }}>🎁 Забронировать</button>
@@ -1168,6 +1448,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             )}
             {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
           </div>
+          {/* Comments — for reserver and owner */}
+          <CommentsThread isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'} />
+
+          {/* Hint for third parties */}
+          {viewingItem.status === 'available' && !commentRole && (
+            <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
+              После бронирования можно оставить комментарий для автора
+            </div>
+          )}
         </div>
       )}
 
@@ -1288,6 +1577,30 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       )}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
+      <BottomSheet isOpen={editingDescription} onClose={() => setEditingDescription(false)} title="Описание">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <textarea
+              style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
+              maxLength={500}
+              placeholder="Опиши подробнее, что хочешь..."
+              value={descriptionText}
+              onChange={(e) => setDescriptionText(e.target.value)}
+              autoFocus
+            />
+            <div style={{ fontSize: 12, color: descriptionText.length > 480 ? C.orange : C.textMuted, textAlign: 'right', marginTop: 4 }}>
+              {descriptionText.length}/500
+            </div>
+          </div>
+          <button
+            style={{ ...btnPrimary, opacity: loading ? 0.5 : 1 }}
+            onClick={() => void handleSaveDescription()}
+            disabled={loading}
+          >
+            {loading ? '…' : '💾 Сохранить'}
+          </button>
+        </div>
+      </BottomSheet>
       <BottomSheet isOpen={!!reservingItem} onClose={() => setReservingItem(null)} title="Забронировать подарок?">
         {reservingItem && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1323,6 +1636,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Название</label>
             <input style={inputStyle} placeholder="Например: AirPods Pro 3" value={itemTitle} onChange={(e) => setItemTitle(e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Описание (необязательно)</label>
+            <textarea
+              style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
+              maxLength={500}
+              placeholder="Подробности о желании..."
+              value={itemDescription}
+              onChange={(e) => setItemDescription(e.target.value)}
+            />
+            <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 2 }}>{itemDescription.length}/500</div>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Ссылка (необязательно)</label>

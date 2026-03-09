@@ -127,6 +127,48 @@ function secureCompare(a: string, b: string): boolean {
   return crypto.timingSafeEqual(aHash, bHash);
 }
 
+/** Best-effort Telegram notification. Fire-and-forget – never throws. */
+async function sendTgNotification(chatId: string, text: string): Promise<void> {
+  const token = process.env.BOT_TOKEN;
+  if (!token || !chatId) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    });
+  } catch {
+    // best-effort, don't fail the main operation
+  }
+}
+
+// Notification batching (30s debounce per item+recipient)
+const pendingNotifications = new Map<string, { chatId: string; itemTitle: string; count: number; timer: ReturnType<typeof setTimeout> }>();
+
+function queueCommentNotification(key: string, chatId: string, itemTitle: string, text: string) {
+  const existing = pendingNotifications.get(key);
+  if (existing) {
+    existing.count++;
+    return;
+  }
+
+  // Send first notification immediately
+  void sendTgNotification(chatId, text);
+
+  const entry = {
+    chatId,
+    itemTitle,
+    count: 0,
+    timer: setTimeout(() => {
+      const e = pendingNotifications.get(key);
+      pendingNotifications.delete(key);
+      if (!e || e.count === 0) return;
+      void sendTgNotification(e.chatId, `💬 У вас ${e.count} ${e.count === 1 ? 'новый комментарий' : 'новых комментариев'} в «${e.itemTitle}»`);
+    }, 30_000),
+  };
+  pendingNotifications.set(key, entry);
+}
+
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const adminKey = process.env.ADMIN_KEY;
   if (!adminKey) {
@@ -194,6 +236,7 @@ async function getSystemUser() {
 function mapItemForPublic(item: {
   id: string;
   title: string;
+  description: string | null;
   url: string;
   priceText: string | null;
   commentOwner: string | null;
@@ -209,6 +252,7 @@ function mapItemForPublic(item: {
   return {
     id: item.id,
     title: item.title,
+    description: item.description,
     url: item.url,
     priceText: item.priceText,
     commentOwner: item.commentOwner,
@@ -900,6 +944,7 @@ function mapTgItem(item: {
   imageUrl?: string | null;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   status: string;
+  description?: string | null;
 }) {
   return {
     id: item.id,
@@ -910,15 +955,60 @@ function mapTgItem(item: {
     imageUrl: item.imageUrl ?? null,
     priority: priorityToNum(item.priority),
     status: item.status.toLowerCase(),
+    description: item.description ?? null,
   };
 }
 
 async function getOrCreateTgUser(tgUser: TelegramUser) {
   return prisma.user.upsert({
     where: { telegramId: String(tgUser.id) },
-    update: {},
-    create: { telegramId: String(tgUser.id) },
+    update: { telegramChatId: String(tgUser.id) },
+    create: { telegramId: String(tgUser.id), telegramChatId: String(tgUser.id) },
   });
+}
+
+type ItemRole = 'owner' | 'reserver' | 'third_party';
+
+async function getItemRole(
+  itemId: string,
+  tgUser: TelegramUser,
+): Promise<{
+  role: ItemRole;
+  item: { id: string; status: string; reservationEpoch: number; reserverUserId: string | null; title: string; wishlist: { ownerId: string } };
+  actorHash: string;
+  user: { id: string; telegramChatId: string | null };
+} | null> {
+  const actorHash = tgActorHash(tgUser.id);
+  const user = await getOrCreateTgUser(tgUser);
+
+  const item = await prisma.item.findUnique({
+    where: { id: itemId },
+    select: {
+      id: true, status: true, reservationEpoch: true, reserverUserId: true, title: true,
+      wishlist: { select: { ownerId: true } },
+      reservationEvents: {
+        where: { type: 'RESERVED' },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { actorHash: true },
+      },
+    },
+  });
+  if (!item) return null;
+
+  if (item.wishlist.ownerId === user.id) {
+    return { role: 'owner', item, actorHash, user };
+  }
+
+  if (
+    item.status === 'RESERVED' &&
+    item.reservationEvents.length > 0 &&
+    secureCompare(item.reservationEvents[0]!.actorHash, actorHash)
+  ) {
+    return { role: 'reserver', item, actorHash, user };
+  }
+
+  return { role: 'third_party', item, actorHash, user };
 }
 
 tgRouter.use(requireTelegramAuth);
@@ -1089,7 +1179,7 @@ tgRouter.get(
     const items = await prisma.item.findMany({
       where: { wishlistId: id, status: { in: [...ACTIVE_STATUSES] } },
       orderBy: ITEM_ORDER_BY,
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
     });
 
     return res.json({ items: items.map(mapTgItem) });
@@ -1133,7 +1223,7 @@ tgRouter.post(
         priority: numToPriority(parsed.data.priority ?? 2),
         imageUrl: parsed.data.imageUrl ?? null,
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
     });
 
     return res.status(201).json({ item: mapTgItem(item) });
@@ -1154,6 +1244,7 @@ tgRouter.patch(
         price: z.number().int().nonnegative().nullable().optional(),
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         imageUrl: z.string().url().nullable().optional(),
+        description: z.string().max(500).nullable().optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
@@ -1161,7 +1252,7 @@ tgRouter.patch(
     const user = await getOrCreateTgUser(req.tgUser!);
     const item = await prisma.item.findUnique({
       where: { id },
-      select: { id: true, wishlist: { select: { ownerId: true } } },
+      select: { id: true, status: true, reservationEpoch: true, reserverUserId: true, title: true, wishlist: { select: { ownerId: true } } },
     });
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -1176,9 +1267,31 @@ tgRouter.patch(
           : {}),
         ...(parsed.data.priority !== undefined ? { priority: numToPriority(parsed.data.priority) } : {}),
         ...(parsed.data.imageUrl !== undefined ? { imageUrl: parsed.data.imageUrl } : {}),
+        ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
     });
+
+    // After update, if description changed and item was reserved — notify reserver
+    if (parsed.data.description !== undefined && item.status === 'RESERVED') {
+      await prisma.comment.create({
+        data: {
+          itemId: id,
+          type: 'SYSTEM',
+          text: 'Описание обновлено',
+          reservationEpoch: item.reservationEpoch,
+        },
+      });
+      if (item.reserverUserId) {
+        const reserver = await prisma.user.findUnique({
+          where: { id: item.reserverUserId },
+          select: { telegramChatId: true },
+        });
+        if (reserver?.telegramChatId) {
+          void sendTgNotification(reserver.telegramChatId, `📝 Описание обновлено в «${item.title}»`);
+        }
+      }
+    }
 
     return res.json({ item: mapTgItem(updated) });
   }),
@@ -1222,8 +1335,16 @@ tgRouter.post(
     const updated = await prisma.item.update({
       where: { id },
       data: { status: 'COMPLETED' },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
     });
+
+    // Set TTL on all comments when item is completed
+    const ttl = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await prisma.comment.updateMany({
+      where: { itemId: id, scheduledDeleteAt: null },
+      data: { scheduledDeleteAt: ttl },
+    });
+
     return res.json({ item: mapTgItem(updated) });
   }),
 );
@@ -1249,7 +1370,7 @@ tgRouter.post(
     const updated = await prisma.item.update({
       where: { id },
       data: { status: 'AVAILABLE' },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
     });
     return res.json({ item: mapTgItem(updated) });
   }),
@@ -1270,7 +1391,7 @@ tgRouter.get(
     const items = await prisma.item.findMany({
       where: { wishlistId: id, status: { in: ['DELETED', 'COMPLETED'] } },
       orderBy: ITEM_ORDER_BY,
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
     });
 
     return res.json({ items: items.map(mapTgItem) });
@@ -1293,20 +1414,56 @@ tgRouter.post(
     const actorHash = tgActorHash(tgUser.id);
     const displayName = parsed.data.displayName ?? tgUser.first_name;
 
+    const user = await getOrCreateTgUser(tgUser);
+
     const result = await prisma.$transaction(async (tx) => {
-      const item = await tx.item.findUnique({ where: { id }, select: { status: true } });
+      const item = await tx.item.findUnique({ where: { id }, select: { status: true, reservationEpoch: true, wishlistId: true } });
       if (!item) return { kind: 'not_found' as const };
       if (item.status !== 'AVAILABLE') return { kind: 'conflict' as const };
 
-      await tx.item.update({ where: { id }, data: { status: 'RESERVED' } });
+      const newEpoch = item.reservationEpoch + 1;
+      await tx.item.update({
+        where: { id },
+        data: {
+          status: 'RESERVED',
+          reservationEpoch: newEpoch,
+          reserverUserId: user.id,
+        },
+      });
       await tx.reservationEvent.create({
         data: { itemId: id, type: 'RESERVED', actorHash, comment: displayName },
       });
-      return { kind: 'ok' as const };
+      await tx.comment.create({
+        data: { itemId: id, type: 'SYSTEM', text: 'Подарок забронирован', reservationEpoch: newEpoch },
+      });
+      // Clear TTL on existing comments (from previous unreserve)
+      await tx.comment.updateMany({
+        where: { itemId: id, scheduledDeleteAt: { not: null } },
+        data: { scheduledDeleteAt: null },
+      });
+      return { kind: 'ok' as const, wishlistId: item.wishlistId };
     });
 
     if (result.kind === 'not_found') return res.status(404).json({ error: 'Item not found' });
     if (result.kind === 'conflict') return res.status(409).json({ error: 'Item is not available' });
+
+    if (result.kind === 'ok') {
+      // Notify owner
+      const itemData = await prisma.item.findUnique({
+        where: { id },
+        select: { title: true, wishlist: { select: { ownerId: true } } },
+      });
+      if (itemData) {
+        const owner = await prisma.user.findUnique({
+          where: { id: itemData.wishlist.ownerId },
+          select: { telegramChatId: true },
+        });
+        if (owner?.telegramChatId) {
+          void sendTgNotification(owner.telegramChatId, `🎁 ${displayName} забронировал желание «${itemData.title}»`);
+        }
+      }
+    }
+
     return res.json({ ok: true });
   }),
 );
@@ -1322,7 +1479,7 @@ tgRouter.post(
     const actorHash = tgActorHash(tgUser.id);
 
     const result = await prisma.$transaction(async (tx) => {
-      const item = await tx.item.findUnique({ where: { id }, select: { status: true } });
+      const item = await tx.item.findUnique({ where: { id }, select: { status: true, reservationEpoch: true } });
       if (!item) return { kind: 'not_found' as const };
       if (item.status !== 'RESERVED') return { kind: 'conflict' as const };
 
@@ -1334,9 +1491,18 @@ tgRouter.post(
       if (!lastEvent || lastEvent.type !== 'RESERVED') return { kind: 'conflict' as const };
       if (!secureCompare(lastEvent.actorHash, actorHash)) return { kind: 'forbidden' as const };
 
-      await tx.item.update({ where: { id }, data: { status: 'AVAILABLE' } });
+      await tx.item.update({ where: { id }, data: { status: 'AVAILABLE', reserverUserId: null } });
       await tx.reservationEvent.create({
         data: { itemId: id, type: 'UNRESERVED', actorHash, comment: null },
+      });
+      await tx.comment.create({
+        data: { itemId: id, type: 'SYSTEM', text: 'Бронь отменена', reservationEpoch: item.reservationEpoch },
+      });
+      // Set TTL on all comments
+      const ttl = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await tx.comment.updateMany({
+        where: { itemId: id, scheduledDeleteAt: null },
+        data: { scheduledDeleteAt: ttl },
       });
       return { kind: 'ok' as const };
     });
@@ -1344,6 +1510,196 @@ tgRouter.post(
     if (result.kind === 'not_found') return res.status(404).json({ error: 'Item not found' });
     if (result.kind === 'conflict') return res.status(409).json({ error: 'Cannot unreserve' });
     if (result.kind === 'forbidden') return res.status(403).json({ error: 'Forbidden' });
+    return res.json({ ok: true });
+  }),
+);
+
+// GET /tg/items/:id/comments — list comments (owner/reserver only)
+tgRouter.get(
+  '/items/:id/comments',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const ctx = await getItemRole(id, req.tgUser!);
+    if (!ctx) return res.status(404).json({ error: 'Item not found' });
+    if (ctx.role === 'third_party') return res.status(403).json({ error: 'Forbidden' });
+
+    const comments = await prisma.comment.findMany({
+      where: { itemId: id },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true, type: true, authorActorHash: true, authorDisplayName: true,
+        text: true, reservationEpoch: true, createdAt: true,
+      },
+    });
+
+    // For reserver: anonymize previous epoch comments
+    const mapped = comments.map((c) => {
+      if (
+        ctx.role === 'reserver' &&
+        c.type === 'USER' &&
+        c.reservationEpoch < ctx.item.reservationEpoch &&
+        c.authorActorHash !== ctx.actorHash
+      ) {
+        return { ...c, authorDisplayName: 'Аноним', createdAt: c.createdAt.toISOString() };
+      }
+      return { ...c, createdAt: c.createdAt.toISOString() };
+    });
+
+    return res.json({ comments: mapped, role: ctx.role });
+  }),
+);
+
+// POST /tg/items/:id/comments — create comment (owner/reserver only)
+tgRouter.post(
+  '/items/:id/comments',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const ctx = await getItemRole(id, req.tgUser!);
+    if (!ctx) return res.status(404).json({ error: 'Item not found' });
+    if (ctx.role === 'third_party') return res.status(403).json({ error: 'Forbidden' });
+
+    // Reject archived items
+    if (ctx.item.status === 'COMPLETED' || ctx.item.status === 'DELETED') {
+      return res.status(400).json({ error: 'Комментарии в архиве запрещены' });
+    }
+
+    // Validate text
+    const parsed = z.object({ text: z.string().min(1).max(300) }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+    const text = parsed.data.text.trim();
+    if (!text) return res.status(400).json({ error: 'Комментарий не может быть пустым' });
+
+    // Reject emoji/dots only
+    const stripped = text.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s.…]+/gu, '');
+    if (stripped.length === 0) {
+      return res.status(400).json({ error: 'Напиши что-нибудь содержательное' });
+    }
+
+    // Anti-spam checks
+    const now = Date.now();
+
+    // 1. Cooldown 10s
+    const lastComment = await prisma.comment.findFirst({
+      where: { itemId: id, authorActorHash: ctx.actorHash, type: 'USER' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true, text: true },
+    });
+    if (lastComment && now - lastComment.createdAt.getTime() < 10_000) {
+      return res.status(429).json({ error: 'Подожди немного перед следующим комментарием' });
+    }
+
+    // 2. Deduplicate
+    if (lastComment && lastComment.text === text) {
+      return res.status(400).json({ error: 'Этот комментарий уже отправлен' });
+    }
+
+    // 3. Max 3 consecutive without reply
+    const recent3 = await prisma.comment.findMany({
+      where: { itemId: id, type: 'USER' },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      select: { authorActorHash: true },
+    });
+    if (recent3.length >= 3 && recent3.every((c) => c.authorActorHash === ctx.actorHash)) {
+      return res.status(429).json({ error: 'Дождись ответа перед отправкой новых комментариев' });
+    }
+
+    // 4. Max 10/hour
+    const hourAgo = new Date(now - 3600_000);
+    const hourCount = await prisma.comment.count({
+      where: { itemId: id, authorActorHash: ctx.actorHash, type: 'USER', createdAt: { gte: hourAgo } },
+    });
+    if (hourCount >= 10) {
+      return res.status(429).json({ error: 'Слишком много комментариев за час' });
+    }
+
+    // 5. Max 20/30 days
+    const monthAgo = new Date(now - 30 * 86400_000);
+    const monthCount = await prisma.comment.count({
+      where: { itemId: id, authorActorHash: ctx.actorHash, type: 'USER', createdAt: { gte: monthAgo } },
+    });
+    if (monthCount >= 20) {
+      return res.status(429).json({ error: 'Достигнут лимит комментариев' });
+    }
+
+    // Determine display name
+    const displayName = req.tgUser!.first_name;
+
+    const comment = await prisma.comment.create({
+      data: {
+        itemId: id,
+        type: 'USER',
+        authorActorHash: ctx.actorHash,
+        authorDisplayName: displayName,
+        text,
+        reservationEpoch: ctx.item.reservationEpoch,
+      },
+      select: {
+        id: true, type: true, authorActorHash: true, authorDisplayName: true,
+        text: true, reservationEpoch: true, createdAt: true,
+      },
+    });
+
+    // Notify the other party
+    if (ctx.role === 'reserver') {
+      // Notify owner
+      const owner = await prisma.user.findUnique({
+        where: { id: ctx.item.wishlist.ownerId },
+        select: { telegramChatId: true, id: true },
+      });
+      if (owner?.telegramChatId) {
+        const key = `${id}:${owner.id}`;
+        queueCommentNotification(key, owner.telegramChatId, ctx.item.title,
+          `💬 ${displayName} прокомментировал «${ctx.item.title}»:\n${text}`);
+      }
+    } else if (ctx.role === 'owner' && ctx.item.reserverUserId) {
+      // Notify reserver
+      const reserver = await prisma.user.findUnique({
+        where: { id: ctx.item.reserverUserId },
+        select: { telegramChatId: true, id: true },
+      });
+      if (reserver?.telegramChatId) {
+        const key = `${id}:${reserver.id}`;
+        queueCommentNotification(key, reserver.telegramChatId, ctx.item.title,
+          `💬 Автор прокомментировал «${ctx.item.title}»:\n${text}`);
+      }
+    }
+
+    return res.status(201).json({ comment: { ...comment, createdAt: comment.createdAt.toISOString() } });
+  }),
+);
+
+// DELETE /tg/items/:id/comments/:commentId — delete comment
+tgRouter.delete(
+  '/items/:id/comments/:commentId',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    const commentId = req.params.commentId ?? '';
+    if (!id || !commentId) return res.status(400).json({ error: 'Missing ids' });
+
+    const ctx = await getItemRole(id, req.tgUser!);
+    if (!ctx) return res.status(404).json({ error: 'Item not found' });
+    if (ctx.role === 'third_party') return res.status(403).json({ error: 'Forbidden' });
+
+    const comment = await prisma.comment.findUnique({
+      where: { id: commentId },
+      select: { id: true, type: true, authorActorHash: true, itemId: true },
+    });
+    if (!comment || comment.itemId !== id) return res.status(404).json({ error: 'Comment not found' });
+
+    // System comments cannot be deleted manually
+    if (comment.type === 'SYSTEM') return res.status(403).json({ error: 'Системные события нельзя удалить' });
+
+    // Owner can delete any USER comment; reserver can delete only own
+    if (ctx.role === 'reserver' && comment.authorActorHash !== ctx.actorHash) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    await prisma.comment.delete({ where: { id: commentId } });
     return res.json({ ok: true });
   }),
 );
@@ -1428,6 +1784,22 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);
   return res.status(500).json({ error: 'Internal server error' });
 });
+
+// TTL cleanup for expired comments (runs every hour)
+setInterval(async () => {
+  try {
+    const result = await prisma.comment.deleteMany({
+      where: { scheduledDeleteAt: { lte: new Date() } },
+    });
+    if (result.count > 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[ttl] cleaned ${result.count} expired comments`);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[ttl] cleanup failed', err);
+  }
+}, 60 * 60 * 1000);
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console

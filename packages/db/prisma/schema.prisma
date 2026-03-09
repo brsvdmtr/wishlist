@@ -27,12 +27,18 @@ enum ReservationType {
   PURCHASED
 }
 
+enum CommentType {
+  USER
+  SYSTEM
+}
+
 model User {
-  id         String   @id @default(cuid())
-  email      String?  @unique
-  telegramId String?  @unique
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             String   @id @default(cuid())
+  email          String?  @unique
+  telegramId     String?  @unique
+  telegramChatId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   wishlists Wishlist[]
 }
@@ -56,22 +62,26 @@ model Wishlist {
 }
 
 model Item {
-  id           String     @id @default(cuid())
-  wishlistId   String
-  title        String
-  url          String
-  priceText    String?
-  commentOwner String?
-  priority     Priority   @default(MEDIUM)
-  deadline     DateTime?
-  imageUrl     String?
-  status       ItemStatus @default(AVAILABLE)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id               String     @id @default(cuid())
+  wishlistId       String
+  title            String
+  url              String
+  description      String?    @db.VarChar(500)
+  priceText        String?
+  commentOwner     String?
+  priority         Priority   @default(MEDIUM)
+  deadline         DateTime?
+  imageUrl         String?
+  status           ItemStatus @default(AVAILABLE)
+  reservationEpoch Int        @default(0)
+  reserverUserId   String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   wishlist          Wishlist           @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
   itemTags          ItemTag[]
   reservationEvents ReservationEvent[]
+  comments          Comment[]
 
   @@index([wishlistId])
 }
@@ -109,4 +119,21 @@ model ReservationEvent {
   item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@index([itemId])
+}
+
+model Comment {
+  id                String      @id @default(cuid())
+  itemId            String
+  type              CommentType @default(USER)
+  authorActorHash   String?
+  authorDisplayName String?
+  text              String      @db.VarChar(300)
+  reservationEpoch  Int         @default(0)
+  scheduledDeleteAt DateTime?
+  createdAt         DateTime    @default(now())
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, createdAt])
+  @@index([scheduledDeleteAt])
 }
