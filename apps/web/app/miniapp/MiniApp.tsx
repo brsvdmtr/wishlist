@@ -124,9 +124,10 @@ const inputStyle: React.CSSProperties = {
   color: C.text, fontSize: 16, fontFamily: font, outline: 'none', boxSizing: 'border-box',
 };
 
-/** onFocus: rAF loop keeps textarea visible while keyboard animates in. */
+/** onFocus: scroll textarea to upper part of screen — above any keyboard.
+ *  Telegram WebView doesn't resize visualViewport when keyboard opens,
+ *  so we skip detection entirely and just position the textarea high enough. */
 function handleTextareaFocus(textarea: HTMLElement) {
-  // Find the overflow:auto scroll container once
   let scrollParent: HTMLElement | null = textarea.parentElement;
   while (scrollParent) {
     const ov = window.getComputedStyle(scrollParent).overflowY;
@@ -134,29 +135,14 @@ function handleTextareaFocus(textarea: HTMLElement) {
     scrollParent = scrollParent.parentElement;
   }
   if (!scrollParent) return;
-  const sp = scrollParent;
 
-  let frames = 0;
-  let stableFrames = 0;
-  let lastVH = 0;
-
-  const tick = () => {
-    frames++;
-    const vh = window.visualViewport?.height ?? window.innerHeight;
-    // Track viewport stability (keyboard done animating?)
-    if (Math.abs(vh - lastVH) < 1) stableFrames++; else stableFrames = 0;
-    lastVH = vh;
-
-    const rect = textarea.getBoundingClientRect();
-    if (rect.bottom > vh - 20) {
-      sp.scrollTop += rect.bottom - vh + 24;
-    }
-
-    // Stop when stable for 15 frames (~250ms) or after 2s
-    if (stableFrames < 15 && frames < 120) requestAnimationFrame(tick);
-  };
-
-  requestAnimationFrame(tick);
+  // Position textarea at ~35% from screen top — always above any keyboard
+  const rect = textarea.getBoundingClientRect();
+  const target = window.innerHeight * 0.35;
+  const delta = rect.top - target;
+  if (delta > 10) {
+    scrollParent.scrollTop += delta;
+  }
 }
 
 // ═══════════════════════════════════════════════════════
