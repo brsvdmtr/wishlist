@@ -204,7 +204,7 @@ function mapItemForPublic(item: {
   createdAt: Date;
   updatedAt: Date;
   itemTags: { tag: { id: string; name: string } }[];
-  reservationEvents?: { comment: string | null }[];
+  reservationEvents?: { comment: string | null; actorHash: string }[];
 }) {
   return {
     id: item.id,
@@ -223,6 +223,11 @@ function mapItemForPublic(item: {
     reservedByDisplayName:
       item.status === 'RESERVED' && item.reservationEvents?.length
         ? (item.reservationEvents[0]?.comment ?? null)
+        : null,
+    // Hash of the reserver's identity — used by frontend to detect "reserved by me".
+    reservedByActorHash:
+      item.status === 'RESERVED' && item.reservationEvents?.length
+        ? (item.reservationEvents[0]?.actorHash ?? null)
         : null,
   };
 }
@@ -264,7 +269,7 @@ publicRouter.get(
           where: { type: 'RESERVED' },
           orderBy: { createdAt: 'desc' },
           take: 1,
-          select: { comment: true },
+          select: { comment: true, actorHash: true },
         },
       },
     });
@@ -297,7 +302,7 @@ publicRouter.get(
               where: { type: 'RESERVED' },
               orderBy: { createdAt: 'desc' },
               take: 1,
-              select: { comment: true },
+              select: { comment: true, actorHash: true },
             },
           },
         },
@@ -350,7 +355,7 @@ publicRouter.get(
                 where: { type: 'RESERVED' },
                 orderBy: { createdAt: 'desc' },
                 take: 1,
-                select: { comment: true },
+                select: { comment: true, actorHash: true },
               },
             },
           },
@@ -403,7 +408,7 @@ publicRouter.post(
             where: { type: 'RESERVED' },
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { comment: true },
+            select: { comment: true, actorHash: true },
           },
         },
       });
@@ -461,7 +466,7 @@ publicRouter.post(
             where: { type: 'RESERVED' },
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { comment: true },
+            select: { comment: true, actorHash: true },
           },
         },
       });
@@ -506,7 +511,7 @@ publicRouter.post(
             where: { type: 'RESERVED' },
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { comment: true },
+            select: { comment: true, actorHash: true },
           },
         },
       });

@@ -82,10 +82,17 @@ type Item = {
   status: 'available' | 'reserved' | 'purchased' | 'completed' | 'deleted';
 };
 
-type GuestItem = Item & { reservedByDisplayName: string | null };
+type GuestItem = Item & { reservedByDisplayName: string | null; reservedByActorHash: string | null };
 
 type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive';
 type Toast = { id: string; message: string; kind: 'success' | 'error' };
+
+async function computeActorHash(telegramId: number): Promise<string> {
+  const data = new TextEncoder().encode(`tg_actor:${telegramId}`);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  const h = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
 
 // ═══════════════════════════════════════════════════════
 // BUTTON / INPUT STYLES
@@ -198,9 +205,10 @@ function WishCardOwner({ item, onTap, onDelete, onComplete }: {
   );
 }
 
-function WishCardGuest({ item, onTap, onReserve }: { item: GuestItem; onTap: (item: GuestItem) => void; onReserve: (item: GuestItem) => void }) {
+function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash }: { item: GuestItem; onTap: (item: GuestItem) => void; onReserve: (item: GuestItem) => void; onUnreserve: (item: GuestItem) => void; myActorHash: string }) {
   const isPurchased = item.status === 'purchased';
   const isReserved = item.status === 'reserved';
+  const isReservedByMe = isReserved && !!myActorHash && item.reservedByActorHash === myActorHash;
   return (
     <div
       onClick={() => onTap(item)}
@@ -227,9 +235,17 @@ function WishCardGuest({ item, onTap, onReserve }: { item: GuestItem; onTap: (it
           {item.status === 'available' && (
             <button onClick={(e) => { e.stopPropagation(); onReserve(item); }} style={{ ...btnPrimary, width: 'auto', padding: '8px 16px', fontSize: 13 }}>🎁 Забронировать</button>
           )}
-          {isReserved && (
+          {isReservedByMe && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>
+                ✅ Забронировано мной
+              </span>
+              <button onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ background: 'none', border: 'none', padding: '6px 8px', fontSize: 12, color: C.textMuted, cursor: 'pointer', fontFamily: font }}>Отменить</button>
+            </div>
+          )}
+          {isReserved && !isReservedByMe && (
             <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.orangeSoft, color: C.orange, fontSize: 13, fontWeight: 600 }}>
-              🎁 {item.reservedByDisplayName ? `Дарит ${item.reservedByDisplayName}` : 'Кто-то уже дарит'}
+              Уже забронировано
             </span>
           )}
           {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>✅ Подарено</span>}
@@ -258,6 +274,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const tgRef = useRef<Window['Telegram']>( undefined);
   const initDataRef = useRef<string>('');
   const urlStartParamRef = useRef<string>(''); // captured for "Open in Telegram" fallback
+  const myActorHashRef = useRef<string>(''); // SHA-256 hash of tg_actor:{telegramId}
 
   const [screen, setScreen] = useState<Screen>('loading');
   const [errorMsg, setErrorMsg] = useState('');
@@ -368,6 +385,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         imageUrl: string | null;
         priority: 'LOW' | 'MEDIUM' | 'HIGH'; status: 'AVAILABLE' | 'RESERVED' | 'PURCHASED';
         reservedByDisplayName: string | null;
+        reservedByActorHash: string | null;
       }>;
     };
 
@@ -403,6 +421,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       priority: priorityMap[i.priority] ?? 2,
       status: i.status.toLowerCase() as 'available' | 'reserved' | 'purchased',
       reservedByDisplayName: i.reservedByDisplayName,
+      reservedByActorHash: i.reservedByActorHash ?? null,
     })));
   }, [apiBase]);
 
@@ -485,7 +504,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         || new URLSearchParams(window.location.search).get('startapp')
         || '';
       const user = tg.initDataUnsafe.user;
-      if (user) setTgUser(user);
+      if (user) {
+        setTgUser(user);
+        computeActorHash(user.id).then(h => { myActorHashRef.current = h; }).catch(() => {});
+      }
 
       // If not inside real Telegram (initData is empty), show "Open in Telegram"
       // instead of attempting a doomed auth/API flow.
@@ -794,16 +816,26 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       });
       if (res.status === 409) { pushToast('Уже забронировано', 'error'); return; }
       if (!res.ok) { pushToast('Что-то пошло не так', 'error'); return; }
-      setGuestItems((prev) =>
-        prev.map((i) =>
-          i.id === reservingItem.id
-            ? { ...i, status: 'reserved' as const, reservedByDisplayName: guestName.trim() }
-            : i,
-        ),
-      );
+      const updatedItem = { ...reservingItem, status: 'reserved' as const, reservedByDisplayName: guestName.trim(), reservedByActorHash: myActorHashRef.current };
+      setGuestItems((prev) => prev.map((i) => i.id === reservingItem.id ? updatedItem : i));
+      if (viewingItem && viewingItem.id === reservingItem.id) setViewingItem(updatedItem);
       pushToast('🎁 Забронировано!', 'success');
       setReservingItem(null);
       setGuestName('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnreserve = async (item: GuestItem) => {
+    setLoading(true);
+    try {
+      const res = await tgFetch(`/tg/items/${item.id}/unreserve`, { method: 'POST', body: '{}' });
+      if (!res.ok) { pushToast('Ошибка отмены', 'error'); return; }
+      const updatedItem = { ...item, status: 'available' as const, reservedByDisplayName: null, reservedByActorHash: null };
+      setGuestItems((prev) => prev.map((i) => i.id === item.id ? updatedItem : i));
+      if (viewingItem && viewingItem.id === item.id) setViewingItem(updatedItem);
+      pushToast('Бронь отменена', 'success');
     } finally {
       setLoading(false);
     }
@@ -1117,13 +1149,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
             </a>
           )}
-          <div style={{ marginTop: 8, marginBottom: 20 }}>
+          <div style={{ marginTop: 8, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {viewingItem.status === 'available' && (
               <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }} style={{ ...btnPrimary, width: '100%' }}>🎁 Забронировать</button>
             )}
-            {viewingItem.status === 'reserved' && (
+            {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && (
+              <>
+                <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
+                  ✅ Забронировано мной
+                </span>
+                <button onClick={() => void handleUnreserve(viewingItem as GuestItem)} style={{ ...btnGhost, color: C.textSec, width: '100%' }}>Отменить бронь</button>
+              </>
+            )}
+            {viewingItem.status === 'reserved' && !(!!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current) && (
               <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
-                🎁 {(viewingItem as GuestItem).reservedByDisplayName ? `Дарит ${(viewingItem as GuestItem).reservedByDisplayName}` : 'Кто-то уже дарит'}
+                Уже забронировано
               </span>
             )}
             {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
@@ -1183,7 +1223,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               .filter((i) => !PRICE_FILTERS[priceFilter]?.max || !i.price || i.price <= (PRICE_FILTERS[priceFilter]?.max ?? Infinity))
               .map((item, i) => (
                 <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                  <WishCardGuest item={item} onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }} onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }} />
+                  <WishCardGuest item={item} onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }} onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }} onUnreserve={handleUnreserve} myActorHash={myActorHashRef.current} />
                 </div>
               ))}
           </div>
