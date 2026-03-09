@@ -278,6 +278,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // Item detail view (for both owner and guest)
   const [viewingItem, setViewingItem] = useState<(Item | GuestItem) | null>(null);
+  const [pendingEditItem, setPendingEditItem] = useState<Item | null>(null);
 
   // UI state
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -533,6 +534,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [screen, guestWl, wishlists, loadItems]);
 
+  // --- Deferred edit: open edit form AFTER navigating back to wishlist-detail
+  // (BottomSheet with position:fixed inside another position:fixed+overflowY:auto
+  //  glitches in Telegram WebView, so we navigate first, then open the form)
+  useEffect(() => {
+    if (pendingEditItem && screen === 'wishlist-detail') {
+      openEditItem(pendingEditItem);
+      setPendingEditItem(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingEditItem, screen]);
+
   // --- Owner actions
   const handleCreateWishlist = async () => {
     if (!wlTitle.trim()) return;
@@ -704,11 +716,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       }
       setShowItemForm(false);
       resetItemForm();
-      // If we were viewing item-detail, navigate back to list after save
-      if (screen === 'item-detail') {
-        setViewingItem(null);
-        setScreen('wishlist-detail');
-      }
     } finally {
       setLoading(false);
       setPhotoUploading(false);
@@ -724,11 +731,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
       pushToast('🗑 Удалено', 'success');
-      // If we were viewing item-detail, navigate back to list after delete
-      if (screen === 'item-detail') {
-        setViewingItem(null);
-        setScreen('wishlist-detail');
-      }
     } finally {
       setLoading(false);
     }
@@ -1065,15 +1067,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {viewingItem.status !== 'purchased' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button onClick={() => {
-                // BottomSheet is now at the top level (position:fixed), so it renders
-                // on any screen. Just open the edit form directly.
-                openEditItem(viewingItem as Item);
+                // Navigate to wishlist-detail first, then open edit form via useEffect
+                // (BottomSheet position:fixed glitches inside Telegram WebView)
+                setPendingEditItem(viewingItem as Item);
+                setViewingItem(null);
+                setScreen('wishlist-detail');
               }} style={{ ...btnPrimary, width: '100%' }}>✏️ Редактировать</button>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => {
-                  setDeletingItem(viewingItem as Item);
+                  // Navigate back, then show delete confirmation
+                  const item = viewingItem as Item;
+                  setViewingItem(null);
+                  setScreen('wishlist-detail');
+                  setDeletingItem(item);
                 }} style={{ ...btnGhost, flex: 1, color: C.red }}>🗑 Удалить</button>
                 <button onClick={() => {
+                  setShowItemForm(false);
+                  resetItemForm();
                   handleCompleteItem(viewingItem as Item);
                   setViewingItem(null);
                   setScreen('wishlist-detail');
