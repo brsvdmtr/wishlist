@@ -387,7 +387,26 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
               value={commentText}
               onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
               maxLength={300}
-              onFocus={(e) => { const el = e.currentTarget; setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 350); }}
+              onFocus={(e) => {
+                const textarea = e.currentTarget;
+                setTimeout(() => {
+                  // visualViewport.height shrinks when keyboard opens
+                  const vvHeight = window.visualViewport?.height ?? window.innerHeight;
+                  const rect = textarea.getBoundingClientRect();
+                  if (rect.bottom > vvHeight - 16) {
+                    // Walk up to find the overflow:auto scroll container
+                    let el: HTMLElement | null = textarea.parentElement;
+                    while (el) {
+                      const ov = window.getComputedStyle(el).overflowY;
+                      if (ov === 'auto' || ov === 'scroll') {
+                        el.scrollTop += rect.bottom - vvHeight + 24;
+                        break;
+                      }
+                      el = el.parentElement;
+                    }
+                  }
+                }, 350);
+              }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSendComment(); } }}
             />
             <span style={{
