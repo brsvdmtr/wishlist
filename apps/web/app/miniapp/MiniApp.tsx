@@ -285,69 +285,71 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
 
   const canDelete = (c: CommentDTO) => {
     if (c.type === 'SYSTEM') return false;
-    if (commentRole === 'owner') return true; // owner can delete any USER
-    return c.authorActorHash === myActorHash; // reserver: own only
+    if (commentRole === 'owner') return true;
+    return c.authorActorHash === myActorHash;
   };
 
+  const isMine = (c: CommentDTO) => c.authorActorHash === myActorHash;
+
   return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 8, fontFamily: font }}>
-        💬 Комментарии
+    <div style={{ marginTop: 24, padding: 20, background: C.surface, borderRadius: 20 }}>
+      <div style={{ fontSize: 17, fontWeight: 600, color: C.text, marginBottom: 4, fontFamily: font }}>
+        Комментарии
       </div>
-      <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12, lineHeight: 1.4 }}>
-        🔒 Комментарии видны только автору и тому, кто забронировал
+      <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 16, lineHeight: 1.4 }}>
+        Личный чат между автором и тем, кто забронировал
       </div>
 
       {isArchive && (
-        <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 12px', borderRadius: 10, marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 14px', borderRadius: 12, marginBottom: 14 }}>
           Комментарии будут удалены через 30 дней
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {comments.length === 0 && (
-          <div style={{ textAlign: 'center', fontSize: 13, color: C.textMuted, padding: '16px 0' }}>
-            Пока нет комментариев
+          <div style={{ textAlign: 'center', fontSize: 14, color: C.textMuted, padding: '24px 0 16px' }}>
+            Напишите первое сообщение
           </div>
         )}
         {comments.map(c => (
           c.type === 'SYSTEM' ? (
             <div key={c.id} style={{
-              textAlign: 'center', fontSize: 11, color: C.textMuted,
-              padding: '6px 12px', background: C.surface, borderRadius: 10, margin: '4px 0',
+              textAlign: 'center', fontSize: 12, color: C.textMuted,
+              padding: '8px 14px', background: C.bg, borderRadius: 12, margin: '6px 0',
             }}>
               {c.text} · {new Date(c.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </div>
           ) : (
             <div key={c.id} style={{
-              alignSelf: c.authorActorHash === myActorHash ? 'flex-end' : 'flex-start',
-              maxWidth: '80%', position: 'relative',
+              alignSelf: isMine(c) ? 'flex-end' : 'flex-start',
+              maxWidth: '75%',
             }}>
-              {c.authorActorHash !== myActorHash && (
-                <div style={{ fontSize: 11, color: C.accent, marginBottom: 2, fontWeight: 600, fontFamily: font }}>
+              {!isMine(c) && (
+                <div style={{ fontSize: 12, color: C.accent, marginBottom: 3, fontWeight: 600, fontFamily: font }}>
                   {c.authorDisplayName ?? 'Аноним'}
                 </div>
               )}
-              {c.authorActorHash === myActorHash && (
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 2, fontWeight: 600, fontFamily: font, textAlign: 'right' }}>
+              {isMine(c) && (
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 3, fontWeight: 500, fontFamily: font, textAlign: 'right' }}>
                   Я
                 </div>
               )}
               <div style={{
-                padding: '10px 14px', borderRadius: 14,
-                background: c.authorActorHash === myActorHash ? C.accent : C.card,
-                color: c.authorActorHash === myActorHash ? '#fff' : C.text,
-                fontSize: 14, lineHeight: 1.4,
-                border: c.authorActorHash === myActorHash ? 'none' : `1px solid ${C.border}`,
+                padding: '12px 16px', borderRadius: 18,
+                background: isMine(c) ? C.accent : C.card,
+                color: isMine(c) ? '#fff' : C.text,
+                fontSize: 15, lineHeight: 1.45,
+                border: isMine(c) ? 'none' : `1px solid ${C.border}`,
               }}>
                 {c.text}
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  marginTop: 4, gap: 8,
+                  marginTop: 6, gap: 8,
                 }}>
                   <span style={{
-                    fontSize: 10,
-                    color: c.authorActorHash === myActorHash ? 'rgba(255,255,255,0.5)' : C.textMuted,
+                    fontSize: 11,
+                    color: isMine(c) ? 'rgba(255,255,255,0.45)' : C.textMuted,
                   }}>
                     {new Date(c.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                   </span>
@@ -355,8 +357,8 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
                     <button
                       onClick={() => void onDeleteComment(c.id)}
                       style={{
-                        background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer',
-                        fontSize: 10, color: c.authorActorHash === myActorHash ? 'rgba(255,255,255,0.4)' : C.textMuted,
+                        background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer',
+                        fontSize: 12, color: isMine(c) ? 'rgba(255,255,255,0.35)' : C.textMuted,
                       }}
                     >
                       ✕
@@ -369,12 +371,18 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
         ))}
       </div>
 
-      {/* Comment input — only for active items */}
+      {/* Composer */}
       {!isArchive && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 16, alignItems: 'flex-end' }}>
           <div style={{ flex: 1, position: 'relative' }}>
             <textarea
-              style={{ ...inputStyle, minHeight: 44, maxHeight: 120, resize: 'none', paddingRight: 50 }}
+              style={{
+                ...inputStyle,
+                minHeight: 48, maxHeight: 100, resize: 'none',
+                paddingRight: 48, padding: '14px 48px 14px 16px',
+                borderRadius: 16, fontSize: 15,
+                background: C.bg,
+              }}
               placeholder="Написать комментарий..."
               value={commentText}
               onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
@@ -382,8 +390,10 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSendComment(); } }}
             />
             <span style={{
-              position: 'absolute', right: 12, bottom: 8,
-              fontSize: 10, color: commentText.length > 280 ? C.orange : C.textMuted,
+              position: 'absolute', right: 14, bottom: 10,
+              fontSize: 10, color: C.textMuted,
+              opacity: commentText.length > 280 ? 1 : 0.5,
+              ...(commentText.length > 280 ? { color: C.orange } : {}),
             }}>
               {commentText.length}/300
             </span>
@@ -392,8 +402,8 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
             onClick={() => void onSendComment()}
             disabled={!commentText.trim() || commentSending}
             style={{
-              ...btnPrimary, width: 44, height: 44, padding: 0, borderRadius: 12,
-              opacity: commentText.trim() ? 1 : 0.4, flexShrink: 0,
+              ...btnPrimary, width: 40, height: 40, padding: 0, borderRadius: 20,
+              opacity: commentText.trim() ? 1 : 0.35, flexShrink: 0, fontSize: 16,
             }}
           >
             {commentSending ? '…' : '↑'}
@@ -1323,100 +1333,154 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           OWNER — ITEM DETAIL (view + actions)
           ══════════════════════════════════════════════ */}
       {screen === 'item-detail' && viewingItem && (
-        <div style={{ padding: '16px 20px 120px' }}>
-          {/* Large image */}
-          {viewingItem.imageUrl ? (
-            <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 16, marginBottom: 20, background: C.surface }} />
-          ) : (
-            <div style={{ width: '100%', height: 140, borderRadius: 16, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56, marginBottom: 20 }}>
-              {getEmoji(viewingItem.title)}
-            </div>
-          )}
-          <h1 style={{ fontSize: 22, fontWeight: 700, fontFamily: font, color: C.text, margin: '0 0 8px' }}>{viewingItem.title}</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <span style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{viewingItem.price != null ? fmtPrice(viewingItem.price) : ''}</span>
-            <span style={{ fontSize: 16 }}>{prioEmoji(viewingItem.priority)}</span>
-            <span style={{ fontSize: 12, color: C.textMuted }}>{PRIORITIES.find((p) => p.value === viewingItem!.priority)?.label}</span>
-          </div>
-          {viewingItem.url && (
-            <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.accent, background: C.accentSoft, padding: '8px 14px', borderRadius: 10, textDecoration: 'none', marginBottom: 16, wordBreak: 'break-all' }}>
-              🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
-            </a>
-          )}
-          {/* Description */}
-          <div style={{ marginTop: 12, marginBottom: 16 }}>
-            {viewingItem.description ? (
-              <div style={{
-                fontSize: 14, color: C.textSec, lineHeight: 1.6,
-                padding: '12px 16px', background: C.surface, borderRadius: 12,
-                border: `1px solid ${C.border}`,
-              }}>
-                {viewingItem.description}
-                <div
-                  onClick={() => { setDescriptionText(viewingItem.description ?? ''); setEditingDescription(true); }}
-                  style={{ fontSize: 12, color: C.accent, marginTop: 8, cursor: 'pointer', fontFamily: font }}
-                >
-                  ✏️ Изменить описание
-                </div>
-              </div>
+        <div style={{ padding: '0 0 40px' }}>
+          {/* Hero image */}
+          <div style={{ padding: '16px 16px 0' }}>
+            {viewingItem.imageUrl ? (
+              <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', height: 230, objectFit: 'cover', borderRadius: 20, display: 'block', background: C.surface }} />
             ) : (
-              <div
-                onClick={() => { setDescriptionText(''); setEditingDescription(true); }}
-                style={{
-                  fontSize: 13, color: C.textMuted, padding: '12px 16px',
-                  background: C.surface, borderRadius: 12, cursor: 'pointer',
-                  border: `1px dashed ${C.borderLight}`, lineHeight: 1.5,
-                }}
-              >
-                ＋ Добавь описание, чтобы друзьям было проще выбрать подарок
+              <div style={{ width: '100%', height: 180, borderRadius: 20, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56 }}>
+                {getEmoji(viewingItem.title)}
               </div>
             )}
           </div>
-          {/* Status badge */}
-          <div style={{ marginTop: 8, marginBottom: 20 }}>
-            {viewingItem.status === 'reserved' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 14, fontWeight: 600 }}>Кто-то выбрал этот подарок ✨</span>}
-            {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
-          </div>
-          {/* Comments */}
-          <CommentsThread
-            commentRole={commentRole}
-            comments={comments}
-            commentText={commentText}
-            setCommentText={setCommentText}
-            commentSending={commentSending}
-            myActorHash={myActorHashRef.current}
-            onDeleteComment={handleDeleteComment}
-            onSendComment={handleSendComment}
-            isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
-          />
-          {/* Owner actions */}
-          {viewingItem.status !== 'purchased' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button onClick={() => {
-                // Navigate to wishlist-detail first, then open edit form via useEffect
-                // (BottomSheet position:fixed glitches inside Telegram WebView)
-                setPendingEditItem(viewingItem as Item);
-                setViewingItem(null);
-                setScreen('wishlist-detail');
-              }} style={{ ...btnPrimary, width: '100%' }}>✏️ Редактировать</button>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => {
-                  // Navigate back, then show delete confirmation
-                  const item = viewingItem as Item;
-                  setViewingItem(null);
-                  setScreen('wishlist-detail');
-                  setDeletingItem(item);
-                }} style={{ ...btnGhost, flex: 1, color: C.red }}>🗑 Удалить</button>
-                <button onClick={() => {
-                  setShowItemForm(false);
-                  resetItemForm();
-                  handleCompleteItem(viewingItem as Item);
-                  setViewingItem(null);
-                  setScreen('wishlist-detail');
-                }} style={{ ...btnGhost, flex: 1, color: C.green }}>Получено ✓</button>
+
+          {/* Content */}
+          <div style={{ padding: '20px 20px 0' }}>
+            {/* Title */}
+            <h1 style={{
+              fontSize: 26, fontWeight: 700, fontFamily: font, color: C.text,
+              margin: '0 0 10px', lineHeight: 1.25,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+              overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{viewingItem.title}</h1>
+
+            {/* Price */}
+            {viewingItem.price != null && (
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.accent, marginBottom: 10 }}>
+                {fmtPrice(viewingItem.price)}
               </div>
+            )}
+
+            {/* Priority pill */}
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '6px 12px', borderRadius: 100,
+              background: C.surface, border: `1px solid ${C.borderLight}`,
+              fontSize: 13, fontWeight: 500, color: C.textSec,
+            }}>
+              {viewingItem.priority === 3 ? '🔥' : viewingItem.priority === 2 ? '💜' : '✨'}{' '}
+              {PRIORITIES.find((p) => p.value === viewingItem!.priority)?.label}
             </div>
-          )}
+
+            {/* URL */}
+            {viewingItem.url && (
+              <div style={{ marginTop: 12 }}>
+                <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
+                  color: C.accent, background: C.accentSoft, padding: '8px 14px',
+                  borderRadius: 12, textDecoration: 'none', wordBreak: 'break-all',
+                }}>
+                  🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
+                </a>
+              </div>
+            )}
+
+            {/* Status badge */}
+            {(viewingItem.status === 'reserved' || viewingItem.status === 'purchased') && (
+              <div style={{ marginTop: 14 }}>
+                {viewingItem.status === 'reserved' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 12, background: C.accentSoft, color: C.accent, fontSize: 14, fontWeight: 600 }}>Кто-то выбрал этот подарок ✨</span>}
+                {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
+              </div>
+            )}
+
+            {/* Description section */}
+            <div style={{ marginTop: 24 }}>
+              {viewingItem.description ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font }}>Описание</span>
+                    <span
+                      onClick={() => { setDescriptionText(viewingItem.description ?? ''); setEditingDescription(true); }}
+                      style={{ fontSize: 13, color: C.accent, cursor: 'pointer', fontFamily: font }}
+                    >
+                      Изменить
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.65 }}>
+                    {viewingItem.description}
+                  </div>
+                </>
+              ) : (
+                <div
+                  onClick={() => { setDescriptionText(''); setEditingDescription(true); }}
+                  style={{
+                    padding: 20, textAlign: 'center', cursor: 'pointer',
+                    background: C.surface, borderRadius: 16,
+                    border: `1px dashed ${C.borderLight}`,
+                  }}
+                >
+                  <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5, marginBottom: 8 }}>
+                    Добавь описание, чтобы друзьям было проще выбрать подарок
+                  </div>
+                  <span style={{ fontSize: 14, color: C.accent, fontWeight: 600, fontFamily: font }}>+ Добавить</span>
+                </div>
+              )}
+            </div>
+
+            {/* Comments */}
+            <CommentsThread
+              commentRole={commentRole}
+              comments={comments}
+              commentText={commentText}
+              setCommentText={setCommentText}
+              commentSending={commentSending}
+              myActorHash={myActorHashRef.current}
+              onDeleteComment={handleDeleteComment}
+              onSendComment={handleSendComment}
+              isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+            />
+
+            {/* Owner actions */}
+            {viewingItem.status !== 'purchased' && (
+              <div style={{ marginTop: 24, marginBottom: 32 }}>
+                <button onClick={() => {
+                  setPendingEditItem(viewingItem as Item);
+                  setViewingItem(null);
+                  setScreen('wishlist-detail');
+                }} style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
+                  ✏️ Редактировать
+                </button>
+                <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
+                  <button onClick={() => {
+                    setShowItemForm(false);
+                    resetItemForm();
+                    handleCompleteItem(viewingItem as Item);
+                    setViewingItem(null);
+                    setScreen('wishlist-detail');
+                  }} style={{
+                    ...btnBase, flex: 1, background: C.surface, color: C.green,
+                    border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                    padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                  }}>
+                    Получено ✓
+                  </button>
+                  <button onClick={() => {
+                    const item = viewingItem as Item;
+                    setViewingItem(null);
+                    setScreen('wishlist-detail');
+                    setDeletingItem(item);
+                  }} style={{
+                    ...btnBase, flex: 1, background: 'transparent', color: C.textMuted,
+                    border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                    padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                  }}>
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1424,73 +1488,126 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           GUEST — ITEM DETAIL (view only)
           ══════════════════════════════════════════════ */}
       {screen === 'guest-item-detail' && viewingItem && (
-        <div style={{ padding: '16px 20px 120px' }}>
-          {viewingItem.imageUrl ? (
-            <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 16, marginBottom: 20, background: C.surface }} />
-          ) : (
-            <div style={{ width: '100%', height: 140, borderRadius: 16, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56, marginBottom: 20 }}>
-              {getEmoji(viewingItem.title)}
-            </div>
-          )}
-          <h1 style={{ fontSize: 22, fontWeight: 700, fontFamily: font, color: C.text, margin: '0 0 8px' }}>{viewingItem.title}</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <span style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{viewingItem.price != null ? fmtPrice(viewingItem.price) : ''}</span>
-            <span style={{ fontSize: 16 }}>{prioEmoji(viewingItem.priority)}</span>
-            <span style={{ fontSize: 12, color: C.textMuted }}>{PRIORITIES.find((p) => p.value === viewingItem!.priority)?.label}</span>
+        <div style={{ padding: '0 0 40px' }}>
+          {/* Hero image */}
+          <div style={{ padding: '16px 16px 0' }}>
+            {viewingItem.imageUrl ? (
+              <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', height: 230, objectFit: 'cover', borderRadius: 20, display: 'block', background: C.surface }} />
+            ) : (
+              <div style={{ width: '100%', height: 180, borderRadius: 20, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56 }}>
+                {getEmoji(viewingItem.title)}
+              </div>
+            )}
           </div>
-          {viewingItem.url && (
-            <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.accent, background: C.accentSoft, padding: '8px 14px', borderRadius: 10, textDecoration: 'none', marginBottom: 16, wordBreak: 'break-all' }}>
-              🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
-            </a>
-          )}
-          {/* Description — read-only for guests */}
-          {viewingItem.description && (
-            <div style={{
-              fontSize: 14, color: C.textSec, lineHeight: 1.6,
-              padding: '12px 16px', background: C.surface, borderRadius: 12,
-              border: `1px solid ${C.border}`, marginTop: 12,
-            }}>
-              {viewingItem.description}
-            </div>
-          )}
-          <div style={{ marginTop: 8, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {viewingItem.status === 'available' && (
-              <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }} style={{ ...btnPrimary, width: '100%' }}>🎁 Забронировать</button>
-            )}
-            {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && (
-              <>
-                <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
-                  ✅ Забронировано мной
-                </span>
-                <button onClick={() => void handleUnreserve(viewingItem as GuestItem)} style={{ ...btnGhost, color: C.textSec, width: '100%' }}>Отменить бронь</button>
-              </>
-            )}
-            {viewingItem.status === 'reserved' && !(!!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current) && (
-              <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
-                Уже забронировано
-              </span>
-            )}
-            {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
-          </div>
-          {/* Comments — for reserver and owner */}
-          <CommentsThread
-            commentRole={commentRole}
-            comments={comments}
-            commentText={commentText}
-            setCommentText={setCommentText}
-            commentSending={commentSending}
-            myActorHash={myActorHashRef.current}
-            onDeleteComment={handleDeleteComment}
-            onSendComment={handleSendComment}
-            isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
-          />
 
-          {/* Hint for third parties */}
-          {viewingItem.status === 'available' && !commentRole && (
-            <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
-              После бронирования можно оставить комментарий для автора
+          {/* Content */}
+          <div style={{ padding: '20px 20px 0' }}>
+            {/* Title */}
+            <h1 style={{
+              fontSize: 26, fontWeight: 700, fontFamily: font, color: C.text,
+              margin: '0 0 10px', lineHeight: 1.25,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+              overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{viewingItem.title}</h1>
+
+            {/* Price */}
+            {viewingItem.price != null && (
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.accent, marginBottom: 10 }}>
+                {fmtPrice(viewingItem.price)}
+              </div>
+            )}
+
+            {/* Priority pill */}
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '6px 12px', borderRadius: 100,
+              background: C.surface, border: `1px solid ${C.borderLight}`,
+              fontSize: 13, fontWeight: 500, color: C.textSec,
+            }}>
+              {viewingItem.priority === 3 ? '🔥' : viewingItem.priority === 2 ? '💜' : '✨'}{' '}
+              {PRIORITIES.find((p) => p.value === viewingItem!.priority)?.label}
             </div>
-          )}
+
+            {/* URL */}
+            {viewingItem.url && (
+              <div style={{ marginTop: 12 }}>
+                <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
+                  color: C.accent, background: C.accentSoft, padding: '8px 14px',
+                  borderRadius: 12, textDecoration: 'none', wordBreak: 'break-all',
+                }}>
+                  🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
+                </a>
+              </div>
+            )}
+
+            {/* Description — read-only for guests */}
+            {viewingItem.description && (
+              <div style={{ marginTop: 24 }}>
+                <div style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font, marginBottom: 10 }}>
+                  Описание
+                </div>
+                <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.65 }}>
+                  {viewingItem.description}
+                </div>
+              </div>
+            )}
+
+            {/* Action zone */}
+            <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {viewingItem.status === 'available' && (
+                <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }}
+                  style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
+                  🎁 Забронировать
+                </button>
+              )}
+              {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && (
+                <>
+                  <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
+                    ✅ Забронировано мной
+                  </span>
+                  <button onClick={() => void handleUnreserve(viewingItem as GuestItem)}
+                    style={{
+                      ...btnBase, width: '100%', background: 'transparent', color: C.textMuted,
+                      border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                      padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                    }}>
+                    Отменить бронь
+                  </button>
+                </>
+              )}
+              {viewingItem.status === 'reserved' && !(!!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current) && (
+                <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
+                  Уже забронировано
+                </span>
+              )}
+              {viewingItem.status === 'purchased' && (
+                <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
+                  ✅ Подарено
+                </span>
+              )}
+            </div>
+
+            {/* Comments — for reserver and owner */}
+            <CommentsThread
+              commentRole={commentRole}
+              comments={comments}
+              commentText={commentText}
+              setCommentText={setCommentText}
+              commentSending={commentSending}
+              myActorHash={myActorHashRef.current}
+              onDeleteComment={handleDeleteComment}
+              onSendComment={handleSendComment}
+              isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+            />
+
+            {/* Hint for third parties */}
+            {viewingItem.status === 'available' && !commentRole && (
+              <div style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', marginTop: 16, lineHeight: 1.5, padding: '0 16px' }}>
+                После бронирования можно оставить комментарий для автора
+              </div>
+            )}
+          </div>
         </div>
       )}
 
