@@ -124,40 +124,33 @@ const inputStyle: React.CSSProperties = {
   color: C.text, fontSize: 16, fontFamily: font, outline: 'none', boxSizing: 'border-box',
 };
 
-/** Scroll the nearest overflow-auto ancestor so `el` is visible above the keyboard. */
-function scrollAboveKeyboard(el: HTMLElement) {
-  const vv = window.visualViewport;
-  const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-  const rect = el.getBoundingClientRect();
-  if (rect.bottom <= visibleBottom - 16) return;
-  let p: HTMLElement | null = el.parentElement;
-  while (p) {
-    const ov = window.getComputedStyle(p).overflowY;
-    if (ov === 'auto' || ov === 'scroll') {
-      p.scrollBy({ top: rect.bottom - visibleBottom + 24, behavior: 'smooth' });
-      return;
-    }
-    p = p.parentElement;
-  }
-}
-
-/** onFocus handler: waits for keyboard to fully appear via visualViewport resize, then scrolls. */
+/** onFocus handler: tracks keyboard via visualViewport resize and scrolls in real-time. */
 function handleTextareaFocus(textarea: HTMLElement) {
   const vv = window.visualViewport;
-  if (!vv) { setTimeout(() => scrollAboveKeyboard(textarea), 500); return; }
-  let done = false;
-  let debounce: ReturnType<typeof setTimeout>;
-  const onResize = () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(() => {
-      done = true;
-      vv.removeEventListener('resize', onResize);
-      scrollAboveKeyboard(textarea);
-    }, 120);
+  // Find the overflow:auto scroll container once
+  let scrollParent: HTMLElement | null = textarea.parentElement;
+  while (scrollParent) {
+    const ov = window.getComputedStyle(scrollParent).overflowY;
+    if (ov === 'auto' || ov === 'scroll') break;
+    scrollParent = scrollParent.parentElement;
+  }
+  if (!scrollParent) return;
+  const sp = scrollParent;
+
+  const doScroll = () => {
+    const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const rect = textarea.getBoundingClientRect();
+    if (rect.bottom > visibleBottom - 16) {
+      sp.scrollTop += rect.bottom - visibleBottom + 24;
+    }
   };
+
+  if (!vv) { setTimeout(doScroll, 400); return; }
+  // Scroll on every resize frame — tracks keyboard in real-time, no lag
+  const onResize = () => doScroll();
   vv.addEventListener('resize', onResize);
-  // Fallback if keyboard was already open or resize doesn't fire
-  setTimeout(() => { if (!done) { done = true; vv.removeEventListener('resize', onResize); scrollAboveKeyboard(textarea); } }, 600);
+  // Clean up after keyboard animation is done
+  setTimeout(() => vv.removeEventListener('resize', onResize), 2000);
 }
 
 // ═══════════════════════════════════════════════════════
