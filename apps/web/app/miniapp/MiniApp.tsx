@@ -267,6 +267,144 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash }: { i
 }
 
 // ═══════════════════════════════════════════════════════
+// COMMENTS THREAD (module-level to keep stable identity)
+// ═══════════════════════════════════════════════════════
+
+function CommentsThread({ commentRole, comments, commentText, setCommentText, commentSending, myActorHash, onDeleteComment, onSendComment, isArchive }: {
+  commentRole: 'owner' | 'reserver' | null;
+  comments: CommentDTO[];
+  commentText: string;
+  setCommentText: (t: string) => void;
+  commentSending: boolean;
+  myActorHash: string;
+  onDeleteComment: (id: string) => void;
+  onSendComment: () => void;
+  isArchive?: boolean;
+}) {
+  if (!commentRole) return null;
+
+  const canDelete = (c: CommentDTO) => {
+    if (c.type === 'SYSTEM') return false;
+    if (commentRole === 'owner') return true; // owner can delete any USER
+    return c.authorActorHash === myActorHash; // reserver: own only
+  };
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 8, fontFamily: font }}>
+        💬 Комментарии
+      </div>
+      <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12, lineHeight: 1.4 }}>
+        🔒 Комментарии видны только автору и тому, кто забронировал
+      </div>
+
+      {isArchive && (
+        <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 12px', borderRadius: 10, marginBottom: 12 }}>
+          Комментарии будут удалены через 30 дней
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {comments.length === 0 && (
+          <div style={{ textAlign: 'center', fontSize: 13, color: C.textMuted, padding: '16px 0' }}>
+            Пока нет комментариев
+          </div>
+        )}
+        {comments.map(c => (
+          c.type === 'SYSTEM' ? (
+            <div key={c.id} style={{
+              textAlign: 'center', fontSize: 11, color: C.textMuted,
+              padding: '6px 12px', background: C.surface, borderRadius: 10, margin: '4px 0',
+            }}>
+              {c.text} · {new Date(c.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </div>
+          ) : (
+            <div key={c.id} style={{
+              alignSelf: c.authorActorHash === myActorHash ? 'flex-end' : 'flex-start',
+              maxWidth: '80%', position: 'relative',
+            }}>
+              {c.authorActorHash !== myActorHash && (
+                <div style={{ fontSize: 11, color: C.accent, marginBottom: 2, fontWeight: 600, fontFamily: font }}>
+                  {c.authorDisplayName ?? 'Аноним'}
+                </div>
+              )}
+              {c.authorActorHash === myActorHash && (
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 2, fontWeight: 600, fontFamily: font, textAlign: 'right' }}>
+                  Я
+                </div>
+              )}
+              <div style={{
+                padding: '10px 14px', borderRadius: 14,
+                background: c.authorActorHash === myActorHash ? C.accent : C.card,
+                color: c.authorActorHash === myActorHash ? '#fff' : C.text,
+                fontSize: 14, lineHeight: 1.4,
+                border: c.authorActorHash === myActorHash ? 'none' : `1px solid ${C.border}`,
+              }}>
+                {c.text}
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  marginTop: 4, gap: 8,
+                }}>
+                  <span style={{
+                    fontSize: 10,
+                    color: c.authorActorHash === myActorHash ? 'rgba(255,255,255,0.5)' : C.textMuted,
+                  }}>
+                    {new Date(c.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  {canDelete(c) && !isArchive && (
+                    <button
+                      onClick={() => void onDeleteComment(c.id)}
+                      style={{
+                        background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer',
+                        fontSize: 10, color: c.authorActorHash === myActorHash ? 'rgba(255,255,255,0.4)' : C.textMuted,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        ))}
+      </div>
+
+      {/* Comment input — only for active items */}
+      {!isArchive && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <textarea
+              style={{ ...inputStyle, minHeight: 44, maxHeight: 120, resize: 'none', paddingRight: 50 }}
+              placeholder="Написать комментарий..."
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
+              maxLength={300}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSendComment(); } }}
+            />
+            <span style={{
+              position: 'absolute', right: 12, bottom: 8,
+              fontSize: 10, color: commentText.length > 280 ? C.orange : C.textMuted,
+            }}>
+              {commentText.length}/300
+            </span>
+          </div>
+          <button
+            onClick={() => void onSendComment()}
+            disabled={!commentText.trim() || commentSending}
+            style={{
+              ...btnPrimary, width: 44, height: 44, padding: 0, borderRadius: 12,
+              opacity: commentText.trim() ? 1 : 0.4, flexShrink: 0,
+            }}
+          >
+            {commentSending ? '…' : '↑'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════
 
@@ -965,130 +1103,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // RENDER
   // ─────────────────────────────────────────────────
 
-  const CommentsThread = ({ isArchive }: { isArchive?: boolean }) => {
-    if (!commentRole) return null;
-
-    const canDelete = (c: CommentDTO) => {
-      if (c.type === 'SYSTEM') return false;
-      if (commentRole === 'owner') return true; // owner can delete any USER
-      return c.authorActorHash === myActorHashRef.current; // reserver: own only
-    };
-
-    return (
-      <div style={{ marginTop: 20 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 8, fontFamily: font }}>
-          💬 Комментарии
-        </div>
-        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12, lineHeight: 1.4 }}>
-          🔒 Комментарии видны только автору и тому, кто забронировал
-        </div>
-
-        {isArchive && (
-          <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 12px', borderRadius: 10, marginBottom: 12 }}>
-            Комментарии будут удалены через 30 дней
-          </div>
-        )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {comments.length === 0 && (
-            <div style={{ textAlign: 'center', fontSize: 13, color: C.textMuted, padding: '16px 0' }}>
-              Пока нет комментариев
-            </div>
-          )}
-          {comments.map(c => (
-            c.type === 'SYSTEM' ? (
-              <div key={c.id} style={{
-                textAlign: 'center', fontSize: 11, color: C.textMuted,
-                padding: '6px 12px', background: C.surface, borderRadius: 10, margin: '4px 0',
-              }}>
-                {c.text} · {new Date(c.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-              </div>
-            ) : (
-              <div key={c.id} style={{
-                alignSelf: c.authorActorHash === myActorHashRef.current ? 'flex-end' : 'flex-start',
-                maxWidth: '80%', position: 'relative',
-              }}>
-                {c.authorActorHash !== myActorHashRef.current && (
-                  <div style={{ fontSize: 11, color: C.accent, marginBottom: 2, fontWeight: 600, fontFamily: font }}>
-                    {c.authorDisplayName ?? 'Аноним'}
-                  </div>
-                )}
-                {c.authorActorHash === myActorHashRef.current && (
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 2, fontWeight: 600, fontFamily: font, textAlign: 'right' }}>
-                    Я
-                  </div>
-                )}
-                <div style={{
-                  padding: '10px 14px', borderRadius: 14,
-                  background: c.authorActorHash === myActorHashRef.current ? C.accent : C.card,
-                  color: c.authorActorHash === myActorHashRef.current ? '#fff' : C.text,
-                  fontSize: 14, lineHeight: 1.4,
-                  border: c.authorActorHash === myActorHashRef.current ? 'none' : `1px solid ${C.border}`,
-                }}>
-                  {c.text}
-                  <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    marginTop: 4, gap: 8,
-                  }}>
-                    <span style={{
-                      fontSize: 10,
-                      color: c.authorActorHash === myActorHashRef.current ? 'rgba(255,255,255,0.5)' : C.textMuted,
-                    }}>
-                      {new Date(c.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    {canDelete(c) && !isArchive && (
-                      <button
-                        onClick={() => void handleDeleteComment(c.id)}
-                        style={{
-                          background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer',
-                          fontSize: 10, color: c.authorActorHash === myActorHashRef.current ? 'rgba(255,255,255,0.4)' : C.textMuted,
-                        }}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          ))}
-        </div>
-
-        {/* Comment input — only for active items */}
-        {!isArchive && (
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
-            <div style={{ flex: 1, position: 'relative' }}>
-              <textarea
-                style={{ ...inputStyle, minHeight: 44, maxHeight: 120, resize: 'none', paddingRight: 50 }}
-                placeholder="Написать комментарий..."
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
-                maxLength={300}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSendComment(); } }}
-              />
-              <span style={{
-                position: 'absolute', right: 12, bottom: 8,
-                fontSize: 10, color: commentText.length > 280 ? C.orange : C.textMuted,
-              }}>
-                {commentText.length}/300
-              </span>
-            </div>
-            <button
-              onClick={() => void handleSendComment()}
-              disabled={!commentText.trim() || commentSending}
-              style={{
-                ...btnPrimary, width: 44, height: 44, padding: 0, borderRadius: 12,
-                opacity: commentText.trim() ? 1 : 0.4, flexShrink: 0,
-              }}
-            >
-              {commentSending ? '…' : '↑'}
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   const totalReserved = Object.values(wishlists).reduce((n, wl) => n + wl.reservedCount, 0);
   const totalItems = wishlists.reduce((n, wl) => n + wl.itemCount, 0);
 
@@ -1364,7 +1378,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
           </div>
           {/* Comments */}
-          <CommentsThread isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'} />
+          <CommentsThread
+            commentRole={commentRole}
+            comments={comments}
+            commentText={commentText}
+            setCommentText={setCommentText}
+            commentSending={commentSending}
+            myActorHash={myActorHashRef.current}
+            onDeleteComment={handleDeleteComment}
+            onSendComment={handleSendComment}
+            isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+          />
           {/* Owner actions */}
           {viewingItem.status !== 'purchased' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1449,7 +1473,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
           </div>
           {/* Comments — for reserver and owner */}
-          <CommentsThread isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'} />
+          <CommentsThread
+            commentRole={commentRole}
+            comments={comments}
+            commentText={commentText}
+            setCommentText={setCommentText}
+            commentSending={commentSending}
+            myActorHash={myActorHashRef.current}
+            onDeleteComment={handleDeleteComment}
+            onSendComment={handleSendComment}
+            isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+          />
 
           {/* Hint for third parties */}
           {viewingItem.status === 'available' && !commentRole && (
