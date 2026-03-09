@@ -3,7 +3,7 @@ FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-# Install OpenSSL for Prisma
+# Install OpenSSL for Prisma + native deps for sharp
 RUN apt-get update && apt-get install -y openssl libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Install pnpm
@@ -25,15 +25,17 @@ COPY . .
 RUN pnpm db:generate
 RUN pnpm build:api
 
-# Create non-root user
+# Create non-root user + persistent upload directory
 RUN addgroup --system --gid 1001 apiuser && \
     adduser --system --uid 1001 apiuser && \
-    chown -R apiuser:apiuser /app
+    mkdir -p /data/uploads && \
+    chown -R apiuser:apiuser /app /data/uploads
 
 USER apiuser
 
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV UPLOAD_DIR=/data/uploads
 
 EXPOSE 3001
 

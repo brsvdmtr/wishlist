@@ -4,6 +4,7 @@ import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
+import sharp from 'sharp';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -48,16 +49,9 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
-const multerStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '');
-    cb(null, `${crypto.randomUUID()}${ext || '.bin'}`);
-  },
-});
-
+// Use memory storage so sharp can process buffer directly (no temp files).
 const upload = multer({
-  storage: multerStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
@@ -66,6 +60,40 @@ const upload = multer({
     cb(null, true);
   },
 });
+
+/**
+ * Process uploaded image with sharp:
+ * - Auto-rotate based on EXIF orientation
+ * - Strip all EXIF/metadata (privacy)
+ * - Resize to fit within maxDim (preserving aspect ratio)
+ * - Convert to JPEG (best browser + Telegram compatibility)
+ * - Quality 80 → targets 100-300KB for typical photos
+ *
+ * Returns: { filename, filepath, sizeBytes, width, height }
+ */
+async function processImage(
+  buffer: Buffer,
+  opts: { maxDim: number; quality?: number; suffix?: string },
+): Promise<{ filename: string; filepath: string; sizeBytes: number; width: number; height: number }> {
+  const id = crypto.randomUUID();
+  const suffix = opts.suffix ?? 'full';
+  const filename = `${id}-${suffix}.jpg`;
+  const filepath = path.join(UPLOAD_DIR, filename);
+
+  const result = await sharp(buffer)
+    .rotate() // auto-rotate from EXIF
+    .resize(opts.maxDim, opts.maxDim, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: opts.quality ?? 80, mozjpeg: true })
+    .toFile(filepath);
+
+  return {
+    filename,
+    filepath,
+    sizeBytes: result.size,
+    width: result.width,
+    height: result.height,
+  };
+}
 
 /** Delete a local upload file. Silently ignores missing files and non-local URLs. */
 function deleteUploadFile(imageUrl: string | null): void {
@@ -77,11 +105,16 @@ function deleteUploadFile(imageUrl: string | null): void {
   if (!filename || filename.includes('..') || filename.includes('/')) return;
   const filepath = path.join(UPLOAD_DIR, filename);
   fs.unlink(filepath, () => {}); // best-effort
+  // Also try to delete the thumbnail variant
+  const thumbName = filename.replace('-full.jpg', '-thumb.jpg');
+  if (thumbName !== filename) {
+    fs.unlink(path.join(UPLOAD_DIR, thumbName), () => {});
+  }
 }
 
 // Serve uploaded files as static assets at /uploads/*
 // In production: nginx /api/* → port 3001, so GET /api/uploads/x → /uploads/x here.
-app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '30d' }));
+app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '30d', immutable: true }));
 // ──────────────────────────────────────────────────────────────────────────────
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -1704,7 +1737,7 @@ tgRouter.delete(
   }),
 );
 
-// POST /tg/items/:id/photo — upload or replace item photo
+// POST /tg/items/:id/photo — upload or replace item photo (with sharp processing)
 tgRouter.post(
   '/items/:id/photo',
   upload.single('photo'),
@@ -1718,23 +1751,22 @@ tgRouter.post(
       where: { id },
       select: { id: true, imageUrl: true, wishlist: { select: { ownerId: true } } },
     });
-    if (!item) {
-      // Clean up orphaned upload before returning.
-      deleteUploadFile(req.file.filename);
-      return res.status(404).json({ error: 'Item not found' });
-    }
-    if (item.wishlist.ownerId !== user.id) {
-      deleteUploadFile(req.file.filename);
-      return res.status(403).json({ error: 'Forbidden' });
-    }
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Process image with sharp: compress, strip EXIF, resize
+    const [full, thumb] = await Promise.all([
+      processImage(req.file.buffer, { maxDim: 1600, quality: 80, suffix: 'full' }),
+      processImage(req.file.buffer, { maxDim: 480, quality: 70, suffix: 'thumb' }),
+    ]);
 
     // Delete the previous local upload if it exists.
     deleteUploadFile(item.imageUrl);
 
-    const photoUrl = `/api/uploads/${req.file.filename}`;
+    const photoUrl = `/api/uploads/${full.filename}`;
     await prisma.item.update({ where: { id }, data: { imageUrl: photoUrl } });
 
-    return res.json({ photoUrl });
+    return res.json({ photoUrl, thumbUrl: `/api/uploads/${thumb.filename}`, width: full.width, height: full.height, sizeBytes: full.sizeBytes });
   }),
 );
 

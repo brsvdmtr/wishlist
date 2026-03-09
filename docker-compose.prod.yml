@@ -33,6 +33,9 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-}
       SYSTEM_USER_EMAIL: ${SYSTEM_USER_EMAIL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - wishlist_uploads:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,3 +91,4 @@ networks:
 
 volumes:
   wishlist_pg_data:
+  wishlist_uploads:
