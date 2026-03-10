@@ -62,6 +62,50 @@ if (!token) {
     }).catch(() => { /* user may not exist yet — will be created by API later */ });
 
     const payload = ctx.startPayload; // slug passed via ?start=SLUG deep link
+    if (payload?.startsWith('hint_')) {
+      // Hint deep link — friend clicks a gift hint link
+      const itemId = payload.slice(5);
+      try {
+        const item = await prisma.item.findUnique({
+          where: { id: itemId },
+          select: { id: true, title: true, status: true, wishlist: { select: { slug: true, ownerId: true, owner: { select: { telegramId: true, firstName: true, telegramChatId: true } } } } },
+        });
+        if (!item) {
+          return ctx.reply('Это желание больше не доступно 🤷');
+        }
+        // Self-send check: owner opened their own hint
+        if (item.wishlist.owner.telegramId === telegramId) {
+          return ctx.reply('Себе намек отправлять не нужно 😊');
+        }
+        // Item no longer available
+        if (item.status !== 'AVAILABLE') {
+          return ctx.reply('На это желание уже не нужно намекать — оно забронировано 🎁');
+        }
+        // Resolve owner name
+        let ownerName = item.wishlist.owner.firstName || 'Пользователь';
+        if (!item.wishlist.owner.firstName && item.wishlist.owner.telegramChatId) {
+          try {
+            const BOT_TOKEN = process.env.BOT_TOKEN!;
+            const resp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getChat?chat_id=${item.wishlist.owner.telegramChatId}`);
+            const data = await resp.json() as { ok: boolean; result?: { first_name?: string } };
+            if (data.ok && data.result?.first_name) {
+              ownerName = data.result.first_name;
+              // Cache for future
+              await prisma.user.update({ where: { id: item.wishlist.ownerId }, data: { firstName: data.result.first_name } }).catch(() => {});
+            }
+          } catch { /* use fallback */ }
+        }
+        const shortName = ownerName.split(' ')[0] ?? ownerName;
+        const msg = `Есть идея подарка для ${ownerName} 🎁\n\nОбрати внимание на желание «${item.title}» — похоже, ${shortName.toLowerCase()} особенно нравится это.`;
+        return ctx.reply(msg, Markup.inlineKeyboard([
+          Markup.button.webApp('Посмотреть желание 🎁', `${MINI_APP_URL}?startapp=${item.wishlist.slug}`),
+        ]));
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[bot] hint deep link error:', err);
+        return ctx.reply('Произошла ошибка. Попробуй позже 🙈');
+      }
+    }
     if (payload) {
       // Guest deep link — open specific wishlist in mini app
       return ctx.reply(

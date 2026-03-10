@@ -184,6 +184,16 @@ async function resolveUserFirstName(user: { id: string; firstName: string | null
   return 'Пользователь';
 }
 
+/** Cancel all active hints for an item (called when item leaves AVAILABLE state). */
+async function cancelItemHints(itemId: string): Promise<void> {
+  try {
+    await prisma.hint.updateMany({
+      where: { itemId, status: 'SENT' },
+      data: { status: 'CANCELLED' },
+    });
+  } catch { /* best-effort */ }
+}
+
 /** Best-effort Telegram notification. Fire-and-forget – never throws. */
 async function sendTgNotification(chatId: string, text: string): Promise<void> {
   const token = process.env.BOT_TOKEN;
@@ -997,7 +1007,7 @@ const PLANS = {
     wishlists: 10,
     items: 100,
     participants: 20,
-    features: ['comments', 'url_import', 'smart_reminders', 'hints'],
+    features: ['comments', 'url_import', 'hints'],
   },
 } as const;
 
@@ -1582,6 +1592,9 @@ tgRouter.delete(
       },
     });
 
+    // Cancel active hints when item is deleted
+    void cancelItemHints(id);
+
     // Notify reserver that item was archived
     if (item.reserverUserId) {
       const reserver = await prisma.user.findUnique({
@@ -1625,6 +1638,9 @@ tgRouter.post(
       },
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
+
+    // Cancel active hints when item is completed
+    void cancelItemHints(id);
 
     // Set TTL on all comments when item is completed
     const ttl = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -1795,6 +1811,9 @@ tgRouter.post(
         }
       }
     }
+
+    // Cancel active hints when item is reserved
+    void cancelItemHints(id);
 
     return res.json({ ok: true });
   }),
@@ -2062,6 +2081,83 @@ tgRouter.post(
     });
 
     return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/items/:id/hint — create a hint wave (Pro feature, owner-only)
+tgRouter.post(
+  '/items/:id/hint',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    // 1. Feature gate: hints require PRO
+    const ent = await getUserEntitlement(user.id);
+    if (!ent.plan.features.includes('hints')) {
+      trackEvent('feature_gate_hit_hints', user.id);
+      return res.status(402).json({ error: 'Pro feature', feature: 'hints', planCode: ent.plan.code });
+    }
+
+    // 2. Load item + verify ownership
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: { id: true, title: true, status: true, wishlist: { select: { ownerId: true, slug: true } } },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // 3. Item must be AVAILABLE (not reserved/completed/deleted)
+    if (item.status !== 'AVAILABLE') {
+      return res.status(400).json({ error: 'item_not_available', message: 'На это желание намекать уже не нужно — его забронировали' });
+    }
+
+    // 4. Anti-spam: max 3 hint waves per item per 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const itemHintCount = await prisma.hint.count({
+      where: { itemId: id, senderUserId: user.id, status: 'SENT', createdAt: { gte: thirtyDaysAgo } },
+    });
+    if (itemHintCount >= 3) {
+      return res.status(429).json({ error: 'По этому желанию уже отправлено максимум намёков. Попробуй позже.' });
+    }
+
+    // 5. Anti-spam: max 5 hints per sender per day
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const dailyHintCount = await prisma.hint.count({
+      where: { senderUserId: user.id, status: 'SENT', createdAt: { gte: oneDayAgo } },
+    });
+    if (dailyHintCount >= 5) {
+      return res.status(429).json({ error: 'Лимит намёков на сегодня. Попробуй завтра.' });
+    }
+
+    // 6. Create hint record
+    const hint = await prisma.hint.create({
+      data: {
+        itemId: id,
+        senderUserId: user.id,
+        status: 'SENT',
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    // 7. Resolve owner name for share text
+    const ownerName = await resolveUserFirstName(
+      await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { id: true, firstName: true, telegramChatId: true } }),
+    );
+
+    // 8. Build share payload + text
+    const sharePayload = `hint_${id}`;
+    const shortName = ownerName.split(' ')[0] ?? ownerName;
+    const shareText = `Есть идея подарка для ${ownerName} 🎁\n\nОбрати внимание на желание «${item.title}» — похоже, ${shortName.toLowerCase()} особенно нравится это.`;
+
+    trackEvent('hint_created', user.id);
+
+    return res.json({
+      hintId: hint.id,
+      sharePayload,
+      shareText,
+    });
   }),
 );
 
@@ -2676,6 +2772,23 @@ setInterval(async () => {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[billing] expiry check failed:', err);
+  }
+}, 60 * 60 * 1000);
+
+// Hint expiry: mark overdue hints as EXPIRED (hourly)
+setInterval(async () => {
+  try {
+    const expired = await prisma.hint.updateMany({
+      where: { status: 'SENT', expiresAt: { lte: new Date() } },
+      data: { status: 'EXPIRED' },
+    });
+    if (expired.count > 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[hints] expired ${expired.count} hints`);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[hints] expiry check failed:', err);
   }
 }, 60 * 60 * 1000);
 

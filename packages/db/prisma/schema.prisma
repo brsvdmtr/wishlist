@@ -43,6 +43,12 @@ enum SubscriptionStatus {
   EXPIRED
 }
 
+enum HintStatus {
+  SENT
+  CANCELLED
+  EXPIRED
+}
+
 model User {
   id             String   @id @default(cuid())
   email          String?  @unique
@@ -56,6 +62,7 @@ model User {
   subscriptions      Subscription[]
   paymentEvents      PaymentEvent[]
   commentReadCursors CommentReadCursor[]
+  hints              Hint[]
 }
 
 model Wishlist {
@@ -105,6 +112,7 @@ model Item {
   reservationEvents ReservationEvent[]
   comments          Comment[]
   commentReadCursors CommentReadCursor[]
+  hints              Hint[]
 
   @@index([wishlistId])
   @@index([purgeAfter])
@@ -216,4 +224,20 @@ model CommentReadCursor {
 
   @@id([userId, itemId])
   @@index([userId])
+}
+
+model Hint {
+  id           String     @id @default(cuid())
+  itemId       String
+  senderUserId String
+  status       HintStatus @default(SENT)
+  createdAt    DateTime   @default(now())
+  expiresAt    DateTime
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([senderUserId, createdAt])
+  @@index([expiresAt])
 }

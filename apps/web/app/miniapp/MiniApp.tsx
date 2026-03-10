@@ -89,7 +89,7 @@ type SubscriptionInfo = {
 } | null;
 
 type UpsellContext =
-  | 'comments' | 'url_import' | 'smart_reminders' | 'hints'
+  | 'comments' | 'url_import' | 'hints'
   | 'wishlist_limit' | 'item_limit' | 'participant_limit';
 
 type UpsellSheetState = { context: UpsellContext } | null;
@@ -231,17 +231,10 @@ const UPSELL_CONTENT: Record<UpsellContext, {
     showTable: false,
     benefits: ['Автозаполнение карточки', 'Поддержка популярных магазинов', 'Добавление в два клика'],
   },
-  smart_reminders: {
-    emoji: '🔔',
-    title: 'Умные напоминания',
-    subtitle: 'Не пропустишь важные даты — напомним о желаниях вовремя.',
-    showTable: false,
-    benefits: ['Напоминания перед праздниками', 'Привязка к дням рождения', 'Без лишних хлопот'],
-  },
   hints: {
     emoji: '💡',
-    title: 'Намекнуть друзьям',
-    subtitle: 'Тактично расскажи близким о своих желаниях.',
+    title: 'Намекнуть на подарок',
+    subtitle: 'Помогает аккуратно подсказать близким конкретное желание и повышает шанс, что подарок действительно дойдет до тебя.',
     showTable: false,
     benefits: ['Мягкая подсказка для друзей', 'Ссылка на конкретное желание', 'Без неловких разговоров'],
   },
@@ -866,6 +859,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [commentRole, setCommentRole] = useState<'owner' | 'reserver' | null>(null);
   const [commentSending, setCommentSending] = useState(false);
 
+  // Hint state
+  const [hintLoading, setHintLoading] = useState(false);
+
   // Description editing
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionText, setDescriptionText] = useState('');
@@ -1168,6 +1164,37 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       pushToast('Ошибка удаления', 'error');
     }
   }, [viewingItem, tgFetch, pushToast]);
+
+  const handleHintTap = useCallback(async (item: Item) => {
+    if (hintLoading) return;
+    // Free users → show upsell
+    if (planInfo.code === 'FREE') { showUpsell('hints'); return; }
+    setHintLoading(true);
+    try {
+      const res = await tgFetch(`/tg/items/${item.id}/hint`, { method: 'POST' });
+      if (!res.ok) {
+        if (res.status === 402) { showUpsell('hints'); return; }
+        const json = await res.json().catch(() => ({})) as { error?: string };
+        pushToast(json.error || 'Ошибка отправки', 'error');
+        return;
+      }
+      const data = await res.json() as { hintId: string; sharePayload: string; shareText: string };
+      pushToast('Намек готов к отправке! Выбери, кому переслать 💡', 'success');
+      try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('success'); } catch { /* ok */ }
+      // Open native Telegram share dialog
+      const deepLink = buildTgDeepLink(data.sharePayload);
+      if (deepLink) {
+        const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(deepLink)}&text=${encodeURIComponent(data.shareText)}`;
+        try {
+          window.Telegram?.WebApp.openTelegramLink(tgShareUrl);
+        } catch {
+          window.open(tgShareUrl, '_blank');
+        }
+      }
+    } finally {
+      setHintLoading(false);
+    }
+  }, [hintLoading, planInfo, tgFetch, pushToast, buildTgDeepLink]);
 
   const handleSaveDescription = useCallback(async () => {
     if (!viewingItem) return;
@@ -2623,25 +2650,43 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            {/* Smart reminders placeholder */}
-            <div
-              onClick={() => showUpsell('smart_reminders')}
-              style={{
-                marginTop: 16, padding: 16, background: C.surface, borderRadius: 16,
-                display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
-                border: `1px solid ${C.accent}10`,
-              }}
-            >
-              <span style={{ fontSize: 22 }}>🔔</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: C.textSec }}>Напоминания</span>
-                  {planInfo.code === 'FREE' && <ProBadge />}
+            {/* Hint button — only show for available items */}
+            {viewingItem.status === 'available' && (
+              <div
+                onClick={() => !hintLoading && handleHintTap(viewingItem as Item)}
+                style={{
+                  marginTop: 16, padding: 16, background: C.surface, borderRadius: 16,
+                  display: 'flex', alignItems: 'center', gap: 12, cursor: hintLoading ? 'wait' : 'pointer',
+                  border: `1px solid ${C.accent}10`, opacity: hintLoading ? 0.6 : 1,
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                <span style={{ fontSize: 22 }}>💡</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>Намекнуть друзьям</span>
+                    {planInfo.code === 'FREE' && <ProBadge />}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted }}>Аккуратно подскажи о своих желаниях</div>
                 </div>
-                <div style={{ fontSize: 12, color: C.textMuted }}>Не пропусти важные даты</div>
+                <span style={{ fontSize: 16, color: C.textMuted }}>›</span>
               </div>
-              <span style={{ fontSize: 16, color: C.textMuted }}>›</span>
-            </div>
+            )}
+            {viewingItem.status === 'reserved' && (
+              <div
+                style={{
+                  marginTop: 16, padding: 16, background: C.surface, borderRadius: 16,
+                  display: 'flex', alignItems: 'center', gap: 12, opacity: 0.5,
+                  border: `1px solid ${C.accent}10`,
+                }}
+              >
+                <span style={{ fontSize: 22 }}>💡</span>
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.textSec }}>Намекнуть друзьям</span>
+                  <div style={{ fontSize: 12, color: C.textMuted }}>На это желание намекать уже не нужно — его забронировали</div>
+                </div>
+              </div>
+            )}
 
             {/* Owner actions */}
             {viewingItem.status !== 'purchased' && (
@@ -2823,7 +2868,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           tgUser={tgUser}
           onCopied={() => pushToast('📨 Ссылка скопирована', 'success')}
           buildTgDeepLink={buildTgDeepLink}
-          onHintTap={() => showUpsell('hints')}
           isPro={planInfo.code === 'PRO'}
         />
       )}
@@ -3355,13 +3399,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 // SHARE SCREEN (extracted to keep main component tidy)
 // ─────────────────────────────────────────────────
 
-function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, onHintTap, isPro }: {
+function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, isPro }: {
   wishlist: Wishlist;
   itemCount: number;
   tgUser: TgUser | null;
   onCopied: () => void;
   buildTgDeepLink: (payload?: string) => string | null;
-  onHintTap?: () => void;
   isPro?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
@@ -3465,29 +3508,6 @@ function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, o
               📋 Скопировать ссылку
             </button>
           </>
-        )}
-
-        {/* Hint placeholder */}
-        {onHintTap && (
-          <div
-            onClick={onHintTap}
-            style={{
-              width: '100%', padding: 16, background: C_local.surface, borderRadius: 16,
-              display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
-              border: `1px solid ${isPro ? C_local.border : `${C_local.accent ?? '#7C6AFF'}15`}`,
-              boxSizing: 'border-box',
-            }}
-          >
-            <span style={{ fontSize: 22 }}>💡</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: C_local.text }}>Намекнуть друзьям</span>
-                {!isPro && <ProBadge />}
-              </div>
-              <div style={{ fontSize: 12, color: C_local.textMuted }}>Тактично подскажи о своих желаниях</div>
-            </div>
-            <span style={{ fontSize: 16, color: C_local.textMuted }}>›</span>
-          </div>
         )}
 
         <div style={{ borderRadius: 12, padding: '12px 16px', fontSize: 12, background: C_local.greenSoft, color: C_local.green, width: '100%', lineHeight: 1.5, boxSizing: 'border-box' }}>
