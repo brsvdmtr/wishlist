@@ -1920,8 +1920,9 @@ const importUrlLimiter = rateLimit({
   limit: 10,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  keyGenerator: (req) => req.tgUser ? String(req.tgUser.id) : req.ip ?? 'unknown',
+  keyGenerator: (req) => req.tgUser ? String(req.tgUser.id) : 'anon',
   message: { error: 'Слишком много запросов. Попробуй через минуту.' },
+  validate: { xForwardedForHeader: false },
 });
 
 tgRouter.post(
@@ -2019,6 +2020,7 @@ const internalImportLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: 'Too many requests' },
+  validate: { xForwardedForHeader: false },
 });
 
 function requireInternalAuth(req: Request, res: Response, next: NextFunction) {
