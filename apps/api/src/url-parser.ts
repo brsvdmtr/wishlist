@@ -91,7 +91,8 @@ async function getBrowser(): Promise<Browser> {
       '--disable-sync',
       '--no-first-run',
       '--single-process',
-      '--disable-web-security',
+      '--disable-crash-reporter',
+      '--crash-dumps-dir=/tmp/crashes',
     ],
   });
 
@@ -122,17 +123,21 @@ export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
   try {
     if (spa) {
       // SPA domains: always use browser rendering
+      console.log(`[parser] using browser for SPA domain: ${hostname}`);
       html = await fetchWithBrowser(url.href);
+      console.log(`[parser] browser fetched ${html.length} bytes`);
     } else {
       // Other domains: try simple fetch first
       html = await fetchHtml(url.href);
     }
   } catch (err) {
+    console.error(`[parser] fetch error for ${hostname}:`, (err as Error).message);
     // If simple fetch failed for non-SPA, try browser as fallback
     if (!spa) {
       try {
         html = await fetchWithBrowser(url.href);
-      } catch {
+      } catch (err2) {
+        console.error(`[parser] browser fallback also failed:`, (err2 as Error).message);
         return {
           title: null, description: null, priceText: null, imageUrl: null,
           sourceDomain: hostname, canonicalUrl,
@@ -172,11 +177,9 @@ export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
     } catch { /* use original merged */ }
   }
 
-  return {
-    ...merged,
-    sourceDomain: hostname,
-    canonicalUrl,
-  };
+  const result = { ...merged, sourceDomain: hostname, canonicalUrl };
+  console.log(`[parser] result for ${hostname}: title=${result.title?.slice(0, 50)}, price=${result.priceText}, image=${result.imageUrl ? 'yes' : 'no'}`);
+  return result;
 }
 
 // ─── URL Validation ──────────────────────────────────────────────────────────

@@ -32,11 +32,11 @@ COPY . .
 RUN pnpm db:generate
 RUN pnpm build:api
 
-# Create non-root user + persistent upload directory
+# Create non-root user with home dir (needed for Chromium) + persistent upload directory
 RUN addgroup --system --gid 1001 apiuser && \
-    adduser --system --uid 1001 apiuser && \
-    mkdir -p /data/uploads && \
-    chown -R apiuser:apiuser /app /data/uploads
+    adduser --system --uid 1001 --home /home/apiuser apiuser && \
+    mkdir -p /data/uploads /tmp/crashes && \
+    chown -R apiuser:apiuser /app /data/uploads /home/apiuser /tmp/crashes
 
 USER apiuser
 
