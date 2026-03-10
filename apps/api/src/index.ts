@@ -962,6 +962,16 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction) {
 
 const PLAN = { WISHLISTS: 2, ITEMS: 10 };
 
+/** Extract numeric price from formatted string like "51 975 ₽" → "51975" */
+function extractNumericPrice(priceText: string | null): string | null {
+  if (!priceText) return null;
+  // Remove currency symbols, spaces, non-breaking spaces
+  const digits = priceText.replace(/[^\d.,]/g, '').replace(',', '.');
+  if (!digits) return null;
+  const num = parseFloat(digits);
+  return isNaN(num) ? null : String(num);
+}
+
 function priorityToNum(p: 'LOW' | 'MEDIUM' | 'HIGH'): 1 | 2 | 3 {
   return p === 'LOW' ? 1 : p === 'HIGH' ? 3 : 2;
 }
@@ -1897,7 +1907,7 @@ async function importUrlForUser(
       title: title.slice(0, 200),
       url: parsed.canonicalUrl || rawUrl,
       description,
-      priceText: parsed.priceText ?? null,
+      priceText: extractNumericPrice(parsed.priceText),
       imageUrl: parsed.imageUrl ?? null,
       sourceUrl: rawUrl,
       sourceDomain: parsed.sourceDomain,
