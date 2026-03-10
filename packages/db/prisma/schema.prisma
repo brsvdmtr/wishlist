@@ -169,6 +169,9 @@ model Subscription {
   currentPeriodStart DateTime
   currentPeriodEnd   DateTime
   cancelledAt        DateTime?
+  source             String?            @default("telegram_stars")
+  billingPeriod      String?            @default("monthly")
+  cancelAtPeriodEnd  Boolean            @default(false)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -185,6 +188,7 @@ model PaymentEvent {
   subscriptionId          String?
   userId                  String
   telegramPaymentChargeId String   @unique
+  providerPaymentChargeId String?
   invoicePayload          String
   totalAmount             Int
   currency                String   @default("XTR")

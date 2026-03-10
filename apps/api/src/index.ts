@@ -981,18 +981,19 @@ const PLANS = {
 type PlanCode = keyof typeof PLANS;
 type PlanInfo = (typeof PLANS)[PlanCode];
 
-const PRO_PRICE_STARS = 100;
-const SUBSCRIPTION_PERIOD_SEC = 2592000; // 30 days
+const PRO_PRICE_XTR = parseInt(process.env.PRO_PRICE_XTR ?? '100', 10);
+const PRO_SUBSCRIPTION_PERIOD = parseInt(process.env.PRO_SUBSCRIPTION_PERIOD ?? '2592000', 10);
+const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
 
 async function getUserEntitlement(userId: string): Promise<{
   plan: PlanInfo;
   isPro: boolean;
-  subscription: { id: string; status: string; periodEnd: string; cancelledAt: string | null } | null;
+  subscription: { id: string; status: string; periodEnd: string; cancelledAt: string | null; cancelAtPeriodEnd: boolean } | null;
 }> {
   const sub = await prisma.subscription.findFirst({
     where: {
       userId,
-      planCode: 'PRO',
+      planCode: PRO_PLAN_CODE,
       status: { in: ['ACTIVE', 'CANCELLED'] },
       currentPeriodEnd: { gt: new Date() },
     },
@@ -1008,6 +1009,7 @@ async function getUserEntitlement(userId: string): Promise<{
         status: sub.status,
         periodEnd: sub.currentPeriodEnd.toISOString(),
         cancelledAt: sub.cancelledAt?.toISOString() ?? null,
+        cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
       },
     };
   }
@@ -2167,7 +2169,7 @@ tgRouter.get(
       },
       subscription: ent.subscription,
       usage: { wishlists: wishlistCount },
-      proPriceStars: PRO_PRICE_STARS,
+      proPriceStars: PRO_PRICE_XTR,
     });
   }),
 );
@@ -2179,18 +2181,17 @@ tgRouter.post(
     const user = await getOrCreateTgUser(req.tgUser!);
     const ent = await getUserEntitlement(user.id);
 
-    if (ent.isPro && ent.subscription?.status === 'ACTIVE') {
-      return res.status(409).json({ error: 'Already subscribed' });
+    // If already active PRO — return current state, don't create new checkout
+    if (ent.isPro && ent.subscription?.status === 'ACTIVE' && !ent.subscription.cancelAtPeriodEnd) {
+      trackEvent('checkout_already_subscribed', user.id);
+      return res.json({ subscription: ent.subscription, alreadySubscribed: true });
     }
 
     const botToken = process.env.BOT_TOKEN;
     if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
 
-    const payload = JSON.stringify({
-      userId: user.id,
-      planCode: 'PRO',
-      ts: Date.now(),
-    });
+    const checkoutSessionId = crypto.randomUUID();
+    const payload = `pro_monthly:${req.tgUser!.id}:${checkoutSessionId}`;
 
     trackEvent('checkout_started', user.id);
 
@@ -2198,13 +2199,12 @@ tgRouter.post(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: 'WishBoard PRO',
-        description: '10 вишлистов, 100 желаний, комментарии, импорт по ссылке',
+        title: 'Wishlist Pro',
+        description: 'Больше вишлистов, комментарии, добавление по ссылке и умные напоминания',
         payload,
-        provider_token: '',
         currency: 'XTR',
-        prices: [{ label: 'PRO на месяц', amount: PRO_PRICE_STARS }],
-        subscription_period: SUBSCRIPTION_PERIOD_SEC,
+        prices: [{ label: 'PRO на месяц', amount: PRO_PRICE_XTR }],
+        subscription_period: PRO_SUBSCRIPTION_PERIOD,
       }),
     });
 
@@ -2216,7 +2216,19 @@ tgRouter.post(
       return res.status(502).json({ error: 'Failed to create invoice' });
     }
 
-    return res.json({ invoiceUrl: data.result });
+    // Save invoice_created event
+    await prisma.paymentEvent.create({
+      data: {
+        userId: user.id,
+        telegramPaymentChargeId: `checkout_${checkoutSessionId}`,
+        invoicePayload: payload,
+        totalAmount: PRO_PRICE_XTR,
+        currency: 'XTR',
+        eventType: 'invoice_created',
+      },
+    });
+
+    return res.json({ invoiceUrl: data.result, checkoutSessionId });
   }),
 );
 
@@ -2225,6 +2237,7 @@ tgRouter.post(
   '/billing/pro/sync',
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
+    trackEvent('sync_requested', user.id);
     const ent = await getUserEntitlement(user.id);
 
     return res.json({
@@ -2252,6 +2265,79 @@ tgRouter.get(
       select: { id: true, totalAmount: true, currency: true, eventType: true, createdAt: true },
     });
     return res.json({ events });
+  }),
+);
+
+// POST /tg/billing/subscription/cancel — cancel auto-renewal (keeps PRO until period end)
+tgRouter.post(
+  '/billing/subscription/cancel',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    trackEvent('subscription_cancel_requested', user.id);
+
+    const sub = await prisma.subscription.findFirst({
+      where: {
+        userId: user.id,
+        planCode: PRO_PLAN_CODE,
+        status: 'ACTIVE',
+        currentPeriodEnd: { gt: new Date() },
+      },
+    });
+    if (!sub) {
+      return res.status(404).json({ error: 'No active subscription' });
+    }
+
+    const updated = await prisma.subscription.update({
+      where: { id: sub.id },
+      data: { cancelAtPeriodEnd: true, cancelledAt: new Date() },
+    });
+
+    return res.json({
+      subscription: {
+        id: updated.id,
+        status: updated.status,
+        periodEnd: updated.currentPeriodEnd.toISOString(),
+        cancelAtPeriodEnd: updated.cancelAtPeriodEnd,
+        cancelledAt: updated.cancelledAt?.toISOString() ?? null,
+      },
+    });
+  }),
+);
+
+// POST /tg/billing/subscription/reactivate — re-enable auto-renewal if period not expired
+tgRouter.post(
+  '/billing/subscription/reactivate',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    trackEvent('subscription_reactivated', user.id);
+
+    const sub = await prisma.subscription.findFirst({
+      where: {
+        userId: user.id,
+        planCode: PRO_PLAN_CODE,
+        status: 'ACTIVE',
+        cancelAtPeriodEnd: true,
+        currentPeriodEnd: { gt: new Date() },
+      },
+    });
+    if (!sub) {
+      return res.status(404).json({ error: 'No cancelled subscription to reactivate' });
+    }
+
+    const updated = await prisma.subscription.update({
+      where: { id: sub.id },
+      data: { cancelAtPeriodEnd: false, cancelledAt: null },
+    });
+
+    return res.json({
+      subscription: {
+        id: updated.id,
+        status: updated.status,
+        periodEnd: updated.currentPeriodEnd.toISOString(),
+        cancelAtPeriodEnd: updated.cancelAtPeriodEnd,
+        cancelledAt: null,
+      },
+    });
   }),
 );
 

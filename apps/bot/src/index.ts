@@ -79,7 +79,17 @@ if (!token) {
 
   bot.command('help', (ctx) =>
     ctx.reply(
-      'WishBoard — создавай вишлисты и делись ими с друзьями.\n\n/start — начать\n\nОтправь ссылку на товар — я создам карточку желания!',
+      'WishBoard — создавай вишлисты и делись ими с друзьями.\n\n/start — начать\n/paysupport — помощь с оплатой\n\nОтправь ссылку на товар — я создам карточку желания!',
+    ),
+  );
+
+  bot.command('paysupport', (ctx) =>
+    ctx.reply(
+      '💳 Помощь с оплатой\n\n' +
+        'Если у тебя возникли проблемы с оплатой или подпиской PRO:\n\n' +
+        '1. Убедись, что у тебя достаточно Telegram Stars\n' +
+        '2. Попробуй перезапустить приложение и повторить оплату\n' +
+        '3. Если проблема сохраняется — напиши описание проблемы в этот чат, мы разберёмся 🙏',
     ),
   );
 
@@ -88,13 +98,19 @@ if (!token) {
   // pre_checkout_query — Telegram requires a response within 10 seconds
   bot.on('pre_checkout_query', async (ctx) => {
     try {
-      const payload = JSON.parse(ctx.preCheckoutQuery.invoice_payload);
-      if (!payload.userId || payload.planCode !== 'PRO') {
+      const raw = ctx.preCheckoutQuery.invoice_payload;
+      // eslint-disable-next-line no-console
+      console.log('[bot] pre_checkout_received:', raw);
+
+      // New format: pro_monthly:<telegramId>:<uuid>
+      const parts = raw.split(':');
+      if (parts.length < 3 || parts[0] !== 'pro_monthly') {
         await ctx.answerPreCheckoutQuery(false, 'Invalid payment');
         return;
       }
+      const telegramId = parts[1];
       const user = await prisma.user.findUnique({
-        where: { id: payload.userId },
+        where: { telegramId },
         select: { id: true },
       });
       if (!user) {
@@ -116,12 +132,37 @@ if (!token) {
       return next();
     }
 
-    const payment = msg.successful_payment;
+    const payment = msg.successful_payment as Record<string, unknown> & {
+      telegram_payment_charge_id: string;
+      provider_payment_charge_id?: string;
+      invoice_payload: string;
+      total_amount: number;
+      currency: string;
+      subscription_expiration_date?: number;
+    };
+
     try {
-      const payload = JSON.parse(payment.invoice_payload);
-      if (payload.planCode !== 'PRO') return;
+      const raw = payment.invoice_payload;
+      // eslint-disable-next-line no-console
+      console.log('[bot] payment_success_received:', raw);
+
+      // New format: pro_monthly:<telegramId>:<uuid>
+      const parts = raw.split(':');
+      if (parts.length < 3 || parts[0] !== 'pro_monthly') return;
+      const telegramId = parts[1];
+
+      const user = await prisma.user.findUnique({
+        where: { telegramId },
+        select: { id: true },
+      });
+      if (!user) {
+        // eslint-disable-next-line no-console
+        console.error('[bot] payment user not found, telegramId:', telegramId);
+        return;
+      }
 
       const chargeId = payment.telegram_payment_charge_id;
+      const providerChargeId = payment.provider_payment_charge_id ?? null;
 
       // Idempotency: skip duplicate webhook
       const existing = await prisma.paymentEvent.findUnique({
@@ -134,21 +175,27 @@ if (!token) {
       }
 
       const now = new Date();
-      const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      // Use subscription_expiration_date from Telegram if available, else 30 days
+      const periodEnd = payment.subscription_expiration_date
+        ? new Date(payment.subscription_expiration_date * 1000)
+        : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
       await prisma.$transaction(async (tx) => {
         const sub = await tx.subscription.upsert({
           where: {
-            userId_planCode: { userId: payload.userId, planCode: 'PRO' },
+            userId_planCode: { userId: user.id, planCode: 'PRO' },
           },
           create: {
-            userId: payload.userId,
+            userId: user.id,
             planCode: 'PRO',
             status: 'ACTIVE',
             starsPrice: payment.total_amount,
             telegramChargeId: chargeId,
             currentPeriodStart: now,
             currentPeriodEnd: periodEnd,
+            source: 'telegram_stars',
+            billingPeriod: 'monthly',
+            cancelAtPeriodEnd: false,
           },
           update: {
             status: 'ACTIVE',
@@ -157,18 +204,22 @@ if (!token) {
             currentPeriodStart: now,
             currentPeriodEnd: periodEnd,
             cancelledAt: null,
+            cancelAtPeriodEnd: false,
+            source: 'telegram_stars',
+            billingPeriod: 'monthly',
           },
         });
 
         await tx.paymentEvent.create({
           data: {
             subscriptionId: sub.id,
-            userId: payload.userId,
+            userId: user.id,
             telegramPaymentChargeId: chargeId,
+            providerPaymentChargeId: providerChargeId,
             invoicePayload: payment.invoice_payload,
             totalAmount: payment.total_amount,
             currency: payment.currency,
-            eventType: 'subscription_created',
+            eventType: 'payment_success',
             rawPayload: JSON.stringify(payment),
           },
         });
@@ -192,7 +243,7 @@ if (!token) {
 
       // eslint-disable-next-line no-console
       console.log(
-        `[bot] PRO activated: user=${payload.userId} charge=${chargeId}`,
+        `[bot] subscription_activated: userId=${user.id} charge=${chargeId} periodEnd=${periodEnd.toISOString()}`,
       );
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -291,7 +342,10 @@ if (!token) {
   });
 
   bot.telegram
-    .setMyCommands([{ command: 'start', description: 'Открыть WishBoard' }])
+    .setMyCommands([
+      { command: 'start', description: 'Открыть WishBoard' },
+      { command: 'paysupport', description: 'Помощь с оплатой' },
+    ])
     .catch((err: unknown) => {
       // eslint-disable-next-line no-console
       console.error('[bot] failed to set commands', err);
