@@ -111,6 +111,12 @@ type Item = {
 
 type GuestItem = Item & { reservedByDisplayName: string | null; reservedByActorHash: string | null };
 
+type ReservationItem = Item & {
+  ownerName: string;
+  ownerId: string;
+  unreadComments: number;
+};
+
 type CommentDTO = {
   id: string;
   type: 'USER' | 'SYSTEM';
@@ -121,7 +127,7 @@ type CommentDTO = {
   createdAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings';
+type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations';
 type Toast = { id: string; message: string; kind: 'success' | 'error' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -395,6 +401,78 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash }: { i
             </span>
           )}
           {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>✅ Подарено</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// RESERVATION CARD (for "My Reservations" section)
+// ═══════════════════════════════════════════════════════
+
+function ReservationCard({ item, onTap, onUnreserve, animDelay }: {
+  item: ReservationItem;
+  onTap: () => void;
+  onUnreserve: () => void;
+  animDelay: number;
+}) {
+  return (
+    <div
+      onClick={onTap}
+      style={{
+        background: C.card, borderRadius: 14, padding: 16,
+        display: 'flex', gap: 14, alignItems: 'flex-start',
+        border: `1px solid ${C.border}`, cursor: 'pointer',
+        WebkitTapHighlightColor: 'transparent',
+        animation: `fadeIn 0.3s ease ${animDelay}s both`,
+      }}
+    >
+      <ItemThumb item={item} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{
+            fontSize: 15, fontWeight: 600, fontFamily: font, color: C.text,
+            lineHeight: 1.3, paddingRight: 8,
+          }}>
+            {item.title}
+          </div>
+          {item.unreadComments > 0 && (
+            <span style={{
+              minWidth: 20, height: 20, borderRadius: 10,
+              background: C.accent, color: '#fff',
+              fontSize: 11, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '0 6px', flexShrink: 0,
+            }}>
+              {item.unreadComments}
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+          {item.price != null && (
+            <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>
+              {fmtPrice(item.price)}
+            </span>
+          )}
+          <span style={{
+            fontSize: 11, background: C.greenSoft, color: C.green,
+            padding: '2px 8px', borderRadius: 6, fontWeight: 600,
+          }}>
+            Забронировано
+          </span>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onUnreserve(); }}
+            style={{
+              background: 'none', border: `1px solid ${C.borderLight}`,
+              borderRadius: 10, padding: '6px 14px', fontSize: 12,
+              color: C.textMuted, cursor: 'pointer', fontFamily: font,
+            }}
+          >
+            Снять бронь
+          </button>
         </div>
       </div>
     </div>
@@ -724,6 +802,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Archive state
   const [archiveItems, setArchiveItems] = useState<Item[]>([]);
 
+  // My Reservations state
+  const [reservations, setReservations] = useState<ReservationItem[]>([]);
+  const [reservationsCount, setReservationsCount] = useState(0);
+  const [reservationsLoading, setReservationsLoading] = useState(false);
+  const [fromReservations, setFromReservations] = useState(false);
+
   // Guest state
   const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null } | null>(null);
   const [guestItems, setGuestItems] = useState<GuestItem[]>([]);
@@ -853,6 +937,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       plan: PlanInfo;
       subscription: SubscriptionInfo;
       drafts?: { wishlistId: string; count: number } | null;
+      reservationsCount?: number;
     };
     setWishlists(json.wishlists);
     setPlanInfo(json.plan);
@@ -864,6 +949,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } else {
       setDraftsWishlistId(null);
       setDraftsCount(0);
+    }
+    setReservationsCount(json.reservationsCount ?? 0);
+  }, [tgFetch]);
+
+  const loadReservations = useCallback(async () => {
+    setReservationsLoading(true);
+    try {
+      const res = await tgFetch('/tg/reservations');
+      if (!res.ok) return;
+      const json = await res.json() as { reservations: ReservationItem[] };
+      setReservations(json.reservations);
+      setReservationsCount(json.reservations.length);
+    } catch {
+      // silent
+    } finally {
+      setReservationsLoading(false);
     }
   }, [tgFetch]);
 
@@ -1258,7 +1359,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       }
     } else if (screen === 'guest-item-detail') {
       setViewingItem(null);
-      setScreen('guest-view');
+      if (fromReservations) {
+        setFromReservations(false);
+        setScreen('my-reservations');
+      } else {
+        setScreen('guest-view');
+      }
+    } else if (screen === 'my-reservations') {
+      setScreen('my-wishlists');
     } else if (screen === 'drafts') {
       setScreen('my-wishlists');
     } else if (screen === 'wishlist-detail' || screen === 'guest-view') {
@@ -1272,7 +1380,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } else if (screen === 'share' || screen === 'archive') {
       setScreen('wishlist-detail');
     }
-  }, [screen, loadWishlists, fromDrafts]);
+  }, [screen, loadWishlists, fromDrafts, fromReservations]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -1395,7 +1503,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         loadWishlists().catch(() => { /* non-critical for guest flow */ });
       } else {
         loadWishlists()
-          .then(() => setScreen('my-wishlists'))
+          .then(() => {
+            setScreen('my-wishlists');
+            void loadReservations();
+          })
           .catch(handleErr);
       }
     };
@@ -1431,11 +1542,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   useEffect(() => {
     if (viewingItem && (screen === 'item-detail' || screen === 'guest-item-detail')) {
       loadComments(viewingItem.id);
+      // Mark comments as read for reservation items (fire-and-forget)
+      if (screen === 'guest-item-detail' && fromReservations) {
+        tgFetch(`/tg/items/${viewingItem.id}/comments/mark-read`, { method: 'POST', body: '{}' }).catch(() => {});
+        setReservations((prev) => prev.map((r) => r.id === viewingItem.id ? { ...r, unreadComments: 0 } : r));
+      }
     } else {
       setComments([]);
       setCommentRole(null);
       setCommentText('');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingItem, screen, loadComments]);
 
   // --- Owner actions
@@ -1745,6 +1862,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const updatedItem = { ...item, status: 'available' as const, reservedByDisplayName: null, reservedByActorHash: null };
       setGuestItems((prev) => prev.map((i) => i.id === item.id ? updatedItem : i));
       if (viewingItem && viewingItem.id === item.id) setViewingItem(updatedItem);
+      // Also remove from reservations list if present
+      setReservations((prev) => prev.filter((r) => r.id !== item.id));
+      setReservationsCount((prev) => Math.max(0, prev - 1));
+      pushToast('Бронь отменена', 'success');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnreserveFromReservations = async (item: ReservationItem) => {
+    setLoading(true);
+    try {
+      const res = await tgFetch(`/tg/items/${item.id}/unreserve`, { method: 'POST', body: '{}' });
+      if (!res.ok) { pushToast('Ошибка отмены', 'error'); return; }
+      setReservations((prev) => prev.filter((r) => r.id !== item.id));
+      setReservationsCount((prev) => Math.max(0, prev - 1));
       pushToast('Бронь отменена', 'success');
     } finally {
       setLoading(false);
@@ -1893,6 +2026,56 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </div>
                 </div>
                 <span style={{ fontSize: 20, color: C.orange }}>›</span>
+              </div>
+            )}
+
+            {/* Забронировано мной — always visible */}
+            {reservationsCount > 0 ? (
+              <div
+                onClick={() => { void loadReservations(); setScreen('my-reservations'); }}
+                style={{
+                  background: `linear-gradient(135deg, ${C.green}20, ${C.green}08)`,
+                  borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
+                  border: `1px solid ${C.green}25`,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  animation: 'fadeIn 0.3s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>🎁</span>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>Забронировано мной</span>
+                      <span style={{
+                        minWidth: 20, height: 20, borderRadius: 10,
+                        background: C.green, color: '#fff',
+                        fontSize: 11, fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '0 6px',
+                      }}>{reservationsCount}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                      {reservations.length > 0
+                        ? reservations.slice(0, 3).map(r => r.title).join(', ').slice(0, 50) + (reservations.length > 3 ? '…' : '')
+                        : 'Открыть список'}
+                    </div>
+                  </div>
+                </div>
+                <span style={{ fontSize: 20, color: C.green }}>›</span>
+              </div>
+            ) : (
+              <div style={{
+                background: C.surface, borderRadius: 16, padding: '16px 20px',
+                border: `1px solid ${C.border}`,
+                animation: 'fadeIn 0.3s ease',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>🎁</span>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>Забронировано мной</div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>Здесь появятся желания, которые ты забронируешь у друзей</div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -2129,6 +2312,97 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               ))}
             </div>
           </BottomSheet>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          MY RESERVATIONS
+          ══════════════════════════════════════════════ */}
+      {screen === 'my-reservations' && (
+        <div style={{ padding: '16px 20px 120px' }}>
+          <div style={{ marginBottom: 20 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>🎁 Забронировано мной</h1>
+            <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
+              {reservationsCount > 0
+                ? `${reservationsCount} ${reservationsCount === 1 ? 'желание' : reservationsCount < 5 ? 'желания' : 'желаний'}`
+                : 'Желания, которые ты забронировал у друзей'}
+            </p>
+          </div>
+
+          {reservationsLoading && reservations.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+              <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
+              <div style={{ fontSize: 14, color: C.textMuted }}>Загружаем…</div>
+            </div>
+          )}
+
+          {!reservationsLoading && reservations.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>Пока пусто</div>
+              <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
+                Здесь появятся желания, которые ты забронируешь у друзей
+              </div>
+            </div>
+          )}
+
+          {reservations.length > 0 && (() => {
+            const groups: Record<string, { ownerName: string; items: ReservationItem[] }> = {};
+            for (const r of reservations) {
+              const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, items: [] });
+              g.items.push(r);
+            }
+            let globalIdx = 0;
+            return Object.entries(groups).map(([ownerId, group]) => (
+              <div key={ownerId} style={{ marginBottom: 24 }}>
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+                    cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+                  }}
+                  onClick={() => pushToast('Профиль появится в следующих версиях', 'success')}
+                >
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 18,
+                    background: `linear-gradient(135deg, ${C.accent}, ${C.green})`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 16, fontWeight: 700, color: '#fff', flexShrink: 0,
+                  }}>
+                    {(group.ownerName || 'П').charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>
+                      {group.items.length} {group.items.length === 1 ? 'желание' : group.items.length < 5 ? 'желания' : 'желаний'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {group.items.map((item) => {
+                    const delay = globalIdx * 0.06;
+                    globalIdx++;
+                    return (
+                      <ReservationCard
+                        key={item.id}
+                        item={item}
+                        animDelay={delay}
+                        onTap={() => {
+                          setViewingItem({
+                            ...item,
+                            reservedByDisplayName: null,
+                            reservedByActorHash: myActorHashRef.current,
+                          } as GuestItem);
+                          setFromReservations(true);
+                          setScreen('guest-item-detail');
+                        }}
+                        onUnreserve={() => void handleUnreserveFromReservations(item)}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ));
+          })()}
         </div>
       )}
 

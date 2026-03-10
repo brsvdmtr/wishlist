@@ -1085,8 +1085,8 @@ function mapTgItem(item: {
 async function getOrCreateTgUser(tgUser: TelegramUser) {
   return prisma.user.upsert({
     where: { telegramId: String(tgUser.id) },
-    update: { telegramChatId: String(tgUser.id) },
-    create: { telegramId: String(tgUser.id), telegramChatId: String(tgUser.id) },
+    update: { telegramChatId: String(tgUser.id), firstName: tgUser.first_name || null },
+    create: { telegramId: String(tgUser.id), telegramChatId: String(tgUser.id), firstName: tgUser.first_name || null },
   });
 }
 
@@ -1165,6 +1165,11 @@ tgRouter.get(
       drafts = { wishlistId: draftsWl.id, count: draftsWl.items.length };
     }
 
+    // Count user's active reservations (for "My Reservations" section)
+    const reservationsCount = await prisma.item.count({
+      where: { reserverUserId: user.id, status: 'RESERVED' },
+    });
+
     return res.json({
       wishlists: wishlists.map((wl, idx) => {
         const active = wl.items.filter((i) => (ACTIVE_STATUSES as readonly string[]).includes(i.status));
@@ -1188,7 +1193,66 @@ tgRouter.get(
       },
       subscription: ent.subscription,
       drafts,
+      reservationsCount,
     });
+  }),
+);
+
+// GET /tg/reservations — items reserved by current user across all wishlists
+tgRouter.get(
+  '/reservations',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const actorHash = tgActorHash(req.tgUser!.id);
+
+    // 1. Items reserved by this user (only TG-identified reservations)
+    const items = await prisma.item.findMany({
+      where: { reserverUserId: user.id, status: 'RESERVED' },
+      select: {
+        id: true, wishlistId: true, title: true, url: true, priceText: true,
+        imageUrl: true, priority: true, status: true, description: true,
+        sourceUrl: true, sourceDomain: true, importMethod: true,
+        wishlist: {
+          select: { owner: { select: { id: true, firstName: true } } },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    // 2. Batch fetch read cursors
+    const itemIds = items.map(i => i.id);
+    const cursors = itemIds.length > 0
+      ? await prisma.commentReadCursor.findMany({
+          where: { userId: user.id, itemId: { in: itemIds } },
+        })
+      : [];
+    const cursorMap = new Map(cursors.map(c => [c.itemId, c.lastReadAt]));
+
+    // 3. Count unread comments per item
+    const unreadCounts: Record<string, number> = {};
+    if (itemIds.length > 0) {
+      await Promise.all(itemIds.map(async (itemId) => {
+        const lastRead = cursorMap.get(itemId);
+        unreadCounts[itemId] = await prisma.comment.count({
+          where: {
+            itemId,
+            type: 'USER',
+            ...(lastRead ? { createdAt: { gt: lastRead } } : {}),
+            NOT: { authorActorHash: actorHash },
+          },
+        });
+      }));
+    }
+
+    // 4. Map response
+    const reservations = items.map(item => ({
+      ...mapTgItem(item),
+      ownerName: item.wishlist.owner.firstName ?? 'Пользователь',
+      ownerId: item.wishlist.owner.id,
+      unreadComments: unreadCounts[item.id] ?? 0,
+    }));
+
+    return res.json({ reservations });
   }),
 );
 
@@ -1466,7 +1530,7 @@ tgRouter.delete(
     const user = await getOrCreateTgUser(req.tgUser!);
     const item = await prisma.item.findUnique({
       where: { id },
-      select: { id: true, wishlist: { select: { ownerId: true } } },
+      select: { id: true, title: true, reserverUserId: true, wishlist: { select: { ownerId: true } } },
     });
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -1480,6 +1544,21 @@ tgRouter.delete(
         purgeAfter: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
       },
     });
+
+    // Notify reserver that item was archived
+    if (item.reserverUserId) {
+      const reserver = await prisma.user.findUnique({
+        where: { id: item.reserverUserId },
+        select: { telegramChatId: true },
+      });
+      if (reserver?.telegramChatId) {
+        void sendTgNotification(
+          reserver.telegramChatId,
+          `📦 Автор поместил желание «${item.title}» в архив`,
+        );
+      }
+    }
+
     return res.json({ ok: true });
   }),
 );
@@ -1494,7 +1573,7 @@ tgRouter.post(
     const user = await getOrCreateTgUser(req.tgUser!);
     const item = await prisma.item.findUnique({
       where: { id },
-      select: { id: true, status: true, wishlist: { select: { ownerId: true } } },
+      select: { id: true, status: true, title: true, reserverUserId: true, wishlist: { select: { ownerId: true } } },
     });
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -1516,6 +1595,25 @@ tgRouter.post(
       where: { itemId: id, scheduledDeleteAt: null },
       data: { scheduledDeleteAt: ttl },
     });
+
+    // Notify reserver that item was completed
+    if (item.reserverUserId) {
+      const reserver = await prisma.user.findUnique({
+        where: { id: item.reserverUserId },
+        select: { telegramChatId: true, id: true },
+      });
+      if (reserver?.telegramChatId) {
+        let msg = `✅ Автор отметил желание «${item.title}» как исполненное. Спасибо за подарок! 🎉`;
+        // Soft CTA if reserver has no wishlists
+        const reserverWlCount = await prisma.wishlist.count({
+          where: { ownerId: reserver.id, type: 'REGULAR' },
+        });
+        if (reserverWlCount === 0) {
+          msg += '\n\nА ты уже создал свой вишлист? Открой WishBoard и расскажи друзьям о своих желаниях!';
+        }
+        void sendTgNotification(reserver.telegramChatId, msg);
+      }
+    }
 
     return res.json({ item: mapTgItem(updated) });
   }),
@@ -1907,6 +2005,25 @@ tgRouter.delete(
     }
 
     await prisma.comment.delete({ where: { id: commentId } });
+    return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/items/:id/comments/mark-read — mark comments as read for current user
+tgRouter.post(
+  '/items/:id/comments/mark-read',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    await prisma.commentReadCursor.upsert({
+      where: { userId_itemId: { userId: user.id, itemId: id } },
+      update: { lastReadAt: new Date() },
+      create: { userId: user.id, itemId: id, lastReadAt: new Date() },
+    });
+
     return res.json({ ok: true });
   }),
 );

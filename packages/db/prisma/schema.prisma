@@ -48,12 +48,14 @@ model User {
   email          String?  @unique
   telegramId     String?  @unique
   telegramChatId String?
+  firstName      String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  wishlists     Wishlist[]
-  subscriptions Subscription[]
-  paymentEvents PaymentEvent[]
+  wishlists          Wishlist[]
+  subscriptions      Subscription[]
+  paymentEvents      PaymentEvent[]
+  commentReadCursors CommentReadCursor[]
 }
 
 model Wishlist {
@@ -102,6 +104,7 @@ model Item {
   itemTags          ItemTag[]
   reservationEvents ReservationEvent[]
   comments          Comment[]
+  commentReadCursors CommentReadCursor[]
 
   @@index([wishlistId])
   @@index([purgeAfter])
@@ -201,4 +204,16 @@ model PaymentEvent {
 
   @@index([userId])
   @@index([subscriptionId])
+}
+
+model CommentReadCursor {
+  userId     String
+  itemId     String
+  lastReadAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@id([userId, itemId])
+  @@index([userId])
 }
