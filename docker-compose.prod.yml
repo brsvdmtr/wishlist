@@ -76,6 +76,7 @@ services:
     environment:
       NODE_ENV: production
       BOT_TOKEN: ${BOT_TOKEN}
+      DATABASE_URL: ${DATABASE_URL}
       API_BASE_URL: http://api:3001
       MINI_APP_URL: ${MINI_APP_URL:-https://wishlistik.ru/miniapp}
       SITE_URL: ${SITE_URL:-${NEXT_PUBLIC_SITE_URL:-https://wishlistik.ru}}
