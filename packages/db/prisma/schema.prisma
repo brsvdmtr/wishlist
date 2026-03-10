@@ -59,9 +59,9 @@ model Wishlist {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  type        WishlistType @default(REGULAR)
+  type WishlistType @default(REGULAR)
 
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   items Item[]
   tags  Tag[]
 
@@ -85,6 +85,8 @@ model Item {
   status           ItemStatus @default(AVAILABLE)
   reservationEpoch Int        @default(0)
   reserverUserId   String?
+  archivedAt       DateTime?
+  purgeAfter       DateTime?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
@@ -94,6 +96,7 @@ model Item {
   comments          Comment[]
 
   @@index([wishlistId])
+  @@index([purgeAfter])
 }
 
 model Tag {
@@ -102,7 +105,7 @@ model Tag {
   name       String
   createdAt  DateTime @default(now())
 
-  wishlist Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  wishlist Wishlist  @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
   itemTags ItemTag[]
 
   @@index([wishlistId])

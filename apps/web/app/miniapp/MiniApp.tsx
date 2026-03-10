@@ -675,6 +675,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [tgFetch, pushToast, wishlists, loadDrafts, loadWishlists]);
 
+  const handleArchiveDraft = useCallback(async (item: Item) => {
+    const res = await tgFetch(`/tg/items/${item.id}`, { method: 'DELETE' });
+    if (!res.ok) { pushToast('Ошибка', 'error'); return; }
+    setDraftsItems(prev => prev.filter(i => i.id !== item.id));
+    setDraftsCount(prev => Math.max(0, prev - 1));
+    pushToast('Перенесено в архив. Восстановить можно в течение 90 дней.', 'success');
+  }, [tgFetch, pushToast]);
+
   // --- Guest API calls
   const loadGuestWishlist = useCallback(async (param: string) => {
     type GuestResponse = {
@@ -1558,6 +1566,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     📁 Переместить
                   </button>
                   <button
+                    style={{ ...btnGhost, padding: '10px 12px', fontSize: 13, color: C.textMuted }}
+                    onClick={() => handleArchiveDraft(item)}
+                  >
+                    📦 В архив
+                  </button>
+                  <button
                     style={{ ...btnGhost, padding: '10px 12px', fontSize: 13 }}
                     onClick={() => {
                       setViewingItem(item);
@@ -2033,6 +2047,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div>
               <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0 }}>📦 Архив</h1>
               <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0' }}>{currentWl.title}</p>
+              <p style={{ fontSize: 11, color: C.orange, margin: '6px 0 0' }}>Архивные желания хранятся 90 дней</p>
             </div>
             <button onClick={() => setScreen('wishlist-detail')} style={{ ...btnGhost, fontSize: 13, padding: '8px 14px' }}>← Назад</button>
           </div>

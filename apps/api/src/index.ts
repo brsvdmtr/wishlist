@@ -1379,7 +1379,15 @@ tgRouter.delete(
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
-    await prisma.item.update({ where: { id }, data: { status: 'DELETED' } });
+    const now = new Date();
+    await prisma.item.update({
+      where: { id },
+      data: {
+        status: 'DELETED',
+        archivedAt: now,
+        purgeAfter: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
+      },
+    });
     return res.json({ ok: true });
   }),
 );
@@ -1399,9 +1407,14 @@ tgRouter.post(
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
+    const now = new Date();
     const updated = await prisma.item.update({
       where: { id },
-      data: { status: 'COMPLETED' },
+      data: {
+        status: 'COMPLETED',
+        archivedAt: now,
+        purgeAfter: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
+      },
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
@@ -1436,7 +1449,11 @@ tgRouter.post(
 
     const updated = await prisma.item.update({
       where: { id },
-      data: { status: 'AVAILABLE' },
+      data: {
+        status: 'AVAILABLE',
+        archivedAt: null,
+        purgeAfter: null,
+      },
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
     return res.json({ item: mapTgItem(updated) });
@@ -2115,6 +2132,44 @@ setInterval(async () => {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[ttl] cleanup failed', err);
+  }
+}, 60 * 60 * 1000);
+
+// Archive purge: hard-delete items past 90-day TTL + cleanup media files (hourly)
+setInterval(async () => {
+  try {
+    const expired = await prisma.item.findMany({
+      where: { purgeAfter: { lte: new Date() } },
+      select: { id: true, imageUrl: true },
+      take: 100, // batch limit — rest picked up next hour
+    });
+    if (expired.length === 0) return;
+
+    // eslint-disable-next-line no-console
+    console.log(`[purge] found ${expired.length} expired archive items`);
+    let deleted = 0, files = 0, errors = 0;
+
+    for (const item of expired) {
+      try {
+        // DB first, files second — orphaned files are harmless, orphaned DB records with broken images are not
+        await prisma.item.delete({ where: { id: item.id } });
+        deleted++;
+        if (item.imageUrl) {
+          deleteUploadFile(item.imageUrl);
+          files++;
+        }
+      } catch (err) {
+        errors++;
+        // eslint-disable-next-line no-console
+        console.error(`[purge] item ${item.id}:`, err);
+      }
+    }
+
+    // eslint-disable-next-line no-console
+    console.log(`[purge] done: ${deleted} deleted, ${files} files cleaned, ${errors} errors`);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[purge] job failed:', err);
   }
 }, 60 * 60 * 1000);
 
