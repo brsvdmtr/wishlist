@@ -69,7 +69,23 @@ type Wishlist = {
   deadline: string | null;
   itemCount: number;
   reservedCount: number;
+  readOnly?: boolean;
 };
+
+type PlanInfo = {
+  code: 'FREE' | 'PRO';
+  wishlists: number;
+  items: number;
+  participants: number;
+  features: string[];
+};
+
+type SubscriptionInfo = {
+  id: string;
+  status: 'ACTIVE' | 'CANCELLED' | 'EXPIRED';
+  periodEnd: string;
+  cancelledAt: string | null;
+} | null;
 
 type Item = {
   id: string;
@@ -98,7 +114,7 @@ type CommentDTO = {
   createdAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts';
+type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings';
 type Toast = { id: string; message: string; kind: 'success' | 'error' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -485,7 +501,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // Owner state
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
-  const [planLimits, setPlanLimits] = useState({ wishlists: 2, items: 10 });
+  const [planLimits, setPlanLimits] = useState({ wishlists: 2, items: 30 });
+  const [planInfo, setPlanInfo] = useState<PlanInfo>({
+    code: 'FREE', wishlists: 2, items: 30, participants: 5, features: [],
+  });
+  const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
+  const [showUpgradeSheet, setShowUpgradeSheet] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
 
@@ -560,6 +582,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [importLoading, setImportLoading] = useState(false);
   const [fromDrafts, setFromDrafts] = useState(false);
 
+  // Analytics stub — will be replaced with real analytics later
+  const trackEvent = useCallback((event: string, props?: Record<string, unknown>) => {
+    // eslint-disable-next-line no-console
+    console.log(`[analytics] ${event}`, props ?? '');
+  }, []);
+
   const pushToast = useCallback((message: string, kind: Toast['kind']) => {
     const toast: Toast = { id: crypto.randomUUID(), message, kind };
     setToasts((prev) => [toast, ...prev].slice(0, 3));
@@ -592,11 +620,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
     const json = await res.json() as {
       wishlists: Wishlist[];
-      plan: { wishlists: number; items: number };
+      plan: PlanInfo;
+      subscription: SubscriptionInfo;
       drafts?: { wishlistId: string; count: number } | null;
     };
     setWishlists(json.wishlists);
-    setPlanLimits(json.plan);
+    setPlanInfo(json.plan);
+    setSubscription(json.subscription);
+    setPlanLimits({ wishlists: json.plan.wishlists, items: json.plan.items });
     if (json.drafts) {
       setDraftsWishlistId(json.drafts.wishlistId);
       setDraftsCount(json.drafts.count);
@@ -636,6 +667,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         body: JSON.stringify({ url, source: 'miniapp' }),
       });
       if (!res.ok) {
+        if (res.status === 402) {
+          const body = await res.json().catch(() => ({})) as { feature?: string };
+          if (body.feature) {
+            setShowUpgradeSheet(true);
+            trackEvent(`feature_gate_hit_${body.feature}`);
+          } else if (planInfo.code === 'FREE') {
+            setShowUpgradeSheet(true);
+            trackEvent('feature_gate_hit_item_limit');
+          } else {
+            pushToast('Лимит тарифа', 'error');
+          }
+          return;
+        }
         const body = await res.json().catch(() => ({})) as { error?: string };
         pushToast(body.error || 'Не удалось обработать ссылку', 'error');
         return;
@@ -770,6 +814,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         body: JSON.stringify({ text }),
       });
       if (!res.ok) {
+        if (res.status === 402) {
+          const body = await res.json().catch(() => ({})) as { feature?: string };
+          if (body.feature) {
+            setShowUpgradeSheet(true);
+            trackEvent(`feature_gate_hit_${body.feature}`);
+          }
+          return;
+        }
         const json = await res.json().catch(() => ({})) as { error?: string };
         pushToast(json.error || 'Ошибка отправки', 'error');
         return;
@@ -812,6 +864,58 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [viewingItem, descriptionText, tgFetch, pushToast]);
 
+  // --- Upgrade to PRO
+  const handleUpgradeToPro = useCallback(async () => {
+    trackEvent('pro_cta_clicked');
+    setCheckoutLoading(true);
+    try {
+      const res = await tgFetch('/tg/billing/pro/checkout', { method: 'POST' });
+      if (res.status === 409) {
+        pushToast('Уже подписан на PRO', 'success');
+        return;
+      }
+      if (!res.ok) {
+        pushToast('Ошибка оформления', 'error');
+        trackEvent('checkout_failed');
+        return;
+      }
+      const { invoiceUrl } = await res.json() as { invoiceUrl: string };
+      trackEvent('checkout_started');
+
+      const tg = tgRef.current?.WebApp;
+      if (!tg?.openInvoice) {
+        pushToast('Обнови Telegram для оплаты', 'error');
+        return;
+      }
+
+      tg.HapticFeedback?.impactOccurred?.('medium');
+
+      tg.openInvoice(invoiceUrl, async (status: string) => {
+        if (status === 'paid') {
+          const syncRes = await tgFetch('/tg/billing/pro/sync', { method: 'POST' });
+          if (syncRes.ok) {
+            const data = await syncRes.json() as { plan: PlanInfo; subscription: SubscriptionInfo };
+            setPlanInfo(data.plan);
+            setSubscription(data.subscription);
+            setPlanLimits({ wishlists: data.plan.wishlists, items: data.plan.items });
+            tg.HapticFeedback?.notificationOccurred?.('success');
+            pushToast('PRO подключен!', 'success');
+            trackEvent('checkout_succeeded');
+            setShowUpgradeSheet(false);
+            loadWishlists().catch(() => {});
+          }
+        } else if (status === 'failed') {
+          pushToast('Ошибка оплаты', 'error');
+          trackEvent('checkout_failed');
+        }
+        setCheckoutLoading(false);
+      });
+    } catch {
+      pushToast('Ошибка', 'error');
+      setCheckoutLoading(false);
+    }
+  }, [tgFetch, pushToast, loadWishlists, trackEvent]);
+
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(() => {
     if (screen === 'item-detail') {
@@ -833,6 +937,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (screen === 'guest-view') {
         loadWishlists().catch(() => { /* silent — screen already set */ });
       }
+    } else if (screen === 'settings') {
+      setScreen('my-wishlists');
     } else if (screen === 'share' || screen === 'archive') {
       setScreen('wishlist-detail');
     }
@@ -1011,7 +1117,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         method: 'POST',
         body: JSON.stringify({ title: wlTitle.trim(), deadline: wlDeadline ? new Date(wlDeadline).toISOString() : null }),
       });
-      if (res.status === 402) { pushToast(`Лимит Free: ${planLimits.wishlists} вишлиста ⭐`, 'error'); return; }
+      if (res.status === 402) {
+        if (planInfo.code === 'FREE') {
+          setShowUpgradeSheet(true);
+          trackEvent('feature_gate_hit_wishlist_limit');
+        } else {
+          pushToast(`Лимит PRO: ${planLimits.wishlists} вишлистов`, 'error');
+        }
+        return;
+      }
       if (!res.ok) { pushToast('Ошибка создания', 'error'); return; }
       const json = await res.json() as { wishlist: Wishlist };
       setWishlists((prev) => [json.wishlist, ...prev]);
@@ -1180,7 +1294,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         pushToast('✅ Сохранено!', 'success');
       } else {
         const res = await tgFetch(`/tg/wishlists/${currentWl.id}/items`, { method: 'POST', body: JSON.stringify(body) });
-        if (res.status === 402) { pushToast(`Лимит Free: ${planLimits.items} желаний ⭐`, 'error'); return; }
+        if (res.status === 402) {
+          if (planInfo.code === 'FREE') {
+            setShowUpgradeSheet(true);
+            trackEvent('feature_gate_hit_item_limit');
+          } else {
+            pushToast(`Лимит PRO: ${planLimits.items} желаний`, 'error');
+          }
+          return;
+        }
         if (!res.ok) { pushToast('Ошибка добавления', 'error'); return; }
         const json = await res.json() as { item: Item };
 
@@ -1373,11 +1495,29 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         <div style={{ padding: '16px 20px 120px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <div>
-              <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>WishBoard</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>WishBoard</h1>
+                {planInfo.code === 'PRO' && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: '3px 8px',
+                    borderRadius: 6, background: C.accentSoft, color: C.accent,
+                  }}>PRO</span>
+                )}
+              </div>
               <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
                 {tgUser ? `Привет, ${tgUser.first_name}!` : 'Мои вишлисты'}
               </p>
             </div>
+            <button
+              onClick={() => setScreen('settings')}
+              style={{
+                background: 'none', border: 'none', padding: 8, cursor: 'pointer',
+                fontSize: 20, color: C.textMuted, lineHeight: 1,
+              }}
+              aria-label="Настройки"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1428,10 +1568,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div key={wl.id} onClick={() => void openWishlist(wl)} style={{
                 background: C.card, borderRadius: 16, padding: 18, cursor: 'pointer',
                 border: `1px solid ${C.border}`, animation: `fadeIn 0.3s ease ${(i + 1) * 0.08}s both`,
+                opacity: wl.readOnly ? 0.6 : 1,
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: font, color: C.text }}>{wl.title}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: font, color: C.text }}>{wl.title}</div>
+                      {wl.readOnly && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 600, padding: '2px 6px',
+                          borderRadius: 4, background: C.orangeSoft, color: C.orange,
+                        }}>Только просмотр</span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
                       {wl.itemCount} желаний • {wl.reservedCount} забронировано
                     </div>
@@ -1465,8 +1614,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             )}
 
             <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
-              Free-план: {wishlists.length} из {planLimits.wishlists} вишлистов
+              {planInfo.code === 'PRO' ? 'PRO' : 'Free'}-план: {wishlists.length} из {planLimits.wishlists} вишлистов
             </div>
+            {planInfo.code === 'FREE' && (
+              <button style={{ ...btnGhost, width: '100%', fontSize: 13, color: C.accent }} onClick={() => { setShowUpgradeSheet(true); trackEvent('paywall_opened', { source: 'my_wishlists' }); }}>
+                Перейти на Pro
+              </button>
+            )}
             <button style={btnPrimary} onClick={() => setShowCreateWl(true)}>＋ Создать вишлист</button>
           </div>
 
@@ -1668,6 +1822,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {currentWl.readOnly && (
+              <div style={{
+                borderRadius: 12, padding: '14px 16px', fontSize: 13,
+                display: 'flex', alignItems: 'center', gap: 10,
+                background: C.orangeSoft, color: C.orange, lineHeight: 1.5,
+              }}>
+                <span>🔒</span>
+                <span>
+                  Этот вишлист в режиме просмотра.{' '}
+                  <span onClick={() => { setShowUpgradeSheet(true); trackEvent('paywall_opened', { source: 'readonly_banner' }); }} style={{ textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}>
+                    Перейди на Pro
+                  </span>, чтобы редактировать.
+                </span>
+              </div>
+            )}
             <div style={{ borderRadius: 12, padding: '12px 16px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, background: C.accentSoft, color: C.accent, lineHeight: 1.5 }}>
               <span>👁</span><span>Ты не видишь, кто и что забронировал — сюрприз!</span>
             </div>
@@ -1690,7 +1859,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            <button style={btnSecondary} onClick={() => { resetItemForm(); setShowItemForm(true); }}>＋ Добавить желание</button>
+            {!currentWl.readOnly && (
+              <button style={btnSecondary} onClick={() => { resetItemForm(); setShowItemForm(true); }}>＋ Добавить желание</button>
+            )}
           </div>
 
         </div>
@@ -2095,6 +2266,100 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         </div>
       )}
 
+      {/* ══════════════════════════════════════════════
+          SETTINGS
+          ══════════════════════════════════════════════ */}
+      {screen === 'settings' && (
+        <div style={{ padding: '16px 20px 120px' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 20px' }}>Настройки</h1>
+
+          {/* Current plan card */}
+          <div style={{
+            background: C.card, borderRadius: 16, padding: 20,
+            border: `1px solid ${planInfo.code === 'PRO' ? C.accentGlow : C.border}`,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>Текущий тариф</span>
+              <span style={{
+                fontSize: 13, fontWeight: 700, padding: '4px 10px',
+                borderRadius: 8,
+                background: planInfo.code === 'PRO' ? C.accentSoft : C.surface,
+                color: planInfo.code === 'PRO' ? C.accent : C.textSec,
+              }}>
+                {planInfo.code === 'PRO' ? 'PRO' : 'Free'}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                { label: 'Вишлисты', value: planInfo.wishlists },
+                { label: 'Желаний в каждом', value: planInfo.items },
+                { label: 'Участников', value: planInfo.participants },
+              ].map((row) => (
+                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 14, color: C.textSec }}>{row.label}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{row.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Subscription info for PRO users */}
+            {subscription && subscription.status === 'ACTIVE' && (
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 13, color: C.textSec }}>
+                  Следующее списание
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginTop: 4 }}>
+                  {new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+              </div>
+            )}
+
+            {subscription && subscription.status === 'CANCELLED' && (
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 13, color: C.orange }}>
+                  Автопродление отключено
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginTop: 4 }}>
+                  PRO до {new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {subscription && subscription.status === 'ACTIVE' && (
+              <button
+                style={{ ...btnSecondary, width: '100%' }}
+                onClick={() => {
+                  try { tgRef.current?.WebApp?.openTelegramLink?.('https://t.me/settings/stars'); } catch { /* ok */ }
+                }}
+              >
+                Управление подпиской
+              </button>
+            )}
+            {planInfo.code === 'FREE' && (
+              <button
+                style={{ ...btnPrimary, width: '100%' }}
+                onClick={() => { setShowUpgradeSheet(true); trackEvent('paywall_opened', { source: 'settings' }); }}
+              >
+                Перейти на Pro
+              </button>
+            )}
+            {subscription && subscription.status === 'CANCELLED' && (
+              <button
+                style={{ ...btnPrimary, width: '100%' }}
+                onClick={() => void handleUpgradeToPro()}
+                disabled={checkoutLoading}
+              >
+                {checkoutLoading ? '...' : 'Возобновить подписку'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
       <BottomSheet isOpen={showRenameWl} onClose={() => setShowRenameWl(false)} title="Переименовать вишлист">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -2317,6 +2582,93 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               🗑 Удалить
             </button>
           </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── UPGRADE BOTTOM SHEET (PAYWALL) ── */}
+      <BottomSheet isOpen={showUpgradeSheet} onClose={() => setShowUpgradeSheet(false)}>
+        <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
+          {/* Hero badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 16px', borderRadius: 20,
+            background: `linear-gradient(135deg, ${C.accent}30, ${C.accent}10)`,
+            color: C.accent, fontSize: 14, fontWeight: 700,
+            marginBottom: 16,
+          }}>
+            PRO
+          </div>
+
+          <div style={{ fontSize: 20, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
+            Больше возможностей
+          </div>
+          <div style={{ fontSize: 14, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+            для тех, кто пользуется по-настоящему
+          </div>
+
+          {/* Comparison table */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            {/* FREE column */}
+            <div style={{ flex: 1, background: C.surface, borderRadius: 14, padding: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.textSec, marginBottom: 12, fontFamily: font }}>Free</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[
+                  { label: 'Вишлисты', val: '2' },
+                  { label: 'Желания', val: '30' },
+                  { label: 'Участников', val: '5' },
+                  { label: 'Комментарии', val: '✕' },
+                  { label: 'Импорт по ссылке', val: '✕' },
+                ].map((r) => (
+                  <div key={r.label} style={{ fontSize: 12, color: r.val === '✕' ? C.textMuted : C.textSec, lineHeight: 1.3 }}>
+                    <div style={{ fontWeight: 600 }}>{r.val}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted }}>{r.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* PRO column */}
+            <div style={{ flex: 1, background: C.card, borderRadius: 14, padding: 14, border: `1px solid ${C.accentGlow}` }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 12, fontFamily: font }}>PRO</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[
+                  { label: 'Вишлисты', val: '10' },
+                  { label: 'Желания', val: '100' },
+                  { label: 'Участников', val: '20' },
+                  { label: 'Комментарии', val: '✓' },
+                  { label: 'Импорт по ссылке', val: '✓' },
+                ].map((r) => (
+                  <div key={r.label} style={{ fontSize: 12, color: r.val === '✓' ? C.green : C.text, lineHeight: 1.3 }}>
+                    <div style={{ fontWeight: 600 }}>{r.val}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted }}>{r.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Price */}
+          <div style={{ marginTop: 20, fontSize: 15, color: C.textSec }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: C.text }}>100 Stars</span>
+            {' '}/ месяц
+          </div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
+            Отменить можно в любой момент
+          </div>
+
+          {/* CTA */}
+          <button
+            style={{ ...btnPrimary, marginTop: 20, width: '100%', fontSize: 16, padding: '16px 24px' }}
+            onClick={() => void handleUpgradeToPro()}
+            disabled={checkoutLoading}
+          >
+            {checkoutLoading ? '...' : 'Перейти на Pro'}
+          </button>
+          <button
+            style={{ ...btnGhost, width: '100%', marginTop: 8 }}
+            onClick={() => setShowUpgradeSheet(false)}
+          >
+            Не сейчас
+          </button>
         </div>
       </BottomSheet>
 

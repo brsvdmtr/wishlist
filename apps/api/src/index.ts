@@ -960,7 +960,78 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction) {
   return next();
 }
 
-const PLAN = { WISHLISTS: 2, ITEMS: 10 };
+// ─── Plan & Entitlement System ──────────────────────────────────────────────
+const PLANS = {
+  FREE: {
+    code: 'FREE' as const,
+    wishlists: 2,
+    items: 30,
+    participants: 5,
+    features: [] as string[],
+  },
+  PRO: {
+    code: 'PRO' as const,
+    wishlists: 10,
+    items: 100,
+    participants: 20,
+    features: ['comments', 'url_import', 'smart_reminders', 'hints'],
+  },
+} as const;
+
+type PlanCode = keyof typeof PLANS;
+type PlanInfo = (typeof PLANS)[PlanCode];
+
+const PRO_PRICE_STARS = 100;
+const SUBSCRIPTION_PERIOD_SEC = 2592000; // 30 days
+
+async function getUserEntitlement(userId: string): Promise<{
+  plan: PlanInfo;
+  isPro: boolean;
+  subscription: { id: string; status: string; periodEnd: string; cancelledAt: string | null } | null;
+}> {
+  const sub = await prisma.subscription.findFirst({
+    where: {
+      userId,
+      planCode: 'PRO',
+      status: { in: ['ACTIVE', 'CANCELLED'] },
+      currentPeriodEnd: { gt: new Date() },
+    },
+    orderBy: { currentPeriodEnd: 'desc' },
+  });
+
+  if (sub) {
+    return {
+      plan: PLANS.PRO,
+      isPro: true,
+      subscription: {
+        id: sub.id,
+        status: sub.status,
+        periodEnd: sub.currentPeriodEnd.toISOString(),
+        cancelledAt: sub.cancelledAt?.toISOString() ?? null,
+      },
+    };
+  }
+
+  return { plan: PLANS.FREE, isPro: false, subscription: null };
+}
+
+/** Check if a wishlist is writable (within plan limits) for the given user */
+async function isWishlistWritable(userId: string, wishlistId: string, planLimit: number): Promise<boolean> {
+  const allWishlists = await prisma.wishlist.findMany({
+    where: { ownerId: userId, type: 'REGULAR' },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  });
+  const writableIds = new Set(allWishlists.slice(0, planLimit).map(w => w.id));
+  return writableIds.has(wishlistId);
+}
+
+// Analytics / logging stub
+function trackEvent(event: string, userId?: string, props?: Record<string, unknown>) {
+  // eslint-disable-next-line no-console
+  console.log(`[analytics] ${event}`, userId ? `user=${userId}` : '', props ?? '');
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 /** Extract numeric price from formatted string like "51 975 ₽" → "51975" */
 function extractNumericPrice(priceText: string | null): string | null {
@@ -1068,9 +1139,11 @@ tgRouter.get(
   '/wishlists',
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id);
+
     const wishlists = await prisma.wishlist.findMany({
       where: { ownerId: user.id, type: 'REGULAR' },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'asc' },  // oldest first for readOnly calculation
       select: {
         id: true, slug: true, title: true, description: true, deadline: true,
         items: { select: { status: true } },
@@ -1091,7 +1164,7 @@ tgRouter.get(
     }
 
     return res.json({
-      wishlists: wishlists.map((wl) => {
+      wishlists: wishlists.map((wl, idx) => {
         const active = wl.items.filter((i) => (ACTIVE_STATUSES as readonly string[]).includes(i.status));
         return {
           id: wl.id,
@@ -1101,9 +1174,17 @@ tgRouter.get(
           deadline: wl.deadline?.toISOString() ?? null,
           itemCount: active.length,
           reservedCount: active.filter((i) => i.status !== 'AVAILABLE').length,
+          readOnly: idx >= ent.plan.wishlists,
         };
       }),
-      plan: { wishlists: PLAN.WISHLISTS, items: PLAN.ITEMS },
+      plan: {
+        code: ent.plan.code,
+        wishlists: ent.plan.wishlists,
+        items: ent.plan.items,
+        participants: ent.plan.participants,
+        features: [...ent.plan.features],
+      },
+      subscription: ent.subscription,
       drafts,
     });
   }),
@@ -1153,9 +1234,11 @@ tgRouter.post(
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id);
     const count = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } });
-    if (count >= PLAN.WISHLISTS) {
-      return res.status(402).json({ error: 'Plan limit reached', limit: PLAN.WISHLISTS });
+    if (count >= ent.plan.wishlists) {
+      trackEvent('feature_gate_hit_wishlist_limit', user.id, { plan: ent.plan.code, count });
+      return res.status(402).json({ error: 'Plan limit reached', limit: ent.plan.wishlists, planCode: ent.plan.code });
     }
 
     const slug = await generateUniqueSlug(parsed.data.title);
@@ -1272,13 +1355,20 @@ tgRouter.post(
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
-    const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true } });
+    const ent = await getUserEntitlement(user.id);
+    const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true, type: true } });
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
+    // Read-only check for over-limit wishlists (only REGULAR)
+    if (wishlist.type === 'REGULAR' && !(await isWishlistWritable(user.id, wishlistId, ent.plan.wishlists))) {
+      return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
+    }
+
     const itemCount = await prisma.item.count({ where: { wishlistId, status: { in: [...ACTIVE_STATUSES] } } });
-    if (itemCount >= PLAN.ITEMS) {
-      return res.status(402).json({ error: 'Plan limit reached', limit: PLAN.ITEMS });
+    if (itemCount >= ent.plan.items) {
+      trackEvent('feature_gate_hit_item_limit', user.id, { plan: ent.plan.code, count: itemCount });
+      return res.status(402).json({ error: 'Plan limit reached', limit: ent.plan.items, planCode: ent.plan.code });
     }
 
     const item = await prisma.item.create({
@@ -1646,6 +1736,13 @@ tgRouter.post(
     if (!ctx) return res.status(404).json({ error: 'Item not found' });
     if (ctx.role === 'third_party') return res.status(403).json({ error: 'Forbidden' });
 
+    // Feature gate: comments require PRO for the item owner
+    const ent = await getUserEntitlement(ctx.item.wishlist.ownerId);
+    if (!ent.plan.features.includes('comments')) {
+      trackEvent('feature_gate_hit_comments', ctx.user.id);
+      return res.status(402).json({ error: 'Pro feature', feature: 'comments', planCode: ent.plan.code });
+    }
+
     // Reject archived items
     if (ctx.item.status === 'COMPLETED' || ctx.item.status === 'DELETED') {
       return res.status(400).json({ error: 'Комментарии в архиве запрещены' });
@@ -1969,6 +2066,14 @@ tgRouter.post(
     }
 
     const user = await getOrCreateTgUser(req.tgUser!);
+
+    // Feature gate: import by URL requires PRO
+    const ent = await getUserEntitlement(user.id);
+    if (!ent.plan.features.includes('url_import')) {
+      trackEvent('feature_gate_hit_url_import', user.id);
+      return res.status(402).json({ error: 'Pro feature', feature: 'url_import', planCode: ent.plan.code });
+    }
+
     try {
       const result = await importUrlForUser(user.id, parsed.data.url, parsed.data.note, parsed.data.source || 'miniapp');
       return res.status(201).json(result);
@@ -1995,6 +2100,7 @@ tgRouter.post(
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id);
 
     // Check item ownership
     const item = await prisma.item.findUnique({
@@ -2014,11 +2120,15 @@ tgRouter.post(
 
     // Check plan limit on target wishlist (only for REGULAR wishlists)
     if (targetWl.type === 'REGULAR') {
+      // Check if target wishlist is writable
+      if (!(await isWishlistWritable(user.id, targetWl.id, ent.plan.wishlists))) {
+        return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
+      }
       const targetItemCount = await prisma.item.count({
         where: { wishlistId: targetWl.id, status: { in: [...ACTIVE_STATUSES] } },
       });
-      if (targetItemCount >= PLAN.ITEMS) {
-        return res.status(402).json({ error: 'Лимит желаний в этом вишлисте', limit: PLAN.ITEMS });
+      if (targetItemCount >= ent.plan.items) {
+        return res.status(402).json({ error: 'Лимит желаний в этом вишлисте', limit: ent.plan.items, planCode: ent.plan.code });
       }
     }
 
@@ -2034,6 +2144,114 @@ tgRouter.post(
     });
 
     return res.json({ item: mapTgItem(updated) });
+  }),
+);
+
+// ─── Billing & Plan endpoints ────────────────────────────────────────────────
+
+// GET /tg/me/plan — current user's plan, subscription, and usage
+tgRouter.get(
+  '/me/plan',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id);
+    const wishlistCount = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } });
+
+    return res.json({
+      plan: {
+        code: ent.plan.code,
+        wishlists: ent.plan.wishlists,
+        items: ent.plan.items,
+        participants: ent.plan.participants,
+        features: [...ent.plan.features],
+      },
+      subscription: ent.subscription,
+      usage: { wishlists: wishlistCount },
+      proPriceStars: PRO_PRICE_STARS,
+    });
+  }),
+);
+
+// POST /tg/billing/pro/checkout — create Stars invoice link
+tgRouter.post(
+  '/billing/pro/checkout',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id);
+
+    if (ent.isPro && ent.subscription?.status === 'ACTIVE') {
+      return res.status(409).json({ error: 'Already subscribed' });
+    }
+
+    const botToken = process.env.BOT_TOKEN;
+    if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
+
+    const payload = JSON.stringify({
+      userId: user.id,
+      planCode: 'PRO',
+      ts: Date.now(),
+    });
+
+    trackEvent('checkout_started', user.id);
+
+    const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'WishBoard PRO',
+        description: '10 вишлистов, 100 желаний, комментарии, импорт по ссылке',
+        payload,
+        provider_token: '',
+        currency: 'XTR',
+        prices: [{ label: 'PRO на месяц', amount: PRO_PRICE_STARS }],
+        subscription_period: SUBSCRIPTION_PERIOD_SEC,
+      }),
+    });
+
+    const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
+    if (!data.ok || !data.result) {
+      // eslint-disable-next-line no-console
+      console.error('[billing] createInvoiceLink failed:', data);
+      trackEvent('checkout_failed', user.id, { reason: data.description });
+      return res.status(502).json({ error: 'Failed to create invoice' });
+    }
+
+    return res.json({ invoiceUrl: data.result });
+  }),
+);
+
+// POST /tg/billing/pro/sync — verify subscription state after payment (does NOT activate — bot does)
+tgRouter.post(
+  '/billing/pro/sync',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id);
+
+    return res.json({
+      plan: {
+        code: ent.plan.code,
+        wishlists: ent.plan.wishlists,
+        items: ent.plan.items,
+        participants: ent.plan.participants,
+        features: [...ent.plan.features],
+      },
+      subscription: ent.subscription,
+    });
+  }),
+);
+
+// GET /tg/billing/history — payment history
+tgRouter.get(
+  '/billing/history',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const events = await prisma.paymentEvent.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { id: true, totalAmount: true, currency: true, eventType: true, createdAt: true },
+    });
+    return res.json({ events });
   }),
 );
 
@@ -2170,6 +2388,26 @@ setInterval(async () => {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[purge] job failed:', err);
+  }
+}, 60 * 60 * 1000);
+
+// Subscription expiry: mark overdue subscriptions as EXPIRED (hourly)
+setInterval(async () => {
+  try {
+    const expired = await prisma.subscription.updateMany({
+      where: {
+        status: { in: ['ACTIVE', 'CANCELLED'] },
+        currentPeriodEnd: { lte: new Date() },
+      },
+      data: { status: 'EXPIRED' },
+    });
+    if (expired.count > 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[billing] expired ${expired.count} subscriptions`);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[billing] expiry check failed:', err);
   }
 }, 60 * 60 * 1000);
 

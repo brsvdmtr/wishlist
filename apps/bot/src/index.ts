@@ -83,6 +83,123 @@ if (!token) {
     ),
   );
 
+  // ─── Payment handlers (must be registered BEFORE bot.on('text')) ──────────
+
+  // pre_checkout_query — Telegram requires a response within 10 seconds
+  bot.on('pre_checkout_query', async (ctx) => {
+    try {
+      const payload = JSON.parse(ctx.preCheckoutQuery.invoice_payload);
+      if (!payload.userId || payload.planCode !== 'PRO') {
+        await ctx.answerPreCheckoutQuery(false, 'Invalid payment');
+        return;
+      }
+      const user = await prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: { id: true },
+      });
+      if (!user) {
+        await ctx.answerPreCheckoutQuery(false, 'User not found');
+        return;
+      }
+      await ctx.answerPreCheckoutQuery(true);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[bot] pre_checkout error:', err);
+      await ctx.answerPreCheckoutQuery(false, 'Error').catch(() => {});
+    }
+  });
+
+  // successful_payment — activates/renews PRO subscription
+  bot.on('message', async (ctx, next) => {
+    const msg = ctx.message;
+    if (!('successful_payment' in msg) || !msg.successful_payment) {
+      return next();
+    }
+
+    const payment = msg.successful_payment;
+    try {
+      const payload = JSON.parse(payment.invoice_payload);
+      if (payload.planCode !== 'PRO') return;
+
+      const chargeId = payment.telegram_payment_charge_id;
+
+      // Idempotency: skip duplicate webhook
+      const existing = await prisma.paymentEvent.findUnique({
+        where: { telegramPaymentChargeId: chargeId },
+      });
+      if (existing) {
+        // eslint-disable-next-line no-console
+        console.log('[bot] duplicate payment, skip:', chargeId);
+        return;
+      }
+
+      const now = new Date();
+      const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      await prisma.$transaction(async (tx) => {
+        const sub = await tx.subscription.upsert({
+          where: {
+            userId_planCode: { userId: payload.userId, planCode: 'PRO' },
+          },
+          create: {
+            userId: payload.userId,
+            planCode: 'PRO',
+            status: 'ACTIVE',
+            starsPrice: payment.total_amount,
+            telegramChargeId: chargeId,
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+          },
+          update: {
+            status: 'ACTIVE',
+            starsPrice: payment.total_amount,
+            telegramChargeId: chargeId,
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+            cancelledAt: null,
+          },
+        });
+
+        await tx.paymentEvent.create({
+          data: {
+            subscriptionId: sub.id,
+            userId: payload.userId,
+            telegramPaymentChargeId: chargeId,
+            invoicePayload: payment.invoice_payload,
+            totalAmount: payment.total_amount,
+            currency: payment.currency,
+            eventType: 'subscription_created',
+            rawPayload: JSON.stringify(payment),
+          },
+        });
+      });
+
+      const fmtDate = periodEnd.toLocaleDateString('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+      await ctx.reply(
+        `🎉 PRO подключен!\n\n` +
+          `✅ 10 вишлистов\n` +
+          `✅ 100 желаний в каждом\n` +
+          `✅ Комментарии и импорт по ссылке\n\n` +
+          `Действует до ${fmtDate}`,
+        Markup.inlineKeyboard([
+          Markup.button.webApp('Открыть WishBoard ✨', MINI_APP_URL),
+        ]),
+      );
+
+      // eslint-disable-next-line no-console
+      console.log(
+        `[bot] PRO activated: user=${payload.userId} charge=${chargeId}`,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[bot] payment processing error:', err);
+    }
+  });
+
   // ─── URL import: text message handler ────────────────────────────────────
   const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
   const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/gi;

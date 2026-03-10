@@ -37,6 +37,12 @@ enum WishlistType {
   SYSTEM_DRAFTS
 }
 
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
 model User {
   id             String   @id @default(cuid())
   email          String?  @unique
@@ -45,7 +51,9 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  wishlists Wishlist[]
+  wishlists     Wishlist[]
+  subscriptions Subscription[]
+  paymentEvents PaymentEvent[]
 }
 
 model Wishlist {
@@ -149,4 +157,44 @@ model Comment {
 
   @@index([itemId, createdAt])
   @@index([scheduledDeleteAt])
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  userId             String
+  planCode           String             @default("PRO")
+  status             SubscriptionStatus @default(ACTIVE)
+  starsPrice         Int
+  telegramChargeId   String?
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelledAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events PaymentEvent[]
+
+  @@unique([userId, planCode])
+  @@index([userId])
+  @@index([currentPeriodEnd])
+}
+
+model PaymentEvent {
+  id                      String   @id @default(cuid())
+  subscriptionId          String?
+  userId                  String
+  telegramPaymentChargeId String   @unique
+  invoicePayload          String
+  totalAmount             Int
+  currency                String   @default("XTR")
+  eventType               String
+  rawPayload              String?  @db.Text
+  createdAt               DateTime @default(now())
+
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([subscriptionId])
 }
