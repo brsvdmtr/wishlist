@@ -10,6 +10,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
+import { parseUrl, validateUrl } from './url-parser.js';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/api (pnpm -C apps/api dev).
@@ -38,7 +39,7 @@ app.use(
       return cb(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV'],
+    allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV', 'X-INTERNAL-KEY'],
   }),
 );
 app.use(express.json());
@@ -978,6 +979,9 @@ function mapTgItem(item: {
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   status: string;
   description?: string | null;
+  sourceUrl?: string | null;
+  sourceDomain?: string | null;
+  importMethod?: string | null;
 }) {
   return {
     id: item.id,
@@ -989,6 +993,9 @@ function mapTgItem(item: {
     priority: priorityToNum(item.priority),
     status: item.status.toLowerCase(),
     description: item.description ?? null,
+    sourceUrl: item.sourceUrl ?? null,
+    sourceDomain: item.sourceDomain ?? null,
+    importMethod: item.importMethod ?? null,
   };
 }
 
@@ -1052,15 +1059,27 @@ tgRouter.get(
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
     const wishlists = await prisma.wishlist.findMany({
-      where: { ownerId: user.id },
+      where: { ownerId: user.id, type: 'REGULAR' },
       orderBy: { createdAt: 'desc' },
-      // Explicit select to avoid fetching shareToken (and any future nullable columns)
-      // which would crash if the DB migration hasn't been applied yet.
       select: {
         id: true, slug: true, title: true, description: true, deadline: true,
         items: { select: { status: true } },
       },
     });
+
+    // Drafts count (system wishlist)
+    let drafts: { wishlistId: string; count: number } | null = null;
+    const draftsWl = await prisma.wishlist.findFirst({
+      where: { ownerId: user.id, type: 'SYSTEM_DRAFTS' },
+      select: {
+        id: true,
+        items: { where: { status: { in: [...ACTIVE_STATUSES] } }, select: { id: true } },
+      },
+    });
+    if (draftsWl && draftsWl.items.length > 0) {
+      drafts = { wishlistId: draftsWl.id, count: draftsWl.items.length };
+    }
+
     return res.json({
       wishlists: wishlists.map((wl) => {
         const active = wl.items.filter((i) => (ACTIVE_STATUSES as readonly string[]).includes(i.status));
@@ -1075,6 +1094,7 @@ tgRouter.get(
         };
       }),
       plan: { wishlists: PLAN.WISHLISTS, items: PLAN.ITEMS },
+      drafts,
     });
   }),
 );
@@ -1123,7 +1143,7 @@ tgRouter.post(
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
-    const count = await prisma.wishlist.count({ where: { ownerId: user.id } });
+    const count = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } });
     if (count >= PLAN.WISHLISTS) {
       return res.status(402).json({ error: 'Plan limit reached', limit: PLAN.WISHLISTS });
     }
@@ -1212,7 +1232,11 @@ tgRouter.get(
     const items = await prisma.item.findMany({
       where: { wishlistId: id, status: { in: [...ACTIVE_STATUSES] } },
       orderBy: ITEM_ORDER_BY,
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
+      select: {
+        id: true, wishlistId: true, title: true, url: true, priceText: true,
+        imageUrl: true, priority: true, status: true, description: true,
+        sourceUrl: true, sourceDomain: true, importMethod: true,
+      },
     });
 
     return res.json({ items: items.map(mapTgItem) });
@@ -1256,7 +1280,7 @@ tgRouter.post(
         priority: numToPriority(parsed.data.priority ?? 2),
         imageUrl: parsed.data.imageUrl ?? null,
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     return res.status(201).json({ item: mapTgItem(item) });
@@ -1302,7 +1326,7 @@ tgRouter.patch(
         ...(parsed.data.imageUrl !== undefined ? { imageUrl: parsed.data.imageUrl } : {}),
         ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     // After update, if description changed and item was reserved — notify reserver
@@ -1368,7 +1392,7 @@ tgRouter.post(
     const updated = await prisma.item.update({
       where: { id },
       data: { status: 'COMPLETED' },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     // Set TTL on all comments when item is completed
@@ -1403,7 +1427,7 @@ tgRouter.post(
     const updated = await prisma.item.update({
       where: { id },
       data: { status: 'AVAILABLE' },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
     return res.json({ item: mapTgItem(updated) });
   }),
@@ -1424,7 +1448,7 @@ tgRouter.get(
     const items = await prisma.item.findMany({
       where: { wishlistId: id, status: { in: ['DELETED', 'COMPLETED'] } },
       orderBy: ITEM_ORDER_BY,
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     return res.json({ items: items.map(mapTgItem) });
@@ -1794,8 +1818,255 @@ tgRouter.delete(
   }),
 );
 
+// ─── Import URL: helpers ─────────────────────────────────────────────────────
+
+const DRAFTS_ITEM_LIMIT = 50;
+
+async function getOrCreateDraftsWishlist(userId: string) {
+  const existing = await prisma.wishlist.findFirst({
+    where: { ownerId: userId, type: 'SYSTEM_DRAFTS' },
+    select: { id: true },
+  });
+  if (existing) return existing;
+  return prisma.wishlist.create({
+    data: {
+      slug: `drafts-${crypto.randomUUID().slice(0, 12)}`,
+      ownerId: userId,
+      title: 'Неразобранное',
+      type: 'SYSTEM_DRAFTS',
+    },
+    select: { id: true },
+  });
+}
+
+async function importUrlForUser(
+  userId: string,
+  rawUrl: string,
+  note?: string,
+  source?: string,
+): Promise<{ item: ReturnType<typeof mapTgItem>; wishlistId: string; parseStatus: 'ok' | 'partial' | 'failed' }> {
+  const draftsWl = await getOrCreateDraftsWishlist(userId);
+
+  // Check drafts limit
+  const draftsCount = await prisma.item.count({
+    where: { wishlistId: draftsWl.id, status: { in: [...ACTIVE_STATUSES] } },
+  });
+  if (draftsCount >= DRAFTS_ITEM_LIMIT) {
+    throw Object.assign(new Error('Drafts limit reached'), { statusCode: 402 });
+  }
+
+  let parsed: Awaited<ReturnType<typeof parseUrl>>;
+  let parseStatus: 'ok' | 'partial' | 'failed' = 'ok';
+
+  try {
+    parsed = await parseUrl(rawUrl);
+    if (!parsed.title && !parsed.priceText && !parsed.imageUrl) {
+      parseStatus = 'failed';
+    } else if (!parsed.title || !parsed.priceText) {
+      parseStatus = 'partial';
+    }
+  } catch {
+    parseStatus = 'failed';
+    let hostname = 'ссылка';
+    try { hostname = new URL(rawUrl).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
+    parsed = {
+      title: null,
+      description: null,
+      priceText: null,
+      imageUrl: null,
+      sourceDomain: hostname,
+      canonicalUrl: rawUrl,
+    };
+  }
+
+  const title = parsed.title || parsed.sourceDomain || 'Ссылка';
+
+  // Description: user note (if any) + parsed description
+  let description: string | null = null;
+  if (note && parsed.description) {
+    description = `💬 ${note}\n\n${parsed.description}`.slice(0, 500);
+  } else if (note) {
+    description = note.slice(0, 500);
+  } else if (parsed.description) {
+    description = parsed.description.slice(0, 500);
+  }
+
+  const item = await prisma.item.create({
+    data: {
+      wishlistId: draftsWl.id,
+      title: title.slice(0, 200),
+      url: parsed.canonicalUrl || rawUrl,
+      description,
+      priceText: parsed.priceText ?? null,
+      imageUrl: parsed.imageUrl ?? null,
+      sourceUrl: rawUrl,
+      sourceDomain: parsed.sourceDomain,
+      importMethod: source || 'bot',
+    },
+    select: {
+      id: true, wishlistId: true, title: true, url: true, priceText: true,
+      imageUrl: true, priority: true, status: true, description: true,
+      sourceUrl: true, sourceDomain: true, importMethod: true,
+    },
+  });
+
+  return { item: mapTgItem(item), wishlistId: draftsWl.id, parseStatus };
+}
+
+// ─── Import URL: TG endpoint ────────────────────────────────────────────────
+
+const importUrlLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => req.tgUser ? String(req.tgUser.id) : req.ip ?? 'unknown',
+  message: { error: 'Слишком много запросов. Попробуй через минуту.' },
+});
+
+tgRouter.post(
+  '/import-url',
+  importUrlLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      url: z.string().min(1).max(2048),
+      note: z.string().max(500).optional(),
+      source: z.string().max(20).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    // Validate URL first
+    try { validateUrl(parsed.data.url); } catch (err: any) {
+      return res.status(400).json({ error: err.message || 'Invalid URL' });
+    }
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    try {
+      const result = await importUrlForUser(user.id, parsed.data.url, parsed.data.note, parsed.data.source || 'miniapp');
+      return res.status(201).json(result);
+    } catch (err: any) {
+      if (err.statusCode === 402) {
+        return res.status(402).json({ error: 'Слишком много неразобранных желаний. Разбери часть, потом добавляй новые.', limit: DRAFTS_ITEM_LIMIT });
+      }
+      throw err;
+    }
+  }),
+);
+
+// ─── Move item between wishlists ─────────────────────────────────────────────
+
+tgRouter.post(
+  '/items/:id/move',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const parsed = z.object({
+      targetWishlistId: z.string().min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    // Check item ownership
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: { id: true, wishlistId: true, wishlist: { select: { ownerId: true } } },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Check target wishlist ownership
+    const targetWl = await prisma.wishlist.findUnique({
+      where: { id: parsed.data.targetWishlistId },
+      select: { id: true, ownerId: true, type: true },
+    });
+    if (!targetWl) return res.status(404).json({ error: 'Target wishlist not found' });
+    if (targetWl.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Check plan limit on target wishlist (only for REGULAR wishlists)
+    if (targetWl.type === 'REGULAR') {
+      const targetItemCount = await prisma.item.count({
+        where: { wishlistId: targetWl.id, status: { in: [...ACTIVE_STATUSES] } },
+      });
+      if (targetItemCount >= PLAN.ITEMS) {
+        return res.status(402).json({ error: 'Лимит желаний в этом вишлисте', limit: PLAN.ITEMS });
+      }
+    }
+
+    // Move item
+    const updated = await prisma.item.update({
+      where: { id },
+      data: { wishlistId: parsed.data.targetWishlistId },
+      select: {
+        id: true, wishlistId: true, title: true, url: true, priceText: true,
+        imageUrl: true, priority: true, status: true, description: true,
+        sourceUrl: true, sourceDomain: true, importMethod: true,
+      },
+    });
+
+    return res.json({ item: mapTgItem(updated) });
+  }),
+);
+
+// ─── Internal router (bot → API communication) ──────────────────────────────
+
+const internalRouter = express.Router();
+
+const internalImportLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests' },
+});
+
+function requireInternalAuth(req: Request, res: Response, next: NextFunction) {
+  const botToken = process.env.BOT_TOKEN;
+  if (!botToken) return res.status(500).json({ error: 'Not configured' });
+  const provided = req.get('X-INTERNAL-KEY');
+  if (!provided || !secureCompare(provided, botToken)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  return next();
+}
+
+internalRouter.use(requireInternalAuth);
+
+internalRouter.post(
+  '/import-url',
+  internalImportLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      userId: z.string().min(1),
+      url: z.string().min(1).max(2048),
+      note: z.string().max(500).optional(),
+      source: z.string().max(20).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    // Validate URL
+    try { validateUrl(parsed.data.url); } catch (err: any) {
+      return res.status(400).json({ error: err.message || 'Invalid URL' });
+    }
+
+    try {
+      const result = await importUrlForUser(parsed.data.userId, parsed.data.url, parsed.data.note, parsed.data.source || 'bot');
+      return res.status(201).json(result);
+    } catch (err: any) {
+      if (err.statusCode === 402) {
+        return res.status(402).json({ error: 'Drafts limit reached', limit: DRAFTS_ITEM_LIMIT });
+      }
+      throw err;
+    }
+  }),
+);
+
+// ─── Mount routers ───────────────────────────────────────────────────────────
+
 app.use('/public', publicRouter);
 app.use('/tg', tgRouter);
+app.use('/internal', internalRouter);
 app.use(privateRouter);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

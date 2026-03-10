@@ -81,6 +81,9 @@ type Item = {
   imageUrl: string | null;
   priority: 1 | 2 | 3;
   status: 'available' | 'reserved' | 'purchased' | 'completed' | 'deleted';
+  sourceUrl?: string | null;
+  sourceDomain?: string | null;
+  importMethod?: string | null;
 };
 
 type GuestItem = Item & { reservedByDisplayName: string | null; reservedByActorHash: string | null };
@@ -95,7 +98,7 @@ type CommentDTO = {
   createdAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive';
+type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts';
 type Toast = { id: string; message: string; kind: 'success' | 'error' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -547,6 +550,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionText, setDescriptionText] = useState('');
 
+  // Drafts (Неразобранное)
+  const [draftsWishlistId, setDraftsWishlistId] = useState<string | null>(null);
+  const [draftsCount, setDraftsCount] = useState(0);
+  const [draftsItems, setDraftsItems] = useState<Item[]>([]);
+  const [showMovePicker, setShowMovePicker] = useState(false);
+  const [movingItem, setMovingItem] = useState<Item | null>(null);
+  const [importUrl, setImportUrl] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [fromDrafts, setFromDrafts] = useState(false);
+
   const pushToast = useCallback((message: string, kind: Toast['kind']) => {
     const toast: Toast = { id: crypto.randomUUID(), message, kind };
     setToasts((prev) => [toast, ...prev].slice(0, 3));
@@ -577,9 +590,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const text = await res.text().catch(() => '');
       throw new Error(`API ${res.status}: ${text || res.statusText}`);
     }
-    const json = await res.json() as { wishlists: Wishlist[]; plan: { wishlists: number; items: number } };
+    const json = await res.json() as {
+      wishlists: Wishlist[];
+      plan: { wishlists: number; items: number };
+      drafts?: { wishlistId: string; count: number } | null;
+    };
     setWishlists(json.wishlists);
     setPlanLimits(json.plan);
+    if (json.drafts) {
+      setDraftsWishlistId(json.drafts.wishlistId);
+      setDraftsCount(json.drafts.count);
+    } else {
+      setDraftsWishlistId(null);
+      setDraftsCount(0);
+    }
   }, [tgFetch]);
 
   const loadItems = useCallback(async (wishlistId: string) => {
@@ -591,6 +615,65 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     const json = await res.json() as { items: Item[] };
     setItems(json.items);
   }, [tgFetch]);
+
+  // --- Drafts API calls
+  const loadDrafts = useCallback(async () => {
+    if (!draftsWishlistId) return;
+    const res = await tgFetch(`/tg/wishlists/${draftsWishlistId}/items`);
+    if (!res.ok) return;
+    const json = await res.json() as { items: Item[] };
+    setDraftsItems(json.items);
+    setDraftsCount(json.items.length);
+  }, [tgFetch, draftsWishlistId]);
+
+  const handleImportUrl = useCallback(async () => {
+    const url = importUrl.trim();
+    if (!url) return;
+    setImportLoading(true);
+    try {
+      const res = await tgFetch('/tg/import-url', {
+        method: 'POST',
+        body: JSON.stringify({ url, source: 'miniapp' }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        pushToast(body.error || 'Не удалось обработать ссылку', 'error');
+        return;
+      }
+      setImportUrl('');
+      // Reload drafts + wishlists (to update drafts count)
+      await loadDrafts();
+      await loadWishlists();
+      pushToast('Карточка создана!', 'success');
+    } catch {
+      pushToast('Ошибка при обработке ссылки', 'error');
+    } finally {
+      setImportLoading(false);
+    }
+  }, [importUrl, tgFetch, pushToast, loadDrafts, loadWishlists]);
+
+  const handleMoveItem = useCallback(async (itemId: string, targetWishlistId: string) => {
+    try {
+      const res = await tgFetch(`/tg/items/${itemId}/move`, {
+        method: 'POST',
+        body: JSON.stringify({ targetWishlistId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        pushToast(body.error || 'Не удалось переместить', 'error');
+        return;
+      }
+      const targetWl = wishlists.find(w => w.id === targetWishlistId);
+      pushToast(`Перемещено в «${targetWl?.title || 'вишлист'}»`, 'success');
+      setShowMovePicker(false);
+      setMovingItem(null);
+      // Reload drafts + wishlists
+      await loadDrafts();
+      await loadWishlists();
+    } catch {
+      pushToast('Ошибка при перемещении', 'error');
+    }
+  }, [tgFetch, pushToast, wishlists, loadDrafts, loadWishlists]);
 
   // --- Guest API calls
   const loadGuestWishlist = useCallback(async (param: string) => {
@@ -725,10 +808,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const navBack = useCallback(() => {
     if (screen === 'item-detail') {
       setViewingItem(null);
-      setScreen('wishlist-detail');
+      if (fromDrafts) {
+        setFromDrafts(false);
+        setScreen('drafts');
+      } else {
+        setScreen('wishlist-detail');
+      }
     } else if (screen === 'guest-item-detail') {
       setViewingItem(null);
       setScreen('guest-view');
+    } else if (screen === 'drafts') {
+      setScreen('my-wishlists');
     } else if (screen === 'wishlist-detail' || screen === 'guest-view') {
       setCurrentWl(null);
       setScreen('my-wishlists');
@@ -738,7 +828,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } else if (screen === 'share' || screen === 'archive') {
       setScreen('wishlist-detail');
     }
-  }, [screen, loadWishlists]);
+  }, [screen, loadWishlists, fromDrafts]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -821,7 +911,37 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setScreen('error');
       };
 
-      if (startParam) {
+      if (startParam && startParam.startsWith('draft_')) {
+        // Deep link from bot: open draft item
+        const draftItemId = startParam.slice(6); // strip "draft_"
+        loadWishlists()
+          .then(async () => {
+            // Load drafts items to find the target
+            const dRes = await tgFetch('/tg/wishlists');
+            if (dRes.ok) {
+              const dJson = await dRes.json() as { drafts?: { wishlistId: string; count: number } | null };
+              if (dJson.drafts) {
+                const itemsRes = await tgFetch(`/tg/wishlists/${dJson.drafts.wishlistId}/items`);
+                if (itemsRes.ok) {
+                  const itemsJson = await itemsRes.json() as { items: Item[] };
+                  setDraftsItems(itemsJson.items);
+                  setDraftsCount(itemsJson.items.length);
+                  setDraftsWishlistId(dJson.drafts.wishlistId);
+                  const found = itemsJson.items.find(i => i.id === draftItemId);
+                  if (found) {
+                    setViewingItem(found);
+                    setFromDrafts(true);
+                    setScreen('item-detail');
+                    return;
+                  }
+                }
+              }
+            }
+            // Fallback: show drafts list
+            setScreen('drafts');
+          })
+          .catch(handleErr);
+      } else if (startParam) {
         // Load guest wishlist AND owner wishlists in parallel.
         // Owner wishlists are needed so that "back" from guest-view shows
         // the user's own data instead of an empty "Пока пусто" screen.
@@ -1275,6 +1395,27 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
+            {draftsCount > 0 && (
+              <div onClick={() => { void loadDrafts(); setScreen('drafts'); }} style={{
+                background: `linear-gradient(135deg, ${C.orange}20, ${C.orange}08)`,
+                borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
+                border: `1px solid ${C.orange}25`,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                animation: 'fadeIn 0.3s ease',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>📥</span>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>Неразобранное</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>
+                      {draftsCount} {draftsCount === 1 ? 'карточка' : draftsCount < 5 ? 'карточки' : 'карточек'}
+                    </div>
+                  </div>
+                </div>
+                <span style={{ fontSize: 20, color: C.orange }}>›</span>
+              </div>
+            )}
+
             {wishlists.map((wl, i) => (
               <div key={wl.id} onClick={() => void openWishlist(wl)} style={{
                 background: C.card, borderRadius: 16, padding: 18, cursor: 'pointer',
@@ -1334,6 +1475,143 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <button style={{ ...btnPrimary, opacity: wlTitle.trim() ? 1 : 0.5 }} onClick={() => void handleCreateWishlist()} disabled={!wlTitle.trim() || loading}>
                 {loading ? '…' : '✨ Создать'}
               </button>
+            </div>
+          </BottomSheet>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          DRAFTS — НЕРАЗОБРАННОЕ
+          ══════════════════════════════════════════════ */}
+      {screen === 'drafts' && (
+        <div style={{ padding: '16px 20px 120px' }}>
+          <div style={{ marginBottom: 20 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>📥 Неразобранное</h1>
+            <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
+              {draftsItems.length > 0
+                ? `${draftsItems.length} ${draftsItems.length === 1 ? 'карточка' : draftsItems.length < 5 ? 'карточки' : 'карточек'}`
+                : 'Отправь ссылку на товар боту'}
+            </p>
+          </div>
+
+          {/* URL input */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+            <input
+              style={{ ...inputStyle, flex: 1 }}
+              placeholder="Вставь ссылку на товар…"
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleImportUrl(); }}
+            />
+            <button
+              style={{
+                ...btnPrimary,
+                width: 48, minWidth: 48, padding: 0,
+                opacity: importUrl.trim() && !importLoading ? 1 : 0.5,
+              }}
+              onClick={() => void handleImportUrl()}
+              disabled={!importUrl.trim() || importLoading}
+            >
+              {importLoading ? '…' : '📥'}
+            </button>
+          </div>
+
+          {/* Draft items list */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {draftsItems.map((item, i) => (
+              <div key={item.id} style={{
+                background: C.card, borderRadius: 16, padding: 16,
+                border: `1px solid ${C.border}`,
+                animation: `fadeIn 0.3s ease ${i * 0.06}s both`,
+              }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  {item.imageUrl && (
+                    <img
+                      src={item.imageUrl}
+                      alt=""
+                      style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.title}
+                    </div>
+                    {item.sourceDomain && (
+                      <div style={{ fontSize: 12, color: C.orange, marginTop: 2 }}>
+                        🔗 {item.sourceDomain}
+                      </div>
+                    )}
+                    {item.price != null && item.price > 0 && (
+                      <div style={{ fontSize: 13, color: C.textSec, marginTop: 2 }}>
+                        💰 {Number(item.price).toLocaleString('ru-RU')} ₽
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button
+                    style={{ ...btnSecondary, flex: 1, padding: '10px 0', fontSize: 13 }}
+                    onClick={() => { setMovingItem(item); setShowMovePicker(true); }}
+                  >
+                    📁 Переместить
+                  </button>
+                  <button
+                    style={{ ...btnGhost, padding: '10px 12px', fontSize: 13 }}
+                    onClick={() => {
+                      setViewingItem(item);
+                      setFromDrafts(true);
+                      setScreen('item-detail');
+                    }}
+                  >
+                    Открыть ›
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {draftsItems.length === 0 && !importLoading && (
+            <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>📥</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>Пусто</div>
+              <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
+                Отправь ссылку на товар в чат с ботом или вставь ссылку выше
+              </div>
+            </div>
+          )}
+
+          {/* Move to wishlist BottomSheet */}
+          <BottomSheet isOpen={showMovePicker} onClose={() => { setShowMovePicker(false); setMovingItem(null); }} title="Переместить в вишлист">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {wishlists.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 12 }}>Сначала создай вишлист</div>
+                  <button style={btnPrimary} onClick={() => { setShowMovePicker(false); setMovingItem(null); setScreen('my-wishlists'); setShowCreateWl(true); }}>
+                    ＋ Создать вишлист
+                  </button>
+                </div>
+              )}
+              {wishlists.map((wl) => (
+                <button
+                  key={wl.id}
+                  style={{
+                    ...btnGhost,
+                    width: '100%', textAlign: 'left', padding: '14px 16px',
+                    borderRadius: 12, background: C.surface,
+                    border: `1px solid ${C.border}`,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}
+                  onClick={() => { if (movingItem) void handleMoveItem(movingItem.id, wl.id); }}
+                >
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>{wl.itemCount} желаний</div>
+                  </div>
+                  <span style={{ color: C.textMuted }}>›</span>
+                </button>
+              ))}
             </div>
           </BottomSheet>
         </div>
@@ -1448,15 +1726,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {PRIORITIES.find((p) => p.value === viewingItem!.priority)?.label}
             </div>
 
-            {/* URL */}
+            {/* URL + source badge */}
             {viewingItem.url && (
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
                   color: C.accent, background: C.accentSoft, padding: '8px 14px',
                   borderRadius: 12, textDecoration: 'none', wordBreak: 'break-all',
                 }}>
-                  🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
+                  🔗 {viewingItem.sourceDomain || viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{!viewingItem.sourceDomain && viewingItem.url.length > 47 ? '…' : ''}
                 </a>
               </div>
             )}

@@ -32,6 +32,11 @@ enum CommentType {
   SYSTEM
 }
 
+enum WishlistType {
+  REGULAR
+  SYSTEM_DRAFTS
+}
+
 model User {
   id             String   @id @default(cuid())
   email          String?  @unique
@@ -54,6 +59,8 @@ model Wishlist {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  type        WishlistType @default(REGULAR)
+
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   items Item[]
   tags  Tag[]
@@ -72,6 +79,9 @@ model Item {
   priority         Priority   @default(MEDIUM)
   deadline         DateTime?
   imageUrl         String?
+  sourceUrl        String?
+  sourceDomain     String?
+  importMethod     String?
   status           ItemStatus @default(AVAILABLE)
   reservationEpoch Int        @default(0)
   reserverUserId   String?

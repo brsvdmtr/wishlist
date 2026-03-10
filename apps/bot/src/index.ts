@@ -79,9 +79,99 @@ if (!token) {
 
   bot.command('help', (ctx) =>
     ctx.reply(
-      'WishBoard — создавай вишлисты и делись ими с друзьями.\n\n/start — начать',
+      'WishBoard — создавай вишлисты и делись ими с друзьями.\n\n/start — начать\n\nОтправь ссылку на товар — я создам карточку желания!',
     ),
   );
+
+  // ─── URL import: text message handler ────────────────────────────────────
+  const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
+  const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/gi;
+
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  bot.on('text', async (ctx) => {
+    const text = ctx.message.text;
+    if (text.startsWith('/')) return; // skip commands
+
+    const urls = text.match(URL_REGEX);
+    if (!urls || urls.length === 0) return; // no URL — stay silent
+
+    const firstUrl = urls[0];
+
+    // Multiple URLs — warn
+    if (urls.length > 1) {
+      await ctx.reply('Нашёл несколько ссылок. Создаю карточку по первой 👌');
+    }
+
+    // Text without URL = user note
+    const note = text.replace(URL_REGEX, '').trim() || undefined;
+
+    // Show typing indicator while parsing
+    await ctx.sendChatAction('typing');
+
+    // Upsert user
+    const telegramId = String(ctx.from.id);
+    const chatId = String(ctx.chat.id);
+    const user = await prisma.user.upsert({
+      where: { telegramId },
+      update: { telegramChatId: chatId },
+      create: { telegramId, telegramChatId: chatId },
+    });
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/internal/import-url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-INTERNAL-KEY': token!,
+        },
+        body: JSON.stringify({ userId: user.id, url: firstUrl, note, source: 'bot' }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        if (res.status === 402) {
+          await ctx.reply('Слишком много неразобранных желаний. Разбери часть в приложении, потом добавляй новые 📦');
+          return;
+        }
+        if (res.status === 400) {
+          await ctx.reply(body.error || 'Не удалось обработать ссылку 🤷');
+          return;
+        }
+        await ctx.reply('Не удалось обработать ссылку. Попробуй ещё раз 🤷');
+        return;
+      }
+
+      const { item, parseStatus } = await res.json() as {
+        item: { id: string; title: string; sourceDomain: string | null; price: number | null };
+        parseStatus: string;
+      };
+
+      let msg = `✅ <b>Добавлено в Неразобранное</b>\n\n`;
+      msg += `<b>${escapeHtml(item.title)}</b>`;
+      if (item.sourceDomain) msg += `\n🔗 ${escapeHtml(item.sourceDomain)}`;
+      if (item.price) msg += `\n💰 ${Number(item.price).toLocaleString('ru-RU')} ₽`;
+
+      if (parseStatus === 'failed') {
+        msg += `\n\n⚠️ Не удалось распознать товар — отредактируй в приложении`;
+      } else if (parseStatus === 'partial') {
+        msg += `\n\n💡 Распознал не всё — проверь и дополни в приложении`;
+      }
+
+      await ctx.reply(msg, {
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard([
+          Markup.button.webApp('Открыть в WishBoard ✨', `${MINI_APP_URL}?startapp=draft_${item.id}`),
+        ]),
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[bot] import-url error:', err);
+      await ctx.reply('Произошла ошибка. Попробуй позже 🙈');
+    }
+  });
 
   bot.telegram
     .setMyCommands([{ command: 'start', description: 'Открыть WishBoard' }])
