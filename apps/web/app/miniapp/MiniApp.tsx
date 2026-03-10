@@ -197,50 +197,63 @@ function ProBadge({ style }: { style?: React.CSSProperties } = {}) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
-      fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
-      padding: '2px 6px', borderRadius: 4,
-      background: C.accentSoft, color: C.accent,
+      fontSize: 9, fontWeight: 800, letterSpacing: 0.6,
+      padding: '2px 7px', borderRadius: 5,
+      background: `linear-gradient(135deg, ${C.accent}20, ${C.accent}12)`,
+      border: `1px solid ${C.accent}30`,
+      color: C.accent,
       lineHeight: 1, verticalAlign: 'middle', ...style,
     }}>PRO</span>
   );
 }
 
 const UPSELL_CONTENT: Record<UpsellContext, {
-  emoji: string; title: string; subtitle: string; showTable: boolean;
+  emoji: string; title: string; subtitle: string; showTable: boolean; benefits?: string[];
 }> = {
   comments: {
-    emoji: '💬', title: 'Комментарии доступны в Pro',
-    subtitle: 'Обсуждай подарки прямо в карточке желания и не теряй детали.',
+    emoji: '💬',
+    title: 'Комментарии к подаркам',
+    subtitle: 'Обсуждай детали с тем, кто забронировал — прямо в карточке.',
     showTable: false,
+    benefits: ['Приватный чат с бронирующим', 'Уточни размер, цвет и детали', 'Вся история в одном месте'],
   },
   url_import: {
-    emoji: '🔗', title: 'Добавление по ссылке доступно в Pro',
-    subtitle: 'Просто отправь ссылку, а WishBoard сам создаст карточку желания.',
+    emoji: '🔗',
+    title: 'Добавление по ссылке',
+    subtitle: 'Вставь ссылку — название, фото и цена подтянутся сами.',
     showTable: false,
+    benefits: ['Автозаполнение карточки', 'Поддержка популярных магазинов', 'Добавление в два клика'],
   },
   smart_reminders: {
-    emoji: '🔔', title: 'Умные напоминания доступны в Pro',
-    subtitle: 'Не пропускай важные события и возвращайся к желаниям вовремя.',
+    emoji: '🔔',
+    title: 'Умные напоминания',
+    subtitle: 'Не пропустишь важные даты — напомним о желаниях вовремя.',
     showTable: false,
+    benefits: ['Напоминания перед праздниками', 'Привязка к дням рождения', 'Без лишних хлопот'],
   },
   hints: {
-    emoji: '💡', title: 'Функция «Намекнуть» доступна в Pro',
-    subtitle: 'Мягко подскажи близким, какой подарок тебе особенно нравится.',
+    emoji: '💡',
+    title: 'Намекнуть друзьям',
+    subtitle: 'Тактично расскажи близким о своих желаниях.',
     showTable: false,
+    benefits: ['Мягкая подсказка для друзей', 'Ссылка на конкретное желание', 'Без неловких разговоров'],
   },
   wishlist_limit: {
-    emoji: '📋', title: 'Лимит Free исчерпан',
-    subtitle: 'На бесплатном тарифе доступно до 2 вишлистов. В Pro — до 10.',
+    emoji: '📋',
+    title: 'Нужно больше вишлистов?',
+    subtitle: 'На бесплатном тарифе — 2 вишлиста. С Pro — до 10.',
     showTable: true,
   },
   item_limit: {
-    emoji: '🎁', title: 'В этом вишлисте достигнут лимит',
-    subtitle: 'На Free доступно до 30 желаний в одном вишлисте. В Pro — до 100.',
+    emoji: '🎁',
+    title: 'Лимит желаний достигнут',
+    subtitle: 'Бесплатно — до 30 в вишлисте. С Pro — до 100.',
     showTable: true,
   },
   participant_limit: {
-    emoji: '👥', title: 'Лимит участников достигнут',
-    subtitle: 'На Free можно делиться вишлистом максимум с 5 участниками. В Pro — до 20.',
+    emoji: '👥',
+    title: 'Слишком много участников',
+    subtitle: 'Бесплатно — до 5 участников. С Pro — до 20.',
     showTable: true,
   },
 };
@@ -551,11 +564,12 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
     <BottomSheet isOpen={state !== null} onClose={onClose}>
       {content && (
         <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
-          {/* Hero emoji */}
+          {/* Hero emoji with gradient glow */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 64, height: 64, borderRadius: 20,
-            background: `linear-gradient(135deg, ${C.accent}30, ${C.accent}10)`,
+            width: 68, height: 68, borderRadius: 22,
+            background: `linear-gradient(145deg, ${C.accent}22, ${C.accent}08)`,
+            border: `1px solid ${C.accent}18`,
             fontSize: 32, marginBottom: 16,
           }}>
             {content.emoji}
@@ -564,30 +578,55 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
           <div style={{ fontSize: 20, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
             {content.title}
           </div>
-          <div style={{ fontSize: 14, color: C.textMuted, marginTop: 6, lineHeight: 1.5, padding: '0 8px' }}>
+          <div style={{ fontSize: 14, color: C.textSec, marginTop: 8, lineHeight: 1.5, padding: '0 4px' }}>
             {content.subtitle}
           </div>
 
+          {/* Benefits list for feature gates */}
+          {content.benefits && (
+            <div style={{ marginTop: 18, textAlign: 'left', padding: '0 4px' }}>
+              {content.benefits.map((b, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '7px 0', fontSize: 14, color: C.textSec, lineHeight: 1.3,
+                }}>
+                  <span style={{
+                    width: 22, height: 22, borderRadius: 11,
+                    background: C.accentSoft, color: C.accent,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, flexShrink: 0, fontWeight: 700,
+                  }}>✓</span>
+                  {b}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Comparison table for limit gates */}
           {content.showTable && (
             <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
               <div style={{ flex: 1, background: C.bg, borderRadius: 14, padding: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.textSec, marginBottom: 12, fontFamily: font }}>Free</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, marginBottom: 12, fontFamily: font }}>Free</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
                     { label: 'Вишлисты', val: '2' },
                     { label: 'Желания', val: '30' },
                     { label: 'Участников', val: '5' },
-                    { label: 'Комментарии', val: '✕' },
-                    { label: 'Импорт по ссылке', val: '✕' },
+                    { label: 'Комментарии', val: '—' },
+                    { label: 'По ссылке', val: '—' },
                   ].map((r) => (
-                    <div key={r.label} style={{ fontSize: 12, color: r.val === '✕' ? C.textMuted : C.textSec, lineHeight: 1.3 }}>
+                    <div key={r.label} style={{ fontSize: 12, color: r.val === '—' ? C.textMuted : C.textSec, lineHeight: 1.3 }}>
                       <div style={{ fontWeight: 600 }}>{r.val}</div>
                       <div style={{ fontSize: 10, color: C.textMuted }}>{r.label}</div>
                     </div>
                   ))}
                 </div>
               </div>
-              <div style={{ flex: 1, background: C.card, borderRadius: 14, padding: 14, border: `1px solid ${C.accentGlow}` }}>
+              <div style={{
+                flex: 1, background: C.card, borderRadius: 14, padding: 14,
+                border: `1px solid ${C.accent}30`,
+                boxShadow: `0 0 24px ${C.accent}08`,
+              }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 12, fontFamily: font }}>PRO</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
@@ -595,11 +634,11 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
                     { label: 'Желания', val: '100' },
                     { label: 'Участников', val: '20' },
                     { label: 'Комментарии', val: '✓' },
-                    { label: 'Импорт по ссылке', val: '✓' },
+                    { label: 'По ссылке', val: '✓' },
                   ].map((r) => (
                     <div key={r.label} style={{ fontSize: 12, color: r.val === '✓' ? C.green : C.text, lineHeight: 1.3 }}>
                       <div style={{ fontWeight: 600 }}>{r.val}</div>
-                      <div style={{ fontSize: 10, color: C.textMuted }}>{r.label}</div>
+                      <div style={{ fontSize: 10, color: C.textSec }}>{r.label}</div>
                     </div>
                   ))}
                 </div>
@@ -608,28 +647,34 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
           )}
 
           {/* Price */}
-          <div style={{ marginTop: 20, fontSize: 15, color: C.textSec }}>
-            <span style={{ fontSize: 22, fontWeight: 800, color: C.text }}>100 Stars</span>
-            {' '}/ месяц
-          </div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
-            Отменить можно в любой момент
+          <div style={{ marginTop: 22, fontSize: 14, color: C.textSec }}>
+            <span style={{ fontSize: 24, fontWeight: 800, color: C.text }}>100</span>
+            {' '}
+            <span style={{ fontSize: 16, fontWeight: 600, color: C.text }}>Stars</span>
+            {' / мес'}
           </div>
 
           {/* CTA */}
           <button
-            style={{ ...btnPrimary, marginTop: 20, width: '100%', fontSize: 16, padding: '16px 24px' }}
+            style={{
+              ...btnPrimary, marginTop: 18, width: '100%',
+              fontSize: 16, padding: '16px 24px',
+              background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
+            }}
             onClick={onUpgrade}
             disabled={checkoutLoading}
           >
-            {checkoutLoading ? '...' : 'Перейти на Pro'}
+            {checkoutLoading ? 'Оформляем…' : 'Подключить Pro'}
           </button>
           <button
-            style={{ ...btnGhost, width: '100%', marginTop: 8 }}
+            style={{ ...btnGhost, width: '100%', marginTop: 8, fontSize: 14 }}
             onClick={onClose}
           >
             Не сейчас
           </button>
+          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 10 }}>
+            Автопродление · отменить можно в любой момент
+          </div>
         </div>
       )}
     </BottomSheet>
@@ -767,6 +812,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     upsellLastShownRef.current[context] = now;
     setUpsellSheet({ context });
     trackEvent(`pro_entrypoint_viewed_${context}`);
+    try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch { /* ok */ }
   }, [trackEvent]);
 
   const pushToast = useCallback((message: string, kind: Toast['kind']) => {
@@ -855,7 +901,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           } else if (planInfo.code === 'FREE') {
             showUpsell('item_limit', { auto: true });
           } else {
-            pushToast('Лимит тарифа', 'error');
+            pushToast('Достигнут лимит тарифа', 'error');
           }
           return;
         }
@@ -1046,12 +1092,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     try {
       const res = await tgFetch('/tg/billing/pro/checkout', { method: 'POST' });
       if (res.status === 409) {
-        pushToast('Уже подписан на PRO', 'success');
+        pushToast('У тебя уже есть Pro ✨', 'success');
+        setCheckoutLoading(false);
         return;
       }
       if (!res.ok) {
-        pushToast('Ошибка оформления', 'error');
+        pushToast('Не удалось начать оформление', 'error');
         trackEvent('checkout_failed');
+        setCheckoutLoading(false);
         return;
       }
       const { invoiceUrl } = await res.json() as { invoiceUrl: string };
@@ -1060,6 +1108,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const tg = tgRef.current?.WebApp;
       if (!tg?.openInvoice) {
         pushToast('Обнови Telegram для оплаты', 'error');
+        setCheckoutLoading(false);
         return;
       }
 
@@ -1067,29 +1116,60 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
       tg.openInvoice(invoiceUrl, async (status: string) => {
         if (status === 'paid') {
-          const syncRes = await tgFetch('/tg/billing/pro/sync', { method: 'POST' });
-          if (syncRes.ok) {
-            const data = await syncRes.json() as { plan: PlanInfo; subscription: SubscriptionInfo };
-            setPlanInfo(data.plan);
-            setSubscription(data.subscription);
-            setPlanLimits({ wishlists: data.plan.wishlists, items: data.plan.items });
+          // Poll sync until plan is PRO (bot needs time to process payment)
+          let syncData: { plan: PlanInfo; subscription: SubscriptionInfo } | null = null;
+          for (let attempt = 0; attempt < 6; attempt++) {
+            if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
+            try {
+              const syncRes = await tgFetch('/tg/billing/pro/sync', { method: 'POST' });
+              if (syncRes.ok) {
+                syncData = await syncRes.json() as { plan: PlanInfo; subscription: SubscriptionInfo };
+                if (syncData.plan.code === 'PRO') break;
+              }
+            } catch { /* retry */ }
+          }
+          if (syncData?.plan.code === 'PRO') {
+            setPlanInfo(syncData.plan);
+            setSubscription(syncData.subscription);
+            setPlanLimits({ wishlists: syncData.plan.wishlists, items: syncData.plan.items });
             tg.HapticFeedback?.notificationOccurred?.('success');
-            pushToast('PRO подключен!', 'success');
+            pushToast('Pro подключён! ✨', 'success');
             trackEvent('checkout_succeeded');
             setUpsellSheet(null);
             loadWishlists().catch(() => {});
+            // Reload comments if user was viewing an item
+            if (viewingItem) loadComments(viewingItem.id);
+          } else {
+            // Fallback: payment went through but sync didn't catch up yet
+            pushToast('Оплата прошла! Данные обновятся через пару секунд', 'success');
+            trackEvent('checkout_succeeded');
+            setUpsellSheet(null);
+            // Schedule a delayed retry
+            setTimeout(async () => {
+              try {
+                const r = await tgFetch('/tg/billing/pro/sync', { method: 'POST' });
+                if (r.ok) {
+                  const d = await r.json() as { plan: PlanInfo; subscription: SubscriptionInfo };
+                  setPlanInfo(d.plan);
+                  setSubscription(d.subscription);
+                  setPlanLimits({ wishlists: d.plan.wishlists, items: d.plan.items });
+                  loadWishlists().catch(() => {});
+                  if (viewingItem) loadComments(viewingItem.id);
+                }
+              } catch { /* ok */ }
+            }, 5000);
           }
         } else if (status === 'failed') {
-          pushToast('Ошибка оплаты', 'error');
+          pushToast('Оплата не прошла', 'error');
           trackEvent('checkout_failed');
         }
         setCheckoutLoading(false);
       });
     } catch {
-      pushToast('Ошибка', 'error');
+      pushToast('Что-то пошло не так', 'error');
       setCheckoutLoading(false);
     }
-  }, [tgFetch, pushToast, loadWishlists, trackEvent]);
+  }, [tgFetch, pushToast, loadWishlists, trackEvent, viewingItem, loadComments]);
 
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(() => {
@@ -1296,7 +1376,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         if (planInfo.code === 'FREE') {
           showUpsell('wishlist_limit', { auto: true });
         } else {
-          pushToast(`Лимит PRO: ${planLimits.wishlists} вишлистов`, 'error');
+          pushToast(`Максимум ${planLimits.wishlists} вишлистов на Pro`, 'error');
         }
         return;
       }
@@ -1472,7 +1552,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           if (planInfo.code === 'FREE') {
             showUpsell('item_limit', { auto: true });
           } else {
-            pushToast(`Лимит PRO: ${planLimits.items} желаний`, 'error');
+            pushToast(`Максимум ${planLimits.items} желаний на Pro`, 'error');
           }
           return;
         }
@@ -1569,7 +1649,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         body: JSON.stringify({ displayName: guestName.trim() }),
       });
       if (res.status === 409) { pushToast('Уже забронировано', 'error'); return; }
-      if (res.status === 402) { pushToast('Лимит участников исчерпан', 'error'); return; }
+      if (res.status === 402) { pushToast('В этом вишлисте уже максимум участников', 'error'); return; }
       if (!res.ok) { pushToast('Что-то пошло не так', 'error'); return; }
       const updatedItem = { ...reservingItem, status: 'reserved' as const, reservedByDisplayName: guestName.trim(), reservedByActorHash: myActorHashRef.current };
       setGuestItems((prev) => prev.map((i) => i.id === reservingItem.id ? updatedItem : i));
@@ -1673,8 +1753,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>WishBoard</h1>
                 {planInfo.code === 'PRO' && (
                   <span style={{
-                    fontSize: 11, fontWeight: 700, padding: '3px 8px',
-                    borderRadius: 6, background: C.accentSoft, color: C.accent,
+                    fontSize: 10, fontWeight: 800, letterSpacing: 0.6, padding: '3px 8px',
+                    borderRadius: 6,
+                    background: `linear-gradient(135deg, ${C.accent}20, ${C.accent}12)`,
+                    border: `1px solid ${C.accent}30`,
+                    color: C.accent,
                   }}>PRO</span>
                 )}
               </div>
@@ -1788,11 +1871,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             )}
 
             <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
-              {planInfo.code === 'PRO' ? 'PRO' : 'Free'}-план: {wishlists.length} из {planLimits.wishlists} вишлистов
+              {planInfo.code === 'PRO' ? 'Pro' : 'Free'}: {wishlists.length} из {planLimits.wishlists} вишлистов
             </div>
             {planInfo.code === 'FREE' && (
               <button style={{ ...btnGhost, width: '100%', fontSize: 13, color: C.accent }} onClick={() => showUpsell('wishlist_limit')}>
-                Перейти на Pro
+                Подключить Pro
               </button>
             )}
             <button style={btnPrimary} onClick={() => setShowCreateWl(true)}>＋ Создать вишлист</button>
@@ -1835,7 +1918,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ position: 'relative', flex: 1 }}>
               <input
                 style={{ ...inputStyle, flex: 1, paddingRight: planInfo.code === 'FREE' ? 52 : 16 }}
-                placeholder="Вставь ссылку на товар…"
+                placeholder={planInfo.code === 'FREE' ? 'Ссылка на товар · Pro' : 'Вставь ссылку на товар…'}
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.target.value)}
                 onKeyDown={(e) => {
@@ -2019,9 +2102,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               }}>
                 <span>🔒</span>
                 <span>
-                  Этот вишлист в режиме просмотра.{' '}
+                  Только просмотр — лимит Free.{' '}
                   <span onClick={() => showUpsell('wishlist_limit')} style={{ textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}>
-                    Перейди на Pro
+                    Подключи Pro
                   </span>, чтобы редактировать.
                 </span>
               </div>
@@ -2173,18 +2256,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 onClick={() => showUpsell('comments')}
                 style={{
                   marginTop: 24, padding: 20, background: C.surface, borderRadius: 20,
-                  cursor: 'pointer',
+                  cursor: 'pointer', border: `1px solid ${C.accent}15`,
+                  transition: 'border-color 0.2s',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font }}>Комментарии</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 20 }}>💬</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: C.text, fontFamily: font }}>Комментарии</span>
                   <ProBadge />
                 </div>
-                <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.4 }}>
-                  Обсуждай подарки приватно с тем, кто забронировал
+                <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
+                  Обсуждай детали подарков с тем, кто забронировал
                 </div>
                 <div style={{ marginTop: 12, fontSize: 13, color: C.accent, fontWeight: 600 }}>
-                  Разблокировать →
+                  Подробнее →
                 </div>
               </div>
             )}
@@ -2195,15 +2280,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               style={{
                 marginTop: 16, padding: 16, background: C.surface, borderRadius: 16,
                 display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+                border: `1px solid ${C.accent}10`,
               }}
             >
-              <span style={{ fontSize: 24 }}>🔔</span>
+              <span style={{ fontSize: 22 }}>🔔</span>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: C.textMuted }}>Умные напоминания</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.textSec }}>Напоминания</span>
                   {planInfo.code === 'FREE' && <ProBadge />}
                 </div>
-                <div style={{ fontSize: 12, color: C.textMuted }}>Скоро</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>Не пропусти важные даты</div>
               </div>
               <span style={{ fontSize: 16, color: C.textMuted }}>›</span>
             </div>
@@ -2506,15 +2592,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
           {/* Current plan card */}
           <div style={{
-            background: C.card, borderRadius: 16, padding: 20,
-            border: `1px solid ${planInfo.code === 'PRO' ? C.accentGlow : C.border}`,
+            background: planInfo.code === 'PRO'
+              ? `linear-gradient(145deg, ${C.card}, ${C.accent}08)`
+              : C.card,
+            borderRadius: 16, padding: 20,
+            border: `1px solid ${planInfo.code === 'PRO' ? C.accent + '25' : C.border}`,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>Текущий тариф</span>
+              <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>Тариф</span>
               <span style={{
-                fontSize: 13, fontWeight: 700, padding: '4px 10px',
-                borderRadius: 8,
-                background: planInfo.code === 'PRO' ? C.accentSoft : C.surface,
+                fontSize: 12, fontWeight: 800, letterSpacing: 0.5, padding: '4px 10px',
+                borderRadius: 6,
+                background: planInfo.code === 'PRO'
+                  ? `linear-gradient(135deg, ${C.accent}22, ${C.accent}12)`
+                  : C.surface,
+                border: planInfo.code === 'PRO' ? `1px solid ${C.accent}30` : 'none',
                 color: planInfo.code === 'PRO' ? C.accent : C.textSec,
               }}>
                 {planInfo.code === 'PRO' ? 'PRO' : 'Free'}
@@ -2523,36 +2615,54 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { label: 'Вишлисты', value: planInfo.wishlists },
-                { label: 'Желаний в каждом', value: planInfo.items },
-                { label: 'Участников', value: planInfo.participants },
+                { label: 'Вишлисты', value: `до ${planInfo.wishlists}` },
+                { label: 'Желаний в каждом', value: `до ${planInfo.items}` },
+                { label: 'Участников', value: `до ${planInfo.participants}` },
               ].map((row) => (
                 <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 14, color: C.textSec }}>{row.label}</span>
                   <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{row.value}</span>
                 </div>
               ))}
+              {planInfo.code === 'PRO' && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 14, color: C.textSec }}>Комментарии</span>
+                    <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 14, color: C.textSec }}>Импорт по ссылке</span>
+                    <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Subscription info for PRO users */}
             {subscription && subscription.status === 'ACTIVE' && (
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
-                <div style={{ fontSize: 13, color: C.textSec }}>
-                  Следующее списание
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginTop: 4 }}>
-                  {new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, color: C.textSec }}>Следующее продление</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                    {new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
+                  </span>
                 </div>
               </div>
             )}
 
             {subscription && subscription.status === 'CANCELLED' && (
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
-                <div style={{ fontSize: 13, color: C.orange }}>
-                  Автопродление отключено
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginTop: 4 }}>
-                  PRO до {new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 14px', borderRadius: 10,
+                  background: C.orangeSoft, fontSize: 13, color: C.orange, lineHeight: 1.4,
+                }}>
+                  <span>⏳</span>
+                  <span>
+                    Pro активен до{' '}
+                    <strong>{new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</strong>.
+                    {' '}После этого тариф сменится на Free.
+                  </span>
                 </div>
               </div>
             )}
@@ -2562,7 +2672,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {subscription && subscription.status === 'ACTIVE' && (
               <button
-                style={{ ...btnSecondary, width: '100%' }}
+                style={{ ...btnSecondary, width: '100%', fontSize: 14 }}
                 onClick={() => {
                   try { tgRef.current?.WebApp?.openTelegramLink?.('https://t.me/settings/stars'); } catch { /* ok */ }
                 }}
@@ -2572,19 +2682,25 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             )}
             {planInfo.code === 'FREE' && (
               <button
-                style={{ ...btnPrimary, width: '100%' }}
+                style={{
+                  ...btnPrimary, width: '100%',
+                  background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
+                }}
                 onClick={() => showUpsell('wishlist_limit')}
               >
-                Перейти на Pro
+                Подключить Pro
               </button>
             )}
             {subscription && subscription.status === 'CANCELLED' && (
               <button
-                style={{ ...btnPrimary, width: '100%' }}
+                style={{
+                  ...btnPrimary, width: '100%',
+                  background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
+                }}
                 onClick={() => void handleUpgradeToPro()}
                 disabled={checkoutLoading}
               >
-                {checkoutLoading ? '...' : 'Возобновить подписку'}
+                {checkoutLoading ? 'Оформляем…' : 'Вернуть Pro'}
               </button>
             )}
           </div>
@@ -2972,16 +3088,17 @@ function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, o
             style={{
               width: '100%', padding: 16, background: C_local.surface, borderRadius: 16,
               display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
-              border: `1px solid ${C_local.border}`, boxSizing: 'border-box',
+              border: `1px solid ${isPro ? C_local.border : `${C_local.accent ?? '#7C6AFF'}15`}`,
+              boxSizing: 'border-box',
             }}
           >
-            <span style={{ fontSize: 24 }}>💡</span>
+            <span style={{ fontSize: 22 }}>💡</span>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 14, fontWeight: 600, color: C_local.text }}>Намекнуть друзьям</span>
                 {!isPro && <ProBadge />}
               </div>
-              <div style={{ fontSize: 12, color: C_local.textMuted }}>Отправить тактичное напоминание</div>
+              <div style={{ fontSize: 12, color: C_local.textMuted }}>Тактично подскажи о своих желаниях</div>
             </div>
             <span style={{ fontSize: 16, color: C_local.textMuted }}>›</span>
           </div>
