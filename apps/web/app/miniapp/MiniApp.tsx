@@ -85,6 +85,7 @@ type SubscriptionInfo = {
   status: 'ACTIVE' | 'CANCELLED' | 'EXPIRED';
   periodEnd: string;
   cancelledAt: string | null;
+  cancelAtPeriodEnd: boolean;
 } | null;
 
 type UpsellContext =
@@ -715,6 +716,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
   const [upsellSheet, setUpsellSheet] = useState<UpsellSheetState>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [showCancelSub, setShowCancelSub] = useState(false);
+  const [cancelSubLoading, setCancelSubLoading] = useState(false);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
 
@@ -1102,7 +1105,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setCheckoutLoading(false);
         return;
       }
-      const { invoiceUrl } = await res.json() as { invoiceUrl: string };
+      const resData = await res.json() as { invoiceUrl?: string; alreadySubscribed?: boolean };
+      if (resData.alreadySubscribed || !resData.invoiceUrl) {
+        pushToast('У тебя уже есть Pro ✨', 'success');
+        setCheckoutLoading(false);
+        // Sync latest state
+        try {
+          const syncRes = await tgFetch('/tg/billing/pro/sync', { method: 'POST' });
+          if (syncRes.ok) {
+            const d = await syncRes.json() as { plan: PlanInfo; subscription: SubscriptionInfo };
+            setPlanInfo(d.plan);
+            setSubscription(d.subscription);
+            setPlanLimits({ wishlists: d.plan.wishlists, items: d.plan.items });
+          }
+        } catch { /* ok */ }
+        return;
+      }
+      const invoiceUrl = resData.invoiceUrl;
       trackEvent('checkout_started');
 
       const tg = tgRef.current?.WebApp;
@@ -1170,6 +1189,62 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setCheckoutLoading(false);
     }
   }, [tgFetch, pushToast, loadWishlists, trackEvent, viewingItem, loadComments]);
+
+  // --- Subscription management (cancel / reactivate)
+  const handleCancelSub = useCallback(async () => {
+    setCancelSubLoading(true);
+    try {
+      const res = await tgFetch('/tg/billing/subscription/cancel', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json() as { subscription: { id: string; status: string; periodEnd: string; cancelAtPeriodEnd: boolean; cancelledAt: string | null } };
+        setSubscription({
+          id: data.subscription.id,
+          status: data.subscription.status as 'ACTIVE' | 'CANCELLED',
+          periodEnd: data.subscription.periodEnd,
+          cancelAtPeriodEnd: true,
+          cancelledAt: data.subscription.cancelledAt,
+        });
+        tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('warning');
+        pushToast('Продление отключено', 'success');
+        trackEvent('subscription_cancelled');
+      } else {
+        pushToast('Не удалось отменить', 'error');
+      }
+    } catch {
+      pushToast('Что-то пошло не так', 'error');
+    } finally {
+      setCancelSubLoading(false);
+      setShowCancelSub(false);
+    }
+  }, [tgFetch, pushToast, trackEvent]);
+
+  const handleReactivateSub = useCallback(async () => {
+    setCancelSubLoading(true);
+    try {
+      const res = await tgFetch('/tg/billing/subscription/reactivate', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json() as { subscription: { id: string; status: string; periodEnd: string; cancelAtPeriodEnd: boolean; cancelledAt: string | null } };
+        setSubscription({
+          id: data.subscription.id,
+          status: data.subscription.status as 'ACTIVE' | 'CANCELLED',
+          periodEnd: data.subscription.periodEnd,
+          cancelAtPeriodEnd: false,
+          cancelledAt: null,
+        });
+        tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('success');
+        pushToast('Продление возобновлено ✨', 'success');
+        trackEvent('subscription_reactivated');
+      } else {
+        // Reactivate failed — maybe cancelled externally, offer new checkout
+        pushToast('Оформляем новую подписку…', 'success');
+        void handleUpgradeToPro();
+      }
+    } catch {
+      pushToast('Что-то пошло не так', 'error');
+    } finally {
+      setCancelSubLoading(false);
+    }
+  }, [tgFetch, pushToast, trackEvent, handleUpgradeToPro]);
 
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(() => {
@@ -2638,8 +2713,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               )}
             </div>
 
-            {/* Subscription info for PRO users */}
-            {subscription && subscription.status === 'ACTIVE' && (
+            {/* Subscription info — ACTIVE_RENEWING */}
+            {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 13, color: C.textSec }}>Следующее продление</span>
@@ -2650,7 +2725,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            {subscription && subscription.status === 'CANCELLED' && (
+            {/* Subscription info — ACTIVE_CANCELLED (cancelAtPeriodEnd or status CANCELLED) */}
+            {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8,
@@ -2659,9 +2735,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 }}>
                   <span>⏳</span>
                   <span>
-                    Pro активен до{' '}
+                    Продление отключено. Pro до{' '}
                     <strong>{new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</strong>.
-                    {' '}После этого тариф сменится на Free.
                   </span>
                 </div>
               </div>
@@ -2670,16 +2745,31 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
           {/* Action buttons */}
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {subscription && subscription.status === 'ACTIVE' && (
+            {/* ACTIVE_RENEWING: offer to cancel renewal */}
+            {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
               <button
                 style={{ ...btnSecondary, width: '100%', fontSize: 14 }}
-                onClick={() => {
-                  try { tgRef.current?.WebApp?.openTelegramLink?.('https://t.me/settings/stars'); } catch { /* ok */ }
-                }}
+                onClick={() => setShowCancelSub(true)}
               >
-                Управление подпиской
+                Отменить продление
               </button>
             )}
+
+            {/* ACTIVE_CANCELLED: offer to reactivate */}
+            {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
+              <button
+                style={{
+                  ...btnPrimary, width: '100%',
+                  background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
+                }}
+                onClick={() => void handleReactivateSub()}
+                disabled={cancelSubLoading}
+              >
+                {cancelSubLoading ? 'Обновляем…' : 'Возобновить подписку'}
+              </button>
+            )}
+
+            {/* FREE: offer to subscribe */}
             {planInfo.code === 'FREE' && (
               <button
                 style={{
@@ -2689,18 +2779,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 onClick={() => showUpsell('wishlist_limit')}
               >
                 Подключить Pro
-              </button>
-            )}
-            {subscription && subscription.status === 'CANCELLED' && (
-              <button
-                style={{
-                  ...btnPrimary, width: '100%',
-                  background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
-                }}
-                onClick={() => void handleUpgradeToPro()}
-                disabled={checkoutLoading}
-              >
-                {checkoutLoading ? 'Оформляем…' : 'Вернуть Pro'}
               </button>
             )}
           </div>
@@ -2945,6 +3023,40 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         }}
         checkoutLoading={checkoutLoading}
       />
+
+      {/* ── CANCEL SUBSCRIPTION CONFIRMATION ── */}
+      <BottomSheet isOpen={showCancelSub} onClose={() => setShowCancelSub(false)}>
+        <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 56, height: 56, borderRadius: 18,
+            background: C.orangeSoft, fontSize: 28, marginBottom: 16,
+          }}>
+            ⚠️
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
+            Отменить продление?
+          </div>
+          <div style={{ fontSize: 14, color: C.textSec, marginTop: 8, lineHeight: 1.5, padding: '0 8px' }}>
+            Pro останется до{' '}
+            <strong>{subscription ? new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : ''}</strong>.
+            {' '}После этого тариф сменится на Free.
+          </div>
+          <button
+            style={{ ...btnPrimary, marginTop: 20, width: '100%', background: C.red, fontSize: 15, padding: '14px 24px' }}
+            onClick={() => void handleCancelSub()}
+            disabled={cancelSubLoading}
+          >
+            {cancelSubLoading ? 'Отменяем…' : 'Отменить продление'}
+          </button>
+          <button
+            style={{ ...btnGhost, width: '100%', marginTop: 8, fontSize: 14 }}
+            onClick={() => setShowCancelSub(false)}
+          >
+            Оставить Pro
+          </button>
+        </div>
+      </BottomSheet>
 
       {/* ── TOASTS ── */}
       <div style={{ position: 'fixed', bottom: 24, left: 16, right: 16, zIndex: 200, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
