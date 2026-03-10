@@ -4,14 +4,17 @@
  * Architecture:
  *   parseUrl(rawUrl)
  *     ├─ validateUrl(rawUrl)       — security checks
- *     ├─ fetchHtml(url)            — safe fetch with limits
+ *     ├─ getHtml(url, hostname)    — fetch or Puppeteer depending on domain
  *     ├─ extractUniversalMeta(html) — OG tags + <title> + meta description
  *     ├─ extractJsonLd(html)       — JSON-LD Product structured data
  *     ├─ tryDomainAdapter(html, hostname) — domain-specific overrides
  *     └─ merge(universal, jsonLd, domain) — domain > jsonLd > universal
  *
- * Graceful fallback at every level — always returns ParsedUrlData.
+ * SPA domains (Ozon, WB, YM) use headless Chromium for JS rendering.
+ * Other domains use simple fetch with Puppeteer fallback when no data found.
  */
+
+import puppeteer, { type Browser } from 'puppeteer-core';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -27,12 +30,12 @@ export interface ParsedUrlData {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const FETCH_TIMEOUT_MS = 8_000;
+const BROWSER_TIMEOUT_MS = 20_000;
 const MAX_HTML_BYTES = 2 * 1024 * 1024; // 2 MB
-const MAX_REDIRECTS = 5;
 const MAX_URL_LENGTH = 2048;
 
 const USER_AGENT =
-  'Mozilla/5.0 (compatible; WishBoardBot/1.0; +https://wishlistik.ru)';
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 /** Tracking query parameters to strip */
 const TRACKING_PARAMS = new Set([
@@ -46,26 +49,101 @@ const BLOCKED_HOSTNAMES = new Set([
   'localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]',
 ]);
 
+/** Domains that require JS rendering (SPA marketplaces) */
+const SPA_DOMAINS = new Set([
+  'ozon.ru',
+  'wildberries.ru',
+  'market.yandex.ru',
+]);
+
+function isSPAdomain(hostname: string): boolean {
+  const h = hostname.replace(/^www\./, '').replace(/^m\./, '');
+  return SPA_DOMAINS.has(h) || [...SPA_DOMAINS].some(d => h.endsWith(`.${d}`));
+}
+
+// ─── Browser Singleton ──────────────────────────────────────────────────────
+
+let browserInstance: Browser | null = null;
+let browserCloseTimer: ReturnType<typeof setTimeout> | null = null;
+const BROWSER_IDLE_MS = 60_000; // close after 60s idle
+
+const CHROMIUM_PATH = process.env.CHROMIUM_PATH || '/usr/bin/chromium';
+
+async function getBrowser(): Promise<Browser> {
+  if (browserInstance && browserInstance.connected) {
+    // Reset idle timer
+    if (browserCloseTimer) clearTimeout(browserCloseTimer);
+    browserCloseTimer = setTimeout(closeBrowser, BROWSER_IDLE_MS);
+    return browserInstance;
+  }
+
+  browserInstance = await puppeteer.launch({
+    executablePath: CHROMIUM_PATH,
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--no-first-run',
+      '--single-process',
+      '--disable-web-security',
+    ],
+  });
+
+  browserCloseTimer = setTimeout(closeBrowser, BROWSER_IDLE_MS);
+  return browserInstance;
+}
+
+async function closeBrowser() {
+  if (browserCloseTimer) {
+    clearTimeout(browserCloseTimer);
+    browserCloseTimer = null;
+  }
+  if (browserInstance) {
+    try { await browserInstance.close(); } catch { /* ignore */ }
+    browserInstance = null;
+  }
+}
+
 // ─── Main Entry Point ────────────────────────────────────────────────────────
 
 export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
   const url = validateUrl(rawUrl);
   const hostname = url.hostname.replace(/^www\./, '');
   const canonicalUrl = canonicalize(url);
+  const spa = isSPAdomain(hostname);
 
   let html: string;
   try {
-    html = await fetchHtml(url.href);
+    if (spa) {
+      // SPA domains: always use browser rendering
+      html = await fetchWithBrowser(url.href);
+    } else {
+      // Other domains: try simple fetch first
+      html = await fetchHtml(url.href);
+    }
   } catch (err) {
-    // Fetch failed — return domain-only fallback
-    return {
-      title: null,
-      description: null,
-      priceText: null,
-      imageUrl: null,
-      sourceDomain: hostname,
-      canonicalUrl,
-    };
+    // If simple fetch failed for non-SPA, try browser as fallback
+    if (!spa) {
+      try {
+        html = await fetchWithBrowser(url.href);
+      } catch {
+        return {
+          title: null, description: null, priceText: null, imageUrl: null,
+          sourceDomain: hostname, canonicalUrl,
+        };
+      }
+    } else {
+      return {
+        title: null, description: null, priceText: null, imageUrl: null,
+        sourceDomain: hostname, canonicalUrl,
+      };
+    }
   }
 
   // Layer 1: Universal OG/meta tags
@@ -79,6 +157,20 @@ export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
 
   // Merge: domain > jsonLd > universal
   const merged = mergeParsed(universal, jsonLd, domain);
+
+  // If non-SPA fetch got no useful data, retry with browser
+  if (!spa && !merged.title && !merged.imageUrl) {
+    try {
+      const browserHtml = await fetchWithBrowser(url.href);
+      const u2 = extractUniversalMeta(browserHtml, url.href);
+      const j2 = extractJsonLd(browserHtml);
+      const d2 = tryDomainAdapter(browserHtml, hostname);
+      const merged2 = mergeParsed(u2, j2, d2);
+      if (merged2.title || merged2.imageUrl) {
+        return { ...merged2, sourceDomain: hostname, canonicalUrl };
+      }
+    } catch { /* use original merged */ }
+  }
 
   return {
     ...merged,
@@ -149,7 +241,7 @@ function canonicalize(url: URL): string {
   return result;
 }
 
-// ─── Safe HTML Fetch ─────────────────────────────────────────────────────────
+// ─── Safe HTML Fetch (simple) ────────────────────────────────────────────────
 
 async function fetchHtml(url: string): Promise<string> {
   const controller = new AbortController();
@@ -209,6 +301,49 @@ function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
     offset += arr.byteLength;
   }
   return result;
+}
+
+// ─── Browser-based HTML Fetch ────────────────────────────────────────────────
+
+async function fetchWithBrowser(url: string): Promise<string> {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+
+  try {
+    await page.setUserAgent(USER_AGENT);
+    await page.setViewport({ width: 1280, height: 800 });
+
+    // Block images, fonts, stylesheets to speed up loading
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const type = req.resourceType();
+      if (['image', 'font', 'stylesheet', 'media'].includes(type)) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+
+    await page.goto(url, {
+      waitUntil: 'domcontentloaded',
+      timeout: BROWSER_TIMEOUT_MS,
+    });
+
+    // Wait a bit for dynamic content to load
+    await page.waitForFunction(
+      () => {
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        const title = document.querySelector('title');
+        return ogTitle || (title && title.textContent && title.textContent.length > 5);
+      },
+      { timeout: 10_000 }
+    ).catch(() => { /* timeout is ok, use what we have */ });
+
+    const html = await page.content();
+    return html;
+  } finally {
+    await page.close().catch(() => {});
+  }
 }
 
 // ─── Universal OG/Meta Parser ────────────────────────────────────────────────

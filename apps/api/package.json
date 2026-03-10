@@ -19,6 +19,7 @@
     "express": "4.19.2",
     "express-rate-limit": "^8.2.1",
     "multer": "^2.1.0",
+    "puppeteer-core": "^24.38.0",
     "sharp": "^0.34.5",
     "zod": "3.23.8"
   },

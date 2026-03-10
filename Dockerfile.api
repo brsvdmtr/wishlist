@@ -3,8 +3,15 @@ FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-# Install OpenSSL for Prisma + native deps for sharp
-RUN apt-get update && apt-get install -y openssl libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
+# Install OpenSSL for Prisma + native deps for sharp + Chromium for URL parsing
+RUN apt-get update && apt-get install -y \
+    openssl libssl3 ca-certificates \
+    chromium \
+    fonts-liberation fonts-noto-color-emoji \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CHROMIUM_PATH=/usr/bin/chromium
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
