@@ -161,6 +161,29 @@ function secureCompare(a: string, b: string): boolean {
   return crypto.timingSafeEqual(aHash, bHash);
 }
 
+/** Best-effort: resolve user's first_name from Telegram Bot API, cache in DB. */
+async function resolveUserFirstName(user: { id: string; firstName: string | null; telegramChatId: string | null }): Promise<string> {
+  if (user.firstName) return user.firstName;
+  const token = process.env.BOT_TOKEN;
+  if (!token || !user.telegramChatId) return 'Пользователь';
+  try {
+    const resp = await fetch(`https://api.telegram.org/bot${token}/getChat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: user.telegramChatId }),
+    });
+    if (!resp.ok) return 'Пользователь';
+    const json = await resp.json() as { ok: boolean; result?: { first_name?: string } };
+    const name = json.result?.first_name;
+    if (name) {
+      // Cache in DB for future calls
+      await prisma.user.update({ where: { id: user.id }, data: { firstName: name } }).catch(() => {});
+      return name;
+    }
+  } catch { /* best-effort */ }
+  return 'Пользователь';
+}
+
 /** Best-effort Telegram notification. Fire-and-forget – never throws. */
 async function sendTgNotification(chatId: string, text: string): Promise<void> {
   const token = process.env.BOT_TOKEN;
@@ -1213,7 +1236,7 @@ tgRouter.get(
         imageUrl: true, priority: true, status: true, description: true,
         sourceUrl: true, sourceDomain: true, importMethod: true,
         wishlist: {
-          select: { owner: { select: { id: true, firstName: true } } },
+          select: { owner: { select: { id: true, firstName: true, telegramChatId: true } } },
         },
       },
       orderBy: { updatedAt: 'desc' },
@@ -1244,10 +1267,24 @@ tgRouter.get(
       }));
     }
 
-    // 4. Map response
+    // 4. Resolve owner names (batch-dedupe by ownerId)
+    const uniqueOwners = new Map<string, typeof items[0]['wishlist']['owner']>();
+    for (const item of items) {
+      if (!uniqueOwners.has(item.wishlist.owner.id)) {
+        uniqueOwners.set(item.wishlist.owner.id, item.wishlist.owner);
+      }
+    }
+    const ownerNames = new Map<string, string>();
+    await Promise.all(
+      [...uniqueOwners.entries()].map(async ([ownerId, owner]) => {
+        ownerNames.set(ownerId, await resolveUserFirstName(owner));
+      }),
+    );
+
+    // 5. Map response
     const reservations = items.map(item => ({
       ...mapTgItem(item),
-      ownerName: item.wishlist.owner.firstName ?? 'Пользователь',
+      ownerName: ownerNames.get(item.wishlist.owner.id) ?? 'Пользователь',
       ownerId: item.wishlist.owner.id,
       unreadComments: unreadCounts[item.id] ?? 0,
     }));
