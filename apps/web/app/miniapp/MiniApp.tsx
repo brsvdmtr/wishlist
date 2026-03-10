@@ -87,6 +87,12 @@ type SubscriptionInfo = {
   cancelledAt: string | null;
 } | null;
 
+type UpsellContext =
+  | 'comments' | 'url_import' | 'smart_reminders' | 'hints'
+  | 'wishlist_limit' | 'item_limit' | 'participant_limit';
+
+type UpsellSheetState = { context: UpsellContext } | null;
+
 type Item = {
   id: string;
   wishlistId?: string;
@@ -182,6 +188,62 @@ function handleTextareaFocus(textarea: HTMLElement) {
   };
   textarea.addEventListener('blur', cleanup);
 }
+
+// ═══════════════════════════════════════════════════════
+// PRO UPSELL SYSTEM
+// ═══════════════════════════════════════════════════════
+
+function ProBadge({ style }: { style?: React.CSSProperties } = {}) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center',
+      fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+      padding: '2px 6px', borderRadius: 4,
+      background: C.accentSoft, color: C.accent,
+      lineHeight: 1, verticalAlign: 'middle', ...style,
+    }}>PRO</span>
+  );
+}
+
+const UPSELL_CONTENT: Record<UpsellContext, {
+  emoji: string; title: string; subtitle: string; showTable: boolean;
+}> = {
+  comments: {
+    emoji: '💬', title: 'Комментарии доступны в Pro',
+    subtitle: 'Обсуждай подарки прямо в карточке желания и не теряй детали.',
+    showTable: false,
+  },
+  url_import: {
+    emoji: '🔗', title: 'Добавление по ссылке доступно в Pro',
+    subtitle: 'Просто отправь ссылку, а WishBoard сам создаст карточку желания.',
+    showTable: false,
+  },
+  smart_reminders: {
+    emoji: '🔔', title: 'Умные напоминания доступны в Pro',
+    subtitle: 'Не пропускай важные события и возвращайся к желаниям вовремя.',
+    showTable: false,
+  },
+  hints: {
+    emoji: '💡', title: 'Функция «Намекнуть» доступна в Pro',
+    subtitle: 'Мягко подскажи близким, какой подарок тебе особенно нравится.',
+    showTable: false,
+  },
+  wishlist_limit: {
+    emoji: '📋', title: 'Лимит Free исчерпан',
+    subtitle: 'На бесплатном тарифе доступно до 2 вишлистов. В Pro — до 10.',
+    showTable: true,
+  },
+  item_limit: {
+    emoji: '🎁', title: 'В этом вишлисте достигнут лимит',
+    subtitle: 'На Free доступно до 30 желаний в одном вишлисте. В Pro — до 100.',
+    showTable: true,
+  },
+  participant_limit: {
+    emoji: '👥', title: 'Лимит участников достигнут',
+    subtitle: 'На Free можно делиться вишлистом максимум с 5 участниками. В Pro — до 20.',
+    showTable: true,
+  },
+};
 
 // ═══════════════════════════════════════════════════════
 // COMPONENTS
@@ -475,6 +537,106 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
 }
 
 // ═══════════════════════════════════════════════════════
+// PRO UPSELL SHEET (context-aware)
+// ═══════════════════════════════════════════════════════
+
+function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
+  state: UpsellSheetState;
+  onClose: () => void;
+  onUpgrade: () => void;
+  checkoutLoading: boolean;
+}) {
+  const content = state ? UPSELL_CONTENT[state.context] : null;
+  return (
+    <BottomSheet isOpen={state !== null} onClose={onClose}>
+      {content && (
+        <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
+          {/* Hero emoji */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 64, height: 64, borderRadius: 20,
+            background: `linear-gradient(135deg, ${C.accent}30, ${C.accent}10)`,
+            fontSize: 32, marginBottom: 16,
+          }}>
+            {content.emoji}
+          </div>
+
+          <div style={{ fontSize: 20, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
+            {content.title}
+          </div>
+          <div style={{ fontSize: 14, color: C.textMuted, marginTop: 6, lineHeight: 1.5, padding: '0 8px' }}>
+            {content.subtitle}
+          </div>
+
+          {content.showTable && (
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <div style={{ flex: 1, background: C.bg, borderRadius: 14, padding: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.textSec, marginBottom: 12, fontFamily: font }}>Free</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[
+                    { label: 'Вишлисты', val: '2' },
+                    { label: 'Желания', val: '30' },
+                    { label: 'Участников', val: '5' },
+                    { label: 'Комментарии', val: '✕' },
+                    { label: 'Импорт по ссылке', val: '✕' },
+                  ].map((r) => (
+                    <div key={r.label} style={{ fontSize: 12, color: r.val === '✕' ? C.textMuted : C.textSec, lineHeight: 1.3 }}>
+                      <div style={{ fontWeight: 600 }}>{r.val}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted }}>{r.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ flex: 1, background: C.card, borderRadius: 14, padding: 14, border: `1px solid ${C.accentGlow}` }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 12, fontFamily: font }}>PRO</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[
+                    { label: 'Вишлисты', val: '10' },
+                    { label: 'Желания', val: '100' },
+                    { label: 'Участников', val: '20' },
+                    { label: 'Комментарии', val: '✓' },
+                    { label: 'Импорт по ссылке', val: '✓' },
+                  ].map((r) => (
+                    <div key={r.label} style={{ fontSize: 12, color: r.val === '✓' ? C.green : C.text, lineHeight: 1.3 }}>
+                      <div style={{ fontWeight: 600 }}>{r.val}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted }}>{r.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Price */}
+          <div style={{ marginTop: 20, fontSize: 15, color: C.textSec }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: C.text }}>100 Stars</span>
+            {' '}/ месяц
+          </div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
+            Отменить можно в любой момент
+          </div>
+
+          {/* CTA */}
+          <button
+            style={{ ...btnPrimary, marginTop: 20, width: '100%', fontSize: 16, padding: '16px 24px' }}
+            onClick={onUpgrade}
+            disabled={checkoutLoading}
+          >
+            {checkoutLoading ? '...' : 'Перейти на Pro'}
+          </button>
+          <button
+            style={{ ...btnGhost, width: '100%', marginTop: 8 }}
+            onClick={onClose}
+          >
+            Не сейчас
+          </button>
+        </div>
+      )}
+    </BottomSheet>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════
 
@@ -506,7 +668,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     code: 'FREE', wishlists: 2, items: 30, participants: 5, features: [],
   });
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
-  const [showUpgradeSheet, setShowUpgradeSheet] = useState(false);
+  const [upsellSheet, setUpsellSheet] = useState<UpsellSheetState>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -549,6 +711,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [photoPickerImgErr, setPhotoPickerImgErr] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  // Anti-spam throttle for upsell sheets
+  const upsellLastShownRef = useRef<Partial<Record<UpsellContext, number>>>({});
+  const upsellAutoShownThisSession = useRef(false);
+
   // Delete confirmation
   const [deletingItem, setDeletingItem] = useState<Item | null>(null);
 
@@ -587,6 +753,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     // eslint-disable-next-line no-console
     console.log(`[analytics] ${event}`, props ?? '');
   }, []);
+
+  /** Show context-aware PRO upsell sheet with anti-spam throttling.
+   *  auto=true (402 response): max 1 auto-show per session + 30s cooldown.
+   *  explicit tap: always shows. */
+  const showUpsell = useCallback((context: UpsellContext, opts?: { auto?: boolean }) => {
+    const now = Date.now();
+    if (opts?.auto) {
+      if (upsellAutoShownThisSession.current) return;
+      if (now - (upsellLastShownRef.current[context] ?? 0) < 30_000) return;
+      upsellAutoShownThisSession.current = true;
+    }
+    upsellLastShownRef.current[context] = now;
+    setUpsellSheet({ context });
+    trackEvent(`pro_entrypoint_viewed_${context}`);
+  }, [trackEvent]);
 
   const pushToast = useCallback((message: string, kind: Toast['kind']) => {
     const toast: Toast = { id: crypto.randomUUID(), message, kind };
@@ -669,12 +850,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (!res.ok) {
         if (res.status === 402) {
           const body = await res.json().catch(() => ({})) as { feature?: string };
-          if (body.feature) {
-            setShowUpgradeSheet(true);
-            trackEvent(`feature_gate_hit_${body.feature}`);
+          if (body.feature === 'url_import') {
+            showUpsell('url_import', { auto: true });
           } else if (planInfo.code === 'FREE') {
-            setShowUpgradeSheet(true);
-            trackEvent('feature_gate_hit_item_limit');
+            showUpsell('item_limit', { auto: true });
           } else {
             pushToast('Лимит тарифа', 'error');
           }
@@ -815,11 +994,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       });
       if (!res.ok) {
         if (res.status === 402) {
-          const body = await res.json().catch(() => ({})) as { feature?: string };
-          if (body.feature) {
-            setShowUpgradeSheet(true);
-            trackEvent(`feature_gate_hit_${body.feature}`);
-          }
+          showUpsell('comments', { auto: true });
           return;
         }
         const json = await res.json().catch(() => ({})) as { error?: string };
@@ -901,7 +1076,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             tg.HapticFeedback?.notificationOccurred?.('success');
             pushToast('PRO подключен!', 'success');
             trackEvent('checkout_succeeded');
-            setShowUpgradeSheet(false);
+            setUpsellSheet(null);
             loadWishlists().catch(() => {});
           }
         } else if (status === 'failed') {
@@ -1119,8 +1294,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       });
       if (res.status === 402) {
         if (planInfo.code === 'FREE') {
-          setShowUpgradeSheet(true);
-          trackEvent('feature_gate_hit_wishlist_limit');
+          showUpsell('wishlist_limit', { auto: true });
         } else {
           pushToast(`Лимит PRO: ${planLimits.wishlists} вишлистов`, 'error');
         }
@@ -1296,8 +1470,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const res = await tgFetch(`/tg/wishlists/${currentWl.id}/items`, { method: 'POST', body: JSON.stringify(body) });
         if (res.status === 402) {
           if (planInfo.code === 'FREE') {
-            setShowUpgradeSheet(true);
-            trackEvent('feature_gate_hit_item_limit');
+            showUpsell('item_limit', { auto: true });
           } else {
             pushToast(`Лимит PRO: ${planLimits.items} желаний`, 'error');
           }
@@ -1396,6 +1569,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         body: JSON.stringify({ displayName: guestName.trim() }),
       });
       if (res.status === 409) { pushToast('Уже забронировано', 'error'); return; }
+      if (res.status === 402) { pushToast('Лимит участников исчерпан', 'error'); return; }
       if (!res.ok) { pushToast('Что-то пошло не так', 'error'); return; }
       const updatedItem = { ...reservingItem, status: 'reserved' as const, reservedByDisplayName: guestName.trim(), reservedByActorHash: myActorHashRef.current };
       setGuestItems((prev) => prev.map((i) => i.id === reservingItem.id ? updatedItem : i));
@@ -1617,7 +1791,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {planInfo.code === 'PRO' ? 'PRO' : 'Free'}-план: {wishlists.length} из {planLimits.wishlists} вишлистов
             </div>
             {planInfo.code === 'FREE' && (
-              <button style={{ ...btnGhost, width: '100%', fontSize: 13, color: C.accent }} onClick={() => { setShowUpgradeSheet(true); trackEvent('paywall_opened', { source: 'my_wishlists' }); }}>
+              <button style={{ ...btnGhost, width: '100%', fontSize: 13, color: C.accent }} onClick={() => showUpsell('wishlist_limit')}>
                 Перейти на Pro
               </button>
             )}
@@ -1656,22 +1830,37 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </p>
           </div>
 
-          {/* URL input */}
+          {/* URL input — with PRO badge for FREE users */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-            <input
-              style={{ ...inputStyle, flex: 1 }}
-              placeholder="Вставь ссылку на товар…"
-              value={importUrl}
-              onChange={(e) => setImportUrl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void handleImportUrl(); }}
-            />
+            <div style={{ position: 'relative', flex: 1 }}>
+              <input
+                style={{ ...inputStyle, flex: 1, paddingRight: planInfo.code === 'FREE' ? 52 : 16 }}
+                placeholder="Вставь ссылку на товар…"
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (planInfo.code === 'FREE') { showUpsell('url_import'); return; }
+                    void handleImportUrl();
+                  }
+                }}
+              />
+              {planInfo.code === 'FREE' && (
+                <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>
+                  <ProBadge />
+                </span>
+              )}
+            </div>
             <button
               style={{
                 ...btnPrimary,
                 width: 48, minWidth: 48, padding: 0,
                 opacity: importUrl.trim() && !importLoading ? 1 : 0.5,
               }}
-              onClick={() => void handleImportUrl()}
+              onClick={() => {
+                if (planInfo.code === 'FREE') { showUpsell('url_import'); return; }
+                void handleImportUrl();
+              }}
               disabled={!importUrl.trim() || importLoading}
             >
               {importLoading ? '…' : '📥'}
@@ -1831,7 +2020,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <span>🔒</span>
                 <span>
                   Этот вишлист в режиме просмотра.{' '}
-                  <span onClick={() => { setShowUpgradeSheet(true); trackEvent('paywall_opened', { source: 'readonly_banner' }); }} style={{ textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}>
+                  <span onClick={() => showUpsell('wishlist_limit')} style={{ textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}>
                     Перейди на Pro
                   </span>, чтобы редактировать.
                 </span>
@@ -1966,18 +2155,58 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               )}
             </div>
 
-            {/* Comments */}
-            <CommentsThread
-              commentRole={commentRole}
-              comments={comments}
-              commentText={commentText}
-              setCommentText={setCommentText}
-              commentSending={commentSending}
-              myActorHash={myActorHashRef.current}
-              onDeleteComment={handleDeleteComment}
-              onSendComment={handleSendComment}
-              isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
-            />
+            {/* Comments — full for PRO, locked placeholder for FREE */}
+            {planInfo.code === 'PRO' ? (
+              <CommentsThread
+                commentRole={commentRole}
+                comments={comments}
+                commentText={commentText}
+                setCommentText={setCommentText}
+                commentSending={commentSending}
+                myActorHash={myActorHashRef.current}
+                onDeleteComment={handleDeleteComment}
+                onSendComment={handleSendComment}
+                isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+              />
+            ) : (
+              <div
+                onClick={() => showUpsell('comments')}
+                style={{
+                  marginTop: 24, padding: 20, background: C.surface, borderRadius: 20,
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font }}>Комментарии</span>
+                  <ProBadge />
+                </div>
+                <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.4 }}>
+                  Обсуждай подарки приватно с тем, кто забронировал
+                </div>
+                <div style={{ marginTop: 12, fontSize: 13, color: C.accent, fontWeight: 600 }}>
+                  Разблокировать →
+                </div>
+              </div>
+            )}
+
+            {/* Smart reminders placeholder */}
+            <div
+              onClick={() => showUpsell('smart_reminders')}
+              style={{
+                marginTop: 16, padding: 16, background: C.surface, borderRadius: 16,
+                display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+              }}
+            >
+              <span style={{ fontSize: 24 }}>🔔</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.textMuted }}>Умные напоминания</span>
+                  {planInfo.code === 'FREE' && <ProBadge />}
+                </div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>Скоро</div>
+              </div>
+              <span style={{ fontSize: 16, color: C.textMuted }}>›</span>
+            </div>
 
             {/* Owner actions */}
             {viewingItem.status !== 'purchased' && (
@@ -2159,6 +2388,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           tgUser={tgUser}
           onCopied={() => pushToast('📨 Ссылка скопирована', 'success')}
           buildTgDeepLink={buildTgDeepLink}
+          onHintTap={() => showUpsell('hints')}
+          isPro={planInfo.code === 'PRO'}
         />
       )}
 
@@ -2342,7 +2573,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {planInfo.code === 'FREE' && (
               <button
                 style={{ ...btnPrimary, width: '100%' }}
-                onClick={() => { setShowUpgradeSheet(true); trackEvent('paywall_opened', { source: 'settings' }); }}
+                onClick={() => showUpsell('wishlist_limit')}
               >
                 Перейти на Pro
               </button>
@@ -2585,92 +2816,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         </div>
       </BottomSheet>
 
-      {/* ── UPGRADE BOTTOM SHEET (PAYWALL) ── */}
-      <BottomSheet isOpen={showUpgradeSheet} onClose={() => setShowUpgradeSheet(false)}>
-        <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
-          {/* Hero badge */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '6px 16px', borderRadius: 20,
-            background: `linear-gradient(135deg, ${C.accent}30, ${C.accent}10)`,
-            color: C.accent, fontSize: 14, fontWeight: 700,
-            marginBottom: 16,
-          }}>
-            PRO
-          </div>
-
-          <div style={{ fontSize: 20, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
-            Больше возможностей
-          </div>
-          <div style={{ fontSize: 14, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>
-            для тех, кто пользуется по-настоящему
-          </div>
-
-          {/* Comparison table */}
-          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-            {/* FREE column */}
-            <div style={{ flex: 1, background: C.surface, borderRadius: 14, padding: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.textSec, marginBottom: 12, fontFamily: font }}>Free</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {[
-                  { label: 'Вишлисты', val: '2' },
-                  { label: 'Желания', val: '30' },
-                  { label: 'Участников', val: '5' },
-                  { label: 'Комментарии', val: '✕' },
-                  { label: 'Импорт по ссылке', val: '✕' },
-                ].map((r) => (
-                  <div key={r.label} style={{ fontSize: 12, color: r.val === '✕' ? C.textMuted : C.textSec, lineHeight: 1.3 }}>
-                    <div style={{ fontWeight: 600 }}>{r.val}</div>
-                    <div style={{ fontSize: 10, color: C.textMuted }}>{r.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* PRO column */}
-            <div style={{ flex: 1, background: C.card, borderRadius: 14, padding: 14, border: `1px solid ${C.accentGlow}` }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 12, fontFamily: font }}>PRO</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {[
-                  { label: 'Вишлисты', val: '10' },
-                  { label: 'Желания', val: '100' },
-                  { label: 'Участников', val: '20' },
-                  { label: 'Комментарии', val: '✓' },
-                  { label: 'Импорт по ссылке', val: '✓' },
-                ].map((r) => (
-                  <div key={r.label} style={{ fontSize: 12, color: r.val === '✓' ? C.green : C.text, lineHeight: 1.3 }}>
-                    <div style={{ fontWeight: 600 }}>{r.val}</div>
-                    <div style={{ fontSize: 10, color: C.textMuted }}>{r.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Price */}
-          <div style={{ marginTop: 20, fontSize: 15, color: C.textSec }}>
-            <span style={{ fontSize: 22, fontWeight: 800, color: C.text }}>100 Stars</span>
-            {' '}/ месяц
-          </div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
-            Отменить можно в любой момент
-          </div>
-
-          {/* CTA */}
-          <button
-            style={{ ...btnPrimary, marginTop: 20, width: '100%', fontSize: 16, padding: '16px 24px' }}
-            onClick={() => void handleUpgradeToPro()}
-            disabled={checkoutLoading}
-          >
-            {checkoutLoading ? '...' : 'Перейти на Pro'}
-          </button>
-          <button
-            style={{ ...btnGhost, width: '100%', marginTop: 8 }}
-            onClick={() => setShowUpgradeSheet(false)}
-          >
-            Не сейчас
-          </button>
-        </div>
-      </BottomSheet>
+      {/* ── PRO UPSELL BOTTOM SHEET (CONTEXT-AWARE) ── */}
+      <ProUpsellSheet
+        state={upsellSheet}
+        onClose={() => {
+          if (upsellSheet) trackEvent(`pro_sheet_dismissed_${upsellSheet.context}`);
+          setUpsellSheet(null);
+        }}
+        onUpgrade={() => {
+          if (upsellSheet) trackEvent(`pro_cta_clicked_${upsellSheet.context}`);
+          void handleUpgradeToPro();
+        }}
+        checkoutLoading={checkoutLoading}
+      />
 
       {/* ── TOASTS ── */}
       <div style={{ position: 'fixed', bottom: 24, left: 16, right: 16, zIndex: 200, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
@@ -2695,12 +2853,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 // SHARE SCREEN (extracted to keep main component tidy)
 // ─────────────────────────────────────────────────
 
-function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink }: {
+function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, onHintTap, isPro }: {
   wishlist: Wishlist;
   itemCount: number;
   tgUser: TgUser | null;
   onCopied: () => void;
   buildTgDeepLink: (payload?: string) => string | null;
+  onHintTap?: () => void;
+  isPro?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -2803,6 +2963,28 @@ function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink }:
               📋 Скопировать ссылку
             </button>
           </>
+        )}
+
+        {/* Hint placeholder */}
+        {onHintTap && (
+          <div
+            onClick={onHintTap}
+            style={{
+              width: '100%', padding: 16, background: C_local.surface, borderRadius: 16,
+              display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+              border: `1px solid ${C_local.border}`, boxSizing: 'border-box',
+            }}
+          >
+            <span style={{ fontSize: 24 }}>💡</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C_local.text }}>Намекнуть друзьям</span>
+                {!isPro && <ProBadge />}
+              </div>
+              <div style={{ fontSize: 12, color: C_local.textMuted }}>Отправить тактичное напоминание</div>
+            </div>
+            <span style={{ fontSize: 16, color: C_local.textMuted }}>›</span>
+          </div>
         )}
 
         <div style={{ borderRadius: 12, padding: '12px 16px', fontSize: 12, background: C_local.greenSoft, color: C_local.green, width: '100%', lineHeight: 1.5, boxSizing: 'border-box' }}>

@@ -1597,6 +1597,26 @@ tgRouter.post(
       if (!item) return { kind: 'not_found' as const };
       if (item.status !== 'AVAILABLE') return { kind: 'conflict' as const };
 
+      // Check participant limit (based on wishlist owner's plan)
+      const wishlist = await tx.wishlist.findUnique({
+        where: { id: item.wishlistId },
+        select: { ownerId: true },
+      });
+      if (wishlist) {
+        const ownerEnt = await getUserEntitlement(wishlist.ownerId);
+        const activeReservations = await tx.item.findMany({
+          where: { wishlistId: item.wishlistId, status: 'RESERVED' },
+          select: { reserverUserId: true },
+          distinct: ['reserverUserId'],
+        });
+        const existingReserverIds = new Set(
+          activeReservations.map((r) => r.reserverUserId).filter(Boolean),
+        );
+        if (!existingReserverIds.has(user.id) && existingReserverIds.size >= ownerEnt.plan.participants) {
+          return { kind: 'participant_limit' as const, limit: ownerEnt.plan.participants };
+        }
+      }
+
       const newEpoch = item.reservationEpoch + 1;
       await tx.item.update({
         where: { id },
@@ -1622,6 +1642,7 @@ tgRouter.post(
 
     if (result.kind === 'not_found') return res.status(404).json({ error: 'Item not found' });
     if (result.kind === 'conflict') return res.status(409).json({ error: 'Item is not available' });
+    if (result.kind === 'participant_limit') return res.status(402).json({ error: 'Participant limit reached', feature: 'participant_limit', limit: result.limit });
 
     if (result.kind === 'ok') {
       // Notify owner
@@ -2381,6 +2402,12 @@ internalRouter.post(
     // Validate URL
     try { validateUrl(parsed.data.url); } catch (err: any) {
       return res.status(400).json({ error: err.message || 'Invalid URL' });
+    }
+
+    // Feature gate: url_import requires PRO
+    const ent = await getUserEntitlement(parsed.data.userId);
+    if (!ent.plan.features.includes('url_import')) {
+      return res.status(402).json({ error: 'Pro feature', feature: 'url_import' });
     }
 
     try {
