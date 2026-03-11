@@ -98,7 +98,7 @@ if (!token) {
         const shortName = ownerName.split(' ')[0] ?? ownerName;
         const msg = `Есть идея подарка для ${ownerName} 🎁\n\nОбрати внимание на желание «${item.title}» — похоже, ${shortName.toLowerCase()} особенно нравится это.`;
         return ctx.reply(msg, Markup.inlineKeyboard([
-          Markup.button.webApp('Посмотреть желание 🎁', `${MINI_APP_URL}?startapp=${item.wishlist.slug}`),
+          Markup.button.webApp('Посмотреть желание 🎁', `${MINI_APP_URL}?startapp=${item.wishlist.slug}__item_${item.id}`),
         ]));
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -376,7 +376,7 @@ if (!token) {
             text: hintText,
             reply_markup: {
               inline_keyboard: [[
-                { text: 'Посмотреть желание 🎁', web_app: { url: `${MINI_APP_URL}?startapp=${hint.item.wishlist.slug}` } },
+                { text: 'Посмотреть желание 🎁', web_app: { url: `${MINI_APP_URL}?startapp=${hint.item.wishlist.slug}__item_${hint.item.id}` } },
               ]],
             },
           }),

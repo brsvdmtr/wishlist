@@ -1088,7 +1088,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
     const priorityMap: Record<string, 1 | 2 | 3> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
     setGuestWl(json.wishlist);
-    setGuestItems(json.items.map((i) => ({
+    const mappedItems = json.items.map((i) => ({
       id: i.id,
       title: i.title,
       description: i.description ?? null,
@@ -1099,7 +1099,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       status: i.status.toLowerCase() as 'available' | 'reserved' | 'purchased',
       reservedByDisplayName: i.reservedByDisplayName,
       reservedByActorHash: i.reservedByActorHash ?? null,
-    })));
+    }));
+    setGuestItems(mappedItems);
+    return mappedItems;
   }, [apiBase]);
 
   const loadComments = useCallback(async (itemId: string) => {
@@ -1509,6 +1511,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             setScreen('drafts');
           })
           .catch(handleErr);
+      } else if (startParam && startParam.includes('__item_')) {
+        // Deep link to specific item (e.g. from hint): <slug>__item_<itemId>
+        const sepIdx = startParam.indexOf('__item_');
+        const slug = startParam.slice(0, sepIdx);
+        const targetItemId = startParam.slice(sepIdx + 7);
+        loadGuestWishlist(slug)
+          .then((items) => {
+            const found = items.find((i) => i.id === targetItemId);
+            if (found) {
+              setViewingItem(found);
+              setScreen('guest-item-detail');
+            } else {
+              // Item not found (deleted/completed) — show wishlist
+              setScreen('guest-view');
+            }
+          })
+          .catch(handleErr);
+        loadWishlists().catch(() => { /* non-critical for guest flow */ });
       } else if (startParam) {
         // Load guest wishlist AND owner wishlists in parallel.
         // Owner wishlists are needed so that "back" from guest-view shows
