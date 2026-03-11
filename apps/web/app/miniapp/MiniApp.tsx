@@ -59,11 +59,12 @@ const fmtPrice = (p: number | null) => p ? `${p.toLocaleString('ru-RU')} ₽` : 
 
 function formatRetryAfter(seconds: number): string {
   if (seconds <= 0) return 'Попробуйте снова.';
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.ceil((seconds % 3600) / 60);
+  let hours = Math.floor(seconds / 3600);
+  let minutes = Math.ceil((seconds % 3600) / 60);
+  if (minutes >= 60) { hours += 1; minutes = 0; }
   if (hours === 0) return `Попробуйте через ${minutes} мин.`;
   if (hours < 24) {
-    return minutes > 0 && minutes < 60
+    return minutes > 0
       ? `Попробуйте через ${hours} ч ${minutes} мин.`
       : `Попробуйте через ${hours} ч.`;
   }
@@ -803,6 +804,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [showCancelSub, setShowCancelSub] = useState(false);
   const [cancelSubLoading, setCancelSubLoading] = useState(false);
+  const [godMode, setGodMode] = useState(false);
+  const [canGodMode, setCanGodMode] = useState(false);
+  const [godModeLoading, setGodModeLoading] = useState(false);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
 
@@ -949,10 +953,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       subscription: SubscriptionInfo;
       drafts?: { wishlistId: string; count: number } | null;
       reservationsCount?: number;
+      godMode?: boolean;
+      canGodMode?: boolean;
     };
     setWishlists(json.wishlists);
     setPlanInfo(json.plan);
     setSubscription(json.subscription);
+    if (json.godMode !== undefined) setGodMode(json.godMode);
+    if (json.canGodMode !== undefined) setCanGodMode(json.canGodMode);
     setPlanLimits({ wishlists: json.plan.wishlists, items: json.plan.items });
     if (json.drafts) {
       setDraftsWishlistId(json.drafts.wishlistId);
@@ -3070,6 +3078,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <span style={{ fontSize: 14, color: C.textSec }}>Импорт по ссылке</span>
                     <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
                   </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 14, color: C.textSec }}>Намекнуть на подарок</span>
+                    <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                  </div>
                 </>
               )}
             </div>
@@ -3143,6 +3155,63 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             )}
           </div>
+
+          {/* God Mode toggle — dev only, whitelisted users */}
+          {canGodMode && (
+            <div style={{
+              marginTop: 32, padding: 16, borderRadius: 12,
+              background: godMode ? '#ff990015' : C.card,
+              border: `1px dashed ${godMode ? '#ff9900' : C.border}`,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: godMode ? '#ff9900' : C.textSec, fontFamily: font }}>
+                    ⚡ Режим бога
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                    {godMode ? 'PRO без подписки, лимиты сняты' : 'Виртуальный PRO для тестирования'}
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (godModeLoading) return;
+                    setGodModeLoading(true);
+                    try {
+                      const res = await tgFetch('/tg/me/god-mode', { method: 'POST' });
+                      if (res.ok) {
+                        const data = await res.json() as { godMode: boolean };
+                        setGodMode(data.godMode);
+                        try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('medium'); } catch {}
+                        // Refresh plan data to reflect god mode changes
+                        loadWishlists().catch(() => {});
+                      } else {
+                        pushToast('Не удалось переключить', 'error');
+                      }
+                    } catch {
+                      pushToast('Ошибка сети', 'error');
+                    } finally {
+                      setGodModeLoading(false);
+                    }
+                  }}
+                  disabled={godModeLoading}
+                  style={{
+                    width: 50, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                    background: godMode ? '#ff9900' : C.surface,
+                    position: 'relative', transition: 'background 0.2s',
+                    opacity: godModeLoading ? 0.5 : 1,
+                  }}
+                >
+                  <div style={{
+                    width: 22, height: 22, borderRadius: 11,
+                    background: '#fff', position: 'absolute', top: 3,
+                    left: godMode ? 25 : 3,
+                    transition: 'left 0.2s',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  }} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

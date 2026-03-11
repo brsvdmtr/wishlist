@@ -1038,7 +1038,7 @@ const PRO_PRICE_XTR = parseInt(process.env.PRO_PRICE_XTR ?? '100', 10);
 const PRO_SUBSCRIPTION_PERIOD = parseInt(process.env.PRO_SUBSCRIPTION_PERIOD ?? '2592000', 10);
 const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
 
-async function getUserEntitlement(userId: string): Promise<{
+async function getUserEntitlement(userId: string, godMode = false): Promise<{
   plan: PlanInfo;
   isPro: boolean;
   subscription: { id: string; status: string; periodEnd: string; cancelledAt: string | null; cancelAtPeriodEnd: boolean } | null;
@@ -1065,6 +1065,11 @@ async function getUserEntitlement(userId: string): Promise<{
         cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
       },
     };
+  }
+
+  // God Mode: virtual PRO without real subscription
+  if (godMode) {
+    return { plan: PLANS.PRO, isPro: true, subscription: null };
   }
 
   return { plan: PLANS.FREE, isPro: false, subscription: null };
@@ -1194,7 +1199,7 @@ tgRouter.get(
   '/wishlists',
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id);
+    const ent = await getUserEntitlement(user.id, user.godMode);
 
     const wishlists = await prisma.wishlist.findMany({
       where: { ownerId: user.id, type: 'REGULAR' },
@@ -1245,6 +1250,10 @@ tgRouter.get(
         features: [...ent.plan.features],
       },
       subscription: ent.subscription,
+      godMode: user.godMode,
+      canGodMode: user.telegramId
+        ? (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean).includes(user.telegramId)
+        : false,
       drafts,
       reservationsCount,
     });
@@ -2113,8 +2122,8 @@ tgRouter.post(
 
     const user = await getOrCreateTgUser(req.tgUser!);
 
-    // 1. Feature gate: hints require PRO
-    const ent = await getUserEntitlement(user.id);
+    // 1. Feature gate: hints require PRO (godMode overrides to PRO)
+    const ent = await getUserEntitlement(user.id, user.godMode);
     if (!ent.plan.features.includes('hints')) {
       trackEvent('feature_gate_hit_hints', user.id);
       return res.status(402).json({ error: 'Pro feature', feature: 'hints', planCode: ent.plan.code });
@@ -2133,12 +2142,8 @@ tgRouter.post(
       return res.status(400).json({ error: 'item_not_available', message: 'На это желание намекать уже не нужно — его забронировали' });
     }
 
-    // DEV BYPASS: skip rate limits for whitelisted Telegram IDs
-    const hintBypassIds = (process.env.HINTS_BYPASS_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
-    const skipRateLimits = user.telegramId ? hintBypassIds.includes(user.telegramId) : false;
-
     // 4. Anti-spam: max 3 hint waves per item per 30 days
-    if (!skipRateLimits) {
+    if (!user.godMode) {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const itemHintCount = await prisma.hint.count({
         where: { itemId: id, senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: thirtyDaysAgo } },
@@ -2515,8 +2520,12 @@ tgRouter.get(
   '/me/plan',
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id);
+    const ent = await getUserEntitlement(user.id, user.godMode);
     const wishlistCount = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } });
+
+    // God mode whitelist: only these Telegram IDs can toggle
+    const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
 
     return res.json({
       plan: {
@@ -2529,7 +2538,30 @@ tgRouter.get(
       subscription: ent.subscription,
       usage: { wishlists: wishlistCount },
       proPriceStars: PRO_PRICE_XTR,
+      godMode: user.godMode,
+      canGodMode,
     });
+  }),
+);
+
+// POST /tg/me/god-mode — toggle god mode (dev only, whitelisted users)
+tgRouter.post(
+  '/me/god-mode',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    if (!user.telegramId || !godModeAllowedIds.includes(user.telegramId)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { godMode: !user.godMode },
+      select: { godMode: true },
+    });
+
+    return res.json({ godMode: updated.godMode });
   }),
 );
 
@@ -2559,7 +2591,7 @@ tgRouter.post(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: 'Wishlist Pro',
-        description: 'Больше вишлистов, комментарии, добавление по ссылке и умные напоминания',
+        description: 'Больше вишлистов, комментарии, добавление по ссылке и намёки на подарок',
         payload,
         currency: 'XTR',
         prices: [{ label: 'PRO на месяц', amount: PRO_PRICE_XTR }],
