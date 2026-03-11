@@ -188,7 +188,7 @@ async function resolveUserFirstName(user: { id: string; firstName: string | null
 async function cancelItemHints(itemId: string): Promise<void> {
   try {
     await prisma.hint.updateMany({
-      where: { itemId, status: 'SENT' },
+      where: { itemId, status: { in: ['SENT', 'DELIVERED'] } },
       data: { status: 'CANCELLED' },
     });
   } catch { /* best-effort */ }
@@ -2136,19 +2136,43 @@ tgRouter.post(
     // 4. Anti-spam: max 3 hint waves per item per 30 days
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const itemHintCount = await prisma.hint.count({
-      where: { itemId: id, senderUserId: user.id, status: 'SENT', createdAt: { gte: thirtyDaysAgo } },
+      where: { itemId: id, senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: thirtyDaysAgo } },
     });
     if (itemHintCount >= 3) {
-      return res.status(429).json({ error: 'По этому желанию уже отправлено максимум намёков. Попробуй позже.' });
+      const oldestItemHint = await prisma.hint.findFirst({
+        where: { itemId: id, senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: thirtyDaysAgo } },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      });
+      const retryAfterSeconds = oldestItemHint
+        ? Math.max(0, Math.ceil((oldestItemHint.createdAt.getTime() + 30 * 24 * 60 * 60 * 1000 - Date.now()) / 1000))
+        : 0;
+      return res.status(429).json({
+        error: 'item_hint_limit',
+        message: 'По этому желанию исчерпан лимит намёков.',
+        retryAfterSeconds,
+      });
     }
 
     // 5. Anti-spam: max 5 hints per sender per day
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const dailyHintCount = await prisma.hint.count({
-      where: { senderUserId: user.id, status: 'SENT', createdAt: { gte: oneDayAgo } },
+      where: { senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: oneDayAgo } },
     });
     if (dailyHintCount >= 5) {
-      return res.status(429).json({ error: 'Лимит намёков на сегодня. Попробуй завтра.' });
+      const oldestDailyHint = await prisma.hint.findFirst({
+        where: { senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: oneDayAgo } },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      });
+      const retryAfterSeconds = oldestDailyHint
+        ? Math.max(0, Math.ceil((oldestDailyHint.createdAt.getTime() + 24 * 60 * 60 * 1000 - Date.now()) / 1000))
+        : 0;
+      return res.status(429).json({
+        error: 'daily_hint_limit',
+        message: 'Лимит намёков на сегодня исчерпан.',
+        retryAfterSeconds,
+      });
     }
 
     // 6. Create hint record
@@ -2181,6 +2205,40 @@ tgRouter.post(
     trackEvent('hint_created', user.id);
 
     return res.json({ hintId: hint.id, status: 'pending_selection' });
+  }),
+);
+
+// GET /tg/hints/:hintId — poll hint delivery status (for mini app)
+tgRouter.get(
+  '/hints/:hintId',
+  asyncHandler(async (req, res) => {
+    const hintId = req.params.hintId ?? '';
+    if (!hintId) return res.status(400).json({ error: 'Missing hint id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const hint = await prisma.hint.findFirst({
+      where: { id: hintId, senderUserId: user.id },
+      select: {
+        id: true,
+        status: true,
+        sentCount: true,
+        pendingCount: true,
+        deliveredAt: true,
+        item: { select: { id: true, title: true, status: true } },
+      },
+    });
+
+    if (!hint) return res.status(404).json({ error: 'Hint not found' });
+
+    return res.json({
+      hintId: hint.id,
+      status: hint.status,
+      sentCount: hint.sentCount,
+      pendingCount: hint.pendingCount,
+      deliveredAt: hint.deliveredAt,
+      itemTitle: hint.item.title,
+    });
   }),
 );
 

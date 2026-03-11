@@ -45,6 +45,7 @@ enum SubscriptionStatus {
 
 enum HintStatus {
   SENT
+  DELIVERED
   CANCELLED
   EXPIRED
 }
@@ -233,6 +234,10 @@ model Hint {
   status       HintStatus @default(SENT)
   createdAt    DateTime   @default(now())
   expiresAt    DateTime
+
+  sentCount    Int?
+  pendingCount Int?
+  deliveredAt  DateTime?
 
   item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
   user User @relation(fields: [senderUserId], references: [id], onDelete: Cascade)

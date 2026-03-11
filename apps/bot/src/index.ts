@@ -398,7 +398,15 @@ if (!token) {
       }
     }
 
-    // Summary to sender
+    // Save delivery results to Hint record (for mini app polling)
+    await prisma.hint.update({
+      where: { id: hint.id },
+      data: { status: 'DELIVERED', sentCount: directSent, pendingCount, deliveredAt: new Date() },
+    }).catch((err) => {
+      console.error('[bot] failed to update hint delivery status:', err);
+    });
+
+    // Summary to sender (secondary — primary UX is in mini app)
     const parts: string[] = [];
     if (directSent > 0) parts.push(`✅ Отправлено напрямую: ${directSent}`);
     if (pendingCount > 0) parts.push(`⏳ Не удалось отправить: ${pendingCount} (нет диалога с ботом)`);
