@@ -209,6 +209,42 @@ async function sendTgNotification(chatId: string, text: string): Promise<void> {
   }
 }
 
+/** Send a Telegram message with optional inline keyboard. Returns true on success. */
+async function sendTgBotMessage(chatId: string, text: string, inlineKeyboard?: Array<Array<{ text: string; url?: string; callback_data?: string }>>): Promise<boolean> {
+  const token = process.env.BOT_TOKEN;
+  if (!token || !chatId) return false;
+  try {
+    const payload: Record<string, unknown> = { chat_id: chatId, text, parse_mode: 'HTML' };
+    if (inlineKeyboard) payload.reply_markup = { inline_keyboard: inlineKeyboard };
+    const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json() as { ok: boolean };
+    return data.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Cached bot username for building deep links in the API layer. */
+let cachedBotUsername: string | null = null;
+async function getBotUsername(): Promise<string | null> {
+  if (cachedBotUsername) return cachedBotUsername;
+  const token = process.env.BOT_TOKEN;
+  if (!token) return null;
+  try {
+    const resp = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const data = await resp.json() as { ok: boolean; result?: { username?: string } };
+    if (data.ok && data.result?.username) {
+      cachedBotUsername = data.result.username;
+      return cachedBotUsername;
+    }
+  } catch { /* fallback */ }
+  return null;
+}
+
 // Notification batching (30s debounce per item+recipient)
 const pendingNotifications = new Map<string, { chatId: string; itemTitle: string; count: number; timer: ReturnType<typeof setTimeout> }>();
 
@@ -2141,23 +2177,27 @@ tgRouter.post(
       },
     });
 
-    // 7. Resolve owner name for share text
-    const ownerName = await resolveUserFirstName(
-      await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { id: true, firstName: true, telegramChatId: true } }),
-    );
+    // 7. Build deep link for hint delivery
+    const botUsername = await getBotUsername();
+    if (!botUsername) {
+      return res.status(500).json({ error: 'Bot not configured' });
+    }
+    const deepLink = `https://t.me/${botUsername}?start=hint_${id}`;
 
-    // 8. Build share payload + text
-    const sharePayload = `hint_${id}`;
-    const shortName = ownerName.split(' ')[0] ?? ownerName;
-    const shareText = `Есть идея подарка для ${ownerName} 🎁\n\nОбрати внимание на желание «${item.title}» — похоже, ${shortName.toLowerCase()} особенно нравится это.`;
+    // 8. Send hint delivery message to sender's bot chat
+    const senderChatId = user.telegramChatId;
+    if (senderChatId) {
+      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(deepLink)}&text=${encodeURIComponent('Загляни сюда 🎁')}`;
+      await sendTgBotMessage(
+        senderChatId,
+        `💡 Намёк на желание «${item.title}» создан!\n\nНажми кнопку ниже, чтобы отправить ссылку друзьям.\nКогда друг откроет ссылку — бот покажет ему желание от твоего имени.`,
+        [[{ text: '📨 Отправить друзьям', url: shareUrl }]],
+      );
+    }
 
     trackEvent('hint_created', user.id);
 
-    return res.json({
-      hintId: hint.id,
-      sharePayload,
-      shareText,
-    });
+    return res.json({ hintId: hint.id, status: 'created' });
   }),
 );
 

@@ -1178,23 +1178,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         pushToast(json.error || 'Ошибка отправки', 'error');
         return;
       }
-      const data = await res.json() as { hintId: string; sharePayload: string; shareText: string };
-      pushToast('Намек готов к отправке! Выбери, кому переслать 💡', 'success');
+      pushToast('Намёк создан! Загляни в чат с ботом 💡', 'success');
       try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('success'); } catch { /* ok */ }
-      // Open native Telegram share dialog
-      const deepLink = buildTgDeepLink(data.sharePayload);
-      if (deepLink) {
-        const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(deepLink)}&text=${encodeURIComponent(data.shareText)}`;
-        try {
-          window.Telegram?.WebApp.openTelegramLink(tgShareUrl);
-        } catch {
-          window.open(tgShareUrl, '_blank');
-        }
-      }
     } finally {
       setHintLoading(false);
     }
-  }, [hintLoading, planInfo, tgFetch, pushToast, buildTgDeepLink]);
+  }, [hintLoading, planInfo, tgFetch, pushToast]);
 
   const handleSaveDescription = useCallback(async () => {
     if (!viewingItem) return;
