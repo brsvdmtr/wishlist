@@ -875,14 +875,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // Hint state
   const [hintLoading, setHintLoading] = useState(false);
-  const [activeHintId, setActiveHintId] = useState<string | null>(null);
-  const [hintResult, setHintResult] = useState<{
-    status: 'SENT' | 'DELIVERED';
-    sentCount: number | null;
-    pendingCount: number | null;
-    itemTitle: string;
-  } | null>(null);
-  const hintPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [hintClosing, setHintClosing] = useState(false);
 
   // Description editing
   const [editingDescription, setEditingDescription] = useState(false);
@@ -1190,7 +1183,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   }, [viewingItem, tgFetch, pushToast]);
 
   const handleHintTap = useCallback(async (item: Item) => {
-    if (hintLoading) return;
+    if (hintLoading || hintClosing) return;
     // Free users → show upsell
     if (planInfo.code === 'FREE') { showUpsell('hints'); return; }
     setHintLoading(true);
@@ -1211,15 +1204,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         }
         return;
       }
-      const data = await res.json() as { hintId: string; status: string };
-      // Open the HintResultSheet with polling
-      setActiveHintId(data.hintId);
-      setHintResult({ status: 'SENT', sentCount: null, pendingCount: null, itemTitle: item.title });
+      // Show brief transition overlay, then close mini app → user lands in bot chat
       try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('success'); } catch { /* ok */ }
+      setHintClosing(true);
+      setTimeout(() => {
+        try { window.Telegram?.WebApp?.close?.(); } catch { /* ok */ }
+      }, 800);
     } finally {
       setHintLoading(false);
     }
-  }, [hintLoading, planInfo, tgFetch, pushToast, showUpsell]);
+  }, [hintLoading, hintClosing, planInfo, tgFetch, pushToast, showUpsell]);
 
   const handleSaveDescription = useCallback(async () => {
     if (!viewingItem) return;
@@ -1597,50 +1591,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [screen, guestWl, wishlists, loadItems]);
 
-  // --- Hint delivery polling: poll GET /tg/hints/:id every 3s while waiting
-  useEffect(() => {
-    if (!activeHintId) return;
-
-    const poll = async () => {
-      try {
-        const res = await tgFetch(`/tg/hints/${activeHintId}`);
-        if (!res.ok) return;
-        const data = await res.json() as {
-          status: string;
-          sentCount: number | null;
-          pendingCount: number | null;
-          itemTitle: string;
-        };
-        setHintResult({
-          status: data.status as 'SENT' | 'DELIVERED',
-          sentCount: data.sentCount,
-          pendingCount: data.pendingCount,
-          itemTitle: data.itemTitle,
-        });
-        // Stop polling once delivered/cancelled/expired
-        if (data.status !== 'SENT') {
-          if (hintPollRef.current) {
-            clearInterval(hintPollRef.current);
-            hintPollRef.current = null;
-          }
-        }
-      } catch { /* best-effort */ }
-    };
-
-    // Initial fetch after short delay (give bot time to process)
-    const initialTimeout = setTimeout(poll, 1000);
-    // Then poll every 3 seconds
-    hintPollRef.current = setInterval(poll, 3000);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      if (hintPollRef.current) {
-        clearInterval(hintPollRef.current);
-        hintPollRef.current = null;
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeHintId]);
 
   // --- Deferred edit: open edit form AFTER navigating back to wishlist-detail
   // (BottomSheet with position:fixed inside another position:fixed+overflowY:auto
@@ -3465,139 +3415,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         </div>
       </BottomSheet>
 
-      {/* ── HINT RESULT SHEET ── */}
-      <BottomSheet
-        isOpen={activeHintId !== null}
-        onClose={() => { setActiveHintId(null); setHintResult(null); }}
-        title="Намёк на подарок"
-      >
-        {hintResult && hintResult.status === 'SENT' && (
-          <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
-            <div style={{ fontSize: 48, marginBottom: 4, animation: 'pulse 2s ease-in-out infinite' }}>💡</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginTop: 8 }}>
-              Выбери получателей
+      {/* ── HINT CLOSING OVERLAY ── */}
+      {hintClosing && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 200 }} />
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 201,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{ fontSize: 40, animation: 'pulse 1s ease-in-out infinite' }}>💡</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginTop: 16, fontFamily: font }}>
+              Передаю в бот...
             </div>
-            <div style={{ fontSize: 13, color: C.textSec, marginTop: 6, lineHeight: 1.5 }}>
-              Нажми кнопку ниже — откроется чат с ботом, где можно выбрать друзей
-            </div>
-            <button
-              onClick={() => {
-                try { window.Telegram?.WebApp.openTelegramLink(`https://t.me/${botUsername}`); } catch { /* ok */ }
-              }}
-              style={{
-                width: '100%', marginTop: 20, padding: '14px 0',
-                background: C.accent, color: '#fff', border: 'none', borderRadius: 14,
-                fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font,
-              }}
-            >
-              Выбрать получателей
-            </button>
-            <button
-              onClick={() => { setActiveHintId(null); setHintResult(null); }}
-              style={{
-                width: '100%', marginTop: 8, padding: '12px 0',
-                background: 'transparent', color: C.textMuted, border: 'none',
-                fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font,
-              }}
-            >
-              Отмена
-            </button>
           </div>
-        )}
-        {hintResult && hintResult.status === 'DELIVERED' && (hintResult.sentCount ?? 0) > 0 && (hintResult.pendingCount ?? 0) === 0 && (
-          <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
-            <div style={{ fontSize: 48, marginBottom: 4 }}>✅</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginTop: 8 }}>
-              Намёк отправлен!
-            </div>
-            <div style={{ fontSize: 14, color: C.textSec, marginTop: 6 }}>
-              Доставлено: {hintResult.sentCount}
-            </div>
-            <button
-              onClick={() => { setActiveHintId(null); setHintResult(null); }}
-              style={{
-                width: '100%', marginTop: 20, padding: '14px 0',
-                background: C.accent, color: '#fff', border: 'none', borderRadius: 14,
-                fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font,
-              }}
-            >
-              Готово
-            </button>
-          </div>
-        )}
-        {hintResult && hintResult.status === 'DELIVERED' && (hintResult.sentCount ?? 0) > 0 && (hintResult.pendingCount ?? 0) > 0 && (
-          <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
-            <div style={{ fontSize: 48, marginBottom: 4 }}>⚠️</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginTop: 8 }}>
-              Частично отправлено
-            </div>
-            <div style={{ fontSize: 14, color: C.green, marginTop: 8 }}>
-              ✅ Доставлено: {hintResult.sentCount}
-            </div>
-            <div style={{ fontSize: 14, color: C.orange, marginTop: 4 }}>
-              ⏳ Не удалось: {hintResult.pendingCount}
-            </div>
-            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8, lineHeight: 1.5 }}>
-              Некоторым друзьям не удалось отправить — они ещё не начали диалог с ботом. Ссылка для них в чате с ботом.
-            </div>
-            <button
-              onClick={() => {
-                try { window.Telegram?.WebApp.openTelegramLink(`https://t.me/${botUsername}`); } catch { /* ok */ }
-              }}
-              style={{
-                width: '100%', marginTop: 16, padding: '14px 0',
-                background: C.surface, color: C.accent, border: `1px solid ${C.accent}40`,
-                borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font,
-              }}
-            >
-              Открыть чат с ботом
-            </button>
-            <button
-              onClick={() => { setActiveHintId(null); setHintResult(null); }}
-              style={{
-                width: '100%', marginTop: 8, padding: '14px 0',
-                background: C.accent, color: '#fff', border: 'none', borderRadius: 14,
-                fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font,
-              }}
-            >
-              Готово
-            </button>
-          </div>
-        )}
-        {hintResult && hintResult.status === 'DELIVERED' && (hintResult.sentCount ?? 0) === 0 && (
-          <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
-            <div style={{ fontSize: 48, marginBottom: 4 }}>📭</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginTop: 8 }}>
-              Не удалось доставить
-            </div>
-            <div style={{ fontSize: 13, color: C.textSec, marginTop: 6, lineHeight: 1.5 }}>
-              Выбранные друзья ещё не начали диалог с ботом. Отправь им ссылку из чата с ботом.
-            </div>
-            <button
-              onClick={() => {
-                try { window.Telegram?.WebApp.openTelegramLink(`https://t.me/${botUsername}`); } catch { /* ok */ }
-              }}
-              style={{
-                width: '100%', marginTop: 16, padding: '14px 0',
-                background: C.surface, color: C.accent, border: `1px solid ${C.accent}40`,
-                borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font,
-              }}
-            >
-              Открыть чат с ботом
-            </button>
-            <button
-              onClick={() => { setActiveHintId(null); setHintResult(null); }}
-              style={{
-                width: '100%', marginTop: 8, padding: '12px 0',
-                background: 'transparent', color: C.textMuted, border: 'none',
-                fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font,
-              }}
-            >
-              Понятно
-            </button>
-          </div>
-        )}
-      </BottomSheet>
+        </>
+      )}
 
       {/* ── TOASTS ── */}
       <div style={{ position: 'fixed', bottom: 24, left: 16, right: 16, zIndex: 200, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
