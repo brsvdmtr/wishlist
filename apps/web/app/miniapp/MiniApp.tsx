@@ -1204,11 +1204,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         }
         return;
       }
-      // Show brief transition overlay, then close mini app → user lands in bot chat
+      // Show brief transition overlay, then navigate to bot chat
       try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('success'); } catch { /* ok */ }
       setHintClosing(true);
       setTimeout(() => {
-        try { window.Telegram?.WebApp?.close?.(); } catch { /* ok */ }
+        try {
+          // openTelegramLink navigates to bot chat AND closes mini app
+          window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`);
+        } catch { /* ok */ }
       }, 800);
     } finally {
       setHintLoading(false);
