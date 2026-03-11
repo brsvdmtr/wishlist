@@ -1215,13 +1215,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // Show brief transition overlay, then navigate to bot chat
       try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('success'); } catch { /* ok */ }
       setHintClosing(true);
+      // Minimal delay for overlay to paint, then navigate to bot
       setTimeout(() => {
         try {
           window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`);
         } catch { /* ok */ }
-        // Clear overlay so it's not visible if mini app is restored from stack
-        setHintClosing(false);
-      }, 800);
+        // Fallback: if openTelegramLink didn't close the mini app, try close()
+        setTimeout(() => {
+          setHintClosing(false);
+          try { window.Telegram?.WebApp?.close?.(); } catch { /* ok */ }
+        }, 300);
+      }, 100);
     } finally {
       setHintLoading(false);
     }

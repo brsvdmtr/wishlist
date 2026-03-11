@@ -221,9 +221,11 @@ async function sendTgBotMessage(chatId: string, text: string, replyMarkup?: Reco
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const data = await resp.json() as { ok: boolean };
+    const data = await resp.json() as { ok: boolean; description?: string };
+    if (!data.ok) console.error('[sendTgBotMessage] Telegram API error:', data.description, 'chat_id:', chatId);
     return data.ok;
-  } catch {
+  } catch (err) {
+    console.error('[sendTgBotMessage] exception:', err);
     return false;
   }
 }
@@ -2199,7 +2201,7 @@ tgRouter.post(
     // 7. Send contact picker to sender's bot chat via request_users keyboard
     const senderChatId = user.telegramChatId;
     if (senderChatId) {
-      await sendTgBotMessage(
+      const sent = await sendTgBotMessage(
         senderChatId,
         `💡 Намёк на «${item.title}» создан!\n\nВыбери друзей, которым хочешь намекнуть:`,
         {
@@ -2209,8 +2211,12 @@ tgRouter.post(
           }]],
           resize_keyboard: true,
           one_time_keyboard: true,
+          is_persistent: true,
         },
       );
+      if (!sent) console.error('[hint] failed to send contact picker to chat', senderChatId);
+    } else {
+      console.error('[hint] no telegramChatId for user', user.id);
     }
 
     trackEvent('hint_created', user.id);
