@@ -2133,46 +2133,52 @@ tgRouter.post(
       return res.status(400).json({ error: 'item_not_available', message: 'На это желание намекать уже не нужно — его забронировали' });
     }
 
-    // 4. Anti-spam: max 3 hint waves per item per 30 days
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const itemHintCount = await prisma.hint.count({
-      where: { itemId: id, senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: thirtyDaysAgo } },
-    });
-    if (itemHintCount >= 3) {
-      const oldestItemHint = await prisma.hint.findFirst({
-        where: { itemId: id, senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: thirtyDaysAgo } },
-        orderBy: { createdAt: 'asc' },
-        select: { createdAt: true },
-      });
-      const retryAfterSeconds = oldestItemHint
-        ? Math.max(0, Math.ceil((oldestItemHint.createdAt.getTime() + 30 * 24 * 60 * 60 * 1000 - Date.now()) / 1000))
-        : 0;
-      return res.status(429).json({
-        error: 'item_hint_limit',
-        message: 'По этому желанию исчерпан лимит намёков.',
-        retryAfterSeconds,
-      });
-    }
+    // DEV BYPASS: skip rate limits for whitelisted Telegram IDs
+    const hintBypassIds = (process.env.HINTS_BYPASS_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    const skipRateLimits = user.telegramId ? hintBypassIds.includes(user.telegramId) : false;
 
-    // 5. Anti-spam: max 5 hints per sender per day
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const dailyHintCount = await prisma.hint.count({
-      where: { senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: oneDayAgo } },
-    });
-    if (dailyHintCount >= 5) {
-      const oldestDailyHint = await prisma.hint.findFirst({
+    // 4. Anti-spam: max 3 hint waves per item per 30 days
+    if (!skipRateLimits) {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const itemHintCount = await prisma.hint.count({
+        where: { itemId: id, senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: thirtyDaysAgo } },
+      });
+      if (itemHintCount >= 3) {
+        const oldestItemHint = await prisma.hint.findFirst({
+          where: { itemId: id, senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: thirtyDaysAgo } },
+          orderBy: { createdAt: 'asc' },
+          select: { createdAt: true },
+        });
+        const retryAfterSeconds = oldestItemHint
+          ? Math.max(0, Math.ceil((oldestItemHint.createdAt.getTime() + 30 * 24 * 60 * 60 * 1000 - Date.now()) / 1000))
+          : 0;
+        return res.status(429).json({
+          error: 'item_hint_limit',
+          message: 'По этому желанию исчерпан лимит намёков.',
+          retryAfterSeconds,
+        });
+      }
+
+      // 5. Anti-spam: max 5 hints per sender per day
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const dailyHintCount = await prisma.hint.count({
         where: { senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: oneDayAgo } },
-        orderBy: { createdAt: 'asc' },
-        select: { createdAt: true },
       });
-      const retryAfterSeconds = oldestDailyHint
-        ? Math.max(0, Math.ceil((oldestDailyHint.createdAt.getTime() + 24 * 60 * 60 * 1000 - Date.now()) / 1000))
-        : 0;
-      return res.status(429).json({
-        error: 'daily_hint_limit',
-        message: 'Лимит намёков на сегодня исчерпан.',
-        retryAfterSeconds,
-      });
+      if (dailyHintCount >= 5) {
+        const oldestDailyHint = await prisma.hint.findFirst({
+          where: { senderUserId: user.id, status: { in: ['SENT', 'DELIVERED'] }, createdAt: { gte: oneDayAgo } },
+          orderBy: { createdAt: 'asc' },
+          select: { createdAt: true },
+        });
+        const retryAfterSeconds = oldestDailyHint
+          ? Math.max(0, Math.ceil((oldestDailyHint.createdAt.getTime() + 24 * 60 * 60 * 1000 - Date.now()) / 1000))
+          : 0;
+        return res.status(429).json({
+          error: 'daily_hint_limit',
+          message: 'Лимит намёков на сегодня исчерпан.',
+          retryAfterSeconds,
+        });
+      }
     }
 
     // 6. Create hint record
