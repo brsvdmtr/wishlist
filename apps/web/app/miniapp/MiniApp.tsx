@@ -1209,9 +1209,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setHintClosing(true);
       setTimeout(() => {
         try {
-          // openTelegramLink navigates to bot chat AND closes mini app
           window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`);
         } catch { /* ok */ }
+        // Clear overlay so it's not visible if mini app is restored from stack
+        setHintClosing(false);
       }, 800);
     } finally {
       setHintLoading(false);
