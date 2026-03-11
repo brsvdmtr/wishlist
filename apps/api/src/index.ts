@@ -209,13 +209,13 @@ async function sendTgNotification(chatId: string, text: string): Promise<void> {
   }
 }
 
-/** Send a Telegram message with optional inline keyboard. Returns true on success. */
-async function sendTgBotMessage(chatId: string, text: string, inlineKeyboard?: Array<Array<{ text: string; url?: string; callback_data?: string }>>): Promise<boolean> {
+/** Send a Telegram message with optional reply markup. Returns true on success. */
+async function sendTgBotMessage(chatId: string, text: string, replyMarkup?: Record<string, unknown>): Promise<boolean> {
   const token = process.env.BOT_TOKEN;
   if (!token || !chatId) return false;
   try {
     const payload: Record<string, unknown> = { chat_id: chatId, text, parse_mode: 'HTML' };
-    if (inlineKeyboard) payload.reply_markup = { inline_keyboard: inlineKeyboard };
+    if (replyMarkup) payload.reply_markup = replyMarkup;
     const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -228,22 +228,6 @@ async function sendTgBotMessage(chatId: string, text: string, inlineKeyboard?: A
   }
 }
 
-/** Cached bot username for building deep links in the API layer. */
-let cachedBotUsername: string | null = null;
-async function getBotUsername(): Promise<string | null> {
-  if (cachedBotUsername) return cachedBotUsername;
-  const token = process.env.BOT_TOKEN;
-  if (!token) return null;
-  try {
-    const resp = await fetch(`https://api.telegram.org/bot${token}/getMe`);
-    const data = await resp.json() as { ok: boolean; result?: { username?: string } };
-    if (data.ok && data.result?.username) {
-      cachedBotUsername = data.result.username;
-      return cachedBotUsername;
-    }
-  } catch { /* fallback */ }
-  return null;
-}
 
 // Notification batching (30s debounce per item+recipient)
 const pendingNotifications = new Map<string, { chatId: string; itemTitle: string; count: number; timer: ReturnType<typeof setTimeout> }>();
@@ -2177,27 +2161,26 @@ tgRouter.post(
       },
     });
 
-    // 7. Build deep link for hint delivery
-    const botUsername = await getBotUsername();
-    if (!botUsername) {
-      return res.status(500).json({ error: 'Bot not configured' });
-    }
-    const deepLink = `https://t.me/${botUsername}?start=hint_${id}`;
-
-    // 8. Send hint delivery message to sender's bot chat
+    // 7. Send contact picker to sender's bot chat via request_users keyboard
     const senderChatId = user.telegramChatId;
     if (senderChatId) {
-      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(deepLink)}&text=${encodeURIComponent('Загляни сюда 🎁')}`;
       await sendTgBotMessage(
         senderChatId,
-        `💡 Намёк на желание «${item.title}» создан!\n\nНажми кнопку ниже, чтобы отправить ссылку друзьям.\nКогда друг откроет ссылку — бот покажет ему желание от твоего имени.`,
-        [[{ text: '📨 Отправить друзьям', url: shareUrl }]],
+        `💡 Намёк на «${item.title}» создан!\n\nВыбери друзей, которым хочешь намекнуть:`,
+        {
+          keyboard: [[{
+            text: '👥 Выбрать получателей',
+            request_users: { request_id: Number(hint.id.slice(-6).replace(/\D/g, '') || '1'), user_is_bot: false, max_quantity: 10 },
+          }]],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        },
       );
     }
 
     trackEvent('hint_created', user.id);
 
-    return res.json({ hintId: hint.id, status: 'created' });
+    return res.json({ hintId: hint.id, status: 'pending_selection' });
   }),
 );
 

@@ -295,6 +295,127 @@ if (!token) {
     }
   });
 
+  // ─── Hint direct delivery: users_shared handler ─────────────────────────
+  // When sender selects recipients via request_users keyboard, Telegram sends
+  // a message with users_shared. We deliver the hint directly via Bot API.
+  bot.on('message', async (ctx, next) => {
+    const msg = ctx.message as unknown as Record<string, unknown>;
+    if (!msg.users_shared) return next();
+
+    const senderTgId = String(ctx.from!.id);
+    const shared = msg.users_shared as { request_id: number; users: Array<{ user_id: number; first_name?: string }> };
+
+    // Find sender's most recent active hint (created in last 30 min)
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+    const sender = await prisma.user.findUnique({ where: { telegramId: senderTgId }, select: { id: true } });
+    if (!sender) {
+      await ctx.reply('Не удалось найти профиль. Открой приложение и попробуй снова.', Markup.removeKeyboard());
+      return;
+    }
+
+    const hint = await prisma.hint.findFirst({
+      where: { senderUserId: sender.id, status: 'SENT', createdAt: { gte: thirtyMinAgo } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        item: {
+          select: {
+            id: true, title: true, status: true,
+            wishlist: { select: { slug: true, ownerId: true } },
+          },
+        },
+      },
+    });
+
+    if (!hint) {
+      await ctx.reply('Активный намёк не найден. Создай новый в приложении.', Markup.removeKeyboard());
+      return;
+    }
+
+    if (hint.item.status !== 'AVAILABLE') {
+      await ctx.reply('Это желание уже забронировано — намёк больше не нужен 🎁', Markup.removeKeyboard());
+      return;
+    }
+
+    // Resolve owner name for the hint message
+    const owner = await prisma.user.findUnique({
+      where: { id: hint.item.wishlist.ownerId },
+      select: { firstName: true, telegramId: true, telegramChatId: true },
+    });
+    let ownerName = owner?.firstName || 'Пользователь';
+    if (!owner?.firstName && owner?.telegramChatId) {
+      try {
+        const resp = await fetch(`https://api.telegram.org/bot${token}/getChat?chat_id=${owner.telegramChatId}`);
+        const data = await resp.json() as { ok: boolean; result?: { first_name?: string } };
+        if (data.ok && data.result?.first_name) {
+          ownerName = data.result.first_name;
+          await prisma.user.update({ where: { id: hint.item.wishlist.ownerId }, data: { firstName: data.result.first_name } }).catch(() => {});
+        }
+      } catch { /* fallback */ }
+    }
+    const shortName = ownerName.split(' ')[0] ?? ownerName;
+    const hintText = `Есть идея подарка для ${ownerName} 🎁\n\nОбрати внимание на желание «${hint.item.title}» — похоже, ${shortName.toLowerCase()} особенно нравится это.`;
+
+    let directSent = 0;
+    let pendingCount = 0;
+
+    for (const u of shared.users) {
+      const recipientTgId = String(u.user_id);
+      // Skip self-send
+      if (recipientTgId === senderTgId) continue;
+      // Skip if recipient is the owner themselves (edge case)
+      if (owner?.telegramId === recipientTgId) continue;
+
+      // Try direct bot delivery
+      try {
+        const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: u.user_id,
+            text: hintText,
+            reply_markup: {
+              inline_keyboard: [[
+                { text: 'Посмотреть желание 🎁', web_app: { url: `${MINI_APP_URL}?startapp=${hint.item.wishlist.slug}` } },
+              ]],
+            },
+          }),
+        });
+        const data = await resp.json() as { ok: boolean };
+        if (data.ok) {
+          directSent++;
+          // Ensure recipient in DB
+          await prisma.user.upsert({
+            where: { telegramId: recipientTgId },
+            update: { telegramChatId: recipientTgId },
+            create: { telegramId: recipientTgId, telegramChatId: recipientTgId },
+          }).catch(() => {});
+        } else {
+          pendingCount++;
+        }
+      } catch {
+        pendingCount++;
+      }
+    }
+
+    // Summary to sender
+    const parts: string[] = [];
+    if (directSent > 0) parts.push(`✅ Отправлено напрямую: ${directSent}`);
+    if (pendingCount > 0) parts.push(`⏳ Не удалось отправить: ${pendingCount} (нет диалога с ботом)`);
+    if (parts.length === 0) parts.push('Не выбран ни один получатель.');
+
+    await ctx.reply(parts.join('\n'), Markup.removeKeyboard());
+
+    // Fallback for pending: send deep link template
+    if (pendingCount > 0) {
+      const botInfo = await bot.telegram.getMe();
+      const deepLink = `https://t.me/${botInfo.username}?start=hint_${hint.item.id}`;
+      await ctx.reply(
+        `Некоторые друзья ещё не начали диалог с ботом.\n\nОтправь им эту ссылку — когда они откроют её, бот покажет намёк:\n${deepLink}`,
+      );
+    }
+  });
+
   // ─── URL import: text message handler ────────────────────────────────────
   const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
   const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/gi;
