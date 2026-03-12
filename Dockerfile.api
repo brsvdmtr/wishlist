@@ -28,8 +28,9 @@ RUN pnpm install --frozen-lockfile
 # Copy source code
 COPY . .
 
-# Generate Prisma and build
+# Generate Prisma, build shared package, then build API
 RUN pnpm db:generate
+RUN pnpm --filter @wishlist/shared build
 RUN pnpm build:api
 
 # Create non-root user with home dir (needed for Chromium) + persistent upload directory
