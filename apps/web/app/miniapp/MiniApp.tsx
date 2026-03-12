@@ -242,16 +242,16 @@ const UPSELL_CONTENT: Record<UpsellContext, {
   url_import: {
     emoji: '🔗',
     title: 'Добавление по ссылке',
-    subtitle: 'Вставь ссылку — название, фото и цена подтянутся сами.',
+    subtitle: 'Просто отправь ссылку боту — он сам подтянет название, фото и цену. Останется только перенести в нужный вишлист.',
     showTable: false,
-    benefits: ['Автозаполнение карточки', 'Поддержка популярных магазинов', 'Добавление в два клика'],
+    benefits: ['Автозаполнение карточки по ссылке', 'Поддержка популярных магазинов', 'Добавление желания в два клика'],
   },
   hints: {
     emoji: '💡',
     title: 'Намекнуть на подарок',
-    subtitle: 'Помогает аккуратно подсказать близким конкретное желание и повышает шанс, что подарок действительно дойдет до тебя.',
+    subtitle: 'Аккуратно подскажи друзьям, что именно ты хочешь получить — без неловкости.',
     showTable: false,
-    benefits: ['Мягкая подсказка для друзей', 'Ссылка на конкретное желание', 'Без неловких разговоров'],
+    benefits: ['Мягкая подсказка для друзей', 'Ссылка на конкретное желание', 'Без неловких разговоров о подарках'],
   },
   wishlist_limit: {
     emoji: '📋',
@@ -701,6 +701,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
                     { label: 'Участников', val: '5' },
                     { label: 'Комментарии', val: '—' },
                     { label: 'По ссылке', val: '—' },
+                    { label: 'Намёки', val: '—' },
                   ].map((r) => (
                     <div key={r.label} style={{ fontSize: 12, color: r.val === '—' ? C.textMuted : C.textSec, lineHeight: 1.3 }}>
                       <div style={{ fontWeight: 600 }}>{r.val}</div>
@@ -722,6 +723,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
                     { label: 'Участников', val: '20' },
                     { label: 'Комментарии', val: '✓' },
                     { label: 'По ссылке', val: '✓' },
+                    { label: 'Намёки', val: '✓' },
                   ].map((r) => (
                     <div key={r.label} style={{ fontSize: 12, color: r.val === '✓' ? C.green : C.text, lineHeight: 1.3 }}>
                       <div style={{ fontWeight: 600 }}>{r.val}</div>
@@ -2225,11 +2227,37 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Название</label>
-                <input style={inputStyle} placeholder="День рождения 2026 🎂" value={wlTitle} onChange={(e) => setWlTitle(e.target.value)} autoFocus />
+                <div style={{ position: 'relative' }}>
+                  <input style={{ ...inputStyle, paddingRight: wlTitle ? 36 : 16 }} placeholder="Например: День рождения 2026 🎂" value={wlTitle} onChange={(e) => setWlTitle(e.target.value)} autoFocus />
+                  {wlTitle && (
+                    <button
+                      onClick={() => setWlTitle('')}
+                      style={{
+                        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                        background: C.textMuted + '33', border: 'none', borderRadius: 10, width: 20, height: 20,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: C.textSec, fontSize: 11, cursor: 'pointer', padding: 0, lineHeight: 1,
+                      }}
+                    >✕</button>
+                  )}
+                </div>
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Дедлайн (необязательно)</label>
-                <input style={{ ...inputStyle, colorScheme: 'dark' }} type="date" value={wlDeadline} onChange={(e) => setWlDeadline(e.target.value)} />
+                <div style={{ position: 'relative' }}>
+                  <input style={{ ...inputStyle, colorScheme: 'dark', paddingRight: wlDeadline ? 36 : 16 }} type="date" value={wlDeadline} onChange={(e) => setWlDeadline(e.target.value)} />
+                  {wlDeadline && (
+                    <button
+                      onClick={() => setWlDeadline('')}
+                      style={{
+                        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                        background: C.textMuted + '33', border: 'none', borderRadius: 10, width: 20, height: 20,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: C.textSec, fontSize: 11, cursor: 'pointer', padding: 0, lineHeight: 1,
+                      }}
+                    >✕</button>
+                  )}
+                </div>
               </div>
               <button style={{ ...btnPrimary, opacity: wlTitle.trim() ? 1 : 0.5 }} onClick={() => void handleCreateWishlist()} disabled={!wlTitle.trim() || loading}>
                 {loading ? '…' : '✨ Создать'}
@@ -2773,9 +2801,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     setScreen('wishlist-detail');
                     setDeletingItem(item);
                   }} style={{
-                    ...btnBase, flex: 1, background: 'transparent', color: C.textMuted,
-                    border: `1px solid ${C.borderLight}`, borderRadius: 14,
-                    padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                    ...btnBase, flex: 1, background: C.redSoft, color: C.red,
+                    border: 'none', borderRadius: 14,
+                    padding: '12px 16px', fontSize: 14, fontWeight: 600,
                   }}>
                     Удалить
                   </button>
@@ -3063,28 +3091,40 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { label: 'Вишлисты', value: `до ${planInfo.wishlists}` },
-                { label: 'Желаний в каждом', value: `до ${planInfo.items}` },
-                { label: 'Участников', value: `до ${planInfo.participants}` },
+                { label: 'Вишлисты', value: `до ${planInfo.wishlists}`, desc: planInfo.code === 'PRO' ? 'Разделяй по событиям и людям' : null },
+                { label: 'Желаний в каждом', value: `до ${planInfo.items}`, desc: planInfo.code === 'PRO' ? 'Больше места для хотелок' : null },
+                { label: 'Участников', value: `до ${planInfo.participants}`, desc: planInfo.code === 'PRO' ? 'Собирай близких в одном вишлисте' : null },
               ].map((row) => (
-                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 14, color: C.textSec }}>{row.label}</span>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{row.value}</span>
+                <div key={row.label}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 14, color: C.textSec }}>{row.label}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{row.value}</span>
+                  </div>
+                  {row.desc && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{row.desc}</div>}
                 </div>
               ))}
               {planInfo.code === 'PRO' && (
                 <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 14, color: C.textSec }}>Комментарии</span>
-                    <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 14, color: C.textSec }}>Комментарии</span>
+                      <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>Обсуждай подарок прямо в карточке</div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 14, color: C.textSec }}>Импорт по ссылке</span>
-                    <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 14, color: C.textSec }}>Добавление по ссылке</span>
+                      <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>Бот сам заполнит карточку по ссылке</div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 14, color: C.textSec }}>Намекнуть на подарок</span>
-                    <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 14, color: C.textSec }}>Намекнуть на подарок</span>
+                      <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>Подскажи друзьям конкретную идею</div>
                   </div>
                 </>
               )}
