@@ -3,6 +3,7 @@ import { Telegraf, Markup } from 'telegraf';
 import fs from 'node:fs';
 import path from 'node:path';
 import { prisma } from '@wishlist/db';
+import { t, detectLocale, type Locale } from '@wishlist/shared';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/bot (pnpm -C apps/bot start).
@@ -28,12 +29,14 @@ if (!token) {
 } else {
   const bot = new Telegraf(token);
 
-  // Set the persistent menu button (bottom-left "Вишлист" button)
+  const getLocale = (ctx: any): Locale => detectLocale(ctx.from?.language_code);
+
+  // Set the persistent menu button (bottom-left "Wishlist" button)
   bot.telegram
     .setChatMenuButton({
       menuButton: {
         type: 'web_app',
-        text: 'Вишлист',
+        text: 'Wishlist',
         web_app: { url: MINI_APP_URL },
       },
     })
@@ -44,11 +47,13 @@ if (!token) {
 
   const menuButton = {
     type: 'web_app' as const,
-    text: 'Вишлист',
+    text: 'Wishlist',
     web_app: { url: MINI_APP_URL },
   };
 
   bot.start(async (ctx) => {
+    const locale = getLocale(ctx);
+
     // Override any stale per-chat menu button left by previous bot versions
     await ctx.setChatMenuButton(menuButton).catch(() => {});
 
@@ -71,18 +76,18 @@ if (!token) {
           select: { id: true, title: true, status: true, wishlist: { select: { slug: true, ownerId: true, owner: { select: { telegramId: true, firstName: true, telegramChatId: true } } } } },
         });
         if (!item) {
-          return ctx.reply('Это желание больше не доступно 🤷');
+          return ctx.reply(t('bot_hint_unavailable', locale));
         }
         // Self-send check: owner opened their own hint
         if (item.wishlist.owner.telegramId === telegramId) {
-          return ctx.reply('Себе намек отправлять не нужно 😊');
+          return ctx.reply(t('bot_hint_self', locale));
         }
         // Item no longer available
         if (item.status !== 'AVAILABLE') {
-          return ctx.reply('На это желание уже не нужно намекать — оно забронировано 🎁');
+          return ctx.reply(t('bot_hint_reserved', locale));
         }
         // Resolve owner name
-        let ownerName = item.wishlist.owner.firstName || 'Пользователь';
+        let ownerName = item.wishlist.owner.firstName || t('api_user_fallback', locale);
         if (!item.wishlist.owner.firstName && item.wishlist.owner.telegramChatId) {
           try {
             const BOT_TOKEN = process.env.BOT_TOKEN!;
@@ -96,46 +101,39 @@ if (!token) {
           } catch { /* use fallback */ }
         }
         const shortName = ownerName.split(' ')[0] ?? ownerName;
-        const msg = `Есть идея подарка для ${ownerName} 🎁\n\nОбрати внимание на желание «${item.title}» — похоже, ${shortName.toLowerCase()} особенно нравится это.`;
+        // Hint message uses the RECIPIENT's locale (the person opening the deep link)
+        const msg = t('bot_hint_msg', locale, { owner: ownerName, title: item.title, shortName: shortName.toLowerCase() });
         return ctx.reply(msg, Markup.inlineKeyboard([
-          Markup.button.webApp('Посмотреть желание 🎁', `${MINI_APP_URL}?startapp=${item.wishlist.slug}__item_${item.id}`),
+          Markup.button.webApp(t('bot_hint_view_btn', locale), `${MINI_APP_URL}?startapp=${item.wishlist.slug}__item_${item.id}`),
         ]));
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error('[bot] hint deep link error:', err);
-        return ctx.reply('Произошла ошибка. Попробуй позже 🙈');
+        return ctx.reply(t('bot_error', locale));
       }
     }
     if (payload) {
       // Guest deep link — open specific wishlist in mini app
       return ctx.reply(
-        `Смотри вишлист 🎁`,
+        t('bot_view_wishlist', locale),
         Markup.inlineKeyboard([
-          Markup.button.webApp('Смотреть вишлист 🎁', `${MINI_APP_URL}?startapp=${payload}`),
+          Markup.button.webApp(t('bot_view_wishlist_btn', locale), `${MINI_APP_URL}?startapp=${payload}`),
         ]),
       );
     }
     // Regular start — no inline button, user uses the menu button
-    return ctx.reply(
-      'Привет! WishBoard — твой персональный список желаний 🎁\nНажми кнопку «Вишлист» внизу, чтобы открыть приложение.',
-    );
+    return ctx.reply(t('bot_start', locale));
   });
 
-  bot.command('help', (ctx) =>
-    ctx.reply(
-      'WishBoard — создавай вишлисты и делись ими с друзьями.\n\n/start — начать\n/paysupport — помощь с оплатой\n\nОтправь ссылку на товар — я создам карточку желания!',
-    ),
-  );
+  bot.command('help', (ctx) => {
+    const locale = getLocale(ctx);
+    return ctx.reply(t('bot_help', locale));
+  });
 
-  bot.command('paysupport', (ctx) =>
-    ctx.reply(
-      '💳 Помощь с оплатой\n\n' +
-        'Если у тебя возникли проблемы с оплатой или подпиской PRO:\n\n' +
-        '1. Убедись, что у тебя достаточно Telegram Stars\n' +
-        '2. Попробуй перезапустить приложение и повторить оплату\n' +
-        '3. Если проблема сохраняется — напиши описание проблемы в этот чат, мы разберёмся 🙏',
-    ),
-  );
+  bot.command('paysupport', (ctx) => {
+    const locale = getLocale(ctx);
+    return ctx.reply(t('bot_paysupport', locale));
+  });
 
   // ─── Payment handlers (must be registered BEFORE bot.on('text')) ──────────
 
@@ -269,19 +267,17 @@ if (!token) {
         });
       });
 
-      const fmtDate = periodEnd.toLocaleDateString('ru-RU', {
+      const locale = getLocale(ctx);
+      const dateFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+      const fmtDate = periodEnd.toLocaleDateString(dateFmtLocale, {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
       });
       await ctx.reply(
-        `🎉 PRO подключен!\n\n` +
-          `✅ 10 вишлистов\n` +
-          `✅ 100 желаний в каждом\n` +
-          `✅ Комментарии и импорт по ссылке\n\n` +
-          `Действует до ${fmtDate}`,
+        t('bot_pro_activated', locale, { date: fmtDate }),
         Markup.inlineKeyboard([
-          Markup.button.webApp('Открыть WishBoard ✨', MINI_APP_URL),
+          Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL),
         ]),
       );
 
@@ -303,13 +299,14 @@ if (!token) {
     if (!msg.users_shared) return next();
 
     const senderTgId = String(ctx.from!.id);
+    const locale = getLocale(ctx); // sender's locale for status messages
     const shared = msg.users_shared as { request_id: number; users: Array<{ user_id: number; first_name?: string }> };
 
     // Find sender's most recent active hint (created in last 30 min)
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
     const sender = await prisma.user.findUnique({ where: { telegramId: senderTgId }, select: { id: true } });
     if (!sender) {
-      await ctx.reply('Не удалось найти профиль. Открой приложение и попробуй снова.', Markup.removeKeyboard());
+      await ctx.reply(t('bot_users_shared_no_profile', locale), Markup.removeKeyboard());
       return;
     }
 
@@ -328,12 +325,12 @@ if (!token) {
     });
 
     if (!hint) {
-      await ctx.reply('Активный намёк не найден. Создай новый в приложении.', Markup.removeKeyboard());
+      await ctx.reply(t('bot_users_shared_no_hint', locale), Markup.removeKeyboard());
       return;
     }
 
     if (hint.item.status !== 'AVAILABLE') {
-      await ctx.reply('Это желание уже забронировано — намёк больше не нужен 🎁', Markup.removeKeyboard());
+      await ctx.reply(t('bot_users_shared_reserved', locale), Markup.removeKeyboard());
       return;
     }
 
@@ -342,7 +339,8 @@ if (!token) {
       where: { id: hint.item.wishlist.ownerId },
       select: { firstName: true, telegramId: true, telegramChatId: true },
     });
-    let ownerName = owner?.firstName || 'Пользователь';
+    // Owner name fallback: use 'en' as default since we don't know recipient locale yet
+    let ownerName = owner?.firstName || t('api_user_fallback', 'en');
     if (!owner?.firstName && owner?.telegramChatId) {
       try {
         const resp = await fetch(`https://api.telegram.org/bot${token}/getChat?chat_id=${owner.telegramChatId}`);
@@ -354,7 +352,6 @@ if (!token) {
       } catch { /* fallback */ }
     }
     const shortName = ownerName.split(' ')[0] ?? ownerName;
-    const hintText = `Есть идея подарка для ${ownerName} 🎁\n\nОбрати внимание на желание «${hint.item.title}» — похоже, ${shortName.toLowerCase()} особенно нравится это.`;
 
     let directSent = 0;
     let pendingCount = 0;
@@ -366,6 +363,10 @@ if (!token) {
       // Skip if recipient is the owner themselves (edge case)
       if (owner?.telegramId === recipientTgId) continue;
 
+      // Recipient locale: not available from users_shared, default to 'en'
+      const recipientLocale: Locale = 'en';
+      const hintText = t('bot_hint_msg', recipientLocale, { owner: ownerName, title: hint.item.title, shortName: shortName.toLowerCase() });
+
       // Try direct bot delivery
       try {
         const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -376,7 +377,7 @@ if (!token) {
             text: hintText,
             reply_markup: {
               inline_keyboard: [[
-                { text: 'Посмотреть желание 🎁', web_app: { url: `${MINI_APP_URL}?startapp=${hint.item.wishlist.slug}__item_${hint.item.id}` } },
+                { text: t('bot_hint_view_btn', recipientLocale), web_app: { url: `${MINI_APP_URL}?startapp=${hint.item.wishlist.slug}__item_${hint.item.id}` } },
               ]],
             },
           }),
@@ -406,11 +407,11 @@ if (!token) {
       console.error('[bot] failed to update hint delivery status:', err);
     });
 
-    // Summary to sender (secondary — primary UX is in mini app)
+    // Summary to sender (uses sender's locale)
     const parts: string[] = [];
-    if (directSent > 0) parts.push(`✅ Отправлено напрямую: ${directSent}`);
-    if (pendingCount > 0) parts.push(`⏳ Не удалось отправить: ${pendingCount} (нет диалога с ботом)`);
-    if (parts.length === 0) parts.push('Не выбран ни один получатель.');
+    if (directSent > 0) parts.push(t('bot_sent_count', locale, { n: directSent }));
+    if (pendingCount > 0) parts.push(t('bot_pending_count', locale, { n: pendingCount }));
+    if (parts.length === 0) parts.push(t('bot_no_recipients', locale));
 
     await ctx.reply(parts.join('\n'), Markup.removeKeyboard());
 
@@ -418,9 +419,7 @@ if (!token) {
     if (pendingCount > 0) {
       const botInfo = await bot.telegram.getMe();
       const deepLink = `https://t.me/${botInfo.username}?start=hint_${hint.item.id}`;
-      await ctx.reply(
-        `Некоторые друзья ещё не начали диалог с ботом.\n\nОтправь им эту ссылку — когда они откроют её, бот покажет намёк:\n${deepLink}`,
-      );
+      await ctx.reply(t('bot_fallback_msg', locale, { link: deepLink }));
     }
   });
 
@@ -436,6 +435,8 @@ if (!token) {
     const text = ctx.message.text;
     if (text.startsWith('/')) return; // skip commands
 
+    const locale = getLocale(ctx);
+
     const urls = text.match(URL_REGEX);
     if (!urls || urls.length === 0) return; // no URL — stay silent
 
@@ -443,7 +444,7 @@ if (!token) {
 
     // Multiple URLs — warn
     if (urls.length > 1) {
-      await ctx.reply('Нашёл несколько ссылок. Создаю карточку по первой 👌');
+      await ctx.reply(t('bot_multiple_urls', locale));
     }
 
     // Text without URL = user note
@@ -474,14 +475,14 @@ if (!token) {
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
         if (res.status === 402) {
-          await ctx.reply('Слишком много неразобранных желаний. Разбери часть в приложении, потом добавляй новые 📦');
+          await ctx.reply(t('bot_import_drafts_full', locale));
           return;
         }
         if (res.status === 400) {
-          await ctx.reply(body.error || 'Не удалось обработать ссылку 🤷');
+          await ctx.reply(body.error || t('bot_import_error', locale));
           return;
         }
-        await ctx.reply('Не удалось обработать ссылку. Попробуй ещё раз 🤷');
+        await ctx.reply(t('bot_import_error_retry', locale));
         return;
       }
 
@@ -490,38 +491,53 @@ if (!token) {
         parseStatus: string;
       };
 
-      let msg = `✅ <b>Добавлено в Неразобранное</b>\n\n`;
+      const priceFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+      let msg = `${t('bot_import_success', locale)}\n\n`;
       msg += `<b>${escapeHtml(item.title)}</b>`;
       if (item.sourceDomain) msg += `\n🔗 ${escapeHtml(item.sourceDomain)}`;
-      if (item.price) msg += `\n💰 ${Number(item.price).toLocaleString('ru-RU')} ₽`;
+      if (item.price) msg += `\n💰 ${Number(item.price).toLocaleString(priceFmtLocale)} ₽`;
 
       if (parseStatus === 'failed') {
-        msg += `\n\n⚠️ Не удалось распознать товар — отредактируй в приложении`;
+        msg += `\n\n${t('bot_import_parse_failed', locale)}`;
       } else if (parseStatus === 'partial') {
-        msg += `\n\n💡 Распознал не всё — проверь и дополни в приложении`;
+        msg += `\n\n${t('bot_import_parse_partial', locale)}`;
       }
 
       await ctx.reply(msg, {
         parse_mode: 'HTML',
         ...Markup.inlineKeyboard([
-          Markup.button.webApp('Открыть в WishBoard ✨', `${MINI_APP_URL}?startapp=draft_${item.id}`),
+          Markup.button.webApp(t('bot_import_open', locale), `${MINI_APP_URL}?startapp=draft_${item.id}`),
         ]),
       });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[bot] import-url error:', err);
-      await ctx.reply('Произошла ошибка. Попробуй позже 🙈');
+      await ctx.reply(t('bot_error', locale));
     }
   });
 
+  // Set bot commands for default (English) and Russian locales
   bot.telegram
     .setMyCommands([
-      { command: 'start', description: 'Открыть WishBoard' },
-      { command: 'paysupport', description: 'Помощь с оплатой' },
+      { command: 'start', description: t('bot_cmd_start', 'en') },
+      { command: 'paysupport', description: t('bot_cmd_paysupport', 'en') },
     ])
     .catch((err: unknown) => {
       // eslint-disable-next-line no-console
       console.error('[bot] failed to set commands', err);
+    });
+
+  bot.telegram
+    .setMyCommands(
+      [
+        { command: 'start', description: t('bot_cmd_start', 'ru') },
+        { command: 'paysupport', description: t('bot_cmd_paysupport', 'ru') },
+      ],
+      { language_code: 'ru' },
+    )
+    .catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error('[bot] failed to set ru commands', err);
     });
 
   bot

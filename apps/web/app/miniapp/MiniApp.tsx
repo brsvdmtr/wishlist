@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { t, detectLocale, pluralize, type Locale } from '@wishlist/shared';
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES
@@ -41,35 +42,35 @@ function getEmoji(s: string) {
   return EMOJIS[Math.abs(code) % EMOJIS.length];
 }
 
-const PRICE_FILTERS = [
-  { label: 'Все', max: null },
-  { label: 'До 3 000 ₽', max: 3000 },
-  { label: 'До 10 000 ₽', max: 10000 },
-  { label: 'До 25 000 ₽', max: 25000 },
+const getPriceFilters = (locale: Locale) => [
+  { label: t('filter_all', locale), max: null },
+  { label: t('filter_under_3k', locale), max: 3000 },
+  { label: t('filter_under_10k', locale), max: 10000 },
+  { label: t('filter_under_25k', locale), max: 25000 },
 ];
 
-const PRIORITIES = [
-  { value: 1, emoji: '👍', label: 'Неплохо',  sub: 'Низкий приоритет' },
-  { value: 2, emoji: '❤️', label: 'Хочу',     sub: 'Средний приоритет' },
-  { value: 3, emoji: '🔥', label: 'Мечтаю',   sub: 'Высокий приоритет' },
+const getPriorities = (locale: Locale) => [
+  { value: 1, emoji: '👍', label: t('priority_low', locale),    sub: t('priority_low_sub', locale) },
+  { value: 2, emoji: '❤️', label: t('priority_medium', locale), sub: t('priority_medium_sub', locale) },
+  { value: 3, emoji: '🔥', label: t('priority_high', locale),   sub: t('priority_high_sub', locale) },
 ];
 
 const prioEmoji = (p: number) => ({ 1: '👍', 2: '❤️', 3: '🔥' } as Record<number, string>)[p] ?? '👍';
-const fmtPrice = (p: number | null) => p ? `${p.toLocaleString('ru-RU')} ₽` : null;
+const fmtPrice = (p: number | null, locale: Locale = 'ru') => p ? `${p.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US')} ₽` : null;
 
-function formatRetryAfter(seconds: number): string {
-  if (seconds <= 0) return 'Попробуйте снова.';
+function formatRetryAfter(seconds: number, locale: Locale): string {
+  if (seconds <= 0) return t('retry_now', locale);
   let hours = Math.floor(seconds / 3600);
   let minutes = Math.ceil((seconds % 3600) / 60);
   if (minutes >= 60) { hours += 1; minutes = 0; }
-  if (hours === 0) return `Попробуйте через ${minutes} мин.`;
+  if (hours === 0) return t('retry_minutes', locale, { minutes });
   if (hours < 24) {
     return minutes > 0
-      ? `Попробуйте через ${hours} ч ${minutes} мин.`
-      : `Попробуйте через ${hours} ч.`;
+      ? t('retry_hours', locale, { hours, minutes })
+      : t('retry_hours_only', locale, { hours });
   }
   const d = new Date(Date.now() + seconds * 1000);
-  return `Попробуйте завтра в ${d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.`;
+  return t('retry_tomorrow', locale, { time: d.toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' }) });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -229,49 +230,49 @@ function ProBadge({ style }: { style?: React.CSSProperties } = {}) {
   );
 }
 
-const UPSELL_CONTENT: Record<UpsellContext, {
+const getUpsellContent = (locale: Locale): Record<UpsellContext, {
   emoji: string; title: string; subtitle: string; showTable: boolean; benefits?: string[];
-}> = {
+}> => ({
   comments: {
     emoji: '💬',
-    title: 'Комментарии к подаркам',
-    subtitle: 'Обсуждай детали с тем, кто забронировал — прямо в карточке.',
+    title: t('upsell_comments_title', locale),
+    subtitle: t('upsell_comments_subtitle', locale),
     showTable: false,
-    benefits: ['Приватный чат с бронирующим', 'Уточни размер, цвет и детали', 'Вся история в одном месте'],
+    benefits: [t('upsell_comments_b1', locale), t('upsell_comments_b2', locale), t('upsell_comments_b3', locale)],
   },
   url_import: {
     emoji: '🔗',
-    title: 'Добавление по ссылке',
-    subtitle: 'Просто отправь ссылку боту — он сам подтянет название, фото и цену. Останется только перенести в нужный вишлист.',
+    title: t('upsell_url_title', locale),
+    subtitle: t('upsell_url_subtitle', locale),
     showTable: false,
-    benefits: ['Автозаполнение карточки по ссылке', 'Поддержка популярных магазинов', 'Добавление желания в два клика'],
+    benefits: [t('upsell_url_b1', locale), t('upsell_url_b2', locale), t('upsell_url_b3', locale)],
   },
   hints: {
     emoji: '💡',
-    title: 'Намекнуть на подарок',
-    subtitle: 'Аккуратно подскажи друзьям, что именно ты хочешь получить — без неловкости.',
+    title: t('upsell_hints_title', locale),
+    subtitle: t('upsell_hints_subtitle', locale),
     showTable: false,
-    benefits: ['Мягкая подсказка для друзей', 'Ссылка на конкретное желание', 'Без неловких разговоров о подарках'],
+    benefits: [t('upsell_hints_b1', locale), t('upsell_hints_b2', locale), t('upsell_hints_b3', locale)],
   },
   wishlist_limit: {
     emoji: '📋',
-    title: 'Нужно больше вишлистов?',
-    subtitle: 'На бесплатном тарифе — 2 вишлиста. С Pro — до 10.',
+    title: t('upsell_wl_title', locale),
+    subtitle: t('upsell_wl_subtitle', locale),
     showTable: true,
   },
   item_limit: {
     emoji: '🎁',
-    title: 'Лимит желаний достигнут',
-    subtitle: 'Бесплатно — до 30 в вишлисте. С Pro — до 100.',
+    title: t('upsell_item_title', locale),
+    subtitle: t('upsell_item_subtitle', locale),
     showTable: true,
   },
   participant_limit: {
     emoji: '👥',
-    title: 'Слишком много участников',
-    subtitle: 'Бесплатно — до 5 участников. С Pro — до 20.',
+    title: t('upsell_part_title', locale),
+    subtitle: t('upsell_part_subtitle', locale),
     showTable: true,
   },
-};
+});
 
 // ═══════════════════════════════════════════════════════
 // COMPONENTS
@@ -320,11 +321,12 @@ function ItemThumb({ item }: { item: Item | GuestItem }) {
   );
 }
 
-function WishCardOwner({ item, onTap, onDelete, onComplete }: {
+function WishCardOwner({ item, onTap, onDelete, onComplete, locale }: {
   item: Item;
   onTap: (item: Item) => void;
   onDelete: (item: Item) => void;
   onComplete?: (item: Item) => void;
+  locale: Locale;
 }) {
   const isPurchased = item.status === 'purchased';
   const isReserved = item.status === 'reserved';
@@ -353,19 +355,19 @@ function WishCardOwner({ item, onTap, onDelete, onComplete }: {
           <span style={{ fontSize: 16, flexShrink: 0 }}>{prioEmoji(item.priority)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-          {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price)}</span>}
-          {item.url && <span style={{ fontSize: 11, color: C.textMuted, background: C.surface, padding: '2px 8px', borderRadius: 6 }}>🔗 ссылка</span>}
+          {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale)}</span>}
+          {item.url && <span style={{ fontSize: 11, color: C.textMuted, background: C.surface, padding: '2px 8px', borderRadius: 6 }}>{t('link_label', locale)}</span>}
         </div>
         <div style={{ marginTop: 10 }}>
-          {isReserved && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600 }}>Кто-то выбрал этот подарок ✨</span>}
-          {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>✅ Подарено</span>}
+          {isReserved && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600 }}>{t('status_someone_reserved', locale)}</span>}
+          {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>{t('status_gifted', locale)}</span>}
         </div>
       </div>
     </div>
   );
 }
 
-function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash }: { item: GuestItem; onTap: (item: GuestItem) => void; onReserve: (item: GuestItem) => void; onUnreserve: (item: GuestItem) => void; myActorHash: string }) {
+function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, locale }: { item: GuestItem; onTap: (item: GuestItem) => void; onReserve: (item: GuestItem) => void; onUnreserve: (item: GuestItem) => void; myActorHash: string; locale: Locale }) {
   const isPurchased = item.status === 'purchased';
   const isReserved = item.status === 'reserved';
   const isReservedByMe = isReserved && !!myActorHash && item.reservedByActorHash === myActorHash;
@@ -388,27 +390,27 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash }: { i
           <span style={{ fontSize: 16, flexShrink: 0 }}>{prioEmoji(item.priority)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-          {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price)}</span>}
-          {item.url && <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, color: C.accent, background: C.accentSoft, padding: '2px 8px', borderRadius: 6, textDecoration: 'none' }}>🔗 ссылка</a>}
+          {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale)}</span>}
+          {item.url && <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, color: C.accent, background: C.accentSoft, padding: '2px 8px', borderRadius: 6, textDecoration: 'none' }}>{t('link_label', locale)}</a>}
         </div>
         <div style={{ marginTop: 10 }}>
           {item.status === 'available' && (
-            <button onClick={(e) => { e.stopPropagation(); onReserve(item); }} style={{ ...btnPrimary, width: 'auto', padding: '8px 16px', fontSize: 13 }}>🎁 Забронировать</button>
+            <button onClick={(e) => { e.stopPropagation(); onReserve(item); }} style={{ ...btnPrimary, width: 'auto', padding: '8px 16px', fontSize: 13 }}>{t('reserve_btn', locale)}</button>
           )}
           {isReservedByMe && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>
-                ✅ Забронировано мной
+                {t('reserved_by_me', locale)}
               </span>
-              <button onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ background: 'none', border: 'none', padding: '6px 8px', fontSize: 12, color: C.textMuted, cursor: 'pointer', fontFamily: font }}>Отменить</button>
+              <button onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ background: 'none', border: 'none', padding: '6px 8px', fontSize: 12, color: C.textMuted, cursor: 'pointer', fontFamily: font }}>{t('cancel', locale)}</button>
             </div>
           )}
           {isReserved && !isReservedByMe && (
             <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.orangeSoft, color: C.orange, fontSize: 13, fontWeight: 600 }}>
-              Уже забронировано
+              {t('already_reserved', locale)}
             </span>
           )}
-          {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>✅ Подарено</span>}
+          {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>{t('status_gifted', locale)}</span>}
         </div>
       </div>
     </div>
@@ -419,11 +421,12 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash }: { i
 // RESERVATION CARD (for "My Reservations" section)
 // ═══════════════════════════════════════════════════════
 
-function ReservationCard({ item, onTap, onUnreserve, animDelay }: {
+function ReservationCard({ item, onTap, onUnreserve, animDelay, locale }: {
   item: ReservationItem;
   onTap: () => void;
   onUnreserve: () => void;
   animDelay: number;
+  locale: Locale;
 }) {
   return (
     <div
@@ -460,14 +463,14 @@ function ReservationCard({ item, onTap, onUnreserve, animDelay }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           {item.price != null && (
             <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>
-              {fmtPrice(item.price)}
+              {fmtPrice(item.price, locale)}
             </span>
           )}
           <span style={{
             fontSize: 11, background: C.greenSoft, color: C.green,
             padding: '2px 8px', borderRadius: 6, fontWeight: 600,
           }}>
-            Забронировано
+            {t('reservations_reserved', locale)}
           </span>
         </div>
         <div style={{ marginTop: 10 }}>
@@ -479,7 +482,7 @@ function ReservationCard({ item, onTap, onUnreserve, animDelay }: {
               color: C.textMuted, cursor: 'pointer', fontFamily: font,
             }}
           >
-            Снять бронь
+            {t('reservations_unreserve', locale)}
           </button>
         </div>
       </div>
@@ -491,13 +494,14 @@ function ReservationCard({ item, onTap, onUnreserve, animDelay }: {
 // COMMENTS THREAD (module-level to keep stable identity)
 // ═══════════════════════════════════════════════════════
 
-function CommentsThread({ commentRole, comments, commentText, setCommentText, commentSending, myActorHash, onDeleteComment, onSendComment, isArchive }: {
+function CommentsThread({ commentRole, comments, commentText, setCommentText, commentSending, myActorHash, onDeleteComment, onSendComment, isArchive, locale }: {
   commentRole: 'owner' | 'reserver' | null;
   comments: CommentDTO[];
   commentText: string;
   setCommentText: (t: string) => void;
   commentSending: boolean;
   myActorHash: string;
+  locale: Locale;
   onDeleteComment: (id: string) => void;
   onSendComment: () => void;
   isArchive?: boolean;
@@ -515,22 +519,22 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
   return (
     <div style={{ marginTop: 24, padding: 20, background: C.surface, borderRadius: 20 }}>
       <div style={{ fontSize: 17, fontWeight: 600, color: C.text, marginBottom: 4, fontFamily: font }}>
-        Комментарии
+        {t('comments_title', locale)}
       </div>
       <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 16, lineHeight: 1.4 }}>
-        Личный чат между автором и тем, кто забронировал
+        {t('comments_subtitle', locale)}
       </div>
 
       {isArchive && (
         <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 14px', borderRadius: 12, marginBottom: 14 }}>
-          Комментарии будут удалены через 30 дней
+          {t('comments_archive_warning', locale)}
         </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {comments.length === 0 && (
           <div style={{ textAlign: 'center', fontSize: 14, color: C.textMuted, padding: '24px 0 16px' }}>
-            Напишите первое сообщение
+            {t('comments_empty', locale)}
           </div>
         )}
         {comments.map(c => (
@@ -539,7 +543,7 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
               textAlign: 'center', fontSize: 12, color: C.textMuted,
               padding: '8px 14px', background: C.bg, borderRadius: 12, margin: '6px 0',
             }}>
-              {c.text} · {new Date(c.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              {c.text} · {new Date(c.createdAt).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </div>
           ) : (
             <div key={c.id} style={{
@@ -548,12 +552,12 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
             }}>
               {!isMine(c) && (
                 <div style={{ fontSize: 12, color: C.accent, marginBottom: 3, fontWeight: 600, fontFamily: font }}>
-                  {c.authorDisplayName ?? 'Аноним'}
+                  {c.authorDisplayName ?? t('comments_anon', locale)}
                 </div>
               )}
               {isMine(c) && (
                 <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 3, fontWeight: 500, fontFamily: font, textAlign: 'right' }}>
-                  Я
+                  {t('comments_me', locale)}
                 </div>
               )}
               <div style={{
@@ -572,7 +576,7 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
                     fontSize: 11,
                     color: isMine(c) ? 'rgba(255,255,255,0.45)' : C.textMuted,
                   }}>
-                    {new Date(c.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(c.createdAt).toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                   {canDelete(c) && !isArchive && (
                     <button
@@ -604,7 +608,7 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
                 borderRadius: 16, fontSize: 15,
                 background: C.bg,
               }}
-              placeholder="Написать комментарий..."
+              placeholder={t('comments_placeholder', locale)}
               value={commentText}
               onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
               maxLength={300}
@@ -640,13 +644,14 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
 // PRO UPSELL SHEET (context-aware)
 // ═══════════════════════════════════════════════════════
 
-function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
+function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, locale }: {
   state: UpsellSheetState;
   onClose: () => void;
   onUpgrade: () => void;
   checkoutLoading: boolean;
+  locale: Locale;
 }) {
-  const content = state ? UPSELL_CONTENT[state.context] : null;
+  const content = state ? getUpsellContent(locale)[state.context] : null;
   return (
     <BottomSheet isOpen={state !== null} onClose={onClose}>
       {content && (
@@ -696,12 +701,12 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, marginBottom: 12, fontFamily: font }}>Free</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { label: 'Вишлисты', val: '2' },
-                    { label: 'Желания', val: '30' },
-                    { label: 'Участников', val: '5' },
-                    { label: 'Комментарии', val: '—' },
-                    { label: 'По ссылке', val: '—' },
-                    { label: 'Намёки', val: '—' },
+                    { label: t('table_wishlists', locale), val: '2' },
+                    { label: t('table_wishes', locale), val: '30' },
+                    { label: t('table_participants', locale), val: '5' },
+                    { label: t('table_comments', locale), val: '—' },
+                    { label: t('table_by_link', locale), val: '—' },
+                    { label: t('table_hints', locale), val: '—' },
                   ].map((r) => (
                     <div key={r.label} style={{ fontSize: 12, color: r.val === '—' ? C.textMuted : C.textSec, lineHeight: 1.3 }}>
                       <div style={{ fontWeight: 600 }}>{r.val}</div>
@@ -718,12 +723,12 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 12, fontFamily: font }}>PRO</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { label: 'Вишлисты', val: '10' },
-                    { label: 'Желания', val: '100' },
-                    { label: 'Участников', val: '20' },
-                    { label: 'Комментарии', val: '✓' },
-                    { label: 'По ссылке', val: '✓' },
-                    { label: 'Намёки', val: '✓' },
+                    { label: t('table_wishlists', locale), val: '10' },
+                    { label: t('table_wishes', locale), val: '100' },
+                    { label: t('table_participants', locale), val: '20' },
+                    { label: t('table_comments', locale), val: '✓' },
+                    { label: t('table_by_link', locale), val: '✓' },
+                    { label: t('table_hints', locale), val: '✓' },
                   ].map((r) => (
                     <div key={r.label} style={{ fontSize: 12, color: r.val === '✓' ? C.green : C.text, lineHeight: 1.3 }}>
                       <div style={{ fontWeight: 600 }}>{r.val}</div>
@@ -740,7 +745,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
             <span style={{ fontSize: 24, fontWeight: 800, color: C.text }}>100</span>
             {' '}
             <span style={{ fontSize: 16, fontWeight: 600, color: C.text }}>Stars</span>
-            {' / мес'}
+            {' '}{t('upsell_per_month', locale)}
           </div>
 
           {/* CTA */}
@@ -753,16 +758,16 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading }: {
             onClick={onUpgrade}
             disabled={checkoutLoading}
           >
-            {checkoutLoading ? 'Оформляем…' : 'Подключить Pro'}
+            {checkoutLoading ? t('upsell_checkout_loading', locale) : t('upsell_cta', locale)}
           </button>
           <button
             style={{ ...btnGhost, width: '100%', marginTop: 8, fontSize: 14 }}
             onClick={onClose}
           >
-            Не сейчас
+            {t('upsell_not_now', locale)}
           </button>
           <div style={{ fontSize: 11, color: C.textMuted, marginTop: 10 }}>
-            Автопродление · отменить можно в любой момент
+            {t('upsell_auto_renew', locale)}
           </div>
         </div>
       )}
@@ -794,6 +799,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [screen, setScreen] = useState<Screen>('loading');
   const [errorMsg, setErrorMsg] = useState('');
   const [tgUser, setTgUser] = useState<TgUser | null>(null);
+  const [locale, setLocale] = useState<Locale>('ru');
 
   // Owner state
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
@@ -1026,21 +1032,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           } else if (planInfo.code === 'FREE') {
             showUpsell('item_limit', { auto: true });
           } else {
-            pushToast('Достигнут лимит тарифа', 'error');
+            pushToast(t('toast_plan_limit', locale), 'error');
           }
           return;
         }
         const body = await res.json().catch(() => ({})) as { error?: string };
-        pushToast(body.error || 'Не удалось обработать ссылку', 'error');
+        pushToast(body.error || t('toast_url_error', locale), 'error');
         return;
       }
       setImportUrl('');
       // Reload drafts + wishlists (to update drafts count)
       await loadDrafts();
       await loadWishlists();
-      pushToast('Карточка создана!', 'success');
+      pushToast(t('drafts_card_created', locale), 'success');
     } catch {
-      pushToast('Ошибка при обработке ссылки', 'error');
+      pushToast(t('toast_url_import_error', locale), 'error');
     } finally {
       setImportLoading(false);
     }
@@ -1054,27 +1060,27 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
-        pushToast(body.error || 'Не удалось переместить', 'error');
+        pushToast(body.error || t('toast_move_error', locale), 'error');
         return;
       }
       const targetWl = wishlists.find(w => w.id === targetWishlistId);
-      pushToast(`Перемещено в «${targetWl?.title || 'вишлист'}»`, 'success');
+      pushToast(t('drafts_moved', locale, { name: targetWl?.title || 'wishlist' }), 'success');
       setShowMovePicker(false);
       setMovingItem(null);
       // Reload drafts + wishlists
       await loadDrafts();
       await loadWishlists();
     } catch {
-      pushToast('Ошибка при перемещении', 'error');
+      pushToast(t('toast_move_error_generic', locale), 'error');
     }
   }, [tgFetch, pushToast, wishlists, loadDrafts, loadWishlists]);
 
   const handleArchiveDraft = useCallback(async (item: Item) => {
     const res = await tgFetch(`/tg/items/${item.id}`, { method: 'DELETE' });
-    if (!res.ok) { pushToast('Ошибка', 'error'); return; }
+    if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
     setDraftsItems(prev => prev.filter(i => i.id !== item.id));
     setDraftsCount(prev => Math.max(0, prev - 1));
-    pushToast('Перенесено в архив. Восстановить можно в течение 90 дней.', 'success');
+    pushToast(t('drafts_archived_toast', locale), 'success');
   }, [tgFetch, pushToast]);
 
   // --- Guest API calls
@@ -1104,12 +1110,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
     if (!resolved) {
       const slugRes = await fetch(`${apiBase}/public/wishlists/${encodeURIComponent(param)}`, { cache: 'no-store' });
-      if (slugRes.status === 404) throw new Error('Вишлист не найден');
-      if (!slugRes.ok) throw new Error('Не удалось загрузить вишлист');
+      if (slugRes.status === 404) throw new Error(t('error_load_failed', locale));
+      if (!slugRes.ok) throw new Error(t('error_load_failed', locale));
       json = await slugRes.json() as GuestResponse;
     }
 
-    if (!json) throw new Error('Не удалось загрузить вишлист');
+    if (!json) throw new Error(t('error_load_failed', locale));
 
     const priorityMap: Record<string, 1 | 2 | 3> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
     setGuestWl(json.wishlist);
@@ -1155,9 +1161,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     if (!viewingItem || !commentText.trim() || commentSending) return;
     const text = commentText.trim();
     // Client-side validation
-    if (text.length > 300) { pushToast('Максимум 300 символов', 'error'); return; }
+    if (text.length > 300) { pushToast(t('comments_max_chars', locale), 'error'); return; }
     const stripped = text.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s.…]+/gu, '');
-    if (stripped.length === 0) { pushToast('Напиши что-нибудь содержательное', 'error'); return; }
+    if (stripped.length === 0) { pushToast(t('comments_write_something', locale), 'error'); return; }
 
     setCommentSending(true);
     try {
@@ -1171,7 +1177,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           return;
         }
         const json = await res.json().catch(() => ({})) as { error?: string };
-        pushToast(json.error || 'Ошибка отправки', 'error');
+        pushToast(json.error || t('comments_send_error', locale), 'error');
         return;
       }
       const json = await res.json() as { comment: CommentDTO };
@@ -1188,9 +1194,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     if (res.ok) {
       setComments(prev => prev.filter(c => c.id !== commentId));
     } else {
-      pushToast('Ошибка удаления', 'error');
+      pushToast(t('comments_delete_error', locale), 'error');
     }
-  }, [viewingItem, tgFetch, pushToast]);
+  }, [viewingItem, tgFetch, pushToast, locale]);
 
   const handleHintTap = useCallback(async (item: Item) => {
     if (hintLoading || hintClosing) return;
@@ -1207,10 +1213,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           retryAfterSeconds?: number;
         };
         if (res.status === 429 && json.retryAfterSeconds != null) {
-          const msg = (json.message || 'Лимит исчерпан.') + ' ' + formatRetryAfter(json.retryAfterSeconds);
+          const msg = (json.message || t('hint_limit_exhausted', locale)) + ' ' + formatRetryAfter(json.retryAfterSeconds, locale);
           pushToast(msg, 'error');
         } else {
-          pushToast(json.message || json.error || 'Ошибка отправки', 'error');
+          pushToast(json.message || json.error || t('comments_send_error', locale), 'error');
         }
         return;
       }
@@ -1242,12 +1248,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         method: 'PATCH',
         body: JSON.stringify({ description: desc }),
       });
-      if (!res.ok) { pushToast('Ошибка сохранения', 'error'); return; }
+      if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
       const updated = { ...viewingItem, description: desc };
       setViewingItem(updated);
       setItems(prev => prev.map(i => i.id === viewingItem.id ? { ...i, description: desc } : i));
       setEditingDescription(false);
-      pushToast('Описание сохранено', 'success');
+      pushToast(t('description_saved', locale), 'success');
     } finally {
       setLoading(false);
     }
@@ -1260,19 +1266,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     try {
       const res = await tgFetch('/tg/billing/pro/checkout', { method: 'POST' });
       if (res.status === 409) {
-        pushToast('У тебя уже есть Pro ✨', 'success');
+        pushToast(t('toast_already_pro', locale), 'success');
         setCheckoutLoading(false);
         return;
       }
       if (!res.ok) {
-        pushToast('Не удалось начать оформление', 'error');
+        pushToast(t('toast_checkout_error', locale), 'error');
         trackEvent('checkout_failed');
         setCheckoutLoading(false);
         return;
       }
       const resData = await res.json() as { invoiceUrl?: string; alreadySubscribed?: boolean };
       if (resData.alreadySubscribed || !resData.invoiceUrl) {
-        pushToast('У тебя уже есть Pro ✨', 'success');
+        pushToast(t('toast_already_pro', locale), 'success');
         setCheckoutLoading(false);
         // Sync latest state
         try {
@@ -1291,7 +1297,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
       const tg = tgRef.current?.WebApp;
       if (!tg?.openInvoice) {
-        pushToast('Обнови Telegram для оплаты', 'error');
+        pushToast(t('toast_update_telegram', locale), 'error');
         setCheckoutLoading(false);
         return;
       }
@@ -1317,7 +1323,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             setSubscription(syncData.subscription);
             setPlanLimits({ wishlists: syncData.plan.wishlists, items: syncData.plan.items });
             tg.HapticFeedback?.notificationOccurred?.('success');
-            pushToast('Pro подключён! ✨', 'success');
+            pushToast(t('toast_pro_activated', locale), 'success');
             trackEvent('checkout_succeeded');
             setUpsellSheet(null);
             loadWishlists().catch(() => {});
@@ -1325,7 +1331,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             if (viewingItem) loadComments(viewingItem.id);
           } else {
             // Fallback: payment went through but sync didn't catch up yet
-            pushToast('Оплата прошла! Данные обновятся через пару секунд', 'success');
+            pushToast(t('toast_payment_syncing', locale), 'success');
             trackEvent('checkout_succeeded');
             setUpsellSheet(null);
             // Schedule a delayed retry
@@ -1344,13 +1350,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }, 5000);
           }
         } else if (status === 'failed') {
-          pushToast('Оплата не прошла', 'error');
+          pushToast(t('toast_payment_failed', locale), 'error');
           trackEvent('checkout_failed');
         }
         setCheckoutLoading(false);
       });
     } catch {
-      pushToast('Что-то пошло не так', 'error');
+      pushToast(t('error_generic', locale), 'error');
       setCheckoutLoading(false);
     }
   }, [tgFetch, pushToast, loadWishlists, trackEvent, viewingItem, loadComments]);
@@ -1370,13 +1376,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           cancelledAt: data.subscription.cancelledAt,
         });
         tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('warning');
-        pushToast('Продление отключено', 'success');
+        pushToast(t('cancel_success', locale), 'success');
         trackEvent('subscription_cancelled');
       } else {
-        pushToast('Не удалось отменить', 'error');
+        pushToast(t('toast_cancel_error', locale), 'error');
       }
     } catch {
-      pushToast('Что-то пошло не так', 'error');
+      pushToast(t('error_generic', locale), 'error');
     } finally {
       setCancelSubLoading(false);
       setShowCancelSub(false);
@@ -1397,15 +1403,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           cancelledAt: null,
         });
         tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('success');
-        pushToast('Продление возобновлено ✨', 'success');
+        pushToast(t('toast_renewal_resumed', locale), 'success');
         trackEvent('subscription_reactivated');
       } else {
         // Reactivate failed — maybe cancelled externally, offer new checkout
-        pushToast('Оформляем новую подписку…', 'success');
+        pushToast(t('toast_renewing_new', locale), 'success');
         void handleUpgradeToPro();
       }
     } catch {
-      pushToast('Что-то пошло не так', 'error');
+      pushToast(t('error_generic', locale), 'error');
     } finally {
       setCancelSubLoading(false);
     }
@@ -1477,7 +1483,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         if (attempts++ < 40) {
           setTimeout(tryInit, 100); // retry up to 4s while SDK loads
         } else {
-          setErrorMsg('Открой в Telegram');
+          setErrorMsg(t('error_open_in_telegram', locale));
           setScreen('error');
         }
         return;
@@ -1493,7 +1499,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       } catch (sdkErr) {
         // eslint-disable-next-line no-console
         console.error('[WishBoard] SDK error:', sdkErr);
-        setErrorMsg('Не удалось загрузить. Попробуй ещё раз.');
+        setErrorMsg(t('error_load_failed', locale));
         setScreen('error');
         return;
       }
@@ -1510,11 +1516,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setTgUser(user);
         computeActorHash(user.id).then(h => { myActorHashRef.current = h; }).catch(() => {});
       }
+      const lang = tg?.initDataUnsafe?.user?.language_code;
+      if (lang !== undefined) setLocale(detectLocale(lang));
 
       // If not inside real Telegram (initData is empty), show "Open in Telegram"
       // instead of attempting a doomed auth/API flow.
       if (!tg.initData) {
-        setErrorMsg('Открой в Telegram');
+        setErrorMsg(t('error_open_in_telegram', locale));
         setScreen('error');
         return;
       }
@@ -1523,7 +1531,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const msg = e instanceof Error ? e.message : String(e);
         // eslint-disable-next-line no-console
         console.error('[WishBoard]', msg, { apiBase, initData: tg.initData?.substring(0, 50) });
-        setErrorMsg('Не удалось загрузить. Попробуй ещё раз.');
+        setErrorMsg(t('error_load_failed', locale));
         setScreen('error');
       };
 
@@ -1651,16 +1659,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         if (planInfo.code === 'FREE') {
           showUpsell('wishlist_limit', { auto: true });
         } else {
-          pushToast(`Максимум ${planLimits.wishlists} вишлистов на Pro`, 'error');
+          pushToast(t('toast_max_wishlists', locale, { n: planLimits.wishlists }), 'error');
         }
         return;
       }
-      if (!res.ok) { pushToast('Ошибка создания', 'error'); return; }
+      if (!res.ok) { pushToast(t('toast_create_error', locale), 'error'); return; }
       const json = await res.json() as { wishlist: Wishlist };
       setWishlists((prev) => [json.wishlist, ...prev]);
       setShowCreateWl(false);
       setWlTitle(''); setWlDeadline('');
-      pushToast('✅ Вишлист создан!', 'success');
+      pushToast(t('wishlist_created', locale), 'success');
       // Navigate into new wishlist
       setCurrentWl(json.wishlist);
       setItems([]);
@@ -1680,13 +1688,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         method: 'PATCH',
         body: JSON.stringify({ title: trimmed }),
       });
-      if (!res.ok) { pushToast('Ошибка сохранения', 'error'); return; }
+      if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
       const json = await res.json() as { wishlist: { title: string } };
       const newTitle = json.wishlist.title;
       setCurrentWl((prev) => prev ? { ...prev, title: newTitle } : prev);
       setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, title: newTitle } : wl));
       setShowRenameWl(false);
-      pushToast('Название обновлено', 'success');
+      pushToast(t('rename_success', locale), 'success');
     } finally {
       setRenameSaving(false);
     }
@@ -1699,7 +1707,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     try {
       await loadItems(wl.id);
     } catch {
-      pushToast('Ошибка загрузки', 'error');
+      pushToast(t('toast_load_error', locale), 'error');
     } finally {
       setLoading(false);
     }
@@ -1740,12 +1748,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     if (!file) return;
     setPhotoError(null);
     if (!file.type.startsWith('image/')) {
-      setPhotoError('Только изображения (JPEG, PNG, WebP, GIF)');
+      setPhotoError(t('item_photo_only_images', locale));
       if (photoInputRef.current) photoInputRef.current.value = '';
       return;
     }
     if (file.size > 30 * 1024 * 1024) {
-      setPhotoError('Файл слишком большой. Максимум 30 МБ');
+      setPhotoError(t('item_photo_too_large', locale));
       if (photoInputRef.current) photoInputRef.current.value = '';
       return;
     }
@@ -1775,7 +1783,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         body: formData,
       });
       if (!res.ok) {
-        let msg = 'Ошибка загрузки фото';
+        let msg = t('item_photo_error', locale);
         try { const j = await res.json() as { error?: string }; if (j.error) msg = j.error; } catch { /* */ }
         setPhotoError(msg);
         return null;
@@ -1783,7 +1791,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const json = await res.json() as { photoUrl: string };
       return json.photoUrl;
     } catch {
-      setPhotoError('Ошибка сети при загрузке фото');
+      setPhotoError(t('item_photo_network_error', locale));
       return null;
     }
   }, [apiBase, initDataRef]);
@@ -1804,7 +1812,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
       if (editingItem) {
         const res = await tgFetch(`/tg/items/${editingItem.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-        if (!res.ok) { pushToast('Ошибка сохранения', 'error'); return; }
+        if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
         const json = await res.json() as { item: Item };
         let finalItem = json.item;
 
@@ -1820,18 +1828,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
         // Reload from API so list order reflects server-side sort (priority DESC)
         await loadItems(editingItem.wishlistId ?? currentWl.id);
-        pushToast('✅ Сохранено!', 'success');
+        pushToast(t('item_saved', locale), 'success');
       } else {
         const res = await tgFetch(`/tg/wishlists/${currentWl.id}/items`, { method: 'POST', body: JSON.stringify(body) });
         if (res.status === 402) {
           if (planInfo.code === 'FREE') {
             showUpsell('item_limit', { auto: true });
           } else {
-            pushToast(`Максимум ${planLimits.items} желаний на Pro`, 'error');
+            pushToast(t('toast_max_items', locale, { n: planLimits.items }), 'error');
           }
           return;
         }
-        if (!res.ok) { pushToast('Ошибка добавления', 'error'); return; }
+        if (!res.ok) { pushToast(t('toast_add_error', locale), 'error'); return; }
         const json = await res.json() as { item: Item };
 
         if (itemPhotoFile) {
@@ -1843,7 +1851,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         // Reload from API to get correct sorted position
         setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
         await loadItems(currentWl.id);
-        pushToast('✅ Желание добавлено!', 'success');
+        pushToast(t('item_added', locale), 'success');
       }
       setShowItemForm(false);
       resetItemForm();
@@ -1858,10 +1866,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setLoading(true);
     try {
       const res = await tgFetch(`/tg/items/${item.id}`, { method: 'DELETE' });
-      if (!res.ok) { pushToast('Ошибка удаления', 'error'); return; }
+      if (!res.ok) { pushToast(t('toast_delete_error', locale), 'error'); return; }
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
-      pushToast('🗑 Удалено', 'success');
+      pushToast(t('delete_deleted', locale), 'success');
     } finally {
       setLoading(false);
     }
@@ -1873,7 +1881,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setLoading(true);
     try {
       const res = await tgFetch(`/tg/wishlists/${currentWl.id}/archive`);
-      if (!res.ok) { pushToast('Ошибка загрузки архива', 'error'); return; }
+      if (!res.ok) { pushToast(t('toast_archive_error', locale), 'error'); return; }
       const json = await res.json() as { items: Item[] };
       setArchiveItems(json.items);
       setScreen('archive');
@@ -1887,10 +1895,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setLoading(true);
     try {
       const res = await tgFetch(`/tg/items/${item.id}/complete`, { method: 'POST' });
-      if (!res.ok) { pushToast('Ошибка', 'error'); return; }
+      if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
-      pushToast('Получено!', 'success');
+      pushToast(t('archive_received_toast', locale), 'success');
       try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch { /* ok */ }
     } finally {
       setLoading(false);
@@ -1901,14 +1909,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setLoading(true);
     try {
       const res = await tgFetch(`/tg/items/${item.id}/restore`, { method: 'POST' });
-      if (!res.ok) { pushToast('Ошибка восстановления', 'error'); return; }
+      if (!res.ok) { pushToast(t('toast_restore_error', locale), 'error'); return; }
       const json = await res.json() as { item: Item };
       setArchiveItems((prev) => prev.filter((i) => i.id !== item.id));
       setItems((prev) => [...prev, json.item]);
       if (currentWl) {
         setWishlists((prev) => prev.map((wl) => wl.id === currentWl!.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
       }
-      pushToast('Восстановлено!', 'success');
+      pushToast(t('archive_restored', locale), 'success');
     } finally {
       setLoading(false);
     }
@@ -1923,13 +1931,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         method: 'POST',
         body: JSON.stringify({ displayName: guestName.trim() }),
       });
-      if (res.status === 409) { pushToast('Уже забронировано', 'error'); return; }
-      if (res.status === 402) { pushToast('В этом вишлисте уже максимум участников', 'error'); return; }
-      if (!res.ok) { pushToast('Что-то пошло не так', 'error'); return; }
+      if (res.status === 409) { pushToast(t('toast_already_reserved', locale), 'error'); return; }
+      if (res.status === 402) { pushToast(t('toast_max_participants', locale), 'error'); return; }
+      if (!res.ok) { pushToast(t('error_generic', locale), 'error'); return; }
       const updatedItem = { ...reservingItem, status: 'reserved' as const, reservedByDisplayName: guestName.trim(), reservedByActorHash: myActorHashRef.current };
       setGuestItems((prev) => prev.map((i) => i.id === reservingItem.id ? updatedItem : i));
       if (viewingItem && viewingItem.id === reservingItem.id) setViewingItem(updatedItem);
-      pushToast('🎁 Забронировано!', 'success');
+      pushToast(t('reserve_success', locale), 'success');
       setReservingItem(null);
       setGuestName('');
     } finally {
@@ -1941,14 +1949,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setLoading(true);
     try {
       const res = await tgFetch(`/tg/items/${item.id}/unreserve`, { method: 'POST', body: '{}' });
-      if (!res.ok) { pushToast('Ошибка отмены', 'error'); return; }
+      if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       const updatedItem = { ...item, status: 'available' as const, reservedByDisplayName: null, reservedByActorHash: null };
       setGuestItems((prev) => prev.map((i) => i.id === item.id ? updatedItem : i));
       if (viewingItem && viewingItem.id === item.id) setViewingItem(updatedItem);
       // Also remove from reservations list if present
       setReservations((prev) => prev.filter((r) => r.id !== item.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
-      pushToast('Бронь отменена', 'success');
+      pushToast(t('unreserve_success', locale), 'success');
     } finally {
       setLoading(false);
     }
@@ -1958,10 +1966,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setLoading(true);
     try {
       const res = await tgFetch(`/tg/items/${item.id}/unreserve`, { method: 'POST', body: '{}' });
-      if (!res.ok) { pushToast('Ошибка отмены', 'error'); return; }
+      if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setReservations((prev) => prev.filter((r) => r.id !== item.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
-      pushToast('Бронь отменена', 'success');
+      pushToast(t('unreserve_success', locale), 'success');
     } finally {
       setLoading(false);
     }
@@ -1969,7 +1977,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   const fmtDeadline = (d: string | null) => {
     if (!d) return null;
-    return new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+    return new Date(d).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' });
   };
 
   // ─────────────────────────────────────────────────
@@ -1997,29 +2005,29 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'loading' && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16 }}>
           <div style={{ fontSize: 40 }}>🎁</div>
-          <div style={{ color: C.textMuted, fontSize: 15 }}>Загрузка…</div>
+          <div style={{ color: C.textMuted, fontSize: 15 }}>{t('loading', locale)}</div>
         </div>
       )}
 
       {/* ── ERROR ── */}
       {screen === 'error' && (() => {
-        const isTgRequired = errorMsg === 'Открой в Telegram';
+        const isTgRequired = errorMsg === t('error_open_in_telegram', locale);
         const tgDeepLink = buildTgDeepLink(urlStartParamRef.current || undefined);
         return (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
             <div style={{ fontSize: 48 }}>{isTgRequired ? '✈️' : '😕'}</div>
             <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>
-              {isTgRequired ? 'Открой в Telegram' : 'Ошибка загрузки'}
+              {isTgRequired ? t('error_open_in_telegram', locale) : t('error_loading', locale)}
             </div>
             <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>
               {isTgRequired
-                ? 'Это приложение работает только внутри Telegram'
-                : (errorMsg || 'Неизвестная ошибка')}
+                ? t('error_telegram_only', locale)
+                : (errorMsg || t('error_unknown', locale))}
             </div>
             {isTgRequired && tgDeepLink ? (
               <a href={tgDeepLink} style={{ textDecoration: 'none' }}>
                 <button style={{ ...btnPrimary, marginTop: 8, width: 220 }}>
-                  Открыть в Telegram
+                  {t('error_open_in_telegram_btn', locale)}
                 </button>
               </a>
             ) : (
@@ -2027,7 +2035,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 style={{ ...btnPrimary, marginTop: 8, width: 200 }}
                 onClick={() => window.location.reload()}
               >
-                Повторить
+                {t('retry', locale)}
               </button>
             )}
           </div>
@@ -2054,7 +2062,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 )}
               </div>
               <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
-                {tgUser ? `Привет, ${tgUser.first_name}!` : 'Мои вишлисты'}
+                {tgUser ? t('greeting', locale, { name: tgUser.first_name }) : t('my_wishlists', locale)}
               </p>
             </div>
             <button
@@ -2063,7 +2071,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 background: 'none', border: 'none', padding: 8, cursor: 'pointer',
                 fontSize: 20, color: C.textMuted, lineHeight: 1,
               }}
-              aria-label="Настройки"
+              aria-label={t('settings_title', locale)}
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
@@ -2076,12 +2084,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 borderRadius: 16, padding: '16px 20px', border: `1px solid ${C.accent}15`,
                 animation: 'fadeIn 0.3s ease',
               }}>
-                <div style={{ fontSize: 13, color: C.textSec, marginBottom: 8 }}>📊 Всего</div>
+                <div style={{ fontSize: 13, color: C.textSec, marginBottom: 8 }}>📊 {t('stats_total', locale)}</div>
                 <div style={{ display: 'flex', gap: 24 }}>
                   {[
-                    { n: wishlists.length, l: 'вишлиста', c: C.text },
-                    { n: totalItems, l: 'желаний', c: C.accent },
-                    { n: totalReserved, l: 'забронировано', c: C.green },
+                    { n: wishlists.length, l: t('stats_wishlists', locale), c: C.text },
+                    { n: totalItems, l: t('stats_wishes', locale), c: C.accent },
+                    { n: totalReserved, l: t('stats_reserved', locale), c: C.green },
                   ].map((s, i) => (
                     <div key={i}>
                       <div style={{ fontSize: 24, fontWeight: 800, color: s.c, fontFamily: font }}>{s.n}</div>
@@ -2103,9 +2111,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ fontSize: 24 }}>📥</span>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>Неразобранное</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{t('drafts_title', locale)}</div>
                     <div style={{ fontSize: 12, color: C.textMuted }}>
-                      {draftsCount} {draftsCount === 1 ? 'карточка' : draftsCount < 5 ? 'карточки' : 'карточек'}
+                      {draftsCount} {pluralize(draftsCount, t('cards_one', locale), t('cards_few', locale), t('cards_many', locale), locale)}
                     </div>
                   </div>
                 </div>
@@ -2129,7 +2137,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <span style={{ fontSize: 24 }}>🎁</span>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>Забронировано мной</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{t('reservations_title', locale)}</span>
                       <span style={{
                         minWidth: 20, height: 20, borderRadius: 10,
                         background: C.green, color: '#fff',
@@ -2141,7 +2149,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
                       {reservations.length > 0
                         ? reservations.slice(0, 3).map(r => r.title).join(', ').slice(0, 50) + (reservations.length > 3 ? '…' : '')
-                        : 'Открыть список'}
+                        : t('reservations_open_list', locale)}
                     </div>
                   </div>
                 </div>
@@ -2156,8 +2164,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ fontSize: 24 }}>🎁</span>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>Забронировано мной</div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>Здесь появятся желания, которые ты забронируешь у друзей</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{t('reservations_title', locale)}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('reservations_empty_hint', locale)}</div>
                   </div>
                 </div>
               </div>
@@ -2177,11 +2185,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         <span style={{
                           fontSize: 10, fontWeight: 600, padding: '2px 6px',
                           borderRadius: 4, background: C.orangeSoft, color: C.orange,
-                        }}>Только просмотр</span>
+                        }}>{t('view_only', locale)}</span>
                       )}
                     </div>
                     <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
-                      {wl.itemCount} желаний • {wl.reservedCount} забронировано
+                      {t('wishlist_count', locale, { count: wl.itemCount, reserved: wl.reservedCount })}
                     </div>
                   </div>
                   <span style={{ fontSize: 20, color: C.textMuted }}>›</span>
@@ -2197,7 +2205,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </div>
                 )}
                 {wl.deadline && (
-                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8 }}>📅 До {fmtDeadline(wl.deadline)}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8 }}>📅 {fmtDeadline(wl.deadline)}</div>
                 )}
               </div>
             ))}
@@ -2205,30 +2213,30 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {wishlists.length === 0 && (
               <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>Пока пусто</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('empty_state_title', locale)}</div>
                 <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
-                  Создай первый вишлист и поделись с друзьями!
+                  {t('empty_state_subtitle', locale)}
                 </div>
               </div>
             )}
 
             <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
-              {planInfo.code === 'PRO' ? 'Pro' : 'Free'}: {wishlists.length} из {planLimits.wishlists} вишлистов
+              {t('plan_status', locale, { plan: planInfo.code === 'PRO' ? 'Pro' : 'Free', count: wishlists.length, max: planLimits.wishlists })}
             </div>
             {planInfo.code === 'FREE' && (
               <button style={{ ...btnGhost, width: '100%', fontSize: 13, color: C.accent }} onClick={() => showUpsell('wishlist_limit')}>
-                Подключить Pro
+                {t('connect_pro', locale)}
               </button>
             )}
-            <button style={btnPrimary} onClick={() => setShowCreateWl(true)}>＋ Создать вишлист</button>
+            <button style={btnPrimary} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</button>
           </div>
 
-          <BottomSheet isOpen={showCreateWl} onClose={() => setShowCreateWl(false)} title="Новый вишлист">
+          <BottomSheet isOpen={showCreateWl} onClose={() => setShowCreateWl(false)} title={t('new_wishlist', locale)}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Название</label>
+                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('wishlist_name', locale)}</label>
                 <div style={{ position: 'relative' }}>
-                  <input style={{ ...inputStyle, paddingRight: wlTitle ? 36 : 16 }} placeholder="Например: День рождения 2026 🎂" value={wlTitle} onChange={(e) => setWlTitle(e.target.value)} autoFocus />
+                  <input style={{ ...inputStyle, paddingRight: wlTitle ? 36 : 16 }} placeholder={t('wishlist_name_placeholder', locale)} value={wlTitle} onChange={(e) => setWlTitle(e.target.value)} autoFocus />
                   {wlTitle && (
                     <button
                       onClick={() => setWlTitle('')}
@@ -2243,7 +2251,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Дедлайн (необязательно)</label>
+                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('wishlist_deadline', locale)}</label>
                 <div style={{ position: 'relative' }}>
                   <input style={{ ...inputStyle, colorScheme: 'dark', paddingRight: wlDeadline ? 36 : 16 }} type="date" value={wlDeadline} onChange={(e) => setWlDeadline(e.target.value)} />
                   {wlDeadline && (
@@ -2260,7 +2268,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </div>
               </div>
               <button style={{ ...btnPrimary, opacity: wlTitle.trim() ? 1 : 0.5 }} onClick={() => void handleCreateWishlist()} disabled={!wlTitle.trim() || loading}>
-                {loading ? '…' : '✨ Создать'}
+                {loading ? '…' : t('wishlist_create_btn', locale)}
               </button>
             </div>
           </BottomSheet>
@@ -2273,11 +2281,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'drafts' && (
         <div style={{ padding: '16px 20px 120px' }}>
           <div style={{ marginBottom: 20 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>📥 Неразобранное</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>📥 {t('drafts_title', locale)}</h1>
             <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
               {draftsItems.length > 0
-                ? `${draftsItems.length} ${draftsItems.length === 1 ? 'карточка' : draftsItems.length < 5 ? 'карточки' : 'карточек'}`
-                : 'Отправь ссылку на товар боту'}
+                ? `${draftsItems.length} ${pluralize(draftsItems.length, t('cards_one', locale), t('cards_few', locale), t('cards_many', locale), locale)}`
+                : t('drafts_send_link', locale)}
             </p>
           </div>
 
@@ -2286,7 +2294,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ position: 'relative', flex: 1 }}>
               <input
                 style={{ ...inputStyle, flex: 1, paddingRight: planInfo.code === 'FREE' ? 52 : 16 }}
-                placeholder={planInfo.code === 'FREE' ? 'Ссылка на товар · Pro' : 'Вставь ссылку на товар…'}
+                placeholder={planInfo.code === 'FREE' ? t('drafts_url_pro_placeholder', locale) : t('drafts_url_placeholder', locale)}
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.target.value)}
                 onKeyDown={(e) => {
@@ -2346,7 +2354,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     )}
                     {item.price != null && item.price > 0 && (
                       <div style={{ fontSize: 13, color: C.textSec, marginTop: 2 }}>
-                        💰 {Number(item.price).toLocaleString('ru-RU')} ₽
+                        💰 {Number(item.price).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US')} ₽
                       </div>
                     )}
                   </div>
@@ -2357,13 +2365,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     style={{ ...btnSecondary, flex: 1, padding: '10px 0', fontSize: 13 }}
                     onClick={() => { setMovingItem(item); setShowMovePicker(true); }}
                   >
-                    📁 Переместить
+                    📁 {t('drafts_move', locale)}
                   </button>
                   <button
                     style={{ ...btnGhost, padding: '10px 12px', fontSize: 13, color: C.textMuted }}
                     onClick={() => handleArchiveDraft(item)}
                   >
-                    📦 В архив
+                    📦 {t('drafts_archive', locale)}
                   </button>
                   <button
                     style={{ ...btnGhost, padding: '10px 12px', fontSize: 13 }}
@@ -2373,7 +2381,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       setScreen('item-detail');
                     }}
                   >
-                    Открыть ›
+                    {t('drafts_open', locale)}
                   </button>
                 </div>
               </div>
@@ -2383,21 +2391,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {draftsItems.length === 0 && !importLoading && (
             <div style={{ textAlign: 'center', padding: '48px 24px' }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>📥</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>Пусто</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('drafts_empty', locale)}</div>
               <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
-                Отправь ссылку на товар в чат с ботом или вставь ссылку выше
+                {t('drafts_empty_hint', locale)}
               </div>
             </div>
           )}
 
           {/* Move to wishlist BottomSheet */}
-          <BottomSheet isOpen={showMovePicker} onClose={() => { setShowMovePicker(false); setMovingItem(null); }} title="Переместить в вишлист">
+          <BottomSheet isOpen={showMovePicker} onClose={() => { setShowMovePicker(false); setMovingItem(null); }} title={t('drafts_move_title', locale)}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {wishlists.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                  <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 12 }}>Сначала создай вишлист</div>
+                  <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 12 }}>{t('drafts_create_first', locale)}</div>
                   <button style={btnPrimary} onClick={() => { setShowMovePicker(false); setMovingItem(null); setScreen('my-wishlists'); setShowCreateWl(true); }}>
-                    ＋ Создать вишлист
+                    {t('create_wishlist_btn', locale)}
                   </button>
                 </div>
               )}
@@ -2415,7 +2423,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 >
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
-                    <div style={{ fontSize: 12, color: C.textMuted }}>{wl.itemCount} желаний</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>{t('wishes_count', locale, { count: wl.itemCount })}</div>
                   </div>
                   <span style={{ color: C.textMuted }}>›</span>
                 </button>
@@ -2431,27 +2439,27 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'my-reservations' && (
         <div style={{ padding: '16px 20px 120px' }}>
           <div style={{ marginBottom: 20 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>🎁 Забронировано мной</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>🎁 {t('reservations_title', locale)}</h1>
             <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
               {reservationsCount > 0
-                ? `${reservationsCount} ${reservationsCount === 1 ? 'желание' : reservationsCount < 5 ? 'желания' : 'желаний'}`
-                : 'Желания, которые ты забронировал у друзей'}
+                ? `${reservationsCount} ${pluralize(reservationsCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}`
+                : t('reservations_empty_hint', locale)}
             </p>
           </div>
 
           {reservationsLoading && reservations.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px 24px' }}>
               <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
-              <div style={{ fontSize: 14, color: C.textMuted }}>Загружаем…</div>
+              <div style={{ fontSize: 14, color: C.textMuted }}>{t('reservations_loading', locale)}</div>
             </div>
           )}
 
           {!reservationsLoading && reservations.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px 24px' }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>Пока пусто</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('reservations_empty_title', locale)}</div>
               <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
-                Здесь появятся желания, которые ты забронируешь у друзей
+                {t('reservations_empty_hint', locale)}
               </div>
             </div>
           )}
@@ -2470,7 +2478,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
                     cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
                   }}
-                  onClick={() => pushToast('Профиль появится в следующих версиях', 'success')}
+                  onClick={() => pushToast(t('toast_profile_coming', locale), 'success')}
                 >
                   <div style={{
                     width: 36, height: 36, borderRadius: 18,
@@ -2478,12 +2486,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 16, fontWeight: 700, color: '#fff', flexShrink: 0,
                   }}>
-                    {(group.ownerName || 'П').charAt(0).toUpperCase()}
+                    {(group.ownerName || t('api_user_fallback', locale)).charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
                     <div style={{ fontSize: 12, color: C.textMuted }}>
-                      {group.items.length} {group.items.length === 1 ? 'желание' : group.items.length < 5 ? 'желания' : 'желаний'}
+                      {group.items.length} {pluralize(group.items.length, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
                     </div>
                   </div>
                 </div>
@@ -2496,6 +2504,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         key={item.id}
                         item={item}
                         animDelay={delay}
+                        locale={locale}
                         onTap={() => {
                           setViewingItem({
                             ...item,
@@ -2528,12 +2537,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <button
                   onClick={() => { setRenameWlTitle(currentWl.title); setShowRenameWl(true); }}
                   style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', fontSize: 14, color: C.textMuted, lineHeight: 1, flexShrink: 0 }}
-                  aria-label="Переименовать"
+                  aria-label={t('rename_title', locale)}
                 >✏️</button>
               </div>
               <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0' }}>
-                {items.length} желаний
-                {currentWl.deadline && ` • до ${fmtDeadline(currentWl.deadline)}`}
+                {t('wishes_count', locale, { count: items.length })}
+                {currentWl.deadline && ` • ${fmtDeadline(currentWl.deadline)}`}
               </p>
             </div>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -2541,13 +2550,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 onClick={() => void loadArchive()}
                 style={{ ...btnGhost, padding: '8px 12px', fontSize: 13 }}
               >
-                📦 Архив
+                📦 {t('archive_btn', locale)}
               </button>
               <button
                 onClick={() => setScreen('share')}
                 style={{ ...btnPrimary, width: 'auto', padding: '8px 16px', fontSize: 13 }}
               >
-                Поделиться
+                {t('share_btn', locale)}
               </button>
             </div>
           </div>
@@ -2561,37 +2570,37 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               }}>
                 <span>🔒</span>
                 <span>
-                  Только просмотр — лимит Free.{' '}
+                  {t('read_only_notice', locale)}{' '}
                   <span onClick={() => showUpsell('wishlist_limit')} style={{ textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}>
-                    Подключи Pro
-                  </span>, чтобы редактировать.
+                    {t('read_only_upgrade', locale)}
+                  </span>{t('read_only_to_edit', locale)}
                 </span>
               </div>
             )}
             <div style={{ borderRadius: 12, padding: '12px 16px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, background: C.accentSoft, color: C.accent, lineHeight: 1.5 }}>
-              <span>👁</span><span>Ты не видишь, кто и что забронировал — сюрприз!</span>
+              <span>👁</span><span>{t('surprise_notice', locale)}</span>
             </div>
 
             {loading && items.length === 0 && (
-              <div style={{ textAlign: 'center', padding: 40, color: C.textMuted }}>Загрузка…</div>
+              <div style={{ textAlign: 'center', padding: 40, color: C.textMuted }}>{t('loading', locale)}</div>
             )}
 
             {items.map((item, i) => (
               <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                <WishCardOwner item={item} onTap={(it) => { setViewingItem(it); setScreen('item-detail'); }} onDelete={setDeletingItem} onComplete={handleCompleteItem} />
+                <WishCardOwner item={item} onTap={(it) => { setViewingItem(it); setScreen('item-detail'); }} onDelete={setDeletingItem} onComplete={handleCompleteItem} locale={locale} />
               </div>
             ))}
 
             {!loading && items.length === 0 && (
               <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>✨</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>Добавь первое желание</div>
-                <div style={{ fontSize: 14, color: C.textMuted }}>Что бы ты хотел получить в подарок?</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('add_first_wish', locale)}</div>
+                <div style={{ fontSize: 14, color: C.textMuted }}>{t('add_first_wish_hint', locale)}</div>
               </div>
             )}
 
             {!currentWl.readOnly && (
-              <button style={btnSecondary} onClick={() => { resetItemForm(); setShowItemForm(true); }}>＋ Добавить желание</button>
+              <button style={btnSecondary} onClick={() => { resetItemForm(); setShowItemForm(true); }}>{t('add_wish_btn', locale)}</button>
             )}
           </div>
 
@@ -2627,7 +2636,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {/* Price */}
             {viewingItem.price != null && (
               <div style={{ fontSize: 22, fontWeight: 700, color: C.accent, marginBottom: 10 }}>
-                {fmtPrice(viewingItem.price)}
+                {fmtPrice(viewingItem.price, locale)}
               </div>
             )}
 
@@ -2639,7 +2648,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               fontSize: 13, fontWeight: 500, color: C.textSec,
             }}>
               {viewingItem.priority === 3 ? '🔥' : viewingItem.priority === 2 ? '💜' : '✨'}{' '}
-              {PRIORITIES.find((p) => p.value === viewingItem!.priority)?.label}
+              {getPriorities(locale).find((p) => p.value === viewingItem!.priority)?.label}
             </div>
 
             {/* URL + source badge */}
@@ -2658,8 +2667,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {/* Status badge */}
             {(viewingItem.status === 'reserved' || viewingItem.status === 'purchased') && (
               <div style={{ marginTop: 14 }}>
-                {viewingItem.status === 'reserved' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 12, background: C.accentSoft, color: C.accent, fontSize: 14, fontWeight: 600 }}>Кто-то выбрал этот подарок ✨</span>}
-                {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>✅ Подарено</span>}
+                {viewingItem.status === 'reserved' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 12, background: C.accentSoft, color: C.accent, fontSize: 14, fontWeight: 600 }}>{t('status_someone_reserved', locale)}</span>}
+                {viewingItem.status === 'purchased' && <span style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>{t('status_gifted', locale)}</span>}
               </div>
             )}
 
@@ -2668,12 +2677,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {viewingItem.description ? (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <span style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font }}>Описание</span>
+                    <span style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font }}>{t('description_title', locale)}</span>
                     <span
                       onClick={() => { setDescriptionText(viewingItem.description ?? ''); setEditingDescription(true); }}
                       style={{ fontSize: 13, color: C.accent, cursor: 'pointer', fontFamily: font }}
                     >
-                      Изменить
+                      {t('description_edit', locale)}
                     </span>
                   </div>
                   <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.65 }}>
@@ -2690,9 +2699,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   }}
                 >
                   <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5, marginBottom: 8 }}>
-                    Добавь описание, чтобы друзьям было проще выбрать подарок
+                    {t('description_add_prompt', locale)}
                   </div>
-                  <span style={{ fontSize: 14, color: C.accent, fontWeight: 600, fontFamily: font }}>+ Добавить</span>
+                  <span style={{ fontSize: 14, color: C.accent, fontWeight: 600, fontFamily: font }}>{t('description_add_btn', locale)}</span>
                 </div>
               )}
             </div>
@@ -2709,6 +2718,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 onDeleteComment={handleDeleteComment}
                 onSendComment={handleSendComment}
                 isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+                locale={locale}
               />
             ) : (
               <div
@@ -2721,14 +2731,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <span style={{ fontSize: 20 }}>💬</span>
-                  <span style={{ fontSize: 16, fontWeight: 600, color: C.text, fontFamily: font }}>Комментарии</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: C.text, fontFamily: font }}>{t('comments_pro_title', locale)}</span>
                   <ProBadge />
                 </div>
                 <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
-                  Обсуждай детали подарков с тем, кто забронировал
+                  {t('comments_pro_hint', locale)}
                 </div>
                 <div style={{ marginTop: 12, fontSize: 13, color: C.accent, fontWeight: 600 }}>
-                  Подробнее →
+                  {t('comments_pro_more', locale)}
                 </div>
               </div>
             )}
@@ -2747,10 +2757,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <span style={{ fontSize: 22 }}>💡</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>Намекнуть друзьям</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('hint_friends_btn', locale)}</span>
                     {planInfo.code === 'FREE' && <ProBadge />}
                   </div>
-                  <div style={{ fontSize: 12, color: C.textMuted }}>Аккуратно подскажи о своих желаниях</div>
+                  <div style={{ fontSize: 12, color: C.textMuted }}>{t('hint_subtitle', locale)}</div>
                 </div>
                 <span style={{ fontSize: 16, color: C.textMuted }}>›</span>
               </div>
@@ -2765,8 +2775,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               >
                 <span style={{ fontSize: 22 }}>💡</span>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: C.textSec }}>Намекнуть друзьям</span>
-                  <div style={{ fontSize: 12, color: C.textMuted }}>На это желание намекать уже не нужно — его забронировали</div>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.textSec }}>{t('hint_friends_btn', locale)}</span>
+                  <div style={{ fontSize: 12, color: C.textMuted }}>{t('hint_reserved_notice', locale)}</div>
                 </div>
               </div>
             )}
@@ -2779,7 +2789,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   setViewingItem(null);
                   setScreen('wishlist-detail');
                 }} style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
-                  ✏️ Редактировать
+                  {t('edit_btn', locale)}
                 </button>
                 <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
                   <button onClick={() => {
@@ -2793,7 +2803,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     border: `1px solid ${C.borderLight}`, borderRadius: 14,
                     padding: '12px 16px', fontSize: 14, fontWeight: 500,
                   }}>
-                    Получено ✓
+                    {t('received_btn', locale)}
                   </button>
                   <button onClick={() => {
                     const item = viewingItem as Item;
@@ -2805,7 +2815,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     border: 'none', borderRadius: 14,
                     padding: '12px 16px', fontSize: 14, fontWeight: 600,
                   }}>
-                    Удалить
+                    {t('delete_btn', locale)}
                   </button>
                 </div>
               </div>
@@ -2843,7 +2853,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {/* Price */}
             {viewingItem.price != null && (
               <div style={{ fontSize: 22, fontWeight: 700, color: C.accent, marginBottom: 10 }}>
-                {fmtPrice(viewingItem.price)}
+                {fmtPrice(viewingItem.price, locale)}
               </div>
             )}
 
@@ -2855,7 +2865,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               fontSize: 13, fontWeight: 500, color: C.textSec,
             }}>
               {viewingItem.priority === 3 ? '🔥' : viewingItem.priority === 2 ? '💜' : '✨'}{' '}
-              {PRIORITIES.find((p) => p.value === viewingItem!.priority)?.label}
+              {getPriorities(locale).find((p) => p.value === viewingItem!.priority)?.label}
             </div>
 
             {/* URL */}
@@ -2875,7 +2885,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {viewingItem.description && (
               <div style={{ marginTop: 24 }}>
                 <div style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font, marginBottom: 10 }}>
-                  Описание
+                  {t('description_title', locale)}
                 </div>
                 <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.65 }}>
                   {viewingItem.description}
@@ -2888,13 +2898,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {viewingItem.status === 'available' && (
                 <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }}
                   style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
-                  🎁 Забронировать
+                  {t('reserve_btn', locale)}
                 </button>
               )}
               {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && (
                 <>
                   <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
-                    ✅ Забронировано мной
+                    {t('reserved_by_me', locale)}
                   </span>
                   <button onClick={() => void handleUnreserve(viewingItem as GuestItem)}
                     style={{
@@ -2902,18 +2912,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       border: `1px solid ${C.borderLight}`, borderRadius: 14,
                       padding: '12px 16px', fontSize: 14, fontWeight: 500,
                     }}>
-                    Отменить бронь
+                    {t('cancel_reservation', locale)}
                   </button>
                 </>
               )}
               {viewingItem.status === 'reserved' && !(!!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current) && (
                 <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
-                  Уже забронировано
+                  {t('already_reserved', locale)}
                 </span>
               )}
               {viewingItem.status === 'purchased' && (
                 <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
-                  ✅ Подарено
+                  {t('status_gifted', locale)}
                 </span>
               )}
             </div>
@@ -2929,12 +2939,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               onDeleteComment={handleDeleteComment}
               onSendComment={handleSendComment}
               isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+              locale={locale}
             />
 
             {/* Hint for third parties */}
             {viewingItem.status === 'available' && !commentRole && (
               <div style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', marginTop: 16, lineHeight: 1.5, padding: '0 16px' }}>
-                После бронирования можно оставить комментарий для автора
+                {t('after_reserve_hint', locale)}
               </div>
             )}
           </div>
@@ -2949,7 +2960,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           wishlist={currentWl}
           itemCount={items.length}
           tgUser={tgUser}
-          onCopied={() => pushToast('📨 Ссылка скопирована', 'success')}
+          onCopied={() => pushToast(t('share_copied', locale), 'success')}
+          locale={locale}
           buildTgDeepLink={buildTgDeepLink}
           isPro={planInfo.code === 'PRO'}
         />
@@ -2973,13 +2985,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div style={{ fontSize: 18, fontWeight: 700, fontFamily: font, color: C.text }}>{guestWl.title}</div>
               {guestWl.description && <div style={{ fontSize: 13, color: C.textMuted }}>{guestWl.description}</div>}
               {guestWl.deadline && (
-                <div style={{ fontSize: 12, color: C.textMuted }}>📅 до {fmtDeadline(guestWl.deadline)}</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>📅 {fmtDeadline(guestWl.deadline)}</div>
               )}
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-            {PRICE_FILTERS.map((pf, i) => (
+            {getPriceFilters(locale).map((pf, i) => (
               <button key={i} onClick={() => setPriceFilter(i)} style={{
                 padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
                 border: 'none', cursor: 'pointer', fontFamily: font, transition: 'all 0.2s',
@@ -2991,10 +3003,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {guestItems
-              .filter((i) => !PRICE_FILTERS[priceFilter]?.max || !i.price || i.price <= (PRICE_FILTERS[priceFilter]?.max ?? Infinity))
+              .filter((i) => !getPriceFilters(locale)[priceFilter]?.max || !i.price || i.price <= (getPriceFilters(locale)[priceFilter]?.max ?? Infinity))
               .map((item, i) => (
                 <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                  <WishCardGuest item={item} onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }} onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }} onUnreserve={handleUnreserve} myActorHash={myActorHashRef.current} />
+                  <WishCardGuest item={item} onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }} onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }} onUnreserve={handleUnreserve} myActorHash={myActorHashRef.current} locale={locale} />
                 </div>
               ))}
           </div>
@@ -3009,18 +3021,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         <div style={{ padding: '16px 20px 120px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0 }}>📦 Архив</h1>
+              <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0 }}>📦 {t('archive_title', locale)}</h1>
               <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0' }}>{currentWl.title}</p>
-              <p style={{ fontSize: 11, color: C.orange, margin: '6px 0 0' }}>Архивные желания хранятся 90 дней</p>
+              <p style={{ fontSize: 11, color: C.orange, margin: '6px 0 0' }}>{t('archive_retention', locale)}</p>
             </div>
-            <button onClick={() => setScreen('wishlist-detail')} style={{ ...btnGhost, fontSize: 13, padding: '8px 14px' }}>← Назад</button>
+            <button onClick={() => setScreen('wishlist-detail')} style={{ ...btnGhost, fontSize: 13, padding: '8px 14px' }}>← {t('back', locale)}</button>
           </div>
 
           {archiveItems.length === 0 && !loading && (
             <div style={{ textAlign: 'center', padding: '48px 24px' }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
-              <div style={{ fontSize: 15, color: C.textMuted, lineHeight: 1.5 }}>Архив пуст</div>
-              <div style={{ fontSize: 13, color: C.textMuted, marginTop: 8 }}>Удалённые и полученные желания появятся здесь</div>
+              <div style={{ fontSize: 15, color: C.textMuted, lineHeight: 1.5 }}>{t('archive_empty', locale)}</div>
+              <div style={{ fontSize: 13, color: C.textMuted, marginTop: 8 }}>{t('archive_empty_hint', locale)}</div>
             </div>
           )}
 
@@ -3041,15 +3053,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
                       {item.status === 'completed' && (
-                        <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>Получено</span>
+                        <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_received', locale)}</span>
                       )}
                       {item.status === 'deleted' && (
-                        <span style={{ fontSize: 11, background: C.surface, color: C.textMuted, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>Удалено</span>
+                        <span style={{ fontSize: 11, background: C.surface, color: C.textMuted, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_deleted', locale)}</span>
                       )}
-                      {item.price != null && <span style={{ fontSize: 13, color: C.textMuted }}>{fmtPrice(item.price)}</span>}
+                      {item.price != null && <span style={{ fontSize: 13, color: C.textMuted }}>{fmtPrice(item.price, locale)}</span>}
                     </div>
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                      <button onClick={() => void handleRestoreItem(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.accent }}>↩ Восстановить</button>
+                      <button onClick={() => void handleRestoreItem(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.accent }}>{t('archive_restore', locale)}</button>
                     </div>
                   </div>
                 </div>
@@ -3064,7 +3076,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'settings' && (
         <div style={{ padding: '16px 20px 120px' }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 20px' }}>Настройки</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 20px' }}>{t('settings_title', locale)}</h1>
 
           {/* Current plan card */}
           <div style={{
@@ -3075,7 +3087,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             border: `1px solid ${planInfo.code === 'PRO' ? C.accent + '25' : C.border}`,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>Тариф</span>
+              <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>{t('settings_plan', locale)}</span>
               <span style={{
                 fontSize: 12, fontWeight: 800, letterSpacing: 0.5, padding: '4px 10px',
                 borderRadius: 6,
@@ -3091,9 +3103,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { label: 'Вишлисты', value: `до ${planInfo.wishlists}`, desc: planInfo.code === 'PRO' ? 'Разделяй по событиям и людям' : null },
-                { label: 'Желаний в каждом', value: `до ${planInfo.items}`, desc: planInfo.code === 'PRO' ? 'Больше места для хотелок' : null },
-                { label: 'Участников', value: `до ${planInfo.participants}`, desc: planInfo.code === 'PRO' ? 'Собирай близких в одном вишлисте' : null },
+                { label: t('settings_wishlists', locale), value: t('settings_up_to', locale, { n: planInfo.wishlists }), desc: planInfo.code === 'PRO' ? t('settings_desc_wishlists', locale) : null },
+                { label: t('settings_wishes_each', locale), value: t('settings_up_to', locale, { n: planInfo.items }), desc: planInfo.code === 'PRO' ? t('settings_desc_wishes', locale) : null },
+                { label: t('settings_participants', locale), value: t('settings_up_to', locale, { n: planInfo.participants }), desc: planInfo.code === 'PRO' ? t('settings_desc_participants', locale) : null },
               ].map((row) => (
                 <div key={row.label}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3107,24 +3119,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <>
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 14, color: C.textSec }}>Комментарии</span>
+                      <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_comments', locale)}</span>
                       <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
                     </div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>Обсуждай подарок прямо в карточке</div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_comments', locale)}</div>
                   </div>
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 14, color: C.textSec }}>Добавление по ссылке</span>
+                      <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_url_import', locale)}</span>
                       <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
                     </div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>Бот сам заполнит карточку по ссылке</div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_url_import', locale)}</div>
                   </div>
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 14, color: C.textSec }}>Намекнуть на подарок</span>
+                      <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_hints', locale)}</span>
                       <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
                     </div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>Подскажи друзьям конкретную идею</div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_hints', locale)}</div>
                   </div>
                 </>
               )}
@@ -3134,9 +3146,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, color: C.textSec }}>Следующее продление</span>
+                  <span style={{ fontSize: 13, color: C.textSec }}>{t('settings_next_renewal', locale)}</span>
                   <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                    {new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
+                    {new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}
                   </span>
                 </div>
               </div>
@@ -3152,8 +3164,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 }}>
                   <span>⏳</span>
                   <span>
-                    Продление отключено. Pro до{' '}
-                    <strong>{new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</strong>.
+                    {t('settings_renewal_disabled', locale)}{' '}
+                    <strong>{new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}</strong>.
                   </span>
                 </div>
               </div>
@@ -3168,7 +3180,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 style={{ ...btnSecondary, width: '100%', fontSize: 14 }}
                 onClick={() => setShowCancelSub(true)}
               >
-                Отменить продление
+                {t('settings_cancel_renewal', locale)}
               </button>
             )}
 
@@ -3182,7 +3194,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 onClick={() => void handleReactivateSub()}
                 disabled={cancelSubLoading}
               >
-                {cancelSubLoading ? 'Обновляем…' : 'Возобновить подписку'}
+                {cancelSubLoading ? t('settings_resuming', locale) : t('settings_resume_sub', locale)}
               </button>
             )}
 
@@ -3195,7 +3207,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 }}
                 onClick={() => showUpsell('wishlist_limit')}
               >
-                Подключить Pro
+                {t('connect_pro', locale)}
               </button>
             )}
           </div>
@@ -3210,10 +3222,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: godMode ? '#ff9900' : C.textSec, fontFamily: font }}>
-                    ⚡ Режим бога
+                    {t('settings_god_mode', locale)}
                   </div>
                   <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                    {godMode ? 'PRO без подписки, лимиты сняты' : 'Виртуальный PRO для тестирования'}
+                    {godMode ? t('settings_god_active', locale) : t('settings_god_inactive', locale)}
                   </div>
                 </div>
                 <button
@@ -3229,10 +3241,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         // Refresh plan data to reflect god mode changes
                         loadWishlists().catch(() => {});
                       } else {
-                        pushToast('Не удалось переключить', 'error');
+                        pushToast(t('toast_god_toggle_error', locale), 'error');
                       }
                     } catch {
-                      pushToast('Ошибка сети', 'error');
+                      pushToast(t('error_network', locale), 'error');
                     } finally {
                       setGodModeLoading(false);
                     }
@@ -3260,16 +3272,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       )}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
-      <BottomSheet isOpen={showRenameWl} onClose={() => setShowRenameWl(false)} title="Переименовать вишлист">
+      <BottomSheet isOpen={showRenameWl} onClose={() => setShowRenameWl(false)} title={t('rename_title', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Название</label>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('wishlist_name', locale)}</label>
             <input
               style={inputStyle}
               value={renameWlTitle}
               onChange={(e) => setRenameWlTitle(e.target.value.slice(0, 80))}
               autoFocus
-              placeholder="Название вишлиста"
+              placeholder={t('rename_placeholder', locale)}
               maxLength={80}
             />
             <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textAlign: 'right' }}>{renameWlTitle.length}/80</div>
@@ -3278,22 +3290,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <button
               style={{ ...btnSecondary, flex: 1 }}
               onClick={() => setShowRenameWl(false)}
-            >Отмена</button>
+            >{t('cancel', locale)}</button>
             <button
               style={{ ...btnPrimary, flex: 1, opacity: renameWlTitle.trim() && renameWlTitle.trim() !== currentWl?.title ? 1 : 0.5 }}
               onClick={() => void handleRenameWishlist()}
               disabled={!renameWlTitle.trim() || renameWlTitle.trim() === currentWl?.title || renameSaving}
-            >{renameSaving ? '…' : 'Сохранить'}</button>
+            >{renameSaving ? '…' : t('save', locale)}</button>
           </div>
         </div>
       </BottomSheet>
-      <BottomSheet isOpen={editingDescription} onClose={() => setEditingDescription(false)} title="Описание">
+      <BottomSheet isOpen={editingDescription} onClose={() => setEditingDescription(false)} title={t('description_title', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <textarea
               style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
               maxLength={500}
-              placeholder="Опиши подробнее, что хочешь..."
+              placeholder={t('description_placeholder', locale)}
               value={descriptionText}
               onChange={(e) => setDescriptionText(e.target.value)}
               autoFocus
@@ -3307,59 +3319,57 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             onClick={() => void handleSaveDescription()}
             disabled={loading}
           >
-            {loading ? '…' : '💾 Сохранить'}
+            {loading ? '…' : `💾 ${t('save', locale)}`}
           </button>
         </div>
       </BottomSheet>
-      <BottomSheet isOpen={!!reservingItem} onClose={() => setReservingItem(null)} title="Забронировать подарок?">
+      <BottomSheet isOpen={!!reservingItem} onClose={() => setReservingItem(null)} title={t('reserve_title', locale)}>
         {reservingItem && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, background: C.bg, borderRadius: 12 }}>
               <div style={{ width: 44, height: 44, borderRadius: 10, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎁</div>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>{reservingItem.title}</div>
-                {reservingItem.price != null && <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{fmtPrice(reservingItem.price)}</div>}
+                {reservingItem.price != null && <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{fmtPrice(reservingItem.price, locale)}</div>}
               </div>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Твоё имя (видят другие гости)</label>
-              <input style={inputStyle} placeholder="Как тебя зовут?" value={guestName} onChange={(e) => setGuestName(e.target.value)} autoFocus />
+              <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('reserve_name_label', locale)}</label>
+              <input style={inputStyle} placeholder={t('reserve_name_placeholder', locale)} value={guestName} onChange={(e) => setGuestName(e.target.value)} autoFocus />
             </div>
-            <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5 }}>
-              🔒 Владелец вишлиста <b>не увидит</b>, кто какой подарок забронировал.
-            </div>
+            <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: t('reserve_privacy', locale) }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <button style={{ ...btnGhost, flex: 1, width: '100%' }} onClick={() => setReservingItem(null)}>Отмена</button>
+              <button style={{ ...btnGhost, flex: 1, width: '100%' }} onClick={() => setReservingItem(null)}>{t('cancel', locale)}</button>
               <button
                 style={{ ...btnPrimary, flex: 2, opacity: guestName.trim() ? 1 : 0.5 }}
                 onClick={() => void handleReserve()}
                 disabled={!guestName.trim() || loading}
               >
-                {loading ? '…' : '🎁 Забронировать'}
+                {loading ? '…' : t('reserve_btn', locale)}
               </button>
             </div>
           </div>
         )}
       </BottomSheet>
-      <BottomSheet isOpen={showItemForm} onClose={() => { setShowItemForm(false); resetItemForm(); }} title={editingItem ? 'Редактировать' : 'Новое желание'}>
+      <BottomSheet isOpen={showItemForm} onClose={() => { setShowItemForm(false); resetItemForm(); }} title={editingItem ? t('item_form_edit', locale) : t('item_form_new', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Название</label>
-            <input style={inputStyle} placeholder="Например: AirPods Pro 3" value={itemTitle} onChange={(e) => setItemTitle(e.target.value)} autoFocus />
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_name', locale)}</label>
+            <input style={inputStyle} placeholder={t('item_name_placeholder', locale)} value={itemTitle} onChange={(e) => setItemTitle(e.target.value)} autoFocus />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Описание (необязательно)</label>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_description', locale)}</label>
             <textarea
               style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
               maxLength={500}
-              placeholder="Подробности о желании..."
+              placeholder={t('item_description_placeholder', locale)}
               value={itemDescription}
               onChange={(e) => setItemDescription(e.target.value)}
             />
             <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 2 }}>{itemDescription.length}/500</div>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Ссылка (необязательно)</label>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_url', locale)}</label>
             <input style={inputStyle} placeholder="https://…" value={itemUrl} onChange={(e) => setItemUrl(e.target.value)} />
           </div>
           {/* ── Photo picker ── */}
@@ -3368,7 +3378,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             const hasPhoto = !!(itemPhotoLocalUrl || (!itemPhotoDeleted && itemImageUrl));
             return (
           <div>
-            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 8 }}>Фото</label>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 8 }}>{t('item_photo', locale)}</label>
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
               {/* Preview square */}
               <div style={{
@@ -3400,7 +3410,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   }}
                 >
                   <span>📎</span>
-                  <span>{hasPhoto ? 'Заменить фото' : 'Выбрать фото'}</span>
+                  <span>{hasPhoto ? t('item_photo_replace', locale) : t('item_photo_select', locale)}</span>
                 </button>
 
                 {hasPhoto && (
@@ -3414,7 +3424,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     }}
                   >
                     <span>🗑</span>
-                    <span>Удалить фото</span>
+                    <span>{t('item_photo_delete', locale)}</span>
                   </button>
                 )}
 
@@ -3422,7 +3432,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <span style={{ fontSize: 12, color: C.red, lineHeight: 1.4 }}>{photoError}</span>
                 )}
                 {photoUploading && (
-                  <span style={{ fontSize: 12, color: C.textMuted }}>Загружаю...</span>
+                  <span style={{ fontSize: 12, color: C.textMuted }}>{t('item_photo_uploading', locale)}</span>
                 )}
               </div>
             </div>
@@ -3438,13 +3448,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             );
           })()}
           <div>
-            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Цена (необязательно)</label>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_price', locale)}</label>
             <input style={inputStyle} placeholder="0 ₽" type="number" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>Приоритет</label>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_priority', locale)}</label>
             <div style={{ display: 'flex', gap: 10 }}>
-              {PRIORITIES.map((p) => (
+              {getPriorities(locale).map((p) => (
                 <div key={p.value} onClick={() => setItemPriority(p.value as 1 | 2 | 3)} style={{
                   flex: 1, padding: '12px 8px', borderRadius: 12, textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
                   background: itemPriority === p.value ? C.accentSoft : C.surface,
@@ -3458,17 +3468,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </div>
           </div>
           <button style={{ ...btnPrimary, opacity: itemTitle.trim() ? 1 : 0.5 }} onClick={() => void handleSaveItem()} disabled={!itemTitle.trim() || loading}>
-            {loading ? '…' : editingItem ? '💾 Сохранить' : '✨ Добавить'}
+            {loading ? '…' : editingItem ? `💾 ${t('save', locale)}` : t('item_add_btn', locale)}
           </button>
         </div>
       </BottomSheet>
 
       {/* Delete confirmation */}
-      <BottomSheet isOpen={!!deletingItem} onClose={() => setDeletingItem(null)} title="Удалить желание?">
+      <BottomSheet isOpen={!!deletingItem} onClose={() => setDeletingItem(null)} title={t('delete_title', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.5 }}>{deletingItem?.title}</div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button style={{ ...btnGhost, flex: 1 }} onClick={() => setDeletingItem(null)}>Отмена</button>
+            <button style={{ ...btnGhost, flex: 1 }} onClick={() => setDeletingItem(null)}>{t('cancel', locale)}</button>
             <button
               style={{ ...btnPrimary, flex: 2, background: C.red }}
               onClick={() => {
@@ -3478,7 +3488,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 }
               }}
             >
-              🗑 Удалить
+              🗑 {t('delete', locale)}
             </button>
           </div>
         </div>
@@ -3496,6 +3506,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           void handleUpgradeToPro();
         }}
         checkoutLoading={checkoutLoading}
+        locale={locale}
       />
 
       {/* ── CANCEL SUBSCRIPTION CONFIRMATION ── */}
@@ -3509,25 +3520,25 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             ⚠️
           </div>
           <div style={{ fontSize: 18, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
-            Отменить продление?
+            {t('cancel_title', locale)}
           </div>
           <div style={{ fontSize: 14, color: C.textSec, marginTop: 8, lineHeight: 1.5, padding: '0 8px' }}>
-            Pro останется до{' '}
-            <strong>{subscription ? new Date(subscription.periodEnd).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : ''}</strong>.
-            {' '}После этого тариф сменится на Free.
+            {t('cancel_notice', locale)}{' '}
+            <strong>{subscription ? new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }) : ''}</strong>.
+            {' '}{t('cancel_after', locale)}
           </div>
           <button
             style={{ ...btnPrimary, marginTop: 20, width: '100%', background: C.red, fontSize: 15, padding: '14px 24px' }}
             onClick={() => void handleCancelSub()}
             disabled={cancelSubLoading}
           >
-            {cancelSubLoading ? 'Отменяем…' : 'Отменить продление'}
+            {cancelSubLoading ? t('cancel_cancelling', locale) : t('cancel_btn', locale)}
           </button>
           <button
             style={{ ...btnGhost, width: '100%', marginTop: 8, fontSize: 14 }}
             onClick={() => setShowCancelSub(false)}
           >
-            Оставить Pro
+            {t('cancel_keep', locale)}
           </button>
         </div>
       </BottomSheet>
@@ -3542,7 +3553,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           }}>
             <div style={{ fontSize: 40, animation: 'pulse 1s ease-in-out infinite' }}>💡</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginTop: 16, fontFamily: font }}>
-              Передаю в бот...
+              {t('hint_closing', locale)}
             </div>
           </div>
         </>
@@ -3571,13 +3582,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 // SHARE SCREEN (extracted to keep main component tidy)
 // ─────────────────────────────────────────────────
 
-function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, isPro }: {
+function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, isPro, locale }: {
   wishlist: Wishlist;
   itemCount: number;
   tgUser: TgUser | null;
   onCopied: () => void;
   buildTgDeepLink: (payload?: string) => string | null;
   isPro?: boolean;
+  locale: Locale;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -3589,7 +3601,7 @@ function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, i
 
   const fmtDeadline = (d: string | null) => {
     if (!d) return null;
-    return new Date(d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+    return new Date(d).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' });
   };
 
   const copy = async () => {
@@ -3614,7 +3626,7 @@ function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, i
 
   const shareToTelegram = () => {
     if (!shareLink) return;
-    const shareText = `🎁 ${wishlist.title}\nВыбирай подарок тут 👇`;
+    const shareText = t('share_text', locale, { title: wishlist.title });
     const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
     try {
       window.Telegram?.WebApp.openTelegramLink(tgShareUrl);
@@ -3630,7 +3642,7 @@ function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, i
 
   return (
     <div style={{ padding: '16px 20px 120px' }}>
-      <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C_local.text, margin: '8px 0 20px' }}>Поделиться</h1>
+      <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C_local.text, margin: '8px 0 20px' }}>{t('share_title', locale)}</h1>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
         <div style={{
@@ -3646,16 +3658,16 @@ function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, i
           }}>
             {initials}
           </div>
-          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: font, color: C_local.text }}>{tgUser?.first_name ?? 'Вишлист'}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: font, color: C_local.text }}>{tgUser?.first_name ?? t('bot_menu_btn', locale)}</div>
           <div style={{ fontSize: 14, color: C_local.textSec, marginTop: 4 }}>{wishlist.title}</div>
           <div style={{ fontSize: 13, color: C_local.textMuted, marginTop: 4 }}>
-            {itemCount} желаний{wishlist.deadline ? ` • до ${fmtDeadline(wishlist.deadline)}` : ''}
+            {itemCount} {pluralize(itemCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}{wishlist.deadline ? ` • ${fmtDeadline(wishlist.deadline)}` : ''}
           </div>
         </div>
 
         {linkError ? (
           <div style={{ borderRadius: 12, padding: '12px 16px', fontSize: 13, background: C_local.redSoft, color: C_local.red, width: '100%', lineHeight: 1.5, boxSizing: 'border-box', textAlign: 'center' }}>
-            Не удалось создать ссылку. Попробуй позже.
+            {t('share_link_error', locale)}
           </div>
         ) : (
           <>
@@ -3668,22 +3680,22 @@ function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, i
                 {shareLink}
               </span>
               <span onClick={copy} style={{ fontSize: 12, color: copied ? C_local.green : C_local.accent, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 10 }}>
-                {copied ? '✅' : 'Копировать'}
+                {copied ? '✅' : t('copy', locale)}
               </span>
             </div>
 
             <button onClick={shareToTelegram} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font, transition: 'all 0.15s', width: '100%', background: C_local.blue, color: '#fff' }}>
-              ✈️ Поделиться в Telegram
+              {t('share_tg_btn', locale)}
             </button>
 
             <button onClick={copy} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font, transition: 'all 0.15s', width: '100%', background: C_local.accent, color: '#fff' }}>
-              📋 Скопировать ссылку
+              {t('share_copy_btn', locale)}
             </button>
           </>
         )}
 
         <div style={{ borderRadius: 12, padding: '12px 16px', fontSize: 12, background: C_local.greenSoft, color: C_local.green, width: '100%', lineHeight: 1.5, boxSizing: 'border-box' }}>
-          🔒 Друзья увидят список, но не узнают, кто что забронировал. Ты тоже не увидишь детали — сюрприз!
+          {t('share_privacy', locale)}
         </div>
       </div>
     </div>

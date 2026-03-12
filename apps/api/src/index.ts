@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
 import { parseUrl, validateUrl } from './url-parser.js';
+import { t, detectLocale, pluralize, type Locale } from '@wishlist/shared';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/api (pnpm -C apps/api dev).
@@ -162,17 +163,18 @@ function secureCompare(a: string, b: string): boolean {
 }
 
 /** Best-effort: resolve user's first_name from Telegram Bot API, cache in DB. */
-async function resolveUserFirstName(user: { id: string; firstName: string | null; telegramChatId: string | null }): Promise<string> {
+async function resolveUserFirstName(user: { id: string; firstName: string | null; telegramChatId: string | null }, locale: Locale = 'ru'): Promise<string> {
   if (user.firstName) return user.firstName;
+  const fallback = t('api_user_fallback', locale);
   const token = process.env.BOT_TOKEN;
-  if (!token || !user.telegramChatId) return 'Пользователь';
+  if (!token || !user.telegramChatId) return fallback;
   try {
     const resp = await fetch(`https://api.telegram.org/bot${token}/getChat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: user.telegramChatId }),
     });
-    if (!resp.ok) return 'Пользователь';
+    if (!resp.ok) return fallback;
     const json = await resp.json() as { ok: boolean; result?: { first_name?: string } };
     const name = json.result?.first_name;
     if (name) {
@@ -181,7 +183,13 @@ async function resolveUserFirstName(user: { id: string; firstName: string | null
       return name;
     }
   } catch { /* best-effort */ }
-  return 'Пользователь';
+  return fallback;
+}
+
+/** Detect locale from Telegram user's language_code on the request. */
+function getRequestLocale(req: Request): Locale {
+  const langCode = req.tgUser?.language_code;
+  return detectLocale(langCode);
 }
 
 /** Cancel all active hints for an item (called when item leaves AVAILABLE state). */
@@ -252,7 +260,9 @@ function queueCommentNotification(key: string, chatId: string, itemTitle: string
       const e = pendingNotifications.get(key);
       pendingNotifications.delete(key);
       if (!e || e.count === 0) return;
-      void sendTgNotification(e.chatId, `💬 У вас ${e.count} ${e.count === 1 ? 'новый комментарий' : 'новых комментариев'} в «${e.itemTitle}»`);
+      const notifLocale: Locale = 'ru'; // notifications use Russian as default
+      const word = pluralize(e.count, 'новый комментарий', 'новых комментария', 'новых комментариев', notifLocale);
+      void sendTgNotification(e.chatId, t('notif_batch_comments', notifLocale, { count: e.count, word, title: e.itemTitle }));
     }, 30_000),
   };
   pendingNotifications.set(key, entry);
@@ -958,6 +968,7 @@ type TelegramUser = {
   first_name: string;
   last_name?: string;
   username?: string;
+  language_code?: string;
 };
 
 declare global {
@@ -1266,6 +1277,7 @@ tgRouter.get(
 tgRouter.get(
   '/reservations',
   asyncHandler(async (req, res) => {
+    const locale = getRequestLocale(req);
     const user = await getOrCreateTgUser(req.tgUser!);
     const actorHash = tgActorHash(req.tgUser!.id);
 
@@ -1318,14 +1330,14 @@ tgRouter.get(
     const ownerNames = new Map<string, string>();
     await Promise.all(
       [...uniqueOwners.entries()].map(async ([ownerId, owner]) => {
-        ownerNames.set(ownerId, await resolveUserFirstName(owner));
+        ownerNames.set(ownerId, await resolveUserFirstName(owner, locale));
       }),
     );
 
     // 5. Map response
     const reservations = items.map(item => ({
       ...mapTgItem(item),
-      ownerName: ownerNames.get(item.wishlist.owner.id) ?? 'Пользователь',
+      ownerName: ownerNames.get(item.wishlist.owner.id) ?? t('api_user_fallback', locale),
       ownerId: item.wishlist.owner.id,
       unreadComments: unreadCounts[item.id] ?? 0,
     }));
@@ -1575,11 +1587,12 @@ tgRouter.patch(
 
     // After update, if description changed and item was reserved — notify reserver
     if (parsed.data.description !== undefined && item.status === 'RESERVED') {
+      const locale = getRequestLocale(req);
       await prisma.comment.create({
         data: {
           itemId: id,
           type: 'SYSTEM',
-          text: 'Описание обновлено',
+          text: t('api_system_description_updated', locale),
           reservationEpoch: item.reservationEpoch,
         },
       });
@@ -1589,7 +1602,8 @@ tgRouter.patch(
           select: { telegramChatId: true },
         });
         if (reserver?.telegramChatId) {
-          void sendTgNotification(reserver.telegramChatId, `📝 Описание обновлено в «${item.title}»`);
+          const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
+          void sendTgNotification(reserver.telegramChatId, t('notif_description_updated', notifLocale, { title: item.title }));
         }
       }
     }
@@ -1633,9 +1647,10 @@ tgRouter.delete(
         select: { telegramChatId: true },
       });
       if (reserver?.telegramChatId) {
+        const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
         void sendTgNotification(
           reserver.telegramChatId,
-          `📦 Автор поместил желание «${item.title}» в архив`,
+          t('notif_archived', notifLocale, { title: item.title }),
         );
       }
     }
@@ -1687,13 +1702,14 @@ tgRouter.post(
         select: { telegramChatId: true, id: true },
       });
       if (reserver?.telegramChatId) {
-        let msg = `✅ Автор отметил желание «${item.title}» как исполненное. Спасибо за подарок! 🎉`;
+        const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
+        let msg = t('notif_completed', notifLocale, { title: item.title });
         // Soft CTA if reserver has no wishlists
         const reserverWlCount = await prisma.wishlist.count({
           where: { ownerId: reserver.id, type: 'REGULAR' },
         });
         if (reserverWlCount === 0) {
-          msg += '\n\nА ты уже создал свой вишлист? Открой WishBoard и расскажи друзьям о своих желаниях!';
+          msg += t('notif_create_your_wishlist', notifLocale);
         }
         void sendTgNotification(reserver.telegramChatId, msg);
       }
@@ -1812,7 +1828,7 @@ tgRouter.post(
         data: { itemId: id, type: 'RESERVED', actorHash, comment: displayName },
       });
       await tx.comment.create({
-        data: { itemId: id, type: 'SYSTEM', text: 'Подарок забронирован', reservationEpoch: newEpoch },
+        data: { itemId: id, type: 'SYSTEM', text: t('api_system_reserved', getRequestLocale(req)), reservationEpoch: newEpoch },
       });
       // Clear TTL on existing comments (from previous unreserve)
       await tx.comment.updateMany({
@@ -1838,7 +1854,8 @@ tgRouter.post(
           select: { telegramChatId: true },
         });
         if (owner?.telegramChatId) {
-          void sendTgNotification(owner.telegramChatId, `🎁 ${displayName} забронировал желание «${itemData.title}»`);
+          const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
+          void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: displayName, title: itemData.title }));
         }
       }
     }
@@ -1878,7 +1895,7 @@ tgRouter.post(
         data: { itemId: id, type: 'UNRESERVED', actorHash, comment: null },
       });
       await tx.comment.create({
-        data: { itemId: id, type: 'SYSTEM', text: 'Бронь отменена', reservationEpoch: item.reservationEpoch },
+        data: { itemId: id, type: 'SYSTEM', text: t('api_system_unreserved', getRequestLocale(req)), reservationEpoch: item.reservationEpoch },
       });
       // Set TTL on all comments
       const ttl = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -1917,6 +1934,7 @@ tgRouter.get(
     });
 
     // For reserver: anonymize previous epoch comments
+    const locale = getRequestLocale(req);
     const mapped = comments.map((c) => {
       if (
         ctx.role === 'reserver' &&
@@ -1924,7 +1942,7 @@ tgRouter.get(
         c.reservationEpoch < ctx.item.reservationEpoch &&
         c.authorActorHash !== ctx.actorHash
       ) {
-        return { ...c, authorDisplayName: 'Аноним', createdAt: c.createdAt.toISOString() };
+        return { ...c, authorDisplayName: t('comments_anon', locale), createdAt: c.createdAt.toISOString() };
       }
       return { ...c, createdAt: c.createdAt.toISOString() };
     });
@@ -1954,19 +1972,24 @@ tgRouter.post(
 
     // Reject archived items
     if (ctx.item.status === 'COMPLETED' || ctx.item.status === 'DELETED') {
-      return res.status(400).json({ error: 'Комментарии в архиве запрещены' });
+      const locale = getRequestLocale(req);
+      return res.status(400).json({ error: t('api_comment_archived', locale) });
     }
 
     // Validate text
     const parsed = z.object({ text: z.string().min(1).max(300) }).safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
     const text = parsed.data.text.trim();
-    if (!text) return res.status(400).json({ error: 'Комментарий не может быть пустым' });
+    if (!text) {
+      const locale = getRequestLocale(req);
+      return res.status(400).json({ error: t('api_comment_empty', locale) });
+    }
 
     // Reject emoji/dots only
     const stripped = text.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s.…]+/gu, '');
     if (stripped.length === 0) {
-      return res.status(400).json({ error: 'Напиши что-нибудь содержательное' });
+      const locale = getRequestLocale(req);
+      return res.status(400).json({ error: t('api_comment_meaningful', locale) });
     }
 
     // Anti-spam checks
@@ -1979,12 +2002,12 @@ tgRouter.post(
       select: { createdAt: true, text: true },
     });
     if (lastComment && now - lastComment.createdAt.getTime() < 10_000) {
-      return res.status(429).json({ error: 'Подожди немного перед следующим комментарием' });
+      return res.status(429).json({ error: t('api_comment_cooldown', getRequestLocale(req)) });
     }
 
     // 2. Deduplicate
     if (lastComment && lastComment.text === text) {
-      return res.status(400).json({ error: 'Этот комментарий уже отправлен' });
+      return res.status(400).json({ error: t('api_comment_duplicate', getRequestLocale(req)) });
     }
 
     // 3. Max 3 consecutive without reply
@@ -1995,7 +2018,7 @@ tgRouter.post(
       select: { authorActorHash: true },
     });
     if (recent3.length >= 3 && recent3.every((c) => c.authorActorHash === ctx.actorHash)) {
-      return res.status(429).json({ error: 'Дождись ответа перед отправкой новых комментариев' });
+      return res.status(429).json({ error: t('api_comment_wait_reply', getRequestLocale(req)) });
     }
 
     // 4. Max 10/hour
@@ -2004,7 +2027,7 @@ tgRouter.post(
       where: { itemId: id, authorActorHash: ctx.actorHash, type: 'USER', createdAt: { gte: hourAgo } },
     });
     if (hourCount >= 10) {
-      return res.status(429).json({ error: 'Слишком много комментариев за час' });
+      return res.status(429).json({ error: t('api_comment_hour_limit', getRequestLocale(req)) });
     }
 
     // 5. Max 20/30 days
@@ -2013,7 +2036,7 @@ tgRouter.post(
       where: { itemId: id, authorActorHash: ctx.actorHash, type: 'USER', createdAt: { gte: monthAgo } },
     });
     if (monthCount >= 20) {
-      return res.status(429).json({ error: 'Достигнут лимит комментариев' });
+      return res.status(429).json({ error: t('api_comment_month_limit', getRequestLocale(req)) });
     }
 
     // Determine display name: use reservation display name for reserver, Telegram name for owner
@@ -2037,6 +2060,7 @@ tgRouter.post(
     });
 
     // Notify the other party
+    const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
     if (ctx.role === 'reserver') {
       // Notify owner
       const owner = await prisma.user.findUnique({
@@ -2046,7 +2070,7 @@ tgRouter.post(
       if (owner?.telegramChatId) {
         const key = `${id}:${owner.id}`;
         queueCommentNotification(key, owner.telegramChatId, ctx.item.title,
-          `💬 ${displayName} прокомментировал «${ctx.item.title}»:\n${text}`);
+          t('notif_commented_reserver', notifLocale, { name: displayName, title: ctx.item.title, text }));
       }
     } else if (ctx.role === 'owner' && ctx.item.reserverUserId) {
       // Notify reserver
@@ -2057,7 +2081,7 @@ tgRouter.post(
       if (reserver?.telegramChatId) {
         const key = `${id}:${reserver.id}`;
         queueCommentNotification(key, reserver.telegramChatId, ctx.item.title,
-          `💬 Автор прокомментировал «${ctx.item.title}»:\n${text}`);
+          t('notif_commented_owner', notifLocale, { title: ctx.item.title, text }));
       }
     }
 
@@ -2084,7 +2108,7 @@ tgRouter.delete(
     if (!comment || comment.itemId !== id) return res.status(404).json({ error: 'Comment not found' });
 
     // System comments cannot be deleted manually
-    if (comment.type === 'SYSTEM') return res.status(403).json({ error: 'Системные события нельзя удалить' });
+    if (comment.type === 'SYSTEM') return res.status(403).json({ error: t('api_system_cant_delete', getRequestLocale(req)) });
 
     // Owner can delete any USER comment; reserver can delete only own
     if (ctx.role === 'reserver' && comment.authorActorHash !== ctx.actorHash) {
@@ -2141,7 +2165,7 @@ tgRouter.post(
 
     // 3. Item must be AVAILABLE (not reserved/completed/deleted)
     if (item.status !== 'AVAILABLE') {
-      return res.status(400).json({ error: 'item_not_available', message: 'На это желание намекать уже не нужно — его забронировали' });
+      return res.status(400).json({ error: 'item_not_available', message: t('api_hint_item_not_available', getRequestLocale(req)) });
     }
 
     // 4. Anti-spam: max 3 hint waves per item per 30 days
@@ -2161,7 +2185,7 @@ tgRouter.post(
           : 0;
         return res.status(429).json({
           error: 'item_hint_limit',
-          message: 'По этому желанию исчерпан лимит намёков.',
+          message: t('api_hint_item_limit', getRequestLocale(req)),
           retryAfterSeconds,
         });
       }
@@ -2182,7 +2206,7 @@ tgRouter.post(
           : 0;
         return res.status(429).json({
           error: 'daily_hint_limit',
-          message: 'Лимит намёков на сегодня исчерпан.',
+          message: t('api_hint_daily_limit', getRequestLocale(req)),
           retryAfterSeconds,
         });
       }
@@ -2201,12 +2225,13 @@ tgRouter.post(
     // 7. Send contact picker to sender's bot chat via request_users keyboard
     const senderChatId = user.telegramChatId;
     if (senderChatId) {
+      const locale = getRequestLocale(req);
       const sent = await sendTgBotMessage(
         senderChatId,
-        `💡 Намёк на «${item.title}» создан!\n\nВыбери друзей, которым хочешь намекнуть:`,
+        t('api_hint_picker_msg', locale, { title: item.title }),
         {
           keyboard: [[{
-            text: '👥 Выбрать получателей',
+            text: t('bot_select_recipients', locale),
             request_users: { request_id: Number(hint.id.slice(-6).replace(/\D/g, '') || '1'), user_is_bot: false, max_quantity: 10 },
           }]],
           resize_keyboard: true,
@@ -2363,7 +2388,7 @@ async function importUrlForUser(
     }
   } catch {
     parseStatus = 'failed';
-    let hostname = 'ссылка';
+    let hostname = 'link';
     try { hostname = new URL(rawUrl).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
     parsed = {
       title: null,
@@ -2375,7 +2400,7 @@ async function importUrlForUser(
     };
   }
 
-  const title = parsed.title || parsed.sourceDomain || 'Ссылка';
+  const title = parsed.title || parsed.sourceDomain || 'Link';
 
   // Description: user note (if any) + parsed description
   let description: string | null = null;
@@ -2417,7 +2442,10 @@ const importUrlLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req) => req.tgUser ? String(req.tgUser.id) : 'anon',
-  message: { error: 'Слишком много запросов. Попробуй через минуту.' },
+  handler: (_req: Request, res: Response) => {
+    const locale = getRequestLocale(_req);
+    res.status(429).json({ error: t('api_import_rate_limit', locale) });
+  },
   validate: false,
 });
 
@@ -2451,7 +2479,7 @@ tgRouter.post(
       return res.status(201).json(result);
     } catch (err: any) {
       if (err.statusCode === 402) {
-        return res.status(402).json({ error: 'Слишком много неразобранных желаний. Разбери часть, потом добавляй новые.', limit: DRAFTS_ITEM_LIMIT });
+        return res.status(402).json({ error: t('api_import_too_many', getRequestLocale(req)), limit: DRAFTS_ITEM_LIMIT });
       }
       throw err;
     }
@@ -2500,7 +2528,7 @@ tgRouter.post(
         where: { wishlistId: targetWl.id, status: { in: [...ACTIVE_STATUSES] } },
       });
       if (targetItemCount >= ent.plan.items) {
-        return res.status(402).json({ error: 'Лимит желаний в этом вишлисте', limit: ent.plan.items, planCode: ent.plan.code });
+        return res.status(402).json({ error: t('api_wishlist_items_limit', getRequestLocale(req)), limit: ent.plan.items, planCode: ent.plan.code });
       }
     }
 
@@ -2597,10 +2625,10 @@ tgRouter.post(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: 'Wishlist Pro',
-        description: 'Больше вишлистов, комментарии, добавление по ссылке и намёки на подарок',
+        description: t('api_invoice_desc', getRequestLocale(req)),
         payload,
         currency: 'XTR',
-        prices: [{ label: 'PRO на месяц', amount: PRO_PRICE_XTR }],
+        prices: [{ label: t('api_invoice_label', getRequestLocale(req)), amount: PRO_PRICE_XTR }],
         subscription_period: PRO_SUBSCRIPTION_PERIOD,
       }),
     });
@@ -2811,7 +2839,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err && typeof err === 'object' && 'code' in err) {
     const multerErr = err as { code: string; message: string };
     if (multerErr.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ error: 'Файл слишком большой. Максимум 30 МБ.' });
+      return res.status(413).json({ error: t('item_photo_too_large', getRequestLocale(_req)) });
     }
     if (multerErr.code === 'LIMIT_UNEXPECTED_FILE') {
       return res.status(400).json({ error: 'Unexpected field name. Use "photo".' });

@@ -3,7 +3,7 @@
 import Script from 'next/script';
 import { useEffect } from 'react';
 
-type TgWebAppUser = { id: number; first_name: string; last_name?: string; username?: string };
+type TgWebAppUser = { id: number; first_name: string; last_name?: string; username?: string; language_code?: string };
 
 declare global {
   interface Window {
