@@ -5911,44 +5911,74 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </button>
                 ))}
               </div>
-              <input
-                ref={priceInputRef}
-                style={{ ...inputStyle, flex: 1 }}
-                placeholder={itemCurrency === 'USD' ? '$0' : '0 ₽'}
-                type="text"
-                inputMode="numeric"
-                value={formatPriceForDisplay(itemPrice)}
-                onChange={(e) => {
-                  // Capture cursor position and displayed value synchronously
-                  const cursorPos = e.target.selectionStart ?? e.target.value.length;
-                  const displayedValue = e.target.value;
-                  // Strip all non-digits → raw state
-                  const raw = parsePriceFromDisplay(displayedValue);
-                  // Count how many digits were before the cursor in the user's edited string
-                  const digitsBeforeCursor = parsePriceFromDisplay(displayedValue.slice(0, cursorPos)).length;
-                  setItemPrice(raw);
-                  // After React re-renders with the newly formatted value, restore cursor position
-                  requestAnimationFrame(() => {
-                    const input = priceInputRef.current;
-                    if (!input) return;
-                    const newFormatted = formatPriceForDisplay(raw);
-                    let digitsSeen = 0;
-                    let newPos = newFormatted.length; // default: end
-                    if (digitsBeforeCursor === 0) {
-                      newPos = 0;
-                    } else {
-                      for (let i = 0; i < newFormatted.length; i++) {
-                        if (/\d/.test(newFormatted[i]!)) {
-                          digitsSeen++;
-                          if (digitsSeen === digitsBeforeCursor) { newPos = i + 1; break; }
+              {/* Price input with currency suffix — same layout for RUB and USD */}
+              <div
+                style={{
+                  ...inputStyle,
+                  flex: 1,
+                  width: 'auto',
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  cursor: 'text',
+                }}
+                onClick={() => priceInputRef.current?.focus()}
+              >
+                <input
+                  ref={priceInputRef}
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    background: 'transparent',
+                    outline: 'none',
+                    color: C.text,
+                    fontSize: 16,
+                    fontFamily: font,
+                    padding: '14px 6px 14px 16px',
+                    minWidth: 0,
+                  }}
+                  placeholder="0"
+                  type="text"
+                  inputMode="numeric"
+                  value={formatPriceForDisplay(itemPrice)}
+                  onChange={(e) => {
+                    const cursorPos = e.target.selectionStart ?? e.target.value.length;
+                    const displayedValue = e.target.value;
+                    const raw = parsePriceFromDisplay(displayedValue);
+                    const digitsBeforeCursor = parsePriceFromDisplay(displayedValue.slice(0, cursorPos)).length;
+                    setItemPrice(raw);
+                    requestAnimationFrame(() => {
+                      const input = priceInputRef.current;
+                      if (!input) return;
+                      const newFormatted = formatPriceForDisplay(raw);
+                      let digitsSeen = 0;
+                      let newPos = newFormatted.length;
+                      if (digitsBeforeCursor === 0) {
+                        newPos = 0;
+                      } else {
+                        for (let i = 0; i < newFormatted.length; i++) {
+                          if (/\d/.test(newFormatted[i]!)) {
+                            digitsSeen++;
+                            if (digitsSeen === digitsBeforeCursor) { newPos = i + 1; break; }
+                          }
                         }
                       }
-                    }
-                    input.selectionStart = newPos;
-                    input.selectionEnd = newPos;
-                  });
-                }}
-              />
+                      input.selectionStart = newPos;
+                      input.selectionEnd = newPos;
+                    });
+                  }}
+                />
+                <span style={{
+                  paddingRight: 14,
+                  fontSize: 16,
+                  color: C.textMuted,
+                  flexShrink: 0,
+                  userSelect: 'none',
+                  pointerEvents: 'none',
+                }}>
+                  {itemCurrency === 'RUB' ? '₽' : '$'}
+                </span>
+              </div>
             </div>
           </div>
           <div>
