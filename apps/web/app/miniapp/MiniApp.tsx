@@ -2350,12 +2350,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div>
                 <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('wishlist_name', locale)}</label>
                 <div style={{ position: 'relative' }}>
-                  <input style={{ ...inputStyle, paddingRight: wlTitle ? 36 : 16 }} placeholder={t('wishlist_name_placeholder', locale)} value={wlTitle} onChange={(e) => setWlTitle(e.target.value)} autoFocus />
+                  <input style={{ ...inputStyle, paddingRight: wlTitle ? 40 : 16 }} placeholder={t('wishlist_name_placeholder', locale)} value={wlTitle} onChange={(e) => setWlTitle(e.target.value)} autoFocus />
                   {wlTitle && (
                     <button
-                      onClick={() => setWlTitle('')}
+                      onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onClick={(e) => { e.stopPropagation(); setWlTitle(''); }}
                       style={{
-                        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
                         background: C.textMuted + '33', border: 'none', borderRadius: 10, width: 20, height: 20,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: C.textSec, fontSize: 11, cursor: 'pointer', padding: 0, lineHeight: 1,
@@ -2367,15 +2368,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div>
                 <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('wishlist_deadline', locale)}</label>
                 <div style={{ position: 'relative' }}>
-                  <input style={{ ...inputStyle, colorScheme: 'dark', paddingRight: wlDeadline ? 36 : 16 }} type="date" value={wlDeadline} onChange={(e) => setWlDeadline(e.target.value)} />
+                  {/* minHeight matches text input; paddingRight always 40 to reserve clear-button zone */}
+                  <input
+                    style={{ ...inputStyle, colorScheme: 'dark', minHeight: 50, paddingRight: 40 }}
+                    type="date"
+                    value={wlDeadline}
+                    onChange={(e) => setWlDeadline(e.target.value)}
+                  />
                   {wlDeadline && (
                     <button
-                      onClick={() => setWlDeadline('')}
+                      onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onClick={(e) => { e.stopPropagation(); setWlDeadline(''); }}
                       style={{
-                        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
                         background: C.textMuted + '33', border: 'none', borderRadius: 10, width: 20, height: 20,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: C.textSec, fontSize: 11, cursor: 'pointer', padding: 0, lineHeight: 1,
+                        zIndex: 2,
                       }}
                     >✕</button>
                   )}
