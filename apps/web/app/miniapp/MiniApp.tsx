@@ -2191,6 +2191,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const updatedItem = { ...reservingItem, status: 'reserved' as const, reservedByDisplayName: guestName.trim(), reservedByActorHash: myActorHashRef.current };
       setGuestItems((prev) => prev.map((i) => i.id === reservingItem.id ? updatedItem : i));
       if (viewingItem && viewingItem.id === reservingItem.id) setViewingItem(updatedItem);
+      setReservationsCount((prev) => prev + 1);
+      setProfileStats((prev) => prev ? { ...prev, reservedByMe: prev.reservedByMe + 1 } : prev);
       pushToast(t('reserve_success', locale), 'success');
       setReservingItem(null);
       setGuestName('');
@@ -2210,6 +2212,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // Also remove from reservations list if present
       setReservations((prev) => prev.filter((r) => r.id !== item.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
+      setProfileStats((prev) => prev ? { ...prev, reservedByMe: Math.max(0, prev.reservedByMe - 1) } : prev);
       pushToast(t('unreserve_success', locale), 'success');
     } finally {
       setLoading(false);
@@ -2223,6 +2226,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setReservations((prev) => prev.filter((r) => r.id !== item.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
+      setProfileStats((prev) => prev ? { ...prev, reservedByMe: Math.max(0, prev.reservedByMe - 1) } : prev);
       pushToast(t('unreserve_success', locale), 'success');
     } finally {
       setLoading(false);
@@ -2238,7 +2242,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // RENDER
   // ─────────────────────────────────────────────────
 
-  const totalReserved = Object.values(wishlists).reduce((n, wl) => n + wl.reservedCount, 0);
   const totalItems = wishlists.reduce((n, wl) => n + wl.itemCount, 0);
 
   return (
@@ -2476,7 +2479,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   {[
                     { n: wishlists.length, l: t('stats_wishlists', locale), c: C.text },
                     { n: totalItems, l: t('stats_wishes', locale), c: C.accent },
-                    { n: totalReserved, l: t('stats_reserved', locale), c: C.green },
+                    { n: reservationsCount, l: t('stats_reserved', locale), c: C.green },
                   ].map((s, i) => (
                     <div key={i}>
                       <div style={{ fontSize: 24, fontWeight: 800, color: s.c, fontFamily: font }}>{s.n}</div>
