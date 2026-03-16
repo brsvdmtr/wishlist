@@ -26,6 +26,8 @@ declare global {
         openTelegramLink(url: string): void;
         openLink(url: string, options?: { try_instant_view?: boolean }): void;
         openInvoice?(url: string, callback?: (status: string) => void): void;
+        disableVerticalSwipes?(): void;
+        enableVerticalSwipes?(): void;
       };
     };
   }

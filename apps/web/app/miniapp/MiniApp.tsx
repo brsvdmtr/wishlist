@@ -2090,6 +2090,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   };
 
   const enterReorderMode = () => {
+    tgRef.current?.WebApp?.expand?.();
+    tgRef.current?.WebApp?.disableVerticalSwipes?.();
     setReorderList([...wishlists]);
     setReorderDragIdx(null);
     setReorderDragOverIdx(null);
@@ -2097,6 +2099,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   };
 
   const cancelReorderMode = () => {
+    tgRef.current?.WebApp?.enableVerticalSwipes?.();
     setReorderMode(false);
     setReorderList([]);
     setReorderDragIdx(null);
@@ -2113,6 +2116,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       });
       if (!res.ok) { pushToast(t('wl_reorder_error', locale), 'error'); return; }
       setWishlists([...reorderList]);
+      tgRef.current?.WebApp?.enableVerticalSwipes?.();
       setReorderMode(false);
       setReorderList([]);
       pushToast(t('wl_reorder_saved', locale), 'success');
@@ -2121,11 +2125,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   };
 
+  // Scroll container ref for auto-scroll during drag
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   // Drag-and-drop handlers for wishlist reorder (pointer capture)
   const reorderPointerStartY = useRef<number>(0);
   const reorderPointerIdx = useRef<number | null>(null);
 
   const handleReorderPointerDown = (e: React.PointerEvent, idx: number) => {
+    e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     reorderPointerStartY.current = e.clientY;
     reorderPointerIdx.current = idx;
@@ -2134,7 +2142,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   };
 
   const handleReorderPointerMove = (e: React.PointerEvent, idx: number) => {
+    e.preventDefault();
     if (reorderPointerIdx.current === null || reorderPointerIdx.current !== idx) return;
+
+    // Auto-scroll when pointer is near viewport edges
+    const sc = scrollContainerRef.current;
+    if (sc) {
+      const SCROLL_ZONE = 80;
+      const SCROLL_SPEED = 8;
+      if (e.clientY < SCROLL_ZONE) sc.scrollTop -= SCROLL_SPEED;
+      else if (e.clientY > window.innerHeight - SCROLL_ZONE) sc.scrollTop += SCROLL_SPEED;
+    }
+
     const deltaY = e.clientY - reorderPointerStartY.current;
     const cardHeight = 82; // approximate card height + gap
     const steps = Math.round(deltaY / cardHeight);
@@ -2162,12 +2181,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // ── Item reorder handlers ──────────────────────────────────────────────────
   const enterItemReorderMode = () => {
+    tgRef.current?.WebApp?.expand?.();
+    tgRef.current?.WebApp?.disableVerticalSwipes?.();
     setItemReorderList([...items]);
     setItemReorderDragIdx(null);
     setItemReorderMode(true);
   };
 
   const cancelItemReorderMode = () => {
+    tgRef.current?.WebApp?.enableVerticalSwipes?.();
     setItemReorderMode(false);
     setItemReorderList([]);
     setItemReorderDragIdx(null);
@@ -2193,6 +2215,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       });
       if (!res.ok) { pushToast(t('wl_reorder_error', locale), 'error'); return; }
       setItems([...itemReorderList]);
+      tgRef.current?.WebApp?.enableVerticalSwipes?.();
       setItemReorderMode(false);
       setItemReorderList([]);
       pushToast(t('wl_reorder_saved', locale), 'success');
@@ -2205,6 +2228,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const itemReorderPointerIdx = useRef<number | null>(null);
 
   const handleItemReorderPointerDown = (e: React.PointerEvent, idx: number) => {
+    e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     itemReorderPointerStartY.current = e.clientY;
     itemReorderPointerIdx.current = idx;
@@ -2212,7 +2236,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   };
 
   const handleItemReorderPointerMove = (e: React.PointerEvent, idx: number) => {
+    e.preventDefault();
     if (itemReorderPointerIdx.current === null || itemReorderPointerIdx.current !== idx) return;
+
+    // Auto-scroll when pointer is near viewport edges
+    const sc = scrollContainerRef.current;
+    if (sc) {
+      const SCROLL_ZONE = 80;
+      const SCROLL_SPEED = 8;
+      if (e.clientY < SCROLL_ZONE) sc.scrollTop -= SCROLL_SPEED;
+      else if (e.clientY > window.innerHeight - SCROLL_ZONE) sc.scrollTop += SCROLL_SPEED;
+    }
+
     const deltaY = e.clientY - itemReorderPointerStartY.current;
     const cardHeight = 72;
     const steps = Math.round(deltaY / cardHeight);
@@ -2577,7 +2612,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const totalItems = wishlists.reduce((n, wl) => n + wl.itemCount, 0);
 
   return (
-    <div style={{
+    <div ref={scrollContainerRef} style={{
       position: 'fixed', inset: 0, overflowY: 'auto', overflowX: 'hidden',
       background: C.bg, fontFamily: font, color: C.text,
     }}>
