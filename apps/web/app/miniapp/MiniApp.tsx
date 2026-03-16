@@ -2535,13 +2535,30 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   };
 
   const handleDeleteItem = async (item: Item) => {
-    if (!currentWl) return;
     setLoading(true);
     try {
       const res = await tgFetch(`/tg/items/${item.id}`, { method: 'DELETE' });
       if (!res.ok) { pushToast(t('toast_delete_error', locale), 'error'); return; }
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
-      setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
+
+      // Determine origin: drafts vs regular wishlist, then update the right state.
+      // Use draftsItems membership (not fromDrafts flag) — flag is already cleared
+      // by the time confirm is tapped.
+      const isDraftsItem = draftsItems.some((d) => d.id === item.id);
+      if (isDraftsItem) {
+        const remaining = draftsItems.filter((d) => d.id !== item.id);
+        setDraftsItems(remaining);
+        setDraftsCount(remaining.length);
+        // Last draft deleted → go home; otherwise drafts screen is already showing
+        if (remaining.length === 0) setScreen('my-wishlists');
+      } else if (currentWl) {
+        setItems((prev) => prev.filter((i) => i.id !== item.id));
+        setWishlists((prev) =>
+          prev.map((wl) =>
+            wl.id === currentWl.id ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl,
+          ),
+        );
+      }
+
       pushToast(t('delete_deleted', locale), 'success');
     } finally {
       setLoading(false);
@@ -4037,7 +4054,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <button onClick={() => {
                     const item = viewingItem as Item;
                     setViewingItem(null);
-                    setScreen('wishlist-detail');
+                    // Return to the screen we came from, not always wishlist-detail.
+                    // fromDrafts → go back to drafts; otherwise → wishlist-detail.
+                    // Clear fromDrafts now so navBack won't fire it again.
+                    if (fromDrafts) {
+                      setFromDrafts(false);
+                      setScreen('drafts');
+                    } else {
+                      setScreen('wishlist-detail');
+                    }
                     setDeletingItem(item);
                   }} style={{
                     ...btnBase, flex: 1, background: C.redSoft, color: C.red,
