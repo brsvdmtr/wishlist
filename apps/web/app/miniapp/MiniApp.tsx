@@ -158,6 +158,13 @@ type ReservationItem = Item & {
   unreadComments: number;
 };
 
+type HomeTab = 'wishlists' | 'wishes' | 'reservations';
+
+type AllItem = Item & {
+  wishlistTitle: string;
+  wishlistSlug: string;
+};
+
 type CommentDTO = {
   id: string;
   type: 'USER' | 'SYSTEM';
@@ -352,12 +359,13 @@ function ItemThumb({ item }: { item: Item | GuestItem }) {
   );
 }
 
-function WishCardOwner({ item, onTap, onDelete, onComplete, locale }: {
+function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel }: {
   item: Item;
   onTap: (item: Item) => void;
   onDelete: (item: Item) => void;
   onComplete?: (item: Item) => void;
   locale: Locale;
+  sourceLabel?: string;
 }) {
   const isPurchased = item.status === 'purchased';
   const isReserved = item.status === 'reserved';
@@ -398,6 +406,17 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale }: {
           {isReserved && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600 }}>{t('status_someone_reserved', locale)}</span>}
           {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>{t('status_gifted', locale)}</span>}
         </div>
+        {sourceLabel && (
+          <div style={{ marginTop: 6 }}>
+            <span style={{
+              display: 'inline-block', fontSize: 10, fontWeight: 500, color: C.textMuted,
+              background: C.surface, border: `1px solid ${C.borderLight}`,
+              padding: '1px 8px', borderRadius: 20,
+            }}>
+              {sourceLabel}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -887,6 +906,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [reservationsLoading, setReservationsLoading] = useState(false);
   const [fromReservations, setFromReservations] = useState(false);
 
+  // Home hub tab navigation
+  const [homeTab, setHomeTab] = useState<HomeTab>('wishlists');
+  const [homeReturnTab, setHomeReturnTab] = useState<HomeTab | null>(null);
+  // All items flat list (for "Wishes" tab)
+  const [allItems, setAllItems] = useState<AllItem[]>([]);
+  const [allItemsLoading, setAllItemsLoading] = useState(false);
+
   // Guest state
   const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null } | null>(null);
   const [guestItems, setGuestItems] = useState<GuestItem[]>([]);
@@ -1088,6 +1114,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // silent
     } finally {
       setReservationsLoading(false);
+    }
+  }, [tgFetch]);
+
+  const loadAllItems = useCallback(async () => {
+    setAllItemsLoading(true);
+    try {
+      const res = await tgFetch('/tg/items');
+      if (!res.ok) return;
+      const json = await res.json() as { items: AllItem[] };
+      setAllItems(json.items);
+    } catch {
+      // silent
+    } finally {
+      setAllItemsLoading(false);
     }
   }, [tgFetch]);
 
@@ -1637,12 +1677,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (fromDrafts) {
         setFromDrafts(false);
         setScreen('drafts');
+      } else if (homeReturnTab !== null) {
+        const tab = homeReturnTab;
+        setHomeReturnTab(null);
+        setHomeTab(tab);
+        if (tab === 'wishes') void loadAllItems();
+        setScreen('my-wishlists');
       } else {
         setScreen('wishlist-detail');
       }
     } else if (screen === 'guest-item-detail') {
       setViewingItem(null);
-      if (fromReservations) {
+      if (homeReturnTab !== null) {
+        const tab = homeReturnTab;
+        setHomeReturnTab(null);
+        setHomeTab(tab);
+        if (tab === 'reservations') void loadReservations();
+        setScreen('my-wishlists');
+      } else if (fromReservations) {
         setFromReservations(false);
         setScreen('my-reservations');
       } else {
@@ -1665,7 +1717,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } else if (screen === 'share' || screen === 'archive') {
       setScreen('wishlist-detail');
     }
-  }, [screen, loadWishlists, fromDrafts, fromReservations]);
+  }, [screen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -2370,41 +2422,97 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </button>
           </div>
 
-          {/* Segment control: Mine / Following */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.surface, borderRadius: 12, padding: 4 }}>
-            {(['mine', 'subscribed'] as const).map((tab) => {
-              const isActive = myWishlistsTab === tab;
-              const totalUnread = subscriptions.reduce((s, sub) => s + sub.unreadCount, 0);
-              return (
-                <button
-                  key={tab}
-                  onClick={() => {
-                    setMyWishlistsTab(tab);
-                    if (tab === 'subscribed') void loadSubscriptions();
-                  }}
-                  style={{
-                    flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                    fontFamily: font, fontSize: 14, fontWeight: 600, transition: 'all 0.2s',
-                    background: isActive ? C.accent : 'transparent',
-                    color: isActive ? '#fff' : C.textSec,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  }}
-                >
-                  {tab === 'mine' ? t('sub_tab_my', locale) : t('sub_tab_subscribed', locale)}
-                  {tab === 'subscribed' && totalUnread > 0 && (
-                    <span style={{
-                      minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
-                      background: isActive ? 'rgba(255,255,255,0.3)' : C.orange,
-                      color: '#fff', fontSize: 10, fontWeight: 700,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>{totalUnread}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          {/* ─── Primary home nav: Вишлисты | Желания | Мои брони ─── */}
+          {(() => {
+            const homeTabs = [
+              { tab: 'wishlists' as HomeTab, count: wishlists.length, label: t('home_tab_wishlists', locale) },
+              { tab: 'wishes' as HomeTab, count: totalItems, label: t('home_tab_wishes', locale) },
+              { tab: 'reservations' as HomeTab, count: reservationsCount, label: t('home_tab_bookings', locale) },
+            ];
+            const activeIdx = homeTabs.findIndex(s => s.tab === homeTab);
+            return (
+              <div style={{ position: 'relative', display: 'flex', marginBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+                {homeTabs.map((seg) => {
+                  const isActive = homeTab === seg.tab;
+                  return (
+                    <button
+                      key={seg.tab}
+                      onClick={() => {
+                        setHomeTab(seg.tab);
+                        if (seg.tab === 'wishes') void loadAllItems();
+                        else if (seg.tab === 'reservations' && reservations.length === 0) void loadReservations();
+                      }}
+                      style={{
+                        flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+                        padding: '10px 4px 14px', fontFamily: font,
+                        WebkitTapHighlightColor: 'transparent',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                      }}
+                    >
+                      <span style={{
+                        fontSize: 22, fontWeight: 800, lineHeight: 1, fontFamily: font,
+                        color: isActive ? C.accent : C.text,
+                        transition: 'color 0.18s',
+                      }}>{seg.count}</span>
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: isActive ? 700 : 500,
+                        color: isActive ? C.text : C.textMuted,
+                        transition: 'color 0.18s',
+                      }}>{seg.label}</span>
+                    </button>
+                  );
+                })}
+                {/* Animated underline */}
+                <div style={{
+                  position: 'absolute', bottom: 0, height: 2, borderRadius: 1,
+                  width: 'calc(100% / 3)',
+                  left: `calc(100% / 3 * ${activeIdx < 0 ? 0 : activeIdx})`,
+                  background: C.accent,
+                  transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                }} />
+              </div>
+            );
+          })()}
 
-          {myWishlistsTab === 'subscribed' && (
+          {/* Mine/Subscribed sub-selector — only in Wishlists tab */}
+          {homeTab === 'wishlists' && (
+            <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.surface, borderRadius: 12, padding: 4 }}>
+              {(['mine', 'subscribed'] as const).map((tab) => {
+                const isActive = myWishlistsTab === tab;
+                const totalUnread = subscriptions.reduce((s, sub) => s + sub.unreadCount, 0);
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => {
+                      setMyWishlistsTab(tab);
+                      if (tab === 'subscribed') void loadSubscriptions();
+                    }}
+                    style={{
+                      flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                      fontFamily: font, fontSize: 14, fontWeight: 600, transition: 'all 0.2s',
+                      background: isActive ? C.accent : 'transparent',
+                      color: isActive ? '#fff' : C.textSec,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}
+                  >
+                    {tab === 'mine' ? t('sub_tab_my', locale) : t('sub_tab_subscribed', locale)}
+                    {tab === 'subscribed' && totalUnread > 0 && (
+                      <span style={{
+                        minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
+                        background: isActive ? 'rgba(255,255,255,0.3)' : C.orange,
+                        color: '#fff', fontSize: 10, fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>{totalUnread}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Subscribed wishlists */}
+          {homeTab === 'wishlists' && myWishlistsTab === 'subscribed' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {subscriptionsLoading && (
                 <div style={{ textAlign: 'center', padding: '32px 0', color: C.textMuted, fontSize: 14 }}>{t('loading', locale)}</div>
@@ -2420,12 +2528,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <div
                   key={sub.id}
                   onClick={async () => {
-                    // Mark unreads as read, then open guest view
                     if (sub.unreadCount > 0) {
                       void tgFetch(`/tg/me/subscriptions/${sub.id}/read`, { method: 'POST' });
                       setSubscriptions((prev) => prev.map((s) => s.id === sub.id ? { ...s, unreadCount: 0, unreadEntityIds: [] } : s));
                     }
-                    // Set unread entity ids so guest view can highlight them
                     setGuestUnreadEntityIds(sub.unreadEntityIds);
                     setGuestSubId(sub.id);
                     setIsSubscribed(true);
@@ -2468,30 +2574,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </div>
           )}
 
-          {myWishlistsTab === 'mine' && (
+          {/* ── WISHLISTS TAB — mine subtab ─────────────────────────── */}
+          {homeTab === 'wishlists' && myWishlistsTab === 'mine' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {wishlists.length > 0 && (
-              <div style={{
-                background: `linear-gradient(135deg, ${C.accent}18, ${C.accent}06)`,
-                borderRadius: 16, padding: '16px 20px', border: `1px solid ${C.accent}15`,
-                animation: 'fadeIn 0.3s ease',
-              }}>
-                <div style={{ fontSize: 13, color: C.textSec, marginBottom: 8 }}>📊 {t('stats_total', locale)}</div>
-                <div style={{ display: 'flex', gap: 24 }}>
-                  {[
-                    { n: wishlists.length, l: t('stats_wishlists', locale), c: C.text },
-                    { n: totalItems, l: t('stats_wishes', locale), c: C.accent },
-                    { n: reservationsCount, l: t('stats_reserved', locale), c: C.green },
-                  ].map((s, i) => (
-                    <div key={i}>
-                      <div style={{ fontSize: 24, fontWeight: 800, color: s.c, fontFamily: font }}>{s.n}</div>
-                      <div style={{ fontSize: 11, color: C.textMuted }}>{s.l}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {draftsCount > 0 && (
               <div onClick={() => { void loadDrafts(); setScreen('drafts'); }} style={{
                 background: `linear-gradient(135deg, ${C.orange}20, ${C.orange}08)`,
@@ -2510,56 +2595,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </div>
                 </div>
                 <span style={{ fontSize: 20, color: C.orange }}>›</span>
-              </div>
-            )}
-
-            {/* Забронировано мной — always visible */}
-            {reservationsCount > 0 ? (
-              <div
-                onClick={() => { void loadReservations(); setScreen('my-reservations'); }}
-                style={{
-                  background: `linear-gradient(135deg, ${C.green}20, ${C.green}08)`,
-                  borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
-                  border: `1px solid ${C.green}25`,
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  animation: 'fadeIn 0.3s ease',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 24 }}>🎁</span>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{t('reservations_title', locale)}</span>
-                      <span style={{
-                        minWidth: 20, height: 20, borderRadius: 10,
-                        background: C.green, color: '#fff',
-                        fontSize: 11, fontWeight: 700,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        padding: '0 6px',
-                      }}>{reservationsCount}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                      {reservations.length > 0
-                        ? reservations.slice(0, 3).map(r => r.title).join(', ').slice(0, 50) + (reservations.length > 3 ? '…' : '')
-                        : t('reservations_open_list', locale)}
-                    </div>
-                  </div>
-                </div>
-                <span style={{ fontSize: 20, color: C.green }}>›</span>
-              </div>
-            ) : (
-              <div style={{
-                background: C.surface, borderRadius: 16, padding: '16px 20px',
-                border: `1px solid ${C.border}`,
-                animation: 'fadeIn 0.3s ease',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 24 }}>🎁</span>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{t('reservations_title', locale)}</div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('reservations_empty_hint', locale)}</div>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -2622,6 +2657,108 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             )}
             <button style={btnPrimary} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</button>
           </div>
+          )}
+
+          {/* ── WISHES TAB ──────────────────────────────────────────── */}
+          {homeTab === 'wishes' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {allItemsLoading && (
+                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                  <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
+                  <div style={{ fontSize: 14, color: C.textMuted }}>{t('loading', locale)}</div>
+                </div>
+              )}
+              {!allItemsLoading && allItems.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>✨</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('wishes_all_empty_title', locale)}</div>
+                  <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('wishes_all_empty_hint', locale)}</div>
+                </div>
+              )}
+              {allItems.map((item) => (
+                <WishCardOwner
+                  key={item.id}
+                  item={item}
+                  locale={locale}
+                  sourceLabel={item.wishlistTitle}
+                  onTap={(it) => {
+                    const wl = wishlists.find(w => w.id === it.wishlistId) ?? null;
+                    setCurrentWl(wl);
+                    if (wl) void loadItems(wl.id);
+                    setViewingItem(it);
+                    setHomeReturnTab('wishes');
+                    setScreen('item-detail');
+                  }}
+                  onDelete={() => {}}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* ── RESERVATIONS TAB ────────────────────────────────────── */}
+          {homeTab === 'reservations' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {reservationsLoading && reservations.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                  <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
+                  <div style={{ fontSize: 14, color: C.textMuted }}>{t('reservations_loading', locale)}</div>
+                </div>
+              )}
+              {!reservationsLoading && reservations.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('reservations_empty_title', locale)}</div>
+                  <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('reservations_empty_hint', locale)}</div>
+                </div>
+              )}
+              {reservations.length > 0 && (() => {
+                const groups: Record<string, { ownerName: string; items: ReservationItem[] }> = {};
+                for (const r of reservations) {
+                  const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, items: [] });
+                  g.items.push(r);
+                }
+                let globalIdx = 0;
+                return Object.entries(groups).map(([ownerId, group]) => (
+                  <div key={ownerId} style={{ marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: 16,
+                        background: `linear-gradient(135deg, ${C.accent}, ${C.green})`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0,
+                      }}>
+                        {(group.ownerName || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {group.items.map((item) => {
+                        const delay = globalIdx * 0.06;
+                        globalIdx++;
+                        return (
+                          <ReservationCard
+                            key={item.id}
+                            item={item}
+                            animDelay={delay}
+                            locale={locale}
+                            onTap={() => {
+                              setViewingItem({
+                                ...item,
+                                reservedByDisplayName: null,
+                                reservedByActorHash: myActorHashRef.current,
+                              } as GuestItem);
+                              setHomeReturnTab('reservations');
+                              setScreen('guest-item-detail');
+                            }}
+                            onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveFromReservations(item))}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
           )}
 
           <BottomSheet isOpen={showCreateWl} onClose={() => setShowCreateWl(false)} title={t('new_wishlist', locale)}>

@@ -1811,6 +1811,35 @@ tgRouter.get(
   }),
 );
 
+// GET /tg/items — flat list of all items across all user's active wishlists
+tgRouter.get(
+  '/items',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const items = await prisma.item.findMany({
+      where: {
+        wishlist: { ownerId: user.id, archivedAt: null },
+        status: { in: [...ACTIVE_STATUSES] },
+        archivedAt: null,
+      },
+      orderBy: [{ wishlistId: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        id: true, wishlistId: true, title: true, url: true, priceText: true,
+        imageUrl: true, priority: true, status: true, description: true,
+        sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+        wishlist: { select: { title: true, slug: true } },
+      },
+    });
+    return res.json({
+      items: items.map(({ wishlist, ...rest }) => ({
+        ...mapTgItem(rest),
+        wishlistTitle: wishlist.title,
+        wishlistSlug: wishlist.slug,
+      })),
+    });
+  }),
+);
+
 // POST /tg/wishlists/:id/items — add item
 tgRouter.post(
   '/wishlists/:id/items',
