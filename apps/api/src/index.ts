@@ -3450,8 +3450,8 @@ tgRouter.patch(
   '/me/profile',
   asyncHandler(async (req, res) => {
     const parsed = z.object({
-      displayName: z.string().min(1).max(100).optional(),
-      username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/).optional(),
+      displayName: z.string().min(1).max(100).nullable().optional(),
+      username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/).nullable().optional(),
       bio: z.string().max(300).nullable().optional(),
       birthday: z.string().nullable().optional(),
       hideYear: z.boolean().optional(),
@@ -3461,8 +3461,8 @@ tgRouter.patch(
     const user = await getOrCreateTgUser(req.tgUser!);
     const locale = getRequestLocale(req);
 
-    // Check username uniqueness
-    if (parsed.data.username !== undefined) {
+    // Check username uniqueness (skip if clearing username)
+    if (parsed.data.username !== undefined && parsed.data.username !== null) {
       const currentProfile = await getOrCreateProfile(user.id, locale);
       if (parsed.data.username !== currentProfile.username) {
         const existing = await prisma.userProfile.findUnique({ where: { username: parsed.data.username } });
