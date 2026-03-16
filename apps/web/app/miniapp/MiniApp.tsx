@@ -1020,6 +1020,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [draftCustomBudget, setDraftCustomBudget] = useState('');
   const [draftPriorities, setDraftPriorities] = useState<number[]>([1, 2, 3]);
 
+  // Wishlist reorder state
+  const [reorderMode, setReorderMode] = useState(false);
+  const [reorderList, setReorderList] = useState<Wishlist[]>([]);
+  const [reorderSaving, setReorderSaving] = useState(false);
+  const [reorderDragIdx, setReorderDragIdx] = useState<number | null>(null);
+  const [reorderDragOverIdx, setReorderDragOverIdx] = useState<number | null>(null);
+
   // Guest forms
   const [reservingItem, setReservingItem] = useState<GuestItem | null>(null);
   const [guestName, setGuestName] = useState('');
@@ -2056,7 +2063,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       }
       if (!res.ok) { pushToast(t('toast_create_error', locale), 'error'); return; }
       const json = await res.json() as { wishlist: Wishlist };
-      setWishlists((prev) => [json.wishlist, ...prev]);
+      const addToTop = !settingsData || settingsData.appBehavior.newWishlistPosition !== 'bottom';
+      setWishlists((prev) => addToTop ? [json.wishlist, ...prev] : [...prev, json.wishlist]);
       setShowCreateWl(false);
       setWlTitle(''); setWlDeadline('');
       pushToast(t('wishlist_created', locale), 'success');
@@ -2067,6 +2075,77 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } finally {
       setLoading(false);
     }
+  };
+
+  const enterReorderMode = () => {
+    setReorderList([...wishlists]);
+    setReorderDragIdx(null);
+    setReorderDragOverIdx(null);
+    setReorderMode(true);
+  };
+
+  const cancelReorderMode = () => {
+    setReorderMode(false);
+    setReorderList([]);
+    setReorderDragIdx(null);
+    setReorderDragOverIdx(null);
+  };
+
+  const handleSaveReorder = async () => {
+    if (reorderSaving) return;
+    setReorderSaving(true);
+    try {
+      const res = await tgFetch('/tg/wishlists/reorder', {
+        method: 'POST',
+        body: JSON.stringify({ orderedIds: reorderList.map(w => w.id) }),
+      });
+      if (!res.ok) { pushToast(t('wl_reorder_error', locale), 'error'); return; }
+      setWishlists([...reorderList]);
+      setReorderMode(false);
+      setReorderList([]);
+      pushToast(t('wl_reorder_saved', locale), 'success');
+    } finally {
+      setReorderSaving(false);
+    }
+  };
+
+  // Drag-and-drop handlers for wishlist reorder (pointer capture)
+  const reorderPointerStartY = useRef<number>(0);
+  const reorderPointerIdx = useRef<number | null>(null);
+
+  const handleReorderPointerDown = (e: React.PointerEvent, idx: number) => {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    reorderPointerStartY.current = e.clientY;
+    reorderPointerIdx.current = idx;
+    setReorderDragIdx(idx);
+    setReorderDragOverIdx(idx);
+  };
+
+  const handleReorderPointerMove = (e: React.PointerEvent, idx: number) => {
+    if (reorderPointerIdx.current === null || reorderPointerIdx.current !== idx) return;
+    const deltaY = e.clientY - reorderPointerStartY.current;
+    const cardHeight = 82; // approximate card height + gap
+    const steps = Math.round(deltaY / cardHeight);
+    const newIdx = Math.max(0, Math.min(reorderList.length - 1, idx + steps));
+    setReorderDragOverIdx(newIdx);
+    if (newIdx !== reorderDragOverIdx) {
+      setReorderList(prev => {
+        const next = [...prev];
+        const [item] = next.splice(idx, 1);
+        next.splice(newIdx, 0, item!);
+        reorderPointerIdx.current = newIdx;
+        reorderPointerStartY.current = e.clientY;
+        return next;
+      });
+      setReorderDragIdx(newIdx);
+      setReorderDragOverIdx(newIdx);
+    }
+  };
+
+  const handleReorderPointerUp = () => {
+    reorderPointerIdx.current = null;
+    setReorderDragIdx(null);
+    setReorderDragOverIdx(null);
   };
 
   const handleRenameWishlist = async () => {
@@ -2700,7 +2779,61 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            {wishlists.map((wl, i) => (
+            {/* ── Reorder mode ── */}
+            {reorderMode && (
+              <>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                  <button
+                    style={{ ...btnPrimary, flex: 1, opacity: reorderSaving ? 0.6 : 1 }}
+                    onClick={() => void handleSaveReorder()}
+                    disabled={reorderSaving}
+                  >
+                    {reorderSaving ? '…' : t('wl_reorder_save', locale)}
+                  </button>
+                  <button
+                    style={{ ...btnGhost, flex: 1 }}
+                    onClick={cancelReorderMode}
+                  >
+                    {t('wl_reorder_cancel', locale)}
+                  </button>
+                </div>
+                {reorderList.map((wl, i) => (
+                  <div
+                    key={wl.id}
+                    style={{
+                      background: reorderDragIdx === i ? C.accent + '22' : C.card,
+                      borderRadius: 16, padding: '14px 18px',
+                      border: `1px solid ${reorderDragIdx === i ? C.accent : C.border}`,
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      transition: 'background 0.15s, border-color 0.15s',
+                      userSelect: 'none', touchAction: 'none',
+                    }}
+                  >
+                    <div
+                      onPointerDown={(e) => handleReorderPointerDown(e, i)}
+                      onPointerMove={(e) => handleReorderPointerMove(e, i)}
+                      onPointerUp={handleReorderPointerUp}
+                      onPointerCancel={handleReorderPointerUp}
+                      style={{
+                        fontSize: 20, color: C.textMuted, cursor: 'grab', padding: '4px 8px 4px 0',
+                        lineHeight: 1, flexShrink: 0, touchAction: 'none',
+                      }}
+                    >
+                      ⠿
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{wl.title}</div>
+                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                        {t('wishlist_count', locale, { count: wl.itemCount, reserved: wl.reservedCount })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* ── Normal mode ── */}
+            {!reorderMode && wishlists.map((wl, i) => (
               <div key={wl.id} onClick={() => void openWishlist(wl)} style={{
                 background: C.card, borderRadius: 16, padding: 18, cursor: 'pointer',
                 border: `1px solid ${C.border}`, animation: `fadeIn 0.3s ease ${(i + 1) * 0.08}s both`,
@@ -2739,7 +2872,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             ))}
 
-            {wishlists.length === 0 && (
+            {!reorderMode && wishlists.length === 0 && (
               <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('empty_state_title', locale)}</div>
@@ -2749,15 +2882,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
-              {t('plan_status', locale, { plan: planInfo.code === 'PRO' ? 'Pro' : 'Free', count: wishlists.length, max: planLimits.wishlists })}
-            </div>
-            {planInfo.code === 'FREE' && (
+            {!reorderMode && (
+              <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
+                {t('plan_status', locale, { plan: planInfo.code === 'PRO' ? 'Pro' : 'Free', count: wishlists.length, max: planLimits.wishlists })}
+              </div>
+            )}
+            {!reorderMode && planInfo.code === 'FREE' && (
               <button style={{ ...btnGhost, width: '100%', fontSize: 13, color: C.accent }} onClick={() => showUpsell('wishlist_limit')}>
                 {t('connect_pro', locale)}
               </button>
             )}
-            <button style={btnPrimary} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</button>
+            {!reorderMode && <button style={btnPrimary} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</button>}
           </div>
           )}
 
@@ -4527,26 +4662,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
               {/* App Behavior */}
               <SettingsSection title={t('settings_app_behavior_title', locale)}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
-                  <span style={{ fontSize: 14, color: C.text }}>{t('settings_wishlist_position', locale)}</span>
-                  <div style={{ display: 'flex', gap: 4, background: C.bg, borderRadius: 8, padding: 2 }}>
-                    {(['top', 'bottom'] as const).map(pos => (
-                      <button key={pos} onClick={() => {
-                        if (pos === 'top' && !settingsData.isPro) { showUpsell('wishlist_limit'); return; }
-                        patchSettings({ appBehavior: { ...settingsData.appBehavior, newWishlistPosition: pos } });
-                      }} style={{
-                        padding: '6px 10px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600,
-                        cursor: 'pointer', fontFamily: font,
-                        background: settingsData.appBehavior.newWishlistPosition === pos ? C.accent : 'transparent',
-                        color: settingsData.appBehavior.newWishlistPosition === pos ? '#fff' : C.textMuted,
-                        display: 'flex', alignItems: 'center', gap: 4,
-                      }}>
-                        {pos === 'top' ? t('settings_position_top', locale) : t('settings_position_bottom', locale)}
-                        {pos === 'top' && !settingsData.isPro && <ProBadge />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <SettingsToggle
+                  label={t('settings_wishlists_on_top', locale)}
+                  value={settingsData.appBehavior.newWishlistPosition !== 'bottom'}
+                  proBadge={!settingsData.isPro}
+                  onChange={(v) => {
+                    const newPos = v ? 'top' : 'bottom';
+                    if (newPos === 'bottom' && !settingsData.isPro) { showUpsell('wishlist_limit'); return; }
+                    patchSettings({ appBehavior: { ...settingsData.appBehavior, newWishlistPosition: newPos } });
+                  }}
+                />
                 <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: 14, color: C.textMuted }}>{t('settings_sorting_default', locale)}</span>
@@ -4593,20 +4718,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <span style={{ fontSize: 20 }}>✏️</span>
             {t('wl_edit', locale)}
           </button>
-          {/* Reorder wishes — stub */}
+          {/* Reorder wishlists */}
           <button
             onClick={() => {
-              pushToast(t('wl_reorder_soon', locale), 'success');
+              setShowWlManage(false);
+              setScreen('my-wishlists');
+              setHomeTab('wishlists');
+              setTimeout(() => enterReorderMode(), 50);
             }}
             style={{
               background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
               textAlign: 'left', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.textSec, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
             }}
           >
             <span style={{ fontSize: 20 }}>↕️</span>
-            <span>{t('wl_reorder', locale)}</span>
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: C.textMuted, background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: '2px 8px' }}>Soon</span>
+            <span>{t('wl_reorder_start', locale)}</span>
           </button>
           {/* Archive wishlist */}
           <button

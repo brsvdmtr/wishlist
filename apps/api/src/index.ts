@@ -1347,7 +1347,7 @@ tgRouter.get(
 
     const wishlists = await prisma.wishlist.findMany({
       where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
-      orderBy: { createdAt: 'asc' },  // oldest first for readOnly calculation
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],  // position first, then createdAt for readOnly calculation
       select: {
         id: true, slug: true, title: true, description: true, deadline: true,
         items: { select: { status: true } },
@@ -1508,6 +1508,38 @@ tgRouter.post(
   }),
 );
 
+// POST /tg/wishlists/reorder — update wishlist positions (owner only)
+tgRouter.post(
+  '/wishlists/reorder',
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({ orderedIds: z.array(z.string()).min(1).max(200) })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const { orderedIds } = parsed.data;
+
+    // Verify all IDs belong to this user and are REGULAR non-archived wishlists
+    const wishlists = await prisma.wishlist.findMany({
+      where: { ownerId: user.id, type: 'REGULAR', archivedAt: null, id: { in: orderedIds } },
+      select: { id: true },
+    });
+    if (wishlists.length !== orderedIds.length) {
+      return res.status(400).json({ error: 'Some wishlist IDs are invalid or not owned by you' });
+    }
+
+    // Transactionally assign positions based on orderedIds index
+    await prisma.$transaction(
+      orderedIds.map((id, idx) =>
+        prisma.wishlist.update({ where: { id }, data: { position: idx } }),
+      ),
+    );
+
+    return res.json({ ok: true });
+  }),
+);
+
 // POST /tg/wishlists — create wishlist
 tgRouter.post(
   '/wishlists',
@@ -1528,6 +1560,27 @@ tgRouter.post(
       return res.status(402).json({ error: 'Plan limit reached', limit: ent.plan.wishlists, planCode: ent.plan.code });
     }
 
+    // Determine insert position based on user's newWishlistPosition setting
+    const profile = await prisma.userProfile.findUnique({ where: { userId: user.id }, select: { newWishlistPosition: true } });
+    const addToTop = !profile || profile.newWishlistPosition === 'top';
+
+    let newPosition: number;
+    if (addToTop) {
+      // Shift all existing REGULAR non-archived wishlists up by 1, then insert at 0
+      await prisma.wishlist.updateMany({
+        where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
+        data: { position: { increment: 1 } },
+      });
+      newPosition = 0;
+    } else {
+      // Append at the end
+      const maxResult = await prisma.wishlist.aggregate({
+        where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
+        _max: { position: true },
+      });
+      newPosition = (maxResult._max.position ?? -1) + 1;
+    }
+
     const slug = await generateUniqueSlug(parsed.data.title);
     const wishlist = await prisma.wishlist.create({
       data: {
@@ -1535,6 +1588,7 @@ tgRouter.post(
         ownerId: user.id,
         title: parsed.data.title,
         deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null,
+        position: newPosition,
       },
       select: { id: true, slug: true, title: true, description: true, deadline: true },
     });
@@ -1609,6 +1663,21 @@ tgRouter.delete(
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
     await prisma.wishlist.delete({ where: { id } });
+
+    // Repack positions for remaining REGULAR non-archived wishlists to keep them contiguous
+    const remaining = await prisma.wishlist.findMany({
+      where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true },
+    });
+    if (remaining.length > 0) {
+      await prisma.$transaction(
+        remaining.map((wl, idx) =>
+          prisma.wishlist.update({ where: { id: wl.id }, data: { position: idx } }),
+        ),
+      );
+    }
+
     return res.json({ ok: true });
   }),
 );
@@ -3227,9 +3296,9 @@ tgRouter.patch(
     }
 
     if (data.appBehavior) {
-      // Pro-gated: newWishlistPosition "top" requires Pro
+      // Pro-gated: newWishlistPosition "bottom" requires Pro (free users are locked to "top")
       if (data.appBehavior.newWishlistPosition !== undefined) {
-        if (isPro || data.appBehavior.newWishlistPosition === 'bottom') {
+        if (isPro || data.appBehavior.newWishlistPosition === 'top') {
           updateData.newWishlistPosition = data.appBehavior.newWishlistPosition;
         }
       }

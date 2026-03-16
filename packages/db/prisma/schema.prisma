@@ -97,6 +97,7 @@ model Wishlist {
   description String?
   deadline    DateTime?
   archivedAt  DateTime?
+  position    Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -108,6 +109,7 @@ model Wishlist {
   wishlistSubscriptions WishlistSubscription[]
 
   @@index([ownerId])
+  @@index([ownerId, position])
 }
 
 model Item {
