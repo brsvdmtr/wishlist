@@ -2769,8 +2769,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
           {/* Content */}
           <div style={{ padding: '20px 20px 0' }}>
-            {/* Title (left) + Price+Priority column (right) */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+            {/* Row 1: Title (left) + Price (right) */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
               <h1 style={{
                 flex: 1, minWidth: 0,
                 fontSize: 22, fontWeight: 700, fontFamily: font, color: C.text,
@@ -2778,30 +2778,29 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
                 overflow: 'hidden', textOverflow: 'ellipsis',
               }}>{viewingItem.title}</h1>
-              {(viewingItem.price != null || viewingItem.priority != null) && (
-                <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, maxWidth: '45%' }}>
-                  {viewingItem.price != null && (
-                    <div style={{
-                      fontSize: 17, fontWeight: 700, color: C.accent,
-                      lineHeight: 1.25, paddingTop: 2,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {fmtPrice(viewingItem.price, locale, viewingItem.currency ?? 'RUB')}
-                    </div>
-                  )}
-                  <div style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '4px 10px', borderRadius: 100,
-                    background: PRIO_BG[viewingItem.priority] ?? PRIO_BG[1],
-                    fontSize: 12, fontWeight: 600,
-                    color: PRIO_COLOR[viewingItem.priority] ?? PRIO_COLOR[1],
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {prioEmoji(viewingItem.priority)}{' '}
-                    {getPriorities(locale).find((p) => p.value === viewingItem!.priority)?.label}
-                  </div>
+              {viewingItem.price != null && (
+                <div style={{
+                  flexShrink: 0, fontSize: 17, fontWeight: 700, color: C.accent,
+                  lineHeight: 1.25, paddingTop: 3, maxWidth: '45%',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {fmtPrice(viewingItem.price, locale, viewingItem.currency ?? 'RUB')}
                 </div>
               )}
+            </div>
+            {/* Row 2: Priority chip — right-aligned (under price) */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 10px', borderRadius: 100,
+                background: PRIO_BG[viewingItem.priority] ?? PRIO_BG[1],
+                fontSize: 12, fontWeight: 600,
+                color: PRIO_COLOR[viewingItem.priority] ?? PRIO_COLOR[1],
+                whiteSpace: 'nowrap',
+              }}>
+                {prioEmoji(viewingItem.priority)}{' '}
+                {getPriorities(locale).find((p) => p.value === viewingItem!.priority)?.label}
+              </div>
             </div>
 
             {/* URL + source badge */}
@@ -2995,8 +2994,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
           {/* Content */}
           <div style={{ padding: '20px 20px 0' }}>
-            {/* Title (left) + Price+Priority column (right) */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+            {/* Row 1: Title (left) + Price (right) */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
               <h1 style={{
                 flex: 1, minWidth: 0,
                 fontSize: 22, fontWeight: 700, fontFamily: font, color: C.text,
@@ -3004,30 +3003,29 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
                 overflow: 'hidden', textOverflow: 'ellipsis',
               }}>{viewingItem.title}</h1>
-              {(viewingItem.price != null || viewingItem.priority != null) && (
-                <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, maxWidth: '45%' }}>
-                  {viewingItem.price != null && (
-                    <div style={{
-                      fontSize: 17, fontWeight: 700, color: C.accent,
-                      lineHeight: 1.25, paddingTop: 2,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {fmtPrice(viewingItem.price, locale, viewingItem.currency ?? 'RUB')}
-                    </div>
-                  )}
-                  <div style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '4px 10px', borderRadius: 100,
-                    background: PRIO_BG[viewingItem.priority] ?? PRIO_BG[1],
-                    fontSize: 12, fontWeight: 600,
-                    color: PRIO_COLOR[viewingItem.priority] ?? PRIO_COLOR[1],
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {prioEmoji(viewingItem.priority)}{' '}
-                    {getPriorities(locale).find((p) => p.value === viewingItem!.priority)?.label}
-                  </div>
+              {viewingItem.price != null && (
+                <div style={{
+                  flexShrink: 0, fontSize: 17, fontWeight: 700, color: C.accent,
+                  lineHeight: 1.25, paddingTop: 3, maxWidth: '45%',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {fmtPrice(viewingItem.price, locale, viewingItem.currency ?? 'RUB')}
                 </div>
               )}
+            </div>
+            {/* Row 2: Priority chip — right-aligned (under price) */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 10px', borderRadius: 100,
+                background: PRIO_BG[viewingItem.priority] ?? PRIO_BG[1],
+                fontSize: 12, fontWeight: 600,
+                color: PRIO_COLOR[viewingItem.priority] ?? PRIO_COLOR[1],
+                whiteSpace: 'nowrap',
+              }}>
+                {prioEmoji(viewingItem.priority)}{' '}
+                {getPriorities(locale).find((p) => p.value === viewingItem!.priority)?.label}
+              </div>
             </div>
 
             {/* URL */}
