@@ -603,6 +603,61 @@ const ru: Dict = {
   sub_subscribers_count: '{{count}} подписчиков',
   sub_subscribers_count_1: '{{count}} подписчик',
   sub_pro_upsell: 'До {{max}} подписок — в Pro',
+
+  // ── Wishlist manage menu (new items) ──────────────────────────────────────
+  wl_manage_privacy: 'Настроить приватность',
+  wl_delete_btn: 'Удалить вишлист',
+
+  // ── Delete wishlist flow ───────────────────────────────────────────────────
+  wl_delete_title: 'Удалить вишлист?',
+  wl_delete_body: 'Все желания внутри вишлиста будут удалены безвозвратно. Восстановить вишлист после удаления будет нельзя.',
+  wl_delete_to_archive: 'В архив вместо удаления',
+  wl_delete_irreversible: 'Удалить вишлист безвозвратно',
+  wl_delete_confirm2_title: 'Точно удалить?',
+  wl_delete_confirm2_body: 'Это безвозвратное действие. Вишлист и все желания внутри него исчезнут навсегда без возможности восстановления.',
+  wl_delete_confirm2_btn: 'Точно удалить',
+  wl_deleted_toast: 'Вишлист удалён',
+
+  // ── Delete with reserved items ────────────────────────────────────────────
+  wl_delete_reserved_title: 'Внутри есть забронированные желания',
+  wl_delete_reserved_body: 'Если удалить вишлист сейчас, забронированные желания и все брони будут потеряны безвозвратно.',
+  wl_delete_reserved_transfer: 'Перенести забронированные',
+  wl_delete_reserved_force: 'Удалить всё безвозвратно',
+
+  // ── Transfer reserved items ────────────────────────────────────────────────
+  wl_transfer_title: 'Перенести забронированные',
+  wl_transfer_pick: 'Выбери вишлист для переноса',
+  wl_transfer_hint: 'Желания вместе с бронями переедут в выбранный вишлист',
+  wl_transfer_btn: 'Перенести и удалить',
+  wl_transfer_no_space: 'Нет места ({{count}} желаний)',
+  wl_transfer_archived: 'Архивный',
+  wl_transfer_done_toast: 'Желания перенесены, вишлист удалён',
+  wl_transfer_error: 'Не удалось перенести желания',
+
+  // ── Wishlist privacy settings ─────────────────────────────────────────────
+  wl_privacy_title: 'Приватность',
+  wl_visibility_section: 'Видимость вишлиста',
+  wl_visibility_link_only: 'По ссылке',
+  wl_visibility_link_only_desc: 'Не отображается в публичном профиле',
+  wl_visibility_public: 'Публичный',
+  wl_visibility_public_desc: 'Показывается в публичном профиле',
+  wl_visibility_private: 'Скрытый',
+  wl_visibility_private_desc: 'Только текущие подписчики имеют доступ',
+  wl_visibility_private_hint: 'Новые пользователи без доступа будут видеть нейтральное сообщение об отсутствии вишлиста',
+  wl_subs_section: 'Кто может подписываться',
+  wl_subs_all: 'Все с доступом',
+  wl_subs_nobody: 'Никто новый',
+  wl_comment_section: 'Кто может комментировать',
+  wl_comment_all: 'Все с доступом',
+  wl_comment_subscribers: 'Только подписчики',
+  wl_privacy_saved: 'Настройки приватности сохранены',
+
+  // ── Private wishlist landing ──────────────────────────────────────────────
+  wishlist_private_title: 'Вишлист перенесён в архив',
+  wishlist_private_body: 'Этот вишлист недоступен.',
+  wishlist_private_cta_profile: 'Перейти в профиль автора',
+  wishlist_private_cta_create: 'Создать свой вишлист',
+  wishlist_private_cta_home: 'На главный экран',
 };
 
 const en: Dict = {
@@ -1189,6 +1244,61 @@ const en: Dict = {
   sub_subscribers_count: '{{count}} followers',
   sub_subscribers_count_1: '{{count}} follower',
   sub_pro_upsell: 'Up to {{max}} following — in Pro',
+
+  // ── Wishlist manage menu (new items) ──────────────────────────────────────
+  wl_manage_privacy: 'Configure privacy',
+  wl_delete_btn: 'Delete wishlist',
+
+  // ── Delete wishlist flow ───────────────────────────────────────────────────
+  wl_delete_title: 'Delete wishlist?',
+  wl_delete_body: 'All wishes inside will be permanently deleted. There\'s no way to undo this action.',
+  wl_delete_to_archive: 'Archive instead',
+  wl_delete_irreversible: 'Delete permanently',
+  wl_delete_confirm2_title: 'Are you sure?',
+  wl_delete_confirm2_body: 'This is irreversible. The wishlist and all its wishes will be gone forever with no way to recover them.',
+  wl_delete_confirm2_btn: 'Yes, delete',
+  wl_deleted_toast: 'Wishlist deleted',
+
+  // ── Delete with reserved items ────────────────────────────────────────────
+  wl_delete_reserved_title: 'There are reserved wishes inside',
+  wl_delete_reserved_body: 'Deleting this wishlist will permanently remove all reserved wishes and their reservations.',
+  wl_delete_reserved_transfer: 'Transfer reserved wishes',
+  wl_delete_reserved_force: 'Delete everything permanently',
+
+  // ── Transfer reserved items ────────────────────────────────────────────────
+  wl_transfer_title: 'Transfer reserved wishes',
+  wl_transfer_pick: 'Choose a target wishlist',
+  wl_transfer_hint: 'Reserved wishes and their reservations will move to the selected wishlist',
+  wl_transfer_btn: 'Transfer and delete',
+  wl_transfer_no_space: 'No space ({{count}} wishes)',
+  wl_transfer_archived: 'Archived',
+  wl_transfer_done_toast: 'Wishes transferred, wishlist deleted',
+  wl_transfer_error: 'Could not transfer wishes',
+
+  // ── Wishlist privacy settings ─────────────────────────────────────────────
+  wl_privacy_title: 'Privacy',
+  wl_visibility_section: 'Wishlist visibility',
+  wl_visibility_link_only: 'By link',
+  wl_visibility_link_only_desc: 'Not shown in public profile',
+  wl_visibility_public: 'Public',
+  wl_visibility_public_desc: 'Shown in public profile',
+  wl_visibility_private: 'Hidden',
+  wl_visibility_private_desc: 'Only current subscribers have access',
+  wl_visibility_private_hint: 'New users without access will see a neutral message',
+  wl_subs_section: 'Who can subscribe',
+  wl_subs_all: 'Everyone with access',
+  wl_subs_nobody: 'No new subscribers',
+  wl_comment_section: 'Who can comment',
+  wl_comment_all: 'Everyone with access',
+  wl_comment_subscribers: 'Subscribers only',
+  wl_privacy_saved: 'Privacy settings saved',
+
+  // ── Private wishlist landing ──────────────────────────────────────────────
+  wishlist_private_title: 'Wishlist archived',
+  wishlist_private_body: 'This wishlist is not publicly accessible.',
+  wishlist_private_cta_profile: 'Go to author\'s profile',
+  wishlist_private_cta_create: 'Create your own wishlist',
+  wishlist_private_cta_home: 'Back to home',
 };
 
 // ─── Dictionaries map ─────────────────────────────────────────────────────────

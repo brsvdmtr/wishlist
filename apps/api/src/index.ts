@@ -552,6 +552,8 @@ publicRouter.get(
         title: true,
         description: true,
         deadline: true,
+        visibility: true,
+        ownerId: true,
         items: {
           where: { status: { in: [...ACTIVE_STATUSES] } },
           orderBy: ITEM_ORDER_BY,
@@ -571,6 +573,32 @@ publicRouter.get(
 
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
 
+    // PRIVATE wishlists: only subscribers can access
+    if (wishlist.visibility === 'PRIVATE') {
+      // Check if authenticated TG user is a subscriber
+      let isSubscriber = false;
+      const tgUser = req.tgUser;
+      if (tgUser) {
+        const user = await prisma.user.findUnique({
+          where: { telegramId: String(tgUser.id) },
+          select: { id: true },
+        }).catch(() => null);
+        if (user) {
+          const sub = await prisma.wishlistSubscription.findFirst({
+            where: { wishlistId: wishlist.id, subscriberId: user.id },
+            select: { id: true },
+          });
+          isSubscriber = !!sub;
+          // Also allow owner
+          if (user.id === wishlist.ownerId) isSubscriber = true;
+        }
+      }
+      if (!isSubscriber) {
+        // Neutral mask: show a generic "archived" facade so origin is not revealed
+        return res.status(403).json({ error: 'wishlist_private', message: 'This wishlist is not publicly accessible' });
+      }
+    }
+
     return res.json({
       wishlist: {
         id: wishlist.id,
@@ -578,6 +606,7 @@ publicRouter.get(
         title: wishlist.title,
         description: wishlist.description,
         deadline: wishlist.deadline,
+        visibility: (wishlist.visibility as string).toLowerCase(),
       },
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,
@@ -638,6 +667,72 @@ publicRouter.get(
       },
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,
+    });
+  }),
+);
+
+// GET /public/profiles/:username — public user profile + public wishlists
+publicRouter.get(
+  '/profiles/:username',
+  publicReadLimiter,
+  asyncHandler(async (req, res) => {
+    const username = req.params.username ?? '';
+    if (!username) return res.status(400).json({ error: 'Missing username' });
+
+    const profile = await prisma.userProfile.findFirst({
+      where: { username: { equals: username, mode: 'insensitive' } },
+      select: {
+        userId: true,
+        displayName: true,
+        username: true,
+        bio: true,
+        avatarUrl: true,
+        profileVisibility: true,
+      },
+    });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    // Respect profileVisibility
+    if (profile.profileVisibility === 'NOBODY') {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    // For non-ALL visibility, return profile info only (no wishlist list)
+    const isPublic = profile.profileVisibility === 'ALL';
+
+    let publicWishlists: Array<{ id: string; slug: string; title: string; deadline: string | null; itemCount: number }> = [];
+    if (isPublic) {
+      const wls = await prisma.wishlist.findMany({
+        where: {
+          ownerId: profile.userId,
+          type: 'REGULAR',
+          archivedAt: null,
+          visibility: 'PUBLIC_PROFILE',
+        },
+        orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+        select: {
+          id: true, slug: true, title: true, deadline: true,
+          items: { where: { status: { in: [...ACTIVE_STATUSES] } }, select: { id: true } },
+        },
+      });
+      publicWishlists = wls.map((wl) => ({
+        id: wl.id,
+        slug: wl.slug,
+        title: wl.title,
+        deadline: wl.deadline?.toISOString() ?? null,
+        itemCount: wl.items.length,
+      }));
+    }
+
+    return res.json({
+      profile: {
+        displayName: profile.displayName,
+        username: profile.username,
+        bio: profile.bio,
+        avatarUrl: profile.avatarUrl,
+        isPublic,
+      },
+      wishlists: publicWishlists,
     });
   }),
 );
@@ -1352,6 +1447,7 @@ tgRouter.get(
       orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],  // position first, then createdAt for readOnly calculation
       select: {
         id: true, slug: true, title: true, description: true, deadline: true,
+        visibility: true, allowSubscriptions: true, commentPolicy: true,
         items: { select: { status: true } },
       },
     });
@@ -1386,6 +1482,9 @@ tgRouter.get(
           itemCount: active.length,
           reservedCount: active.filter((i) => i.status !== 'AVAILABLE').length,
           readOnly: idx >= ent.plan.wishlists,
+          visibility: (wl.visibility as string).toLowerCase() as 'link_only' | 'public_profile' | 'private',
+          allowSubscriptions: (wl.allowSubscriptions as string).toLowerCase() as 'all' | 'nobody',
+          commentPolicy: (wl.commentPolicy as string).toLowerCase() as 'all' | 'subscribers',
         };
       }),
       plan: {
@@ -1601,7 +1700,7 @@ tgRouter.post(
   }),
 );
 
-// PATCH /tg/wishlists/:id — update wishlist
+// PATCH /tg/wishlists/:id — update wishlist (title, deadline, privacy settings)
 tgRouter.patch(
   '/wishlists/:id',
   asyncHandler(async (req, res) => {
@@ -1612,14 +1711,31 @@ tgRouter.patch(
       .object({
         title: z.string().min(1).max(200).optional(),
         deadline: z.string().datetime().nullable().optional(),
+        visibility: z.enum(['LINK_ONLY', 'PUBLIC_PROFILE', 'PRIVATE']).optional(),
+        allowSubscriptions: z.enum(['ALL', 'NOBODY']).optional(),
+        commentPolicy: z.enum(['ALL', 'SUBSCRIBERS']).optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id, user.godMode);
+    const isPro = ent.plan.code !== 'FREE';
+
     const wishlist = await prisma.wishlist.findUnique({ where: { id }, select: { ownerId: true, title: true } });
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // PRO-gate advanced visibility modes
+    if (!isPro && (parsed.data.visibility === 'PUBLIC_PROFILE' || parsed.data.visibility === 'PRIVATE')) {
+      return res.status(403).json({ error: 'pro_required', message: 'Upgrade to Pro to use this visibility setting' });
+    }
+    if (!isPro && parsed.data.allowSubscriptions === 'NOBODY') {
+      return res.status(403).json({ error: 'pro_required', message: 'Upgrade to Pro to restrict subscriptions' });
+    }
+    if (!isPro && parsed.data.commentPolicy === 'SUBSCRIBERS') {
+      return res.status(403).json({ error: 'pro_required', message: 'Upgrade to Pro to restrict comments' });
+    }
 
     // Detect which subscriber-visible fields are changing
     const wlChangedFields: string[] = [];
@@ -1633,8 +1749,14 @@ tgRouter.patch(
         ...(parsed.data.deadline !== undefined
           ? { deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null }
           : {}),
+        ...(parsed.data.visibility !== undefined ? { visibility: parsed.data.visibility } : {}),
+        ...(parsed.data.allowSubscriptions !== undefined ? { allowSubscriptions: parsed.data.allowSubscriptions } : {}),
+        ...(parsed.data.commentPolicy !== undefined ? { commentPolicy: parsed.data.commentPolicy } : {}),
       },
-      select: { id: true, slug: true, title: true, description: true, deadline: true },
+      select: {
+        id: true, slug: true, title: true, description: true, deadline: true,
+        visibility: true, allowSubscriptions: true, commentPolicy: true,
+      },
     });
 
     // Notify subscribers of wishlist-level change
@@ -1648,7 +1770,15 @@ tgRouter.patch(
       );
     }
 
-    return res.json({ wishlist: { ...updated, deadline: updated.deadline?.toISOString() ?? null } });
+    return res.json({
+      wishlist: {
+        ...updated,
+        deadline: updated.deadline?.toISOString() ?? null,
+        visibility: (updated.visibility as string).toLowerCase(),
+        allowSubscriptions: (updated.allowSubscriptions as string).toLowerCase(),
+        commentPolicy: (updated.commentPolicy as string).toLowerCase(),
+      },
+    });
   }),
 );
 
@@ -1681,6 +1811,71 @@ tgRouter.delete(
     }
 
     return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/wishlists/:id/transfer-items — move RESERVED items to another wishlist before deletion
+tgRouter.post(
+  '/wishlists/:id/transfer-items',
+  asyncHandler(async (req, res) => {
+    const sourceId = req.params.id ?? '';
+    if (!sourceId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const parsed = z
+      .object({ targetWishlistId: z.string().min(1) })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const { targetWishlistId } = parsed.data;
+    if (targetWishlistId === sourceId) {
+      return res.status(400).json({ error: 'Source and target must be different' });
+    }
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id, user.godMode);
+
+    // Verify ownership of both wishlists
+    const [source, target] = await Promise.all([
+      prisma.wishlist.findUnique({ where: { id: sourceId }, select: { ownerId: true, title: true } }),
+      prisma.wishlist.findUnique({ where: { id: targetWishlistId }, select: { ownerId: true, title: true, archivedAt: true } }),
+    ]);
+    if (!source) return res.status(404).json({ error: 'Source wishlist not found' });
+    if (source.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (!target) return res.status(404).json({ error: 'Target wishlist not found' });
+    if (target.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (target.archivedAt) return res.status(409).json({ error: 'target_archived', message: 'Target wishlist is archived' });
+
+    // Get reserved items from source
+    const reservedItems = await prisma.item.findMany({
+      where: { wishlistId: sourceId, status: 'RESERVED' },
+      select: { id: true },
+    });
+    if (reservedItems.length === 0) {
+      return res.json({ transferred: 0, targetWishlistId, targetTitle: target.title });
+    }
+
+    // Check target capacity
+    const targetActiveCount = await prisma.item.count({
+      where: { wishlistId: targetWishlistId, status: { in: [...ACTIVE_STATUSES] } },
+    });
+    const available = ent.plan.items - targetActiveCount;
+    if (available < reservedItems.length) {
+      return res.status(409).json({
+        error: 'insufficient_capacity',
+        message: `Target wishlist can accept ${available} more items but ${reservedItems.length} items need to be transferred`,
+        available,
+        needed: reservedItems.length,
+      });
+    }
+
+    // Move all reserved items to target
+    const itemIds = reservedItems.map((i) => i.id);
+    await prisma.item.updateMany({
+      where: { id: { in: itemIds } },
+      data: { wishlistId: targetWishlistId },
+    });
+
+    return res.json({ transferred: reservedItems.length, targetWishlistId, targetTitle: target.title });
   }),
 );
 

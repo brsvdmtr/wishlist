@@ -108,6 +108,10 @@ function formatRetryAfter(seconds: number, locale: Locale): string {
 // DATA TYPES
 // ═══════════════════════════════════════════════════════
 
+type WishlistVisibility = 'link_only' | 'public_profile' | 'private';
+type AllowSubscriptions = 'all' | 'nobody';
+type CommentPolicy = 'all' | 'subscribers';
+
 type Wishlist = {
   id: string;
   slug: string;
@@ -117,6 +121,9 @@ type Wishlist = {
   itemCount: number;
   reservedCount: number;
   readOnly?: boolean;
+  visibility: WishlistVisibility;
+  allowSubscriptions: AllowSubscriptions;
+  commentPolicy: CommentPolicy;
 };
 
 type PlanInfo = {
@@ -999,6 +1006,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showWlManage, setShowWlManage] = useState(false);
   const [showArchiveWlConfirm, setShowArchiveWlConfirm] = useState(false);
   const [archivingWl, setArchivingWl] = useState(false);
+
+  // ── Delete wishlist flow ──────────────────────────────────────────────────
+  const [showDeleteWl1, setShowDeleteWl1] = useState(false);       // step 1: confirm
+  const [showDeleteWl2, setShowDeleteWl2] = useState(false);       // step 2: truly confirm
+  const [showDeleteWlReserved, setShowDeleteWlReserved] = useState(false); // reserved items warning
+  const [deletingWl, setDeletingWl] = useState(false);
+
+  // ── Transfer reserved items ───────────────────────────────────────────────
+  const [showTransferPicker, setShowTransferPicker] = useState(false);
+  const [transferingItems, setTransferingItems] = useState(false);
+  const [transferTargetId, setTransferTargetId] = useState<string | null>(null);
+
+  // ── Privacy settings per wishlist ────────────────────────────────────────
+  const [showWlPrivacy, setShowWlPrivacy] = useState(false);
+  const [privacySaving, setPrivacySaving] = useState(false);
+  const [privacyDraftVisibility, setPrivacyDraftVisibility] = useState<WishlistVisibility>('link_only');
+  const [privacyDraftAllowSubs, setPrivacyDraftAllowSubs] = useState<AllowSubscriptions>('all');
+  const [privacyDraftCommentPolicy, setPrivacyDraftCommentPolicy] = useState<CommentPolicy>('all');
   const [pendingUnreserveAction, setPendingUnreserveAction] = useState<(() => Promise<void>) | null>(null);
   const [unreservingConfirm, setUnreservingConfirm] = useState(false);
 
@@ -2582,6 +2607,118 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch { /* ok */ }
     } finally {
       setArchivingWl(false);
+    }
+  };
+
+  // --- Delete wishlist handlers ─────────────────────────────────────────────
+
+  /** Entry point: called from manage menu. Routes to reserved-warning or step-1. */
+  const startDeleteWishlist = () => {
+    setShowWlManage(false);
+    if ((currentWl?.reservedCount ?? 0) > 0) {
+      setShowDeleteWlReserved(true);
+    } else {
+      setShowDeleteWl1(true);
+    }
+  };
+
+  /** Final hard delete — called after all confirmations (or after transfer) */
+  const handleDeleteWishlist = async () => {
+    if (!currentWl || deletingWl) return;
+    setDeletingWl(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}`, { method: 'DELETE' });
+      if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
+      setWishlists((prev) => prev.filter((wl) => wl.id !== currentWl.id));
+      setShowDeleteWl2(false);
+      setShowDeleteWl1(false);
+      setShowDeleteWlReserved(false);
+      setCurrentWl(null);
+      setScreen('my-wishlists');
+      pushToast(t('wl_deleted_toast', locale), 'success');
+      // Update profile stats
+      setProfileStats((prev) => prev ? { ...prev, wishlists: Math.max(0, prev.wishlists - 1) } : prev);
+    } finally {
+      setDeletingWl(false);
+    }
+  };
+
+  /** Transfer all reserved items from currentWl to transferTargetId, then delete. */
+  const handleTransferAndDelete = async () => {
+    if (!currentWl || !transferTargetId || transferingItems) return;
+    setTransferingItems(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}/transfer-items`, {
+        method: 'POST',
+        body: JSON.stringify({ targetWishlistId: transferTargetId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string; available?: number };
+        if (err.error === 'insufficient_capacity') {
+          pushToast(t('wl_transfer_no_space', locale, { count: err.available ?? 0 }), 'error');
+        } else {
+          pushToast(t('wl_transfer_error', locale), 'error');
+        }
+        return;
+      }
+      const json = await res.json() as { transferred: number };
+      // Update target wishlist item count in state
+      setWishlists((prev) => prev.map((wl) =>
+        wl.id === transferTargetId
+          ? { ...wl, itemCount: wl.itemCount + json.transferred, reservedCount: wl.reservedCount + json.transferred }
+          : wl,
+      ));
+      setShowTransferPicker(false);
+      // Now hard-delete the source wishlist
+      await handleDeleteWishlist();
+      pushToast(t('wl_transfer_done_toast', locale), 'success');
+    } finally {
+      setTransferingItems(false);
+    }
+  };
+
+  // --- Privacy settings handler ────────────────────────────────────────────
+
+  const handleSaveWlPrivacy = async (
+    visibility: WishlistVisibility,
+    allowSubscriptions: AllowSubscriptions,
+    commentPolicy: CommentPolicy,
+  ) => {
+    if (!currentWl || privacySaving) return;
+    setPrivacySaving(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          visibility: visibility.toUpperCase(),
+          allowSubscriptions: allowSubscriptions.toUpperCase(),
+          commentPolicy: commentPolicy.toUpperCase(),
+        }),
+      });
+      if (res.status === 403) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        if (err.error === 'pro_required') { pushToast(t('settings_pro_required', locale), 'error'); return; }
+        pushToast(t('toast_error_generic', locale), 'error');
+        return;
+      }
+      if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
+      const json = await res.json() as { wishlist: { visibility: WishlistVisibility; allowSubscriptions: AllowSubscriptions; commentPolicy: CommentPolicy } };
+      setCurrentWl((prev) => prev ? {
+        ...prev,
+        visibility: json.wishlist.visibility,
+        allowSubscriptions: json.wishlist.allowSubscriptions,
+        commentPolicy: json.wishlist.commentPolicy,
+      } : prev);
+      setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? {
+        ...wl,
+        visibility: json.wishlist.visibility,
+        allowSubscriptions: json.wishlist.allowSubscriptions,
+        commentPolicy: json.wishlist.commentPolicy,
+      } : wl));
+      setShowWlPrivacy(false);
+      pushToast(t('wl_privacy_saved', locale), 'success');
+    } finally {
+      setPrivacySaving(false);
     }
   };
 
@@ -5003,6 +5140,26 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <span style={{ fontSize: 20 }}>↕️</span>
             <span>{t('wl_reorder', locale)}</span>
           </button>
+          {/* Privacy settings */}
+          <button
+            onClick={() => {
+              setShowWlManage(false);
+              if (currentWl) {
+                setPrivacyDraftVisibility(currentWl.visibility ?? 'link_only');
+                setPrivacyDraftAllowSubs(currentWl.allowSubscriptions ?? 'all');
+                setPrivacyDraftCommentPolicy(currentWl.commentPolicy ?? 'all');
+              }
+              setShowWlPrivacy(true);
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🔒</span>
+            {t('wl_manage_privacy', locale)}
+          </button>
           {/* Archive wishlist */}
           <button
             onClick={() => {
@@ -5017,6 +5174,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           >
             <span style={{ fontSize: 20 }}>📦</span>
             {t('wl_archive', locale)}
+          </button>
+          {/* Delete wishlist */}
+          <button
+            onClick={() => startDeleteWishlist()}
+            style={{
+              background: C.redSoft, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.red, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🗑️</span>
+            {t('wl_delete_btn', locale)}
           </button>
           {/* Cancel */}
           <button
@@ -5047,6 +5216,315 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </button>
           </div>
         </div>
+      </BottomSheet>
+
+      {/* ── Delete wishlist step 1: offer archive alternative ── */}
+      <BottomSheet isOpen={showDeleteWl1} onClose={() => setShowDeleteWl1(false)} title={t('wl_delete_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
+            {t('wl_delete_body', locale)}
+          </p>
+          <button
+            onClick={() => {
+              setShowDeleteWl1(false);
+              setShowArchiveWlConfirm(true);
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              fontSize: 15, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>📦</span>
+            {t('wl_delete_to_archive', locale)}
+          </button>
+          <button
+            onClick={() => {
+              setShowDeleteWl1(false);
+              setShowDeleteWl2(true);
+            }}
+            style={{
+              background: C.redSoft, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              fontSize: 15, color: C.red, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🗑️</span>
+            {t('wl_delete_irreversible', locale)}
+          </button>
+          <button onClick={() => setShowDeleteWl1(false)} style={{ ...btnGhost }}>
+            {t('wl_cancel', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Delete wishlist step 2: final confirmation ── */}
+      <BottomSheet isOpen={showDeleteWl2} onClose={() => { if (!deletingWl) setShowDeleteWl2(false); }} title={t('wl_delete_confirm2_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
+            {t('wl_delete_confirm2_body', locale)}
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              style={{ ...btnSecondary, flex: 1 }}
+              onClick={() => setShowDeleteWl2(false)}
+              disabled={deletingWl}
+            >
+              {t('wl_cancel', locale)}
+            </button>
+            <button
+              style={{ ...btnPrimary, flex: 1, background: C.red, opacity: deletingWl ? 0.6 : 1 }}
+              onClick={() => void handleDeleteWishlist()}
+              disabled={deletingWl}
+            >
+              {deletingWl ? '…' : t('wl_delete_confirm2_btn', locale)}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── Delete with reserved items warning ── */}
+      <BottomSheet isOpen={showDeleteWlReserved} onClose={() => { if (!deletingWl && !transferingItems) setShowDeleteWlReserved(false); }} title={t('wl_delete_reserved_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
+            {t('wl_delete_reserved_body', locale)}
+          </p>
+          <button
+            onClick={() => {
+              setShowDeleteWlReserved(false);
+              setTransferTargetId(null);
+              setShowTransferPicker(true);
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              fontSize: 15, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>📤</span>
+            {t('wl_delete_reserved_transfer', locale)}
+          </button>
+          <button
+            onClick={() => {
+              setShowDeleteWlReserved(false);
+              setShowDeleteWl2(true);
+            }}
+            style={{
+              background: C.redSoft, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              fontSize: 15, color: C.red, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🗑️</span>
+            {t('wl_delete_reserved_force', locale)}
+          </button>
+          <button onClick={() => setShowDeleteWlReserved(false)} style={{ ...btnGhost }} disabled={deletingWl || transferingItems}>
+            {t('wl_cancel', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Transfer reserved items picker ── */}
+      <BottomSheet isOpen={showTransferPicker} onClose={() => { if (!transferingItems) setShowTransferPicker(false); }} title={t('wl_transfer_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ fontSize: 13, color: C.textSec, margin: 0 }}>{t('wl_transfer_hint', locale)}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {wishlists
+              .filter((wl) => wl.id !== currentWl?.id)
+              .map((wl) => {
+                const isArchived = false; // wishlists list only shows non-archived
+                const reservedCount = currentWl?.reservedCount ?? 0;
+                const availableSlots = (planInfo.items - (wl.itemCount - wl.reservedCount));
+                const hasSpace = availableSlots >= reservedCount;
+                const isDisabled = isArchived || !hasSpace;
+                const isSelected = transferTargetId === wl.id;
+                return (
+                  <button
+                    key={wl.id}
+                    onClick={() => !isDisabled && setTransferTargetId(wl.id)}
+                    disabled={isDisabled}
+                    style={{
+                      background: isSelected ? C.accentSoft : C.surface,
+                      border: isSelected ? `2px solid ${C.accent}` : '2px solid transparent',
+                      borderRadius: 12, padding: '12px 16px',
+                      textAlign: 'left', cursor: isDisabled ? 'not-allowed' : 'pointer', fontFamily: font,
+                      opacity: isDisabled ? 0.5 : 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 18 }}>{getEmoji(wl.title)}</span>
+                      <div>
+                        <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>{wl.title}</div>
+                        <div style={{ fontSize: 12, color: C.textMuted }}>
+                          {wl.itemCount} {locale === 'ru' ? 'желаний' : 'wishes'}
+                        </div>
+                      </div>
+                    </div>
+                    {isArchived && (
+                      <span style={{ fontSize: 11, color: C.textMuted, background: C.surface, padding: '2px 8px', borderRadius: 6 }}>
+                        {t('wl_transfer_archived', locale)}
+                      </span>
+                    )}
+                    {!isArchived && !hasSpace && (
+                      <span style={{ fontSize: 11, color: C.red }}>
+                        {t('wl_transfer_no_space', locale, { count: availableSlots })}
+                      </span>
+                    )}
+                    {isSelected && (
+                      <span style={{ fontSize: 18, color: C.accent }}>✓</span>
+                    )}
+                  </button>
+                );
+              })
+            }
+            {wishlists.filter((wl) => wl.id !== currentWl?.id).length === 0 && (
+              <p style={{ fontSize: 14, color: C.textMuted, textAlign: 'center', padding: '20px 0' }}>
+                {locale === 'ru' ? 'Нет других вишлистов' : 'No other wishlists'}
+              </p>
+            )}
+          </div>
+          <button
+            style={{ ...btnPrimary, opacity: (!transferTargetId || transferingItems) ? 0.5 : 1 }}
+            disabled={!transferTargetId || transferingItems}
+            onClick={() => void handleTransferAndDelete()}
+          >
+            {transferingItems ? '…' : t('wl_transfer_btn', locale)}
+          </button>
+          <button onClick={() => setShowTransferPicker(false)} style={{ ...btnGhost }} disabled={transferingItems}>
+            {t('wl_cancel', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Privacy settings per wishlist ── */}
+      <BottomSheet isOpen={showWlPrivacy} onClose={() => { if (!privacySaving) setShowWlPrivacy(false); }} title={t('wl_privacy_title', locale)}>
+        {(() => {
+          const isPro = planInfo.code === 'PRO';
+          const visOptions: { value: WishlistVisibility; label: string; desc: string; pro: boolean }[] = [
+            { value: 'link_only', label: t('wl_visibility_link_only', locale), desc: t('wl_visibility_link_only_desc', locale), pro: false },
+            { value: 'public_profile', label: t('wl_visibility_public', locale), desc: t('wl_visibility_public_desc', locale), pro: true },
+            { value: 'private', label: t('wl_visibility_private', locale), desc: t('wl_visibility_private_desc', locale), pro: true },
+          ];
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* Visibility */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+                  {t('wl_visibility_section', locale)}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {visOptions.map((opt) => {
+                    const selected = privacyDraftVisibility === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => {
+                          if (opt.pro && !isPro) { showUpsell('wishlist_limit'); return; }
+                          setPrivacyDraftVisibility(opt.value);
+                        }}
+                        style={{
+                          background: selected ? C.accentSoft : C.surface,
+                          border: selected ? `2px solid ${C.accent}` : '2px solid transparent',
+                          borderRadius: 12, padding: '12px 14px',
+                          textAlign: 'left', cursor: 'pointer', fontFamily: font,
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{opt.label}</span>
+                            {opt.pro && !isPro && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: C.accent, background: C.accentSoft, padding: '2px 6px', borderRadius: 6 }}>PRO</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{opt.desc}</div>
+                        </div>
+                        {selected && <span style={{ fontSize: 16, color: C.accent, flexShrink: 0 }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                {privacyDraftVisibility === 'private' && (
+                  <p style={{ fontSize: 12, color: C.textMuted, margin: '8px 0 0', lineHeight: 1.5 }}>
+                    {t('wl_visibility_private_hint', locale)}
+                  </p>
+                )}
+              </div>
+
+              {/* Allow subscriptions */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+                  {t('wl_subs_section', locale)}
+                </div>
+                <div style={{ display: 'flex', gap: 4, background: C.bg, borderRadius: 10, padding: 3 }}>
+                  {([['all', t('wl_subs_all', locale), false], ['nobody', t('wl_subs_nobody', locale), true]] as [AllowSubscriptions, string, boolean][]).map(([val, label, pro]) => {
+                    const selected = privacyDraftAllowSubs === val;
+                    return (
+                      <button
+                        key={val}
+                        onClick={() => {
+                          if (pro && !isPro) { showUpsell('wishlist_limit'); return; }
+                          setPrivacyDraftAllowSubs(val);
+                        }}
+                        style={{
+                          flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: font,
+                          fontSize: 13, fontWeight: 600,
+                          background: selected ? C.accent : 'transparent',
+                          color: selected ? '#fff' : C.textMuted,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                        }}
+                      >
+                        {label}
+                        {pro && !isPro && <span style={{ fontSize: 9, fontWeight: 700, color: selected ? 'rgba(255,255,255,0.8)' : C.accent }}>PRO</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Comment policy */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+                  {t('wl_comment_section', locale)}
+                </div>
+                <div style={{ display: 'flex', gap: 4, background: C.bg, borderRadius: 10, padding: 3 }}>
+                  {([['all', t('wl_comment_all', locale), false], ['subscribers', t('wl_comment_subscribers', locale), true]] as [CommentPolicy, string, boolean][]).map(([val, label, pro]) => {
+                    const selected = privacyDraftCommentPolicy === val;
+                    return (
+                      <button
+                        key={val}
+                        onClick={() => {
+                          if (pro && !isPro) { showUpsell('wishlist_limit'); return; }
+                          setPrivacyDraftCommentPolicy(val);
+                        }}
+                        style={{
+                          flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: font,
+                          fontSize: 13, fontWeight: 600,
+                          background: selected ? C.accent : 'transparent',
+                          color: selected ? '#fff' : C.textMuted,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                        }}
+                      >
+                        {label}
+                        {pro && !isPro && <span style={{ fontSize: 9, fontWeight: 700, color: selected ? 'rgba(255,255,255,0.8)' : C.accent }}>PRO</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <button
+                style={{ ...btnPrimary, opacity: privacySaving ? 0.6 : 1 }}
+                disabled={privacySaving}
+                onClick={() => void handleSaveWlPrivacy(privacyDraftVisibility, privacyDraftAllowSubs, privacyDraftCommentPolicy)}
+              >
+                {privacySaving ? '…' : t('save', locale)}
+              </button>
+            </div>
+          );
+        })()}
       </BottomSheet>
 
       {/* ── Unreserve confirmation ── */}

@@ -69,6 +69,22 @@ enum SubscribePolicy {
   NOBODY
 }
 
+enum WishlistVisibility {
+  LINK_ONLY       // accessible via link, not shown in public profile (default)
+  PUBLIC_PROFILE  // shown on owner's public profile (PRO)
+  PRIVATE         // new users cannot access; existing subscribers retain access (PRO)
+}
+
+enum AllowSubscriptions {
+  ALL    // anyone with wishlist access can subscribe
+  NOBODY // no new subscriptions allowed
+}
+
+enum CommentPolicy {
+  ALL         // anyone with wishlist access can comment
+  SUBSCRIBERS // only subscribers can comment
+}
+
 model User {
   id             String   @id @default(cuid())
   email          String?  @unique
@@ -96,10 +112,13 @@ model Wishlist {
   title       String
   description String?
   deadline    DateTime?
-  archivedAt  DateTime?
-  position    Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  archivedAt         DateTime?
+  position           Int                @default(0)
+  visibility         WishlistVisibility @default(LINK_ONLY)
+  allowSubscriptions AllowSubscriptions @default(ALL)
+  commentPolicy      CommentPolicy      @default(ALL)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   type WishlistType @default(REGULAR)
 
