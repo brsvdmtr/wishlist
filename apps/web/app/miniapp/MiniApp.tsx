@@ -1728,7 +1728,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           cancelledAt: data.subscription.cancelledAt,
         });
         tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('warning');
-        pushToast(t('cancel_success', locale), 'success');
+        const cancelledPeriodEnd = new Date(data.subscription.periodEnd).toLocaleDateString(
+          locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' },
+        );
+        pushToast(t('cancel_success', locale, { date: cancelledPeriodEnd }), 'success');
         trackEvent('subscription_cancelled');
       } else {
         pushToast(t('toast_cancel_error', locale), 'error');
@@ -1739,7 +1742,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setCancelSubLoading(false);
       setShowCancelSub(false);
     }
-  }, [tgFetch, pushToast, trackEvent]);
+  }, [tgFetch, pushToast, trackEvent, locale]);
 
   const handleReactivateSub = useCallback(async () => {
     setCancelSubLoading(true);
@@ -4952,36 +4955,123 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
       {/* ── CANCEL SUBSCRIPTION CONFIRMATION ── */}
       <BottomSheet isOpen={showCancelSub} onClose={() => setShowCancelSub(false)}>
-        <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 56, height: 56, borderRadius: 18,
-            background: C.orangeSoft, fontSize: 28, marginBottom: 16,
-          }}>
-            ⚠️
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
-            {t('cancel_title', locale)}
-          </div>
-          <div style={{ fontSize: 14, color: C.textSec, marginTop: 8, lineHeight: 1.5, padding: '0 8px' }}>
-            {t('cancel_notice', locale)}{' '}
-            <strong>{subscription ? new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }) : ''}</strong>.
-            {' '}{t('cancel_after', locale)}
-          </div>
-          <button
-            style={{ ...btnPrimary, marginTop: 20, width: '100%', background: C.red, fontSize: 15, padding: '14px 24px' }}
-            onClick={() => void handleCancelSub()}
-            disabled={cancelSubLoading}
-          >
-            {cancelSubLoading ? t('cancel_cancelling', locale) : t('cancel_btn', locale)}
-          </button>
-          <button
-            style={{ ...btnGhost, width: '100%', marginTop: 8, fontSize: 14 }}
-            onClick={() => setShowCancelSub(false)}
-          >
-            {t('cancel_keep', locale)}
-          </button>
-        </div>
+        {(() => {
+          const periodEndDate = subscription
+            ? new Date(subscription.periodEnd).toLocaleDateString(
+                locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' },
+              )
+            : null;
+
+          const cancelFeatures: { key: string; soon?: boolean }[] = [
+            { key: 'cancel_feat_wishlists' },
+            { key: 'cancel_feat_items' },
+            { key: 'cancel_feat_participants' },
+            { key: 'cancel_feat_comments' },
+            { key: 'cancel_feat_url' },
+            { key: 'cancel_feat_hints' },
+            { key: 'cancel_feat_sort', soon: true },
+          ];
+
+          return (
+            <div style={{ padding: '0 0 8px' }}>
+              {/* Icon + Title */}
+              <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 52, height: 52, borderRadius: 16,
+                  background: C.accentSoft, fontSize: 26, marginBottom: 14,
+                }}>
+                  💎
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
+                  {t('cancel_title', locale)}
+                </div>
+                <div style={{ fontSize: 13, color: C.textSec, marginTop: 6, lineHeight: 1.5 }}>
+                  {periodEndDate
+                    ? t('cancel_notice', locale, { date: periodEndDate })
+                    : t('cancel_notice_fallback', locale)}
+                  {' '}
+                  {t('cancel_after', locale)}
+                </div>
+              </div>
+
+              {/* What becomes unavailable */}
+              <div style={{
+                background: C.surface, borderRadius: 14,
+                padding: '12px 14px', marginBottom: 12,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  {t('cancel_features_title', locale)}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {cancelFeatures.map(({ key, soon }) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+                      <span style={{
+                        width: 20, height: 20, borderRadius: 10, flexShrink: 0,
+                        background: C.accentSoft, color: C.accent,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 11, fontWeight: 800,
+                      }}>✓</span>
+                      <span style={{ fontSize: 14, color: C.text, flex: 1 }}>{t(key as Parameters<typeof t>[0], locale)}</span>
+                      {soon && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 600, color: C.textMuted,
+                          background: C.bg, border: `1px solid ${C.borderLight}`,
+                          padding: '1px 7px', borderRadius: 10, flexShrink: 0,
+                        }}>
+                          {t('cancel_feat_soon', locale)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Support block — only if botUsername is available */}
+              {botUsername && (
+                <div style={{
+                  background: C.surface, borderRadius: 12, padding: '10px 14px',
+                  marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                }}>
+                  <span style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.4, flex: 1 }}>
+                    {t('cancel_support_text', locale)}
+                  </span>
+                  <button
+                    onClick={() => {
+                      try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
+                    }}
+                    style={{
+                      flexShrink: 0, background: 'none', border: `1px solid ${C.border}`,
+                      borderRadius: 20, padding: '6px 12px', cursor: 'pointer',
+                      fontFamily: font, fontSize: 12, fontWeight: 600, color: C.accent,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {t('cancel_support_btn', locale)}
+                  </button>
+                </div>
+              )}
+
+              {/* CTAs — Keep Pro first, then Cancel (reversed from before) */}
+              <button
+                style={{ ...btnPrimary, width: '100%', fontSize: 15, padding: '14px 24px' }}
+                onClick={() => setShowCancelSub(false)}
+              >
+                {t('cancel_keep', locale)}
+              </button>
+              <button
+                style={{
+                  ...btnGhost, width: '100%', marginTop: 6, fontSize: 14,
+                  color: C.red,
+                }}
+                onClick={() => void handleCancelSub()}
+                disabled={cancelSubLoading}
+              >
+                {cancelSubLoading ? t('cancel_cancelling', locale) : t('cancel_btn', locale)}
+              </button>
+            </div>
+          );
+        })()}
       </BottomSheet>
 
       {/* ── EDIT PROFILE BOTTOM SHEET ── */}
