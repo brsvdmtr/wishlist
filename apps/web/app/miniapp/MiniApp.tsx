@@ -160,6 +160,8 @@ type Item = {
 };
 
 type GuestItem = Item & { reservedByDisplayName: string | null; reservedByActorHash: string | null };
+type GlobalArchiveItem = Item & { wishlistTitle: string; wishlistId: string; wishlistIsArchived: boolean };
+type ArchiveMode = 'wishlist' | 'global';
 
 type SubscribedWishlist = {
   id: string; // subscription id
@@ -930,6 +932,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // Archive state
   const [archiveItems, setArchiveItems] = useState<Item[]>([]);
+  const [archiveMode, setArchiveMode] = useState<ArchiveMode>('wishlist');
+  const [globalArchiveItems, setGlobalArchiveItems] = useState<GlobalArchiveItem[]>([]);
 
   // My Reservations state
   const [reservations, setReservations] = useState<ReservationItem[]>([]);
@@ -1835,10 +1839,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('my-wishlists');
     } else if (screen === 'settings') {
       setScreen('profile');
-    } else if (screen === 'share' || screen === 'archive') {
+    } else if (screen === 'share') {
       setScreen('wishlist-detail');
+    } else if (screen === 'archive') {
+      if (archiveMode === 'global') {
+        setScreen('profile');
+      } else {
+        setScreen('wishlist-detail');
+      }
     }
-  }, [screen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode]);
+  }, [screen, archiveMode, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -2488,6 +2498,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (!res.ok) { pushToast(t('toast_archive_error', locale), 'error'); return; }
       const json = await res.json() as { items: Item[] };
       setArchiveItems(json.items);
+      setArchiveMode('wishlist');
+      setScreen('archive');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Global archive: all archived items across all wishlists (opened from profile)
+  const loadGlobalArchive = async () => {
+    setLoading(true);
+    try {
+      const res = await tgFetch('/tg/archive');
+      if (!res.ok) { pushToast(t('toast_archive_error', locale), 'error'); return; }
+      const json = await res.json() as { items: GlobalArchiveItem[] };
+      setGlobalArchiveItems(json.items);
+      setArchiveMode('global');
       setScreen('archive');
     } finally {
       setLoading(false);
@@ -2509,17 +2535,33 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   };
 
-  const handleRestoreItem = async (item: Item) => {
+  const handleRestoreItem = async (item: Item | GlobalArchiveItem) => {
     setLoading(true);
     try {
       const res = await tgFetch(`/tg/items/${item.id}/restore`, { method: 'POST' });
       if (!res.ok) { pushToast(t('toast_restore_error', locale), 'error'); return; }
-      const json = await res.json() as { item: Item };
-      setArchiveItems((prev) => prev.filter((i) => i.id !== item.id));
-      setItems((prev) => [...prev, json.item]);
-      if (currentWl) {
-        setWishlists((prev) => prev.map((wl) => wl.id === currentWl!.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
+      const json = await res.json() as { item: Item; wishlistId: string; wishlistTitle: string };
+
+      if (archiveMode === 'global') {
+        setGlobalArchiveItems((prev) => prev.filter((i) => i.id !== item.id));
+      } else {
+        setArchiveItems((prev) => prev.filter((i) => i.id !== item.id));
+        // In wishlist mode, add back to current wishlist's items list
+        if (currentWl && json.wishlistId === currentWl.id) {
+          setItems((prev) => [...prev, json.item]);
+        }
       }
+
+      // Update correct wishlist item count regardless of mode
+      if (json.wishlistId) {
+        setWishlists((prev) => prev.map((wl) =>
+          wl.id === json.wishlistId ? { ...wl, itemCount: wl.itemCount + 1 } : wl,
+        ));
+      }
+
+      // Keep profile stats counter in sync
+      setProfileStats((prev) => prev ? { ...prev, archived: Math.max(0, prev.archived - 1) } : prev);
+
       pushToast(t('archive_restored', locale), 'success');
     } finally {
       setLoading(false);
@@ -4306,61 +4348,68 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       </BottomSheet>
 
       {/* ══════════════════════════════════════════════
-          ARCHIVE
+          ARCHIVE  (mode: 'wishlist' | 'global')
           ══════════════════════════════════════════════ */}
-      {screen === 'archive' && currentWl && (
-        <div style={{ padding: '16px 20px 120px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0 }}>📦 {t('archive_title', locale)}</h1>
-              <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0' }}>{currentWl.title}</p>
+      {screen === 'archive' && (archiveMode === 'global' || currentWl) && (() => {
+        const displayItems = archiveMode === 'global' ? globalArchiveItems : archiveItems;
+        return (
+          <div style={{ padding: '16px 20px 120px' }}>
+            <div style={{ marginBottom: 16 }}>
+              <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0 }}>
+                📦 {t('archive_title', locale)}
+              </h1>
+              {archiveMode === 'wishlist' && currentWl && (
+                <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0' }}>{currentWl.title}</p>
+              )}
               <p style={{ fontSize: 11, color: C.orange, margin: '6px 0 0' }}>{t('archive_retention', locale)}</p>
             </div>
-            <button onClick={() => setScreen('wishlist-detail')} style={{ ...btnGhost, fontSize: 13, padding: '8px 14px' }}>← {t('back', locale)}</button>
-          </div>
 
-          {archiveItems.length === 0 && !loading && (
-            <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
-              <div style={{ fontSize: 15, color: C.textMuted, lineHeight: 1.5 }}>{t('archive_empty', locale)}</div>
-              <div style={{ fontSize: 13, color: C.textMuted, marginTop: 8 }}>{t('archive_empty_hint', locale)}</div>
-            </div>
-          )}
+            {displayItems.length === 0 && !loading && (
+              <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
+                <div style={{ fontSize: 15, color: C.textMuted, lineHeight: 1.5 }}>{t('archive_empty', locale)}</div>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 8 }}>{t('archive_empty_hint', locale)}</div>
+              </div>
+            )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {archiveItems.map((item, i) => (
-              <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                <div style={{
-                  background: C.card, borderRadius: 14, padding: 16,
-                  display: 'flex', gap: 14, alignItems: 'flex-start',
-                  border: `1px solid ${C.border}`, opacity: 0.7,
-                }}>
-                  <ItemThumb item={item} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, color: C.textMuted, lineHeight: 1.3, paddingRight: 8, textDecoration: 'line-through' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {displayItems.map((item, i) => (
+                <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
+                  <div style={{
+                    background: C.card, borderRadius: 14, padding: 16,
+                    display: 'flex', gap: 14, alignItems: 'flex-start',
+                    border: `1px solid ${C.border}`, opacity: 0.7,
+                  }}>
+                    <ItemThumb item={item} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, color: C.textMuted, lineHeight: 1.3, textDecoration: 'line-through' }}>
                         {item.title}
                       </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                      {item.status === 'completed' && (
-                        <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_received', locale)}</span>
+                      {archiveMode === 'global' && (item as GlobalArchiveItem).wishlistTitle && (
+                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>
+                          📋 {(item as GlobalArchiveItem).wishlistTitle}
+                        </div>
                       )}
-                      {item.status === 'deleted' && (
-                        <span style={{ fontSize: 11, background: C.surface, color: C.textMuted, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_deleted', locale)}</span>
-                      )}
-                      {item.price != null && <span style={{ fontSize: 13, color: C.textMuted }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                      <button onClick={() => void handleRestoreItem(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.accent }}>{t('archive_restore', locale)}</button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                        {item.status === 'completed' && (
+                          <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_received', locale)}</span>
+                        )}
+                        {item.status === 'deleted' && (
+                          <span style={{ fontSize: 11, background: C.surface, color: C.textMuted, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_deleted', locale)}</span>
+                        )}
+                        {item.price != null && <span style={{ fontSize: 13, color: C.textMuted }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <button onClick={() => void handleRestoreItem(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.accent }}>{t('archive_restore', locale)}</button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ══════════════════════════════════════════════
           PROFILE
@@ -4456,7 +4505,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       </div>
                       <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_reserved_by_me', locale)}</div>
                     </div>
-                    <div onClick={() => { if (wishlists.length > 0) { setCurrentWl(wishlists[0]!); setScreen('archive'); } }} style={{ cursor: wishlists.length > 0 ? 'pointer' : 'default', background: C.surface, borderRadius: 12, padding: 12 }}>
+                    <div onClick={() => { void loadGlobalArchive(); }} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
                       <div style={{ fontSize: 20, fontWeight: 800, color: C.orange, fontFamily: font }}>
                         {profileStats.archived}
                       </div>

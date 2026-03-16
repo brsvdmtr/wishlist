@@ -2267,13 +2267,19 @@ tgRouter.post(
         archivedAt: null,
         purgeAfter: null,
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      select: {
+        id: true, wishlistId: true, title: true, url: true, priceText: true,
+        currency: true, imageUrl: true, priority: true, position: true,
+        status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true,
+        wishlist: { select: { id: true, title: true } },
+      },
     });
-    return res.json({ item: mapTgItem(updated) });
+    const { wishlist, ...itemFields } = updated;
+    return res.json({ item: mapTgItem(itemFields), wishlistId: wishlist.id, wishlistTitle: wishlist.title });
   }),
 );
 
-// GET /tg/wishlists/:id/archive — archived items (DELETED + COMPLETED)
+// GET /tg/wishlists/:id/archive — archived items of a specific wishlist (DELETED + COMPLETED)
 tgRouter.get(
   '/wishlists/:id/archive',
   asyncHandler(async (req, res) => {
@@ -2288,10 +2294,42 @@ tgRouter.get(
     const items = await prisma.item.findMany({
       where: { wishlistId: id, status: { in: ['DELETED', 'COMPLETED'] } },
       orderBy: ITEM_ORDER_BY,
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     return res.json({ items: items.map(mapTgItem) });
+  }),
+);
+
+// GET /tg/archive — global user archive (ALL DELETED + COMPLETED items across all wishlists)
+tgRouter.get(
+  '/archive',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const items = await prisma.item.findMany({
+      where: {
+        status: { in: ['DELETED', 'COMPLETED'] },
+        wishlist: { ownerId: user.id },
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      select: {
+        id: true, wishlistId: true, title: true, url: true, priceText: true,
+        currency: true, imageUrl: true, priority: true, position: true,
+        status: true, description: true, sourceUrl: true, sourceDomain: true,
+        importMethod: true,
+        wishlist: { select: { id: true, title: true, archivedAt: true } },
+      },
+    });
+
+    return res.json({
+      items: items.map(({ wishlist, ...item }) => ({
+        ...mapTgItem(item),
+        wishlistTitle: wishlist.title,
+        wishlistId: wishlist.id,
+        wishlistIsArchived: wishlist.archivedAt !== null,
+      })),
+    });
   }),
 );
 
