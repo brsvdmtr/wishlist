@@ -914,6 +914,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showRenameWl, setShowRenameWl] = useState(false);
   const [renameWlTitle, setRenameWlTitle] = useState('');
   const [renameSaving, setRenameSaving] = useState(false);
+  const [showWlManage, setShowWlManage] = useState(false);
+  const [showArchiveWlConfirm, setShowArchiveWlConfirm] = useState(false);
+  const [archivingWl, setArchivingWl] = useState(false);
 
   // Guest forms
   const [priceFilter, setPriceFilter] = useState(0);
@@ -2021,6 +2024,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   };
 
+  const handleArchiveWishlist = async () => {
+    if (!currentWl) return;
+    setArchivingWl(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}/archive`, { method: 'POST' });
+      if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
+      setWishlists((prev) => prev.filter((wl) => wl.id !== currentWl.id));
+      setShowArchiveWlConfirm(false);
+      setShowWlManage(false);
+      setScreen('my-wishlists');
+      pushToast(t('wl_archived_toast', locale), 'success');
+      try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch { /* ok */ }
+    } finally {
+      setArchivingWl(false);
+    }
+  };
+
   // --- Guest actions
   const handleReserve = async () => {
     if (!reservingItem || !guestName.trim()) return;
@@ -2653,33 +2673,34 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'wishlist-detail' && currentWl && (
         <div style={{ padding: '16px 20px 120px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0 }}>{currentWl.title}</h1>
-                <button
-                  onClick={() => { setRenameWlTitle(currentWl.title); setShowRenameWl(true); }}
-                  style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', fontSize: 14, color: C.textMuted, lineHeight: 1, flexShrink: 0 }}
-                  aria-label={t('rename_title', locale)}
-                >✏️</button>
-              </div>
-              <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0' }}>
+          {/* ── Wishlist detail header ── */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
+            {/* Left: title + meta */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h1 style={{
+                fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+                overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3,
+              }}>{currentWl.title}</h1>
+              <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0' }}>
                 {t('wishes_count', locale, { count: items.length })}
                 {currentWl.deadline && ` • ${fmtDeadline(currentWl.deadline)}`}
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button
-                onClick={() => void loadArchive()}
-                style={{ ...btnGhost, padding: '8px 12px', fontSize: 13 }}
-              >
-                📦 {t('archive_btn', locale)}
-              </button>
+            {/* Right: vertical action stack */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
               <button
                 onClick={() => setScreen('share')}
                 style={{ ...btnPrimary, width: 'auto', padding: '8px 16px', fontSize: 13 }}
               >
                 {t('share_btn', locale)}
+              </button>
+              {/* Manage button — always visible to owner (wishlist-detail is owner-only) */}
+              <button
+                onClick={() => setShowWlManage(true)}
+                style={{ ...btnGhost, padding: '8px 16px', fontSize: 13 }}
+              >
+                {t('wl_manage_btn', locale)}
               </button>
             </div>
           </div>
@@ -3764,6 +3785,86 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       })()}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
+
+      {/* ── Wishlist management sheet ── */}
+      <BottomSheet isOpen={showWlManage} onClose={() => setShowWlManage(false)} title={t('wl_manage_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Edit wishlist */}
+          <button
+            onClick={() => {
+              setShowWlManage(false);
+              if (currentWl) { setRenameWlTitle(currentWl.title); setShowRenameWl(true); }
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>✏️</span>
+            {t('wl_edit', locale)}
+          </button>
+          {/* Reorder wishes — stub */}
+          <button
+            onClick={() => {
+              pushToast(t('wl_reorder_soon', locale), 'success');
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.textSec, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>↕️</span>
+            <span>{t('wl_reorder', locale)}</span>
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: C.textMuted, background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: '2px 8px' }}>Soon</span>
+          </button>
+          {/* Archive wishlist */}
+          <button
+            onClick={() => {
+              setShowWlManage(false);
+              setShowArchiveWlConfirm(true);
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.orange, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>📦</span>
+            {t('wl_archive', locale)}
+          </button>
+          {/* Cancel */}
+          <button
+            onClick={() => setShowWlManage(false)}
+            style={{ ...btnGhost, marginTop: 4 }}
+          >
+            {t('wl_cancel', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Archive wishlist confirmation ── */}
+      <BottomSheet isOpen={showArchiveWlConfirm} onClose={() => setShowArchiveWlConfirm(false)} title={t('wl_archive_confirm_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
+            {t('wl_archive_confirm_body', locale)}
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button style={{ ...btnSecondary, flex: 1 }} onClick={() => setShowArchiveWlConfirm(false)}>
+              {t('wl_cancel', locale)}
+            </button>
+            <button
+              style={{ ...btnPrimary, flex: 1, background: C.orange, opacity: archivingWl ? 0.6 : 1 }}
+              onClick={() => void handleArchiveWishlist()}
+              disabled={archivingWl}
+            >
+              {archivingWl ? '…' : t('wl_archive_confirm_btn', locale)}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
       <BottomSheet isOpen={showRenameWl} onClose={() => setShowRenameWl(false)} title={t('rename_title', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>

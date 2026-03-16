@@ -1091,7 +1091,7 @@ async function getUserEntitlement(userId: string, godMode = false): Promise<{
 /** Check if a wishlist is writable (within plan limits) for the given user */
 async function isWishlistWritable(userId: string, wishlistId: string, planLimit: number): Promise<boolean> {
   const allWishlists = await prisma.wishlist.findMany({
-    where: { ownerId: userId, type: 'REGULAR' },
+    where: { ownerId: userId, type: 'REGULAR', archivedAt: null },
     orderBy: { createdAt: 'asc' },
     select: { id: true },
   });
@@ -1228,7 +1228,7 @@ tgRouter.get(
     const ent = await getUserEntitlement(user.id, user.godMode);
 
     const wishlists = await prisma.wishlist.findMany({
-      where: { ownerId: user.id, type: 'REGULAR' },
+      where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
       orderBy: { createdAt: 'asc' },  // oldest first for readOnly calculation
       select: {
         id: true, slug: true, title: true, description: true, deadline: true,
@@ -1404,7 +1404,7 @@ tgRouter.post(
 
     const user = await getOrCreateTgUser(req.tgUser!);
     const ent = await getUserEntitlement(user.id);
-    const count = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } });
+    const count = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR', archivedAt: null } });
     if (count >= ent.plan.wishlists) {
       trackEvent('feature_gate_hit_wishlist_limit', user.id, { plan: ent.plan.code, count });
       return res.status(402).json({ error: 'Plan limit reached', limit: ent.plan.wishlists, planCode: ent.plan.code });
@@ -1475,6 +1475,41 @@ tgRouter.delete(
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
     await prisma.wishlist.delete({ where: { id } });
+    return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/wishlists/:id/archive — soft-archive a wishlist (owner only)
+tgRouter.post(
+  '/wishlists/:id/archive',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const wishlist = await prisma.wishlist.findUnique({ where: { id }, select: { ownerId: true, archivedAt: true } });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (wishlist.archivedAt) return res.status(409).json({ error: 'Already archived' });
+
+    await prisma.wishlist.update({ where: { id }, data: { archivedAt: new Date() } });
+    return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/wishlists/:id/unarchive — restore a soft-archived wishlist (owner only)
+tgRouter.post(
+  '/wishlists/:id/unarchive',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const wishlist = await prisma.wishlist.findUnique({ where: { id }, select: { ownerId: true, archivedAt: true } });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    await prisma.wishlist.update({ where: { id }, data: { archivedAt: null } });
     return res.json({ ok: true });
   }),
 );
@@ -2617,7 +2652,7 @@ tgRouter.get(
 
     // Stats
     const [wishlists, totalWishes, reservedByMe, archived] = await Promise.all([
-      prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } }),
+      prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR', archivedAt: null } }),
       prisma.item.count({
         where: {
           wishlist: { ownerId: user.id },

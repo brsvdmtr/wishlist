@@ -1,0 +1,229 @@
+# TELEGRAM_FLOW.md - Telegram Bot & Mini App Integration
+
+## Bot Overview
+
+**Bot username**: Configured via `NEXT_PUBLIC_BOT_USERNAME` env (default: WishHub_bot)
+**Framework**: Telegraf 4.16.3
+**Source**: `apps/bot/src/index.ts` (~100 lines)
+**Runtime**: Long polling (not webhook)
+
+---
+
+## Bot Commands
+
+| Command | Description | Behavior |
+|---------|-------------|----------|
+| `/start` | Open WishBoard | Shows welcome text + inline keyboard |
+| `/start <payload>` | Deep link | Shows "Смотри вишлист" + WebApp button with payload |
+| `/help` | Help text | Shows product description |
+
+### /start Handler Details
+
+```
+1. Sets per-chat menu button (WebApp type)
+2. Stores telegramChatId in User record (for future notifications)
+3. If payload present:
+   - Replies with inline keyboard button:
+     type: web_app
+     text: "Смотреть вишлист 🎁"
+     url: {MINI_APP_URL}?startapp={payload}
+4. If no payload:
+   - Replies with welcome text
+```
+
+### Menu Button
+- Type: `web_app`
+- Text: "Вишлист"
+- URL: `MINI_APP_URL` (e.g., https://wishlistik.ru/miniapp)
+- Set globally via `setChatMenuButton()`
+
+---
+
+## Deep Linking
+
+### Link Format
+```
+Owner sharing: https://t.me/{BOT_USERNAME}?startapp=share_{SHARE_TOKEN}
+```
+
+### Deep Link Flow (Guest)
+```
+1. Owner generates share link in MiniApp
+   -> POST /tg/wishlists/:id/share-token -> returns shareToken
+   -> Frontend builds: https://t.me/{BOT_USERNAME}?startapp=share_{shareToken}
+
+2. Owner shares link (clipboard or Telegram share dialog)
+
+3. Guest opens link in Telegram
+   -> Telegram sends /start with startPayload = "share_{shareToken}"
+   -> Bot replies with inline WebApp button
+
+4. Guest taps WebApp button
+   -> Opens Mini App: {MINI_APP_URL}?startapp=share_{shareToken}
+
+5. MiniApp reads startapp param:
+   - Extracts share token from "share_XXX" prefix
+   - Calls GET /public/share/{token}
+   - Loads guest wishlist view
+   - Auto-detects if viewer is the owner -> switches to owner view
+```
+
+### Deep Link Payload Format
+| Prefix | Meaning | Example |
+|--------|---------|---------|
+| `share_` | Guest wishlist link | `share_abc123def456` |
+| (no prefix) | NEEDS VERIFICATION | Could be wishlist ID |
+
+### Link Generation (packages/shared)
+```typescript
+buildTgDeepLink(botUsername, payload)
+  -> https://t.me/{botUsername}?startapp={encodeURIComponent(payload)}
+
+buildTgShareUrl(url, text)
+  -> https://t.me/share/url?url={url}&text={text}
+```
+
+---
+
+## Telegram WebApp SDK Integration
+
+### Initialization (MiniApp.tsx)
+```
+1. Check window.Telegram?.WebApp exists
+   - If not: show error "Откройте через Telegram"
+
+2. Extract initData from WebApp
+   - Store in initDataRef for API auth headers
+
+3. Read startapp param from WebApp.initDataUnsafe
+   - Determines initial screen (owner vs guest)
+
+4. Parse user from initData
+   - Set tgUser state
+   - Compute myActorHash from telegramId
+
+5. Configure WebApp:
+   - WebApp.ready()
+   - WebApp.expand() - full height
+   - WebApp.setHeaderColor(C.bg)
+   - WebApp.setBackgroundColor(C.bg)
+```
+
+### SDK Features Used
+| Feature | Where Used |
+|---------|-----------|
+| `WebApp.initData` | Auth header for all API calls |
+| `WebApp.initDataUnsafe.start_param` | Deep link routing |
+| `WebApp.initDataUnsafe.user` | User info display |
+| `WebApp.ready()` | Signal loading complete |
+| `WebApp.expand()` | Full-height mode |
+| `WebApp.setHeaderColor()` | Match dark theme |
+| `WebApp.setBackgroundColor()` | Match dark theme |
+| `WebApp.BackButton.show/hide/onClick` | Navigation back |
+| `WebApp.HapticFeedback.impactOccurred` | Reserve action feedback |
+| `WebApp.openTelegramLink(url)` | Share to Telegram |
+
+### BackButton Management
+```
+Shown on: wishlist-detail, item-detail, share, guest-view,
+          guest-item-detail, archive
+Hidden on: my-wishlists, loading, error
+
+onClick handlers:
+  guest-item-detail -> guest-view
+  item-detail -> wishlist-detail
+  share -> wishlist-detail
+  archive -> wishlist-detail
+  wishlist-detail -> my-wishlists
+  guest-view -> (no back, it's the entry point for guests)
+```
+
+---
+
+## Telegram Authentication (API Side)
+
+### Signature Validation (`validateTelegramInitData`)
+```
+Input: initData string (URL-encoded key=value pairs)
+Process:
+  1. Parse key=value pairs
+  2. Extract "hash" field
+  3. Build data_check_string:
+     - Sort remaining pairs alphabetically by key
+     - Join with newlines: "key=value\nkey=value"
+  4. Compute HMAC-SHA256:
+     - secret = HMAC-SHA256("WebAppData", BOT_TOKEN)
+     - hash = HMAC-SHA256(secret, data_check_string)
+  5. Compare hex(hash) with provided hash
+  6. Parse "user" JSON field -> TelegramUser
+
+Output: TelegramUser | null
+```
+
+### Dev Bypass
+```
+In non-production (NODE_ENV !== 'production'):
+  - Accept X-TG-DEV header with raw telegramId
+  - Skip signature validation
+  - Construct minimal TelegramUser: { id, first_name: 'Dev' }
+```
+
+---
+
+## Notifications (API -> Telegram)
+
+### Trigger Points
+| Event | Recipient | Message Template |
+|-------|-----------|-----------------|
+| Item reserved | Owner | `🎁 {displayName} забронировал желание «{title}»` |
+| Comment (reserver -> owner) | Owner | `💬 {displayName} прокомментировал «{title}»:\n{text}` |
+| Comment (owner -> reserver) | Reserver | `💬 Автор прокомментировал «{title}»:\n{text}` |
+| Description updated | Reserver | `📝 Описание обновлено в «{title}»` |
+| Batch comments | Recipient | `💬 У вас {N} новых комментариев в «{title}»` |
+
+### Display Name Source
+- **Reservation notifications**: `displayName` from reserve request body
+- **Comment notifications (reserver)**: `reservationEvents[0].comment` (chosen display name)
+- **Comment notifications (owner)**: "Автор" (hardcoded label)
+
+### Notification Queue
+- 30-second debounce per `itemId:recipientUserId`
+- First message: sent immediately
+- Subsequent within window: count accumulated
+- After 30s: sends batch summary if count > 0
+- In-memory (Map) - lost on server restart (acceptable)
+
+---
+
+## Opening MiniApp Outside Telegram
+
+### Behavior
+- `window.Telegram?.WebApp` will be undefined
+- MiniApp shows error screen: "Откройте через Telegram"
+- No API calls made
+- No crash
+
+### Known Limitations
+- Cannot test Mini App in regular browser without dev bypass
+- For development: use X-TG-DEV header
+- Telegram Desktop and Mobile have slightly different WebView behaviors
+- Telegram WebView does NOT change `visualViewport.height` when keyboard opens
+
+---
+
+## Edge Cases
+
+### Handled
+- Bot token missing: bot prints warning and enters idle loop (no crash)
+- Guest opens own wishlist: auto-detected, switches to owner view
+- Share token not generated yet: created on first share request
+- Telegram initData expired: API returns 401, frontend shows error
+- Bot fails to set menu button: error caught, logged, continues
+
+### NOT Handled / Gaps
+- No webhook support (long polling only) - may need for scaling
+- No rate limiting on bot commands
+- No graceful shutdown timeout for bot
+- Chat ID stored only on /start - if user blocks/restarts, chatId may be stale
+- No retry mechanism for failed Telegram notifications
+- NEEDS VERIFICATION: What happens if Telegram initData format changes?

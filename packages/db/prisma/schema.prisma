@@ -95,6 +95,7 @@ model Wishlist {
   title       String
   description String?
   deadline    DateTime?
+  archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
