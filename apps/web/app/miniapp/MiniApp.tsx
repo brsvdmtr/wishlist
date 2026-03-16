@@ -3352,7 +3352,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'guest-view' && guestWl && (
         <div style={{ padding: '16px 20px 120px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '8px 0 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '8px 0 20px' }}>
             <div style={{
               width: 48, height: 48, borderRadius: '50%',
               background: `linear-gradient(135deg, ${C.accent}, #a78bfa)`,
@@ -3368,12 +3368,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <div style={{ fontSize: 12, color: C.textMuted }}>📅 {fmtDeadline(guestWl.deadline)}</div>
               )}
             </div>
-          </div>
-
-          {/* Subscribe button — separate row, only for logged-in non-owner users */}
-          {tgUser && (
-            <div style={{ marginBottom: 16 }}>
+            {/* Subscribe button — right corner, only for logged-in users */}
+            {tgUser && (
               <button
+                key={isSubscribed ? 'subscribed' : 'not-subscribed'}
                 onClick={() => {
                   if (isSubscribed) {
                     void handleUnsubscribe(guestWl.id);
@@ -3383,8 +3381,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 }}
                 disabled={subscribing}
                 style={{
-                  padding: '9px 20px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                  fontFamily: font, fontSize: 13, fontWeight: 600, transition: 'background 0.2s, color 0.2s',
+                  flexShrink: 0, padding: '8px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                  fontFamily: font, fontSize: 12, fontWeight: 600,
                   background: isSubscribed ? C.surface : C.accent,
                   color: isSubscribed ? C.textSec : '#fff',
                   opacity: subscribing ? 0.7 : 1,
@@ -3392,8 +3390,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               >
                 {isSubscribed ? `✓ ${t('sub_subscribed_btn', locale)}` : t('sub_subscribe_btn', locale)}
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
             {getPriceFilters(locale).map((pf, i) => (
