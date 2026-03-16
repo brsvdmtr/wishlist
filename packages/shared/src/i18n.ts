@@ -268,19 +268,35 @@ const ru: Dict = {
   upsell_hints_b2: 'Ссылка на конкретное желание',
   upsell_hints_b3: 'Без неловких разговоров о подарках',
   upsell_wl_title: 'Нужно больше вишлистов?',
-  upsell_wl_subtitle: 'На бесплатном тарифе — 2 вишлиста. С Pro — до 10.',
+  upsell_wl_subtitle: 'На бесплатном тарифе - до 2 вишлистов. С Pro - до 10 и больше возможностей для подарков.',
   upsell_item_title: 'Лимит желаний достигнут',
-  upsell_item_subtitle: 'Бесплатно — до 30 в вишлисте. С Pro — до 100.',
+  upsell_item_subtitle: 'Бесплатно - до 30 желаний в вишлисте. С Pro - до 100.',
   upsell_part_title: 'Слишком много участников',
-  upsell_part_subtitle: 'Бесплатно — до 5 участников. С Pro — до 20.',
+  upsell_part_subtitle: 'Бесплатно - до 5 участников. С Pro - до 20.',
 
-  // ── Comparison table labels ───────────────────────────────────────────────
+  // ── Comparison table labels (legacy, kept for type completeness) ──────────
   table_wishlists: 'Вишлисты',
   table_wishes: 'Желания',
   table_participants: 'Участников',
   table_comments: 'Комментарии',
   table_by_link: 'По ссылке',
   table_hints: 'Намёки',
+
+  // ── Plan feature lists (paywall + profile card) ───────────────────────────
+  plan_now_block: 'Сейчас у тебя',
+  plan_pro_block: 'С Pro получишь',
+  plan_free_f1: 'До 2 вишлистов',
+  plan_free_f2: 'До 30 желаний в каждом вишлисте',
+  plan_free_f3: 'До 5 участников в одном вишлисте',
+  plan_pro_f1: 'До 10 вишлистов',
+  plan_pro_f2: 'До 100 желаний в каждом вишлисте',
+  plan_pro_f3: 'До 20 участников в одном вишлисте',
+  plan_pro_f4: 'Комментарии к желаниям',
+  plan_pro_f5: 'Добавление желаний по ссылке',
+  plan_pro_f6: 'Функция «Намекнуть на подарок»',
+  settings_your_plan: 'Твой тариф',
+  settings_free_subtitle: 'Базовый тариф для старта',
+  settings_pro_unlock_title: 'Что откроется с Pro',
 
   // ── Share screen ──────────────────────────────────────────────────────────
   share_title: 'Поделиться',
@@ -744,19 +760,35 @@ const en: Dict = {
   upsell_hints_b2: 'Link to a specific wish',
   upsell_hints_b3: 'No awkward gift conversations',
   upsell_wl_title: 'Need more wishlists?',
-  upsell_wl_subtitle: 'Free plan: 2 wishlists. Pro: up to 10.',
+  upsell_wl_subtitle: 'Free plan: up to 2 wishlists. Pro: up to 10, plus more gifting features.',
   upsell_item_title: 'Wish limit reached',
-  upsell_item_subtitle: 'Free: up to 30 per list. Pro: up to 100.',
+  upsell_item_subtitle: 'Free: up to 30 wishes per list. Pro: up to 100.',
   upsell_part_title: 'Too many participants',
-  upsell_part_subtitle: 'Free: up to 5 participants. Pro: up to 20.',
+  upsell_part_subtitle: 'Free: up to 5 participants per list. Pro: up to 20.',
 
-  // ── Comparison table labels ───────────────────────────────────────────────
+  // ── Comparison table labels (legacy, kept for type completeness) ──────────
   table_wishlists: 'Wishlists',
   table_wishes: 'Wishes',
   table_participants: 'Participants',
   table_comments: 'Comments',
   table_by_link: 'By link',
   table_hints: 'Hints',
+
+  // ── Plan feature lists (paywall + profile card) ───────────────────────────
+  plan_now_block: 'What you have now',
+  plan_pro_block: 'With Pro you get',
+  plan_free_f1: 'Up to 2 wishlists',
+  plan_free_f2: 'Up to 30 wishes per list',
+  plan_free_f3: 'Up to 5 participants per list',
+  plan_pro_f1: 'Up to 10 wishlists',
+  plan_pro_f2: 'Up to 100 wishes per list',
+  plan_pro_f3: 'Up to 20 participants per list',
+  plan_pro_f4: 'Comments on wishes',
+  plan_pro_f5: 'Add wishes by link',
+  plan_pro_f6: 'Gift hint feature',
+  settings_your_plan: 'Your plan',
+  settings_free_subtitle: 'Basic plan to get started',
+  settings_pro_unlock_title: 'What you unlock with Pro',
 
   // ── Share screen ──────────────────────────────────────────────────────────
   share_title: 'Share',

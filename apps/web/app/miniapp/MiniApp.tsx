@@ -714,48 +714,32 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, locale }: 
             </div>
           )}
 
-          {/* Comparison table for limit gates */}
+          {/* Two semantic blocks for limit gates */}
           {content.showTable && (
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-              <div style={{ flex: 1, background: C.bg, borderRadius: 14, padding: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, marginBottom: 12, fontFamily: font }}>Free</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {[
-                    { label: t('table_wishlists', locale), val: '2' },
-                    { label: t('table_wishes', locale), val: '30' },
-                    { label: t('table_participants', locale), val: '5' },
-                    { label: t('table_comments', locale), val: '—' },
-                    { label: t('table_by_link', locale), val: '—' },
-                    { label: t('table_hints', locale), val: '—' },
-                  ].map((r) => (
-                    <div key={r.label} style={{ fontSize: 12, color: r.val === '—' ? C.textMuted : C.textSec, lineHeight: 1.3 }}>
-                      <div style={{ fontWeight: 600 }}>{r.val}</div>
-                      <div style={{ fontSize: 10, color: C.textMuted }}>{r.label}</div>
-                    </div>
-                  ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
+              {/* Block 1: what you have now (Free) */}
+              <div style={{ background: C.bg, borderRadius: 14, padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  {t('plan_now_block', locale)}
                 </div>
+                {[t('plan_free_f1', locale), t('plan_free_f2', locale), t('plan_free_f3', locale)].map((f, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '3px 0', fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
+                    <span style={{ color: C.textMuted, flexShrink: 0, marginTop: 1 }}>–</span>
+                    {f}
+                  </div>
+                ))}
               </div>
-              <div style={{
-                flex: 1, background: C.card, borderRadius: 14, padding: 14,
-                border: `1px solid ${C.accent}30`,
-                boxShadow: `0 0 24px ${C.accent}08`,
-              }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 12, fontFamily: font }}>PRO</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {[
-                    { label: t('table_wishlists', locale), val: '10' },
-                    { label: t('table_wishes', locale), val: '100' },
-                    { label: t('table_participants', locale), val: '20' },
-                    { label: t('table_comments', locale), val: '✓' },
-                    { label: t('table_by_link', locale), val: '✓' },
-                    { label: t('table_hints', locale), val: '✓' },
-                  ].map((r) => (
-                    <div key={r.label} style={{ fontSize: 12, color: r.val === '✓' ? C.green : C.text, lineHeight: 1.3 }}>
-                      <div style={{ fontWeight: 600 }}>{r.val}</div>
-                      <div style={{ fontSize: 10, color: C.textSec }}>{r.label}</div>
-                    </div>
-                  ))}
+              {/* Block 2: with Pro */}
+              <div style={{ background: C.card, borderRadius: 14, padding: '12px 14px', border: `1px solid ${C.accent}30` }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  {t('plan_pro_block', locale)}
                 </div>
+                {[t('plan_pro_f1', locale), t('plan_pro_f2', locale), t('plan_pro_f3', locale), t('plan_pro_f4', locale), t('plan_pro_f5', locale), t('plan_pro_f6', locale)].map((f, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '3px 0', fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
+                    <span style={{ color: C.green, flexShrink: 0, fontWeight: 700, marginTop: 1 }}>✓</span>
+                    {f}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -3307,133 +3291,167 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </div>
               )}
 
-              {/* My Plan card — moved from settings */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
-                  {t('profile_plan_title', locale)}
-                </div>
-                <div style={{
-                  background: planInfo.code === 'PRO'
-                    ? `linear-gradient(145deg, ${C.card}, ${C.accent}08)`
-                    : C.card,
-                  borderRadius: 16, padding: 20,
-                  border: `1px solid ${planInfo.code === 'PRO' ? C.accent + '25' : C.border}`,
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>{t('settings_plan', locale)}</span>
-                    <span style={{
-                      fontSize: 12, fontWeight: 800, letterSpacing: 0.5, padding: '4px 10px',
-                      borderRadius: 6,
-                      background: planInfo.code === 'PRO'
-                        ? `linear-gradient(135deg, ${C.accent}22, ${C.accent}12)`
-                        : C.surface,
-                      border: planInfo.code === 'PRO' ? `1px solid ${C.accent}30` : 'none',
-                      color: planInfo.code === 'PRO' ? C.accent : C.textSec,
-                    }}>
-                      {planInfo.code === 'PRO' ? 'PRO' : 'Free'}
-                    </span>
+              {/* My Plan card — FREE: two semantic blocks; PRO: feature table */}
+              {planInfo.code === 'FREE' ? (
+                <>
+                  {/* FREE — current plan block */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
+                      {t('settings_your_plan', locale)}
+                    </div>
+                    <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.border}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font }}>Free</span>
+                        <span style={{ fontSize: 12, color: C.textMuted }}>{t('settings_free_subtitle', locale)}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        {[t('plan_free_f1', locale), t('plan_free_f2', locale), t('plan_free_f3', locale)].map((f, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 14, color: C.textSec, lineHeight: 1.4 }}>
+                            <span style={{ color: C.textMuted, flexShrink: 0 }}>–</span>
+                            {f}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {[
-                      { label: t('settings_wishlists', locale), value: t('settings_up_to', locale, { n: planInfo.wishlists }), desc: planInfo.code === 'PRO' ? t('settings_desc_wishlists', locale) : null },
-                      { label: t('settings_wishes_each', locale), value: t('settings_up_to', locale, { n: planInfo.items }), desc: planInfo.code === 'PRO' ? t('settings_desc_wishes', locale) : null },
-                      { label: t('settings_participants', locale), value: t('settings_up_to', locale, { n: planInfo.participants }), desc: planInfo.code === 'PRO' ? t('settings_desc_participants', locale) : null },
-                    ].map((row) => (
-                      <div key={row.label}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 14, color: C.textSec }}>{row.label}</span>
-                          <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{row.value}</span>
-                        </div>
-                        {row.desc && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{row.desc}</div>}
+                  {/* FREE — Pro unlock block */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
+                      {t('settings_pro_unlock_title', locale)}
+                    </div>
+                    <div style={{
+                      background: `linear-gradient(145deg, ${C.card}, ${C.accent}08)`,
+                      borderRadius: 16, padding: 16,
+                      border: `1px solid ${C.accent}25`,
+                    }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                        {[t('plan_pro_f1', locale), t('plan_pro_f2', locale), t('plan_pro_f3', locale), t('plan_pro_f4', locale), t('plan_pro_f5', locale), t('plan_pro_f6', locale)].map((f, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 14, color: C.textSec, lineHeight: 1.4 }}>
+                            <span style={{ color: C.accent, flexShrink: 0, fontWeight: 700 }}>✓</span>
+                            {f}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    {planInfo.code === 'PRO' && (
-                      <>
-                        <div>
+                      <div style={{ paddingTop: 14, borderTop: `1px solid ${C.accent}20`, marginBottom: 14 }}>
+                        <span style={{ fontSize: 22, fontWeight: 800, color: C.text }}>100</span>
+                        {' '}
+                        <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>Stars</span>
+                        <span style={{ fontSize: 13, color: C.textSec }}> {t('upsell_per_month', locale)}</span>
+                      </div>
+                      <button
+                        style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)` }}
+                        onClick={() => showUpsell('wishlist_limit')}
+                      >
+                        {t('connect_pro', locale)}
+                      </button>
+                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8, textAlign: 'center' }}>
+                        {t('upsell_auto_renew', locale)}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* PRO — feature table + subscription info + cancel/resume */
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
+                    {t('profile_plan_title', locale)}
+                  </div>
+                  <div style={{
+                    background: `linear-gradient(145deg, ${C.card}, ${C.accent}08)`,
+                    borderRadius: 16, padding: 20,
+                    border: `1px solid ${C.accent}25`,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>{t('settings_plan', locale)}</span>
+                      <span style={{
+                        fontSize: 12, fontWeight: 800, letterSpacing: 0.5, padding: '4px 10px', borderRadius: 6,
+                        background: `linear-gradient(135deg, ${C.accent}22, ${C.accent}12)`,
+                        border: `1px solid ${C.accent}30`, color: C.accent,
+                      }}>PRO</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {[
+                        { label: t('settings_wishlists', locale), value: t('settings_up_to', locale, { n: planInfo.wishlists }), desc: t('settings_desc_wishlists', locale) },
+                        { label: t('settings_wishes_each', locale), value: t('settings_up_to', locale, { n: planInfo.items }), desc: t('settings_desc_wishes', locale) },
+                        { label: t('settings_participants', locale), value: t('settings_up_to', locale, { n: planInfo.participants }), desc: t('settings_desc_participants', locale) },
+                      ].map((row) => (
+                        <div key={row.label}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_comments', locale)}</span>
+                            <span style={{ fontSize: 14, color: C.textSec }}>{row.label}</span>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{row.value}</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{row.desc}</div>
+                        </div>
+                      ))}
+                      {[
+                        { label: t('settings_comments', locale), desc: t('settings_desc_comments', locale) },
+                        { label: t('settings_url_import', locale), desc: t('settings_desc_url_import', locale) },
+                        { label: t('settings_hints', locale), desc: t('settings_desc_hints', locale) },
+                      ].map((row) => (
+                        <div key={row.label}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 14, color: C.textSec }}>{row.label}</span>
                             <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
                           </div>
-                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_comments', locale)}</div>
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{row.desc}</div>
                         </div>
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_url_import', locale)}</span>
-                            <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
-                          </div>
-                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_url_import', locale)}</div>
+                      ))}
+                    </div>
+
+                    {/* Subscription info — ACTIVE_RENEWING */}
+                    {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
+                      <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 13, color: C.textSec }}>{t('settings_next_renewal', locale)}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                            {new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}
+                          </span>
                         </div>
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_hints', locale)}</span>
-                            <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
-                          </div>
-                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_hints', locale)}</div>
+                      </div>
+                    )}
+
+                    {/* Subscription info — ACTIVE_CANCELLED */}
+                    {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
+                      <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '10px 14px', borderRadius: 10,
+                          background: C.orangeSoft, fontSize: 13, color: C.orange, lineHeight: 1.4,
+                        }}>
+                          <span>⏳</span>
+                          <span>
+                            {t('settings_renewal_disabled', locale)}{' '}
+                            <strong>{new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}</strong>.
+                          </span>
                         </div>
-                      </>
+                      </div>
                     )}
                   </div>
 
-                  {/* Subscription info — ACTIVE_RENEWING */}
-                  {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
-                    <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 13, color: C.textSec }}>{t('settings_next_renewal', locale)}</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                          {new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Subscription info — ACTIVE_CANCELLED */}
-                  {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
-                    <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '10px 14px', borderRadius: 10,
-                        background: C.orangeSoft, fontSize: 13, color: C.orange, lineHeight: 1.4,
-                      }}>
-                        <span>⏳</span>
-                        <span>
-                          {t('settings_renewal_disabled', locale)}{' '}
-                          <strong>{new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}</strong>.
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                  {/* Plan action buttons */}
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
+                      <button
+                        style={{ ...btnSecondary, width: '100%', fontSize: 14 }}
+                        onClick={() => setShowCancelSub(true)}
+                      >
+                        {t('settings_cancel_renewal', locale)}
+                      </button>
+                    )}
+                    {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
+                      <button
+                        style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)` }}
+                        onClick={() => void handleReactivateSub()}
+                        disabled={cancelSubLoading}
+                      >
+                        {cancelSubLoading ? t('settings_resuming', locale) : t('settings_resume_sub', locale)}
+                      </button>
+                    )}
+                  </div>
                 </div>
-
-                {/* Plan action buttons */}
-                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
-                    <button
-                      style={{ ...btnSecondary, width: '100%', fontSize: 14 }}
-                      onClick={() => setShowCancelSub(true)}
-                    >
-                      {t('settings_cancel_renewal', locale)}
-                    </button>
-                  )}
-                  {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
-                    <button
-                      style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)` }}
-                      onClick={() => void handleReactivateSub()}
-                      disabled={cancelSubLoading}
-                    >
-                      {cancelSubLoading ? t('settings_resuming', locale) : t('settings_resume_sub', locale)}
-                    </button>
-                  )}
-                  {planInfo.code === 'FREE' && (
-                    <button
-                      style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)` }}
-                      onClick={() => showUpsell('wishlist_limit')}
-                    >
-                      {t('connect_pro', locale)}
-                    </button>
-                  )}
-                </div>
-              </div>
+              )}
 
               {/* Public Profile section */}
               <div style={{ marginBottom: 16 }}>
