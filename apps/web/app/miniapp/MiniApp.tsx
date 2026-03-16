@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { t, detectLocale, pluralize, type Locale } from '@wishlist/shared';
 
 // ═══════════════════════════════════════════════════════
@@ -42,12 +42,34 @@ function getEmoji(s: string) {
   return EMOJIS[Math.abs(code) % EMOJIS.length];
 }
 
-const getPriceFilters = (locale: Locale) => [
+const GUEST_BUDGET_PRESETS = [3000, 5000, 10000, 25000] as const;
+
+const getGuestBudgetPresets = (locale: Locale) => [
   { label: t('filter_all', locale), max: null },
   { label: t('filter_under_3k', locale), max: 3000 },
+  { label: t('filter_under_5k', locale), max: 5000 },
   { label: t('filter_under_10k', locale), max: 10000 },
   { label: t('filter_under_25k', locale), max: 25000 },
 ];
+
+// Keep for any legacy callsites
+const getPriceFilters = getGuestBudgetPresets;
+
+type GuestSort = 'default' | 'price_asc' | 'price_desc' | 'priority_desc' | 'recommended';
+
+/** Score an item for recommended sort. Higher = better match. */
+function guestRecommendedScore(item: { priority: number; status: string; imageUrl?: string | null; url?: string | null; description?: string | null; price: number | null }, budgetMax: number | null): number {
+  let score = 0;
+  score += (item.priority - 1) * 100;           // priority: 0/100/200
+  if (item.status === 'available') score += 50;  // not reserved
+  if (item.imageUrl) score += 10;
+  if (item.url) score += 5;
+  if (item.description) score += 5;
+  if (budgetMax !== null && item.price !== null && item.price > 0 && item.price <= budgetMax) {
+    score += Math.round((item.price / budgetMax) * 15); // closer to budget ceiling = small bonus
+  }
+  return score;
+}
 
 const PRIO_EMOJI: Record<number, string> = { 1: '🙂', 2: '😊', 3: '😍' };
 // accent color per priority level: LOW=blue-violet, MEDIUM=amber, HIGH=coral-rose
@@ -115,7 +137,8 @@ type SubscriptionInfo = {
 
 type UpsellContext =
   | 'comments' | 'url_import' | 'hints'
-  | 'wishlist_limit' | 'item_limit' | 'participant_limit' | 'subscription_limit';
+  | 'wishlist_limit' | 'item_limit' | 'participant_limit' | 'subscription_limit'
+  | 'sort_recommended';
 
 type UpsellSheetState = { context: UpsellContext } | null;
 
@@ -309,6 +332,13 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     title: t('upsell_wishlist_title', locale),
     subtitle: t('sub_pro_upsell', locale, { max: '7' }),
     showTable: true,
+  },
+  sort_recommended: {
+    emoji: '✨',
+    title: t('upsell_sort_title', locale),
+    subtitle: t('upsell_sort_subtitle', locale),
+    showTable: false,
+    benefits: [t('upsell_sort_b1', locale), t('upsell_sort_b2', locale), t('upsell_sort_b3', locale)],
   },
 });
 
@@ -979,8 +1009,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Items with unreads (for highlight in guest-view opened from subscriptions)
   const [guestUnreadEntityIds, setGuestUnreadEntityIds] = useState<string[]>([]);
 
+  // Guest filter & sort state
+  const [guestBudgetMax, setGuestBudgetMax] = useState<number | null>(null);
+  const [guestCustomBudget, setGuestCustomBudget] = useState('');
+  const [guestPriorityFilter, setGuestPriorityFilter] = useState<number[]>([1, 2, 3]);
+  const [guestSort, setGuestSort] = useState<GuestSort>('default');
+  const [guestFilterOpen, setGuestFilterOpen] = useState(false);
+  // Local (sheet-draft) states — applied only on "Apply"
+  const [draftBudget, setDraftBudget] = useState<number | null>(null);
+  const [draftCustomBudget, setDraftCustomBudget] = useState('');
+  const [draftPriorities, setDraftPriorities] = useState<number[]>([1, 2, 3]);
+
   // Guest forms
-  const [priceFilter, setPriceFilter] = useState(0);
   const [reservingItem, setReservingItem] = useState<GuestItem | null>(null);
   const [guestName, setGuestName] = useState('');
 
@@ -1007,6 +1047,65 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [importUrl, setImportUrl] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [fromDrafts, setFromDrafts] = useState(false);
+
+  // ── Guest view: computed filtered + sorted items ─────────────────────────
+  const { guestMainList, guestNoPriceBlock } = useMemo(() => {
+    const isPro = planInfo.code === 'PRO';
+    const budgetActive = guestBudgetMax !== null;
+    const highPrioSelected = guestPriorityFilter.includes(3);
+
+    // Step 1: filter by priority
+    const byPriority = guestItems.filter(
+      (item) => guestPriorityFilter.length === 0 || guestPriorityFilter.includes(item.priority),
+    );
+
+    // Step 2: split into priced-list vs no-price block (only when budget active)
+    let mainList: GuestItem[];
+    let noPriceBlock: GuestItem[] = [];
+
+    if (budgetActive) {
+      mainList = byPriority.filter((item) => item.price != null && item.price <= guestBudgetMax!);
+      if (highPrioSelected) {
+        noPriceBlock = byPriority
+          .filter((item) => item.price == null && item.priority === 3)
+          .slice(0, 3);
+      }
+    } else {
+      mainList = byPriority;
+    }
+
+    // Step 3: sort main list
+    const sorted = [...mainList].sort((a, b) => {
+      switch (guestSort) {
+        case 'price_asc': {
+          const pa = a.price ?? Infinity;
+          const pb = b.price ?? Infinity;
+          return pa !== pb ? pa - pb : 0;
+        }
+        case 'price_desc': {
+          const pa2 = a.price ?? -Infinity;
+          const pb2 = b.price ?? -Infinity;
+          return pa2 !== pb2 ? pb2 - pa2 : 0;
+        }
+        case 'priority_desc':
+          return b.priority !== a.priority ? b.priority - a.priority : 0;
+        case 'recommended':
+          if (!isPro) return 0; // fallback to natural order if somehow rendered without Pro
+          return guestRecommendedScore(b, guestBudgetMax) - guestRecommendedScore(a, guestBudgetMax);
+        default:
+          return 0; // preserve natural server order
+      }
+    });
+
+    return { guestMainList: sorted, guestNoPriceBlock: noPriceBlock };
+  }, [guestItems, guestBudgetMax, guestPriorityFilter, guestSort, planInfo.code]);
+
+  // ── Guest filter active check ─────────────────────────────────────────────
+  const guestFiltersActive = guestBudgetMax !== null || guestPriorityFilter.length < 3;
+  const guestFilterBadge = [
+    guestBudgetMax !== null ? 1 : 0,
+    guestPriorityFilter.length < 3 ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
 
   // Analytics stub — will be replaced with real analytics later
   const trackEvent = useCallback((event: string, props?: Record<string, unknown>) => {
@@ -3578,21 +3677,92 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-            {getPriceFilters(locale).map((pf, i) => (
-              <button key={i} onClick={() => setPriceFilter(i)} style={{
-                padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-                border: 'none', cursor: 'pointer', fontFamily: font, transition: 'all 0.2s',
-                background: priceFilter === i ? C.accent : C.surface,
-                color: priceFilter === i ? '#fff' : C.textSec,
-              }}>{pf.label}</button>
-            ))}
+          {/* ── Filter & Sort bar ─────────────────────────────────────── */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
+            {/* Filter button */}
+            <button
+              onClick={() => {
+                setDraftBudget(guestBudgetMax);
+                setDraftCustomBudget(guestCustomBudget);
+                setDraftPriorities([...guestPriorityFilter]);
+                setGuestFilterOpen(true);
+              }}
+              style={{
+                flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '7px 13px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                fontFamily: font, fontSize: 13, fontWeight: 600, transition: 'all 0.18s',
+                background: guestFiltersActive ? C.accent : C.surface,
+                color: guestFiltersActive ? '#fff' : C.text,
+              }}
+            >
+              <span style={{ fontSize: 14 }}>⚙</span>
+              {t('filter_label', locale)}
+              {guestFilterBadge > 0 && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: 18, height: 18, borderRadius: 9, fontSize: 11, fontWeight: 700,
+                  background: 'rgba(255,255,255,0.3)', color: '#fff', padding: '0 4px',
+                }}>{guestFilterBadge}</span>
+              )}
+            </button>
+
+            {/* Sort chips */}
+            {(
+              [
+                { key: 'default',        label: t('sort_default',       locale) },
+                { key: 'price_asc',      label: t('sort_price_asc',     locale) },
+                { key: 'price_desc',     label: t('sort_price_desc',    locale) },
+                { key: 'priority_desc',  label: t('sort_priority_desc', locale) },
+                { key: 'recommended',    label: t('sort_recommended',   locale), pro: true },
+              ] as { key: GuestSort; label: string; pro?: boolean }[]
+            ).map(({ key, label, pro }) => {
+              const isActive = guestSort === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => {
+                    if (pro && planInfo.code !== 'PRO') {
+                      showUpsell('sort_recommended');
+                      return;
+                    }
+                    setGuestSort(key);
+                  }}
+                  style={{
+                    flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '7px 13px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                    fontFamily: font, fontSize: 13, fontWeight: isActive ? 700 : 500,
+                    transition: 'all 0.18s',
+                    background: isActive ? C.accent : C.surface,
+                    color: isActive ? '#fff' : C.text,
+                    opacity: pro && planInfo.code !== 'PRO' ? 0.75 : 1,
+                  }}
+                >
+                  {label}
+                  {pro && planInfo.code !== 'PRO' && <ProBadge style={{ marginLeft: 2 }} />}
+                </button>
+              );
+            })}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {guestItems
-              .filter((i) => !getPriceFilters(locale)[priceFilter]?.max || !i.price || i.price <= (getPriceFilters(locale)[priceFilter]?.max ?? Infinity))
-              .map((item, i) => {
+          {/* ── Main list ─────────────────────────────────────────────────── */}
+          {guestMainList.length === 0 && !guestNoPriceBlock.length ? (
+            <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 6 }}>
+                {t('guest_filter_empty', locale)}
+              </div>
+              {guestFiltersActive && (
+                <button
+                  onClick={() => { setGuestBudgetMax(null); setGuestCustomBudget(''); setGuestPriorityFilter([1, 2, 3]); }}
+                  style={{ ...btnSecondary, width: 'auto', padding: '10px 20px', fontSize: 14, marginTop: 12 }}
+                >
+                  {t('guest_filter_reset', locale)}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {guestMainList.map((item, i) => {
                 const hasUnread = guestUnreadEntityIds.includes(item.id);
                 return (
                   <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative' }}>
@@ -3603,14 +3773,178 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         boxShadow: `0 0 6px ${C.orange}`,
                       }} />
                     )}
-                    <WishCardGuest item={item} onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }} onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }} onUnreserve={handleUnreserve} myActorHash={myActorHashRef.current} locale={locale} />
+                    <WishCardGuest
+                      item={item}
+                      onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
+                      onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                      onUnreserve={handleUnreserve}
+                      myActorHash={myActorHashRef.current}
+                      locale={locale}
+                    />
                   </div>
                 );
               })}
-          </div>
+
+              {/* ── No-price high-priority block ───────────────────────────── */}
+              {guestNoPriceBlock.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{
+                    fontSize: 12, fontWeight: 600, color: C.textMuted,
+                    marginBottom: 10, paddingLeft: 2,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                    <span>😍</span>
+                    {t('guest_no_price_title', locale)}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {guestNoPriceBlock.map((item, i) => (
+                      <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
+                        <WishCardGuest
+                          item={item}
+                          onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
+                          onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                          onUnreserve={handleUnreserve}
+                          myActorHash={myActorHashRef.current}
+                          locale={locale}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════
+          GUEST FILTER BOTTOM SHEET
+          ══════════════════════════════════════════════ */}
+      <BottomSheet
+        isOpen={guestFilterOpen}
+        onClose={() => setGuestFilterOpen(false)}
+        title={t('filter_label', locale)}
+      >
+        <div style={{ padding: '0 0 16px' }}>
+          {/* Budget section */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              {t('filter_budget_label', locale)}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+              {getGuestBudgetPresets(locale).map((preset) => {
+                const isActive = draftBudget === preset.max && (preset.max !== null || draftCustomBudget === '');
+                return (
+                  <button
+                    key={preset.max ?? 'all'}
+                    onClick={() => { setDraftBudget(preset.max); setDraftCustomBudget(''); }}
+                    style={{
+                      padding: '7px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                      fontFamily: font, fontSize: 13, fontWeight: 600, transition: 'all 0.18s',
+                      background: isActive ? C.accent : C.surface,
+                      color: isActive ? '#fff' : C.text,
+                    }}
+                  >{preset.label}</button>
+                );
+              })}
+            </div>
+            {/* Custom budget input */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                placeholder={t('filter_custom_placeholder', locale)}
+                value={draftCustomBudget}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^0-9]/g, '');
+                  setDraftCustomBudget(raw);
+                  const num = parseInt(raw, 10);
+                  if (!isNaN(num) && num > 0) {
+                    setDraftBudget(num);
+                  } else if (raw === '') {
+                    setDraftBudget(null);
+                  }
+                }}
+                style={{
+                  flex: 1, padding: '10px 14px', borderRadius: 12,
+                  border: `1.5px solid ${draftCustomBudget ? C.accent : C.border}`,
+                  background: C.surface, color: C.text,
+                  fontFamily: font, fontSize: 14, outline: 'none',
+                  MozAppearance: 'textfield',
+                } as React.CSSProperties}
+              />
+              {draftCustomBudget && (
+                <button
+                  onClick={() => { setDraftCustomBudget(''); setDraftBudget(null); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, fontSize: 20, padding: '0 4px', lineHeight: 1 }}
+                >×</button>
+              )}
+            </div>
+          </div>
+
+          {/* Priority section */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              {t('filter_priority_label', locale)}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {getPriorities(locale).map((p) => {
+                const isActive = draftPriorities.includes(p.value);
+                return (
+                  <button
+                    key={p.value}
+                    onClick={() => {
+                      setDraftPriorities((prev) => {
+                        if (isActive) {
+                          // Don't deselect if it's the last one
+                          if (prev.length === 1) return prev;
+                          return prev.filter((v) => v !== p.value);
+                        }
+                        return [...prev, p.value].sort();
+                      });
+                    }}
+                    style={{
+                      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      gap: 4, padding: '10px 8px', borderRadius: 12,
+                      border: `2px solid ${isActive ? PRIO_COLOR[p.value] : C.border}`,
+                      cursor: 'pointer', fontFamily: font, transition: 'all 0.18s',
+                      background: isActive ? PRIO_BG[p.value] : C.surface,
+                    }}
+                  >
+                    <span style={{ fontSize: 20 }}>{p.emoji}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? PRIO_COLOR[p.value] : C.textMuted }}>{p.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={() => {
+                setDraftBudget(null); setDraftCustomBudget(''); setDraftPriorities([1, 2, 3]);
+              }}
+              style={{ ...btnSecondary, flex: 1, padding: '13px', fontSize: 14 }}
+            >
+              {t('filter_reset', locale)}
+            </button>
+            <button
+              onClick={() => {
+                setGuestBudgetMax(draftBudget);
+                setGuestCustomBudget(draftCustomBudget);
+                setGuestPriorityFilter(draftPriorities);
+                setGuestFilterOpen(false);
+              }}
+              style={{ ...btnPrimary, flex: 2, padding: '13px', fontSize: 14 }}
+            >
+              {t('filter_apply', locale)}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
 
       {/* ══════════════════════════════════════════════
           ARCHIVE

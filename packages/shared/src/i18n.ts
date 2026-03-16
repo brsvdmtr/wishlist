@@ -335,8 +335,31 @@ const ru: Dict = {
   // ── Price filters ─────────────────────────────────────────────────────────
   filter_all: 'Все',
   filter_under_3k: 'До 3 000 ₽',
+  filter_under_5k: 'До 5 000 ₽',
   filter_under_10k: 'До 10 000 ₽',
   filter_under_25k: 'До 25 000 ₽',
+
+  // ── Guest view: filter & sort panel ──────────────────────────────────────
+  filter_label: 'Фильтр',
+  sort_label: 'Сортировка',
+  filter_budget_label: 'Бюджет',
+  filter_priority_label: 'Приоритет',
+  filter_custom_placeholder: 'Своя сумма',
+  filter_apply: 'Применить',
+  filter_reset: 'Сбросить',
+  sort_default: 'По умолчанию',
+  sort_price_asc: 'Сначала дешевле',
+  sort_price_desc: 'Сначала дороже',
+  sort_priority_desc: 'Сначала важнее',
+  sort_recommended: 'Рекомендованный',
+  guest_no_price_title: 'Есть ещё важные желания без указанной цены',
+  guest_filter_empty: 'Ничего не найдено по выбранным параметрам',
+  guest_filter_reset: 'Сбросить фильтры',
+  upsell_sort_title: 'Рекомендованный порядок',
+  upsell_sort_subtitle: 'Pro-функция, которая ставит нужные подарки наверх с учётом приоритета, наличия фото и других сигналов.',
+  upsell_sort_b1: 'Важные желания всегда наверху',
+  upsell_sort_b2: 'Свободные желания выше забронированных',
+  upsell_sort_b3: 'Учитывает твой бюджет',
 
   // ── Toasts / errors ───────────────────────────────────────────────────────
   toast_plan_limit: 'Достигнут лимит тарифа',
@@ -881,8 +904,31 @@ const en: Dict = {
   // ── Price filters ─────────────────────────────────────────────────────────
   filter_all: 'All',
   filter_under_3k: 'Under 3,000 ₽',
+  filter_under_5k: 'Under 5,000 ₽',
   filter_under_10k: 'Under 10,000 ₽',
   filter_under_25k: 'Under 25,000 ₽',
+
+  // ── Guest view: filter & sort panel ──────────────────────────────────────
+  filter_label: 'Filter',
+  sort_label: 'Sort',
+  filter_budget_label: 'Budget',
+  filter_priority_label: 'Priority',
+  filter_custom_placeholder: 'Custom amount',
+  filter_apply: 'Apply',
+  filter_reset: 'Reset',
+  sort_default: 'Default',
+  sort_price_asc: 'Cheapest first',
+  sort_price_desc: 'Most expensive first',
+  sort_priority_desc: 'Most important first',
+  sort_recommended: 'Recommended',
+  guest_no_price_title: 'Some important wishes have no price listed',
+  guest_filter_empty: 'Nothing found with these filters',
+  guest_filter_reset: 'Clear filters',
+  upsell_sort_title: 'Recommended Order',
+  upsell_sort_subtitle: 'A Pro feature that ranks gifts by priority, availability, and other signals — so the best matches always come first.',
+  upsell_sort_b1: 'High-priority wishes ranked at the top',
+  upsell_sort_b2: 'Available items shown before reserved ones',
+  upsell_sort_b3: 'Takes your budget into account',
 
   // ── Toasts / errors ───────────────────────────────────────────────────────
   toast_plan_limit: 'Plan limit reached',
