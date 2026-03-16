@@ -3813,6 +3813,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {!itemReorderMode && !currentWl.readOnly && (
               <button style={btnSecondary} onClick={() => { resetItemForm(); setShowItemForm(true); }}>{t('add_wish_btn', locale)}</button>
             )}
+            {!itemReorderMode && !currentWl.readOnly && (
+              <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
+                {t('items_limit_status', locale, { count: items.length, max: planLimits.items })}
+              </div>
+            )}
           </div>
 
         </div>
