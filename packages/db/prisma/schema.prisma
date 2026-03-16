@@ -129,6 +129,7 @@ model Item {
   importMethod     String?
   status           ItemStatus @default(AVAILABLE)
   reservationEpoch Int        @default(0)
+  position         Int        @default(0)
   reserverUserId   String?
   archivedAt       DateTime?
   purgeAfter       DateTime?
@@ -144,6 +145,7 @@ model Item {
 
   @@index([wishlistId])
   @@index([purgeAfter])
+  @@index([wishlistId, priority, position])
 }
 
 model Tag {

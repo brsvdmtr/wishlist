@@ -1250,6 +1250,7 @@ function mapTgItem(item: {
   currency?: string;
   imageUrl?: string | null;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  position?: number;
   status: string;
   description?: string | null;
   sourceUrl?: string | null;
@@ -1265,6 +1266,7 @@ function mapTgItem(item: {
     currency: item.currency ?? null,
     imageUrl: item.imageUrl ?? null,
     priority: priorityToNum(item.priority),
+    position: item.position ?? 0,
     status: item.status.toLowerCase(),
     description: item.description ?? null,
     sourceUrl: item.sourceUrl ?? null,
@@ -1871,12 +1873,70 @@ tgRouter.get(
       orderBy: ITEM_ORDER_BY,
       select: {
         id: true, wishlistId: true, title: true, url: true, priceText: true,
-        imageUrl: true, priority: true, status: true, description: true,
+        imageUrl: true, priority: true, position: true, status: true, description: true,
         sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
       },
     });
 
     return res.json({ items: items.map(mapTgItem) });
+  }),
+);
+
+// POST /tg/wishlists/:id/items/reorder — reorder items within their priority group (owner only)
+tgRouter.post(
+  '/wishlists/:id/items/reorder',
+  asyncHandler(async (req, res) => {
+    const wishlistId = req.params.id ?? '';
+    if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const parsed = z
+      .object({
+        groups: z.array(z.object({
+          priority: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+          orderedIds: z.array(z.string()).min(1).max(500),
+        })).min(1).max(3),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const wishlist = await prisma.wishlist.findUnique({
+      where: { id: wishlistId },
+      select: { ownerId: true },
+    });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const { groups } = parsed.data;
+    const allIds = groups.flatMap(g => g.orderedIds);
+
+    // Verify all IDs belong to this wishlist and match their declared priority
+    const dbItems = await prisma.item.findMany({
+      where: { id: { in: allIds }, wishlistId },
+      select: { id: true, priority: true },
+    });
+    if (dbItems.length !== allIds.length) {
+      return res.status(400).json({ error: 'Some item IDs are invalid or not in this wishlist' });
+    }
+    const dbItemMap = new Map(dbItems.map(i => [i.id, i]));
+    for (const group of groups) {
+      for (const id of group.orderedIds) {
+        if (dbItemMap.get(id)?.priority !== group.priority) {
+          return res.status(400).json({ error: `Item ${id} does not belong to priority group ${group.priority}` });
+        }
+      }
+    }
+
+    // Transactionally assign positions within each priority group
+    await prisma.$transaction(
+      groups.flatMap(group =>
+        group.orderedIds.map((id, idx) =>
+          prisma.item.update({ where: { id }, data: { position: idx } }),
+        ),
+      ),
+    );
+
+    return res.json({ ok: true });
   }),
 );
 
@@ -1964,7 +2024,7 @@ tgRouter.post(
         imageUrl: parsed.data.imageUrl ?? null,
         currency,
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     // Notify wishlist subscribers
@@ -2034,7 +2094,7 @@ tgRouter.patch(
         ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
         ...(parsed.data.currency !== undefined ? { currency: parsed.data.currency } : {}),
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     // Notify wishlist subscribers of item change

@@ -151,6 +151,7 @@ type Item = {
   price: number | null;
   imageUrl: string | null;
   priority: 1 | 2 | 3;
+  position: number;
   status: 'available' | 'reserved' | 'purchased' | 'completed' | 'deleted';
   sourceUrl?: string | null;
   sourceDomain?: string | null;
@@ -1027,6 +1028,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [reorderDragIdx, setReorderDragIdx] = useState<number | null>(null);
   const [reorderDragOverIdx, setReorderDragOverIdx] = useState<number | null>(null);
 
+  // Item reorder state
+  const [itemReorderMode, setItemReorderMode] = useState(false);
+  const [itemReorderList, setItemReorderList] = useState<Item[]>([]);
+  const [itemReorderSaving, setItemReorderSaving] = useState(false);
+  const [itemReorderDragIdx, setItemReorderDragIdx] = useState<number | null>(null);
+
   // Guest forms
   const [reservingItem, setReservingItem] = useState<GuestItem | null>(null);
   const [guestName, setGuestName] = useState('');
@@ -1486,6 +1493,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       price: i.priceText ? Number(i.priceText) || null : null,
       imageUrl: i.imageUrl ?? null,
       priority: priorityMap[i.priority] ?? 2,
+      position: (i as { position?: number }).position ?? 0,
       status: i.status.toLowerCase() as 'available' | 'reserved' | 'purchased',
       reservedByDisplayName: i.reservedByDisplayName,
       reservedByActorHash: i.reservedByActorHash ?? null,
@@ -1781,6 +1789,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(() => {
+    // Cancel active reorder modes before navigating away
+    if (itemReorderMode) { cancelItemReorderMode(); return; }
+    if (reorderMode) { cancelReorderMode(); return; }
     if (screen === 'item-detail') {
       setViewingItem(null);
       if (fromDrafts) {
@@ -1814,6 +1825,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } else if (screen === 'drafts') {
       setScreen('my-wishlists');
     } else if (screen === 'wishlist-detail' || screen === 'guest-view') {
+      if (itemReorderMode) cancelItemReorderMode();
       setCurrentWl(null);
       setScreen('my-wishlists');
       if (screen === 'guest-view') {
@@ -1826,7 +1838,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } else if (screen === 'share' || screen === 'archive') {
       setScreen('wishlist-detail');
     }
-  }, [screen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab]);
+  }, [screen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -2146,6 +2158,91 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     reorderPointerIdx.current = null;
     setReorderDragIdx(null);
     setReorderDragOverIdx(null);
+  };
+
+  // ── Item reorder handlers ──────────────────────────────────────────────────
+  const enterItemReorderMode = () => {
+    setItemReorderList([...items]);
+    setItemReorderDragIdx(null);
+    setItemReorderMode(true);
+  };
+
+  const cancelItemReorderMode = () => {
+    setItemReorderMode(false);
+    setItemReorderList([]);
+    setItemReorderDragIdx(null);
+  };
+
+  const handleSaveItemReorder = async () => {
+    if (itemReorderSaving || !currentWl) return;
+    setItemReorderSaving(true);
+    try {
+      const prioMap: Record<number, 'LOW' | 'MEDIUM' | 'HIGH'> = { 3: 'HIGH', 2: 'MEDIUM', 1: 'LOW' };
+      const groups = ([3, 2, 1] as const)
+        .map(prioNum => {
+          const orderedIds = itemReorderList
+            .filter(it => it.priority === prioNum)
+            .map(it => it.id);
+          return orderedIds.length > 0 ? { priority: prioMap[prioNum]!, orderedIds } : null;
+        })
+        .filter((g): g is NonNullable<typeof g> => g !== null);
+
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}/items/reorder`, {
+        method: 'POST',
+        body: JSON.stringify({ groups }),
+      });
+      if (!res.ok) { pushToast(t('wl_reorder_error', locale), 'error'); return; }
+      setItems([...itemReorderList]);
+      setItemReorderMode(false);
+      setItemReorderList([]);
+      pushToast(t('wl_reorder_saved', locale), 'success');
+    } finally {
+      setItemReorderSaving(false);
+    }
+  };
+
+  const itemReorderPointerStartY = useRef<number>(0);
+  const itemReorderPointerIdx = useRef<number | null>(null);
+
+  const handleItemReorderPointerDown = (e: React.PointerEvent, idx: number) => {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    itemReorderPointerStartY.current = e.clientY;
+    itemReorderPointerIdx.current = idx;
+    setItemReorderDragIdx(idx);
+  };
+
+  const handleItemReorderPointerMove = (e: React.PointerEvent, idx: number) => {
+    if (itemReorderPointerIdx.current === null || itemReorderPointerIdx.current !== idx) return;
+    const deltaY = e.clientY - itemReorderPointerStartY.current;
+    const cardHeight = 72;
+    const steps = Math.round(deltaY / cardHeight);
+    const draggedItem = itemReorderList[idx];
+    if (!draggedItem) return;
+
+    // Only allow dragging within same priority group
+    const samePrioIndices = itemReorderList
+      .map((it, i) => it.priority === draggedItem.priority ? i : -1)
+      .filter(i => i >= 0);
+    const minIdx = samePrioIndices[0] ?? 0;
+    const maxIdx = samePrioIndices[samePrioIndices.length - 1] ?? itemReorderList.length - 1;
+    const newIdx = Math.max(minIdx, Math.min(maxIdx, idx + steps));
+
+    if (newIdx !== idx) {
+      setItemReorderList(prev => {
+        const next = [...prev];
+        const [item] = next.splice(idx, 1);
+        next.splice(newIdx, 0, item!);
+        itemReorderPointerIdx.current = newIdx;
+        itemReorderPointerStartY.current = e.clientY;
+        return next;
+      });
+      setItemReorderDragIdx(newIdx);
+    }
+  };
+
+  const handleItemReorderPointerUp = () => {
+    itemReorderPointerIdx.current = null;
+    setItemReorderDragIdx(null);
   };
 
   const handleRenameWishlist = async () => {
@@ -2779,6 +2876,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
+            {/* ── Reorder trigger button (only in normal mode, 2+ wishlists) ── */}
+            {!reorderMode && wishlists.length >= 2 && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: -4, marginTop: -4 }}>
+                <button
+                  onClick={enterReorderMode}
+                  style={{
+                    background: 'none', border: 'none', padding: '4px 0 4px 12px', cursor: 'pointer',
+                    fontSize: 13, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 4,
+                    fontFamily: font,
+                  }}
+                >
+                  <span>↕</span>
+                  <span>{t('wl_reorder_start', locale)}</span>
+                </button>
+              </div>
+            )}
+
             {/* ── Reorder mode ── */}
             {reorderMode && (
               <>
@@ -3362,13 +3476,85 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div style={{ textAlign: 'center', padding: 40, color: C.textMuted }}>{t('loading', locale)}</div>
             )}
 
-            {items.map((item, i) => (
+            {/* ── Item reorder mode ── */}
+            {itemReorderMode && (
+              <>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                  <button
+                    style={{ ...btnPrimary, flex: 1, opacity: itemReorderSaving ? 0.6 : 1 }}
+                    onClick={() => void handleSaveItemReorder()}
+                    disabled={itemReorderSaving}
+                  >
+                    {itemReorderSaving ? '…' : t('wl_reorder_save', locale)}
+                  </button>
+                  <button style={{ ...btnGhost, flex: 1 }} onClick={cancelItemReorderMode}>
+                    {t('wl_reorder_cancel', locale)}
+                  </button>
+                </div>
+                <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', marginBottom: 8, lineHeight: 1.4 }}>
+                  {t('item_reorder_hint', locale)}
+                </div>
+                {([3, 2, 1] as const).map(prioNum => {
+                  const groupItems = itemReorderList.filter(it => it.priority === prioNum);
+                  if (groupItems.length === 0) return null;
+                  const prioLabel = getPriorities(locale).find(p => p.value === prioNum)?.label ?? '';
+                  const prioIcon = prioNum === 3 ? '🔴' : prioNum === 2 ? '🟡' : '🟢';
+                  return (
+                    <div key={prioNum}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, letterSpacing: 0.5, marginBottom: 6, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span>{prioIcon}</span><span style={{ textTransform: 'uppercase' }}>{prioLabel}</span>
+                      </div>
+                      {groupItems.map(item => {
+                        const globalIdx = itemReorderList.findIndex(it => it.id === item.id);
+                        const isDragging = itemReorderDragIdx === globalIdx;
+                        return (
+                          <div
+                            key={item.id}
+                            style={{
+                              background: isDragging ? C.accent + '22' : C.card,
+                              borderRadius: 14, padding: '12px 14px', marginBottom: 8,
+                              border: `1px solid ${isDragging ? C.accent : C.border}`,
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              transition: 'background 0.12s, border-color 0.12s',
+                              userSelect: 'none', touchAction: 'none',
+                            }}
+                          >
+                            <div
+                              onPointerDown={(e) => handleItemReorderPointerDown(e, globalIdx)}
+                              onPointerMove={(e) => handleItemReorderPointerMove(e, globalIdx)}
+                              onPointerUp={handleItemReorderPointerUp}
+                              onPointerCancel={handleItemReorderPointerUp}
+                              style={{ fontSize: 20, color: C.textMuted, cursor: 'grab', padding: '4px 6px 4px 0', lineHeight: 1, flexShrink: 0, touchAction: 'none' }}
+                            >
+                              ⠿
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {item.title}
+                              </div>
+                              {item.price != null && (
+                                <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                                  {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {/* ── Normal mode items ── */}
+            {!itemReorderMode && items.map((item, i) => (
               <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
                 <WishCardOwner item={item} onTap={(it) => { setViewingItem(it); setScreen('item-detail'); }} onDelete={setDeletingItem} onComplete={handleCompleteItem} locale={locale} />
               </div>
             ))}
 
-            {!loading && items.length === 0 && (
+            {!itemReorderMode && !loading && items.length === 0 && (
               <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>✨</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('add_first_wish', locale)}</div>
@@ -3376,7 +3562,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            {!currentWl.readOnly && (
+            {!itemReorderMode && !currentWl.readOnly && (
               <button style={btnSecondary} onClick={() => { resetItemForm(); setShowItemForm(true); }}>{t('add_wish_btn', locale)}</button>
             )}
           </div>
@@ -4718,13 +4904,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <span style={{ fontSize: 20 }}>✏️</span>
             {t('wl_edit', locale)}
           </button>
-          {/* Reorder wishlists */}
+          {/* Reorder wishes (items) */}
           <button
             onClick={() => {
               setShowWlManage(false);
-              setScreen('my-wishlists');
-              setHomeTab('wishlists');
-              setTimeout(() => enterReorderMode(), 50);
+              enterItemReorderMode();
             }}
             style={{
               background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
@@ -4733,7 +4917,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }}
           >
             <span style={{ fontSize: 20 }}>↕️</span>
-            <span>{t('wl_reorder_start', locale)}</span>
+            <span>{t('wl_reorder', locale)}</span>
           </button>
           {/* Archive wishlist */}
           <button
