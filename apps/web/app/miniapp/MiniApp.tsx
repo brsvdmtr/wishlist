@@ -89,6 +89,17 @@ const fmtPrice = (p: number | null, locale: Locale = 'ru', currency: 'RUB' | 'US
   return currency === 'USD' ? `$${formatted}` : `${formatted} ₽`;
 };
 
+/** Strip everything except digits from a user-facing price string. Returns raw digit string. */
+const parsePriceFromDisplay = (value: string): string => value.replace(/\D/g, '');
+
+/** Format a raw number/string as a thousands-separated display value (space as separator). */
+const formatPriceForDisplay = (value: number | string | null | undefined): string => {
+  if (value === null || value === undefined || value === '') return '';
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+};
+
 function formatRetryAfter(seconds: number, locale: Locale): string {
   if (seconds <= 0) return t('retry_now', locale);
   let hours = Math.floor(seconds / 3600);
@@ -982,7 +993,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [itemTitle, setItemTitle] = useState('');
   const [itemDescription, setItemDescription] = useState('');
   const [itemUrl, setItemUrl] = useState('');
-  const [itemPrice, setItemPrice] = useState('');
+  const [itemPrice, setItemPrice] = useState(''); // raw digits only, e.g. "5000000"
+  const priceInputRef = useRef<HTMLInputElement>(null);
   const [itemPriority, setItemPriority] = useState<1 | 2 | 3>(2);
   const [itemCurrency, setItemCurrency] = useState<'RUB' | 'USD'>('RUB');
   const [defaultCurrency, setDefaultCurrency] = useState<'RUB' | 'USD'>('RUB');
@@ -5899,7 +5911,44 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </button>
                 ))}
               </div>
-              <input style={{ ...inputStyle, flex: 1 }} placeholder={itemCurrency === 'USD' ? '$0' : '0 ₽'} type="number" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} />
+              <input
+                ref={priceInputRef}
+                style={{ ...inputStyle, flex: 1 }}
+                placeholder={itemCurrency === 'USD' ? '$0' : '0 ₽'}
+                type="text"
+                inputMode="numeric"
+                value={formatPriceForDisplay(itemPrice)}
+                onChange={(e) => {
+                  // Capture cursor position and displayed value synchronously
+                  const cursorPos = e.target.selectionStart ?? e.target.value.length;
+                  const displayedValue = e.target.value;
+                  // Strip all non-digits → raw state
+                  const raw = parsePriceFromDisplay(displayedValue);
+                  // Count how many digits were before the cursor in the user's edited string
+                  const digitsBeforeCursor = parsePriceFromDisplay(displayedValue.slice(0, cursorPos)).length;
+                  setItemPrice(raw);
+                  // After React re-renders with the newly formatted value, restore cursor position
+                  requestAnimationFrame(() => {
+                    const input = priceInputRef.current;
+                    if (!input) return;
+                    const newFormatted = formatPriceForDisplay(raw);
+                    let digitsSeen = 0;
+                    let newPos = newFormatted.length; // default: end
+                    if (digitsBeforeCursor === 0) {
+                      newPos = 0;
+                    } else {
+                      for (let i = 0; i < newFormatted.length; i++) {
+                        if (/\d/.test(newFormatted[i]!)) {
+                          digitsSeen++;
+                          if (digitsSeen === digitsBeforeCursor) { newPos = i + 1; break; }
+                        }
+                      }
+                    }
+                    input.selectionStart = newPos;
+                    input.selectionEnd = newPos;
+                  });
+                }}
+              />
             </div>
           </div>
           <div>
