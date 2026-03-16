@@ -569,6 +569,20 @@ const ru: Dict = {
   subscribe_approved: 'Только одобренным',
   subscribe_nobody: 'Никому',
 
+  // ── Profile privacy settings UI ─────────────────────────────────────────
+  privacy_value_all: 'Все',
+  privacy_value_nobody: 'Никто',
+  privacy_subs_nobody_new: 'Никто новый',
+  privacy_subs_existing_kept: 'Текущие подписчики сохраняются',
+  privacy_comments_anyone: 'Все, у кого есть доступ',
+  privacy_comments_subs_only: 'Только подписчики',
+  privacy_profile_sheet_title: 'Видимость профиля',
+  privacy_subs_sheet_title: 'Новые подписки',
+  privacy_profile_closed_hint: 'Прямые ссылки на вишлисты остаются рабочими',
+  subs_closed_toast: 'Автор временно закрыл новые подписки',
+  comments_restricted_toast: 'Автор ограничил возможность комментирования',
+  hints_disabled_toast: 'Намёки отключены',
+
   // ── Currency ────────────────────────────────────────────────────────────
   currency_rub: '₽ RUB',
   currency_usd: '$ USD',
@@ -1209,6 +1223,21 @@ const en: Dict = {
   subscribe_link_only: 'Link only',
   subscribe_approved: 'Approved only',
   subscribe_nobody: 'Nobody',
+
+  // ── Profile privacy settings UI ─────────────────────────────────────────
+  privacy_value_all: 'Everyone',
+  privacy_value_nobody: 'Nobody',
+  privacy_subs_nobody_new: 'No new',
+  privacy_subs_existing_kept: 'Existing subscribers keep access',
+  privacy_comments_anyone: 'Anyone with access',
+  privacy_comments_subs_only: 'Subscribers only',
+  privacy_profile_sheet_title: 'Profile visibility',
+  privacy_subs_sheet_title: 'New subscriptions',
+  privacy_profile_closed_hint: 'Direct wishlist links still work',
+  subs_closed_toast: 'Author has temporarily closed new subscriptions',
+  comments_restricted_toast: 'Author has restricted commenting',
+  hints_disabled_toast: 'Hints are disabled',
+
 
   // ── Currency ────────────────────────────────────────────────────────────
   currency_rub: '₽ RUB',

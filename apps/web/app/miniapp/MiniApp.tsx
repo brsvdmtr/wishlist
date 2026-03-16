@@ -936,6 +936,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   } | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [showProfileVisibilitySheet, setShowProfileVisibilitySheet] = useState(false);
+  const [showSubscribePolicySheet, setShowSubscribePolicySheet] = useState(false);
+  const [showCommentsDefaultSheet, setShowCommentsDefaultSheet] = useState(false);
 
   // Archive state
   const [archiveItems, setArchiveItems] = useState<Item[]>([]);
@@ -1307,6 +1310,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         showUpsell('subscription_limit', { auto: true });
         return;
       }
+      if (res.status === 403) {
+        const json = await res.json().catch(() => ({})) as { error?: string };
+        if (json.error === 'subscriptions_closed') {
+          pushToast(t('subs_closed_toast', locale), 'error');
+          return;
+        }
+      }
       if (!res.ok) return;
       const json = await res.json() as { subscription: { id: string; wishlistId: string } };
       setGuestSubId(json.subscription.id);
@@ -1573,6 +1583,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           return;
         }
         const json = await res.json().catch(() => ({})) as { error?: string };
+        if (res.status === 403 && json.error === 'comments_restricted') {
+          pushToast(t('comments_restricted_toast', locale), 'error');
+          return;
+        }
         pushToast(json.error || t('comments_send_error', locale), 'error');
         return;
       }
@@ -1603,6 +1617,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const res = await tgFetch(`/tg/items/${item.id}/hint`, { method: 'POST' });
       if (!res.ok) {
         if (res.status === 402) { showUpsell('hints'); return; }
+        if (res.status === 403) {
+          const json = await res.json().catch(() => ({})) as { error?: string };
+          if (json.error === 'hints_disabled') { pushToast(t('hints_disabled_toast', locale), 'error'); return; }
+        }
         const json = await res.json().catch(() => ({})) as {
           error?: string;
           message?: string;
@@ -4931,11 +4949,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
         );
 
-        const SettingsRow = ({ label, value, hint }: { label: string; value: string; hint?: string }) => (
-          <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
+        const SettingsRow = ({ label, value, hint, onClick, proBadge }: { label: string; value: string; hint?: string; onClick?: () => void; proBadge?: boolean }) => (
+          <div onClick={onClick} style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}`, cursor: onClick ? 'pointer' : 'default' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, color: C.text }}>{label}</span>
-              <span style={{ fontSize: 14, color: C.textMuted }}>{value}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 14, color: C.text }}>{label}</span>
+                {proBadge && <ProBadge />}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 14, color: C.textMuted }}>{value}</span>
+                {onClick && <span style={{ fontSize: 18, color: C.textMuted, lineHeight: 1 }}>›</span>}
+              </div>
             </div>
             {hint && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{hint}</div>}
           </div>
@@ -5045,14 +5069,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
               {/* Privacy */}
               <SettingsSection title={t('settings_privacy_title', locale)}>
-                <SettingsRow label={t('settings_profile_visibility', locale)} value={settingsData.privacy.profileVisibility === 'all' ? t('visibility_all', locale) : settingsData.privacy.profileVisibility === 'link_only' ? t('visibility_link_only', locale) : settingsData.privacy.profileVisibility} />
-                <SettingsRow label={t('settings_subscribe_policy', locale)} value={settingsData.privacy.subscribePolicy === 'all' ? t('subscribe_all', locale) : settingsData.privacy.subscribePolicy === 'link_only' ? t('subscribe_link_only', locale) : settingsData.privacy.subscribePolicy} />
-                <SettingsToggle
+                <SettingsRow
+                  label={t('settings_profile_visibility', locale)}
+                  value={settingsData.privacy.profileVisibility === 'ALL' ? t('privacy_value_all', locale) : settingsData.privacy.profileVisibility === 'NOBODY' ? t('privacy_value_nobody', locale) : settingsData.privacy.profileVisibility === 'LINK_ONLY' ? t('visibility_link_only', locale) : settingsData.privacy.profileVisibility}
+                  onClick={() => setShowProfileVisibilitySheet(true)}
+                />
+                <SettingsRow
+                  label={t('settings_subscribe_policy', locale)}
+                  value={settingsData.privacy.subscribePolicy === 'ALL' ? t('privacy_value_all', locale) : settingsData.privacy.subscribePolicy === 'NOBODY' ? t('privacy_subs_nobody_new', locale) : settingsData.privacy.subscribePolicy === 'LINK_ONLY' ? t('subscribe_link_only', locale) : settingsData.privacy.subscribePolicy}
+                  onClick={() => setShowSubscribePolicySheet(true)}
+                />
+                <SettingsRow
                   label={t('settings_allow_comments', locale)}
-                  value={settingsData.privacy.commentsEnabled}
-                  disabled={!settingsData.isPro}
+                  value={settingsData.privacy.commentsEnabled ? t('privacy_comments_anyone', locale) : t('privacy_comments_subs_only', locale)}
                   proBadge={!settingsData.isPro}
-                  onChange={(v) => settingsData.isPro ? patchSettings({ privacy: { ...settingsData.privacy, commentsEnabled: v } }) : showUpsell('comments')}
+                  onClick={settingsData.isPro ? () => setShowCommentsDefaultSheet(true) : () => showUpsell('comments')}
                 />
                 <SettingsToggle
                   label={t('settings_allow_hints', locale)}
@@ -5106,6 +5137,110 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       })()}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
+
+      {/* ── Profile visibility sheet ── */}
+      <BottomSheet isOpen={showProfileVisibilitySheet} onClose={() => setShowProfileVisibilitySheet(false)} title={t('privacy_profile_sheet_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(['ALL', 'NOBODY'] as const).map((opt) => {
+            const isSelected = settingsData?.privacy.profileVisibility === opt;
+            return (
+              <button
+                key={opt}
+                onClick={() => {
+                  void patchSettings({ privacy: { ...settingsData!.privacy, profileVisibility: opt } });
+                  setShowProfileVisibilitySheet(false);
+                }}
+                style={{
+                  background: isSelected ? C.accentSoft : C.surface,
+                  border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
+                  borderRadius: 14, padding: '14px 18px', textAlign: 'left',
+                  cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: isSelected ? 600 : 400 }}>
+                    {opt === 'ALL' ? t('privacy_value_all', locale) : t('privacy_value_nobody', locale)}
+                  </div>
+                  {opt === 'NOBODY' && (
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                      {t('privacy_profile_closed_hint', locale)}
+                    </div>
+                  )}
+                </div>
+                {isSelected && <span style={{ color: C.accent, fontSize: 18 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      </BottomSheet>
+
+      {/* ── Subscribe policy sheet ── */}
+      <BottomSheet isOpen={showSubscribePolicySheet} onClose={() => setShowSubscribePolicySheet(false)} title={t('privacy_subs_sheet_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(['ALL', 'NOBODY'] as const).map((opt) => {
+            const isSelected = settingsData?.privacy.subscribePolicy === opt;
+            return (
+              <button
+                key={opt}
+                onClick={() => {
+                  void patchSettings({ privacy: { ...settingsData!.privacy, subscribePolicy: opt } });
+                  setShowSubscribePolicySheet(false);
+                }}
+                style={{
+                  background: isSelected ? C.accentSoft : C.surface,
+                  border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
+                  borderRadius: 14, padding: '14px 18px', textAlign: 'left',
+                  cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: isSelected ? 600 : 400 }}>
+                    {opt === 'ALL' ? t('privacy_value_all', locale) : t('privacy_subs_nobody_new', locale)}
+                  </div>
+                  {opt === 'NOBODY' && (
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                      {t('privacy_subs_existing_kept', locale)}
+                    </div>
+                  )}
+                </div>
+                {isSelected && <span style={{ color: C.accent, fontSize: 18 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      </BottomSheet>
+
+      {/* ── Comments default policy sheet ── */}
+      <BottomSheet isOpen={showCommentsDefaultSheet} onClose={() => setShowCommentsDefaultSheet(false)} title={t('settings_allow_comments', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {([true, false] as const).map((opt) => {
+            const isSelected = settingsData?.privacy.commentsEnabled === opt;
+            return (
+              <button
+                key={String(opt)}
+                onClick={() => {
+                  void patchSettings({ privacy: { ...settingsData!.privacy, commentsEnabled: opt } });
+                  setShowCommentsDefaultSheet(false);
+                }}
+                style={{
+                  background: isSelected ? C.accentSoft : C.surface,
+                  border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
+                  borderRadius: 14, padding: '14px 18px', textAlign: 'left',
+                  cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}
+              >
+                <span style={{ fontWeight: isSelected ? 600 : 400 }}>
+                  {opt ? t('privacy_comments_anyone', locale) : t('privacy_comments_subs_only', locale)}
+                </span>
+                {isSelected && <span style={{ color: C.accent, fontSize: 18 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      </BottomSheet>
 
       {/* ── Wishlist management sheet ── */}
       <BottomSheet isOpen={showWlManage} onClose={() => setShowWlManage(false)} title={t('wl_manage_title', locale)}>

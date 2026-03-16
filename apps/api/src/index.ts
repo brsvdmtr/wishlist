@@ -1661,8 +1661,8 @@ tgRouter.post(
       return res.status(402).json({ error: 'Plan limit reached', limit: ent.plan.wishlists, planCode: ent.plan.code });
     }
 
-    // Determine insert position based on user's newWishlistPosition setting
-    const profile = await prisma.userProfile.findUnique({ where: { userId: user.id }, select: { newWishlistPosition: true } });
+    // Determine insert position + inherit privacy defaults from profile
+    const profile = await prisma.userProfile.findUnique({ where: { userId: user.id }, select: { newWishlistPosition: true, commentsEnabled: true } });
     const addToTop = !profile || profile.newWishlistPosition === 'top';
 
     let newPosition: number;
@@ -1683,6 +1683,8 @@ tgRouter.post(
     }
 
     const slug = await generateUniqueSlug(parsed.data.title);
+    // Inherit commentPolicy from profile default: commentsEnabled=false → SUBSCRIBERS, else ALL
+    const inheritedCommentPolicy = profile?.commentsEnabled === false ? 'SUBSCRIBERS' : 'ALL';
     const wishlist = await prisma.wishlist.create({
       data: {
         slug,
@@ -1690,6 +1692,7 @@ tgRouter.post(
         title: parsed.data.title,
         deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null,
         position: newPosition,
+        commentPolicy: inheritedCommentPolicy,
       },
       select: { id: true, slug: true, title: true, description: true, deadline: true },
     });
@@ -1924,10 +1927,24 @@ tgRouter.post(
     const user = await getOrCreateTgUser(req.tgUser!);
     const wishlist = await prisma.wishlist.findUnique({
       where: { id: wishlistId },
-      select: { ownerId: true, title: true, shareToken: true, archivedAt: true },
+      select: { ownerId: true, title: true, shareToken: true, archivedAt: true, allowSubscriptions: true },
     });
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
     if (wishlist.ownerId === user.id) return res.status(400).json({ error: 'Cannot subscribe to your own wishlist' });
+
+    // Check wishlist-level allowSubscriptions override
+    if (wishlist.allowSubscriptions === 'NOBODY') {
+      return res.status(403).json({ error: 'subscriptions_closed' });
+    }
+
+    // Check owner's global subscribePolicy
+    const ownerProfile = await prisma.userProfile.findUnique({
+      where: { userId: wishlist.ownerId },
+      select: { subscribePolicy: true },
+    });
+    if (ownerProfile?.subscribePolicy === 'NOBODY') {
+      return res.status(403).json({ error: 'subscriptions_closed' });
+    }
 
     // Check plan limit
     const ent = await getUserEntitlement(user.id);
@@ -2726,6 +2743,23 @@ tgRouter.post(
       return res.status(402).json({ error: 'Pro feature', feature: 'comments', planCode: commenterEnt.plan.code });
     }
 
+    // Check wishlist commentPolicy (subscribers-only restriction)
+    if (ctx.role !== 'owner') {
+      const itemWishlist = await prisma.item.findUnique({
+        where: { id },
+        select: { wishlist: { select: { id: true, commentPolicy: true } } },
+      });
+      if (itemWishlist?.wishlist.commentPolicy === 'SUBSCRIBERS') {
+        const isSub = await prisma.wishlistSubscription.findFirst({
+          where: { wishlistId: itemWishlist.wishlist.id, subscriberId: ctx.user.id },
+          select: { id: true },
+        });
+        if (!isSub) {
+          return res.status(403).json({ error: 'comments_restricted' });
+        }
+      }
+    }
+
     // Reject archived items
     if (ctx.item.status === 'COMPLETED' || ctx.item.status === 'DELETED') {
       const locale = getRequestLocale(req);
@@ -2918,6 +2952,15 @@ tgRouter.post(
     });
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // 2b. Check owner's hintsEnabled setting
+    const ownerProfile = await prisma.userProfile.findUnique({
+      where: { userId: user.id },
+      select: { hintsEnabled: true },
+    });
+    if (ownerProfile?.hintsEnabled === false) {
+      return res.status(403).json({ error: 'hints_disabled' });
+    }
 
     // 3. Item must be AVAILABLE (not reserved/completed/deleted)
     if (item.status !== 'AVAILABLE') {
