@@ -3393,10 +3393,13 @@ tgRouter.get(
     // Stats
     const [wishlists, totalWishes, reservedByMe, archived] = await Promise.all([
       prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR', archivedAt: null } }),
+      // Same formula as /tg/wishlists → itemCount:
+      // only active (non-archived) REGULAR wishlists, only ACTIVE_STATUSES items.
+      // SYSTEM_DRAFTS and archived wishlists are excluded to keep both counters in sync.
       prisma.item.count({
         where: {
-          wishlist: { ownerId: user.id },
-          status: { in: ['AVAILABLE', 'RESERVED'] },
+          wishlist: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
+          status: { in: [...ACTIVE_STATUSES] },
         },
       }),
       prisma.item.count({
