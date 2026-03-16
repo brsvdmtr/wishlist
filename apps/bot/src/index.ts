@@ -21,6 +21,35 @@ for (const p of envCandidates) {
 const token = process.env.BOT_TOKEN;
 const MINI_APP_URL = process.env.MINI_APP_URL ?? 'https://example.com/miniapp';
 
+/** Send alert to all ADMIN_ALERT_CHAT_IDS. Best-effort, never throws. */
+async function sendAdminAlert(text: string): Promise<void> {
+  if (!token) return;
+  const chatIds = (process.env.ADMIN_ALERT_CHAT_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (chatIds.length === 0) return;
+  await Promise.allSettled(
+    chatIds.map((chatId) =>
+      fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+      }),
+    ),
+  );
+}
+
+/** Update bot heartbeat in DB (best-effort). */
+async function updateHeartbeat(): Promise<void> {
+  try {
+    await prisma.serviceHeartbeat.upsert({
+      where: { serviceName: 'bot' },
+      update: { updatedAt: new Date() },
+      create: { serviceName: 'bot', updatedAt: new Date() },
+    });
+  } catch {
+    // best-effort
+  }
+}
+
 if (!token) {
   // eslint-disable-next-line no-console
   console.warn('[bot] BOT_TOKEN is missing. Bot is disabled (see apps/bot/.env.example).');
@@ -545,12 +574,31 @@ if (!token) {
     .then(() => {
       // eslint-disable-next-line no-console
       console.log('[bot] started');
+      // Startup alert + initial heartbeat
+      void sendAdminAlert(`🟢 <b>Bot started</b>\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
+      void updateHeartbeat();
     })
     .catch((err: unknown) => {
       // eslint-disable-next-line no-console
       console.error('[bot] failed to start', err);
       process.exitCode = 1;
     });
+
+  // Heartbeat: update every 60 s so /health/deep can detect bot absence
+  setInterval(() => void updateHeartbeat(), 60_000);
+
+  // Uncaught exception / rejection alerts
+  process.on('uncaughtException', (err) => {
+    // eslint-disable-next-line no-console
+    console.error('[bot] uncaughtException:', err);
+    void sendAdminAlert(`🔴 <b>Bot uncaughtException</b>\n${String(err)}`).finally(() => process.exit(1));
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    // eslint-disable-next-line no-console
+    console.error('[bot] unhandledRejection:', reason);
+    void sendAdminAlert(`🔴 <b>Bot unhandledRejection</b>\n${String(reason)}`);
+  });
 
   process.once('SIGINT', () => bot.stop('SIGINT'));
   process.once('SIGTERM', () => bot.stop('SIGTERM'));

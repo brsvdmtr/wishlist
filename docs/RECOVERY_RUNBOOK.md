@@ -89,6 +89,10 @@ EOF
 
 ### 2.3 Configure Nginx
 ```bash
+# Copy maintenance page
+mkdir -p /opt/wishlist/ops/maintenance
+cp /opt/wishlist/ops/maintenance/maintenance.html /opt/wishlist/ops/maintenance/
+
 cat > /etc/nginx/sites-enabled/wishlistik.ru << 'EOF'
 server {
   listen 80;
@@ -103,6 +107,13 @@ server {
   ssl_certificate     /etc/letsencrypt/live/wishlistik.ru/fullchain.pem;
   ssl_certificate_key /etc/letsencrypt/live/wishlistik.ru/privkey.pem;
 
+  # Maintenance page (auto-fallback on upstream 502/503/504)
+  error_page 502 503 504 /maintenance.html;
+  location = /maintenance.html {
+    root /opt/wishlist/ops/maintenance;
+    internal;
+  }
+
   location /api/ {
     client_max_body_size 30m;
     proxy_pass http://127.0.0.1:3001/;
@@ -111,6 +122,7 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_intercept_errors on;
   }
 
   location / {
@@ -122,6 +134,7 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
+    proxy_intercept_errors on;
   }
 }
 EOF
@@ -272,10 +285,14 @@ Users will need to re-upload photos.
 
 ## Phase 6: Smoke Tests (5 min)
 
-### 6.1 API Health
+### 6.1 API Health (shallow + deep)
 ```bash
 curl -s https://wishlistik.ru/api/health
 # Expected: {"ok":true}
+
+curl -s https://wishlistik.ru/api/health/deep
+# Expected: {"ok":true,"checks":{"db":"ok","bot":{"ok":true,"ageSec":<N>},"version":"..."}}
+# Note: bot.ok may be false if bot hasn't sent its first heartbeat yet (wait ~60 s)
 ```
 
 ### 6.2 Web App
@@ -515,9 +532,14 @@ docker compose -f docker-compose.prod.yml exec bot \
 
 ```bash
 # === STATUS ===
-docker compose -f docker-compose.prod.yml ps          # Service status
-curl -s https://wishlistik.ru/api/health               # API health
+docker compose -f docker-compose.prod.yml ps             # Service status
+curl -s https://wishlistik.ru/api/health                 # Shallow health
+curl -s https://wishlistik.ru/api/health/deep | jq .     # Deep health (db + bot heartbeat)
 echo | openssl s_client -servername wishlistik.ru -connect wishlistik.ru:443 2>/dev/null | openssl x509 -noout -enddate  # SSL expiry
+
+# === MAINTENANCE MODE ===
+# Enable:  edit /opt/wishlist/.env → MAINTENANCE_MODE=true → docker compose ... up -d api bot
+# Disable: edit /opt/wishlist/.env → MAINTENANCE_MODE=false → docker compose ... up -d api bot
 
 # === LOGS ===
 docker compose -f docker-compose.prod.yml logs --tail 50 api    # API logs

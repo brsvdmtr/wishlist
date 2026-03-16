@@ -121,6 +121,45 @@ app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '30d', immutable: true 
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// ─── Deep health check ────────────────────────────────────────────────────────
+app.get('/health/deep', asyncHandler(async (_req, res) => {
+  const checks: Record<string, unknown> = {};
+  let ok = true;
+
+  // DB check
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    checks.db = 'ok';
+  } catch (err) {
+    checks.db = { error: String(err) };
+    ok = false;
+  }
+
+  // Bot heartbeat check (stale if > 120 s)
+  try {
+    const hb = await prisma.serviceHeartbeat.findUnique({ where: { serviceName: 'bot' } });
+    if (!hb) {
+      checks.bot = 'no_heartbeat';
+      ok = false;
+    } else {
+      const ageSec = (Date.now() - hb.updatedAt.getTime()) / 1000;
+      if (ageSec > 120) {
+        checks.bot = { stale: true, ageSec: Math.round(ageSec) };
+        ok = false;
+      } else {
+        checks.bot = { ok: true, ageSec: Math.round(ageSec) };
+      }
+    }
+  } catch (err) {
+    checks.bot = { error: String(err) };
+    ok = false;
+  }
+
+  checks.version = process.env.npm_package_version ?? 'unknown';
+
+  return res.status(ok ? 200 : 503).json({ ok, checks });
+}));
+
 const publicRouter = express.Router();
 const privateRouter = express.Router();
 const tgRouter = express.Router();
@@ -238,6 +277,22 @@ async function sendTgBotMessage(chatId: string, text: string, replyMarkup?: Reco
   }
 }
 
+
+/** Send alert to all ADMIN_ALERT_CHAT_IDS. Best-effort, never throws. */
+async function sendAdminAlert(text: string): Promise<void> {
+  const token = process.env.BOT_TOKEN;
+  const chatIds = (process.env.ADMIN_ALERT_CHAT_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (!token || chatIds.length === 0) return;
+  await Promise.allSettled(
+    chatIds.map((chatId) =>
+      fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+      }),
+    ),
+  );
+}
 
 // Notification batching (30s debounce per item+recipient)
 const pendingNotifications = new Map<string, { chatId: string; itemTitle: string; count: number; timer: ReturnType<typeof setTimeout> }>();
@@ -3442,6 +3497,16 @@ internalRouter.post(
   }),
 );
 
+// ─── Maintenance mode middleware ──────────────────────────────────────────────
+// When MAINTENANCE_MODE=true, block /tg/* and /public/* with 503 + code=MAINTENANCE.
+// /health, /health/deep, /uploads, /internal remain accessible.
+app.use(['/tg', '/public'], (req: Request, res: Response, next: NextFunction) => {
+  if ((process.env.MAINTENANCE_MODE ?? '').toLowerCase() === 'true') {
+    return res.status(503).json({ error: 'Service temporarily unavailable', code: 'MAINTENANCE' });
+  }
+  return next();
+});
+
 // ─── Mount routers ───────────────────────────────────────────────────────────
 
 app.use('/public', publicRouter);
@@ -3564,4 +3629,19 @@ setInterval(async () => {
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`[api] listening on http://localhost:${PORT}`);
+  // Send startup alert to admins (best-effort)
+  void sendAdminAlert(`🟢 <b>API started</b>\nPort: ${PORT}\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
+});
+
+// ─── Uncaught exception / rejection alerts ────────────────────────────────────
+process.on('uncaughtException', (err) => {
+  // eslint-disable-next-line no-console
+  console.error('[api] uncaughtException:', err);
+  void sendAdminAlert(`🔴 <b>API uncaughtException</b>\n${String(err)}`).finally(() => process.exit(1));
+});
+
+process.on('unhandledRejection', (reason) => {
+  // eslint-disable-next-line no-console
+  console.error('[api] unhandledRejection:', reason);
+  void sendAdminAlert(`🔴 <b>API unhandledRejection</b>\n${String(reason)}`);
 });

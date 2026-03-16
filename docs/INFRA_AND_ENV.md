@@ -132,6 +132,11 @@ server {
 | UPLOAD_DIR | api | /data/uploads (Docker), ./uploads (local) | Upload directory |
 | NEXT_PUBLIC_MINIAPP_SHORT_NAME | web | (empty) | NEEDS VERIFICATION |
 | INTERNAL_API_BASE_URL | web | http://api:3001 | SSR API URL |
+| MAINTENANCE_MODE | api, bot | false | Set to `true` to block all /tg/* and /public/* with 503+MAINTENANCE code |
+| ADMIN_ALERT_CHAT_IDS | api, bot | (empty) | Comma-separated Telegram chat IDs for startup/crash alerts |
+| WATCHDOG_BASE_URL | watchdog | (required) | Base URL to check, e.g. `https://wishlistik.ru` |
+| WATCHDOG_STATE_FILE | watchdog | /tmp/watchdog-state.json | State file for deduplicating alerts |
+| WATCHDOG_TIMEOUT_MS | watchdog | 8000 | HTTP timeout for watchdog checks |
 
 ### .env.example (root) `VERIFIED_FROM_CONFIG`
 Full template with all variables and comments available in `.env.example` (root of repo).
@@ -270,13 +275,80 @@ docker compose -f docker-compose.prod.yml exec postgres psql -U wishlist -d wish
 | Job | Location | Interval | Purpose |
 |-----|----------|----------|---------|
 | Comment TTL cleanup | api/src/index.ts | Every 1 hour | Delete expired comments |
-
-**No cron jobs, no workers, no message queues.**
+| Subscription expiry | api/src/index.ts | Every 1 hour | Mark overdue subscriptions as EXPIRED |
+| Hint expiry | api/src/index.ts | Every 1 hour | Mark overdue hints as EXPIRED |
+| Bot heartbeat | bot/src/index.ts | Every 60 s | Write `ServiceHeartbeat` record so /health/deep can detect bot absence |
 
 ---
 
 ## Monitoring
 
-**Current state**: NONE. No health check monitoring, no error tracking, no performance monitoring.
+### Health Endpoints
 
-**GAP**: No alerting if services go down. Only manual `docker logs` inspection.
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/health` | Shallow: returns `{ok:true}` if API is reachable |
+| `GET /api/health/deep` | Deep: checks DB connectivity + bot heartbeat age; returns 503 if any critical check fails |
+
+### Admin Alerts (Telegram)
+
+Set `ADMIN_ALERT_CHAT_IDS=chatId1,chatId2` in `.env`.
+
+Events that trigger alerts:
+- API container starts → `🟢 API started`
+- Bot container starts → `🟢 Bot started`
+- `uncaughtException` in API or Bot → `🔴 uncaughtException`
+- `unhandledRejection` in API or Bot → `🔴 unhandledRejection`
+- Watchdog detects downtime → `🔴 Wishlistik DOWN`
+- Watchdog detects recovery → `🟢 Wishlistik RECOVERED`
+
+### Watchdog Script
+
+`ops/watchdog/health-watchdog.mjs` — cron-runnable Node.js script.
+
+**Setup on server:**
+```bash
+# Install cron (runs every 5 minutes):
+crontab -e
+# Add:
+*/5 * * * * /usr/bin/node /opt/wishlist/ops/watchdog/health-watchdog.mjs >> /var/log/wishlist-watchdog.log 2>&1
+```
+
+**Required env vars** (in `.env` or exported):
+- `WATCHDOG_BASE_URL=https://wishlistik.ru`
+- `BOT_TOKEN=...`
+- `ADMIN_ALERT_CHAT_IDS=...`
+
+**State file**: `/tmp/watchdog-state.json` — deduplicates repeated down/recovery alerts.
+
+### Nginx Maintenance Page
+
+`ops/maintenance/maintenance.html` — static dark-themed page, no external dependencies.
+
+**Setup** (one-time):
+```bash
+scp ops/maintenance/maintenance.html root@wishlistik.ru:/opt/wishlist/ops/maintenance/
+```
+
+Add to `/etc/nginx/sites-enabled/wishlistik.ru` (see `ops/nginx/wishlistik-maintenance.conf.snippet`):
+```nginx
+error_page 502 503 504 /maintenance.html;
+location = /maintenance.html {
+    root /opt/wishlist/ops/maintenance;
+    internal;
+}
+# Add to each proxy location block:
+proxy_intercept_errors on;
+```
+
+### Maintenance Mode
+
+To enable planned downtime:
+1. Set `MAINTENANCE_MODE=true` in `.env`
+2. `docker compose -f docker-compose.prod.yml up -d api bot`
+
+To disable:
+1. Remove or set `MAINTENANCE_MODE=false`
+2. `docker compose -f docker-compose.prod.yml up -d api bot`
+
+nginx will serve the static maintenance page for 502/503/504 automatically.

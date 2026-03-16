@@ -40,6 +40,11 @@ const ru: Dict = {
   error_load_failed: 'Не удалось загрузить. Попробуй ещё раз.',
   error_open_in_telegram_btn: 'Открыть в Telegram',
 
+  // ── Maintenance screen ────────────────────────────────────────────────────
+  maintenance_title: 'Технические работы',
+  maintenance_body: 'Сервис временно недоступен. Мы уже работаем над этим — загляни через пару минут.',
+  maintenance_retry: 'Попробовать снова',
+
   // ── My Wishlists screen ───────────────────────────────────────────────────
   greeting: 'Привет, {{name}}!',
   my_wishlists: 'Мои вишлисты',
@@ -572,6 +577,11 @@ const en: Dict = {
   error_telegram_only: 'This app only works inside Telegram',
   error_load_failed: 'Failed to load. Please try again.',
   error_open_in_telegram_btn: 'Open in Telegram',
+
+  // ── Maintenance screen ────────────────────────────────────────────────────
+  maintenance_title: 'Maintenance',
+  maintenance_body: 'Service is temporarily unavailable. We\'re already working on it — check back in a few minutes.',
+  maintenance_retry: 'Try again',
 
   // ── My Wishlists screen ───────────────────────────────────────────────────
   greeting: 'Hi, {{name}}!',

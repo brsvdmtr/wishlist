@@ -335,3 +335,9 @@ model SubscriptionUnread {
   @@unique([subId, entityId, fieldName])
   @@index([subId])
 }
+
+model ServiceHeartbeat {
+  serviceName String   @id
+  updatedAt   DateTime @updatedAt
+  metadata    String?
+}

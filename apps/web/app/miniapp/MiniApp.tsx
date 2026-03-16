@@ -168,7 +168,7 @@ type CommentDTO = {
   createdAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile';
 type Toast = { id: string; message: string; kind: 'success' | 'error' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1010,18 +1010,35 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   const tgFetch = useCallback(async (path: string, init?: RequestInit) => {
     const url = `${apiBase}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch(url, {
         ...init,
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'X-TG-INIT-DATA': initDataRef.current,
           ...(init?.headers as Record<string, string> | undefined),
         },
       });
+      clearTimeout(timer);
+      // Maintenance mode: API responds 503 + code=MAINTENANCE
+      if (res.status === 503) {
+        const json = await res.json().catch(() => ({})) as { code?: string };
+        const err = new Error(json.code === 'MAINTENANCE' ? 'MAINTENANCE' : 'UNAVAILABLE') as Error & { kind: string };
+        err.kind = json.code === 'MAINTENANCE' ? 'maintenance' : 'unavailable';
+        throw err;
+      }
       return res;
     } catch (err) {
-      throw new Error(`Fetch ${url}: ${err instanceof Error ? err.message : String(err)}`);
+      clearTimeout(timer);
+      if (err instanceof Error && (err.name === 'AbortError' || (err as { kind?: string }).kind)) {
+        throw err;
+      }
+      const wrapped = new Error(`Fetch ${url}: ${err instanceof Error ? err.message : String(err)}`) as Error & { kind: string };
+      wrapped.kind = 'unavailable';
+      throw wrapped;
     }
   }, [apiBase]);
 
@@ -1658,7 +1675,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (!tg) return;
-    if (screen === 'my-wishlists' || screen === 'loading' || screen === 'error') {
+    if (screen === 'my-wishlists' || screen === 'loading' || screen === 'error' || screen === 'maintenance') {
       tg.BackButton.hide();
     } else {
       tg.BackButton.show();
@@ -1725,10 +1742,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
       const handleErr = (e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
+        const kind = (e as { kind?: string }).kind;
         // eslint-disable-next-line no-console
         console.error('[WishBoard]', msg, { apiBase, initData: tg.initData?.substring(0, 50) });
-        setErrorMsg(t('error_load_failed', locale));
-        setScreen('error');
+        if (kind === 'maintenance' || msg === 'MAINTENANCE') {
+          setScreen('maintenance');
+        } else if (kind === 'unavailable' || msg === 'UNAVAILABLE') {
+          setScreen('maintenance');
+        } else {
+          setErrorMsg(t('error_load_failed', locale));
+          setScreen('error');
+        }
       };
 
       if (startParam && startParam.startsWith('draft_')) {
@@ -2271,6 +2295,25 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
         );
       })()}
+
+      {/* ── MAINTENANCE ── */}
+      {screen === 'maintenance' && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
+          <div style={{ fontSize: 48 }}>🔧</div>
+          <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>
+            {t('maintenance_title', locale)}
+          </div>
+          <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>
+            {t('maintenance_body', locale)}
+          </div>
+          <button
+            style={{ ...btnPrimary, marginTop: 8, width: 200 }}
+            onClick={() => { setScreen('loading'); window.location.reload(); }}
+          >
+            {t('maintenance_retry', locale)}
+          </button>
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════
           OWNER — MY WISHLISTS
