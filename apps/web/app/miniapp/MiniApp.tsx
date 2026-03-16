@@ -49,13 +49,18 @@ const getPriceFilters = (locale: Locale) => [
   { label: t('filter_under_25k', locale), max: 25000 },
 ];
 
+const PRIO_EMOJI: Record<number, string> = { 1: '🙂', 2: '😊', 3: '😍' };
+// accent color per priority level: LOW=blue-violet, MEDIUM=amber, HIGH=coral-rose
+const PRIO_COLOR: Record<number, string> = { 1: '#6B7FD4', 2: '#E8930A', 3: '#F04E6E' };
+const PRIO_BG:    Record<number, string> = { 1: 'rgba(107,127,212,0.13)', 2: 'rgba(232,147,10,0.13)', 3: 'rgba(240,78,110,0.13)' };
+
 const getPriorities = (locale: Locale) => [
-  { value: 1, emoji: '👍', label: t('priority_low', locale),    sub: t('priority_low_sub', locale) },
-  { value: 2, emoji: '❤️', label: t('priority_medium', locale), sub: t('priority_medium_sub', locale) },
-  { value: 3, emoji: '🔥', label: t('priority_high', locale),   sub: t('priority_high_sub', locale) },
+  { value: 1, emoji: PRIO_EMOJI[1], label: t('priority_low', locale),    sub: t('priority_low_sub', locale) },
+  { value: 2, emoji: PRIO_EMOJI[2], label: t('priority_medium', locale), sub: t('priority_medium_sub', locale) },
+  { value: 3, emoji: PRIO_EMOJI[3], label: t('priority_high', locale),   sub: t('priority_high_sub', locale) },
 ];
 
-const prioEmoji = (p: number) => ({ 1: '👍', 2: '❤️', 3: '🔥' } as Record<number, string>)[p] ?? '👍';
+const prioEmoji = (p: number) => PRIO_EMOJI[p] ?? '🙂';
 const fmtPrice = (p: number | null, locale: Locale = 'ru', currency: 'RUB' | 'USD' = 'RUB') => {
   if (!p) return null;
   const formatted = p.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US');
@@ -357,7 +362,12 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale }: {
           }}>
             {item.title}
           </div>
-          <span style={{ fontSize: 16, flexShrink: 0 }}>{prioEmoji(item.priority)}</span>
+          <span style={{
+            flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
+            background: PRIO_BG[item.priority] ?? PRIO_BG[1],
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 16, lineHeight: 1,
+          }}>{prioEmoji(item.priority)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
@@ -392,7 +402,12 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
           <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, color: C.text, lineHeight: 1.3, paddingRight: 8, textDecoration: isPurchased ? 'line-through' : 'none' }}>
             {item.title}
           </div>
-          <span style={{ fontSize: 16, flexShrink: 0 }}>{prioEmoji(item.priority)}</span>
+          <span style={{
+            flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
+            background: PRIO_BG[item.priority] ?? PRIO_BG[1],
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 16, lineHeight: 1,
+          }}>{prioEmoji(item.priority)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
@@ -2757,12 +2772,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             {/* Priority pill */}
             <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '6px 12px', borderRadius: 100,
-              background: C.surface, border: `1px solid ${C.borderLight}`,
-              fontSize: 13, fontWeight: 500, color: C.textSec,
+              background: PRIO_BG[viewingItem.priority] ?? PRIO_BG[1],
+              fontSize: 13, fontWeight: 600,
+              color: PRIO_COLOR[viewingItem.priority] ?? PRIO_COLOR[1],
             }}>
-              {viewingItem.priority === 3 ? '🔥' : viewingItem.priority === 2 ? '💜' : '✨'}{' '}
+              {prioEmoji(viewingItem.priority)}{' '}
               {getPriorities(locale).find((p) => p.value === viewingItem!.priority)?.label}
             </div>
 
@@ -2974,12 +2990,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             {/* Priority pill */}
             <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '6px 12px', borderRadius: 100,
-              background: C.surface, border: `1px solid ${C.borderLight}`,
-              fontSize: 13, fontWeight: 500, color: C.textSec,
+              background: PRIO_BG[viewingItem.priority] ?? PRIO_BG[1],
+              fontSize: 13, fontWeight: 600,
+              color: PRIO_COLOR[viewingItem.priority] ?? PRIO_COLOR[1],
             }}>
-              {viewingItem.priority === 3 ? '🔥' : viewingItem.priority === 2 ? '💜' : '✨'}{' '}
+              {prioEmoji(viewingItem.priority)}{' '}
               {getPriorities(locale).find((p) => p.value === viewingItem!.priority)?.label}
             </div>
 
@@ -3925,17 +3942,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_priority', locale)}</label>
             <div style={{ display: 'flex', gap: 10 }}>
-              {getPriorities(locale).map((p) => (
-                <div key={p.value} onClick={() => setItemPriority(p.value as 1 | 2 | 3)} style={{
-                  flex: 1, padding: '12px 8px', borderRadius: 12, textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
-                  background: itemPriority === p.value ? C.accentSoft : C.surface,
-                  border: `1px solid ${itemPriority === p.value ? C.accentGlow : C.border}`,
-                }}>
-                  <div style={{ fontSize: 22, marginBottom: 4 }}>{p.emoji}</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: itemPriority === p.value ? C.accent : C.text, marginBottom: 2 }}>{p.label}</div>
-                  <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.2 }}>{p.sub}</div>
-                </div>
-              ))}
+              {getPriorities(locale).map((p) => {
+                const isSelected = itemPriority === p.value;
+                const pc = PRIO_COLOR[p.value];
+                const pb = PRIO_BG[p.value];
+                return (
+                  <div key={p.value} onClick={() => setItemPriority(p.value as 1 | 2 | 3)} style={{
+                    flex: 1, padding: '12px 8px', borderRadius: 12, textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
+                    background: isSelected ? pb : C.surface,
+                    border: `1.5px solid ${isSelected ? pc : C.border}`,
+                  }}>
+                    <div style={{ fontSize: 22, marginBottom: 4 }}>{p.emoji}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: isSelected ? pc : C.text, marginBottom: 2 }}>{p.label}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.2 }}>{p.sub}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
           <button style={{ ...btnPrimary, opacity: itemTitle.trim() ? 1 : 0.5 }} onClick={() => void handleSaveItem()} disabled={!itemTitle.trim() || loading}>

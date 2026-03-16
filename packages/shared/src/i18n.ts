@@ -187,11 +187,11 @@ const ru: Dict = {
   item_add_btn: '✨ Добавить',
 
   // ── Priority labels ───────────────────────────────────────────────────────
-  priority_low: 'Неплохо',
+  priority_low: 'Будет приятно',
   priority_low_sub: 'Низкий приоритет',
   priority_medium: 'Хочу',
   priority_medium_sub: 'Средний приоритет',
-  priority_high: 'Мечтаю',
+  priority_high: 'В приоритете',
   priority_high_sub: 'Высокий приоритет',
 
   // ── Delete confirmation ───────────────────────────────────────────────────
@@ -665,9 +665,9 @@ const en: Dict = {
   // ── Priority labels ───────────────────────────────────────────────────────
   priority_low: 'Nice to have',
   priority_low_sub: 'Low priority',
-  priority_medium: 'Want',
+  priority_medium: 'Want it',
   priority_medium_sub: 'Medium priority',
-  priority_high: 'Dream',
+  priority_high: 'Top priority',
   priority_high_sub: 'High priority',
 
   // ── Delete confirmation ───────────────────────────────────────────────────
