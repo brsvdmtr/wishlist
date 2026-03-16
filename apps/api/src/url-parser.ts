@@ -1,64 +1,69 @@
 /**
- * URL Parser Module — product card metadata extraction
+ * URL Parser — product card metadata extraction
  *
- * Pipeline:
- *   parseUrl(rawUrl)
- *     ├─ validateUrl + canonicalize
- *     ├─ Cache check (24h success / 5min negative)
- *     ├─ WB shortcut: card.wb.ru JSON API (no browser needed)
- *     ├─ Fast path: fetchHtml → Cheerio → domain adapter
- *     │    └─ if confidence < medium → browser fallback
- *     └─ Browser path: stealth puppeteer → Cheerio → domain adapter
+ * Extraction pipeline with 5-level source priority:
+ *   1. network_response  — XHR/fetch JSON intercepted during browser render
+ *   2. next_data         — __NEXT_DATA__ (Next.js hydration)
+ *   3. hydration_state   — window.__INITIAL_STATE__ / Redux / Vuex / etc.
+ *   4. jsonld            — JSON-LD Product structured data
+ *   5. og_meta / dom     — Open Graph meta tags + domain DOM selectors
  *
- * Domain adapters: Ozon, Wildberries, Yandex Market, Lamoda,
- *                  Goldapple, Техпарк, Bork  (+generic)
- *
- * Anti-bot detection prevents saving captcha/challenge pages as results.
- * In-memory LRU cache (1 000 entries, 24 h TTL) avoids re-fetching.
+ * Overall flow per request:
+ *   validateUrl + canonicalize
+ *   → cache check (24 h success / 5 min negative)
+ *   → WB shortcut: card.wb.ru JSON API (if nm extractable)
+ *   → SPA/browser-first domains → browserExtract (network + hydration + HTML)
+ *   → HTTP-first domains → fetchHtml + Cheerio
+ *       → confidence < medium → browserExtract fallback
+ *   → anti-bot / garbage guard
+ *   → merge by priority
+ *   → cache store
  */
 
 import * as cheerio from 'cheerio';
 import puppeteer, { type Browser } from 'puppeteer-core';
+import {
+  browserExtract,
+  type ExtractedProduct,
+  wbCdnImageUrl,
+  wbBasket,
+} from './browser-network-extractor.js';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Public Types ─────────────────────────────────────────────────────────────
 
 export interface ParsedUrlData {
-  title: string | null;
-  description: string | null;
-  priceText: string | null;
-  imageUrl: string | null;
+  title:        string | null;
+  description:  string | null;
+  priceText:    string | null;
+  imageUrl:     string | null;
   sourceDomain: string;
   canonicalUrl: string;
-  /** How reliable the result is */
-  confidence?: 'high' | 'medium' | 'low' | 'none';
-  /** Which extraction path produced the result */
+  confidence?:  'high' | 'medium' | 'low' | 'none';
   parseMethod?: 'domain_api' | 'domain_adapter' | 'generic_jsonld' | 'generic_html' | 'browser_fallback';
 }
 
+// ─── Internal Types ───────────────────────────────────────────────────────────
+
 interface ParseResult {
-  title: string | null;
+  title:       string | null;
   description: string | null;
-  priceText: string | null;
-  imageUrl: string | null;
-  confidence: 'high' | 'medium' | 'low' | 'none';
+  priceText:   string | null;
+  imageUrl:    string | null;
+  confidence:  'high' | 'medium' | 'low' | 'none';
   parseMethod: 'domain_api' | 'domain_adapter' | 'generic_jsonld' | 'generic_html' | 'browser_fallback';
 }
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const FETCH_TIMEOUT_MS   = 8_000;
-const BROWSER_TIMEOUT_MS = 25_000;
-const MAX_HTML_BYTES     = 3 * 1024 * 1024; // 3 MB
+const BROWSER_IDLE_MS    = 90_000;
+const MAX_HTML_BYTES     = 3 * 1024 * 1024;
 const MAX_URL_LENGTH     = 2_048;
-const BROWSER_IDLE_MS    = 90_000; // close after 90 s idle
+const CACHE_TTL_MS       = 24 * 60 * 60 * 1_000;
+const NEGATIVE_CACHE_TTL = 5  * 60 * 1_000;
+const MAX_CACHE_ENTRIES  = 1_000;
+const CHROMIUM_PATH      = process.env.CHROMIUM_PATH || '/usr/bin/chromium';
 
-const CACHE_TTL_MS          = 24 * 60 * 60 * 1_000; // 24 h
-const NEGATIVE_CACHE_TTL_MS =  5 * 60 * 1_000;      //  5 min
-const MAX_CACHE_ENTRIES      = 1_000;
-
-const CHROMIUM_PATH = process.env.CHROMIUM_PATH || '/usr/bin/chromium';
-
-/** User-agent that most CDNs/marketplaces accept */
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -73,227 +78,190 @@ const BLOCKED_HOSTNAMES = new Set([
   'localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]',
 ]);
 
-/** Domains that always require browser rendering */
-const BROWSER_FIRST_DOMAINS = new Set([
+/** Domains where a browser is always used for initial load */
+const BROWSER_FIRST = new Set([
   'ozon.ru',
   'market.yandex.ru',
+  // WB uses a direct API; only falls back to browser when API fails
 ]);
 
-// ─── In-Memory Cache ─────────────────────────────────────────────────────────
+// ─── In-Memory Cache ──────────────────────────────────────────────────────────
 
-interface CacheEntry {
-  data: ParsedUrlData;
-  expiresAt: number;
-}
-
+interface CacheEntry { data: ParsedUrlData; expiresAt: number; }
 const resultCache   = new Map<string, CacheEntry>();
-const negativeCache = new Map<string, number>(); // url → expiresAt
+const negativeCache = new Map<string, number>();
 
 function cacheGet(key: string): ParsedUrlData | null {
-  const entry = resultCache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) { resultCache.delete(key); return null; }
-  return entry.data;
+  const e = resultCache.get(key);
+  if (!e) return null;
+  if (Date.now() > e.expiresAt) { resultCache.delete(key); return null; }
+  return e.data;
 }
-
 function cacheSet(key: string, data: ParsedUrlData): void {
-  // Evict oldest entry if at capacity
   if (resultCache.size >= MAX_CACHE_ENTRIES) {
     const oldest = resultCache.keys().next().value;
     if (oldest) resultCache.delete(oldest);
   }
   resultCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
 }
-
-function isNegativelyCached(key: string): boolean {
-  const exp = negativeCache.get(key);
-  if (exp === undefined) return false;
-  if (Date.now() > exp) { negativeCache.delete(key); return false; }
+function isNegative(key: string): boolean {
+  const t = negativeCache.get(key);
+  if (t === undefined) return false;
+  if (Date.now() > t) { negativeCache.delete(key); return false; }
   return true;
 }
+function setNegative(key: string): void { negativeCache.set(key, Date.now() + NEGATIVE_CACHE_TTL); }
 
-function setNegativeCache(key: string): void {
-  negativeCache.set(key, Date.now() + NEGATIVE_CACHE_TTL_MS);
-}
-
-// ─── Browser Singleton ───────────────────────────────────────────────────────
+// ─── Browser Singleton ────────────────────────────────────────────────────────
 
 let browserInstance: Browser | null = null;
-let browserCloseTimer: ReturnType<typeof setTimeout> | null = null;
+let browserTimer:    ReturnType<typeof setTimeout> | null = null;
 
 async function getBrowser(): Promise<Browser> {
-  if (browserInstance && browserInstance.connected) {
-    if (browserCloseTimer) clearTimeout(browserCloseTimer);
-    browserCloseTimer = setTimeout(closeBrowser, BROWSER_IDLE_MS);
+  if (browserInstance?.connected) {
+    if (browserTimer) clearTimeout(browserTimer);
+    browserTimer = setTimeout(closeBrowser, BROWSER_IDLE_MS);
     return browserInstance;
   }
-
   browserInstance = await puppeteer.launch({
     executablePath: CHROMIUM_PATH,
     headless: true,
     args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--disable-extensions',
-      '--disable-background-networking',
-      '--disable-default-apps',
-      '--disable-sync',
-      '--no-first-run',
-      '--single-process',
-      '--disable-crash-reporter',
+      '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+      '--disable-gpu', '--disable-extensions', '--disable-background-networking',
+      '--disable-default-apps', '--disable-sync', '--no-first-run',
+      '--single-process', '--disable-crash-reporter',
       '--crash-dumps-dir=/tmp/crashes',
       '--disable-blink-features=AutomationControlled',
     ],
   });
-
-  browserCloseTimer = setTimeout(closeBrowser, BROWSER_IDLE_MS);
+  browserTimer = setTimeout(closeBrowser, BROWSER_IDLE_MS);
   return browserInstance;
 }
-
 async function closeBrowser(): Promise<void> {
-  if (browserCloseTimer) { clearTimeout(browserCloseTimer); browserCloseTimer = null; }
+  if (browserTimer) { clearTimeout(browserTimer); browserTimer = null; }
   if (browserInstance) {
     try { await browserInstance.close(); } catch { /* ignore */ }
     browserInstance = null;
   }
 }
 
-// ─── Main Entry Point ────────────────────────────────────────────────────────
+// ─── Main Entry ───────────────────────────────────────────────────────────────
 
 export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
-  const url         = validateUrl(rawUrl);
-  const hostname    = url.hostname.replace(/^www\./, '').replace(/^m\./, '');
+  const url          = validateUrl(rawUrl);
+  const hostname     = url.hostname.replace(/^www\./, '').replace(/^m\./, '');
   const canonicalUrl = canonicalize(url);
 
-  // ── Cache check ──────────────────────────────────────────────────────────
+  // ── Cache ────────────────────────────────────────────────────────────────
   const cached = cacheGet(canonicalUrl);
   if (cached) {
     console.log(`[parser] cache hit: ${hostname}`);
     return cached;
   }
-  if (isNegativelyCached(canonicalUrl)) {
-    console.log(`[parser] negative cache hit: ${hostname}`);
+  if (isNegative(canonicalUrl)) {
+    console.log(`[parser] negative cache: ${hostname}`);
     return emptyResult(hostname, canonicalUrl);
   }
 
   let result: ParseResult;
 
   try {
-    // ── Wildberries: dedicated JSON API (fastest, most accurate) ─────────
-    if (isWildberries(hostname)) {
+    // ── Wildberries: direct card API (fastest, no browser) ───────────────
+    if (isWildberriesHost(hostname)) {
       const nm = extractWbArticleId(url);
       if (nm) {
-        const wbResult = await fetchWbCardApi(nm);
+        const wbResult = await fetchWbCardApi(nm, url.href);
         if (wbResult && wbResult.confidence !== 'none') {
-          result = wbResult;
-          console.log(`[parser] WB API success for nm=${nm}: ${result.title?.slice(0, 50)}`);
-          const final = buildFinal(result, hostname, canonicalUrl);
+          console.log(`[parser] WB API success nm=${nm}: ${wbResult.title?.slice(0, 50)}`);
+          const final = toFinal(wbResult, hostname, canonicalUrl);
           cacheSet(canonicalUrl, final);
           return final;
         }
+        // API failed — fall through to browser
       }
-      // Fall through to browser for WB if API fails
     }
 
-    // ── Browser-first domains (Ozon, Yandex Market) ───────────────────────
-    if (isBrowserFirstDomain(hostname)) {
+    // ── Browser-first: always render with network capture ────────────────
+    if (isBrowserFirst(hostname) || isWildberriesHost(hostname)) {
       console.log(`[parser] browser-first: ${hostname}`);
-      const html = await fetchWithBrowser(url.href);
-      result = extractFromHtml(html, url.href, hostname, 'browser_fallback');
+      result = await runBrowserExtract(url.href, hostname);
     } else {
-      // ── Fast HTTP path ───────────────────────────────────────────────────
+      // ── HTTP-first ───────────────────────────────────────────────────
       let html: string | null = null;
-      try {
-        html = await fetchHtml(url.href);
-      } catch (err) {
-        console.warn(`[parser] HTTP fetch failed for ${hostname}: ${(err as Error).message}`);
+      try { html = await fetchHtml(url.href); } catch (e) {
+        console.warn(`[parser] HTTP failed for ${hostname}: ${(e as Error).message}`);
       }
 
       if (html) {
-        const fastResult = extractFromHtml(html, url.href, hostname, 'generic_html');
-        if (confidenceScore(fastResult.confidence) >= 2) {
+        const fast = extractFromHtml(html, url.href, hostname, 'generic_html');
+        if (confidenceScore(fast.confidence) >= 2) {
           // medium or high — good enough
-          result = fastResult;
-          console.log(`[parser] fast path OK (${fastResult.confidence}): ${hostname}`);
+          result = fast;
         } else {
-          // Low confidence — try browser
-          console.log(`[parser] low confidence on fast path, using browser: ${hostname}`);
+          console.log(`[parser] HTTP confidence=${fast.confidence}, trying browser: ${hostname}`);
           try {
-            const browserHtml = await fetchWithBrowser(url.href);
-            const browserResult = extractFromHtml(browserHtml, url.href, hostname, 'browser_fallback');
-            result = pickBetter(fastResult, browserResult);
+            const browser = await runBrowserExtract(url.href, hostname);
+            result = pickBetter(fast, browser);
           } catch {
-            result = fastResult; // use what we have
+            result = fast;
           }
         }
       } else {
-        // HTTP failed entirely — use browser
-        console.log(`[parser] HTTP failed, using browser: ${hostname}`);
-        const browserHtml = await fetchWithBrowser(url.href);
-        result = extractFromHtml(browserHtml, url.href, hostname, 'browser_fallback');
+        result = await runBrowserExtract(url.href, hostname);
       }
     }
 
     if (result.confidence === 'none') {
       console.warn(`[parser] no useful data for ${hostname}`);
-      setNegativeCache(canonicalUrl);
+      setNegative(canonicalUrl);
       return emptyResult(hostname, canonicalUrl);
     }
 
-    const final = buildFinal(result, hostname, canonicalUrl);
     console.log(
-      `[parser] ${hostname}: ${result.confidence} / ${result.parseMethod} — ` +
-      `title="${result.title?.slice(0, 40)}", price=${result.priceText ?? '-'}, img=${result.imageUrl ? '✓' : '✗'}`
+      `[parser] ${hostname}: ${result.confidence}/${result.parseMethod} — ` +
+      `"${result.title?.slice(0, 40)}" price=${result.priceText ?? '-'} img=${result.imageUrl ? '✓' : '✗'}`
     );
+
+    const final = toFinal(result, hostname, canonicalUrl);
     cacheSet(canonicalUrl, final);
     return final;
 
   } catch (err) {
     console.error(`[parser] unhandled error for ${hostname}:`, (err as Error).message);
-    setNegativeCache(canonicalUrl);
+    setNegative(canonicalUrl);
     return emptyResult(hostname, canonicalUrl);
   }
 }
 
-// ─── URL Validation ──────────────────────────────────────────────────────────
+// ─── URL Validation ───────────────────────────────────────────────────────────
 
 export function validateUrl(raw: string): URL {
-  if (!raw || raw.length > MAX_URL_LENGTH) {
-    throw new Error('URL слишком длинный или пустой');
-  }
-
+  if (!raw || raw.length > MAX_URL_LENGTH) throw new Error('URL слишком длинный или пустой');
   let url: URL;
-  try { url = new URL(raw); } catch {
-    throw new Error('Некорректный URL');
-  }
-
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+  try { url = new URL(raw); } catch { throw new Error('Некорректный URL'); }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:')
     throw new Error('Поддерживаются только http и https ссылки');
-  }
-
   const h = url.hostname.toLowerCase();
   if (BLOCKED_HOSTNAMES.has(h)) throw new Error('Ссылка на локальный адрес недоступна');
   if (isPrivateIP(h))           throw new Error('Ссылка на внутренний адрес недоступна');
-
   return url;
 }
 
-function isPrivateIP(hostname: string): boolean {
-  const parts = hostname.split('.');
+function isPrivateIP(h: string): boolean {
+  const parts = h.split('.');
   if (parts.length === 4 && parts.every(p => /^\d+$/.test(p))) {
     const [a, b] = parts.map(Number) as [number, number];
     if (a === 10) return true;
     if (a === 172 && b >= 16 && b <= 31) return true;
     if (a === 192 && b === 168) return true;
     if (a === 169 && b === 254) return true;
-    if (a === 0) return true;
+    if (a === 0)  return true;
   }
   return false;
 }
 
-// ─── URL Canonicalization ─────────────────────────────────────────────────────
+// ─── Canonicalization ─────────────────────────────────────────────────────────
 
 function canonicalize(url: URL): string {
   const c = new URL(url.href);
@@ -305,85 +273,136 @@ function canonicalize(url: URL): string {
   return s;
 }
 
-// ─── Domain Helpers ───────────────────────────────────────────────────────────
+// ─── Host Helpers ─────────────────────────────────────────────────────────────
 
 function normalizeHost(h: string): string {
   return h.replace(/^www\./, '').replace(/^m\./, '');
 }
-
-function isWildberries(h: string): boolean {
+function isWildberriesHost(h: string): boolean {
   const n = normalizeHost(h);
   return n === 'wildberries.ru' || n.endsWith('.wildberries.ru');
 }
-
-function isBrowserFirstDomain(h: string): boolean {
+function isBrowserFirst(h: string): boolean {
   const n = normalizeHost(h);
-  return BROWSER_FIRST_DOMAINS.has(n) || [...BROWSER_FIRST_DOMAINS].some(d => n.endsWith(`.${d}`));
+  return BROWSER_FIRST.has(n) || [...BROWSER_FIRST].some(d => n.endsWith(`.${d}`));
 }
 
-function confidenceScore(c: ParseResult['confidence']): number {
-  return { none: 0, low: 1, medium: 2, high: 3 }[c];
+// ─── Wildberries Direct API ───────────────────────────────────────────────────
+
+function extractWbArticleId(url: URL): string | null {
+  const m = url.pathname.match(/\/catalog\/(\d{6,12})\//);
+  if (m) return m[1]!;
+  const m2 = url.pathname.match(/\/(\d{6,12})(?:\/|$)/);
+  if (m2) return m2[1]!;
+  return null;
 }
 
-function pickBetter(a: ParseResult, b: ParseResult): ParseResult {
-  return confidenceScore(b.confidence) > confidenceScore(a.confidence) ? b : a;
+async function fetchWbCardApi(nmStr: string, referer: string): Promise<ParseResult | null> {
+  const apiUrl = `https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-1257786&nm=${nmStr}`;
+  try {
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6_000);
+    const res   = await fetch(apiUrl, {
+      signal: ctrl.signal,
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Accept': 'application/json',
+        'Origin': 'https://www.wildberries.ru',
+        'Referer': referer,
+      },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+
+    const json = await res.json() as {
+      data?: { products?: Array<{
+        id: number; name?: string;
+        salePriceU?: number;
+        sizes?: Array<{ price?: { total?: number } }>;
+        mediaFiles?: string[];
+      }> };
+    };
+    const p = json?.data?.products?.[0];
+    if (!p) return null;
+
+    const title      = p.name?.trim() ?? null;
+    const kopecks    = p.salePriceU ?? p.sizes?.[0]?.price?.total ?? null;
+    const priceRub   = kopecks !== null ? Math.round(kopecks / 100) : null;
+    const priceText  = priceRub ? `${formatNumber(priceRub)} ₽` : null;
+    const nm         = p.id;
+
+    let imageUrl: string | null = null;
+    if (Array.isArray(p.mediaFiles) && p.mediaFiles.length > 0) {
+      imageUrl = p.mediaFiles[0]!;
+    }
+    if (!imageUrl) imageUrl = wbCdnImageUrl(nm);
+
+    const confidence = calcConfidence({ title, imageUrl, priceText });
+    return { title, description: null, priceText, imageUrl, confidence, parseMethod: 'domain_api' };
+  } catch (e) {
+    console.warn(`[parser] WB API error nm=${nmStr}: ${(e as Error).message}`);
+    return null;
+  }
 }
 
-function emptyResult(sourceDomain: string, canonicalUrl: string): ParsedUrlData {
-  return { title: null, description: null, priceText: null, imageUrl: null,
-           sourceDomain, canonicalUrl, confidence: 'none', parseMethod: 'generic_html' };
+// ─── Browser Path ─────────────────────────────────────────────────────────────
+
+async function runBrowserExtract(url: string, hostname: string): Promise<ParseResult> {
+  const browser = await getBrowser();
+  const { html, product: networkProduct } = await browserExtract(browser, url, hostname);
+
+  // Cheerio extraction from rendered HTML (levels 3–5 in priority)
+  const htmlResult = extractFromHtml(html, url, hostname, 'browser_fallback');
+
+  return mergeNetworkWithHtml(networkProduct, htmlResult);
 }
 
-function buildFinal(r: ParseResult, sourceDomain: string, canonicalUrl: string): ParsedUrlData {
-  return { ...r, sourceDomain, canonicalUrl };
-}
+/**
+ * Merge: network/hydration product (level 1-3) > HTML-based result (level 4-5)
+ * Each field independently takes the best available source.
+ */
+function mergeNetworkWithHtml(
+  net: ExtractedProduct | null,
+  html: ParseResult,
+): ParseResult {
+  if (!net || net.score < 20) return html;
 
-function calcConfidence(r: { title: string | null; imageUrl: string | null; priceText: string | null }): ParseResult['confidence'] {
-  const hasTitle = !!r.title;
-  const hasImage = !!r.imageUrl;
-  const hasPrice = !!r.priceText;
-  if (!hasTitle) return 'none';
-  if (hasTitle && hasImage && hasPrice) return 'high';
-  if (hasTitle && (hasImage || hasPrice)) return 'medium';
-  return 'low';
-}
+  const title      = net.title      ?? html.title;
+  const description = net.description ?? html.description;
+  const imageUrl   = net.imageUrl   ?? html.imageUrl;
+  const priceText  = net.rawPrice
+    ? formatPrice(net.rawPrice, net.currency)
+    : html.priceText;
 
-// ─── Anti-Bot Detection ───────────────────────────────────────────────────────
+  // Clean up title (remove "- купить на..." suffixes from network data too)
+  const hostname = ''; // titles from network don't need domain-specific cleaning usually
+  const cleanedTitle = cleanTitle(title, hostname);
 
-function isAntiBotPage(html: string, title: string | null): boolean {
-  if (html.length < 800) return true;
+  const confidence = calcConfidence({ title: cleanedTitle, imageUrl, priceText });
 
-  const lTitle = (title ?? '').toLowerCase();
-  const badTitles = ['captcha', 'robot', 'challenge', 'antibot', 'access denied',
-                     'attention required', 'just a moment', 'проверка'];
-  if (badTitles.some(t => lTitle.includes(t))) return true;
+  // parseMethod reflects where the most valuable data came from
+  const parseMethod: ParseResult['parseMethod'] =
+    net.source === 'network_response' ? 'domain_api' :
+    net.source === 'next_data'        ? 'generic_jsonld' :
+    net.source === 'hydration_state'  ? 'generic_jsonld' :
+    'browser_fallback';
 
-  const lHtml = html.toLowerCase();
-  const botSignals = [
-    'g-recaptcha', 'h-captcha', 'cf_challenge', 'cf-challenge-running',
-    'cf_chl_opt', 'cf-please-wait', 'ddos-guard', 'yandex-smartcaptcha',
-    'smartcaptcha', 'class="antibot"', '__cf_chl',
-  ];
-  if (botSignals.some(s => lHtml.includes(s))) return true;
-
-  return false;
+  return { title: cleanedTitle, description, priceText, imageUrl, confidence, parseMethod };
 }
 
 // ─── HTML Fetch (plain HTTP) ──────────────────────────────────────────────────
 
 async function fetchHtml(url: string): Promise<string> {
-  const ctrl = new AbortController();
+  const ctrl  = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
       headers: {
         'User-Agent': USER_AGENT,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
         'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
         'Sec-Fetch-Dest': 'document',
         'Sec-Fetch-Mode': 'navigate',
         'Sec-Fetch-Site': 'none',
@@ -391,17 +410,13 @@ async function fetchHtml(url: string): Promise<string> {
       },
       redirect: 'follow',
     });
-
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
     const ct = res.headers.get('content-type') ?? '';
-    if (!ct.includes('text/html') && !ct.includes('application/xhtml')) {
+    if (!ct.includes('text/html') && !ct.includes('application/xhtml'))
       throw new Error(`Not HTML: ${ct}`);
-    }
 
     const reader = res.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
+    if (!reader) throw new Error('No body');
     const chunks: Uint8Array[] = [];
     let total = 0;
     while (true) {
@@ -411,173 +426,12 @@ async function fetchHtml(url: string): Promise<string> {
       chunks.push(value);
       if (total >= MAX_HTML_BYTES) { reader.cancel(); break; }
     }
-
-    const buf = new Uint8Array(chunks.reduce((s, c) => s + c.byteLength, 0));
+    const buf = new Uint8Array(total);
     let off = 0;
     for (const c of chunks) { buf.set(c, off); off += c.byteLength; }
     return new TextDecoder('utf-8', { fatal: false }).decode(buf);
   } finally {
     clearTimeout(timer);
-  }
-}
-
-// ─── Browser Fetch (stealth Puppeteer) ───────────────────────────────────────
-
-async function fetchWithBrowser(url: string): Promise<string> {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-
-  try {
-    // Stealth: mask headless signals
-    await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => false });
-      Object.defineProperty(navigator, 'plugins',   { get: () => [1, 2, 3, 4, 5] });
-      Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru', 'en-US', 'en'] });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).chrome = { runtime: {}, loadTimes: () => {}, csi: () => {} };
-      Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
-      Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
-    });
-
-    await page.setUserAgent(USER_AGENT);
-    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7' });
-
-    // Block heavy resources, keep XHR/fetch for hydration
-    await page.setRequestInterception(true);
-    page.on('request', req => {
-      const type = req.resourceType();
-      if (['font', 'stylesheet', 'media'].includes(type)) { req.abort(); }
-      else { req.continue(); }
-    });
-
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: BROWSER_TIMEOUT_MS });
-
-    // Wait for meta title or OG title to be populated
-    await page.waitForFunction(
-      () => {
-        const og = document.querySelector('meta[property="og:title"]');
-        const t  = document.querySelector('title');
-        return (og && og.getAttribute('content') && og.getAttribute('content')!.length > 3)
-            || (t  && t.textContent && t.textContent.length > 3);
-      },
-      { timeout: 10_000 }
-    ).catch(() => { /* timeout OK — use what we have */ });
-
-    // Extra pause for React hydration on SPAs
-    await new Promise(r => setTimeout(r, 800));
-
-    return await page.content();
-  } finally {
-    await page.close().catch(() => {});
-  }
-}
-
-// ─── Wildberries Card API ─────────────────────────────────────────────────────
-
-function extractWbArticleId(url: URL): string | null {
-  // /catalog/12345678/detail.aspx  or  /catalog/12345678/
-  const m = url.pathname.match(/\/catalog\/(\d{6,12})\//);
-  if (m) return m[1]!;
-  // Also handle /product/name-12345678
-  const m2 = url.pathname.match(/\/(\d{6,12})(?:\/|$)/);
-  if (m2) return m2[1]!;
-  return null;
-}
-
-/** Moscow basket index for Wildberries image CDN */
-function wbBasket(vol: number): string {
-  let b: number;
-  if (vol <= 143) b = 1;
-  else if (vol <= 287) b = 2;
-  else if (vol <= 431) b = 3;
-  else if (vol <= 719) b = 4;
-  else if (vol <= 1007) b = 5;
-  else if (vol <= 1061) b = 6;
-  else if (vol <= 1115) b = 7;
-  else if (vol <= 1169) b = 8;
-  else if (vol <= 1313) b = 9;
-  else if (vol <= 1601) b = 10;
-  else if (vol <= 1655) b = 11;
-  else if (vol <= 1919) b = 12;
-  else if (vol <= 2045) b = 13;
-  else if (vol <= 2189) b = 14;
-  else if (vol <= 2405) b = 15;
-  else if (vol <= 2621) b = 16;
-  else b = 17;
-  return b.toString().padStart(2, '0');
-}
-
-function wbImageUrl(nm: number): string {
-  const vol  = Math.floor(nm / 100_000);
-  const part = Math.floor(nm / 1_000);
-  return `https://basket-${wbBasket(vol)}.wbbasket.ru/vol${vol}/part${part}/${nm}/images/big/1.webp`;
-}
-
-async function fetchWbCardApi(nmStr: string): Promise<ParseResult | null> {
-  const nm = parseInt(nmStr, 10);
-  const apiUrl = `https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-1257786&nm=${nmStr}`;
-
-  try {
-    const ctrl  = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 6_000);
-
-    const res = await fetch(apiUrl, {
-      signal: ctrl.signal,
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept': 'application/json',
-        'Origin': 'https://www.wildberries.ru',
-        'Referer': `https://www.wildberries.ru/catalog/${nmStr}/detail.aspx`,
-      },
-    });
-    clearTimeout(timer);
-
-    if (!res.ok) {
-      console.warn(`[parser] WB API returned ${res.status} for nm=${nmStr}`);
-      return null;
-    }
-
-    const json = await res.json() as {
-      state?: number;
-      data?: {
-        products?: Array<{
-          id: number;
-          name?: string;
-          salePriceU?: number;
-          priceU?: number;
-          sizes?: Array<{ price?: { total?: number } }>;
-        }>;
-      };
-    };
-
-    const product = json?.data?.products?.[0];
-    if (!product) return null;
-
-    const title = product.name?.trim() ?? null;
-
-    // Price in kopecks → rubles
-    const priceKop = product.salePriceU
-      ?? product.sizes?.[0]?.price?.total
-      ?? product.priceU
-      ?? null;
-    const priceRub = priceKop ? Math.round(priceKop / 100) : null;
-    const priceText = priceRub ? `${formatNumber(priceRub)} ₽` : null;
-
-    const imageUrl = wbImageUrl(nm);
-
-    const r: ParseResult = {
-      title,
-      description: null,
-      priceText,
-      imageUrl,
-      confidence: calcConfidence({ title, imageUrl, priceText }),
-      parseMethod: 'domain_api',
-    };
-    return r;
-  } catch (err) {
-    console.warn(`[parser] WB API error for nm=${nmStr}: ${(err as Error).message}`);
-    return null;
   }
 }
 
@@ -592,7 +446,7 @@ function extractFromHtml(
   const $ = cheerio.load(html);
   const h = normalizeHost(hostname);
 
-  // --- Universal OG/meta extraction ---
+  // ── Open Graph / meta (level 5a) ──────────────────────────────────────
   const ogTitle  = $('meta[property="og:title"]').attr('content')?.trim() ?? null;
   const ogImage  = $('meta[property="og:image"]').attr('content')?.trim() ?? null;
   const ogDesc   = $('meta[property="og:description"]').attr('content')?.trim() ?? null;
@@ -600,65 +454,77 @@ function extractFromHtml(
                  ?? $('meta[property="og:price:amount"]').attr('content'))?.trim() ?? null;
   const ogCur    = ($('meta[property="product:price:currency"]').attr('content')
                  ?? $('meta[property="og:price:currency"]').attr('content'))?.trim() ?? null;
-
   const titleTag = $('title').first().text().trim() || null;
   const metaDesc = $('meta[name="description"]').attr('content')?.trim() ?? null;
 
-  // Resolve relative image URL
   let resolvedOgImage = ogImage;
   if (resolvedOgImage && !resolvedOgImage.startsWith('http')) {
     try { resolvedOgImage = new URL(resolvedOgImage, baseUrl).href; } catch { /* keep */ }
   }
 
   const universal = {
-    title:  ogTitle ?? titleTag ?? null,
-    desc:   ogDesc  ?? metaDesc ?? null,
-    image:  resolvedOgImage,
-    price:  ogPrice,
-    cur:    ogCur,
+    title: ogTitle ?? titleTag ?? null,
+    desc:  ogDesc  ?? metaDesc ?? null,
+    image: resolvedOgImage,
+    price: ogPrice,
+    cur:   ogCur,
   };
 
-  // --- Anti-bot check on raw title ---
+  // ── Anti-bot guard ─────────────────────────────────────────────────────
   if (isAntiBotPage(html, universal.title)) {
     console.warn(`[parser] anti-bot detected for ${hostname}`);
-    return { title: null, description: null, priceText: null, imageUrl: null,
-             confidence: 'none', parseMethod: defaultMethod };
+    return emptyParseResult(defaultMethod);
   }
 
-  // --- JSON-LD extraction ---
+  // ── JSON-LD (level 4) ──────────────────────────────────────────────────
   const jsonLd = extractJsonLd($);
 
-  // --- Domain adapter ---
-  const domain = tryDomainAdapter($, h, html, baseUrl);
+  // ── Domain adapters (level 5b — DOM selectors) ─────────────────────────
+  const domainData = applyDomainAdapter($, h, html);
 
-  // --- Merge: domain > jsonLd > universal ---
-  const title = cleanTitle(domain?.title ?? jsonLd?.name ?? universal.title ?? null, h);
-  const description = (domain?.description ?? jsonLd?.description ?? universal.desc ?? null)
-    ?.slice(0, 500) ?? null;
-  const imageUrl = resolveUrl(domain?.image ?? jsonLd?.image ?? universal.image ?? null, baseUrl);
+  // ── Merge: domain DOM > JSON-LD > OG ──────────────────────────────────
+  const title       = cleanTitle(domainData?.title ?? jsonLd?.name    ?? universal.title ?? null, h);
+  const description = (domainData?.description ?? jsonLd?.description ?? universal.desc  ?? null)?.slice(0, 500) ?? null;
+  const imageUrl    = resolveUrl(domainData?.image ?? jsonLd?.image    ?? universal.image ?? null, baseUrl);
+  const rawPrice    = domainData?.price ?? jsonLd?.price    ?? universal.price ?? null;
+  const priceCur    = jsonLd?.currency ?? universal.cur ?? null;
+  const priceText   = rawPrice ? formatPrice(rawPrice, priceCur) : null;
 
-  // Price
-  const rawPrice = domain?.price ?? jsonLd?.price ?? universal.price ?? null;
-  const priceCur = jsonLd?.currency ?? universal.cur ?? null;
-  const priceText = rawPrice ? formatPrice(rawPrice, priceCur) : null;
-
-  // Determine parse method
   let parseMethod: ParseResult['parseMethod'] = defaultMethod;
-  if (domain)  parseMethod = defaultMethod === 'browser_fallback' ? 'browser_fallback' : 'domain_adapter';
-  else if (jsonLd && (jsonLd.name || jsonLd.price)) parseMethod = defaultMethod === 'browser_fallback' ? 'browser_fallback' : 'generic_jsonld';
+  if (domainData) {
+    parseMethod = defaultMethod === 'browser_fallback' ? 'browser_fallback' : 'domain_adapter';
+  } else if (jsonLd?.name || jsonLd?.price) {
+    parseMethod = defaultMethod === 'browser_fallback' ? 'browser_fallback' : 'generic_jsonld';
+  }
 
   const confidence = calcConfidence({ title, imageUrl: imageUrl ?? null, priceText });
   return { title, description, priceText, imageUrl: imageUrl ?? null, confidence, parseMethod };
 }
 
+// ─── Anti-Bot Detection ───────────────────────────────────────────────────────
+
+function isAntiBotPage(html: string, title: string | null): boolean {
+  if (html.length < 800) return true;
+
+  const lTitle = (title ?? '').toLowerCase();
+  if (['captcha', 'robot', 'challenge', 'antibot', 'access denied',
+       'attention required', 'just a moment', 'проверка', 'verify you are human']
+    .some(t => lTitle.includes(t))) return true;
+
+  const lHtml = html.toLowerCase();
+  if (['g-recaptcha', 'h-captcha', 'cf_challenge', 'cf-challenge-running',
+       'cf_chl_opt', 'cf-please-wait', 'ddos-guard', 'smartcaptcha',
+       'class="antibot"', '__cf_chl', 'yandex-smartcaptcha']
+    .some(s => lHtml.includes(s))) return true;
+
+  return false;
+}
+
 // ─── JSON-LD Extractor ────────────────────────────────────────────────────────
 
 interface JsonLdProduct {
-  name: string | null;
-  description: string | null;
-  image: string | null;
-  price: string | null;
-  currency: string | null;
+  name: string | null; description: string | null;
+  image: string | null; price: string | null; currency: string | null;
 }
 
 function extractJsonLd($: cheerio.CheerioAPI): JsonLdProduct | null {
@@ -668,33 +534,26 @@ function extractJsonLd($: cheerio.CheerioAPI): JsonLdProduct | null {
       const raw = $(scripts[i]).html()?.trim();
       if (!raw) continue;
       const data = JSON.parse(raw);
-      const product = findProduct(data);
+      const product = findJsonLdProduct(data);
       if (product) return product;
-    } catch { /* invalid JSON */ }
+    } catch { /* skip */ }
   }
   return null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function findProduct(data: any): JsonLdProduct | null {
+function findJsonLdProduct(data: any): JsonLdProduct | null {
   if (!data) return null;
-
   if (data['@graph'] && Array.isArray(data['@graph'])) {
-    for (const item of data['@graph']) {
-      const r = findProduct(item); if (r) return r;
-    }
+    for (const item of data['@graph']) { const r = findJsonLdProduct(item); if (r) return r; }
     return null;
   }
   if (Array.isArray(data)) {
-    for (const item of data) {
-      const r = findProduct(item); if (r) return r;
-    }
+    for (const item of data) { const r = findJsonLdProduct(item); if (r) return r; }
     return null;
   }
-
   const type = data['@type'];
-  const isProduct = type === 'Product' || (Array.isArray(type) && type.includes('Product'));
-  if (!isProduct) return null;
+  if (!(type === 'Product' || (Array.isArray(type) && type.includes('Product')))) return null;
 
   let price: string | null = null;
   let currency: string | null = null;
@@ -706,20 +565,18 @@ function findProduct(data: any): JsonLdProduct | null {
   }
 
   let image: string | null = null;
-  if (typeof data.image === 'string') image = data.image;
-  else if (Array.isArray(data.image)) image = typeof data.image[0] === 'string' ? data.image[0] : (data.image[0]?.url ?? null);
-  else if (data.image?.url) image = data.image.url;
+  if (typeof data.image === 'string')          image = data.image;
+  else if (Array.isArray(data.image))          image = typeof data.image[0] === 'string' ? data.image[0] : (data.image[0]?.url ?? null);
+  else if (data.image?.url)                    image = data.image.url;
 
   return {
     name:        data.name        ? String(data.name).trim()        : null,
     description: data.description ? String(data.description).trim() : null,
-    image,
-    price,
-    currency,
+    image, price, currency,
   };
 }
 
-// ─── Domain Adapters ──────────────────────────────────────────────────────────
+// ─── Domain Adapters (DOM-level, level 5b) ────────────────────────────────────
 
 interface DomainData {
   title?: string | null;
@@ -728,207 +585,122 @@ interface DomainData {
   price?: string | null;
 }
 
-function tryDomainAdapter(
-  $: cheerio.CheerioAPI,
-  hostname: string,
-  html: string,
-  baseUrl: string,
-): DomainData | null {
-  if (hostname === 'ozon.ru'         || hostname.endsWith('.ozon.ru'))           return ozonAdapter($, html);
-  if (hostname === 'wildberries.ru'  || hostname.endsWith('.wildberries.ru'))    return wbHtmlAdapter($, html);
-  if (hostname === 'market.yandex.ru'|| hostname.endsWith('.market.yandex.ru')) return yandexMarketAdapter($, html);
-  if (hostname === 'lamoda.ru'       || hostname.endsWith('.lamoda.ru'))         return lamodaAdapter($);
-  if (hostname === 'goldapple.ru'    || hostname.endsWith('.goldapple.ru'))      return goldappleAdapter($);
-  if (hostname === 'tehnopark.ru'    || hostname.endsWith('.tehnopark.ru'))      return tehnoparkAdapter($);
-  if (hostname === 'bork.ru'         || hostname.endsWith('.bork.ru'))           return borkAdapter($, baseUrl);
+function applyDomainAdapter($: cheerio.CheerioAPI, hostname: string, html: string): DomainData | null {
+  if (hostname === 'ozon.ru'          || hostname.endsWith('.ozon.ru'))           return ozonAdapter($, html);
+  if (hostname === 'wildberries.ru'   || hostname.endsWith('.wildberries.ru'))    return wbHtmlAdapter($, html);
+  if (hostname === 'market.yandex.ru' || hostname.endsWith('.market.yandex.ru')) return ymAdapter($);
+  if (hostname === 'lamoda.ru'        || hostname.endsWith('.lamoda.ru'))         return lamodaAdapter($);
+  if (hostname === 'goldapple.ru'     || hostname.endsWith('.goldapple.ru'))      return goldappleAdapter($);
+  if (hostname === 'tehnopark.ru'     || hostname.endsWith('.tehnopark.ru'))      return tehnoparkAdapter($);
+  if (hostname === 'bork.ru'          || hostname.endsWith('.bork.ru'))           return borkAdapter($);
   return null;
 }
 
-/**
- * Ozon: deeply SPA-rendered. Best sources are OG tags (populated by SSR) and
- * JSON-LD. Also try to scrape the app hydration state for price.
- */
 function ozonAdapter($: cheerio.CheerioAPI, html: string): DomainData | null {
   const result: DomainData = {};
-
   const ogTitle = $('meta[property="og:title"]').attr('content')?.trim();
   if (ogTitle) {
     result.title = ogTitle
       .replace(/\s*[-–—]\s*(?:купить|заказать)\s+(?:на|в)\s+OZON.*/i, '')
-      .replace(/\s*\|\s*OZON\s*$/i, '')
-      .trim();
+      .replace(/\s*\|\s*OZON\s*$/i, '').trim();
   }
-
-  // Price: try hydration state JSON
-  const priceFromHydration = extractOzonPrice(html);
-  if (priceFromHydration) result.price = priceFromHydration;
-
-  // Price fallback: DOM selector (Ozon uses data-widget)
+  // Price from hydration JSON (Ozon embeds price in script tags)
+  const priceM = html.match(/"finalPrice"\s*:\s*(\d+)/)
+              ?? html.match(/"price"\s*:\s*(\d+)/);
+  if (priceM?.[1]) {
+    const p = parseInt(priceM[1]!, 10);
+    if (p > 0 && p < 10_000_000) result.price = String(p);
+  }
+  // DOM selector fallback
   if (!result.price) {
-    const priceEl = $('[data-widget="webSalePrice"] span').first().text()
-                 || $('[data-widget="webPrice"] span').first().text();
-    if (priceEl) {
-      const m = priceEl.match(/([\d\s]+)\s*₽/);
-      if (m) result.price = m[1]!.replace(/\s/g, '');
+    const domPrice = $('[data-widget="webSalePrice"] span').first().text()
+                  || $('[data-widget="webPrice"] span').first().text();
+    if (domPrice) {
+      const m = domPrice.match(/([\d\s]+)\s*₽/);
+      if (m?.[1]) result.price = m[1]!.replace(/\s/g, '');
     }
   }
-
   return Object.keys(result).length ? result : null;
 }
 
-function extractOzonPrice(html: string): string | null {
-  // Ozon stores structured data in multiple script blocks
-  const patterns = [
-    /"finalPrice"\s*:\s*(\d+)/,
-    /"price"\s*:\s*(\d+)/,
-    /"originalPrice"\s*:\s*(\d+)/,
-  ];
-  for (const re of patterns) {
-    const m = html.match(re);
-    if (m?.[1]) {
-      const price = parseInt(m[1]!, 10);
-      if (price > 0 && price < 10_000_000) return m[1]!;
-    }
-  }
-  return null;
-}
-
-/**
- * Wildberries HTML adapter (fallback when card API fails/unavailable).
- * WB renders OG tags server-side for product pages.
- */
 function wbHtmlAdapter($: cheerio.CheerioAPI, html: string): DomainData | null {
   const result: DomainData = {};
-
   const ogTitle = $('meta[property="og:title"]').attr('content')?.trim();
   if (ogTitle) {
     result.title = ogTitle
-      .replace(/\s*[-–—]\s*(?:купить|заказать)\s+(?:по цен[еуы]|за)?.*/i, '')
-      .replace(/\s*[-–—]\s*Wildberries\s*$/i, '')
-      .replace(/\s*\|\s*Wildberries\s*$/i, '')
-      .trim();
-    // Sometimes price is embedded in OG title
-    const pm = ogTitle.match(/(?:цен[еуы]|за)\s*([\d\s]+)\s*₽/);
-    if (pm?.[1]) result.price = pm[1]!.replace(/\s/g, '');
+      .replace(/\s*[-–—]\s*(?:купить|заказать).*/i, '')
+      .replace(/\s*\|\s*Wildberries\s*$/i, '').trim();
   }
-
-  // Try to find price in script data
-  const wbPriceM = html.match(/"price"\s*:\s*(\d+)/);
-  if (wbPriceM?.[1] && !result.price) {
-    const p = parseInt(wbPriceM[1]!, 10);
-    // WB stores prices in both rubles and kopecks in different endpoints
-    // Heuristic: if > 50000 and remainder is 00, likely kopecks
-    if (p > 50_000 && p % 100 === 0) {
-      result.price = String(Math.round(p / 100));
-    } else if (p > 0 && p < 1_000_000) {
-      result.price = String(p);
+  // Price might be in page script data
+  if (!result.price) {
+    const m = html.match(/"price"\s*:\s*(\d+)/);
+    if (m?.[1]) {
+      const p = parseInt(m[1]!, 10);
+      if (p > 50_000 && p % 100 === 0) result.price = String(Math.round(p / 100));
+      else if (p > 0 && p < 1_000_000) result.price = String(p);
     }
   }
-
   return Object.keys(result).length ? result : null;
 }
 
-/**
- * Yandex Market: heavily SPA. JSON-LD Product is usually present after render.
- * OG tags are clean and reliable.
- */
-function yandexMarketAdapter($: cheerio.CheerioAPI, _html: string): DomainData | null {
+function ymAdapter($: cheerio.CheerioAPI): DomainData | null {
   const result: DomainData = {};
-
   const ogTitle = $('meta[property="og:title"]').attr('content')?.trim();
   if (ogTitle) {
     result.title = ogTitle
-      .replace(/\s*[-–—]\s*(?:купить|заказать).*$/i, '')
-      .replace(/\s*[-–—]\s*Яндекс\s*Маркет\s*$/i, '')
-      .replace(/\s*[-–—]\s*(?:цены,\s*)?(?:описание|характеристики|отзывы).*$/i, '')
-      .trim();
+      .replace(/\s*[-–—]\s*(?:купить|заказать).*/i, '')
+      .replace(/\s*[-–—]\s*Яндекс.*/i, '').trim();
   }
-
-  // YM often has price in specific meta
   const priceM = $('meta[property="yandex_market:price"]').attr('content')
               ?? $('meta[name="price"]').attr('content');
   if (priceM) result.price = priceM;
-
   return Object.keys(result).length ? result : null;
 }
 
-/**
- * Lamoda: SSR fashion store, good OG + JSON-LD.
- * Specific selectors for price.
- */
 function lamodaAdapter($: cheerio.CheerioAPI): DomainData | null {
   const result: DomainData = {};
-
-  // Price selectors (Lamoda changes them often, try multiple)
-  const priceSelectors = [
-    '[class*="product-prices__price_type_discount"]',
-    '[class*="product-prices__price"]',
-    '[data-testid="price"]',
-    '[class*="price__price"]',
-    '.x-premium-product-sticky-block__price',
-  ];
-  for (const sel of priceSelectors) {
-    const text = $(sel).first().text().trim();
-    if (text) {
-      const m = text.match(/([\d\s]+)\s*(?:₽|руб)/);
+  for (const sel of [
+    '[class*="product-prices__price_type_discount"]', '[class*="product-prices__price"]',
+    '[data-testid="price"]', '[class*="price__price"]',
+  ]) {
+    const t = $(sel).first().text().trim();
+    if (t) {
+      const m = t.match(/([\d\s]+)\s*(?:₽|руб)/);
       if (m?.[1]) { result.price = m[1]!.replace(/\s/g, ''); break; }
     }
   }
-
-  // Brand + product name from specific selectors
-  const brand    = $('[data-testid="brand-name"]').first().text().trim();
-  const prodName = $('[data-testid="product-name"]').first().text().trim()
-                || $('[class*="product-title"]').first().text().trim();
-  if (brand && prodName) result.title = `${brand} ${prodName}`;
-  else if (prodName) result.title = prodName;
-
+  const brand = $('[data-testid="brand-name"]').first().text().trim();
+  const prod  = $('[data-testid="product-name"]').first().text().trim()
+             || $('[class*="product-title"]').first().text().trim();
+  if (brand && prod) result.title = `${brand} ${prod}`;
+  else if (prod)     result.title = prod;
   return Object.keys(result).length ? result : null;
 }
 
-/**
- * Goldapple (goldapple.ru): beauty/cosmetics store.
- * Usually has clean OG tags and JSON-LD.
- */
 function goldappleAdapter($: cheerio.CheerioAPI): DomainData | null {
   const result: DomainData = {};
-
-  const priceSelectors = [
-    '[class*="ProductPage__price"]',
-    '[class*="product-price"]',
-    '.price__value',
-    '[itemprop="price"]',
-    '[data-testid="price"]',
-  ];
-  for (const sel of priceSelectors) {
-    const el = $(sel).first();
+  for (const sel of [
+    '[class*="ProductPage__price"]', '[class*="product-price"]',
+    '.price__value', '[itemprop="price"]', '[data-testid="price"]',
+  ]) {
+    const el   = $(sel).first();
     const text = el.attr('content') ?? el.text().trim();
     if (text) {
       const m = text.match(/([\d\s]+)\s*(?:₽|руб)?/);
       if (m?.[1]) { result.price = m[1]!.replace(/\s/g, ''); break; }
     }
   }
-
   const nameEl = $('[class*="ProductPage__name"]').first().text().trim()
               || $('h1').first().text().trim();
   if (nameEl) result.title = nameEl;
-
   return Object.keys(result).length ? result : null;
 }
 
-/**
- * Технопарк (tehnopark.ru): electronics store.
- * Good JSON-LD coverage, clean OG tags.
- */
 function tehnoparkAdapter($: cheerio.CheerioAPI): DomainData | null {
   const result: DomainData = {};
-
-  const priceSelectors = [
-    '[class*="product-buy__price"]',
-    '[itemprop="price"]',
-    '[class*="price_value"]',
-    '.price',
-  ];
-  for (const sel of priceSelectors) {
+  for (const sel of [
+    '[class*="product-buy__price"]', '[itemprop="price"]', '[class*="price_value"]', '.price',
+  ]) {
     const el   = $(sel).first();
     const text = el.attr('content') ?? el.text().trim();
     if (text) {
@@ -936,24 +708,15 @@ function tehnoparkAdapter($: cheerio.CheerioAPI): DomainData | null {
       if (m?.[1]) { result.price = m[1]!; break; }
     }
   }
-
   return Object.keys(result).length ? result : null;
 }
 
-/**
- * Bork (bork.ru): premium kitchen appliances.
- * Usually has JSON-LD + clean OG tags.
- */
-function borkAdapter($: cheerio.CheerioAPI, _baseUrl: string): DomainData | null {
+function borkAdapter($: cheerio.CheerioAPI): DomainData | null {
   const result: DomainData = {};
-
-  const priceSelectors = [
-    '[class*="product__price"]',
-    '[class*="price__value"]',
-    '[itemprop="price"]',
-    '.product-price',
-  ];
-  for (const sel of priceSelectors) {
+  for (const sel of [
+    '[class*="product__price"]', '[class*="price__value"]',
+    '[itemprop="price"]', '.product-price',
+  ]) {
     const el   = $(sel).first();
     const text = el.attr('content') ?? el.text().trim();
     if (text) {
@@ -961,10 +724,8 @@ function borkAdapter($: cheerio.CheerioAPI, _baseUrl: string): DomainData | null
       if (m?.[1]) { result.price = m[1]!; break; }
     }
   }
-
   const h1 = $('h1').first().text().trim();
   if (h1) result.title = h1;
-
   return Object.keys(result).length ? result : null;
 }
 
@@ -983,43 +744,67 @@ const TITLE_SUFFIXES: Array<[RegExp, RegExp[]]> = [
 function cleanTitle(title: string | null, hostname: string): string | null {
   if (!title) return null;
   let t = title;
-  for (const [domainRe, cleanRules] of TITLE_SUFFIXES) {
+  for (const [domainRe, rules] of TITLE_SUFFIXES) {
     if (domainRe.test(hostname)) {
-      for (const re of cleanRules) t = t.replace(re, '');
+      for (const re of rules) t = t.replace(re, '');
     }
   }
-  t = t.trim();
-  return t.length > 0 ? t : title.trim() || null;
+  return t.trim() || title.trim() || null;
 }
 
-// ─── URL Resolver ─────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function resolveUrl(url: string | null | undefined, base: string): string | null {
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('//')) return 'https:' + url;
   try { return new URL(url, base).href; } catch { return null; }
 }
-
-// ─── Price Formatting ─────────────────────────────────────────────────────────
 
 function formatNumber(n: number): string {
   return n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 function formatPrice(raw: string, currency?: string | null): string {
-  // Normalize: "12 999", "12,999", "12999.00" → 12999
   const cleaned = raw.replace(/\s/g, '').replace(',', '.');
   const num = parseFloat(cleaned);
   if (isNaN(num) || num <= 0) return raw;
-
-  const formatted = num.toLocaleString('ru-RU', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
-
+  const formatted = num.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const cur = (currency ?? '').toUpperCase();
   if (!cur || cur === 'RUB' || cur === 'RUR') return `${formatted} ₽`;
   if (cur === 'USD') return `$${formatted}`;
   if (cur === 'EUR') return `€${formatted}`;
   return `${formatted} ${cur}`;
 }
+
+function calcConfidence(r: { title: string | null; imageUrl: string | null; priceText: string | null }): ParseResult['confidence'] {
+  if (!r.title) return 'none';
+  if (r.title && r.imageUrl && r.priceText) return 'high';
+  if (r.title && (r.imageUrl || r.priceText)) return 'medium';
+  return 'low';
+}
+
+function confidenceScore(c: ParseResult['confidence']): number {
+  return { none: 0, low: 1, medium: 2, high: 3 }[c];
+}
+
+function pickBetter(a: ParseResult, b: ParseResult): ParseResult {
+  return confidenceScore(b.confidence) > confidenceScore(a.confidence) ? b : a;
+}
+
+function emptyParseResult(method: ParseResult['parseMethod']): ParseResult {
+  return { title: null, description: null, priceText: null, imageUrl: null,
+           confidence: 'none', parseMethod: method };
+}
+
+function emptyResult(sourceDomain: string, canonicalUrl: string): ParsedUrlData {
+  return { title: null, description: null, priceText: null, imageUrl: null,
+           sourceDomain, canonicalUrl, confidence: 'none', parseMethod: 'generic_html' };
+}
+
+function toFinal(r: ParseResult, sourceDomain: string, canonicalUrl: string): ParsedUrlData {
+  return { ...r, sourceDomain, canonicalUrl };
+}
+
+// Re-export for any callers that still import wbBasket from this module
+export { wbBasket, wbCdnImageUrl };
