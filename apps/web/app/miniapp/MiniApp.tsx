@@ -938,7 +938,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showWlManage, setShowWlManage] = useState(false);
   const [showArchiveWlConfirm, setShowArchiveWlConfirm] = useState(false);
   const [archivingWl, setArchivingWl] = useState(false);
-  const [unreserveConfirmItem, setUnreserveConfirmItem] = useState<ReservationItem | null>(null);
+  const [pendingUnreserveAction, setPendingUnreserveAction] = useState<(() => Promise<void>) | null>(null);
   const [unreservingConfirm, setUnreservingConfirm] = useState(false);
 
   // Subscriptions (following)
@@ -2916,7 +2916,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           setFromReservations(true);
                           setScreen('guest-item-detail');
                         }}
-                        onUnreserve={() => setUnreserveConfirmItem(item)}
+                        onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveFromReservations(item))}
                       />
                     );
                   })}
@@ -3334,7 +3334,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
                     {t('reserved_by_me', locale)}
                   </span>
-                  <button onClick={() => void handleUnreserve(viewingItem as GuestItem)}
+                  <button onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
                     style={{
                       ...btnBase, width: '100%', background: C.redSoft, color: C.red,
                       border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 14,
@@ -4181,7 +4181,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       </BottomSheet>
 
       {/* ── Unreserve confirmation ── */}
-      <BottomSheet isOpen={!!unreserveConfirmItem} onClose={() => { if (!unreservingConfirm) setUnreserveConfirmItem(null); }} title={t('unreserve_confirm_title', locale)}>
+      <BottomSheet isOpen={!!pendingUnreserveAction} onClose={() => { if (!unreservingConfirm) setPendingUnreserveAction(null); }} title={t('unreserve_confirm_title', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
             {t('unreserve_confirm_body', locale)}
@@ -4189,7 +4189,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               style={{ ...btnSecondary, flex: 1 }}
-              onClick={() => setUnreserveConfirmItem(null)}
+              onClick={() => setPendingUnreserveAction(null)}
               disabled={unreservingConfirm}
             >
               {t('cancel', locale)}
@@ -4198,11 +4198,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               style={{ ...btnPrimary, flex: 1, background: C.red, opacity: unreservingConfirm ? 0.6 : 1 }}
               disabled={unreservingConfirm}
               onClick={async () => {
-                if (!unreserveConfirmItem || unreservingConfirm) return;
+                if (!pendingUnreserveAction || unreservingConfirm) return;
                 setUnreservingConfirm(true);
                 try {
-                  await handleUnreserveFromReservations(unreserveConfirmItem);
-                  setUnreserveConfirmItem(null);
+                  await pendingUnreserveAction();
+                  setPendingUnreserveAction(null);
                 } finally {
                   setUnreservingConfirm(false);
                 }
