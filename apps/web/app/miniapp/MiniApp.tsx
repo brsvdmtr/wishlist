@@ -936,6 +936,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   } | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  // Track which screen the user came from before opening settings (for correct back navigation)
+  const [settingsOriginScreen, setSettingsOriginScreen] = useState<Screen>('my-wishlists');
   const [showProfileVisibilitySheet, setShowProfileVisibilitySheet] = useState(false);
   const [showSubscribePolicySheet, setShowSubscribePolicySheet] = useState(false);
   const [showCommentsDefaultSheet, setShowCommentsDefaultSheet] = useState(false);
@@ -1881,7 +1883,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } else if (screen === 'profile') {
       setScreen('my-wishlists');
     } else if (screen === 'settings') {
-      setScreen('profile');
+      // Return to the screen the user came from; fall back to my-wishlists if unknown
+      const origin = settingsOriginScreen && settingsOriginScreen !== 'settings' ? settingsOriginScreen : 'my-wishlists';
+      setScreen(origin);
     } else if (screen === 'share') {
       setScreen('wishlist-detail');
     } else if (screen === 'archive') {
@@ -1891,7 +1895,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setScreen('wishlist-detail');
       }
     }
-  }, [screen, archiveMode, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode]);
+  }, [screen, archiveMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -2921,7 +2925,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             </div>
             <button
-              onClick={() => { loadSettings(); setScreen('settings'); }}
+              onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
               style={{
                 background: 'none', border: 'none', padding: 8, cursor: 'pointer',
                 fontSize: 20, color: C.textMuted, lineHeight: 1,
@@ -4576,7 +4580,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>
               {t('profile_title', locale)}
             </h1>
-            <button onClick={() => { loadSettings(); setScreen('settings'); }} style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', color: C.textMuted }}>
+            <button onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }} style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', color: C.textMuted }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
           </div>
