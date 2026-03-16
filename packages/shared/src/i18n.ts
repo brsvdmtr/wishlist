@@ -424,7 +424,7 @@ const ru: Dict = {
   bot_start:
     'Привет! WishBoard — твой персональный список желаний 🎁\nНажми кнопку «Вишлист» внизу, чтобы открыть приложение.',
   bot_help:
-    'WishBoard — создавай вишлисты и делись ими с друзьями.\n\n/start — начать\n/paysupport — помощь с оплатой\n\nОтправь ссылку на товар — я создам карточку желания!',
+    'WishBoard помогает создавать вишлисты, делиться ими и отслеживать брони.\n\n/start — начать\n/support — написать в поддержку\n/paysupport — помощь с оплатой\n\nОтправь ссылку на товар — я создам карточку желания!',
   bot_paysupport:
     '💳 Помощь с оплатой\n\nЕсли у тебя возникли проблемы с оплатой или подпиской PRO:\n\n1. Убедись, что у тебя достаточно Telegram Stars\n2. Попробуй перезапустить приложение и повторить оплату\n3. Если проблема сохраняется — напиши описание проблемы в этот чат, мы разберёмся 🙏',
   bot_view_wishlist: 'Смотри вишлист 🎁',
@@ -457,8 +457,18 @@ const ru: Dict = {
   bot_import_parse_partial: '💡 Распознал не всё — проверь и дополни в приложении',
   bot_import_open: 'Открыть в WishBoard ✨',
   bot_cmd_start: 'Открыть WishBoard',
+  bot_cmd_support: 'Написать в поддержку',
   bot_cmd_paysupport: 'Помощь с оплатой',
   bot_select_recipients: '👥 Выбрать получателей',
+
+  // ── Support flow ──────────────────────────────────────────────────────────
+  support_btn: '✍️ Написать в поддержку',
+  support_prompt: 'Опиши, что пошло не так. Можно текстом, фото или скрином.',
+  support_confirm: '✅ Обращение принято. Номер тикета: {{code}}',
+  support_already_open: 'У тебя уже есть открытое обращение {{code}}. Ответь на предыдущее сообщение поддержки или дождись закрытия тикета.',
+  support_followup_sent: 'Сообщение добавлено к тикету {{code}}',
+  support_ticket_closed: 'Этот тикет уже закрыт. Создай новое обращение через /support.',
+  support_closed: 'Тикет {{code}} закрыт. Если вопрос останется — напиши снова через /support.',
 
   // ── API strings (user-facing) ─────────────────────────────────────────────
   api_hint_picker_msg: '💡 Намёк на «{{title}}» создан!\n\nВыбери друзей, которым хочешь намекнуть:',
@@ -1082,7 +1092,7 @@ const en: Dict = {
   bot_start:
     'Hi! WishBoard is your personal wishlist 🎁\nTap the "Wishlist" button below to open the app.',
   bot_help:
-    "WishBoard — create wishlists and share them with friends.\n\n/start — get started\n/paysupport — payment help\n\nSend a product link — I'll create a wish card!",
+    "WishBoard helps you create wishlists, share them with friends, and track reservations.\n\n/start — get started\n/support — contact support\n/paysupport — payment help\n\nSend a product link — I'll create a wish card!",
   bot_paysupport:
     "💳 Payment help\n\nIf you're having issues with payment or PRO subscription:\n\n1. Make sure you have enough Telegram Stars\n2. Try restarting the app and retrying payment\n3. If the problem persists — describe the issue in this chat, we'll sort it out 🙏",
   bot_view_wishlist: 'Check out this wishlist 🎁',
@@ -1114,8 +1124,18 @@ const en: Dict = {
   bot_import_parse_partial: '💡 Partially parsed — check and complete in the app',
   bot_import_open: 'Open in WishBoard ✨',
   bot_cmd_start: 'Open WishBoard',
+  bot_cmd_support: 'Contact support',
   bot_cmd_paysupport: 'Payment help',
   bot_select_recipients: '👥 Select recipients',
+
+  // ── Support flow ──────────────────────────────────────────────────────────
+  support_btn: '✍️ Contact support',
+  support_prompt: "Tell us what went wrong. You can send text, photos, or screenshots.",
+  support_confirm: '✅ Request received. Ticket number: {{code}}',
+  support_already_open: 'You already have an open ticket {{code}}. Reply to the previous support message or wait for it to be closed.',
+  support_followup_sent: 'Message added to ticket {{code}}',
+  support_ticket_closed: 'This ticket is already closed. Start a new request with /support.',
+  support_closed: 'Ticket {{code}} closed. If the issue persists, write again via /support.',
 
   // ── API strings (user-facing) ─────────────────────────────────────────────
   api_hint_picker_msg: '💡 Hint for "{{title}}" created!\n\nSelect friends you want to hint to:',

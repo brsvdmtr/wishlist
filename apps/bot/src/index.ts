@@ -60,6 +60,322 @@ if (!token) {
 
   const getLocale = (ctx: any): Locale => detectLocale(ctx.from?.language_code);
 
+  // ─── Support chat configuration ───────────────────────────────────────────
+  const SUPPORT_CHAT_ID = (process.env.SUPPORT_CHAT_ID ?? '').trim();
+
+  // ─── Support helper: generate next ticket code ────────────────────────────
+  async function generateTicketCode(): Promise<string> {
+    const last = await prisma.supportTicket.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { ticketCode: true },
+    });
+    if (!last) return 'SUP-0001';
+    const match = last.ticketCode.match(/SUP-(\d+)/);
+    if (!match) return 'SUP-0001';
+    return `SUP-${String(parseInt(match[1]!, 10) + 1).padStart(4, '0')}`;
+  }
+
+  // ─── Support helper: extract content from any message ────────────────────
+  type MsgContent = { kind: 'TEXT' | 'PHOTO' | 'VIDEO' | 'DOCUMENT' | 'OTHER'; text?: string; caption?: string; fileId?: string };
+
+  function extractMessageContent(msg: any): MsgContent {
+    if ('text' in msg && msg.text && !String(msg.text).startsWith('/')) {
+      return { kind: 'TEXT', text: String(msg.text) };
+    }
+    if ('photo' in msg && Array.isArray(msg.photo) && msg.photo.length > 0) {
+      const largest = msg.photo[msg.photo.length - 1] as { file_id: string };
+      return { kind: 'PHOTO', caption: msg.caption as string | undefined, fileId: largest.file_id };
+    }
+    if ('document' in msg && msg.document) {
+      return { kind: 'DOCUMENT', caption: msg.caption as string | undefined, fileId: (msg.document as any).file_id };
+    }
+    if ('video' in msg && msg.video) {
+      return { kind: 'VIDEO', caption: msg.caption as string | undefined, fileId: (msg.video as any).file_id };
+    }
+    return { kind: 'OTHER', text: '[Unsupported message type]' };
+  }
+
+  // ─── Support helper: send message to support chat ─────────────────────────
+  async function sendToSupportChat(
+    fromId: number,
+    fromFirstName: string,
+    fromUsername: string | undefined,
+    content: MsgContent,
+    headerLines: string[],
+  ): Promise<{ message_id: number } | null> {
+    if (!SUPPORT_CHAT_ID) return null;
+    const userTag = fromUsername ? `@${fromUsername}` : `ID: ${fromId}`;
+    const header = [...headerLines, `👤 ${fromFirstName} ${userTag}`, `ID: ${fromId}`].join('\n');
+
+    try {
+      let sent: { message_id: number };
+      if (content.kind === 'PHOTO' && content.fileId) {
+        const cap = [header, content.caption].filter(Boolean).join('\n');
+        sent = await bot.telegram.sendPhoto(SUPPORT_CHAT_ID, content.fileId, { caption: cap.slice(0, 1024) });
+      } else if (content.kind === 'DOCUMENT' && content.fileId) {
+        const cap = [header, content.caption].filter(Boolean).join('\n');
+        sent = await bot.telegram.sendDocument(SUPPORT_CHAT_ID, content.fileId, { caption: cap.slice(0, 1024) });
+      } else if (content.kind === 'VIDEO' && content.fileId) {
+        const cap = [header, content.caption].filter(Boolean).join('\n');
+        sent = await bot.telegram.sendVideo(SUPPORT_CHAT_ID, content.fileId, { caption: cap.slice(0, 1024) });
+      } else {
+        const body = content.text || `[${content.kind}]`;
+        sent = await bot.telegram.sendMessage(SUPPORT_CHAT_ID, `${header}\n\n${body}`.slice(0, 4096));
+      }
+      return sent;
+    } catch (err) {
+      console.error('[bot][support] failed to send to support chat:', err);
+      return null;
+    }
+  }
+
+  // ─── Support: send ForceReply prompt to user ─────────────────────────────
+  async function sendSupportPrompt(ctx: any): Promise<void> {
+    const locale = getLocale(ctx);
+    const chatId = String(ctx.chat.id);
+    const sent = await ctx.reply(t('support_prompt', locale), {
+      reply_markup: { force_reply: true, selective: true },
+    }) as { message_id: number };
+    await prisma.supportSession.create({
+      data: {
+        telegramChatId: chatId,
+        promptMessageId: sent.message_id,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    }).catch((err: unknown) => console.error('[bot][support] failed to save session:', err));
+  }
+
+  // ─── Support: create a new ticket ────────────────────────────────────────
+  async function handleCreateTicket(ctx: any): Promise<void> {
+    const locale = getLocale(ctx);
+    const msg = ctx.message as any;
+    const fromId = String(ctx.from.id);
+    const chatId = String(ctx.chat.id);
+
+    // Upsert user
+    const user = await prisma.user.upsert({
+      where: { telegramId: fromId },
+      update: { telegramChatId: chatId },
+      create: { telegramId: fromId, telegramChatId: chatId },
+    });
+
+    // Rate limit: max 1 non-closed ticket per user
+    const existingOpen = await prisma.supportTicket.findFirst({
+      where: { userId: user.id, status: { not: 'CLOSED' } },
+      select: { ticketCode: true },
+    });
+    if (existingOpen) {
+      await ctx.reply(t('support_already_open', locale, { code: existingOpen.ticketCode }));
+      return;
+    }
+
+    const content = extractMessageContent(msg);
+    const ticketCode = await generateTicketCode();
+
+    // Create ticket + first message in DB
+    const ticket = await prisma.supportTicket.create({
+      data: {
+        ticketCode,
+        userId: user.id,
+        status: 'WAITING_SUPPORT',
+        openedVia: 'support_flow',
+        supportChatId: SUPPORT_CHAT_ID || null,
+        messages: {
+          create: {
+            authorRole: 'USER',
+            kind: content.kind,
+            text: content.text,
+            caption: content.caption,
+            telegramUserChatId: chatId,
+            telegramUserMsgId: msg.message_id as number,
+            telegramFileId: content.fileId,
+          },
+        },
+      },
+      include: { messages: true },
+    });
+
+    // Confirm to user
+    await ctx.reply(t('support_confirm', locale, { code: ticketCode }));
+
+    // Forward to support chat
+    const headerLines = [`[${ticketCode}] Новое обращение`];
+    const sent = await sendToSupportChat(ctx.from.id, ctx.from.first_name || 'User', ctx.from.username, content, headerLines);
+    if (sent) {
+      await prisma.supportMessage.update({
+        where: { id: ticket.messages[0]!.id },
+        data: {
+          telegramSupportChatId: SUPPORT_CHAT_ID,
+          telegramSupportMsgId: sent.message_id,
+        },
+      }).catch(() => {});
+    }
+
+    console.log(`[bot][support] ticket created: ${ticketCode} userId=${user.id}`);
+  }
+
+  // ─── Support: handle user follow-up ──────────────────────────────────────
+  async function handleUserFollowUp(ctx: any, ticket: { id: string; ticketCode: string; status: string }): Promise<void> {
+    const locale = getLocale(ctx);
+    const msg = ctx.message as any;
+    const chatId = String(ctx.chat.id);
+    const content = extractMessageContent(msg);
+
+    // Save follow-up message
+    const savedMsg = await prisma.supportMessage.create({
+      data: {
+        ticketId: ticket.id,
+        authorRole: 'USER',
+        kind: content.kind,
+        text: content.text,
+        caption: content.caption,
+        telegramUserChatId: chatId,
+        telegramUserMsgId: msg.message_id as number,
+        telegramFileId: content.fileId,
+      },
+    });
+
+    await prisma.supportTicket.update({
+      where: { id: ticket.id },
+      data: { status: 'WAITING_SUPPORT', updatedAt: new Date() },
+    });
+
+    // Forward to support chat as follow-up
+    const headerLines = [`[${ticket.ticketCode}] Follow-up от пользователя`];
+    const sent = await sendToSupportChat(ctx.from.id, ctx.from.first_name || 'User', ctx.from.username, content, headerLines);
+    if (sent) {
+      await prisma.supportMessage.update({
+        where: { id: savedMsg.id },
+        data: {
+          telegramSupportChatId: SUPPORT_CHAT_ID,
+          telegramSupportMsgId: sent.message_id,
+        },
+      }).catch(() => {});
+    }
+
+    await ctx.reply(t('support_followup_sent', locale, { code: ticket.ticketCode }));
+  }
+
+  // ─── Support: handle staff reply from support chat ────────────────────────
+  async function handleSupportReply(ctx: any, replyToMsgId: number, replyText: string): Promise<void> {
+    // Find which ticket message was replied to
+    const originalMsg = await prisma.supportMessage.findFirst({
+      where: { telegramSupportMsgId: replyToMsgId },
+      include: { ticket: { include: { user: { select: { telegramChatId: true } } } } },
+    });
+
+    if (!originalMsg) {
+      await ctx.reply('⚠️ Не удалось найти тикет для этого сообщения. Убедись, что это reply на сообщение тикета.').catch(() => {});
+      return;
+    }
+
+    const ticket = originalMsg.ticket;
+
+    if (ticket.status === 'CLOSED') {
+      await ctx.reply(`ℹ️ Тикет ${ticket.ticketCode} уже закрыт.`).catch(() => {});
+      return;
+    }
+
+    // Save support message
+    const supportReplyRecord = await prisma.supportMessage.create({
+      data: {
+        ticketId: ticket.id,
+        authorRole: 'SUPPORT',
+        kind: 'TEXT',
+        text: replyText,
+        telegramSupportChatId: String(ctx.chat.id),
+        telegramSupportMsgId: (ctx.message as any).message_id as number,
+      },
+    });
+
+    // Update ticket status
+    await prisma.supportTicket.update({
+      where: { id: ticket.id },
+      data: { status: 'WAITING_USER', updatedAt: new Date() },
+    });
+
+    // Deliver to user
+    const userChatId = ticket.user.telegramChatId;
+    if (!userChatId) {
+      await ctx.reply(`⚠️ [${ticket.ticketCode}] Не удалось доставить ответ: у пользователя нет Chat ID.`).catch(() => {});
+      return;
+    }
+
+    const msgToUser = `[${ticket.ticketCode}] Ответ поддержки:\n${replyText}`;
+    try {
+      const sent = await bot.telegram.sendMessage(userChatId, msgToUser, {
+        reply_markup: { force_reply: true, selective: true },
+      });
+      // Store delivery message ID so user can reply to continue the thread
+      await prisma.supportMessage.update({
+        where: { id: supportReplyRecord.id },
+        data: { telegramUserChatId: userChatId, telegramUserMsgId: sent.message_id },
+      }).catch(() => {});
+      await ctx.reply(`✅ Ответ доставлен (${ticket.ticketCode})`).catch(() => {});
+    } catch (err) {
+      console.error('[bot][support] failed to deliver support reply to user:', err);
+      await ctx.reply(`⚠️ [${ticket.ticketCode}] Не удалось доставить ответ пользователю: ${String(err)}`).catch(() => {});
+    }
+  }
+
+  // ─── Support: close ticket ────────────────────────────────────────────────
+  async function handleCloseTicket(ctx: any, replyToMsgId: number): Promise<void> {
+    const supportMsg = await prisma.supportMessage.findFirst({
+      where: { telegramSupportMsgId: replyToMsgId },
+      include: { ticket: { include: { user: { select: { telegramChatId: true } } } } },
+    });
+
+    if (!supportMsg) {
+      await ctx.reply('⚠️ Не удалось найти тикет. Убедись, что /close — это reply на сообщение тикета.').catch(() => {});
+      return;
+    }
+
+    const ticket = supportMsg.ticket;
+
+    if (ticket.status === 'CLOSED') {
+      await ctx.reply(`ℹ️ Тикет ${ticket.ticketCode} уже закрыт.`).catch(() => {});
+      return;
+    }
+
+    await prisma.supportTicket.update({
+      where: { id: ticket.id },
+      data: { status: 'CLOSED', closedAt: new Date() },
+    });
+
+    // Notify user (best-effort, locale unknown for closed-ticket notification — use RU as default)
+    const userChatId = ticket.user.telegramChatId;
+    if (userChatId) {
+      const closedTextRu = t('support_closed', 'ru', { code: ticket.ticketCode });
+      await bot.telegram.sendMessage(userChatId, closedTextRu).catch(() => {});
+    }
+
+    await ctx.reply(`✅ Тикет ${ticket.ticketCode} закрыт.`).catch(() => {});
+    console.log(`[bot][support] ticket closed: ${ticket.ticketCode}`);
+  }
+
+  // ─── Support: handle all messages from support chat ───────────────────────
+  async function handleSupportChatMessage(ctx: any): Promise<void> {
+    const msg = ctx.message as any;
+    if (!msg) return;
+
+    const text: string | undefined = 'text' in msg ? msg.text : undefined;
+
+    // Must be a reply to be actionable
+    if (!msg.reply_to_message) return;
+    const replyToMsgId = (msg.reply_to_message as { message_id: number }).message_id;
+
+    // /close command (reply to a ticket message)
+    if (text?.startsWith('/close')) {
+      await handleCloseTicket(ctx, replyToMsgId);
+      return;
+    }
+
+    // Support staff reply (text only for now)
+    const replyText = text ?? (msg.caption as string | undefined);
+    if (!replyText) return;
+    await handleSupportReply(ctx, replyToMsgId, replyText);
+  }
+
   // Set the persistent menu button (bottom-left "Wishlist" button)
   bot.telegram
     .setChatMenuButton({
@@ -154,9 +470,23 @@ if (!token) {
     return ctx.reply(t('bot_start', locale));
   });
 
-  bot.command('help', (ctx) => {
+  // /help — includes support button
+  bot.command('help', async (ctx) => {
     const locale = getLocale(ctx);
-    return ctx.reply(t('bot_help', locale));
+    return ctx.reply(t('bot_help', locale), Markup.inlineKeyboard([
+      [Markup.button.callback(t('support_btn', locale), 'open_support')],
+    ]));
+  });
+
+  // /support — immediately launch support flow
+  bot.command('support', async (ctx) => {
+    await sendSupportPrompt(ctx);
+  });
+
+  // Inline button "Contact support" from /help
+  bot.action('open_support', async (ctx) => {
+    await ctx.answerCbQuery();
+    await sendSupportPrompt(ctx);
   });
 
   bot.command('paysupport', (ctx) => {
@@ -452,6 +782,61 @@ if (!token) {
     }
   });
 
+  // ─── Support flow handler ────────────────────────────────────────────────
+  // Intercepts:
+  //   1. All messages from the support chat (SUPPORT_CHAT_ID)
+  //   2. User replies to a support ForceReply prompt → create ticket
+  //   3. User replies to a bot support message → follow-up on existing ticket
+  bot.on('message', async (ctx, next) => {
+    const msg = ctx.message as any;
+    if (!msg || !ctx.from) return next();
+
+    const chatId = String(ctx.chat.id);
+
+    // ── Handle messages from support chat ──────────────────────────────────
+    if (SUPPORT_CHAT_ID && chatId === SUPPORT_CHAT_ID) {
+      await handleSupportChatMessage(ctx);
+      return; // consumed — don't fall through to URL import handler
+    }
+
+    // ── Handle user replies in private chat ────────────────────────────────
+    if (!msg.reply_to_message) return next();
+    const replyToId: number = (msg.reply_to_message as { message_id: number }).message_id;
+
+    // Case 1: Reply to a ForceReply support prompt → create new ticket
+    const session = await prisma.supportSession.findFirst({
+      where: {
+        telegramChatId: chatId,
+        promptMessageId: replyToId,
+        expiresAt: { gte: new Date() },
+      },
+    });
+    if (session) {
+      // Consume the session so it can't be used again
+      await prisma.supportSession.delete({ where: { id: session.id } }).catch(() => {});
+      await handleCreateTicket(ctx);
+      return;
+    }
+
+    // Case 2: Reply to a bot support message (support reply sent to user) → follow-up
+    const linkedMsg = await prisma.supportMessage.findFirst({
+      where: { telegramUserChatId: chatId, telegramUserMsgId: replyToId },
+      include: { ticket: true },
+    });
+    if (linkedMsg) {
+      const ticket = linkedMsg.ticket;
+      const locale = getLocale(ctx);
+      if (ticket.status === 'CLOSED') {
+        await ctx.reply(t('support_ticket_closed', locale, { code: ticket.ticketCode }));
+      } else {
+        await handleUserFollowUp(ctx, ticket);
+      }
+      return;
+    }
+
+    return next();
+  });
+
   // ─── URL import: text message handler ────────────────────────────────────
   const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
   const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/gi;
@@ -549,6 +934,7 @@ if (!token) {
   bot.telegram
     .setMyCommands([
       { command: 'start', description: t('bot_cmd_start', 'en') },
+      { command: 'support', description: t('bot_cmd_support', 'en') },
       { command: 'paysupport', description: t('bot_cmd_paysupport', 'en') },
     ])
     .catch((err: unknown) => {
@@ -560,6 +946,7 @@ if (!token) {
     .setMyCommands(
       [
         { command: 'start', description: t('bot_cmd_start', 'ru') },
+        { command: 'support', description: t('bot_cmd_support', 'ru') },
         { command: 'paysupport', description: t('bot_cmd_paysupport', 'ru') },
       ],
       { language_code: 'ru' },
