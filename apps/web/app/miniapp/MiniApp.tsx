@@ -115,7 +115,7 @@ type SubscriptionInfo = {
 
 type UpsellContext =
   | 'comments' | 'url_import' | 'hints'
-  | 'wishlist_limit' | 'item_limit' | 'participant_limit';
+  | 'wishlist_limit' | 'item_limit' | 'participant_limit' | 'subscription_limit';
 
 type UpsellSheetState = { context: UpsellContext } | null;
 
@@ -136,6 +136,21 @@ type Item = {
 };
 
 type GuestItem = Item & { reservedByDisplayName: string | null; reservedByActorHash: string | null };
+
+type SubscribedWishlist = {
+  id: string; // subscription id
+  wishlist: {
+    id: string;
+    slug: string;
+    title: string;
+    deadline: string | null;
+    archivedAt: string | null;
+    itemCount: number;
+    ownerName: string;
+  };
+  unreadCount: number;
+  unreadEntityIds: string[];
+};
 
 type ReservationItem = Item & {
   ownerName: string;
@@ -280,6 +295,12 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     emoji: '👥',
     title: t('upsell_part_title', locale),
     subtitle: t('upsell_part_subtitle', locale),
+    showTable: true,
+  },
+  subscription_limit: {
+    emoji: '👥',
+    title: t('upsell_wishlist_title', locale),
+    subtitle: t('sub_pro_upsell', locale, { max: '7' }),
     showTable: true,
   },
 });
@@ -918,6 +939,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showArchiveWlConfirm, setShowArchiveWlConfirm] = useState(false);
   const [archivingWl, setArchivingWl] = useState(false);
 
+  // Subscriptions (following)
+  const [myWishlistsTab, setMyWishlistsTab] = useState<'mine' | 'subscribed'>('mine');
+  const [subscriptions, setSubscriptions] = useState<SubscribedWishlist[]>([]);
+  const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
+  // Guest subscription state
+  const [guestSubId, setGuestSubId] = useState<string | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscriberCount, setSubscriberCount] = useState(0);
+  const [subscribing, setSubscribing] = useState(false);
+  // Items with unreads (for highlight in guest-view opened from subscriptions)
+  const [guestUnreadEntityIds, setGuestUnreadEntityIds] = useState<string[]>([]);
+
   // Guest forms
   const [priceFilter, setPriceFilter] = useState(0);
   const [reservingItem, setReservingItem] = useState<GuestItem | null>(null);
@@ -1038,6 +1071,69 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setReservationsLoading(false);
     }
   }, [tgFetch]);
+
+  const loadSubscriptions = useCallback(async () => {
+    setSubscriptionsLoading(true);
+    try {
+      const res = await tgFetch('/tg/me/subscriptions');
+      if (!res.ok) return;
+      const json = await res.json() as { subscriptions: SubscribedWishlist[] };
+      setSubscriptions(json.subscriptions);
+    } catch {
+      // silent
+    } finally {
+      setSubscriptionsLoading(false);
+    }
+  }, [tgFetch]);
+
+  const loadGuestSubscriptionStatus = useCallback(async (wishlistId: string) => {
+    try {
+      const res = await tgFetch(`/tg/wishlists/${wishlistId}/subscribe`);
+      if (!res.ok) return;
+      const json = await res.json() as { subscribed: boolean; subscriberCount: number };
+      setIsSubscribed(json.subscribed);
+      setSubscriberCount(json.subscriberCount);
+    } catch {
+      // silent
+    }
+  }, [tgFetch]);
+
+  const handleSubscribe = useCallback(async (wishlistId: string) => {
+    setSubscribing(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${wishlistId}/subscribe`, { method: 'POST' });
+      if (res.status === 402) {
+        showUpsell('subscription_limit', { auto: true });
+        return;
+      }
+      if (!res.ok) return;
+      const json = await res.json() as { subscription: { id: string; wishlistId: string } };
+      setGuestSubId(json.subscription.id);
+      setIsSubscribed(true);
+      setSubscriberCount((c) => c + 1);
+      pushToast(t('sub_subscribed_toast', 'ru'), 'success');
+    } catch {
+      // silent
+    } finally {
+      setSubscribing(false);
+    }
+  }, [tgFetch, showUpsell, pushToast]);
+
+  const handleUnsubscribe = useCallback(async (wishlistId: string) => {
+    setSubscribing(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${wishlistId}/subscribe`, { method: 'DELETE' });
+      if (!res.ok) return;
+      setGuestSubId(null);
+      setIsSubscribed(false);
+      setSubscriberCount((c) => Math.max(0, c - 1));
+      pushToast(t('sub_unsubscribed_toast', 'ru'), 'success');
+    } catch {
+      // silent
+    } finally {
+      setSubscribing(false);
+    }
+  }, [tgFetch, pushToast]);
 
   const loadProfile = useCallback(async () => {
     setProfileLoading(true);
@@ -1704,6 +1800,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // --- Load subscription status when entering guest-view (for subscribe button)
+  useEffect(() => {
+    if (screen === 'guest-view' && guestWl && tgUser) {
+      void loadGuestSubscriptionStatus(guestWl.id);
+    }
+    if (screen !== 'guest-view') {
+      // Reset guest subscription state when leaving guest-view
+      setIsSubscribed(false);
+      setSubscriberCount(0);
+      setGuestSubId(null);
+      setGuestUnreadEntityIds([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, guestWl?.id]);
+
   // --- Ownership detection: if user opens their OWN wishlist via a shared link,
   // switch from guest-view to owner wishlist-detail automatically.
   useEffect(() => {
@@ -2211,6 +2322,105 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </button>
           </div>
 
+          {/* Segment control: Mine / Following */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.surface, borderRadius: 12, padding: 4 }}>
+            {(['mine', 'subscribed'] as const).map((tab) => {
+              const isActive = myWishlistsTab === tab;
+              const totalUnread = subscriptions.reduce((s, sub) => s + sub.unreadCount, 0);
+              return (
+                <button
+                  key={tab}
+                  onClick={() => {
+                    setMyWishlistsTab(tab);
+                    if (tab === 'subscribed') void loadSubscriptions();
+                  }}
+                  style={{
+                    flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    fontFamily: font, fontSize: 14, fontWeight: 600, transition: 'all 0.2s',
+                    background: isActive ? C.accent : 'transparent',
+                    color: isActive ? '#fff' : C.textSec,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  {tab === 'mine' ? t('sub_tab_my', locale) : t('sub_tab_subscribed', locale)}
+                  {tab === 'subscribed' && totalUnread > 0 && (
+                    <span style={{
+                      minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
+                      background: isActive ? 'rgba(255,255,255,0.3)' : C.orange,
+                      color: '#fff', fontSize: 10, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>{totalUnread}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {myWishlistsTab === 'subscribed' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {subscriptionsLoading && (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: C.textMuted, fontSize: 14 }}>{t('loading', locale)}</div>
+              )}
+              {!subscriptionsLoading && subscriptions.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>👥</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('sub_empty_title', locale)}</div>
+                  <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('sub_empty_hint', locale)}</div>
+                </div>
+              )}
+              {subscriptions.map((sub, i) => (
+                <div
+                  key={sub.id}
+                  onClick={async () => {
+                    // Mark unreads as read, then open guest view
+                    if (sub.unreadCount > 0) {
+                      void tgFetch(`/tg/me/subscriptions/${sub.id}/read`, { method: 'POST' });
+                      setSubscriptions((prev) => prev.map((s) => s.id === sub.id ? { ...s, unreadCount: 0, unreadEntityIds: [] } : s));
+                    }
+                    // Set unread entity ids so guest view can highlight them
+                    setGuestUnreadEntityIds(sub.unreadEntityIds);
+                    setGuestSubId(sub.id);
+                    setIsSubscribed(true);
+                    setSubscriberCount(0);
+                    setScreen('loading');
+                    try {
+                      await loadGuestWishlist(sub.wishlist.slug);
+                      setScreen('guest-view');
+                    } catch {
+                      setScreen('my-wishlists');
+                    }
+                  }}
+                  style={{
+                    background: C.card, borderRadius: 16, padding: 18, cursor: 'pointer',
+                    border: sub.unreadCount > 0 ? `1px solid ${C.orange}40` : `1px solid ${C.border}`,
+                    animation: `fadeIn 0.3s ease ${i * 0.08}s both`,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <div style={{ fontSize: 16, fontWeight: 700, fontFamily: font, color: C.text }}>{sub.wishlist.title}</div>
+                        {sub.unreadCount > 0 && (
+                          <span style={{
+                            minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
+                            background: C.orange, color: '#fff', fontSize: 10, fontWeight: 700,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                          }}>{sub.unreadCount}</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: C.textMuted }}>
+                        {sub.wishlist.ownerName} · {sub.wishlist.itemCount} {t('stats_wishes', locale)}
+                        {sub.wishlist.deadline && ` · 📅 ${fmtDeadline(sub.wishlist.deadline)}`}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 20, color: C.textMuted }}>›</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {myWishlistsTab === 'mine' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {wishlists.length > 0 && (
               <div style={{
@@ -2364,6 +2574,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             )}
             <button style={btnPrimary} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</button>
           </div>
+          )}
 
           <BottomSheet isOpen={showCreateWl} onClose={() => setShowCreateWl(false)} title={t('new_wishlist', locale)}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -3146,17 +3357,39 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               width: 48, height: 48, borderRadius: '50%',
               background: `linear-gradient(135deg, ${C.accent}, #a78bfa)`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 20, fontWeight: 700, color: '#fff',
+              fontSize: 20, fontWeight: 700, color: '#fff', flexShrink: 0,
             }}>
               🎁
             </div>
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 18, fontWeight: 700, fontFamily: font, color: C.text }}>{guestWl.title}</div>
               {guestWl.description && <div style={{ fontSize: 13, color: C.textMuted }}>{guestWl.description}</div>}
               {guestWl.deadline && (
                 <div style={{ fontSize: 12, color: C.textMuted }}>📅 {fmtDeadline(guestWl.deadline)}</div>
               )}
             </div>
+            {/* Subscribe button — only show for logged-in non-owner users */}
+            {tgUser && (
+              <button
+                onClick={() => {
+                  if (isSubscribed) {
+                    void handleUnsubscribe(guestWl.id);
+                  } else {
+                    void handleSubscribe(guestWl.id);
+                  }
+                }}
+                disabled={subscribing}
+                style={{
+                  flexShrink: 0, padding: '8px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                  fontFamily: font, fontSize: 12, fontWeight: 600, transition: 'all 0.2s',
+                  background: isSubscribed ? C.surface : C.accent,
+                  color: isSubscribed ? C.textSec : '#fff',
+                  opacity: subscribing ? 0.7 : 1,
+                }}
+              >
+                {isSubscribed ? t('sub_subscribed_btn', locale) : t('sub_subscribe_btn', locale)}
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -3173,11 +3406,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {guestItems
               .filter((i) => !getPriceFilters(locale)[priceFilter]?.max || !i.price || i.price <= (getPriceFilters(locale)[priceFilter]?.max ?? Infinity))
-              .map((item, i) => (
-                <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                  <WishCardGuest item={item} onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }} onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }} onUnreserve={handleUnreserve} myActorHash={myActorHashRef.current} locale={locale} />
-                </div>
-              ))}
+              .map((item, i) => {
+                const hasUnread = guestUnreadEntityIds.includes(item.id);
+                return (
+                  <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative' }}>
+                    {hasUnread && (
+                      <span style={{
+                        position: 'absolute', top: 10, right: 10, zIndex: 2,
+                        width: 8, height: 8, borderRadius: '50%', background: C.orange,
+                        boxShadow: `0 0 6px ${C.orange}`,
+                      }} />
+                    )}
+                    <WishCardGuest item={item} onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }} onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }} onUnreserve={handleUnreserve} myActorHash={myActorHashRef.current} locale={locale} />
+                  </div>
+                );
+              })}
           </div>
 
         </div>

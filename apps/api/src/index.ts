@@ -268,6 +268,67 @@ function queueCommentNotification(key: string, chatId: string, itemTitle: string
   pendingNotifications.set(key, entry);
 }
 
+/**
+ * Record unread changes for subscribers of a wishlist and send Telegram notifications.
+ * Fire-and-forget — never throws.
+ */
+async function notifySubscribersOfChange(
+  wishlistId: string,
+  entityId: string,
+  changedFields: string[],
+  eventType: 'item_added' | 'item_updated' | 'wishlist_updated',
+  meta: { itemTitle?: string; wishlistTitle?: string; ownerName?: string },
+): Promise<void> {
+  try {
+    const subs = await prisma.wishlistSubscription.findMany({
+      where: { wishlistId },
+      select: { id: true, subscriber: { select: { id: true, telegramChatId: true } } },
+    });
+    if (subs.length === 0) return;
+
+    const notifLocale: Locale = 'ru';
+    await Promise.all(
+      subs.map(async (sub) => {
+        // Upsert unread markers
+        await Promise.all(
+          changedFields.map((field) =>
+            prisma.subscriptionUnread.upsert({
+              where: { subId_entityId_fieldName: { subId: sub.id, entityId, fieldName: field } },
+              update: {},
+              create: { subId: sub.id, entityId, fieldName: field },
+            }),
+          ),
+        );
+
+        // Send Telegram notification
+        const chatId = sub.subscriber.telegramChatId;
+        if (!chatId) return;
+
+        let text = '';
+        if (eventType === 'item_added') {
+          text = t('sub_notification_new_item', notifLocale, {
+            owner: meta.ownerName ?? '…',
+            title: meta.itemTitle ?? '…',
+            wishlist: meta.wishlistTitle ?? '…',
+          });
+        } else if (eventType === 'item_updated') {
+          text = t('sub_notification_updated', notifLocale, {
+            title: meta.itemTitle ?? '…',
+            wishlist: meta.wishlistTitle ?? '…',
+          });
+        } else {
+          text = t('sub_notification_wishlist_updated', notifLocale, {
+            title: meta.wishlistTitle ?? '…',
+          });
+        }
+        void sendTgNotification(chatId, text);
+      }),
+    );
+  } catch (err) {
+    console.error('[notifySubscribersOfChange] error:', err);
+  }
+}
+
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const adminKey = process.env.ADMIN_KEY;
   if (!adminKey) {
@@ -1033,6 +1094,7 @@ const PLANS = {
     wishlists: 2,
     items: 30,
     participants: 5,
+    subscriptions: 2,
     features: [] as string[],
   },
   PRO: {
@@ -1040,6 +1102,7 @@ const PLANS = {
     wishlists: 10,
     items: 100,
     participants: 20,
+    subscriptions: 7,
     features: ['comments', 'url_import', 'hints'],
   },
 } as const;
@@ -1443,9 +1506,14 @@ tgRouter.patch(
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
-    const wishlist = await prisma.wishlist.findUnique({ where: { id }, select: { ownerId: true } });
+    const wishlist = await prisma.wishlist.findUnique({ where: { id }, select: { ownerId: true, title: true } });
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Detect which subscriber-visible fields are changing
+    const wlChangedFields: string[] = [];
+    if (parsed.data.title !== undefined) wlChangedFields.push('wishlist_title');
+    if (parsed.data.deadline !== undefined) wlChangedFields.push('wishlist_deadline');
 
     const updated = await prisma.wishlist.update({
       where: { id },
@@ -1457,6 +1525,17 @@ tgRouter.patch(
       },
       select: { id: true, slug: true, title: true, description: true, deadline: true },
     });
+
+    // Notify subscribers of wishlist-level change
+    if (wlChangedFields.length > 0) {
+      void notifySubscribersOfChange(
+        id,
+        id,
+        wlChangedFields,
+        'wishlist_updated',
+        { wishlistTitle: updated.title },
+      );
+    }
 
     return res.json({ wishlist: { ...updated, deadline: updated.deadline?.toISOString() ?? null } });
   }),
@@ -1510,6 +1589,143 @@ tgRouter.post(
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
     await prisma.wishlist.update({ where: { id }, data: { archivedAt: null } });
+    return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/wishlists/:id/subscribe — subscribe to a wishlist (non-owner only)
+tgRouter.post(
+  '/wishlists/:id/subscribe',
+  asyncHandler(async (req, res) => {
+    const wishlistId = req.params.id ?? '';
+    if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const wishlist = await prisma.wishlist.findUnique({
+      where: { id: wishlistId },
+      select: { ownerId: true, title: true, shareToken: true, archivedAt: true },
+    });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId === user.id) return res.status(400).json({ error: 'Cannot subscribe to your own wishlist' });
+
+    // Check plan limit
+    const ent = await getUserEntitlement(user.id);
+    const currentCount = await prisma.wishlistSubscription.count({ where: { subscriberId: user.id } });
+    if (currentCount >= ent.plan.subscriptions) {
+      return res.status(402).json({ error: 'Subscription limit reached', limit: ent.plan.subscriptions, planCode: ent.plan.code });
+    }
+
+    const sub = await prisma.wishlistSubscription.upsert({
+      where: { wishlistId_subscriberId: { wishlistId, subscriberId: user.id } },
+      update: {},
+      create: { wishlistId, subscriberId: user.id },
+      select: { id: true, wishlistId: true, createdAt: true },
+    });
+
+    return res.json({ subscription: { id: sub.id, wishlistId: sub.wishlistId } });
+  }),
+);
+
+// DELETE /tg/wishlists/:id/subscribe — unsubscribe from a wishlist
+tgRouter.delete(
+  '/wishlists/:id/subscribe',
+  asyncHandler(async (req, res) => {
+    const wishlistId = req.params.id ?? '';
+    if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    await prisma.wishlistSubscription.deleteMany({ where: { wishlistId, subscriberId: user.id } });
+    return res.json({ ok: true });
+  }),
+);
+
+// GET /tg/wishlists/:id/subscribe — subscription status + subscriber count (for guest view)
+tgRouter.get(
+  '/wishlists/:id/subscribe',
+  asyncHandler(async (req, res) => {
+    const wishlistId = req.params.id ?? '';
+    if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const [sub, subscriberCount] = await Promise.all([
+      prisma.wishlistSubscription.findUnique({
+        where: { wishlistId_subscriberId: { wishlistId, subscriberId: user.id } },
+        select: { id: true },
+      }),
+      prisma.wishlistSubscription.count({ where: { wishlistId } }),
+    ]);
+
+    return res.json({ subscribed: !!sub, subscriberCount });
+  }),
+);
+
+// GET /tg/me/subscriptions — wishlists the user is subscribed to, with unread counts
+tgRouter.get(
+  '/me/subscriptions',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const subs = await prisma.wishlistSubscription.findMany({
+      where: { subscriberId: user.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        wishlistId: true,
+        createdAt: true,
+        unreads: { select: { id: true, entityId: true, fieldName: true } },
+        wishlist: {
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            deadline: true,
+            archivedAt: true,
+            owner: { select: { firstName: true, telegramId: true } },
+            items: {
+              where: { status: { in: [...ACTIVE_STATUSES] } },
+              select: { id: true },
+            },
+          },
+        },
+      },
+    });
+
+    const result = subs.map((sub) => ({
+      id: sub.id,
+      wishlist: {
+        id: sub.wishlist.id,
+        slug: sub.wishlist.slug,
+        title: sub.wishlist.title,
+        deadline: sub.wishlist.deadline?.toISOString() ?? null,
+        archivedAt: sub.wishlist.archivedAt?.toISOString() ?? null,
+        itemCount: sub.wishlist.items.length,
+        ownerName: sub.wishlist.owner.firstName ?? '…',
+      },
+      unreadCount: sub.unreads.length,
+      unreadEntityIds: [...new Set(sub.unreads.map((u) => u.entityId))],
+    }));
+
+    return res.json({ subscriptions: result });
+  }),
+);
+
+// POST /tg/me/subscriptions/:id/read — mark all unreads as read for a subscription
+tgRouter.post(
+  '/me/subscriptions/:id/read',
+  asyncHandler(async (req, res) => {
+    const subId = req.params.id ?? '';
+    if (!subId) return res.status(400).json({ error: 'Missing subscription id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const sub = await prisma.wishlistSubscription.findUnique({
+      where: { id: subId },
+      select: { subscriberId: true },
+    });
+    if (!sub) return res.status(404).json({ error: 'Subscription not found' });
+    if (sub.subscriberId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    await prisma.subscriptionUnread.deleteMany({ where: { subId } });
     return res.json({ ok: true });
   }),
 );
@@ -1583,6 +1799,8 @@ tgRouter.post(
       currency = profile.defaultCurrency;
     }
 
+    const wlForSub = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { title: true } });
+
     const item = await prisma.item.create({
       data: {
         wishlistId,
@@ -1595,6 +1813,19 @@ tgRouter.post(
       },
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
+
+    // Notify wishlist subscribers
+    void notifySubscribersOfChange(
+      wishlistId,
+      item.id,
+      ['title'],
+      'item_added',
+      {
+        itemTitle: item.title,
+        wishlistTitle: wlForSub?.title ?? '…',
+        ownerName: req.tgUser?.first_name ?? '…',
+      },
+    );
 
     return res.status(201).json({ item: mapTgItem(item) });
   }),
@@ -1623,10 +1854,19 @@ tgRouter.patch(
     const user = await getOrCreateTgUser(req.tgUser!);
     const item = await prisma.item.findUnique({
       where: { id },
-      select: { id: true, status: true, reservationEpoch: true, reserverUserId: true, title: true, wishlist: { select: { ownerId: true } } },
+      select: { id: true, status: true, reservationEpoch: true, reserverUserId: true, title: true, wishlistId: true, wishlist: { select: { ownerId: true, title: true } } },
     });
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Detect which subscriber-visible fields are changing
+    const subChangedFields: string[] = [];
+    if (parsed.data.title !== undefined) subChangedFields.push('title');
+    if (parsed.data.price !== undefined) subChangedFields.push('price');
+    if (parsed.data.description !== undefined) subChangedFields.push('description');
+    if (parsed.data.priority !== undefined) subChangedFields.push('priority');
+    if (parsed.data.url !== undefined) subChangedFields.push('url');
+    if (parsed.data.imageUrl !== undefined) subChangedFields.push('image');
 
     const updated = await prisma.item.update({
       where: { id },
@@ -1643,6 +1883,17 @@ tgRouter.patch(
       },
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
+
+    // Notify wishlist subscribers of item change
+    if (subChangedFields.length > 0) {
+      void notifySubscribersOfChange(
+        item.wishlistId,
+        id,
+        subChangedFields,
+        'item_updated',
+        { itemTitle: updated.title, wishlistTitle: item.wishlist.title },
+      );
+    }
 
     // After update, if description changed and item was reserved — notify reserver
     if (parsed.data.description !== undefined && item.status === 'RESERVED') {

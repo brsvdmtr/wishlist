@@ -79,12 +79,13 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  wishlists          Wishlist[]
-  subscriptions      Subscription[]
-  paymentEvents      PaymentEvent[]
-  commentReadCursors CommentReadCursor[]
-  hints              Hint[]
-  profile            UserProfile?
+  wishlists              Wishlist[]
+  subscriptions          Subscription[]
+  paymentEvents          PaymentEvent[]
+  commentReadCursors     CommentReadCursor[]
+  hints                  Hint[]
+  profile                UserProfile?
+  wishlistSubscriptions  WishlistSubscription[]
 }
 
 model Wishlist {
@@ -104,6 +105,7 @@ model Wishlist {
   owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   items Item[]
   tags  Tag[]
+  wishlistSubscriptions WishlistSubscription[]
 
   @@index([ownerId])
 }
@@ -304,4 +306,32 @@ model UserProfile {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WishlistSubscription {
+  id             String    @id @default(cuid())
+  wishlistId     String
+  subscriberId   String
+  createdAt      DateTime  @default(now())
+  lastNotifiedAt DateTime?
+
+  wishlist  Wishlist             @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  subscriber User               @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  unreads   SubscriptionUnread[]
+
+  @@unique([wishlistId, subscriberId])
+  @@index([subscriberId])
+  @@index([wishlistId])
+}
+
+model SubscriptionUnread {
+  id        String @id @default(cuid())
+  subId     String
+  entityId  String
+  fieldName String
+
+  subscription WishlistSubscription @relation(fields: [subId], references: [id], onDelete: Cascade)
+
+  @@unique([subId, entityId, fieldName])
+  @@index([subId])
 }
