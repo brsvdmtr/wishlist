@@ -4444,8 +4444,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         {t('profile_wishlists_of', locale, { count: profileStats.wishlists, max: profileStats.wishlistsLimit })}
                       </div>
                     </div>
-                    <div style={{ background: C.surface, borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font }}>
+                    <div onClick={() => { setHomeTab('wishes'); void loadAllItems(); setScreen('my-wishlists'); }} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: C.accent, fontFamily: font }}>
                         {profileStats.totalWishes}
                       </div>
                       <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_wishes_total', locale)}</div>
