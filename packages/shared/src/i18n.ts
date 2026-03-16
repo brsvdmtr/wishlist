@@ -135,6 +135,9 @@ const ru: Dict = {
   reserve_privacy: '🔒 Владелец вишлиста <b>не увидит</b>, кто какой подарок забронировал.',
   reserve_success: '🎁 Забронировано!',
   unreserve_success: 'Бронь отменена',
+  unreserve_confirm_title: 'Снять бронь?',
+  unreserve_confirm_body: 'Ты уверен, что хочешь снять бронь с этого желания? Другие гости смогут его забронировать.',
+  unreserve_confirm_btn: 'Да, снять бронь',
 
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'Комментарии',
@@ -673,6 +676,9 @@ const en: Dict = {
   reserve_privacy: "🔒 The wishlist owner <b>won't see</b> who reserved which gift.",
   reserve_success: '🎁 Reserved!',
   unreserve_success: 'Reservation cancelled',
+  unreserve_confirm_title: 'Cancel reservation?',
+  unreserve_confirm_body: 'Are you sure you want to cancel your reservation for this wish? Other guests will be able to reserve it.',
+  unreserve_confirm_btn: 'Yes, cancel reservation',
 
   // ── Comments ──────────────────────────────────────────────────────────────
   comments_title: 'Comments',

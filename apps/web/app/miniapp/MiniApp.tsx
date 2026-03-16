@@ -518,9 +518,9 @@ function ReservationCard({ item, onTap, onUnreserve, animDelay, locale }: {
           <button
             onClick={(e) => { e.stopPropagation(); onUnreserve(); }}
             style={{
-              background: 'none', border: `1px solid ${C.borderLight}`,
+              background: C.redSoft, border: `1px solid rgba(248,113,113,0.3)`,
               borderRadius: 10, padding: '6px 14px', fontSize: 12,
-              color: C.textMuted, cursor: 'pointer', fontFamily: font,
+              color: C.red, cursor: 'pointer', fontFamily: font, fontWeight: 500,
             }}
           >
             {t('reservations_unreserve', locale)}
@@ -938,6 +938,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showWlManage, setShowWlManage] = useState(false);
   const [showArchiveWlConfirm, setShowArchiveWlConfirm] = useState(false);
   const [archivingWl, setArchivingWl] = useState(false);
+  const [unreserveConfirmItem, setUnreserveConfirmItem] = useState<ReservationItem | null>(null);
+  const [unreservingConfirm, setUnreservingConfirm] = useState(false);
 
   // Subscriptions (following)
   const [myWishlistsTab, setMyWishlistsTab] = useState<'mine' | 'subscribed'>('mine');
@@ -2914,7 +2916,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           setFromReservations(true);
                           setScreen('guest-item-detail');
                         }}
-                        onUnreserve={() => void handleUnreserveFromReservations(item)}
+                        onUnreserve={() => setUnreserveConfirmItem(item)}
                       />
                     );
                   })}
@@ -3334,8 +3336,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </span>
                   <button onClick={() => void handleUnreserve(viewingItem as GuestItem)}
                     style={{
-                      ...btnBase, width: '100%', background: 'transparent', color: C.textMuted,
-                      border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                      ...btnBase, width: '100%', background: C.redSoft, color: C.red,
+                      border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 14,
                       padding: '12px 16px', fontSize: 14, fontWeight: 500,
                     }}>
                     {t('cancel_reservation', locale)}
@@ -4173,6 +4175,40 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               disabled={archivingWl}
             >
               {archivingWl ? '…' : t('wl_archive_confirm_btn', locale)}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── Unreserve confirmation ── */}
+      <BottomSheet isOpen={!!unreserveConfirmItem} onClose={() => { if (!unreservingConfirm) setUnreserveConfirmItem(null); }} title={t('unreserve_confirm_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
+            {t('unreserve_confirm_body', locale)}
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              style={{ ...btnSecondary, flex: 1 }}
+              onClick={() => setUnreserveConfirmItem(null)}
+              disabled={unreservingConfirm}
+            >
+              {t('cancel', locale)}
+            </button>
+            <button
+              style={{ ...btnPrimary, flex: 1, background: C.red, opacity: unreservingConfirm ? 0.6 : 1 }}
+              disabled={unreservingConfirm}
+              onClick={async () => {
+                if (!unreserveConfirmItem || unreservingConfirm) return;
+                setUnreservingConfirm(true);
+                try {
+                  await handleUnreserveFromReservations(unreserveConfirmItem);
+                  setUnreserveConfirmItem(null);
+                } finally {
+                  setUnreservingConfirm(false);
+                }
+              }}
+            >
+              {unreservingConfirm ? '…' : t('unreserve_confirm_btn', locale)}
             </button>
           </div>
         </div>
