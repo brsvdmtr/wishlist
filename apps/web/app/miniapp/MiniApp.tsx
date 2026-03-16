@@ -56,7 +56,11 @@ const getPriorities = (locale: Locale) => [
 ];
 
 const prioEmoji = (p: number) => ({ 1: '👍', 2: '❤️', 3: '🔥' } as Record<number, string>)[p] ?? '👍';
-const fmtPrice = (p: number | null, locale: Locale = 'ru') => p ? `${p.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US')} ₽` : null;
+const fmtPrice = (p: number | null, locale: Locale = 'ru', currency: 'RUB' | 'USD' = 'RUB') => {
+  if (!p) return null;
+  const formatted = p.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US');
+  return currency === 'USD' ? `$${formatted}` : `${formatted} ₽`;
+};
 
 function formatRetryAfter(seconds: number, locale: Locale): string {
   if (seconds <= 0) return t('retry_now', locale);
@@ -123,6 +127,7 @@ type Item = {
   sourceUrl?: string | null;
   sourceDomain?: string | null;
   importMethod?: string | null;
+  currency?: 'RUB' | 'USD';
 };
 
 type GuestItem = Item & { reservedByDisplayName: string | null; reservedByActorHash: string | null };
@@ -143,7 +148,7 @@ type CommentDTO = {
   createdAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations';
+type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile';
 type Toast = { id: string; message: string; kind: 'success' | 'error' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -355,7 +360,7 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale }: {
           <span style={{ fontSize: 16, flexShrink: 0 }}>{prioEmoji(item.priority)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-          {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale)}</span>}
+          {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
           {item.url && <span style={{ fontSize: 11, color: C.textMuted, background: C.surface, padding: '2px 8px', borderRadius: 6 }}>{t('link_label', locale)}</span>}
         </div>
         <div style={{ marginTop: 10 }}>
@@ -390,7 +395,7 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
           <span style={{ fontSize: 16, flexShrink: 0 }}>{prioEmoji(item.priority)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-          {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale)}</span>}
+          {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
           {item.url && <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, color: C.accent, background: C.accentSoft, padding: '2px 8px', borderRadius: 6, textDecoration: 'none' }}>{t('link_label', locale)}</a>}
         </div>
         <div style={{ marginTop: 10 }}>
@@ -463,7 +468,7 @@ function ReservationCard({ item, onTap, onUnreserve, animDelay, locale }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           {item.price != null && (
             <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>
-              {fmtPrice(item.price, locale)}
+              {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
             </span>
           )}
           <span style={{
@@ -818,6 +823,41 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
 
+  // Profile state
+  const [profileData, setProfileData] = useState<{
+    displayName: string | null;
+    username: string | null;
+    bio: string | null;
+    avatarUrl: string | null;
+    birthday: string | null;
+    hideYear: boolean;
+    defaultCurrency: 'RUB' | 'USD';
+  } | null>(null);
+  const [profileStats, setProfileStats] = useState<{
+    wishlists: number; wishlistsLimit: number;
+    totalWishes: number; wishesLimit: number;
+    reservedByMe: number; archived: number;
+  } | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editProfileName, setEditProfileName] = useState('');
+  const [editProfileUsername, setEditProfileUsername] = useState('');
+  const [editProfileBio, setEditProfileBio] = useState('');
+  const [editProfileBirthday, setEditProfileBirthday] = useState('');
+  const [editProfileSaving, setEditProfileSaving] = useState(false);
+
+  // Settings state
+  const [settingsData, setSettingsData] = useState<{
+    language: string;
+    defaultCurrency: 'RUB' | 'USD';
+    notifications: { comments: boolean; reservations: boolean; subscriptions: boolean; marketing: boolean };
+    privacy: { profileVisibility: string; subscribePolicy: string; commentsEnabled: boolean; hintsEnabled: boolean };
+    appBehavior: { newWishlistPosition: string };
+    isPro: boolean;
+  } | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+
   // Archive state
   const [archiveItems, setArchiveItems] = useState<Item[]>([]);
 
@@ -851,6 +891,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [itemUrl, setItemUrl] = useState('');
   const [itemPrice, setItemPrice] = useState('');
   const [itemPriority, setItemPriority] = useState<1 | 2 | 3>(2);
+  const [itemCurrency, setItemCurrency] = useState<'RUB' | 'USD'>('RUB');
+  const [defaultCurrency, setDefaultCurrency] = useState<'RUB' | 'USD'>('RUB');
   const [itemImageUrl, setItemImageUrl] = useState(''); // existing/saved URL from DB
 
   // Photo upload state
@@ -994,6 +1036,60 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setReservationsLoading(false);
     }
   }, [tgFetch]);
+
+  const loadProfile = useCallback(async () => {
+    setProfileLoading(true);
+    try {
+      const res = await tgFetch('/tg/me/profile');
+      if (!res.ok) throw new Error();
+      const data = await res.json() as {
+        profile: typeof profileData;
+        stats: typeof profileStats;
+        plan: PlanInfo;
+        subscription: SubscriptionInfo;
+        godMode: boolean;
+        canGodMode: boolean;
+      };
+      setProfileData(data.profile);
+      setProfileStats(data.stats);
+      if (data.profile?.defaultCurrency) setDefaultCurrency(data.profile.defaultCurrency);
+      setPlanInfo(data.plan);
+      if (data.subscription) setSubscription(data.subscription);
+      setGodMode(data.godMode);
+      setCanGodMode(data.canGodMode);
+    } catch {
+      pushToast(t('toast_load_error', locale), 'error');
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [tgFetch, locale, pushToast]);
+
+  const loadSettings = useCallback(async () => {
+    setSettingsLoading(true);
+    try {
+      const res = await tgFetch('/tg/me/settings');
+      if (!res.ok) throw new Error();
+      setSettingsData(await res.json());
+    } catch {
+      pushToast(t('toast_load_error', locale), 'error');
+    } finally {
+      setSettingsLoading(false);
+    }
+  }, [tgFetch, locale, pushToast]);
+
+  const patchSettings = useCallback(async (patch: Record<string, unknown>) => {
+    try {
+      const res = await tgFetch('/tg/me/settings', {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error();
+      setSettingsData(await res.json());
+      if (patch.defaultCurrency) setDefaultCurrency(patch.defaultCurrency as 'RUB' | 'USD');
+    } catch {
+      pushToast(t('toast_save_error', locale), 'error');
+    }
+  }, [tgFetch, locale, pushToast]);
 
   const loadItems = useCallback(async (wishlistId: string) => {
     const res = await tgFetch(`/tg/wishlists/${wishlistId}/items`);
@@ -1445,8 +1541,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (screen === 'guest-view') {
         loadWishlists().catch(() => { /* silent — screen already set */ });
       }
-    } else if (screen === 'settings') {
+    } else if (screen === 'profile') {
       setScreen('my-wishlists');
+    } else if (screen === 'settings') {
+      setScreen('profile');
     } else if (screen === 'share' || screen === 'archive') {
       setScreen('wishlist-detail');
     }
@@ -1714,7 +1812,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   };
 
   const resetItemForm = () => {
-    setItemTitle(''); setItemDescription(''); setItemUrl(''); setItemPrice(''); setItemPriority(2); setItemImageUrl('');
+    setItemTitle(''); setItemDescription(''); setItemUrl(''); setItemPrice(''); setItemPriority(2); setItemCurrency(defaultCurrency); setItemImageUrl('');
     setItemPhotoFile(null);
     if (itemPhotoLocalUrl) URL.revokeObjectURL(itemPhotoLocalUrl);
     setItemPhotoLocalUrl(null);
@@ -1732,6 +1830,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setItemUrl(item.url ?? '');
     setItemPrice(item.price != null ? String(item.price) : '');
     setItemPriority(item.priority);
+    setItemCurrency(item.currency ?? 'RUB');
     setItemImageUrl(item.imageUrl ?? '');
     setItemPhotoFile(null);
     if (itemPhotoLocalUrl) URL.revokeObjectURL(itemPhotoLocalUrl);
@@ -1807,6 +1906,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         url: itemUrl.trim() || undefined,
         price: itemPrice ? Number(itemPrice) : null,
         priority: itemPriority,
+        currency: itemCurrency,
         // imageUrl is managed via dedicated photo endpoints — not sent here
       };
 
@@ -2048,25 +2148,40 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'my-wishlists' && (
         <div style={{ padding: '16px 20px 120px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>WishBoard</h1>
-                {planInfo.code === 'PRO' && (
-                  <span style={{
-                    fontSize: 10, fontWeight: 800, letterSpacing: 0.6, padding: '3px 8px',
-                    borderRadius: 6,
-                    background: `linear-gradient(135deg, ${C.accent}20, ${C.accent}12)`,
-                    border: `1px solid ${C.accent}30`,
-                    color: C.accent,
-                  }}>PRO</span>
-                )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {/* Avatar → Profile */}
+              <button
+                onClick={() => { loadProfile(); setScreen('profile'); }}
+                style={{
+                  width: 36, height: 36, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                  background: `linear-gradient(135deg, ${C.accent}, ${C.accent}80)`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16, fontWeight: 700, color: '#fff', flexShrink: 0, padding: 0,
+                }}
+                aria-label={t('profile_title', locale)}
+              >
+                {(tgUser?.first_name ?? '?')[0]!.toUpperCase()}
+              </button>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>WishBoard</h1>
+                  {planInfo.code === 'PRO' && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 800, letterSpacing: 0.6, padding: '3px 8px',
+                      borderRadius: 6,
+                      background: `linear-gradient(135deg, ${C.accent}20, ${C.accent}12)`,
+                      border: `1px solid ${C.accent}30`,
+                      color: C.accent,
+                    }}>PRO</span>
+                  )}
+                </div>
+                <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
+                  {tgUser ? t('greeting', locale, { name: tgUser.first_name }) : t('my_wishlists', locale)}
+                </p>
               </div>
-              <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
-                {tgUser ? t('greeting', locale, { name: tgUser.first_name }) : t('my_wishlists', locale)}
-              </p>
             </div>
             <button
-              onClick={() => setScreen('settings')}
+              onClick={() => { loadSettings(); setScreen('settings'); }}
               style={{
                 background: 'none', border: 'none', padding: 8, cursor: 'pointer',
                 fontSize: 20, color: C.textMuted, lineHeight: 1,
@@ -2354,7 +2469,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     )}
                     {item.price != null && item.price > 0 && (
                       <div style={{ fontSize: 13, color: C.textSec, marginTop: 2 }}>
-                        💰 {Number(item.price).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US')} ₽
+                        💰 {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
                       </div>
                     )}
                   </div>
@@ -2636,7 +2751,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {/* Price */}
             {viewingItem.price != null && (
               <div style={{ fontSize: 22, fontWeight: 700, color: C.accent, marginBottom: 10 }}>
-                {fmtPrice(viewingItem.price, locale)}
+                {fmtPrice(viewingItem.price, locale, viewingItem.currency ?? 'RUB')}
               </div>
             )}
 
@@ -2853,7 +2968,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {/* Price */}
             {viewingItem.price != null && (
               <div style={{ fontSize: 22, fontWeight: 700, color: C.accent, marginBottom: 10 }}>
-                {fmtPrice(viewingItem.price, locale)}
+                {fmtPrice(viewingItem.price, locale, viewingItem.currency ?? 'RUB')}
               </div>
             )}
 
@@ -3058,7 +3173,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       {item.status === 'deleted' && (
                         <span style={{ fontSize: 11, background: C.surface, color: C.textMuted, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_deleted', locale)}</span>
                       )}
-                      {item.price != null && <span style={{ fontSize: 13, color: C.textMuted }}>{fmtPrice(item.price, locale)}</span>}
+                      {item.price != null && <span style={{ fontSize: 13, color: C.textMuted }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
                     </div>
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                       <button onClick={() => void handleRestoreItem(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.accent }}>{t('archive_restore', locale)}</button>
@@ -3072,204 +3187,537 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       )}
 
       {/* ══════════════════════════════════════════════
-          SETTINGS
+          PROFILE
           ══════════════════════════════════════════════ */}
-      {screen === 'settings' && (
-        <div style={{ padding: '16px 20px 120px' }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 20px' }}>{t('settings_title', locale)}</h1>
+      {screen === 'profile' && (
+        <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+          {/* Header with gear icon for settings */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>
+              {t('profile_title', locale)}
+            </h1>
+            <button onClick={() => { loadSettings(); setScreen('settings'); }} style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', color: C.textMuted }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+          </div>
 
-          {/* Current plan card */}
-          <div style={{
-            background: planInfo.code === 'PRO'
-              ? `linear-gradient(145deg, ${C.card}, ${C.accent}08)`
-              : C.card,
-            borderRadius: 16, padding: 20,
-            border: `1px solid ${planInfo.code === 'PRO' ? C.accent + '25' : C.border}`,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>{t('settings_plan', locale)}</span>
-              <span style={{
-                fontSize: 12, fontWeight: 800, letterSpacing: 0.5, padding: '4px 10px',
-                borderRadius: 6,
-                background: planInfo.code === 'PRO'
-                  ? `linear-gradient(135deg, ${C.accent}22, ${C.accent}12)`
-                  : C.surface,
-                border: planInfo.code === 'PRO' ? `1px solid ${C.accent}30` : 'none',
-                color: planInfo.code === 'PRO' ? C.accent : C.textSec,
-              }}>
-                {planInfo.code === 'PRO' ? 'PRO' : 'Free'}
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[
-                { label: t('settings_wishlists', locale), value: t('settings_up_to', locale, { n: planInfo.wishlists }), desc: planInfo.code === 'PRO' ? t('settings_desc_wishlists', locale) : null },
-                { label: t('settings_wishes_each', locale), value: t('settings_up_to', locale, { n: planInfo.items }), desc: planInfo.code === 'PRO' ? t('settings_desc_wishes', locale) : null },
-                { label: t('settings_participants', locale), value: t('settings_up_to', locale, { n: planInfo.participants }), desc: planInfo.code === 'PRO' ? t('settings_desc_participants', locale) : null },
-              ].map((row) => (
-                <div key={row.label}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 14, color: C.textSec }}>{row.label}</span>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{row.value}</span>
-                  </div>
-                  {row.desc && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{row.desc}</div>}
-                </div>
-              ))}
-              {planInfo.code === 'PRO' && (
-                <>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_comments', locale)}</span>
-                      <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_comments', locale)}</div>
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_url_import', locale)}</span>
-                      <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_url_import', locale)}</div>
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_hints', locale)}</span>
-                      <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_hints', locale)}</div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Subscription info — ACTIVE_RENEWING */}
-            {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
-              <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, color: C.textSec }}>{t('settings_next_renewal', locale)}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                    {new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Subscription info — ACTIVE_CANCELLED (cancelAtPeriodEnd or status CANCELLED) */}
-            {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
-              <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+          {profileLoading && !profileData ? (
+            <div style={{ textAlign: 'center', padding: 40, color: C.textMuted }}>{t('loading', locale)}</div>
+          ) : profileData && (
+            <>
+              {/* Avatar + Name + Badge section */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
                 <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '10px 14px', borderRadius: 10,
-                  background: C.orangeSoft, fontSize: 13, color: C.orange, lineHeight: 1.4,
+                  width: 80, height: 80, borderRadius: '50%',
+                  background: `linear-gradient(135deg, ${C.accent}, ${C.accent}80)`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 32, fontWeight: 700, color: '#fff', marginBottom: 12,
+                  position: 'relative',
+                  ...(profileData.avatarUrl ? { backgroundImage: `url(${profileData.avatarUrl})`, backgroundSize: 'cover' } : {}),
                 }}>
-                  <span>⏳</span>
-                  <span>
-                    {t('settings_renewal_disabled', locale)}{' '}
-                    <strong>{new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}</strong>.
-                  </span>
+                  {!profileData.avatarUrl && (profileData.displayName || tgUser?.first_name || '?')[0]!.toUpperCase()}
                 </div>
-              </div>
-            )}
-          </div>
 
-          {/* Action buttons */}
-          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {/* ACTIVE_RENEWING: offer to cancel renewal */}
-            {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
-              <button
-                style={{ ...btnSecondary, width: '100%', fontSize: 14 }}
-                onClick={() => setShowCancelSub(true)}
-              >
-                {t('settings_cancel_renewal', locale)}
-              </button>
-            )}
-
-            {/* ACTIVE_CANCELLED: offer to reactivate */}
-            {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
-              <button
-                style={{
-                  ...btnPrimary, width: '100%',
-                  background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
-                }}
-                onClick={() => void handleReactivateSub()}
-                disabled={cancelSubLoading}
-              >
-                {cancelSubLoading ? t('settings_resuming', locale) : t('settings_resume_sub', locale)}
-              </button>
-            )}
-
-            {/* FREE: offer to subscribe */}
-            {planInfo.code === 'FREE' && (
-              <button
-                style={{
-                  ...btnPrimary, width: '100%',
-                  background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
-                }}
-                onClick={() => showUpsell('wishlist_limit')}
-              >
-                {t('connect_pro', locale)}
-              </button>
-            )}
-          </div>
-
-          {/* God Mode toggle — dev only, whitelisted users */}
-          {canGodMode && (
-            <div style={{
-              marginTop: 32, padding: 16, borderRadius: 12,
-              background: godMode ? '#ff990015' : C.card,
-              border: `1px dashed ${godMode ? '#ff9900' : C.border}`,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: godMode ? '#ff9900' : C.textSec, fontFamily: font }}>
-                    {t('settings_god_mode', locale)}
-                  </div>
-                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                    {godMode ? t('settings_god_active', locale) : t('settings_god_inactive', locale)}
-                  </div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font }}>
+                  {profileData.displayName || tgUser?.first_name || t('profile_display_name', locale)}
                 </div>
-                <button
-                  onClick={async () => {
-                    if (godModeLoading) return;
-                    setGodModeLoading(true);
-                    try {
-                      const res = await tgFetch('/tg/me/god-mode', { method: 'POST' });
-                      if (res.ok) {
-                        const data = await res.json() as { godMode: boolean };
-                        setGodMode(data.godMode);
-                        try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('medium'); } catch {}
-                        // Refresh plan data to reflect god mode changes
-                        loadWishlists().catch(() => {});
-                      } else {
-                        pushToast(t('toast_god_toggle_error', locale), 'error');
-                      }
-                    } catch {
-                      pushToast(t('error_network', locale), 'error');
-                    } finally {
-                      setGodModeLoading(false);
-                    }
-                  }}
-                  disabled={godModeLoading}
-                  style={{
-                    width: 50, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
-                    background: godMode ? '#ff9900' : C.surface,
-                    position: 'relative', transition: 'background 0.2s',
-                    opacity: godModeLoading ? 0.5 : 1,
-                  }}
-                >
-                  <div style={{
-                    width: 22, height: 22, borderRadius: 11,
-                    background: '#fff', position: 'absolute', top: 3,
-                    left: godMode ? 25 : 3,
-                    transition: 'left 0.2s',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                  }} />
+
+                {profileData.username && (
+                  <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{profileData.username}</div>
+                )}
+
+                <span style={{
+                  marginTop: 8, fontSize: 11, fontWeight: 800, letterSpacing: 0.6, padding: '4px 12px',
+                  borderRadius: 8,
+                  background: planInfo.code === 'PRO' ? `linear-gradient(135deg, ${C.accent}25, ${C.accent}15)` : C.surface,
+                  border: `1px solid ${planInfo.code === 'PRO' ? C.accent + '40' : C.borderLight}`,
+                  color: planInfo.code === 'PRO' ? C.accent : C.textSec,
+                }}>
+                  {planInfo.code}
+                </span>
+
+                {profileData.bio && (
+                  <div style={{ fontSize: 14, color: C.textSec, marginTop: 10, textAlign: 'center', maxWidth: 280 }}>
+                    {profileData.bio}
+                  </div>
+                )}
+
+                <button onClick={() => {
+                  setEditProfileName(profileData.displayName || '');
+                  setEditProfileUsername(profileData.username || '');
+                  setEditProfileBio(profileData.bio || '');
+                  setEditProfileBirthday(profileData.birthday || '');
+                  setEditingProfile(true);
+                }} style={{ ...btnGhost, marginTop: 12, fontSize: 13 }}>
+                  {t('edit_btn', locale)}
                 </button>
               </div>
-            </div>
+
+              {/* Stats card */}
+              {profileStats && (
+                <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 12 }}>
+                    {t('profile_stats_title', locale)}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div onClick={() => setScreen('my-wishlists')} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: C.accent, fontFamily: font }}>
+                        {profileStats.wishlists}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textMuted }}>
+                        {t('profile_wishlists_of', locale, { count: profileStats.wishlists, max: profileStats.wishlistsLimit })}
+                      </div>
+                    </div>
+                    <div style={{ background: C.surface, borderRadius: 12, padding: 12 }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font }}>
+                        {profileStats.totalWishes}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_wishes_total', locale)}</div>
+                    </div>
+                    <div onClick={() => setScreen('my-reservations')} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: C.green, fontFamily: font }}>
+                        {profileStats.reservedByMe}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_reserved_by_me', locale)}</div>
+                    </div>
+                    <div onClick={() => { if (wishlists.length > 0) { setCurrentWl(wishlists[0]!); setScreen('archive'); } }} style={{ cursor: wishlists.length > 0 ? 'pointer' : 'default', background: C.surface, borderRadius: 12, padding: 12 }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: C.orange, fontFamily: font }}>
+                        {profileStats.archived}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_archived', locale)}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* My Plan card — moved from settings */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
+                  {t('profile_plan_title', locale)}
+                </div>
+                <div style={{
+                  background: planInfo.code === 'PRO'
+                    ? `linear-gradient(145deg, ${C.card}, ${C.accent}08)`
+                    : C.card,
+                  borderRadius: 16, padding: 20,
+                  border: `1px solid ${planInfo.code === 'PRO' ? C.accent + '25' : C.border}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>{t('settings_plan', locale)}</span>
+                    <span style={{
+                      fontSize: 12, fontWeight: 800, letterSpacing: 0.5, padding: '4px 10px',
+                      borderRadius: 6,
+                      background: planInfo.code === 'PRO'
+                        ? `linear-gradient(135deg, ${C.accent}22, ${C.accent}12)`
+                        : C.surface,
+                      border: planInfo.code === 'PRO' ? `1px solid ${C.accent}30` : 'none',
+                      color: planInfo.code === 'PRO' ? C.accent : C.textSec,
+                    }}>
+                      {planInfo.code === 'PRO' ? 'PRO' : 'Free'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {[
+                      { label: t('settings_wishlists', locale), value: t('settings_up_to', locale, { n: planInfo.wishlists }), desc: planInfo.code === 'PRO' ? t('settings_desc_wishlists', locale) : null },
+                      { label: t('settings_wishes_each', locale), value: t('settings_up_to', locale, { n: planInfo.items }), desc: planInfo.code === 'PRO' ? t('settings_desc_wishes', locale) : null },
+                      { label: t('settings_participants', locale), value: t('settings_up_to', locale, { n: planInfo.participants }), desc: planInfo.code === 'PRO' ? t('settings_desc_participants', locale) : null },
+                    ].map((row) => (
+                      <div key={row.label}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 14, color: C.textSec }}>{row.label}</span>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{row.value}</span>
+                        </div>
+                        {row.desc && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{row.desc}</div>}
+                      </div>
+                    ))}
+                    {planInfo.code === 'PRO' && (
+                      <>
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_comments', locale)}</span>
+                            <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_comments', locale)}</div>
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_url_import', locale)}</span>
+                            <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_url_import', locale)}</div>
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 14, color: C.textSec }}>{t('settings_hints', locale)}</span>
+                            <span style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>✓</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('settings_desc_hints', locale)}</div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Subscription info — ACTIVE_RENEWING */}
+                  {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
+                    <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 13, color: C.textSec }}>{t('settings_next_renewal', locale)}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                          {new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Subscription info — ACTIVE_CANCELLED */}
+                  {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
+                    <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '10px 14px', borderRadius: 10,
+                        background: C.orangeSoft, fontSize: 13, color: C.orange, lineHeight: 1.4,
+                      }}>
+                        <span>⏳</span>
+                        <span>
+                          {t('settings_renewal_disabled', locale)}{' '}
+                          <strong>{new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}</strong>.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Plan action buttons */}
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
+                    <button
+                      style={{ ...btnSecondary, width: '100%', fontSize: 14 }}
+                      onClick={() => setShowCancelSub(true)}
+                    >
+                      {t('settings_cancel_renewal', locale)}
+                    </button>
+                  )}
+                  {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
+                    <button
+                      style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)` }}
+                      onClick={() => void handleReactivateSub()}
+                      disabled={cancelSubLoading}
+                    >
+                      {cancelSubLoading ? t('settings_resuming', locale) : t('settings_resume_sub', locale)}
+                    </button>
+                  )}
+                  {planInfo.code === 'FREE' && (
+                    <button
+                      style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)` }}
+                      onClick={() => showUpsell('wishlist_limit')}
+                    >
+                      {t('connect_pro', locale)}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Public Profile section */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
+                  {t('profile_public_title', locale)}
+                </div>
+                <div style={{ background: C.card, borderRadius: 16, padding: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
+                    <span style={{ fontSize: 14, color: C.text }}>{t('profile_birthday', locale)}</span>
+                    <span style={{ fontSize: 14, color: profileData.birthday ? C.text : C.textMuted }}>
+                      {profileData.birthday ? new Date(profileData.birthday).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', {
+                        day: 'numeric', month: 'long', ...(profileData.hideYear ? {} : { year: 'numeric' })
+                      }) : '\u2014'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
+                    <span style={{ fontSize: 14, color: C.text }}>{t('profile_hide_year', locale)}</span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await tgFetch('/tg/me/profile', {
+                            method: 'PATCH',
+                            body: JSON.stringify({ hideYear: !profileData.hideYear }),
+                          });
+                          if (res.ok) {
+                            setProfileData(prev => prev ? { ...prev, hideYear: !prev.hideYear } : prev);
+                          }
+                        } catch { /* silent */ }
+                      }}
+                      style={{
+                        width: 50, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                        background: profileData.hideYear ? C.accent : C.surface,
+                        position: 'relative', transition: 'background 0.2s',
+                      }}
+                    >
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 11,
+                        background: '#fff', position: 'absolute', top: 3,
+                        left: profileData.hideYear ? 25 : 3,
+                        transition: 'left 0.2s',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      }} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* God mode toggle — dev only, moved from settings */}
+              {canGodMode && (
+                <div style={{
+                  marginBottom: 16, padding: 16, borderRadius: 12,
+                  background: godMode ? '#ff990015' : C.card,
+                  border: `1px dashed ${godMode ? '#ff9900' : C.border}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: godMode ? '#ff9900' : C.textSec, fontFamily: font }}>
+                        {t('settings_god_mode', locale)}
+                      </div>
+                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                        {godMode ? t('settings_god_active', locale) : t('settings_god_inactive', locale)}
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (godModeLoading) return;
+                        setGodModeLoading(true);
+                        try {
+                          const res = await tgFetch('/tg/me/god-mode', { method: 'POST' });
+                          if (res.ok) {
+                            const data = await res.json() as { godMode: boolean };
+                            setGodMode(data.godMode);
+                            try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('medium'); } catch {}
+                            loadWishlists().catch(() => {});
+                          } else {
+                            pushToast(t('toast_god_toggle_error', locale), 'error');
+                          }
+                        } catch {
+                          pushToast(t('error_network', locale), 'error');
+                        } finally {
+                          setGodModeLoading(false);
+                        }
+                      }}
+                      disabled={godModeLoading}
+                      style={{
+                        width: 50, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                        background: godMode ? '#ff9900' : C.surface,
+                        position: 'relative', transition: 'background 0.2s',
+                        opacity: godModeLoading ? 0.5 : 1,
+                      }}
+                    >
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 11,
+                        background: '#fff', position: 'absolute', top: 3,
+                        left: godMode ? 25 : 3,
+                        transition: 'left 0.2s',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      }} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════
+          SETTINGS
+          ══════════════════════════════════════════════ */}
+      {screen === 'settings' && (() => {
+        const SettingsSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>{title}</div>
+            <div style={{ background: C.card, borderRadius: 16, padding: '4px 16px' }}>{children}</div>
+          </div>
+        );
+
+        const SettingsRow = ({ label, value, hint }: { label: string; value: string; hint?: string }) => (
+          <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 14, color: C.text }}>{label}</span>
+              <span style={{ fontSize: 14, color: C.textMuted }}>{value}</span>
+            </div>
+            {hint && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{hint}</div>}
+          </div>
+        );
+
+        const SettingsToggle = ({ label, value, disabled, proBadge, onChange }: {
+          label: string; value: boolean; disabled?: boolean; proBadge?: boolean; onChange: (v: boolean) => void;
+        }) => (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 14, color: disabled ? C.textMuted : C.text }}>{label}</span>
+              {proBadge && <ProBadge />}
+            </div>
+            <button
+              onClick={() => onChange(!value)}
+              disabled={disabled && !proBadge}
+              style={{
+                width: 50, height: 28, borderRadius: 14, border: 'none', cursor: disabled ? 'default' : 'pointer',
+                background: value ? C.accent : C.surface,
+                position: 'relative', transition: 'background 0.2s',
+                opacity: disabled ? 0.5 : 1,
+              }}
+            >
+              <div style={{
+                width: 22, height: 22, borderRadius: 11,
+                background: '#fff', position: 'absolute', top: 3,
+                left: value ? 25 : 3,
+                transition: 'left 0.2s',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+              }} />
+            </button>
+          </div>
+        );
+
+        const SettingsActionRow = ({ label, color, onClick }: { label: string; color?: string; onClick: () => void }) => (
+          <div
+            onClick={onClick}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
+          >
+            <span style={{ fontSize: 14, color: color || C.text }}>{label}</span>
+            <span style={{ fontSize: 14, color: C.textMuted }}>{'\u203A'}</span>
+          </div>
+        );
+
+        return (
+        <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 20px' }}>
+            {t('settings_title', locale)}
+          </h1>
+
+          {settingsLoading && !settingsData ? (
+            <div style={{ textAlign: 'center', padding: 40, color: C.textMuted }}>{t('loading', locale)}</div>
+          ) : settingsData && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* General */}
+              <SettingsSection title={t('settings_general', locale)}>
+                <SettingsRow label={t('settings_language', locale)} value={locale === 'ru' ? 'Русский' : 'English'} hint={t('settings_language_auto', locale)} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
+                  <span style={{ fontSize: 14, color: C.text }}>{t('settings_default_currency', locale)}</span>
+                  <div style={{ display: 'flex', gap: 4, background: C.bg, borderRadius: 8, padding: 2 }}>
+                    {(['RUB', 'USD'] as const).map(c => (
+                      <button key={c} onClick={() => patchSettings({ defaultCurrency: c })} style={{
+                        padding: '6px 12px', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
+                        cursor: 'pointer', fontFamily: font,
+                        background: settingsData.defaultCurrency === c ? C.accent : 'transparent',
+                        color: settingsData.defaultCurrency === c ? '#fff' : C.textMuted,
+                      }}>
+                        {c === 'RUB' ? '₽' : '$'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </SettingsSection>
+
+              {/* Notifications */}
+              <SettingsSection title={t('settings_notifications_title', locale)}>
+                <SettingsToggle
+                  label={t('settings_notify_comments', locale)}
+                  value={settingsData.notifications.comments}
+                  disabled={!settingsData.isPro}
+                  proBadge={!settingsData.isPro}
+                  onChange={(v) => settingsData.isPro ? patchSettings({ notifications: { ...settingsData.notifications, comments: v } }) : showUpsell('comments')}
+                />
+                <SettingsToggle
+                  label={t('settings_notify_reservations', locale)}
+                  value={settingsData.notifications.reservations}
+                  disabled={!settingsData.isPro}
+                  proBadge={!settingsData.isPro}
+                  onChange={(v) => settingsData.isPro ? patchSettings({ notifications: { ...settingsData.notifications, reservations: v } }) : showUpsell('comments')}
+                />
+                <SettingsToggle
+                  label={t('settings_notify_subscriptions', locale)}
+                  value={settingsData.notifications.subscriptions}
+                  disabled={!settingsData.isPro}
+                  proBadge={!settingsData.isPro}
+                  onChange={(v) => settingsData.isPro ? patchSettings({ notifications: { ...settingsData.notifications, subscriptions: v } }) : showUpsell('comments')}
+                />
+                <SettingsToggle
+                  label={t('settings_notify_marketing', locale)}
+                  value={settingsData.notifications.marketing}
+                  disabled={!settingsData.isPro}
+                  proBadge={!settingsData.isPro}
+                  onChange={(v) => settingsData.isPro ? patchSettings({ notifications: { ...settingsData.notifications, marketing: v } }) : showUpsell('comments')}
+                />
+              </SettingsSection>
+
+              {/* Privacy */}
+              <SettingsSection title={t('settings_privacy_title', locale)}>
+                <SettingsRow label={t('settings_profile_visibility', locale)} value={settingsData.privacy.profileVisibility === 'all' ? t('visibility_all', locale) : settingsData.privacy.profileVisibility === 'link_only' ? t('visibility_link_only', locale) : settingsData.privacy.profileVisibility} />
+                <SettingsRow label={t('settings_subscribe_policy', locale)} value={settingsData.privacy.subscribePolicy === 'all' ? t('subscribe_all', locale) : settingsData.privacy.subscribePolicy === 'link_only' ? t('subscribe_link_only', locale) : settingsData.privacy.subscribePolicy} />
+                <SettingsToggle
+                  label={t('settings_allow_comments', locale)}
+                  value={settingsData.privacy.commentsEnabled}
+                  disabled={!settingsData.isPro}
+                  proBadge={!settingsData.isPro}
+                  onChange={(v) => settingsData.isPro ? patchSettings({ privacy: { ...settingsData.privacy, commentsEnabled: v } }) : showUpsell('comments')}
+                />
+                <SettingsToggle
+                  label={t('settings_allow_hints', locale)}
+                  value={settingsData.privacy.hintsEnabled}
+                  onChange={(v) => patchSettings({ privacy: { ...settingsData.privacy, hintsEnabled: v } })}
+                />
+                <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 14, color: C.textMuted }}>{t('settings_reserved_visibility', locale)}</span>
+                    <span style={{ fontSize: 12, color: C.textMuted }}>{t('settings_coming_soon', locale)}</span>
+                  </div>
+                </div>
+              </SettingsSection>
+
+              {/* App Behavior */}
+              <SettingsSection title={t('settings_app_behavior_title', locale)}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
+                  <span style={{ fontSize: 14, color: C.text }}>{t('settings_wishlist_position', locale)}</span>
+                  <div style={{ display: 'flex', gap: 4, background: C.bg, borderRadius: 8, padding: 2 }}>
+                    {(['top', 'bottom'] as const).map(pos => (
+                      <button key={pos} onClick={() => {
+                        if (pos === 'top' && !settingsData.isPro) { showUpsell('wishlist_limit'); return; }
+                        patchSettings({ appBehavior: { ...settingsData.appBehavior, newWishlistPosition: pos } });
+                      }} style={{
+                        padding: '6px 10px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer', fontFamily: font,
+                        background: settingsData.appBehavior.newWishlistPosition === pos ? C.accent : 'transparent',
+                        color: settingsData.appBehavior.newWishlistPosition === pos ? '#fff' : C.textMuted,
+                        display: 'flex', alignItems: 'center', gap: 4,
+                      }}>
+                        {pos === 'top' ? t('settings_position_top', locale) : t('settings_position_bottom', locale)}
+                        {pos === 'top' && !settingsData.isPro && <ProBadge />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 14, color: C.textMuted }}>{t('settings_sorting_default', locale)}</span>
+                    <span style={{ fontSize: 12, color: C.textMuted }}>{t('settings_coming_soon', locale)}</span>
+                  </div>
+                </div>
+              </SettingsSection>
+
+              {/* Support */}
+              <SettingsSection title={t('settings_support_title', locale)}>
+                <SettingsActionRow label={t('settings_report_problem', locale)} onClick={() => {
+                  try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
+                }} />
+                <SettingsActionRow label={t('settings_contact_support', locale)} onClick={() => {
+                  try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
+                }} />
+                <SettingsActionRow label={t('settings_faq', locale)} onClick={() => pushToast(t('settings_coming_soon', locale), 'success')} />
+                <SettingsActionRow label={t('settings_legal', locale)} onClick={() => pushToast(t('settings_coming_soon', locale), 'success')} />
+                <SettingsActionRow label={t('settings_delete_account', locale)} color={C.red} onClick={() => setShowDeleteAccount(true)} />
+              </SettingsSection>
+            </div>
+          )}
+        </div>
+        );
+      })()}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
       <BottomSheet isOpen={showRenameWl} onClose={() => setShowRenameWl(false)} title={t('rename_title', locale)}>
@@ -3330,7 +3778,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div style={{ width: 44, height: 44, borderRadius: 10, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎁</div>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>{reservingItem.title}</div>
-                {reservingItem.price != null && <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{fmtPrice(reservingItem.price, locale)}</div>}
+                {reservingItem.price != null && <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{fmtPrice(reservingItem.price, locale, reservingItem.currency ?? 'RUB')}</div>}
               </div>
             </div>
             <div>
@@ -3449,7 +3897,30 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           })()}
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_price', locale)}</label>
-            <input style={inputStyle} placeholder="0 ₽" type="number" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                {(['RUB', 'USD'] as const).map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setItemCurrency(c)}
+                    style={{
+                      ...btnGhost,
+                      width: 'auto',
+                      padding: '6px 12px',
+                      fontSize: 13,
+                      background: itemCurrency === c ? C.accentSoft : 'transparent',
+                      color: itemCurrency === c ? C.accent : C.textMuted,
+                      border: `1px solid ${itemCurrency === c ? C.accent + '40' : C.borderLight}`,
+                      borderRadius: 8,
+                    }}
+                  >
+                    {c === 'RUB' ? '₽' : '$'}
+                  </button>
+                ))}
+              </div>
+              <input style={{ ...inputStyle, flex: 1 }} placeholder={itemCurrency === 'USD' ? '$0' : '0 ₽'} type="number" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} />
+            </div>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_priority', locale)}</label>
@@ -3539,6 +4010,110 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             onClick={() => setShowCancelSub(false)}
           >
             {t('cancel_keep', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── EDIT PROFILE BOTTOM SHEET ── */}
+      <BottomSheet isOpen={editingProfile} onClose={() => setEditingProfile(false)} title={t('profile_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('profile_display_name', locale)}</label>
+            <input style={inputStyle} placeholder={t('profile_display_name_placeholder', locale)} value={editProfileName} onChange={(e) => setEditProfileName(e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('profile_username', locale)}</label>
+            <input style={inputStyle} placeholder={t('profile_username_placeholder', locale)} value={editProfileUsername} onChange={(e) => setEditProfileUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} />
+            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{t('profile_username_hint', locale)}</div>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('profile_bio', locale)}</label>
+            <textarea
+              style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
+              maxLength={200}
+              placeholder={t('profile_bio_placeholder', locale)}
+              value={editProfileBio}
+              onChange={(e) => setEditProfileBio(e.target.value)}
+            />
+            <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 2 }}>{editProfileBio.length}/200</div>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('profile_birthday', locale)}</label>
+            <input style={{ ...inputStyle, colorScheme: 'dark' }} type="date" value={editProfileBirthday} onChange={(e) => setEditProfileBirthday(e.target.value)} />
+          </div>
+          <button
+            style={{ ...btnPrimary, opacity: editProfileSaving ? 0.5 : 1 }}
+            onClick={async () => {
+              setEditProfileSaving(true);
+              try {
+                const res = await tgFetch('/tg/me/profile', {
+                  method: 'PATCH',
+                  body: JSON.stringify({
+                    displayName: editProfileName.trim() || null,
+                    username: editProfileUsername.trim() || null,
+                    bio: editProfileBio.trim() || null,
+                    birthday: editProfileBirthday || null,
+                  }),
+                });
+                if (!res.ok) {
+                  const body = await res.json().catch(() => ({})) as { error?: string };
+                  pushToast(body.error || t('toast_save_error', locale), 'error');
+                  return;
+                }
+                pushToast(t('profile_saved', locale), 'success');
+                setEditingProfile(false);
+                loadProfile();
+              } catch {
+                pushToast(t('toast_save_error', locale), 'error');
+              } finally {
+                setEditProfileSaving(false);
+              }
+            }}
+            disabled={editProfileSaving}
+          >
+            {editProfileSaving ? '\u2026' : t('save', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── DELETE ACCOUNT BOTTOM SHEET ── */}
+      <BottomSheet isOpen={showDeleteAccount} onClose={() => setShowDeleteAccount(false)}>
+        <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 56, height: 56, borderRadius: 18,
+            background: C.redSoft, fontSize: 28, marginBottom: 16,
+          }}>
+            {'⚠️'}
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
+            {t('settings_delete_confirm_title', locale)}
+          </div>
+          <div style={{ fontSize: 14, color: C.textSec, marginTop: 8, lineHeight: 1.5, padding: '0 8px' }}>
+            {t('settings_delete_warning', locale)}
+          </div>
+          <button
+            style={{ ...btnPrimary, marginTop: 20, width: '100%', background: C.red, fontSize: 15, padding: '14px 24px' }}
+            onClick={async () => {
+              try {
+                const res = await tgFetch('/tg/me/account', { method: 'DELETE' });
+                if (res.ok) {
+                  try { window.Telegram?.WebApp?.close?.(); } catch { /* ok */ }
+                } else {
+                  pushToast(t('error_generic', locale), 'error');
+                }
+              } catch {
+                pushToast(t('error_generic', locale), 'error');
+              }
+            }}
+          >
+            {t('settings_delete_btn', locale)}
+          </button>
+          <button
+            style={{ ...btnGhost, width: '100%', marginTop: 8, fontSize: 14 }}
+            onClick={() => setShowDeleteAccount(false)}
+          >
+            {t('cancel', locale)}
           </button>
         </div>
       </BottomSheet>

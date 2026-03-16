@@ -1129,6 +1129,7 @@ function mapTgItem(item: {
   title: string;
   url: string;
   priceText: string | null;
+  currency?: string;
   imageUrl?: string | null;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   status: string;
@@ -1143,6 +1144,7 @@ function mapTgItem(item: {
     title: item.title,
     url: item.url || null,
     price: item.priceText ? (Number(item.priceText) || null) : null,
+    currency: item.currency ?? null,
     imageUrl: item.imageUrl ?? null,
     priority: priorityToNum(item.priority),
     status: item.status.toLowerCase(),
@@ -1158,6 +1160,17 @@ async function getOrCreateTgUser(tgUser: TelegramUser) {
     where: { telegramId: String(tgUser.id) },
     update: { telegramChatId: String(tgUser.id), firstName: tgUser.first_name || null },
     create: { telegramId: String(tgUser.id), telegramChatId: String(tgUser.id), firstName: tgUser.first_name || null },
+  });
+}
+
+async function getOrCreateProfile(userId: string, locale?: Locale) {
+  return prisma.userProfile.upsert({
+    where: { userId },
+    update: {},
+    create: {
+      userId,
+      defaultCurrency: locale === 'ru' ? 'RUB' : 'USD',
+    },
   });
 }
 
@@ -1287,7 +1300,7 @@ tgRouter.get(
       select: {
         id: true, wishlistId: true, title: true, url: true, priceText: true,
         imageUrl: true, priority: true, status: true, description: true,
-        sourceUrl: true, sourceDomain: true, importMethod: true,
+        sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
         wishlist: {
           select: { owner: { select: { id: true, firstName: true, telegramChatId: true } } },
         },
@@ -1484,7 +1497,7 @@ tgRouter.get(
       select: {
         id: true, wishlistId: true, title: true, url: true, priceText: true,
         imageUrl: true, priority: true, status: true, description: true,
-        sourceUrl: true, sourceDomain: true, importMethod: true,
+        sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
       },
     });
 
@@ -1506,6 +1519,7 @@ tgRouter.post(
         price: z.number().int().nonnegative().nullable().optional(),
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         imageUrl: z.string().url().optional(),
+        currency: z.enum(['RUB', 'USD']).optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
@@ -1527,6 +1541,13 @@ tgRouter.post(
       return res.status(402).json({ error: 'Plan limit reached', limit: ent.plan.items, planCode: ent.plan.code });
     }
 
+    // Resolve currency: use provided value, or fall back to user's profile default
+    let currency = parsed.data.currency;
+    if (!currency) {
+      const profile = await getOrCreateProfile(user.id, getRequestLocale(req));
+      currency = profile.defaultCurrency;
+    }
+
     const item = await prisma.item.create({
       data: {
         wishlistId,
@@ -1535,8 +1556,9 @@ tgRouter.post(
         priceText: parsed.data.price != null ? String(parsed.data.price) : null,
         priority: numToPriority(parsed.data.priority ?? 2),
         imageUrl: parsed.data.imageUrl ?? null,
+        currency,
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     return res.status(201).json({ item: mapTgItem(item) });
@@ -1558,6 +1580,7 @@ tgRouter.patch(
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         imageUrl: z.string().url().nullable().optional(),
         description: z.string().max(500).nullable().optional(),
+        currency: z.enum(['RUB', 'USD']).optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
@@ -1581,8 +1604,9 @@ tgRouter.patch(
         ...(parsed.data.priority !== undefined ? { priority: numToPriority(parsed.data.priority) } : {}),
         ...(parsed.data.imageUrl !== undefined ? { imageUrl: parsed.data.imageUrl } : {}),
         ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
+        ...(parsed.data.currency !== undefined ? { currency: parsed.data.currency } : {}),
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     // After update, if description changed and item was reserved — notify reserver
@@ -1682,7 +1706,7 @@ tgRouter.post(
         archivedAt: now,
         purgeAfter: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     // Cancel active hints when item is completed
@@ -1744,7 +1768,7 @@ tgRouter.post(
         archivedAt: null,
         purgeAfter: null,
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
     return res.json({ item: mapTgItem(updated) });
   }),
@@ -1765,7 +1789,7 @@ tgRouter.get(
     const items = await prisma.item.findMany({
       where: { wishlistId: id, status: { in: ['DELETED', 'COMPLETED'] } },
       orderBy: ITEM_ORDER_BY,
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
     return res.json({ items: items.map(mapTgItem) });
@@ -2427,7 +2451,7 @@ async function importUrlForUser(
     select: {
       id: true, wishlistId: true, title: true, url: true, priceText: true,
       imageUrl: true, priority: true, status: true, description: true,
-      sourceUrl: true, sourceDomain: true, importMethod: true,
+      sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
     },
   });
 
@@ -2539,7 +2563,7 @@ tgRouter.post(
       select: {
         id: true, wishlistId: true, title: true, url: true, priceText: true,
         imageUrl: true, priority: true, status: true, description: true,
-        sourceUrl: true, sourceDomain: true, importMethod: true,
+        sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
       },
     });
 
@@ -2575,6 +2599,312 @@ tgRouter.get(
       godMode: user.godMode,
       canGodMode,
     });
+  }),
+);
+
+// GET /tg/me/profile — user profile with stats
+tgRouter.get(
+  '/me/profile',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
+    const profile = await getOrCreateProfile(user.id, locale);
+    const ent = await getUserEntitlement(user.id, user.godMode);
+
+    // God mode whitelist
+    const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
+
+    // Stats
+    const [wishlists, totalWishes, reservedByMe, archived] = await Promise.all([
+      prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } }),
+      prisma.item.count({
+        where: {
+          wishlist: { ownerId: user.id },
+          status: { in: ['AVAILABLE', 'RESERVED'] },
+        },
+      }),
+      prisma.item.count({
+        where: { reserverUserId: user.id, status: 'RESERVED' },
+      }),
+      prisma.item.count({
+        where: {
+          wishlist: { ownerId: user.id },
+          status: { in: ['COMPLETED', 'DELETED'] },
+        },
+      }),
+    ]);
+
+    return res.json({
+      profile: {
+        displayName: profile.displayName,
+        username: profile.username,
+        bio: profile.bio,
+        avatarUrl: profile.avatarUrl,
+        birthday: profile.birthday?.toISOString() ?? null,
+        hideYear: profile.hideYear,
+        defaultCurrency: profile.defaultCurrency,
+      },
+      stats: {
+        wishlists,
+        wishlistsLimit: ent.plan.wishlists,
+        totalWishes,
+        wishesLimit: ent.plan.items,
+        reservedByMe,
+        archived,
+      },
+      plan: {
+        code: ent.plan.code,
+        wishlists: ent.plan.wishlists,
+        items: ent.plan.items,
+        participants: ent.plan.participants,
+        features: [...ent.plan.features],
+      },
+      subscription: ent.subscription,
+      godMode: user.godMode,
+      canGodMode,
+    });
+  }),
+);
+
+// PATCH /tg/me/profile — update user profile
+tgRouter.patch(
+  '/me/profile',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      displayName: z.string().min(1).max(100).optional(),
+      username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/).optional(),
+      bio: z.string().max(300).nullable().optional(),
+      birthday: z.string().nullable().optional(),
+      hideYear: z.boolean().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
+
+    // Check username uniqueness
+    if (parsed.data.username !== undefined) {
+      const currentProfile = await getOrCreateProfile(user.id, locale);
+      if (parsed.data.username !== currentProfile.username) {
+        const existing = await prisma.userProfile.findUnique({ where: { username: parsed.data.username } });
+        if (existing && existing.userId !== user.id) {
+          return res.status(409).json({ error: t('profile_username_taken', locale) });
+        }
+      }
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (parsed.data.displayName !== undefined) updateData.displayName = parsed.data.displayName;
+    if (parsed.data.username !== undefined) updateData.username = parsed.data.username;
+    if (parsed.data.bio !== undefined) updateData.bio = parsed.data.bio;
+    if (parsed.data.birthday !== undefined) updateData.birthday = parsed.data.birthday ? new Date(parsed.data.birthday) : null;
+    if (parsed.data.hideYear !== undefined) updateData.hideYear = parsed.data.hideYear;
+
+    const profile = await prisma.userProfile.upsert({
+      where: { userId: user.id },
+      update: updateData,
+      create: {
+        userId: user.id,
+        defaultCurrency: locale === 'ru' ? 'RUB' : 'USD',
+        ...updateData,
+      },
+    });
+
+    return res.json({
+      profile: {
+        displayName: profile.displayName,
+        username: profile.username,
+        bio: profile.bio,
+        avatarUrl: profile.avatarUrl,
+        birthday: profile.birthday?.toISOString() ?? null,
+        hideYear: profile.hideYear,
+        defaultCurrency: profile.defaultCurrency,
+      },
+    });
+  }),
+);
+
+// POST /tg/me/profile/avatar — upload profile avatar
+tgRouter.post(
+  '/me/profile/avatar',
+  upload.single('avatar'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
+    const profile = await getOrCreateProfile(user.id, locale);
+
+    // Process image
+    const result = await processImage(req.file.buffer, { maxDim: 512, quality: 80, suffix: 'avatar' });
+
+    // Delete old avatar file if exists
+    deleteUploadFile(profile.avatarUrl);
+
+    const avatarUrl = `/api/uploads/${result.filename}`;
+    await prisma.userProfile.update({
+      where: { userId: user.id },
+      data: { avatarUrl },
+    });
+
+    return res.json({ avatarUrl });
+  }),
+);
+
+// DELETE /tg/me/profile/avatar — remove profile avatar
+tgRouter.delete(
+  '/me/profile/avatar',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
+    const profile = await getOrCreateProfile(user.id, locale);
+
+    deleteUploadFile(profile.avatarUrl);
+    await prisma.userProfile.update({
+      where: { userId: user.id },
+      data: { avatarUrl: null },
+    });
+
+    return res.json({ success: true });
+  }),
+);
+
+// GET /tg/me/settings — user settings
+tgRouter.get(
+  '/me/settings',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
+    const profile = await getOrCreateProfile(user.id, locale);
+    const { isPro } = await getUserEntitlement(user.id, user.godMode);
+
+    return res.json({
+      language: locale,
+      defaultCurrency: profile.defaultCurrency,
+      notifications: {
+        comments: profile.notifyComments,
+        reservations: profile.notifyReservations,
+        subscriptions: profile.notifySubscriptions,
+        marketing: profile.notifyMarketing,
+      },
+      privacy: {
+        profileVisibility: profile.profileVisibility,
+        subscribePolicy: profile.subscribePolicy,
+        commentsEnabled: profile.commentsEnabled,
+        hintsEnabled: profile.hintsEnabled,
+      },
+      appBehavior: {
+        newWishlistPosition: profile.newWishlistPosition,
+      },
+      isPro,
+    });
+  }),
+);
+
+// PATCH /tg/me/settings — update user settings
+tgRouter.patch(
+  '/me/settings',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      defaultCurrency: z.enum(['RUB', 'USD']).optional(),
+      notifications: z.object({
+        comments: z.boolean().optional(),
+        reservations: z.boolean().optional(),
+        subscriptions: z.boolean().optional(),
+        marketing: z.boolean().optional(),
+      }).optional(),
+      privacy: z.object({
+        profileVisibility: z.enum(['ALL', 'LINK_ONLY', 'SUBSCRIBERS', 'NOBODY']).optional(),
+        subscribePolicy: z.enum(['ALL', 'LINK_ONLY', 'APPROVED', 'NOBODY']).optional(),
+        commentsEnabled: z.boolean().optional(),
+        hintsEnabled: z.boolean().optional(),
+      }).optional(),
+      appBehavior: z.object({
+        newWishlistPosition: z.enum(['top', 'bottom']).optional(),
+      }).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
+    const { isPro } = await getUserEntitlement(user.id, user.godMode);
+    const data = parsed.data;
+
+    // Build update object
+    const updateData: Record<string, unknown> = {};
+
+    if (data.defaultCurrency !== undefined) updateData.defaultCurrency = data.defaultCurrency;
+
+    if (data.notifications) {
+      if (data.notifications.reservations !== undefined) updateData.notifyReservations = data.notifications.reservations;
+      if (data.notifications.marketing !== undefined) updateData.notifyMarketing = data.notifications.marketing;
+      // Pro-gated notification settings
+      if (isPro) {
+        if (data.notifications.comments !== undefined) updateData.notifyComments = data.notifications.comments;
+        if (data.notifications.subscriptions !== undefined) updateData.notifySubscriptions = data.notifications.subscriptions;
+      }
+    }
+
+    if (data.privacy) {
+      if (data.privacy.profileVisibility !== undefined) updateData.profileVisibility = data.privacy.profileVisibility;
+      if (data.privacy.subscribePolicy !== undefined) updateData.subscribePolicy = data.privacy.subscribePolicy;
+      if (data.privacy.hintsEnabled !== undefined) updateData.hintsEnabled = data.privacy.hintsEnabled;
+      // Pro-gated privacy settings
+      if (isPro) {
+        if (data.privacy.commentsEnabled !== undefined) updateData.commentsEnabled = data.privacy.commentsEnabled;
+      }
+    }
+
+    if (data.appBehavior) {
+      // Pro-gated: newWishlistPosition "top" requires Pro
+      if (data.appBehavior.newWishlistPosition !== undefined) {
+        if (isPro || data.appBehavior.newWishlistPosition === 'bottom') {
+          updateData.newWishlistPosition = data.appBehavior.newWishlistPosition;
+        }
+      }
+    }
+
+    const profile = await prisma.userProfile.upsert({
+      where: { userId: user.id },
+      update: updateData,
+      create: {
+        userId: user.id,
+        defaultCurrency: (data.defaultCurrency as 'RUB' | 'USD' | undefined) ?? (locale === 'ru' ? 'RUB' : 'USD'),
+        ...updateData,
+      },
+    });
+
+    return res.json({
+      language: locale,
+      defaultCurrency: profile.defaultCurrency,
+      notifications: {
+        comments: profile.notifyComments,
+        reservations: profile.notifyReservations,
+        subscriptions: profile.notifySubscriptions,
+        marketing: profile.notifyMarketing,
+      },
+      privacy: {
+        profileVisibility: profile.profileVisibility,
+        subscribePolicy: profile.subscribePolicy,
+        commentsEnabled: profile.commentsEnabled,
+        hintsEnabled: profile.hintsEnabled,
+      },
+      appBehavior: {
+        newWishlistPosition: profile.newWishlistPosition,
+      },
+      isPro,
+    });
+  }),
+);
+
+// DELETE /tg/me/account — delete user and all related data
+tgRouter.delete(
+  '/me/account',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    await prisma.user.delete({ where: { id: user.id } });
+    return res.json({ success: true });
   }),
 );
 
