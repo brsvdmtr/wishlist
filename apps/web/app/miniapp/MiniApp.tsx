@@ -86,7 +86,7 @@ const prioEmoji = (p: number) => PRIO_EMOJI[p] ?? '🙂';
 const fmtPrice = (p: number | null, locale: Locale = 'ru', currency: 'RUB' | 'USD' = 'RUB') => {
   if (!p) return null;
   const formatted = p.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US');
-  return currency === 'USD' ? `$${formatted}` : `${formatted} ₽`;
+  return currency === 'USD' ? `${formatted} $` : `${formatted} ₽`;
 };
 
 /** Strip everything except digits from a user-facing price string. Returns raw digit string. */
