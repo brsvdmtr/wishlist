@@ -47,7 +47,7 @@ mkdir -p /opt
 cd /opt
 git clone https://github.com/brsvdmtr/wishlist.git
 cd /opt/wishlist
-git checkout claude/wizardly-satoshi  # NEEDS_VERIFICATION: confirm active production branch
+git checkout claude/wizardly-satoshi  # Production branch as of 2026-03-17 (not merged to main)
 ```
 
 ### 2.2 Create .env File

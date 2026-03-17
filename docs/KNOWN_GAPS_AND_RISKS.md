@@ -33,12 +33,12 @@
 ## ARCHITECTURE RISKS
 
 ### 5. Monolithic API (Single File)
-- **Risk**: `apps/api/src/index.ts` is ~3900 lines
+- **Risk**: `apps/api/src/index.ts` is ~4100 lines (verified 2026-03-17)
 - **Impact**: Hard to maintain, test, and reason about
 - **Note**: Post-monetization + URL import expansion; works for current scale but becomes fragile as features grow
 
 ### 6. Monolithic Frontend (Single File)
-- **Risk**: `MiniApp.tsx` is ~4500 lines with 30+ useState hooks
+- **Risk**: `MiniApp.tsx` is ~6500 lines with 30+ useState hooks (verified 2026-03-17)
 - **Impact**: State management complexity, no code splitting
 - **Note**: Acceptable for Telegram Mini App constraints
 
@@ -163,11 +163,11 @@
 - **Gap**: NEEDS VERIFICATION if certbot auto-renewal is configured
 - **Impact**: Site goes down if cert expires
 
-### 29. Git Branch Strategy `NEEDS_VERIFICATION`
-- **Risk**: Development on `claude/wizardly-satoshi` worktree branch
-- **Gap**: Unknown if merged to `main`. Unknown which branch is deployed on production server.
-- **Impact**: `git pull origin main` may miss latest changes
-- **Action**: Verify on server: `cd /opt/wishlist && git branch && git log --oneline -3`
+### 29. Git Branch Strategy
+- **Status**: Production runs `claude/wizardly-satoshi` (confirmed from INFRA_AND_ENV.md). Branch has NOT been merged to `main` as of 2026-03-17.
+- **Risk**: `git pull origin main` would miss all feature work; production deploys must use `git pull origin claude/wizardly-satoshi`
+- **Impact**: Any new contributor may accidentally target `main` instead of the active branch
+- **Action needed**: Decide if/when to merge to `main` or update repo default branch
 
 ### 30. Client-Only PRO Gate for Recommended Sort
 - **Risk**: Guest sort "Recommended" is shown as PRO on client, but no server-side enforcement
@@ -216,15 +216,15 @@
 
 | File | Lines | Why Critical |
 |------|-------|-------------|
-| `apps/api/src/index.ts` | ~3900 | ENTIRE backend logic |
-| `apps/web/app/miniapp/MiniApp.tsx` | ~4500 | ENTIRE Mini App frontend |
+| `apps/api/src/index.ts` | ~4100 | ENTIRE backend logic |
+| `apps/web/app/miniapp/MiniApp.tsx` | ~6500 | ENTIRE Mini App frontend |
 | `packages/db/prisma/schema.prisma` | ~120 | Database schema |
 | `packages/db/prisma/migrations/*` | varies | Migration history |
 | `docker-compose.prod.yml` | 91 | Production deployment config |
 | `Dockerfile.api` | 43 | API container build |
 | `Dockerfile.web` | ~50 | Web container build |
 | `Dockerfile.bot` | ~40 | Bot container build |
-| `apps/bot/src/index.ts` | ~100 | Telegram bot logic |
+| `apps/bot/src/index.ts` | ~1000 | Telegram bot logic |
 | `.env` (on server) | ~20 | ALL secrets and config |
 
 ---

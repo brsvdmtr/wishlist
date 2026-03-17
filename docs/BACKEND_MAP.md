@@ -10,7 +10,7 @@
 ```
 apps/api/
 ├── src/
-│   ├── index.ts                    # Express server, all routes, helpers, background jobs (~4 000 lines)
+│   ├── index.ts                    # Express server, all routes, helpers, background jobs (~4 100 lines)
 │   ├── url-parser.ts               # URL product card extraction pipeline
 │   ├── browser-network-extractor.ts # Puppeteer XHR/fetch interception for SPAs
 │   ├── sort.ts                     # Item sort order logic (unit-testable, no side effects)

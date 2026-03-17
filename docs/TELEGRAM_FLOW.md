@@ -5,7 +5,7 @@
 
 **Bot username**: Configured via `NEXT_PUBLIC_BOT_USERNAME` env (default: WishHub_bot)
 **Framework**: Telegraf 4.16.3
-**Source**: `apps/bot/src/index.ts` (~100 lines)
+**Source**: `apps/bot/src/index.ts` (~1000 lines)
 **Runtime**: Long polling (not webhook)
 
 ---
@@ -72,8 +72,11 @@ Owner sharing: https://t.me/{BOT_USERNAME}?startapp=share_{SHARE_TOKEN}
 ### Deep Link Payload Format
 | Prefix | Meaning | Example |
 |--------|---------|---------|
-| `share_` | Guest wishlist link | `share_abc123def456` |
-| (no prefix) | NEEDS VERIFICATION | Could be wishlist ID |
+| `share_` | Guest wishlist view (share token) | `share_abc123def456` |
+| `hint_` | Hint notification → opens item for recipient | `hint_cma1b2c3d4` |
+| `draft_` | URL import result → opens drafts screen | `draft_cma1b2c3d4` |
+| `{slug}__item_{id}` | Direct item navigation within a wishlist | `my-wishlist__item_cma1b2c3d4` |
+| (no prefix) | Legacy: passed as wishlist slug or direct startapp param | `my-wishlist-slug` |
 
 ### Link Generation (packages/shared)
 ```typescript
@@ -273,4 +276,4 @@ A ForceReply-based bridge between user DMs and a Telegram support group.
 - No graceful shutdown timeout for bot
 - Chat ID stored only on /start - if user blocks/restarts, chatId may be stale
 - No retry mechanism for failed Telegram notifications
-- NEEDS VERIFICATION: What happens if Telegram initData format changes?
+- Telegram initData format is Telegram-controlled; changes would require updating `validateTelegramInitData()` in `apps/api/src/index.ts`
