@@ -315,7 +315,7 @@ model UserProfile {
   notifyComments       Boolean @default(true)
   notifyReservations   Boolean @default(true)
   notifySubscriptions  Boolean @default(true)
-  notifyMarketing      Boolean @default(false)
+  notifyMarketing      Boolean @default(true)
 
   // Settings — Privacy
   profileVisibility   ProfileVisibility @default(ALL)

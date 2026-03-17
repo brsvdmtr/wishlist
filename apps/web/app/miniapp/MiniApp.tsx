@@ -5253,14 +5253,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               disabled={disabled && !proBadge}
               style={{
                 width: 50, height: 28, borderRadius: 14, border: 'none', cursor: disabled ? 'default' : 'pointer',
-                background: value ? C.accent : C.surface,
+                // When disabled: show actual value but muted (ON=muted accent, OFF=muted surface)
+                // so users can see the real effective state even when they can't edit it
+                background: value
+                  ? (disabled ? C.accent + '99' : C.accent)
+                  : C.surface,
                 position: 'relative', transition: 'background 0.2s',
-                opacity: disabled ? 0.5 : 1,
               }}
             >
               <div style={{
                 width: 22, height: 22, borderRadius: 11,
-                background: '#fff', position: 'absolute', top: 3,
+                background: disabled ? 'rgba(255,255,255,0.7)' : '#fff',
+                position: 'absolute', top: 3,
                 left: value ? 25 : 3,
                 transition: 'left 0.2s',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.2)',

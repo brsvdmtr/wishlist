@@ -3558,15 +3558,22 @@ tgRouter.get(
     const profile = await getOrCreateProfile(user.id, locale);
     const { isPro } = await getUserEntitlement(user.id, user.godMode);
 
+    // FREE users: all notifications are always ON (they cannot opt out — only PRO users can
+    // manage notification preferences). Normalise here so the UI always shows the correct
+    // effective state regardless of what's stored in the DB.
+    const notifications = isPro
+      ? {
+          comments: profile.notifyComments,
+          reservations: profile.notifyReservations,
+          subscriptions: profile.notifySubscriptions,
+          marketing: profile.notifyMarketing,
+        }
+      : { comments: true, reservations: true, subscriptions: true, marketing: true };
+
     return res.json({
       language: locale,
       defaultCurrency: profile.defaultCurrency,
-      notifications: {
-        comments: profile.notifyComments,
-        reservations: profile.notifyReservations,
-        subscriptions: profile.notifySubscriptions,
-        marketing: profile.notifyMarketing,
-      },
+      notifications,
       privacy: {
         profileVisibility: profile.profileVisibility,
         subscribePolicy: profile.subscribePolicy,
@@ -3617,12 +3624,13 @@ tgRouter.patch(
     if (data.defaultCurrency !== undefined) updateData.defaultCurrency = data.defaultCurrency;
 
     if (data.notifications) {
-      if (data.notifications.reservations !== undefined) updateData.notifyReservations = data.notifications.reservations;
-      if (data.notifications.marketing !== undefined) updateData.notifyMarketing = data.notifications.marketing;
-      // Pro-gated notification settings
+      // All notification preferences are PRO-only — FREE users have all notifications ON
+      // and cannot opt out. Silently ignore any notification changes from FREE users.
       if (isPro) {
         if (data.notifications.comments !== undefined) updateData.notifyComments = data.notifications.comments;
+        if (data.notifications.reservations !== undefined) updateData.notifyReservations = data.notifications.reservations;
         if (data.notifications.subscriptions !== undefined) updateData.notifySubscriptions = data.notifications.subscriptions;
+        if (data.notifications.marketing !== undefined) updateData.notifyMarketing = data.notifications.marketing;
       }
     }
 
@@ -3655,15 +3663,20 @@ tgRouter.patch(
       },
     });
 
+    // Normalise notifications for FREE users — same logic as GET
+    const updatedNotifications = isPro
+      ? {
+          comments: profile.notifyComments,
+          reservations: profile.notifyReservations,
+          subscriptions: profile.notifySubscriptions,
+          marketing: profile.notifyMarketing,
+        }
+      : { comments: true, reservations: true, subscriptions: true, marketing: true };
+
     return res.json({
       language: locale,
       defaultCurrency: profile.defaultCurrency,
-      notifications: {
-        comments: profile.notifyComments,
-        reservations: profile.notifyReservations,
-        subscriptions: profile.notifySubscriptions,
-        marketing: profile.notifyMarketing,
-      },
+      notifications: updatedNotifications,
       privacy: {
         profileVisibility: profile.profileVisibility,
         subscribePolicy: profile.subscribePolicy,
