@@ -1095,6 +1095,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [allItems, setAllItems] = useState<AllItem[]>([]);
   const [allItemsLoading, setAllItemsLoading] = useState(false);
   const [allItemsPriorityFilter, setAllItemsPriorityFilter] = useState<number | null>(null);
+  // Keyboard open detection — used to hide fixed CTAs so they don't float above the keyboard
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   // Guest state
   const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null } | null>(null);
@@ -2207,6 +2209,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     };
     tryInit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- Keyboard open detection via visualViewport (hides fixed bottom CTAs)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const handleResize = () => {
+      // Keyboard is considered open when visual viewport shrinks >150px vs window height
+      setKeyboardOpen(window.innerHeight - vv.height > 150);
+    };
+    vv.addEventListener('resize', handleResize);
+    return () => vv.removeEventListener('resize', handleResize);
   }, []);
 
   // --- Load subscription status when entering guest-view (for subscribe button)
@@ -3872,7 +3886,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           OWNER — WISHLIST DETAIL
           ══════════════════════════════════════════════ */}
       {screen === 'wishlist-detail' && currentWl && (
-        <div style={{ padding: '16px 20px 120px' }}>
+        <div style={{ padding: '16px 20px', paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))' }}>
           {/* ── Wishlist detail header ── */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
             {/* Left: title + meta */}
@@ -4015,9 +4029,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            {!itemReorderMode && !currentWl.readOnly && (
-              <button style={btnSecondary} onClick={() => { resetItemForm(); setShowItemForm(true); }}>{t('add_wish_btn', locale)}</button>
-            )}
             {!itemReorderMode && !currentWl.readOnly && (
               <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
                 {t('items_limit_status', locale, { count: items.length, max: planLimits.items })}
@@ -5481,6 +5492,40 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       })()}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
+
+      {/* ── Fixed "Add wish" CTA — wishlist-detail owner view only ── */}
+      {screen === 'wishlist-detail' &&
+       currentWl &&
+       !currentWl.readOnly &&
+       currentWl.id !== draftsWishlistId &&
+       !itemReorderMode &&
+       !showItemForm &&
+       !keyboardOpen && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0, left: 0, right: 0,
+          zIndex: 50,
+          // Gradient fade so the button visually merges with the list background
+          background: `linear-gradient(to top, ${C.bg} 55%, transparent)`,
+          padding: '20px 20px 0',
+          paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
+          pointerEvents: 'none',
+        }}>
+          <button
+            onClick={() => { resetItemForm(); setShowItemForm(true); }}
+            style={{
+              ...btnPrimary,
+              height: 50,
+              borderRadius: 14,
+              fontSize: 15,
+              pointerEvents: 'auto',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
+            }}
+          >
+            {t('add_wish_btn', locale)}
+          </button>
+        </div>
+      )}
 
       {/* ── Move item to wishlist picker — triggered from Drafts screen or item-detail ── */}
       <BottomSheet isOpen={showMovePicker} onClose={() => { setShowMovePicker(false); setMovingItem(null); }} title={t('drafts_move_title', locale)}>
