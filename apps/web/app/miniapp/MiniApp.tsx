@@ -7104,9 +7104,13 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, onCopied, buildTg
 
   const shareToTelegram = () => {
     if (!shareLink) return;
-    // Prepend the owner's display name so recipients see who is sharing
-    const namePrefix = ownerName ? `${ownerName}\n` : '';
-    const shareText = `${namePrefix}${t('share_text', locale, { title: wishlist.title })}`;
+    // Format:
+    //   {name} делится своим вишлистом:
+    //   [empty line]
+    //   🎁 {title}
+    //   Посмотри, что можно подарить 👇
+    const intro = ownerName ? `${t('share_intro', locale, { name: ownerName })}\n\n` : '';
+    const shareText = `${intro}🎁 ${wishlist.title}\n${t('share_cta', locale)}`;
     const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
     try {
       window.Telegram?.WebApp.openTelegramLink(tgShareUrl);

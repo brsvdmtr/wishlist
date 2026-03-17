@@ -377,7 +377,9 @@ const ru: Dict = {
   share_copy_btn: '📋 Скопировать ссылку',
   share_privacy:
     '🔒 Друзья увидят список, но не узнают, кто что забронировал. Ты тоже не увидишь детали — сюрприз!',
-  share_text: '🎁 {{title}}\nВыбирай подарок тут 👇',
+  share_intro: '{{name}} делится своим вишлистом:',
+  share_cta: 'Посмотри, что можно подарить 👇',
+  share_text: '🎁 {{title}}\nПосмотри, что можно подарить 👇',
 
   // ── Price filters ─────────────────────────────────────────────────────────
   filter_all: 'Все',
@@ -1084,7 +1086,9 @@ const en: Dict = {
   share_copy_btn: '📋 Copy link',
   share_privacy:
     "🔒 Friends will see the list but won't know who reserved what. You won't see the details either — surprise!",
-  share_text: '🎁 {{title}}\nChoose a gift here 👇',
+  share_intro: '{{name}} is sharing their wishlist:',
+  share_cta: 'See what you can gift 👇',
+  share_text: '🎁 {{title}}\nSee what you can gift 👇',
 
   // ── Price filters ─────────────────────────────────────────────────────────
   filter_all: 'All',
