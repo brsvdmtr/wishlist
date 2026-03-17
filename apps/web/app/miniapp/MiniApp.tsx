@@ -405,29 +405,45 @@ function BottomSheet({ isOpen, onClose, title, children }: {
     const el = sheetRef.current;
     if (!el || !isOpen) return;
     let startY: number | null = null;
-    let startScrollTop = 0;
+    // Mirror of dragOffset in a plain variable so onEnd can read it without
+    // capturing stale React state in the closure
+    let currentOffset = 0;
 
     const onStart = (e: TouchEvent) => {
       if (!e.touches[0]) return;
       startY = e.touches[0].clientY;
-      startScrollTop = el.scrollTop;
+      currentOffset = 0;
     };
 
     const onMove = (e: TouchEvent) => {
       if (startY === null || !e.touches[0]) return;
-      const delta = e.touches[0].clientY - startY;
-      // Dismiss gesture: downward drag only when sheet is scrolled to top
-      if (delta > 0 && startScrollTop === 0) {
-        e.preventDefault(); // block native scroll on the root container
-        setDragOffset(delta);
+      const currentY = e.touches[0].clientY;
+
+      if (el.scrollTop === 0 && currentY > startY) {
+        // Sheet content is at top and finger moves down → dismiss gesture.
+        // preventDefault stops the root scroll container from moving.
+        e.preventDefault();
+        const offset = currentY - startY;
+        currentOffset = offset;
+        setDragOffset(offset);
+      } else {
+        // Sheet is still scrolling its own content.
+        // Continuously reset startY so that the dismiss delta starts cleanly
+        // from zero at the exact moment scrollTop reaches 0 — this is what
+        // makes "scroll-down-then-scroll-back-up-then-swipe-away" work in one
+        // uninterrupted gesture without needing to lift the finger.
+        startY = currentY;
+        if (currentOffset !== 0) {
+          currentOffset = 0;
+          setDragOffset(0);
+        }
       }
     };
 
     const onEnd = () => {
-      setDragOffset(prev => {
-        if (prev > 80) onCloseRef.current();
-        return 0;
-      });
+      if (currentOffset > 80) onCloseRef.current();
+      currentOffset = 0;
+      setDragOffset(0);
       startY = null;
     };
 
