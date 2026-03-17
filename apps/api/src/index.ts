@@ -567,6 +567,12 @@ publicRouter.get(
         deadline: true,
         visibility: true,
         ownerId: true,
+        owner: {
+          select: {
+            firstName: true,
+            profile: { select: { displayName: true, username: true } },
+          },
+        },
         items: {
           where: { status: { in: [...ACTIVE_STATUSES] } },
           orderBy: ITEM_ORDER_BY,
@@ -612,6 +618,12 @@ publicRouter.get(
       }
     }
 
+    const ownerName =
+      wishlist.owner?.profile?.displayName?.trim() ||
+      wishlist.owner?.profile?.username?.trim() ||
+      wishlist.owner?.firstName?.trim() ||
+      null;
+
     return res.json({
       wishlist: {
         id: wishlist.id,
@@ -620,6 +632,7 @@ publicRouter.get(
         description: wishlist.description,
         deadline: wishlist.deadline,
         visibility: (wishlist.visibility as string).toLowerCase(),
+        ownerName,
       },
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,
@@ -647,6 +660,12 @@ publicRouter.get(
           title: true,
           description: true,
           deadline: true,
+          owner: {
+            select: {
+              firstName: true,
+              profile: { select: { displayName: true, username: true } },
+            },
+          },
           items: {
             where: { status: { in: [...ACTIVE_STATUSES] } },
             orderBy: ITEM_ORDER_BY,
@@ -670,6 +689,12 @@ publicRouter.get(
 
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
 
+    const ownerNameToken =
+      wishlist.owner?.profile?.displayName?.trim() ||
+      wishlist.owner?.profile?.username?.trim() ||
+      wishlist.owner?.firstName?.trim() ||
+      null;
+
     return res.json({
       wishlist: {
         id: wishlist.id,
@@ -677,6 +702,7 @@ publicRouter.get(
         title: wishlist.title,
         description: wishlist.description,
         deadline: wishlist.deadline,
+        ownerName: ownerNameToken,
       },
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,

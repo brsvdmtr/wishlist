@@ -310,6 +310,23 @@ function growTextarea(el: HTMLTextAreaElement) {
   el.style.height = el.scrollHeight + 'px';
 }
 
+/**
+ * resolveOwnerName — canonical fallback chain for the wishlist owner's display name.
+ * Priority: profile displayName → profile username → Telegram first_name → "Пользователь".
+ * Single source of truth used on the Share screen, Guest view, and any context
+ * that shows the owner's name — never reads tgUser.first_name directly.
+ */
+function resolveOwnerName(
+  profile: { displayName?: string | null; username?: string | null } | null | undefined,
+  tgUser: { first_name?: string | null; username?: string | null } | null | undefined,
+  fallback = 'Пользователь',
+): string {
+  return profile?.displayName?.trim() ||
+    profile?.username?.trim() ||
+    tgUser?.first_name?.trim() ||
+    fallback;
+}
+
 // ═══════════════════════════════════════════════════════
 // PRO UPSELL SYSTEM
 // ═══════════════════════════════════════════════════════
@@ -1123,7 +1140,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   // Guest state
-  const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null } | null>(null);
+  const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName: string | null } | null>(null);
   const [guestItems, setGuestItems] = useState<GuestItem[]>([]);
 
   // Item detail view (for both owner and guest)
@@ -1755,7 +1772,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // --- Guest API calls
   const loadGuestWishlist = useCallback(async (param: string) => {
     type GuestResponse = {
-      wishlist: { id: string; slug: string; title: string; description: string | null; deadline: string | null };
+      wishlist: { id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName?: string | null };
       items: Array<{
         id: string; title: string; description: string | null; url: string; priceText: string | null;
         imageUrl: string | null;
@@ -1787,7 +1804,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     if (!json) throw new Error(t('error_load_failed', locale));
 
     const priorityMap: Record<string, 1 | 2 | 3> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
-    setGuestWl(json.wishlist);
+    setGuestWl({ ...json.wishlist, ownerName: json.wishlist.ownerName ?? null });
     const mappedItems = json.items.map((i) => ({
       id: i.id,
       title: i.title,
@@ -4704,6 +4721,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           wishlist={currentWl}
           itemCount={items.length}
           tgUser={tgUser}
+          ownerName={resolveOwnerName(profileData, tgUser)}
           onCopied={() => pushToast(t('share_copied', locale), 'success')}
           locale={locale}
           buildTgDeepLink={buildTgDeepLink}
@@ -4723,9 +4741,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 20, fontWeight: 700, color: '#fff', flexShrink: 0,
             }}>
-              🎁
+              {guestWl.ownerName?.[0]?.toUpperCase() ?? '🎁'}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
+              {guestWl.ownerName && (
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.accent, marginBottom: 2 }}>{guestWl.ownerName}</div>
+              )}
               <div style={{ fontSize: 18, fontWeight: 700, fontFamily: font, color: C.text }}>{guestWl.title}</div>
               {guestWl.description && <div style={{ fontSize: 13, color: C.textMuted }}>{guestWl.description}</div>}
               {guestWl.deadline && (
@@ -7035,10 +7056,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 // SHARE SCREEN (extracted to keep main component tidy)
 // ─────────────────────────────────────────────────
 
-function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, isPro, locale }: {
+function ShareScreen({ wishlist, itemCount, tgUser, ownerName, onCopied, buildTgDeepLink, isPro, locale }: {
   wishlist: Wishlist;
   itemCount: number;
   tgUser: TgUser | null;
+  ownerName: string;
   onCopied: () => void;
   buildTgDeepLink: (payload?: string) => string | null;
   isPro?: boolean;
@@ -7089,7 +7111,7 @@ function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, i
     }
   };
 
-  const initials = tgUser?.first_name?.[0]?.toUpperCase() ?? '?';
+  const initials = ownerName?.[0]?.toUpperCase() ?? '?';
   const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
   const C_local = { accent: '#7C6AFF', text: '#F4F4F6', textSec: '#9CA3AF', textMuted: '#6B7280', bg: '#1B1B1F', surface: '#26262C', border: 'rgba(255,255,255,0.06)', borderLight: 'rgba(255,255,255,0.1)', green: '#34D399', greenSoft: 'rgba(52,211,153,0.12)', blue: '#3B82F6', red: '#EF4444', redSoft: 'rgba(239,68,68,0.12)' };
 
@@ -7111,7 +7133,7 @@ function ShareScreen({ wishlist, itemCount, tgUser, onCopied, buildTgDeepLink, i
           }}>
             {initials}
           </div>
-          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: font, color: C_local.text }}>{tgUser?.first_name ?? t('bot_menu_btn', locale)}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: font, color: C_local.text }}>{ownerName}</div>
           <div style={{ fontSize: 14, color: C_local.textSec, marginTop: 4 }}>{wishlist.title}</div>
           <div style={{ fontSize: 13, color: C_local.textMuted, marginTop: 4 }}>
             {itemCount} {pluralize(itemCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}{wishlist.deadline ? ` • ${fmtDeadline(wishlist.deadline)}` : ''}
