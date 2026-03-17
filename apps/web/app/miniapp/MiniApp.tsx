@@ -1093,6 +1093,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // All items flat list (for "Wishes" tab)
   const [allItems, setAllItems] = useState<AllItem[]>([]);
   const [allItemsLoading, setAllItemsLoading] = useState(false);
+  const [allItemsPriorityFilter, setAllItemsPriorityFilter] = useState<number | null>(null);
 
   // Guest state
   const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null } | null>(null);
@@ -1230,6 +1231,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [importUrl, setImportUrl] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [fromDrafts, setFromDrafts] = useState(false);
+
+  // ── Wishes tab: filtered by priority ─────────────────────────────────────
+  const filteredAllItems = useMemo(() => {
+    if (allItemsPriorityFilter === null) return allItems;
+    return allItems.filter((item) => item.priority === allItemsPriorityFilter);
+  }, [allItems, allItemsPriorityFilter]);
 
   // ── Guest view: computed filtered + sorted items ─────────────────────────
   const { guestMainList, guestNoPriceBlock } = useMemo(() => {
@@ -3427,6 +3434,57 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {/* ── WISHES TAB ──────────────────────────────────────────── */}
           {homeTab === 'wishes' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Priority filter chips */}
+              {!allItemsLoading && allItems.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
+                  {/* "All" chip */}
+                  <button
+                    onClick={() => setAllItemsPriorityFilter(null)}
+                    style={{
+                      flexShrink: 0,
+                      padding: '6px 14px',
+                      borderRadius: 20,
+                      border: 'none',
+                      fontSize: 13,
+                      fontWeight: allItemsPriorityFilter === null ? 700 : 500,
+                      cursor: 'pointer',
+                      background: allItemsPriorityFilter === null ? C.accent : C.surface,
+                      color: allItemsPriorityFilter === null ? '#fff' : C.text,
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {t('filter_all', locale)}
+                  </button>
+                  {getPriorities(locale).slice().reverse().map((p) => {
+                    const active = allItemsPriorityFilter === p.value;
+                    return (
+                      <button
+                        key={p.value}
+                        onClick={() => setAllItemsPriorityFilter(active ? null : p.value)}
+                        style={{
+                          flexShrink: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '6px 14px',
+                          borderRadius: 20,
+                          border: 'none',
+                          fontSize: 13,
+                          fontWeight: active ? 700 : 500,
+                          cursor: 'pointer',
+                          background: active ? PRIO_BG[p.value] : C.surface,
+                          color: active ? PRIO_COLOR[p.value] : C.text,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <span>{p.emoji}</span>
+                        <span>{p.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {allItemsLoading && (
                 <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                   <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
@@ -3440,7 +3498,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('wishes_all_empty_hint', locale)}</div>
                 </div>
               )}
-              {allItems.map((item) => (
+              {!allItemsLoading && allItems.length > 0 && filteredAllItems.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                  <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+                  <div style={{ fontSize: 15, color: C.textMuted, marginBottom: 16 }}>{t('guest_filter_empty', locale)}</div>
+                  <button
+                    onClick={() => setAllItemsPriorityFilter(null)}
+                    style={{ ...btnSecondary, padding: '10px 24px', fontSize: 14 }}
+                  >
+                    {t('filter_reset', locale)}
+                  </button>
+                </div>
+              )}
+              {filteredAllItems.map((item) => (
                 <WishCardOwner
                   key={item.id}
                   item={item}
