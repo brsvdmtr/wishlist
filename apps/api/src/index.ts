@@ -570,7 +570,7 @@ publicRouter.get(
         owner: {
           select: {
             firstName: true,
-            profile: { select: { displayName: true, username: true } },
+            profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true } },
           },
         },
         items: {
@@ -624,6 +624,12 @@ publicRouter.get(
       wishlist.owner?.firstName?.trim() ||
       null;
 
+    // Respect avatarPublic — only expose photo if owner allows it
+    const ownerProfile = wishlist.owner?.profile;
+    const ownerAvatarUrl = (ownerProfile?.avatarPublic !== false && ownerProfile?.avatarUrl)
+      ? ownerProfile.avatarUrl
+      : null;
+
     return res.json({
       wishlist: {
         id: wishlist.id,
@@ -633,6 +639,7 @@ publicRouter.get(
         deadline: wishlist.deadline,
         visibility: (wishlist.visibility as string).toLowerCase(),
         ownerName,
+        ownerAvatarUrl,
       },
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,
@@ -1584,7 +1591,14 @@ tgRouter.get(
         imageUrl: true, priority: true, status: true, description: true,
         sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
         wishlist: {
-          select: { owner: { select: { id: true, firstName: true, telegramChatId: true } } },
+          select: {
+            owner: {
+              select: {
+                id: true, firstName: true, telegramChatId: true,
+                profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true } },
+              },
+            },
+          },
         },
       },
       orderBy: { updatedAt: 'desc' },
@@ -1615,7 +1629,7 @@ tgRouter.get(
       }));
     }
 
-    // 4. Resolve owner names (batch-dedupe by ownerId)
+    // 4. Resolve owner names + avatars (batch-dedupe by ownerId)
     const uniqueOwners = new Map<string, typeof items[0]['wishlist']['owner']>();
     for (const item of items) {
       if (!uniqueOwners.has(item.wishlist.owner.id)) {
@@ -1623,9 +1637,15 @@ tgRouter.get(
       }
     }
     const ownerNames = new Map<string, string>();
+    const ownerAvatarUrls = new Map<string, string | null>();
     await Promise.all(
       [...uniqueOwners.entries()].map(async ([ownerId, owner]) => {
         ownerNames.set(ownerId, await resolveUserFirstName(owner, locale));
+        const profile = owner.profile;
+        ownerAvatarUrls.set(
+          ownerId,
+          (profile?.avatarPublic !== false && profile?.avatarUrl) ? profile.avatarUrl : null,
+        );
       }),
     );
 
@@ -1633,6 +1653,7 @@ tgRouter.get(
     const reservations = items.map(item => ({
       ...mapTgItem(item),
       ownerName: ownerNames.get(item.wishlist.owner.id) ?? t('api_user_fallback', locale),
+      ownerAvatarUrl: ownerAvatarUrls.get(item.wishlist.owner.id) ?? null,
       ownerId: item.wishlist.owner.id,
       unreadComments: unreadCounts[item.id] ?? 0,
     }));
@@ -2083,7 +2104,13 @@ tgRouter.get(
             title: true,
             deadline: true,
             archivedAt: true,
-            owner: { select: { firstName: true, telegramId: true } },
+            owner: {
+              select: {
+                firstName: true,
+                telegramId: true,
+                profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true } },
+              },
+            },
             items: {
               where: { status: { in: [...ACTIVE_STATUSES] } },
               select: { id: true },
@@ -2102,7 +2129,13 @@ tgRouter.get(
         deadline: sub.wishlist.deadline?.toISOString() ?? null,
         archivedAt: sub.wishlist.archivedAt?.toISOString() ?? null,
         itemCount: sub.wishlist.items.length,
-        ownerName: sub.wishlist.owner.firstName ?? '…',
+        ownerName: sub.wishlist.owner.profile?.displayName?.trim() ||
+          sub.wishlist.owner.profile?.username?.trim() ||
+          sub.wishlist.owner.firstName?.trim() ||
+          '…',
+        ownerAvatarUrl: (sub.wishlist.owner.profile?.avatarPublic !== false && sub.wishlist.owner.profile?.avatarUrl)
+          ? sub.wishlist.owner.profile.avatarUrl
+          : null,
       },
       unreadCount: sub.unreads.length,
       unreadEntityIds: [...new Set(sub.unreads.map((u) => u.entityId))],

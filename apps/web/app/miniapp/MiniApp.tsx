@@ -191,6 +191,7 @@ type SubscribedWishlist = {
     archivedAt: string | null;
     itemCount: number;
     ownerName: string;
+    ownerAvatarUrl: string | null;
   };
   unreadCount: number;
   unreadEntityIds: string[];
@@ -198,6 +199,7 @@ type SubscribedWishlist = {
 
 type ReservationItem = Item & {
   ownerName: string;
+  ownerAvatarUrl: string | null;
   ownerId: string;
   unreadComments: number;
 };
@@ -325,6 +327,36 @@ function resolveOwnerName(
     profile?.username?.trim() ||
     tgUser?.first_name?.trim() ||
     fallback;
+}
+
+/**
+ * UserAvatar — reusable avatar circle.
+ * Shows profile photo if avatarUrl is provided; falls back to first letter of name.
+ * Size, accent colour, and optional border can all be customised per call-site.
+ */
+function UserAvatar({
+  avatarUrl, name, size, accent, border, style: extraStyle,
+}: {
+  avatarUrl?: string | null;
+  name?: string | null;
+  size: number;
+  accent: string;
+  border?: string;
+  style?: React.CSSProperties;
+}) {
+  const initial = ((name ?? '?').trim() || '?')[0]!.toUpperCase();
+  const baseStyle: React.CSSProperties = {
+    width: size, height: size, borderRadius: '50%', flexShrink: 0,
+    background: `linear-gradient(135deg, ${accent}, ${accent}80)`,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: Math.round(size * 0.42), fontWeight: 700, color: '#fff',
+    ...(border ? { border } : {}),
+    ...(avatarUrl
+      ? { backgroundImage: `url(${avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+      : {}),
+    ...extraStyle,
+  };
+  return <div style={baseStyle}>{!avatarUrl && initial}</div>;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1154,7 +1186,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   // Guest state
-  const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName: string | null } | null>(null);
+  const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName: string | null; ownerAvatarUrl: string | null } | null>(null);
   const [guestItems, setGuestItems] = useState<GuestItem[]>([]);
 
   // Item detail view (for both owner and guest)
@@ -1837,7 +1869,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // --- Guest API calls
   const loadGuestWishlist = useCallback(async (param: string) => {
     type GuestResponse = {
-      wishlist: { id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName?: string | null };
+      wishlist: { id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName?: string | null; ownerAvatarUrl?: string | null };
       items: Array<{
         id: string; title: string; description: string | null; url: string; priceText: string | null;
         imageUrl: string | null;
@@ -1869,7 +1901,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     if (!json) throw new Error(t('error_load_failed', locale));
 
     const priorityMap: Record<string, 1 | 2 | 3> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
-    setGuestWl({ ...json.wishlist, ownerName: json.wishlist.ownerName ?? null });
+    setGuestWl({ ...json.wishlist, ownerName: json.wishlist.ownerName ?? null, ownerAvatarUrl: json.wishlist.ownerAvatarUrl ?? null });
     const mappedItems = json.items.map((i) => ({
       id: i.id,
       title: i.title,
@@ -3396,15 +3428,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {/* Avatar → Profile */}
               <button
                 onClick={() => { loadProfile(); setScreen('profile'); }}
-                style={{
-                  width: 36, height: 36, borderRadius: '50%', border: 'none', cursor: 'pointer',
-                  background: `linear-gradient(135deg, ${C.accent}, ${C.accent}80)`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 16, fontWeight: 700, color: '#fff', flexShrink: 0, padding: 0,
-                }}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
                 aria-label={t('profile_title', locale)}
               >
-                {(tgUser?.first_name ?? '?')[0]!.toUpperCase()}
+                <UserAvatar
+                  avatarUrl={profileData?.avatarUrl}
+                  name={resolveOwnerName(profileData, tgUser)}
+                  size={36}
+                  accent={C.accent}
+                />
               </button>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -3576,9 +3608,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           }}>{sub.unreadCount}</span>
                         )}
                       </div>
-                      <div style={{ fontSize: 12, color: C.textMuted }}>
-                        {sub.wishlist.ownerName} · {sub.wishlist.itemCount} {t('stats_wishes', locale)}
-                        {sub.wishlist.deadline && ` · 📅 ${fmtDeadline(sub.wishlist.deadline)}`}
+                      <div style={{ fontSize: 12, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                        <UserAvatar avatarUrl={sub.wishlist.ownerAvatarUrl} name={sub.wishlist.ownerName} size={16} accent={C.accent} />
+                        <span>{sub.wishlist.ownerName} · {sub.wishlist.itemCount} {t('stats_wishes', locale)}{sub.wishlist.deadline ? ` · 📅 ${fmtDeadline(sub.wishlist.deadline)}` : ''}</span>
                       </div>
                     </div>
                     <span style={{ fontSize: 20, color: C.textMuted }}>›</span>
@@ -3862,23 +3894,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </div>
               )}
               {reservations.length > 0 && (() => {
-                const groups: Record<string, { ownerName: string; items: ReservationItem[] }> = {};
+                const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: ReservationItem[] }> = {};
                 for (const r of reservations) {
-                  const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, items: [] });
+                  const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, ownerAvatarUrl: r.ownerAvatarUrl, items: [] });
                   g.items.push(r);
                 }
                 let globalIdx = 0;
                 return Object.entries(groups).map(([ownerId, group]) => (
                   <div key={ownerId} style={{ marginBottom: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                      <div style={{
-                        width: 32, height: 32, borderRadius: 16,
-                        background: `linear-gradient(135deg, ${C.accent}, ${C.green})`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0,
-                      }}>
-                        {(group.ownerName || '?').charAt(0).toUpperCase()}
-                      </div>
+                      <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName} size={32} accent={C.accent} />
                       <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -4220,9 +4245,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           )}
 
           {reservations.length > 0 && (() => {
-            const groups: Record<string, { ownerName: string; items: ReservationItem[] }> = {};
+            const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: ReservationItem[] }> = {};
             for (const r of reservations) {
-              const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, items: [] });
+              const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, ownerAvatarUrl: r.ownerAvatarUrl, items: [] });
               g.items.push(r);
             }
             let globalIdx = 0;
@@ -4235,14 +4260,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   }}
                   onClick={() => pushToast(t('toast_profile_coming', locale), 'success')}
                 >
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 18,
-                    background: `linear-gradient(135deg, ${C.accent}, ${C.green})`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 16, fontWeight: 700, color: '#fff', flexShrink: 0,
-                  }}>
-                    {(group.ownerName || t('api_user_fallback', locale)).charAt(0).toUpperCase()}
-                  </div>
+                  <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName || t('api_user_fallback', locale)} size={36} accent={C.accent} />
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
                     <div style={{ fontSize: 12, color: C.textMuted }}>
@@ -4893,6 +4911,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           itemCount={items.length}
           tgUser={tgUser}
           ownerName={resolveOwnerName(profileData, tgUser)}
+          ownerAvatarUrl={profileData?.avatarUrl ?? null}
           onCopied={() => pushToast(t('share_copied', locale), 'success')}
           locale={locale}
           buildTgDeepLink={buildTgDeepLink}
@@ -4906,14 +4925,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'guest-view' && guestWl && (
         <div style={{ padding: '16px 20px 120px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '8px 0 20px' }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: '50%',
-              background: `linear-gradient(135deg, ${C.accent}, #a78bfa)`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 20, fontWeight: 700, color: '#fff', flexShrink: 0,
-            }}>
-              {guestWl.ownerName?.[0]?.toUpperCase() ?? '🎁'}
-            </div>
+            <UserAvatar
+              avatarUrl={guestWl.ownerAvatarUrl}
+              name={guestWl.ownerName ?? '🎁'}
+              size={48}
+              accent={C.accent}
+            />
             <div style={{ flex: 1, minWidth: 0 }}>
               {guestWl.ownerName && (
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.accent, marginBottom: 2 }}>{guestWl.ownerName}</div>
@@ -7521,11 +7538,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 // SHARE SCREEN (extracted to keep main component tidy)
 // ─────────────────────────────────────────────────
 
-function ShareScreen({ wishlist, itemCount, tgUser, ownerName, onCopied, buildTgDeepLink, isPro, locale }: {
+function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, onCopied, buildTgDeepLink, isPro, locale }: {
   wishlist: Wishlist;
   itemCount: number;
   tgUser: TgUser | null;
   ownerName: string;
+  ownerAvatarUrl?: string | null;
   onCopied: () => void;
   buildTgDeepLink: (payload?: string) => string | null;
   isPro?: boolean;
@@ -7582,7 +7600,6 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, onCopied, buildTg
     }
   };
 
-  const initials = ownerName?.[0]?.toUpperCase() ?? '?';
   const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
   const C_local = { accent: '#7C6AFF', text: '#F4F4F6', textSec: '#9CA3AF', textMuted: '#6B7280', bg: '#1B1B1F', surface: '#26262C', border: 'rgba(255,255,255,0.06)', borderLight: 'rgba(255,255,255,0.1)', green: '#34D399', greenSoft: 'rgba(52,211,153,0.12)', blue: '#3B82F6', red: '#EF4444', redSoft: 'rgba(239,68,68,0.12)' };
 
@@ -7596,13 +7613,8 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, onCopied, buildTg
           borderRadius: 20, padding: 28, textAlign: 'center', width: '100%',
           border: `1px solid ${C_local.accent}18`,
         }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: '50%',
-            background: `linear-gradient(135deg, ${C_local.accent}, #a78bfa)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 28, fontWeight: 700, color: '#fff', margin: '0 auto 14px',
-          }}>
-            {initials}
+          <div style={{ margin: '0 auto 14px', width: 'fit-content' }}>
+            <UserAvatar avatarUrl={ownerAvatarUrl} name={ownerName} size={64} accent={C_local.accent} />
           </div>
           <div style={{ fontSize: 20, fontWeight: 800, fontFamily: font, color: C_local.text }}>{ownerName}</div>
           <div style={{ fontSize: 14, color: C_local.textSec, marginTop: 4 }}>{wishlist.title}</div>
