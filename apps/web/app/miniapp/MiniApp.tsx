@@ -5172,12 +5172,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <SettingsSection title={t('settings_app_behavior_title', locale)}>
                 <SettingsToggle
                   label={t('settings_wishlists_on_top', locale)}
-                  value={settingsData.appBehavior.newWishlistPosition !== 'bottom'}
+                  value={settingsData.isPro && settingsData.appBehavior.newWishlistPosition === 'top'}
+                  disabled={!settingsData.isPro}
                   proBadge={!settingsData.isPro}
                   onChange={(v) => {
-                    const newPos = v ? 'top' : 'bottom';
-                    if (newPos === 'bottom' && !settingsData.isPro) { showUpsell('wishlist_limit'); return; }
-                    patchSettings({ appBehavior: { ...settingsData.appBehavior, newWishlistPosition: newPos } });
+                    if (!settingsData.isPro) { showUpsell('wishlist_limit'); return; }
+                    patchSettings({ appBehavior: { ...settingsData.appBehavior, newWishlistPosition: v ? 'top' : 'bottom' } });
                   }}
                 />
                 <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>

@@ -1663,7 +1663,8 @@ tgRouter.post(
 
     // Determine insert position + inherit privacy defaults from profile
     const profile = await prisma.userProfile.findUnique({ where: { userId: user.id }, select: { newWishlistPosition: true, commentsEnabled: true } });
-    const addToTop = !profile || profile.newWishlistPosition === 'top';
+    // "top" is a PRO feature — FREE users always append to bottom regardless of stored value
+    const addToTop = ent.isPro && profile?.newWishlistPosition === 'top';
 
     let newPosition: number;
     if (addToTop) {
@@ -3573,7 +3574,8 @@ tgRouter.get(
         hintsEnabled: profile.hintsEnabled,
       },
       appBehavior: {
-        newWishlistPosition: profile.newWishlistPosition,
+        // "top" is PRO-only — normalize to "bottom" for FREE users (handles PRO→FREE downgrade)
+        newWishlistPosition: isPro ? profile.newWishlistPosition : 'bottom',
       },
       isPro,
     });
@@ -3635,9 +3637,9 @@ tgRouter.patch(
     }
 
     if (data.appBehavior) {
-      // Pro-gated: newWishlistPosition "bottom" requires Pro (free users are locked to "top")
+      // Pro-gated: newWishlistPosition "top" requires Pro (free users can only use "bottom")
       if (data.appBehavior.newWishlistPosition !== undefined) {
-        if (isPro || data.appBehavior.newWishlistPosition === 'top') {
+        if (isPro || data.appBehavior.newWishlistPosition === 'bottom') {
           updateData.newWishlistPosition = data.appBehavior.newWishlistPosition;
         }
       }
@@ -3669,7 +3671,8 @@ tgRouter.patch(
         hintsEnabled: profile.hintsEnabled,
       },
       appBehavior: {
-        newWishlistPosition: profile.newWishlistPosition,
+        // "top" is PRO-only — normalize to "bottom" for FREE users
+        newWishlistPosition: isPro ? profile.newWishlistPosition : 'bottom',
       },
       isPro,
     });

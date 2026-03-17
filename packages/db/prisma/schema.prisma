@@ -324,7 +324,7 @@ model UserProfile {
   hintsEnabled        Boolean @default(true)
 
   // Settings — App Behavior
-  newWishlistPosition String  @default("top")
+  newWishlistPosition String  @default("bottom")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
