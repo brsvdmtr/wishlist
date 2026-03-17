@@ -288,6 +288,13 @@ function handleTextareaFocus(textarea: HTMLElement) {
   textarea.addEventListener('blur', cleanup);
 }
 
+/** Auto-size a textarea to its content height. Call on mount (via ref callback)
+ *  and on every onChange to keep height in sync with content. */
+function growTextarea(el: HTMLTextAreaElement) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
 // ═══════════════════════════════════════════════════════
 // PRO UPSELL SYSTEM
 // ═══════════════════════════════════════════════════════
@@ -844,7 +851,8 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
               }}
               placeholder={t('comments_placeholder', locale)}
               value={commentText}
-              onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
+              ref={(el) => { if (el) growTextarea(el); }}
+              onChange={(e) => { setCommentText(e.target.value.slice(0, 300)); growTextarea(e.target); }}
               maxLength={300}
               onFocus={(e) => handleTextareaFocus(e.currentTarget)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSendComment(); } }}
@@ -2557,7 +2565,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const openEditItem = (item: Item) => {
     setEditingItem(item);
     setItemTitle(item.title);
-    setItemDescription(item.description ?? '');
+    setItemDescription(item.description?.replace(/\n+$/, '') ?? '');
     setItemUrl(item.url ?? '');
     setItemPrice(item.price != null ? String(item.price) : '');
     setItemPriority(item.priority);
@@ -4124,7 +4132,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <span style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font }}>{t('description_title', locale)}</span>
                     <span
-                      onClick={() => { setDescriptionText(viewingItem.description ?? ''); setEditingDescription(true); }}
+                      onClick={() => { setDescriptionText(viewingItem.description?.replace(/\n+$/, '') ?? ''); setEditingDescription(true); }}
                       style={{ fontSize: 13, color: C.accent, cursor: 'pointer', fontFamily: font }}
                     >
                       {t('description_edit', locale)}
@@ -4902,7 +4910,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <button onClick={() => {
                   setEditProfileName(profileData.displayName || '');
                   setEditProfileUsername(profileData.username || '');
-                  setEditProfileBio(profileData.bio || '');
+                  setEditProfileBio(profileData.bio?.replace(/\n+$/, '') || '');
                   setEditProfileBirthday(profileData.birthday ? profileData.birthday.slice(0, 10) : '');
                   setEditingProfile(true);
                 }} style={{ ...btnGhost, marginTop: 12, fontSize: 13 }}>
@@ -6155,11 +6163,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <textarea
-              style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
+              style={{ ...inputStyle, minHeight: 48, resize: 'none', overflow: 'hidden' }}
               maxLength={500}
               placeholder={t('description_placeholder', locale)}
               value={descriptionText}
-              onChange={(e) => setDescriptionText(e.target.value)}
+              ref={(el) => { if (el) growTextarea(el); }}
+              onChange={(e) => { setDescriptionText(e.target.value); growTextarea(e.target); }}
               autoFocus
             />
             <div style={{ fontSize: 12, color: descriptionText.length > 480 ? C.orange : C.textMuted, textAlign: 'right', marginTop: 4 }}>
@@ -6212,11 +6221,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_description', locale)}</label>
             <textarea
-              style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
+              style={{ ...inputStyle, minHeight: 48, resize: 'none', overflow: 'hidden' }}
               maxLength={500}
               placeholder={t('item_description_placeholder', locale)}
               value={itemDescription}
-              onChange={(e) => setItemDescription(e.target.value)}
+              ref={(el) => { if (el) growTextarea(el); }}
+              onChange={(e) => { setItemDescription(e.target.value); growTextarea(e.target); }}
             />
             <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 2 }}>{itemDescription.length}/500</div>
           </div>
@@ -6584,11 +6594,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('profile_bio', locale)}</label>
             <textarea
-              style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
+              style={{ ...inputStyle, minHeight: 48, resize: 'none', overflow: 'hidden' }}
               maxLength={200}
               placeholder={t('profile_bio_placeholder', locale)}
               value={editProfileBio}
-              onChange={(e) => setEditProfileBio(e.target.value)}
+              ref={(el) => { if (el) growTextarea(el); }}
+              onChange={(e) => { setEditProfileBio(e.target.value); growTextarea(e.target); }}
             />
             <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 2 }}>{editProfileBio.length}/200</div>
           </div>
