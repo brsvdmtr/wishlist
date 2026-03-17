@@ -1297,7 +1297,7 @@ const PLANS = {
   FREE: {
     code: 'FREE' as const,
     wishlists: 2,
-    items: 30,
+    items: 20,       // reduced from 30; add-ons fill the gap; MAX tier will have 200+
     participants: 5,
     subscriptions: 2,
     features: [] as string[],
@@ -1305,9 +1305,9 @@ const PLANS = {
   PRO: {
     code: 'PRO' as const,
     wishlists: 10,
-    items: 100,
+    items: 70,       // reduced from 100; MAX tier will be 200+
     participants: 20,
-    subscriptions: 7,
+    subscriptions: 5, // reduced from 7; 5 covers active users well; MAX will offer 15+
     features: ['comments', 'url_import', 'hints'],
   },
 } as const;
@@ -1318,6 +1318,29 @@ type PlanInfo = (typeof PLANS)[PlanCode];
 const PRO_PRICE_XTR = parseInt(process.env.PRO_PRICE_XTR ?? '100', 10);
 const PRO_SUBSCRIPTION_PERIOD = parseInt(process.env.PRO_SUBSCRIPTION_PERIOD ?? '2592000', 10);
 const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
+
+// ─── One-time SKU catalogue ──────────────────────────────────────────────────
+const ONE_TIME_SKUS = {
+  extra_wishlist_slot:     { code: 'extra_wishlist_slot',     price: 39, type: 'permanent' as const,  addonType: 'wishlist_slot'       as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0,  targetRequired: false },
+  extra_subscription_slot: { code: 'extra_subscription_slot', price: 25, type: 'permanent' as const,  addonType: 'subscription_slot'   as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0,  targetRequired: false },
+  extra_items_5:           { code: 'extra_items_5',           price: 19, type: 'permanent' as const,  addonType: 'item_slot_5'         as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0,  targetRequired: true  },
+  extra_items_15:          { code: 'extra_items_15',          price: 39, type: 'permanent' as const,  addonType: 'item_slot_15'        as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0,  targetRequired: true  },
+  hints_pack_5:            { code: 'hints_pack_5',            price: 29, type: 'consumable' as const, addonType: null as string | null,                  creditKey: 'hint'   as 'hint' | 'import' | null, creditAmount: 5,  targetRequired: false },
+  hints_pack_10:           { code: 'hints_pack_10',           price: 49, type: 'consumable' as const, addonType: null as string | null,                  creditKey: 'hint'   as 'hint' | 'import' | null, creditAmount: 10, targetRequired: false },
+  import_pack_10:          { code: 'import_pack_10',          price: 39, type: 'consumable' as const, addonType: null as string | null,                  creditKey: 'import' as 'hint' | 'import' | null, creditAmount: 10, targetRequired: false },
+  import_pack_25:          { code: 'import_pack_25',          price: 79, type: 'consumable' as const, addonType: null as string | null,                  creditKey: 'import' as 'hint' | 'import' | null, creditAmount: 25, targetRequired: false },
+  seasonal_decoration:     { code: 'seasonal_decoration',     price: 29, type: 'cosmetic' as const,   addonType: 'seasonal_decoration' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0,  targetRequired: true  },
+} as const;
+
+type SkuCode = keyof typeof ONE_TIME_SKUS;
+
+// ─── Add-on caps — prevent add-ons from substituting PRO ────────────────────
+const ADDON_CAPS = {
+  extraWishlistSlots:        { FREE: 3, PRO: 5 }, // FREE total≤5; PRO total≤15
+  extraSubscriptionSlots:    3,                   // any plan: +3 max (FREE→5, PRO→8)
+  extraItems5PerWishlist:    3,                   // +5×3 = +15 items per wishlist
+  extraItems15PerWishlist:   1,                   // +15×1 = +15 items per wishlist
+} as const;
 
 async function getUserEntitlement(userId: string, godMode = false): Promise<{
   plan: PlanInfo;
@@ -1354,6 +1377,47 @@ async function getUserEntitlement(userId: string, godMode = false): Promise<{
   }
 
   return { plan: PLANS.FREE, isPro: false, subscription: null };
+}
+
+/** Unified effective entitlement resolver — single source of truth for all limit checks */
+async function getEffectiveEntitlements(userId: string, godMode = false) {
+  const [base, addOns, credits] = await Promise.all([
+    getUserEntitlement(userId, godMode),
+    prisma.userAddOn.findMany({ where: { userId } }),
+    prisma.userCredits.findUnique({ where: { userId } }),
+  ]);
+
+  const extraWishlistSlots = addOns
+    .filter(a => a.addonType === 'wishlist_slot')
+    .reduce((s, a) => s + a.quantity, 0);
+
+  const extraSubscriptionSlots = addOns
+    .filter(a => a.addonType === 'subscription_slot')
+    .reduce((s, a) => s + a.quantity, 0);
+
+  // Per-wishlist extra items: wishlistId → additional item count
+  const extraItemsPerWishlist: Record<string, number> = {};
+  for (const a of addOns.filter(a => a.addonType === 'item_slot_5' || a.addonType === 'item_slot_15')) {
+    if (a.targetId) {
+      extraItemsPerWishlist[a.targetId] = (extraItemsPerWishlist[a.targetId] ?? 0) + a.quantity;
+    }
+  }
+
+  // Seasonal decoration wishlist IDs
+  const seasonalWishlists = new Set<string>(
+    addOns.filter(a => a.addonType === 'seasonal_decoration' && a.targetId).map(a => a.targetId!)
+  );
+
+  return {
+    ...base,
+    effectiveWishlistLimit: base.plan.wishlists + extraWishlistSlots,
+    effectiveSubscriptionLimit: base.plan.subscriptions + extraSubscriptionSlots,
+    extraItemsPerWishlist,
+    seasonalWishlists,
+    hintCredits: credits?.hintCredits ?? 0,
+    importCredits: credits?.importCredits ?? 0,
+    addOns,
+  };
 }
 
 /** Check if a wishlist is writable (within plan limits) for the given user */
@@ -1510,7 +1574,7 @@ tgRouter.get(
   '/wishlists',
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id, user.godMode);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
 
     const wishlists = await prisma.wishlist.findMany({
       where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
@@ -1551,7 +1615,7 @@ tgRouter.get(
           deadline: wl.deadline?.toISOString() ?? null,
           itemCount: active.length,
           reservedCount: active.filter((i) => i.status !== 'AVAILABLE').length,
-          readOnly: idx >= ent.plan.wishlists,
+          readOnly: idx >= ent.effectiveWishlistLimit,
           visibility: (wl.visibility as string).toLowerCase() as 'link_only' | 'public_profile' | 'private',
           allowSubscriptions: (wl.allowSubscriptions as string).toLowerCase() as 'all' | 'nobody',
           commentPolicy: (wl.commentPolicy as string).toLowerCase() as 'all' | 'subscribers',
@@ -1559,8 +1623,9 @@ tgRouter.get(
       }),
       plan: {
         code: ent.plan.code,
-        wishlists: ent.plan.wishlists,
+        wishlists: ent.effectiveWishlistLimit,
         items: ent.plan.items,
+        subscriptions: ent.effectiveSubscriptionLimit,
         participants: ent.plan.participants,
         features: [...ent.plan.features],
       },
@@ -1738,11 +1803,11 @@ tgRouter.post(
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id);
+    const ent = await getEffectiveEntitlements(user.id);
     const count = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR', archivedAt: null } });
-    if (count >= ent.plan.wishlists) {
-      trackEvent('feature_gate_hit_wishlist_limit', user.id, { plan: ent.plan.code, count });
-      return res.status(402).json({ error: 'Plan limit reached', limit: ent.plan.wishlists, planCode: ent.plan.code });
+    if (count >= ent.effectiveWishlistLimit) {
+      trackEvent('feature_gate_hit_wishlist_limit', user.id, { plan: ent.plan.code, count, limit: ent.effectiveWishlistLimit });
+      return res.status(402).json({ error: 'Plan limit reached', limit: ent.effectiveWishlistLimit, planCode: ent.plan.code });
     }
 
     // Determine insert position + inherit privacy defaults from profile
@@ -2031,11 +2096,11 @@ tgRouter.post(
       return res.status(403).json({ error: 'subscriptions_closed' });
     }
 
-    // Check plan limit
-    const ent = await getUserEntitlement(user.id);
+    // Check effective subscription limit (base plan + any purchased extra slots)
+    const ent = await getEffectiveEntitlements(user.id);
     const currentCount = await prisma.wishlistSubscription.count({ where: { subscriberId: user.id } });
-    if (currentCount >= ent.plan.subscriptions) {
-      return res.status(402).json({ error: 'Subscription limit reached', limit: ent.plan.subscriptions, planCode: ent.plan.code });
+    if (currentCount >= ent.effectiveSubscriptionLimit) {
+      return res.status(402).json({ error: 'Subscription limit reached', limit: ent.effectiveSubscriptionLimit, planCode: ent.plan.code });
     }
 
     const sub = await prisma.wishlistSubscription.upsert({
@@ -2298,20 +2363,22 @@ tgRouter.post(
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id);
+    const ent = await getEffectiveEntitlements(user.id);
     const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true, type: true } });
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
     // Read-only check for over-limit wishlists (only REGULAR)
-    if (wishlist.type === 'REGULAR' && !(await isWishlistWritable(user.id, wishlistId, ent.plan.wishlists))) {
+    if (wishlist.type === 'REGULAR' && !(await isWishlistWritable(user.id, wishlistId, ent.effectiveWishlistLimit))) {
       return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
     }
 
+    // Per-wishlist item limit = plan base + any permanent item upgrades for this wishlist
+    const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[wishlistId] ?? 0);
     const itemCount = await prisma.item.count({ where: { wishlistId, status: { in: [...ACTIVE_STATUSES] } } });
-    if (itemCount >= ent.plan.items) {
-      trackEvent('feature_gate_hit_item_limit', user.id, { plan: ent.plan.code, count: itemCount });
-      return res.status(402).json({ error: 'Plan limit reached', limit: ent.plan.items, planCode: ent.plan.code });
+    if (itemCount >= effectiveItemLimit) {
+      trackEvent('feature_gate_hit_item_limit', user.id, { plan: ent.plan.code, count: itemCount, limit: effectiveItemLimit });
+      return res.status(402).json({ error: 'Plan limit reached', limit: effectiveItemLimit, planCode: ent.plan.code });
     }
 
     // Resolve currency: use provided value, or fall back to user's profile default
@@ -3674,23 +3741,28 @@ tgRouter.post(
 
 // ─── Billing & Plan endpoints ────────────────────────────────────────────────
 
-// GET /tg/me/plan — current user's plan, subscription, and usage
+// GET /tg/me/plan — current user's plan, subscription, effective limits, and add-ons
 tgRouter.get(
   '/me/plan',
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id, user.godMode);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
     const wishlistCount = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } });
 
     // God mode whitelist: only these Telegram IDs can toggle
     const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
     const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
 
+    // Summarize add-ons for frontend
+    const extraWishlistSlots = ent.addOns.filter(a => a.addonType === 'wishlist_slot').reduce((s, a) => s + a.quantity, 0);
+    const extraSubscriptionSlots = ent.addOns.filter(a => a.addonType === 'subscription_slot').reduce((s, a) => s + a.quantity, 0);
+
     return res.json({
       plan: {
         code: ent.plan.code,
-        wishlists: ent.plan.wishlists,
+        wishlists: ent.effectiveWishlistLimit,
         items: ent.plan.items,
+        subscriptions: ent.effectiveSubscriptionLimit,
         participants: ent.plan.participants,
         features: [...ent.plan.features],
       },
@@ -3699,6 +3771,22 @@ tgRouter.get(
       proPriceStars: PRO_PRICE_XTR,
       godMode: user.godMode,
       canGodMode,
+      // Effective entitlements layer
+      addOns: {
+        extraWishlistSlots,
+        extraSubscriptionSlots,
+        seasonalWishlists: [...ent.seasonalWishlists],
+      },
+      credits: {
+        hintCredits: ent.hintCredits,
+        importCredits: ent.importCredits,
+      },
+      skus: Object.values(ONE_TIME_SKUS).map(s => ({
+        code: s.code,
+        price: s.price,
+        type: s.type,
+        targetRequired: s.targetRequired,
+      })),
     });
   }),
 );
@@ -3710,7 +3798,7 @@ tgRouter.get(
     const user = await getOrCreateTgUser(req.tgUser!);
     const locale = getRequestLocale(req);
     const profile = await getOrCreateProfile(user.id, locale);
-    const ent = await getUserEntitlement(user.id, user.godMode);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
 
     // God mode whitelist
     const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
@@ -3756,7 +3844,7 @@ tgRouter.get(
       },
       stats: {
         wishlists,
-        wishlistsLimit: ent.plan.wishlists,
+        wishlistsLimit: ent.effectiveWishlistLimit,
         totalWishes,
         wishesLimit: ent.plan.items,
         reservedByMe,
@@ -3764,8 +3852,9 @@ tgRouter.get(
       },
       plan: {
         code: ent.plan.code,
-        wishlists: ent.plan.wishlists,
+        wishlists: ent.effectiveWishlistLimit,
         items: ent.plan.items,
+        subscriptions: ent.effectiveSubscriptionLimit,
         participants: ent.plan.participants,
         features: [...ent.plan.features],
       },
@@ -4134,13 +4223,14 @@ tgRouter.post(
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
     trackEvent('sync_requested', user.id);
-    const ent = await getUserEntitlement(user.id);
+    const ent = await getEffectiveEntitlements(user.id);
 
     return res.json({
       plan: {
         code: ent.plan.code,
-        wishlists: ent.plan.wishlists,
+        wishlists: ent.effectiveWishlistLimit,
         items: ent.plan.items,
+        subscriptions: ent.effectiveSubscriptionLimit,
         participants: ent.plan.participants,
         features: [...ent.plan.features],
       },
@@ -4232,6 +4322,127 @@ tgRouter.post(
         periodEnd: updated.currentPeriodEnd.toISOString(),
         cancelAtPeriodEnd: updated.cancelAtPeriodEnd,
         cancelledAt: null,
+      },
+    });
+  }),
+);
+
+// POST /tg/billing/addon/checkout — create Stars invoice for a one-time SKU
+tgRouter.post(
+  '/billing/addon/checkout',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      skuCode: z.string().min(1),
+      targetId: z.string().optional(), // wishlistId for wishlist-scoped SKUs
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const { skuCode, targetId } = parsed.data;
+    const sku = ONE_TIME_SKUS[skuCode as SkuCode];
+    if (!sku) return res.status(400).json({ error: 'Unknown SKU', code: skuCode });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+
+    // Validate target for wishlist-scoped SKUs
+    if (sku.targetRequired) {
+      if (!targetId) return res.status(400).json({ error: 'targetId required for this SKU' });
+      const wl = await prisma.wishlist.findUnique({ where: { id: targetId }, select: { ownerId: true } });
+      if (!wl) return res.status(404).json({ error: 'Wishlist not found' });
+      if (wl.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Cap checks per SKU
+    if (skuCode === 'extra_wishlist_slot') {
+      const existing = ent.addOns.filter(a => a.addonType === 'wishlist_slot').reduce((s, a) => s + a.quantity, 0);
+      const cap = ent.isPro ? ADDON_CAPS.extraWishlistSlots.PRO : ADDON_CAPS.extraWishlistSlots.FREE;
+      if (existing >= cap) return res.status(409).json({ error: 'cap_reached', cap, current: existing });
+    }
+    if (skuCode === 'extra_subscription_slot') {
+      const existing = ent.addOns.filter(a => a.addonType === 'subscription_slot').reduce((s, a) => s + a.quantity, 0);
+      if (existing >= ADDON_CAPS.extraSubscriptionSlots) return res.status(409).json({ error: 'cap_reached', cap: ADDON_CAPS.extraSubscriptionSlots, current: existing });
+    }
+    if (skuCode === 'extra_items_5' && targetId) {
+      const existing = ent.addOns.filter(a => a.addonType === 'item_slot_5' && a.targetId === targetId).length;
+      if (existing >= ADDON_CAPS.extraItems5PerWishlist) return res.status(409).json({ error: 'cap_reached', cap: ADDON_CAPS.extraItems5PerWishlist, current: existing });
+    }
+    if (skuCode === 'extra_items_15' && targetId) {
+      const existing = ent.addOns.filter(a => a.addonType === 'item_slot_15' && a.targetId === targetId).length;
+      if (existing >= ADDON_CAPS.extraItems15PerWishlist) return res.status(409).json({ error: 'cap_reached', cap: ADDON_CAPS.extraItems15PerWishlist, current: existing });
+    }
+
+    const botToken = process.env.BOT_TOKEN;
+    if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
+
+    const sessionId = crypto.randomUUID();
+    // Payload format: addon:<skuCode>:<telegramId>:<targetId|_>:<sessionId>
+    const payload = `addon:${skuCode}:${req.tgUser!.id}:${targetId ?? '_'}:${sessionId}`;
+    const locale = getRequestLocale(req);
+
+    const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: t(`addon_title_${skuCode}` as any, locale, {}),
+        description: t(`addon_desc_${skuCode}` as any, locale, {}),
+        payload,
+        currency: 'XTR',
+        prices: [{ label: t('api_invoice_label', locale), amount: sku.price }],
+      }),
+    });
+
+    const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
+    if (!data.ok || !data.result) {
+      console.error('[billing] addon createInvoiceLink failed:', data);
+      trackEvent('addon_checkout_failed', user.id, { skuCode, reason: data.description });
+      return res.status(502).json({ error: 'Failed to create invoice' });
+    }
+
+    // Log invoice_created event
+    await prisma.paymentEvent.create({
+      data: {
+        userId: user.id,
+        telegramPaymentChargeId: `addon_checkout_${sessionId}`,
+        invoicePayload: payload,
+        totalAmount: sku.price,
+        currency: 'XTR',
+        eventType: 'addon_invoice_created',
+      },
+    });
+
+    trackEvent('addon_checkout_started', user.id, { skuCode, targetId });
+    return res.json({ invoiceUrl: data.result, sessionId });
+  }),
+);
+
+// POST /tg/billing/addon/sync — return current add-ons and credits after purchase
+tgRouter.post(
+  '/billing/addon/sync',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+
+    const extraWishlistSlots = ent.addOns.filter(a => a.addonType === 'wishlist_slot').reduce((s, a) => s + a.quantity, 0);
+    const extraSubscriptionSlots = ent.addOns.filter(a => a.addonType === 'subscription_slot').reduce((s, a) => s + a.quantity, 0);
+
+    return res.json({
+      plan: {
+        code: ent.plan.code,
+        wishlists: ent.effectiveWishlistLimit,
+        items: ent.plan.items,
+        subscriptions: ent.effectiveSubscriptionLimit,
+        participants: ent.plan.participants,
+        features: [...ent.plan.features],
+      },
+      addOns: {
+        extraWishlistSlots,
+        extraSubscriptionSlots,
+        seasonalWishlists: [...ent.seasonalWishlists],
+        extraItemsPerWishlist: ent.extraItemsPerWishlist,
+      },
+      credits: {
+        hintCredits: ent.hintCredits,
+        importCredits: ent.importCredits,
       },
     });
   }),

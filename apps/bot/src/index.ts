@@ -526,7 +526,7 @@ if (!token) {
     }
   });
 
-  // successful_payment — activates/renews PRO subscription
+  // successful_payment — handles PRO subscription renewals and one-time add-on purchases
   bot.on('message', async (ctx, next) => {
     const msg = ctx.message;
     if (!('successful_payment' in msg) || !msg.successful_payment) {
@@ -547,103 +547,196 @@ if (!token) {
       // eslint-disable-next-line no-console
       console.log('[bot] payment_success_received:', raw);
 
-      // New format: pro_monthly:<telegramId>:<uuid>
       const parts = raw.split(':');
-      if (parts.length < 3 || parts[0] !== 'pro_monthly') return;
-      const telegramId = parts[1];
+      const payloadType = parts[0];
 
-      const user = await prisma.user.findUnique({
-        where: { telegramId },
-        select: { id: true },
-      });
-      if (!user) {
-        // eslint-disable-next-line no-console
-        console.error('[bot] payment user not found, telegramId:', telegramId);
+      // ── PRO subscription: pro_monthly:<telegramId>:<uuid> ─────────────────
+      if (payloadType === 'pro_monthly') {
+        if (parts.length < 3) return;
+        const telegramId = parts[1];
+
+        const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
+        if (!user) {
+          console.error('[bot] payment user not found, telegramId:', telegramId);
+          return;
+        }
+
+        const chargeId = payment.telegram_payment_charge_id;
+        const providerChargeId = payment.provider_payment_charge_id ?? null;
+
+        // Idempotency: skip duplicate webhook
+        const existing = await prisma.paymentEvent.findUnique({ where: { telegramPaymentChargeId: chargeId } });
+        if (existing) {
+          console.log('[bot] duplicate payment, skip:', chargeId);
+          return;
+        }
+
+        const now = new Date();
+        const periodEnd = payment.subscription_expiration_date
+          ? new Date(payment.subscription_expiration_date * 1000)
+          : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+        await prisma.$transaction(async (tx) => {
+          const sub = await tx.subscription.upsert({
+            where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
+            create: {
+              userId: user.id,
+              planCode: 'PRO',
+              status: 'ACTIVE',
+              starsPrice: payment.total_amount,
+              telegramChargeId: chargeId,
+              currentPeriodStart: now,
+              currentPeriodEnd: periodEnd,
+              source: 'telegram_stars',
+              billingPeriod: 'monthly',
+              cancelAtPeriodEnd: false,
+            },
+            update: {
+              status: 'ACTIVE',
+              starsPrice: payment.total_amount,
+              telegramChargeId: chargeId,
+              currentPeriodStart: now,
+              currentPeriodEnd: periodEnd,
+              cancelledAt: null,
+              cancelAtPeriodEnd: false,
+              source: 'telegram_stars',
+              billingPeriod: 'monthly',
+            },
+          });
+          await tx.paymentEvent.create({
+            data: {
+              subscriptionId: sub.id,
+              userId: user.id,
+              telegramPaymentChargeId: chargeId,
+              providerPaymentChargeId: providerChargeId,
+              invoicePayload: payment.invoice_payload,
+              totalAmount: payment.total_amount,
+              currency: payment.currency,
+              eventType: 'payment_success',
+              rawPayload: JSON.stringify(payment),
+            },
+          });
+        });
+
+        const locale = getLocale(ctx);
+        const dateFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+        const fmtDate = periodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
+        await ctx.reply(
+          t('bot_pro_activated', locale, { date: fmtDate }),
+          Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
+        );
+        console.log(`[bot] subscription_activated: userId=${user.id} charge=${chargeId} periodEnd=${periodEnd.toISOString()}`);
         return;
       }
 
-      const chargeId = payment.telegram_payment_charge_id;
-      const providerChargeId = payment.provider_payment_charge_id ?? null;
+      // ── One-time add-on: addon:<skuCode>:<telegramId>:<targetId|_>:<sessionId> ──
+      if (payloadType === 'addon') {
+        // parts: [addon, skuCode, telegramId, targetIdOrUnderscore, sessionId]
+        if (parts.length < 5) return;
+        const [, skuCode, telegramId, rawTargetId] = parts;
+        if (!skuCode || !telegramId) return;
+        const targetId = rawTargetId === '_' ? null : rawTargetId ?? null;
 
-      // Idempotency: skip duplicate webhook
-      const existing = await prisma.paymentEvent.findUnique({
-        where: { telegramPaymentChargeId: chargeId },
-      });
-      if (existing) {
-        // eslint-disable-next-line no-console
-        console.log('[bot] duplicate payment, skip:', chargeId);
+        const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
+        if (!user) {
+          console.error('[bot] addon payment user not found, telegramId:', telegramId);
+          return;
+        }
+
+        const chargeId = payment.telegram_payment_charge_id;
+
+        // Idempotency via Purchase table
+        const existingPurchase = await prisma.purchase.findUnique({ where: { telegramChargeId: chargeId } });
+        if (existingPurchase) {
+          console.log('[bot] duplicate addon payment, skip:', chargeId);
+          return;
+        }
+
+        // SKU type lookup (replicated constants to avoid cross-app imports)
+        const SKU_ADDON_TYPES: Record<string, string | null> = {
+          extra_wishlist_slot: 'wishlist_slot',
+          extra_subscription_slot: 'subscription_slot',
+          extra_items_5: 'item_slot_5',
+          extra_items_15: 'item_slot_15',
+          seasonal_decoration: 'seasonal_decoration',
+        };
+        const SKU_CREDITS: Record<string, { key: 'hintCredits' | 'importCredits'; amount: number }> = {
+          hints_pack_5:   { key: 'hintCredits',   amount: 5  },
+          hints_pack_10:  { key: 'hintCredits',   amount: 10 },
+          import_pack_10: { key: 'importCredits', amount: 10 },
+          import_pack_25: { key: 'importCredits', amount: 25 },
+        };
+        const SKU_PRICES: Record<string, number> = {
+          extra_wishlist_slot: 39, extra_subscription_slot: 25,
+          extra_items_5: 19, extra_items_15: 39,
+          hints_pack_5: 29, hints_pack_10: 49,
+          import_pack_10: 39, import_pack_25: 79,
+          seasonal_decoration: 29,
+        };
+
+        await prisma.$transaction(async (tx) => {
+          // 1. Record the purchase (idempotency log)
+          await tx.purchase.create({
+            data: {
+              userId: user.id,
+              skuCode,
+              quantity: 1,
+              targetId,
+              starsPrice: payment.total_amount,
+              telegramChargeId: chargeId,
+              invoicePayload: payment.invoice_payload,
+              status: 'completed',
+            },
+          });
+
+          // 2. Log payment event for history
+          await tx.paymentEvent.create({
+            data: {
+              userId: user.id,
+              telegramPaymentChargeId: chargeId,
+              providerPaymentChargeId: payment.provider_payment_charge_id ?? null,
+              invoicePayload: payment.invoice_payload,
+              totalAmount: payment.total_amount,
+              currency: payment.currency,
+              eventType: 'addon_payment_success',
+              rawPayload: JSON.stringify(payment),
+            },
+          });
+
+          // 3a. Permanent add-on
+          const addonType = SKU_ADDON_TYPES[skuCode];
+          if (addonType != null) {
+            const quantity = skuCode === 'extra_items_5' ? 5 : skuCode === 'extra_items_15' ? 15 : 1;
+            await tx.userAddOn.create({
+              data: { userId: user.id, addonType, quantity, targetId },
+            });
+          }
+
+          // 3b. Consumable credits
+          const creditInfo = SKU_CREDITS[skuCode];
+          if (creditInfo) {
+            await tx.userCredits.upsert({
+              where: { userId: user.id },
+              create: {
+                userId: user.id,
+                hintCredits: creditInfo.key === 'hintCredits' ? creditInfo.amount : 0,
+                importCredits: creditInfo.key === 'importCredits' ? creditInfo.amount : 0,
+              },
+              update: { [creditInfo.key]: { increment: creditInfo.amount } },
+            });
+          }
+        });
+
+        const locale = getLocale(ctx);
+        await ctx.reply(
+          t('bot_addon_activated', locale),
+          Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
+        );
+        console.log(`[bot] addon_activated: userId=${user.id} sku=${skuCode} targetId=${targetId} charge=${chargeId}`);
         return;
       }
 
-      const now = new Date();
-      // Use subscription_expiration_date from Telegram if available, else 30 days
-      const periodEnd = payment.subscription_expiration_date
-        ? new Date(payment.subscription_expiration_date * 1000)
-        : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-      await prisma.$transaction(async (tx) => {
-        const sub = await tx.subscription.upsert({
-          where: {
-            userId_planCode: { userId: user.id, planCode: 'PRO' },
-          },
-          create: {
-            userId: user.id,
-            planCode: 'PRO',
-            status: 'ACTIVE',
-            starsPrice: payment.total_amount,
-            telegramChargeId: chargeId,
-            currentPeriodStart: now,
-            currentPeriodEnd: periodEnd,
-            source: 'telegram_stars',
-            billingPeriod: 'monthly',
-            cancelAtPeriodEnd: false,
-          },
-          update: {
-            status: 'ACTIVE',
-            starsPrice: payment.total_amount,
-            telegramChargeId: chargeId,
-            currentPeriodStart: now,
-            currentPeriodEnd: periodEnd,
-            cancelledAt: null,
-            cancelAtPeriodEnd: false,
-            source: 'telegram_stars',
-            billingPeriod: 'monthly',
-          },
-        });
-
-        await tx.paymentEvent.create({
-          data: {
-            subscriptionId: sub.id,
-            userId: user.id,
-            telegramPaymentChargeId: chargeId,
-            providerPaymentChargeId: providerChargeId,
-            invoicePayload: payment.invoice_payload,
-            totalAmount: payment.total_amount,
-            currency: payment.currency,
-            eventType: 'payment_success',
-            rawPayload: JSON.stringify(payment),
-          },
-        });
-      });
-
-      const locale = getLocale(ctx);
-      const dateFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
-      const fmtDate = periodEnd.toLocaleDateString(dateFmtLocale, {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      });
-      await ctx.reply(
-        t('bot_pro_activated', locale, { date: fmtDate }),
-        Markup.inlineKeyboard([
-          Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL),
-        ]),
-      );
-
-      // eslint-disable-next-line no-console
-      console.log(
-        `[bot] subscription_activated: userId=${user.id} charge=${chargeId} periodEnd=${periodEnd.toISOString()}`,
-      );
+      console.warn('[bot] unknown payment payload format:', raw);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[bot] payment processing error:', err);

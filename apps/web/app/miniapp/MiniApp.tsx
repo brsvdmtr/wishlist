@@ -141,6 +141,7 @@ type PlanInfo = {
   code: 'FREE' | 'PRO';
   wishlists: number;
   items: number;
+  subscriptions: number;
   participants: number;
   features: string[];
 };
@@ -153,12 +154,25 @@ type SubscriptionInfo = {
   cancelAtPeriodEnd: boolean;
 } | null;
 
+// Add-ons returned from /tg/me/plan
+type AddOnsInfo = {
+  extraWishlistSlots: number;
+  extraSubscriptionSlots: number;
+  seasonalWishlists: string[];
+  extraItemsPerWishlist?: Record<string, number>;
+};
+type CreditsInfo = { hintCredits: number; importCredits: number };
+
+// SKU descriptor from server
+type SkuInfo = { code: string; price: number; type: string; targetRequired: boolean };
+
 type UpsellContext =
   | 'comments' | 'url_import' | 'hints'
   | 'wishlist_limit' | 'item_limit' | 'participant_limit' | 'subscription_limit'
   | 'sort_recommended';
 
-type UpsellSheetState = { context: UpsellContext } | null;
+// UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
+type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
 
 type Item = {
   id: string;
@@ -420,9 +434,9 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     showTable: true,
   },
   subscription_limit: {
-    emoji: '👥',
-    title: t('upsell_wishlist_title', locale),
-    subtitle: t('sub_pro_upsell', locale, { max: '7' }),
+    emoji: '🔔',
+    title: t('upsell_sub_title', locale),
+    subtitle: t('upsell_sub_subtitle', locale, { free: '2', pro: '5' }),
     showTable: true,
   },
   sort_recommended: {
@@ -946,14 +960,44 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
 }
 
 // ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// ADD-ON OFFER HELPERS (module-level, no state)
+// ═══════════════════════════════════════════════════════
+
+const CONTEXT_ADDON_SKUS: Partial<Record<UpsellContext, string[]>> = {
+  wishlist_limit:    ['extra_wishlist_slot'],
+  item_limit:        ['extra_items_5', 'extra_items_15'],
+  subscription_limit:['extra_subscription_slot'],
+  hints:             ['hints_pack_5', 'hints_pack_10'],
+  url_import:        ['import_pack_10', 'import_pack_25'],
+};
+
+function getAddonOffers(locale: Locale): Record<string, { title: string; desc: string }> {
+  return {
+    extra_wishlist_slot:     { title: t('addon_extra_wishlist_title', locale),       desc: t('addon_extra_wishlist_desc', locale) },
+    extra_subscription_slot:{ title: t('addon_extra_subscription_title', locale),   desc: t('addon_extra_subscription_desc', locale) },
+    extra_items_5:          { title: t('addon_extra_items_5_title', locale),         desc: t('addon_extra_items_5_desc', locale) },
+    extra_items_15:         { title: t('addon_extra_items_15_title', locale),        desc: t('addon_extra_items_15_desc', locale) },
+    hints_pack_5:           { title: t('addon_hints_pack_5_title', locale),          desc: t('addon_hints_pack_5_desc', locale) },
+    hints_pack_10:          { title: t('addon_hints_pack_10_title', locale),         desc: t('addon_hints_pack_10_desc', locale) },
+    import_pack_10:         { title: t('addon_import_pack_10_title', locale),        desc: t('addon_import_pack_10_desc', locale) },
+    import_pack_25:         { title: t('addon_import_pack_25_title', locale),        desc: t('addon_import_pack_25_desc', locale) },
+    seasonal_decoration:    { title: t('addon_seasonal_decoration_title', locale),   desc: t('addon_seasonal_decoration_desc', locale) },
+  };
+}
+
+// ═══════════════════════════════════════════════════════
 // PRO UPSELL SHEET (context-aware)
 // ═══════════════════════════════════════════════════════
 
-function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, locale }: {
+function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, availableSkus, locale }: {
   state: UpsellSheetState;
   onClose: () => void;
   onUpgrade: () => void;
   checkoutLoading: boolean;
+  onBuyAddon: (skuCode: string, targetId?: string) => void;
+  addonCheckoutLoading: boolean;
+  availableSkus: SkuInfo[];
   locale: Locale;
 }) {
   const content = state ? getUpsellContent(locale)[state.context] : null;
@@ -1045,12 +1089,77 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, locale }: 
               background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
             }}
             onClick={onUpgrade}
-            disabled={checkoutLoading}
+            disabled={checkoutLoading || addonCheckoutLoading}
           >
             {checkoutLoading ? t('upsell_checkout_loading', locale) : t('upsell_cta', locale)}
           </button>
+
+          {/* One-time add-on offers (for limit-gate contexts) */}
+          {(() => {
+            const contextSkuCodes = state?.context ? (CONTEXT_ADDON_SKUS[state.context] ?? []) : [];
+            const skusToShow = contextSkuCodes
+              .map(code => availableSkus.find(s => s.code === code))
+              .filter((s): s is SkuInfo => s !== undefined);
+            if (skusToShow.length === 0) return null;
+            const offers = getAddonOffers(locale);
+            return (
+              <div style={{ marginTop: 20 }}>
+                {/* Section divider */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <div style={{ flex: 1, height: 1, background: C.border }} />
+                  <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {t('addon_section_header', locale)}
+                  </div>
+                  <div style={{ flex: 1, height: 1, background: C.border }} />
+                </div>
+                <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', marginBottom: 10 }}>
+                  {t('addon_section_hint', locale)}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {skusToShow.map(sku => {
+                    const offer = offers[sku.code];
+                    if (!offer) return null;
+                    return (
+                      <div
+                        key={sku.code}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          background: C.surface, borderRadius: 12, padding: '10px 12px',
+                          textAlign: 'left',
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>
+                            {offer.title}
+                          </div>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, lineHeight: 1.4 }}>
+                            {offer.desc}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => onBuyAddon(sku.code, state?.wishlistId)}
+                          disabled={addonCheckoutLoading || checkoutLoading}
+                          style={{
+                            background: C.accentSoft, color: C.accent,
+                            border: `1px solid ${C.accent}30`,
+                            borderRadius: 8, padding: '6px 10px',
+                            fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: font,
+                            flexShrink: 0, whiteSpace: 'nowrap',
+                            opacity: (addonCheckoutLoading || checkoutLoading) ? 0.5 : 1,
+                          }}
+                        >
+                          {addonCheckoutLoading ? '…' : t('addon_stars_price', locale, { price: String(sku.price) })}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           <button
-            style={{ ...btnGhost, width: '100%', marginTop: 8, fontSize: 14 }}
+            style={{ ...btnGhost, width: '100%', marginTop: 14, fontSize: 14 }}
             onClick={onClose}
           >
             {t('upsell_not_now', locale)}
@@ -1092,13 +1201,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // Owner state
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
-  const [planLimits, setPlanLimits] = useState({ wishlists: 2, items: 30 });
+  const [planLimits, setPlanLimits] = useState({ wishlists: 2, items: 20 });
   const [planInfo, setPlanInfo] = useState<PlanInfo>({
-    code: 'FREE', wishlists: 2, items: 30, participants: 5, features: [],
+    code: 'FREE', wishlists: 2, items: 20, subscriptions: 2, participants: 5, features: [],
   });
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
   const [upsellSheet, setUpsellSheet] = useState<UpsellSheetState>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [addonCheckoutLoading, setAddonCheckoutLoading] = useState(false);
+  const [addOns, setAddOns] = useState<AddOnsInfo>({ extraWishlistSlots: 0, extraSubscriptionSlots: 0, seasonalWishlists: [] });
+  const [credits, setCredits] = useState<CreditsInfo>({ hintCredits: 0, importCredits: 0 });
+  const [availableSkus, setAvailableSkus] = useState<SkuInfo[]>([]);
   const [showCancelSub, setShowCancelSub] = useState(false);
   const [cancelSubLoading, setCancelSubLoading] = useState(false);
   const [godMode, setGodMode] = useState(false);
@@ -1404,7 +1517,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   /** Show context-aware PRO upsell sheet with anti-spam throttling.
    *  auto=true (402 response): max 1 auto-show per session + 30s cooldown.
    *  explicit tap: always shows. */
-  const showUpsell = useCallback((context: UpsellContext, opts?: { auto?: boolean }) => {
+  const showUpsell = useCallback((context: UpsellContext, opts?: { auto?: boolean; wishlistId?: string }) => {
     const now = Date.now();
     if (opts?.auto) {
       if (upsellAutoShownThisSession.current) return;
@@ -1412,7 +1525,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       upsellAutoShownThisSession.current = true;
     }
     upsellLastShownRef.current[context] = now;
-    setUpsellSheet({ context });
+    setUpsellSheet({ context, wishlistId: opts?.wishlistId });
     trackEvent(`pro_entrypoint_viewed_${context}`);
     try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch { /* ok */ }
   }, [trackEvent]);
@@ -1489,6 +1602,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       reservationsCount?: number;
       godMode?: boolean;
       canGodMode?: boolean;
+      addOns?: AddOnsInfo;
+      credits?: CreditsInfo;
+      skus?: SkuInfo[];
     };
     setWishlists(json.wishlists);
     setPlanInfo(json.plan);
@@ -1496,6 +1612,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     if (json.godMode !== undefined) setGodMode(json.godMode);
     if (json.canGodMode !== undefined) setCanGodMode(json.canGodMode);
     setPlanLimits({ wishlists: json.plan.wishlists, items: json.plan.items });
+    if (json.addOns) setAddOns(json.addOns);
+    if (json.credits) setCredits(json.credits);
+    if (json.skus) setAvailableSkus(json.skus);
     if (json.drafts) {
       setDraftsWishlistId(json.drafts.wishlistId);
       setDraftsCount(json.drafts.count);
@@ -2212,6 +2331,85 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [tgFetch, pushToast, trackEvent, handleUpgradeToPro]);
 
+  // --- One-time add-on purchase
+  const handleBuyAddon = useCallback(async (skuCode: string, targetId?: string) => {
+    trackEvent('addon_cta_clicked', { sku: skuCode });
+    setAddonCheckoutLoading(true);
+    try {
+      const res = await tgFetch('/tg/billing/addon/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ skuCode, targetId }),
+      });
+      if (res.status === 409) {
+        pushToast(t('addon_cap_reached', locale), 'error');
+        setAddonCheckoutLoading(false);
+        return;
+      }
+      if (!res.ok) {
+        pushToast(t('addon_checkout_error', locale), 'error');
+        setAddonCheckoutLoading(false);
+        return;
+      }
+      const resData = await res.json() as { invoiceUrl?: string };
+      if (!resData.invoiceUrl) {
+        pushToast(t('addon_checkout_error', locale), 'error');
+        setAddonCheckoutLoading(false);
+        return;
+      }
+      const tg = tgRef.current?.WebApp;
+      if (!tg?.openInvoice) {
+        pushToast(t('toast_update_telegram', locale), 'error');
+        setAddonCheckoutLoading(false);
+        return;
+      }
+      tg.HapticFeedback?.impactOccurred?.('medium');
+      tg.openInvoice(resData.invoiceUrl, async (status: string) => {
+        if (status === 'paid') {
+          // Poll sync until add-ons are updated
+          let synced = false;
+          for (let attempt = 0; attempt < 6; attempt++) {
+            if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
+            try {
+              const syncRes = await tgFetch('/tg/billing/addon/sync', { method: 'POST' });
+              if (syncRes.ok) {
+                const d = await syncRes.json() as { addOns: AddOnsInfo; credits: CreditsInfo; skus: SkuInfo[] };
+                setAddOns(d.addOns);
+                setCredits(d.credits);
+                if (d.skus) setAvailableSkus(d.skus);
+                synced = true;
+                break;
+              }
+            } catch { /* retry */ }
+          }
+          tg.HapticFeedback?.notificationOccurred?.('success');
+          const toastKey: string = skuCode.startsWith('extra_wishlist') ? 'addon_activated_wishlist'
+            : skuCode.startsWith('extra_subscription') ? 'addon_activated_subscription'
+            : skuCode.startsWith('extra_items') ? 'addon_activated_items'
+            : skuCode.startsWith('hints') ? 'addon_activated_hints'
+            : skuCode.startsWith('import') ? 'addon_activated_imports'
+            : 'addon_activated_seasonal';
+          if (synced) {
+            pushToast(t(toastKey as Parameters<typeof t>[0], locale), 'success');
+          } else {
+            pushToast(t('addon_syncing', locale), 'success');
+          }
+          trackEvent('addon_checkout_succeeded', { sku: skuCode });
+          setUpsellSheet(null);
+          loadWishlists().catch(() => {});
+        } else if (status === 'cancelled') {
+          trackEvent('addon_checkout_cancelled', { sku: skuCode });
+        } else if (status === 'failed') {
+          pushToast(t('toast_payment_failed', locale), 'error');
+          trackEvent('addon_checkout_failed', { sku: skuCode });
+        }
+        setAddonCheckoutLoading(false);
+      });
+    } catch {
+      pushToast(t('addon_checkout_error', locale), 'error');
+      setAddonCheckoutLoading(false);
+    }
+  }, [tgFetch, pushToast, trackEvent, loadWishlists, locale]);
+
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(() => {
     // Cancel active reorder modes before navigating away
@@ -2909,7 +3107,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const res = await tgFetch(`/tg/wishlists/${currentWl!.id}/items`, { method: 'POST', body: JSON.stringify(body) });
         if (res.status === 402) {
           if (planInfo.code === 'FREE') {
-            showUpsell('item_limit', { auto: true });
+            showUpsell('item_limit', { auto: true, wishlistId: currentWl!.id });
           } else {
             pushToast(t('toast_max_items', locale, { n: planLimits.items }), 'error');
           }
@@ -7332,6 +7530,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           void handleUpgradeToPro();
         }}
         checkoutLoading={checkoutLoading}
+        onBuyAddon={handleBuyAddon}
+        addonCheckoutLoading={addonCheckoutLoading}
+        availableSkus={availableSkus}
         locale={locale}
       />
 
