@@ -48,5 +48,5 @@ ENV UPLOAD_DIR=/data/uploads
 EXPOSE 3001
 
 # Run DB migrations (non-fatal — server starts even if migration fails)
-# Use direct prisma binary to avoid corepack/npm-registry dependency at runtime
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy --schema packages/db/prisma/schema.prisma 2>&1 | tee /tmp/migrate.log || echo '[api] migration skipped'; exec node apps/api/dist/index.js"]
+# Use direct prisma binary (installed in packages/db) to avoid corepack/npm-registry at runtime
+CMD ["sh", "-c", "packages/db/node_modules/.bin/prisma migrate deploy --schema packages/db/prisma/schema.prisma 2>&1 || echo '[api] migration skipped'; exec node apps/api/dist/index.js"]
