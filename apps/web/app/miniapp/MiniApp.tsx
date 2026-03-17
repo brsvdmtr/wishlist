@@ -363,6 +363,20 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
   },
 });
 
+// Centralized PRO benefits config — single source of truth for all paywall/plan screens
+function getProBenefits(locale: Locale): Array<{ icon: string; title: string; subtitle: string }> {
+  return [
+    { icon: '📋', title: t('plan_pro_f1', locale), subtitle: t('plan_pro_sub1', locale) },
+    { icon: '🎁', title: t('plan_pro_f2', locale), subtitle: t('plan_pro_sub2', locale) },
+    { icon: '👥', title: t('plan_pro_f3', locale), subtitle: t('plan_pro_sub3', locale) },
+    { icon: '💬', title: t('plan_pro_f4', locale), subtitle: t('plan_pro_sub4', locale) },
+    { icon: '🔗', title: t('plan_pro_f5', locale), subtitle: t('plan_pro_sub5', locale) },
+    { icon: '💡', title: t('plan_pro_f6', locale), subtitle: t('plan_pro_sub6', locale) },
+    { icon: '👁', title: t('plan_pro_f7', locale), subtitle: t('plan_pro_sub7', locale) },
+    { icon: '🛡', title: t('plan_pro_f8', locale), subtitle: t('plan_pro_sub8', locale) },
+  ];
+}
+
 // ═══════════════════════════════════════════════════════
 // COMPONENTS
 // ═══════════════════════════════════════════════════════
@@ -825,10 +839,10 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, locale }: 
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                   {t('plan_pro_block', locale)}
                 </div>
-                {[t('plan_pro_f1', locale), t('plan_pro_f2', locale), t('plan_pro_f3', locale), t('plan_pro_f4', locale), t('plan_pro_f5', locale), t('plan_pro_f6', locale)].map((f, i) => (
+                {getProBenefits(locale).map((b, i) => (
                   <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '3px 0', fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
                     <span style={{ color: C.green, flexShrink: 0, fontWeight: 700, marginTop: 1 }}>✓</span>
-                    {f}
+                    {b.title}
                   </div>
                 ))}
               </div>
@@ -4750,11 +4764,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       borderRadius: 16, padding: 16,
                       border: `1px solid ${C.accent}25`,
                     }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
-                        {[t('plan_pro_f1', locale), t('plan_pro_f2', locale), t('plan_pro_f3', locale), t('plan_pro_f4', locale), t('plan_pro_f5', locale), t('plan_pro_f6', locale)].map((f, i) => (
-                          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 14, color: C.textSec, lineHeight: 1.4 }}>
-                            <span style={{ color: C.accent, flexShrink: 0, fontWeight: 700 }}>✓</span>
-                            {f}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                        {getProBenefits(locale).map((b, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                            <span style={{
+                              width: 22, height: 22, borderRadius: 11, flexShrink: 0, marginTop: 1,
+                              background: C.accentSoft, color: C.accent,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 11, fontWeight: 800,
+                            }}>✓</span>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{b.title}</div>
+                              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 1, lineHeight: 1.4 }}>{b.subtitle}</div>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -4814,6 +4836,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         { label: t('settings_comments', locale), desc: t('settings_desc_comments', locale) },
                         { label: t('settings_url_import', locale), desc: t('settings_desc_url_import', locale) },
                         { label: t('settings_hints', locale), desc: t('settings_desc_hints', locale) },
+                        { label: t('settings_subscriptions', locale), desc: t('settings_desc_subscriptions', locale) },
+                        { label: t('settings_privacy_pro', locale), desc: t('settings_desc_privacy_pro', locale) },
                       ].map((row) => (
                         <div key={row.label}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -6083,14 +6107,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               )
             : null;
 
-          const cancelFeatures: { key: string; soon?: boolean }[] = [
+          const cancelFeatures: { key: string }[] = [
             { key: 'cancel_feat_wishlists' },
             { key: 'cancel_feat_items' },
             { key: 'cancel_feat_participants' },
             { key: 'cancel_feat_comments' },
             { key: 'cancel_feat_url' },
             { key: 'cancel_feat_hints' },
-            { key: 'cancel_feat_sort', soon: true },
+            { key: 'cancel_feat_subs' },
+            { key: 'cancel_feat_privacy' },
           ];
 
           return (
@@ -6125,7 +6150,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   {t('cancel_features_title', locale)}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {cancelFeatures.map(({ key, soon }) => (
+                  {cancelFeatures.map(({ key }) => (
                     <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
                       <span style={{
                         width: 20, height: 20, borderRadius: 10, flexShrink: 0,
@@ -6134,15 +6159,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         fontSize: 11, fontWeight: 800,
                       }}>✓</span>
                       <span style={{ fontSize: 14, color: C.text, flex: 1 }}>{t(key as Parameters<typeof t>[0], locale)}</span>
-                      {soon && (
-                        <span style={{
-                          fontSize: 10, fontWeight: 600, color: C.textMuted,
-                          background: C.bg, border: `1px solid ${C.borderLight}`,
-                          padding: '1px 7px', borderRadius: 10, flexShrink: 0,
-                        }}>
-                          {t('cancel_feat_soon', locale)}
-                        </span>
-                      )}
                     </div>
                   ))}
                 </div>
