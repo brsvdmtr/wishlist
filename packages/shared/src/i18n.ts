@@ -631,6 +631,9 @@ const ru: Dict = {
   support_id_copy: 'Скопировать',
   support_id_copied: 'Скопировано',
   support_id_copy_error: 'Не удалось скопировать',
+  support_contact_id_copied: 'ID поддержки скопирован. Вставь его в сообщение',
+  support_contact_id_copy_failed: 'Не удалось скопировать ID. Сообщи его поддержке вручную',
+  support_contact_opened: 'Чат поддержки открыт',
 
   // ── Item title copy ──────────────────────────────────────────────────────
   title_copied: 'Название скопировано',
@@ -1363,6 +1366,9 @@ const en: Dict = {
   support_id_copy: 'Copy',
   support_id_copied: 'Copied',
   support_id_copy_error: 'Could not copy',
+  support_contact_id_copied: 'Support ID copied. Paste it in your message',
+  support_contact_id_copy_failed: 'Could not copy ID. Share it with support manually',
+  support_contact_opened: 'Support chat opened',
 
   // ── Item title copy ──────────────────────────────────────────────────────
   title_copied: 'Title copied',

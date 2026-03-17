@@ -5951,7 +5951,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const SettingsActionRow = ({ label, color, onClick }: { label: string; color?: string; onClick: () => void }) => (
           <div
             onClick={onClick}
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
+            onPointerDown={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; }}
+            onPointerUp={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+            onPointerLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', transition: 'opacity 0.12s' }}
           >
             <span style={{ fontSize: 14, color: color || C.text }}>{label}</span>
             <span style={{ fontSize: 14, color: C.textMuted }}>{'\u203A'}</span>
@@ -6077,8 +6080,66 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <SettingsActionRow label={t('settings_report_problem', locale)} onClick={() => {
                   try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
                 }} />
-                <SettingsActionRow label={t('settings_contact_support', locale)} onClick={() => {
-                  try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
+                <SettingsActionRow label={t('settings_contact_support', locale)} onClick={async () => {
+                  try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch { /* ok */ }
+                  trackEvent('settings_support_contact_tap');
+
+                  const supportUrl = 'https://t.me/Wish_Support';
+                  const openChat = () => {
+                    try {
+                      if (window.Telegram?.WebApp?.openTelegramLink) {
+                        window.Telegram.WebApp.openTelegramLink(supportUrl);
+                      } else {
+                        window.open(supportUrl, '_blank');
+                      }
+                      trackEvent('settings_support_contact_opened');
+                    } catch {
+                      window.open(supportUrl, '_blank');
+                      trackEvent('settings_support_contact_opened');
+                    }
+                  };
+
+                  const id = settingsData.supportId;
+                  if (!id) {
+                    openChat();
+                    pushToast(t('support_contact_opened', locale), 'success');
+                    return;
+                  }
+
+                  // Try to copy support ID then open chat
+                  const copyId = async (): Promise<boolean> => {
+                    try {
+                      if (typeof window !== 'undefined' && window.Telegram?.WebApp?.writeToClipboard) {
+                        window.Telegram.WebApp.writeToClipboard(id);
+                        return true;
+                      }
+                      await navigator.clipboard.writeText(id);
+                      return true;
+                    } catch {
+                      try {
+                        const ta = document.createElement('textarea');
+                        ta.value = id;
+                        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+                        document.body.appendChild(ta);
+                        ta.focus(); ta.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(ta);
+                        return true;
+                      } catch {
+                        return false;
+                      }
+                    }
+                  };
+
+                  const copied = await copyId();
+                  openChat();
+                  if (copied) {
+                    pushToast(t('support_contact_id_copied', locale), 'success');
+                    trackEvent('settings_support_id_copied');
+                  } else {
+                    pushToast(t('support_contact_id_copy_failed', locale), 'error');
+                    trackEvent('settings_support_id_copy_failed');
+                  }
                 }} />
                 <SettingsActionRow label={t('settings_faq', locale)} onClick={() => pushToast(t('settings_coming_soon', locale), 'success')} />
                 <SettingsActionRow label={t('settings_legal', locale)} onClick={() => pushToast(t('settings_coming_soon', locale), 'success')} />
