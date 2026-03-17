@@ -5859,6 +5859,82 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       </div>
                     </div>
                   </div>
+
+                  {/* One-time upgrades block — shown when availableSkus populated */}
+                  {availableSkus.length > 0 && (() => {
+                    const planScreenSkus = ['extra_wishlist_slot', 'extra_items_5', 'extra_items_15', 'extra_subscription_slot']
+                      .map(code => availableSkus.find(s => s.code === code))
+                      .filter((s): s is SkuInfo => s !== undefined);
+                    if (planScreenSkus.length === 0) return null;
+                    const offers = getAddonOffers(locale);
+                    const isLoading = addonCheckoutLoading || checkoutLoading;
+                    return (
+                      <div style={{ marginBottom: 16 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
+                          {t('addon_section_header', locale)}
+                        </div>
+                        <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>
+                          {t('addon_section_hint', locale)}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {planScreenSkus.map(sku => {
+                            const offer = offers[sku.code];
+                            if (!offer) return null;
+                            // item-slot SKUs require a target wishlist — skip if no wishlists yet
+                            if ((sku.code === 'extra_items_5' || sku.code === 'extra_items_15') && wishlists.length === 0) return null;
+                            return (
+                              <div
+                                key={sku.code}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 12,
+                                  background: C.card, borderRadius: 14, padding: '12px 14px',
+                                  border: `1px solid ${C.border}`,
+                                }}
+                              >
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>
+                                    {offer.title}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3, lineHeight: 1.4 }}>
+                                    {offer.tag}
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: C.textSec, whiteSpace: 'nowrap' }}>
+                                    {sku.price} ⭐
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      // For wishlist-scoped SKUs, open the upsell with the first wishlist as target
+                                      // (user can always buy from the wishlist detail view for a specific one)
+                                      const targetId = (sku.code === 'extra_items_5' || sku.code === 'extra_items_15')
+                                        ? wishlists[0]?.id
+                                        : undefined;
+                                      void handleBuyAddon(sku.code, targetId);
+                                    }}
+                                    disabled={isLoading}
+                                    style={{
+                                      background: isLoading ? C.surface : C.accentSoft,
+                                      color: C.accent,
+                                      border: `1px solid ${C.accent}40`,
+                                      borderRadius: 8, padding: '5px 12px',
+                                      fontSize: 13, fontWeight: 700,
+                                      cursor: isLoading ? 'default' : 'pointer',
+                                      fontFamily: font, whiteSpace: 'nowrap',
+                                      opacity: isLoading ? 0.5 : 1,
+                                      transition: 'opacity 0.15s',
+                                    }}
+                                  >
+                                    {addonCheckoutLoading ? '…' : t('addon_cta_buy', locale)}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </>
               ) : (
                 /* PRO — feature table + subscription info + cancel/resume */
