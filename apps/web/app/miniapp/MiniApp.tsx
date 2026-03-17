@@ -288,6 +288,17 @@ function handleTextareaFocus(textarea: HTMLElement) {
   textarea.addEventListener('blur', cleanup);
 }
 
+/** Decode HTML entities (e.g. &quot; → ") and strip stray whitespace.
+ *  Runs client-side only (uses DOM textarea trick); returns original string on server. */
+function normalizeTitle(raw: string | null | undefined): string {
+  if (!raw) return '';
+  if (typeof window === 'undefined') return raw.replace(/\s+/g, ' ').trim();
+  const el = document.createElement('textarea');
+  el.innerHTML = raw;
+  // collapse runs of whitespace / stray newlines but preserve intentional spacing
+  return el.value.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 /** Auto-size a textarea to its content height.
  *  IMPORTANT: must use height:'0px' (not 'auto') before reading scrollHeight.
  *  With height:'auto' the browser renders rows=2 intrinsic height (~68px) which
@@ -4073,7 +4084,34 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ══════════════════════════════════════════════
           OWNER — ITEM DETAIL (view + actions)
           ══════════════════════════════════════════════ */}
-      {screen === 'item-detail' && viewingItem && (
+      {screen === 'item-detail' && viewingItem && (() => {
+        const displayTitle = normalizeTitle(viewingItem.title);
+        const copyTitle = async () => {
+          if (!displayTitle) return;
+          try {
+            if (typeof window !== 'undefined' && window.Telegram?.WebApp?.writeToClipboard) {
+              window.Telegram.WebApp.writeToClipboard(displayTitle);
+              pushToast(t('title_copied', locale), 'success');
+              return;
+            }
+            await navigator.clipboard.writeText(displayTitle);
+            pushToast(t('title_copied', locale), 'success');
+          } catch {
+            try {
+              const ta = document.createElement('textarea');
+              ta.value = displayTitle;
+              ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand('copy');
+              document.body.removeChild(ta);
+              pushToast(t('title_copied', locale), 'success');
+            } catch {
+              pushToast(t('title_copy_error', locale), 'error');
+            }
+          }
+        };
+        return (
         <div style={{ padding: '0 0 40px' }}>
           {/* Hero image */}
           <div style={{ padding: '16px 16px 0' }}>
@@ -4096,7 +4134,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 margin: 0, lineHeight: 1.25,
                 display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
                 overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{viewingItem.title}</h1>
+              }}>{displayTitle}</h1>
               {/* Meta-block: width = max-content so both items share same center axis */}
               <div style={{
                 flexShrink: 0,
@@ -4265,24 +4303,39 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               const isDraftItem = fromDrafts || draftsItems.some(d => d.id === (viewingItem as Item).id);
               return (
                 <div style={{ marginTop: 24, marginBottom: 32 }}>
-                  {isDraftItem ? (
-                    // Draft item: primary CTA is "Move to another wishlist"
-                    <button
-                      onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }}
-                      style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}
-                    >
-                      {t('item_move_cta', locale)}
-                    </button>
-                  ) : (
-                    // Regular item: primary CTA is "Edit"
-                    <button onClick={() => {
-                      setPendingEditItem(viewingItem as Item);
-                      setViewingItem(null);
-                      setScreen('wishlist-detail');
-                    }} style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
-                      {t('edit_btn', locale)}
-                    </button>
-                  )}
+                  {/* Primary CTA row — Edit or Move, with copy icon when title exists */}
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {isDraftItem ? (
+                      <button
+                        onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }}
+                        style={{ ...btnPrimary, flex: 1, width: 'auto', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}
+                      >
+                        {t('item_move_cta', locale)}
+                      </button>
+                    ) : (
+                      <button onClick={() => {
+                        setPendingEditItem(viewingItem as Item);
+                        setViewingItem(null);
+                        setScreen('wishlist-detail');
+                      }} style={{ ...btnPrimary, flex: 1, width: 'auto', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
+                        {t('edit_btn', locale)}
+                      </button>
+                    )}
+                    {displayTitle && (
+                      <button
+                        onClick={() => void copyTitle()}
+                        title={t('title_copied', locale)}
+                        style={{
+                          ...btnBase, width: 52, flexShrink: 0,
+                          background: C.surface, color: C.textSec,
+                          border: `1px solid ${C.borderLight}`,
+                          borderRadius: 16, padding: 0, fontSize: 18,
+                        }}
+                      >
+                        ⧉
+                      </button>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
                     {isDraftItem ? (
                       // Draft: Edit in secondary slot (no Received).
@@ -4338,7 +4391,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             })()}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ══════════════════════════════════════════════
           GUEST — ITEM DETAIL (view only)
@@ -4366,7 +4420,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 margin: 0, lineHeight: 1.25,
                 display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
                 overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{viewingItem.title}</h1>
+              }}>{normalizeTitle(viewingItem.title)}</h1>
               <div style={{
                 flexShrink: 0,
                 display: 'flex', flexDirection: 'column', alignItems: 'center',

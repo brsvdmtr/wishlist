@@ -594,6 +594,10 @@ const ru: Dict = {
   support_id_copied: 'Скопировано',
   support_id_copy_error: 'Не удалось скопировать',
 
+  // ── Item title copy ──────────────────────────────────────────────────────
+  title_copied: 'Название скопировано',
+  title_copy_error: 'Не удалось скопировать',
+
   // ── Visibility / Policy options ─────────────────────────────────────────
   visibility_all: 'Всем',
   visibility_link_only: 'Только по ссылке',
@@ -1283,6 +1287,10 @@ const en: Dict = {
   support_id_copy: 'Copy',
   support_id_copied: 'Copied',
   support_id_copy_error: 'Could not copy',
+
+  // ── Item title copy ──────────────────────────────────────────────────────
+  title_copied: 'Title copied',
+  title_copy_error: 'Could not copy',
 
   // ── Visibility / Policy options ─────────────────────────────────────────
   visibility_all: 'Everyone',
