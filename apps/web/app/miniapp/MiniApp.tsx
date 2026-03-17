@@ -851,7 +851,6 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
               }}
               placeholder={t('comments_placeholder', locale)}
               value={commentText}
-              ref={(el) => { if (el) growTextarea(el); }}
               onChange={(e) => { setCommentText(e.target.value.slice(0, 300)); growTextarea(e.target); }}
               maxLength={300}
               onFocus={(e) => handleTextareaFocus(e.currentTarget)}
@@ -1066,6 +1065,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [editProfileBio, setEditProfileBio] = useState('');
   const [editProfileBirthday, setEditProfileBirthday] = useState('');
   const [editProfileSaving, setEditProfileSaving] = useState(false);
+  const bioTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Settings state
   const [settingsData, setSettingsData] = useState<{
@@ -1127,6 +1127,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [itemTitle, setItemTitle] = useState('');
   const [itemDescription, setItemDescription] = useState('');
+  const itemDescTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [itemUrl, setItemUrl] = useState('');
   const [itemPrice, setItemPrice] = useState(''); // raw digits only, e.g. "5000000"
   const priceInputRef = useRef<HTMLInputElement>(null);
@@ -1232,6 +1233,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Description editing
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionText, setDescriptionText] = useState('');
+  const descTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Drafts (Неразобранное)
   const [draftsWishlistId, setDraftsWishlistId] = useState<string | null>(null);
@@ -1335,6 +1337,32 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setToasts((prev) => [toast, ...prev].slice(0, 3));
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toast.id)), 2800);
   }, []);
+
+  // Auto-grow textareas: use useEffect + rAF so measurement runs after the
+  // BottomSheet has finished its slideUp animation and layout is fully settled.
+  useEffect(() => {
+    if (!editingProfile) return;
+    const el = bioTextareaRef.current;
+    if (!el) return;
+    const raf = requestAnimationFrame(() => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; });
+    return () => cancelAnimationFrame(raf);
+  }, [editingProfile, editProfileBio]);
+
+  useEffect(() => {
+    if (!showItemForm) return;
+    const el = itemDescTextareaRef.current;
+    if (!el) return;
+    const raf = requestAnimationFrame(() => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; });
+    return () => cancelAnimationFrame(raf);
+  }, [showItemForm, itemDescription]);
+
+  useEffect(() => {
+    if (!editingDescription) return;
+    const el = descTextareaRef.current;
+    if (!el) return;
+    const raf = requestAnimationFrame(() => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; });
+    return () => cancelAnimationFrame(raf);
+  }, [editingDescription, descriptionText]);
 
   const tgFetch = useCallback(async (path: string, init?: RequestInit) => {
     const url = `${apiBase}${path}`;
@@ -6167,8 +6195,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               maxLength={500}
               placeholder={t('description_placeholder', locale)}
               value={descriptionText}
-              ref={(el) => { if (el) growTextarea(el); }}
-              onChange={(e) => { setDescriptionText(e.target.value); growTextarea(e.target); }}
+              ref={descTextareaRef}
+              onChange={(e) => setDescriptionText(e.target.value)}
               autoFocus
             />
             <div style={{ fontSize: 12, color: descriptionText.length > 480 ? C.orange : C.textMuted, textAlign: 'right', marginTop: 4 }}>
@@ -6225,8 +6253,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               maxLength={500}
               placeholder={t('item_description_placeholder', locale)}
               value={itemDescription}
-              ref={(el) => { if (el) growTextarea(el); }}
-              onChange={(e) => { setItemDescription(e.target.value); growTextarea(e.target); }}
+              ref={itemDescTextareaRef}
+              onChange={(e) => setItemDescription(e.target.value)}
             />
             <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 2 }}>{itemDescription.length}/500</div>
           </div>
@@ -6598,8 +6626,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               maxLength={200}
               placeholder={t('profile_bio_placeholder', locale)}
               value={editProfileBio}
-              ref={(el) => { if (el) growTextarea(el); }}
-              onChange={(e) => { setEditProfileBio(e.target.value); growTextarea(e.target); }}
+              ref={bioTextareaRef}
+              onChange={(e) => setEditProfileBio(e.target.value)}
             />
             <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 2 }}>{editProfileBio.length}/200</div>
           </div>
