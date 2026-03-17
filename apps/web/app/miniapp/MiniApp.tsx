@@ -1260,6 +1260,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [importUrl, setImportUrl] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [fromDrafts, setFromDrafts] = useState(false);
+  // ── Drafts multi-select ───────────────────────────────────────────────────
+  const [draftsSelectMode, setDraftsSelectMode] = useState(false);
+  const [draftsSelected, setDraftsSelected] = useState<string[]>([]);
+  const [showBulkMovePicker, setShowBulkMovePicker] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [draftsBulkLoading, setDraftsBulkLoading] = useState(false);
 
   // ── Wishes tab: filtered by priority ─────────────────────────────────────
   const filteredAllItems = useMemo(() => {
@@ -1688,6 +1694,64 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     pushToast(t('drafts_archived_toast', locale), 'success');
   }, [tgFetch, pushToast]);
 
+  const handleBulkMove = useCallback(async (targetWishlistId: string) => {
+    if (draftsSelected.length === 0) return;
+    setDraftsBulkLoading(true);
+    try {
+      const res = await tgFetch('/tg/items/bulk-move', {
+        method: 'POST',
+        body: JSON.stringify({ itemIds: draftsSelected, targetWishlistId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        pushToast(body.error || t('toast_move_error', locale), 'error');
+        return;
+      }
+      const data = await res.json() as { moved: string[]; failed: Array<{ itemId: string; reason: string }> };
+      setShowBulkMovePicker(false);
+      setDraftsSelectMode(false);
+      setDraftsSelected([]);
+      if (data.moved.length === 0) {
+        pushToast(t('toast_move_error', locale), 'error');
+      } else if (data.moved.length < draftsSelected.length) {
+        pushToast(t('drafts_bulk_moved_partial', locale, { moved: data.moved.length, total: draftsSelected.length }), 'success');
+      } else {
+        pushToast(t('drafts_bulk_moved', locale, { n: data.moved.length }), 'success');
+      }
+      await loadDrafts();
+      await loadWishlists();
+    } catch {
+      pushToast(t('toast_move_error_generic', locale), 'error');
+    } finally {
+      setDraftsBulkLoading(false);
+    }
+  }, [draftsSelected, tgFetch, pushToast, locale, loadDrafts, loadWishlists]);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (draftsSelected.length === 0) return;
+    setDraftsBulkLoading(true);
+    try {
+      const res = await tgFetch('/tg/items/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ itemIds: draftsSelected }),
+      });
+      if (!res.ok) {
+        pushToast(t('toast_error_generic', locale), 'error');
+        return;
+      }
+      const data = await res.json() as { deleted: number };
+      setShowBulkDeleteConfirm(false);
+      setDraftsSelectMode(false);
+      setDraftsSelected([]);
+      pushToast(t('drafts_bulk_deleted', locale, { n: data.deleted }), 'success');
+      await loadDrafts();
+    } catch {
+      pushToast(t('toast_error_generic', locale), 'error');
+    } finally {
+      setDraftsBulkLoading(false);
+    }
+  }, [draftsSelected, tgFetch, pushToast, locale, loadDrafts]);
+
   // --- Guest API calls
   const loadGuestWishlist = useCallback(async (param: string) => {
     type GuestResponse = {
@@ -2070,7 +2134,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } else if (screen === 'my-reservations') {
       setScreen('my-wishlists');
     } else if (screen === 'drafts') {
-      setScreen('my-wishlists');
+      if (draftsSelectMode) {
+        setDraftsSelectMode(false);
+        setDraftsSelected([]);
+      } else {
+        setScreen('my-wishlists');
+      }
     } else if (screen === 'wishlist-detail' || screen === 'guest-view') {
       if (itemReorderMode) cancelItemReorderMode();
       setCurrentWl(null);
@@ -3712,112 +3781,210 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'drafts' && (
         <div style={{ padding: '16px 20px 120px' }}>
+          {/* Header */}
           <div style={{ marginBottom: 20 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>📥 {t('drafts_title', locale)}</h1>
-            <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
-              {draftsItems.length > 0
-                ? `${draftsItems.length} ${pluralize(draftsItems.length, t('cards_one', locale), t('cards_few', locale), t('cards_many', locale), locale)}`
-                : t('drafts_send_link', locale)}
-            </p>
-          </div>
-
-          {/* URL input — with PRO badge for FREE users */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <input
-                style={{ ...inputStyle, flex: 1, paddingRight: planInfo.code === 'FREE' ? 52 : 16 }}
-                placeholder={planInfo.code === 'FREE' ? t('drafts_url_pro_placeholder', locale) : t('drafts_url_placeholder', locale)}
-                value={importUrl}
-                onChange={(e) => setImportUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    if (planInfo.code === 'FREE') { showUpsell('url_import'); return; }
-                    void handleImportUrl();
-                  }
-                }}
-              />
-              {planInfo.code === 'FREE' && (
-                <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>
-                  <ProBadge />
-                </span>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>📥 {t('drafts_title', locale)}</h1>
+                <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
+                  {draftsSelectMode
+                    ? t('drafts_selected_n', locale, { n: draftsSelected.length })
+                    : draftsItems.length > 0
+                      ? `${draftsItems.length} ${pluralize(draftsItems.length, t('cards_one', locale), t('cards_few', locale), t('cards_many', locale), locale)}`
+                      : t('drafts_send_link', locale)}
+                </p>
+              </div>
+              {draftsItems.length > 0 && !draftsSelectMode && (
+                <button
+                  style={{ ...btnGhost, padding: '8px 14px', fontSize: 13, flexShrink: 0, marginTop: 2 }}
+                  onClick={() => { setDraftsSelectMode(true); setDraftsSelected([]); }}
+                >
+                  {t('drafts_select', locale)}
+                </button>
+              )}
+              {draftsSelectMode && (
+                <button
+                  style={{ ...btnGhost, padding: '8px 14px', fontSize: 13, flexShrink: 0, marginTop: 2, color: C.textMuted }}
+                  onClick={() => { setDraftsSelectMode(false); setDraftsSelected([]); }}
+                >
+                  {t('drafts_cancel_select', locale)}
+                </button>
               )}
             </div>
-            <button
-              style={{
-                ...btnPrimary,
-                width: 48, minWidth: 48, padding: 0,
-                opacity: importUrl.trim() && !importLoading ? 1 : 0.5,
-              }}
-              onClick={() => {
-                if (planInfo.code === 'FREE') { showUpsell('url_import'); return; }
-                void handleImportUrl();
-              }}
-              disabled={!importUrl.trim() || importLoading}
-            >
-              {importLoading ? '…' : '📥'}
-            </button>
           </div>
+
+          {/* Bulk action bar — visible in select mode */}
+          {draftsSelectMode && (
+            <div style={{
+              position: 'sticky', top: 0, zIndex: 10,
+              background: C.surface, borderBottom: `1px solid ${C.border}`,
+              padding: '10px 0', marginBottom: 16,
+              display: 'flex', gap: 8, alignItems: 'center',
+            }}>
+              <button
+                style={{ ...btnGhost, padding: '8px 12px', fontSize: 13, flex: 1 }}
+                onClick={() => {
+                  if (draftsSelected.length === draftsItems.length) {
+                    setDraftsSelected([]);
+                  } else {
+                    setDraftsSelected(draftsItems.map(i => i.id));
+                  }
+                }}
+              >
+                {draftsSelected.length === draftsItems.length ? t('drafts_deselect_all', locale) : t('drafts_select_all', locale)}
+              </button>
+              <button
+                style={{
+                  ...btnPrimary, padding: '8px 14px', fontSize: 13,
+                  opacity: draftsSelected.length > 0 && !draftsBulkLoading ? 1 : 0.4,
+                }}
+                disabled={draftsSelected.length === 0 || draftsBulkLoading}
+                onClick={() => setShowBulkMovePicker(true)}
+              >
+                📁 {t('drafts_move', locale)}
+              </button>
+              <button
+                style={{
+                  ...btnGhost, padding: '8px 14px', fontSize: 13, color: C.red,
+                  opacity: draftsSelected.length > 0 && !draftsBulkLoading ? 1 : 0.4,
+                }}
+                disabled={draftsSelected.length === 0 || draftsBulkLoading}
+                onClick={() => setShowBulkDeleteConfirm(true)}
+              >
+                🗑
+              </button>
+            </div>
+          )}
+
+          {/* URL input — hidden in select mode, with PRO badge for FREE users */}
+          {!draftsSelectMode && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <input
+                  style={{ ...inputStyle, flex: 1, paddingRight: planInfo.code === 'FREE' ? 52 : 16 }}
+                  placeholder={planInfo.code === 'FREE' ? t('drafts_url_pro_placeholder', locale) : t('drafts_url_placeholder', locale)}
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (planInfo.code === 'FREE') { showUpsell('url_import'); return; }
+                      void handleImportUrl();
+                    }
+                  }}
+                />
+                {planInfo.code === 'FREE' && (
+                  <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>
+                    <ProBadge />
+                  </span>
+                )}
+              </div>
+              <button
+                style={{
+                  ...btnPrimary,
+                  width: 48, minWidth: 48, padding: 0,
+                  opacity: importUrl.trim() && !importLoading ? 1 : 0.5,
+                }}
+                onClick={() => {
+                  if (planInfo.code === 'FREE') { showUpsell('url_import'); return; }
+                  void handleImportUrl();
+                }}
+                disabled={!importUrl.trim() || importLoading}
+              >
+                {importLoading ? '…' : '📥'}
+              </button>
+            </div>
+          )}
 
           {/* Draft items list */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {draftsItems.map((item, i) => (
-              <div key={item.id} style={{
-                background: C.card, borderRadius: 16, padding: 16,
-                border: `1px solid ${C.border}`,
-                animation: `fadeIn 0.3s ease ${i * 0.06}s both`,
-              }}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  {item.imageUrl && (
-                    <img
-                      src={item.imageUrl}
-                      alt=""
-                      style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.title}
+            {draftsItems.map((item, i) => {
+              const isSelected = draftsSelected.includes(item.id);
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    background: draftsSelectMode && isSelected ? C.accentSoft : C.card,
+                    borderRadius: 16, padding: 16,
+                    border: draftsSelectMode && isSelected ? `1.5px solid ${C.accent}` : `1px solid ${C.border}`,
+                    animation: `fadeIn 0.3s ease ${i * 0.06}s both`,
+                    cursor: draftsSelectMode ? 'pointer' : 'default',
+                    WebkitTapHighlightColor: 'transparent',
+                    transition: 'background 0.15s, border-color 0.15s',
+                  }}
+                  onClick={draftsSelectMode ? () => {
+                    setDraftsSelected(prev =>
+                      prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id]
+                    );
+                  } : undefined}
+                >
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    {/* Checkbox circle in select mode */}
+                    {draftsSelectMode && (
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 11, flexShrink: 0, marginTop: 2,
+                        border: `2px solid ${isSelected ? C.accent : C.border}`,
+                        background: isSelected ? C.accent : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'background 0.15s, border-color 0.15s',
+                      }}>
+                        {isSelected && <span style={{ color: '#fff', fontSize: 12, lineHeight: 1 }}>✓</span>}
+                      </div>
+                    )}
+                    {item.imageUrl && (
+                      <img
+                        src={item.imageUrl}
+                        alt=""
+                        style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.title}
+                      </div>
+                      {item.sourceDomain && (
+                        <div style={{ fontSize: 12, color: C.orange, marginTop: 2 }}>
+                          🔗 {item.sourceDomain}
+                        </div>
+                      )}
+                      {item.price != null && item.price > 0 && (
+                        <div style={{ fontSize: 13, color: C.textSec, marginTop: 2 }}>
+                          💰 {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
+                        </div>
+                      )}
                     </div>
-                    {item.sourceDomain && (
-                      <div style={{ fontSize: 12, color: C.orange, marginTop: 2 }}>
-                        🔗 {item.sourceDomain}
-                      </div>
-                    )}
-                    {item.price != null && item.price > 0 && (
-                      <div style={{ fontSize: 13, color: C.textSec, marginTop: 2 }}>
-                        💰 {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
-                      </div>
-                    )}
                   </div>
-                </div>
 
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button
-                    style={{ ...btnSecondary, flex: 1, padding: '10px 0', fontSize: 13 }}
-                    onClick={() => { setMovingItem(item); setShowMovePicker(true); }}
-                  >
-                    📁 {t('drafts_move', locale)}
-                  </button>
-                  <button
-                    style={{ ...btnGhost, padding: '10px 12px', fontSize: 13, color: C.textMuted }}
-                    onClick={() => handleArchiveDraft(item)}
-                  >
-                    📦 {t('drafts_archive', locale)}
-                  </button>
-                  <button
-                    style={{ ...btnGhost, padding: '10px 12px', fontSize: 13 }}
-                    onClick={() => {
-                      setViewingItem(item);
-                      setFromDrafts(true);
-                      setScreen('item-detail');
-                    }}
-                  >
-                    {t('drafts_open', locale)}
-                  </button>
+                  {/* Action buttons — hidden in select mode */}
+                  {!draftsSelectMode && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                      <button
+                        style={{ ...btnSecondary, flex: 1, padding: '10px 0', fontSize: 13 }}
+                        onClick={() => { setMovingItem(item); setShowMovePicker(true); }}
+                      >
+                        📁 {t('drafts_move', locale)}
+                      </button>
+                      <button
+                        style={{ ...btnGhost, padding: '10px 12px', fontSize: 13, color: C.textMuted }}
+                        onClick={() => handleArchiveDraft(item)}
+                      >
+                        📦 {t('drafts_archive', locale)}
+                      </button>
+                      <button
+                        style={{ ...btnGhost, padding: '10px 12px', fontSize: 13 }}
+                        onClick={() => {
+                          setViewingItem(item);
+                          setFromDrafts(true);
+                          setScreen('item-detail');
+                        }}
+                      >
+                        {t('drafts_open', locale)}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {draftsItems.length === 0 && !importLoading && (
@@ -5644,6 +5811,73 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </div>
           );
         })()}
+      </BottomSheet>
+
+      {/* ── Bulk move picker ── */}
+      <BottomSheet isOpen={showBulkMovePicker} onClose={() => { if (!draftsBulkLoading) setShowBulkMovePicker(false); }} title={t('drafts_move_title', locale)}>
+        {(() => {
+          const moveTargets = wishlists.filter(wl => wl.id !== draftsWishlistId);
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {moveTargets.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 12 }}>{t('drafts_create_first', locale)}</div>
+                  <button style={btnPrimary} onClick={() => { setShowBulkMovePicker(false); setDraftsSelectMode(false); setDraftsSelected([]); setScreen('my-wishlists'); setShowCreateWl(true); }}>
+                    {t('create_wishlist_btn', locale)}
+                  </button>
+                </div>
+              )}
+              {moveTargets.map((wl) => (
+                <button
+                  key={wl.id}
+                  style={{
+                    ...btnGhost,
+                    width: '100%', textAlign: 'left', padding: '14px 16px',
+                    borderRadius: 12, background: C.surface,
+                    border: `1px solid ${C.border}`,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    opacity: draftsBulkLoading ? 0.6 : 1,
+                  }}
+                  disabled={draftsBulkLoading}
+                  onClick={() => void handleBulkMove(wl.id)}
+                >
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>{t('wishes_count', locale, { count: wl.itemCount })}</div>
+                  </div>
+                  {draftsBulkLoading ? <span style={{ color: C.textMuted, fontSize: 13 }}>…</span> : <span style={{ color: C.textMuted }}>›</span>}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+      </BottomSheet>
+
+      {/* ── Bulk delete confirmation ── */}
+      <BottomSheet isOpen={showBulkDeleteConfirm} onClose={() => { if (!draftsBulkLoading) setShowBulkDeleteConfirm(false); }} title={t('drafts_bulk_delete_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <p style={{ margin: 0, fontSize: 14, color: C.textSec, lineHeight: 1.5 }}>
+            {t('drafts_bulk_delete_desc', locale)}
+          </p>
+          <button
+            style={{
+              ...btnPrimary,
+              background: C.red, width: '100%', padding: '14px 0', fontSize: 15,
+              opacity: draftsBulkLoading ? 0.6 : 1,
+            }}
+            disabled={draftsBulkLoading}
+            onClick={() => void handleBulkDelete()}
+          >
+            {draftsBulkLoading ? '…' : t('drafts_bulk_delete_cta', locale, { n: draftsSelected.length })}
+          </button>
+          <button
+            style={{ ...btnGhost, width: '100%', padding: '14px 0', fontSize: 15, color: C.textMuted }}
+            disabled={draftsBulkLoading}
+            onClick={() => setShowBulkDeleteConfirm(false)}
+          >
+            {t('drafts_cancel_select', locale)}
+          </button>
+        </div>
       </BottomSheet>
 
       {/* ── Profile visibility sheet ── */}

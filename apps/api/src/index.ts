@@ -2285,6 +2285,112 @@ tgRouter.post(
   }),
 );
 
+// POST /tg/items/bulk-move — move multiple items to a target wishlist
+tgRouter.post(
+  '/items/bulk-move',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      itemIds: z.array(z.string().min(1)).min(1).max(100),
+      targetWishlistId: z.string().min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id);
+    const { itemIds, targetWishlistId } = parsed.data;
+
+    // Validate target wishlist ownership + not a SYSTEM wishlist
+    const targetWl = await prisma.wishlist.findUnique({
+      where: { id: targetWishlistId },
+      select: { id: true, ownerId: true, type: true },
+    });
+    if (!targetWl) return res.status(404).json({ error: 'Target wishlist not found' });
+    if (targetWl.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (targetWl.type === 'SYSTEM_DRAFTS') return res.status(400).json({ error: 'Cannot move to system wishlist' });
+
+    // Check target wishlist writable on current plan
+    if (targetWl.type === 'REGULAR') {
+      if (!(await isWishlistWritable(user.id, targetWl.id, ent.plan.wishlists))) {
+        return res.status(402).json({ error: t('api_wishlist_items_limit', getRequestLocale(req)), planCode: ent.plan.code });
+      }
+    }
+
+    // Load all requested items — filter to only those owned by the user and not already in target
+    const items = await prisma.item.findMany({
+      where: { id: { in: itemIds }, status: { in: [...ACTIVE_STATUSES] } },
+      select: { id: true, wishlistId: true, wishlist: { select: { ownerId: true } } },
+    });
+    const ownedItems = items.filter(
+      (i) => i.wishlist.ownerId === user.id && i.wishlistId !== targetWishlistId,
+    );
+    const notOwnedIds = itemIds.filter((id) => !items.find((i) => i.id === id) || items.find((i) => i.id === id)?.wishlist.ownerId !== user.id);
+
+    // Check capacity: how many slots are available in the target wishlist
+    const currentTargetCount = await prisma.item.count({
+      where: { wishlistId: targetWishlistId, status: { in: [...ACTIVE_STATUSES] } },
+    });
+    const available = Math.max(0, ent.plan.items - currentTargetCount);
+    const toMove = ownedItems.slice(0, available);
+    const overLimit = ownedItems.slice(available);
+
+    // Move in a transaction
+    if (toMove.length > 0) {
+      await prisma.$transaction(
+        toMove.map((item) =>
+          prisma.item.update({ where: { id: item.id }, data: { wishlistId: targetWishlistId } }),
+        ),
+      );
+    }
+
+    const failed = [
+      ...notOwnedIds.map((id) => ({ itemId: id, reason: 'not_found_or_forbidden' })),
+      ...overLimit.map((i) => ({ itemId: i.id, reason: 'limit_reached' })),
+    ];
+    return res.json({ moved: toMove.map((i) => i.id), failed });
+  }),
+);
+
+// POST /tg/items/bulk-delete — soft-delete multiple items
+tgRouter.post(
+  '/items/bulk-delete',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      itemIds: z.array(z.string().min(1)).min(1).max(100),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const { itemIds } = parsed.data;
+
+    // Load and verify ownership
+    const items = await prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, wishlist: { select: { ownerId: true } } },
+    });
+    const ownedIds = items
+      .filter((i) => i.wishlist.ownerId === user.id)
+      .map((i) => i.id);
+
+    if (ownedIds.length === 0) return res.json({ deleted: 0 });
+
+    const now = new Date();
+    await prisma.$transaction(
+      ownedIds.map((id) =>
+        prisma.item.update({
+          where: { id },
+          data: {
+            status: 'DELETED',
+            archivedAt: now,
+            purgeAfter: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
+          },
+        }),
+      ),
+    );
+
+    return res.json({ deleted: ownedIds.length });
+  }),
+);
+
 // PATCH /tg/items/:id — edit item
 tgRouter.patch(
   '/items/:id',
