@@ -2335,6 +2335,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           })
           .catch(handleErr);
       }
+      // Always pre-load profile data so ownerName is available on the
+      // Share screen without requiring the user to visit Profile first.
+      loadProfile().catch(() => { /* non-critical — share screen has fallback */ });
     };
     tryInit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -7101,7 +7104,9 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, onCopied, buildTg
 
   const shareToTelegram = () => {
     if (!shareLink) return;
-    const shareText = t('share_text', locale, { title: wishlist.title });
+    // Prepend the owner's display name so recipients see who is sharing
+    const namePrefix = ownerName ? `${ownerName}\n` : '';
+    const shareText = `${namePrefix}${t('share_text', locale, { title: wishlist.title })}`;
     const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
     try {
       window.Telegram?.WebApp.openTelegramLink(tgShareUrl);
