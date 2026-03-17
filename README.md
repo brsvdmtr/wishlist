@@ -85,7 +85,7 @@ pnpm db:generate    # сгенерировать Prisma Client
 ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
 
 cd /opt/wishlist
-git pull
+git pull origin claude/wizardly-satoshi
 
 # Пересобрать и перезапустить сервисы
 docker compose -f docker-compose.prod.yml up -d --build api web bot
@@ -101,9 +101,9 @@ docker compose -f docker-compose.prod.yml up -d --build api web bot
 
 ```
 apps/
-  api/        Express API (~3900 lines в src/index.ts)
-  web/        Next.js (Mini App в app/miniapp/MiniApp.tsx, ~4500 lines)
-  bot/        Telegraf bot (~100 lines)
+  api/        Express API — весь бэкенд (src/index.ts)
+  web/        Next.js — Mini App (app/miniapp/MiniApp.tsx) + публичные страницы + admin
+  bot/        Telegraf bot — команды, уведомления, биллинг-хуки
 packages/
   db/         Prisma schema + миграции
   shared/     i18n строки (RU+EN), shared типы

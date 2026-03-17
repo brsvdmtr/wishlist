@@ -164,7 +164,7 @@ The table below defines the canonical terms used across all documentation. Where
 ## What the documentation does NOT cover
 
 - Manual language selection (auto-detected from Telegram locale only)
-- Currency conversion / exchange rates (schema has Currency field, not yet in UI)
+- Currency conversion / exchange rates (items support RUB/USD, but no conversion between them)
 - Custom archive/inbox display
 - Onboarding / tips system
 - Full "reserved by me" visibility for other users

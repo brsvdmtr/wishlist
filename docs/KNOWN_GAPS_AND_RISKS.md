@@ -218,7 +218,7 @@
 |------|-------|-------------|
 | `apps/api/src/index.ts` | ~4100 | ENTIRE backend logic |
 | `apps/web/app/miniapp/MiniApp.tsx` | ~6500 | ENTIRE Mini App frontend |
-| `packages/db/prisma/schema.prisma` | ~120 | Database schema |
+| `packages/db/prisma/schema.prisma` | ~440 | Database schema |
 | `packages/db/prisma/migrations/*` | varies | Migration history |
 | `docker-compose.prod.yml` | 91 | Production deployment config |
 | `Dockerfile.api` | 43 | API container build |

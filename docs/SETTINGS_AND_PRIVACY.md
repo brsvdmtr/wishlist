@@ -201,7 +201,7 @@ Update one or more profile-level settings.
 
 **Notes:**
 - PRO-only fields sent by FREE users are silently ignored in the response (no error).
-- `defaultCurrency` (enum: `RUB` | `USD`) exists in the schema but is not yet surfaced in the API.
+- `defaultCurrency` (enum: `RUB` | `USD`) is surfaced via `GET/PATCH /tg/me/settings` (see [API_REFERENCE.md](./API_REFERENCE.md)).
 
 ### PATCH /tg/wishlists/:id (privacy fields)
 
