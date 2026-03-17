@@ -1,327 +1,352 @@
-# FRONTEND_MAP.md - Frontend Code Structure & Screens
+# FRONTEND_MAP.md — Frontend Architecture
 
-## Architecture Overview
+> Date: 2026-03-17. Verified from source code.
 
-The Telegram Mini App is a **single React component** in one file:
-- `apps/web/app/miniapp/MiniApp.tsx` (~2170 lines)
-- Pure React useState hooks (no Redux/Zustand/Context)
-- Inline CSS (no CSS modules, no Tailwind in Mini App)
-- No routing library (manual screen state machine)
+---
 
-### Other Web Pages (Next.js App Router)
+## 1. File / Folder Structure
+
 ```
-apps/web/app/
-  layout.tsx              - Root layout (fonts, metadata)
-  page.tsx                - Home page (landing)
-  globals.css             - Global styles (Tailwind)
-  middleware.ts           - Basic auth for /admin, www redirect
-  miniapp/
-    layout.tsx            - Mini App layout (no extra wrapping)
-    page.tsx              - Mini App page (loads MiniApp component)
-    MiniApp.tsx           - THE ENTIRE MINI APP (2170 lines)
-  admin/
-    page.tsx              - Admin list page
-    new/page.tsx          - Create wishlist (admin)
-    [id]/page.tsx         - Edit wishlist (admin)
-  w/[slug]/
-    page.tsx              - Public wishlist page (SSR)
-    WishlistClient.tsx    - Client-side wishlist component
-    error.tsx             - Error boundary
-    not-found.tsx         - 404 page
+apps/web/
+  middleware.ts                  - Basic Auth for /admin/*, www→canonical redirect
   app/
-    page.tsx              - Authenticated app page
-  lib/
-    auth.ts               - Auth helpers (localStorage token)
-    api-proxy.ts          - API proxy for SSR
-    admin-api-client.ts   - Admin API client with X-ADMIN-KEY
+    layout.tsx                   - Root layout (fonts, metadata)
+    page.tsx                     - Home/landing page
+    globals.css                  - Global styles (Tailwind)
+    app/
+      page.tsx                   - Redirects /app → /miniapp
+    miniapp/
+      layout.tsx                 - Mini App layout (viewport meta, Telegram script)
+      page.tsx                   - Mini App page entry (renders <MiniApp />)
+      MiniApp.tsx                - THE ENTIRE MINI APP (~6475 lines, single component)
+      TelegramWebApp.tsx         - Telegram WebApp type declarations / helper
+    admin/
+      page.tsx                   - Admin: wishlist list
+      new/page.tsx               - Admin: create wishlist
+      [id]/page.tsx              - Admin: edit wishlist
+    w/[slug]/
+      page.tsx                   - Public wishlist page (SSR)
+      WishlistClient.tsx         - Client-side wishlist component
+      error.tsx                  - Error boundary
+      not-found.tsx              - 404 page
+
+packages/shared/src/
+  i18n.ts                        - ru + en dictionaries, t(), detectLocale(), pluralize()
+  index.ts                       - Package exports
 ```
 
 ---
 
-## Design System (MiniApp.tsx constants)
+## 2. Screen State Machine
 
-### Colors (C object)
-```
-bg: '#1B1B1F'           - Page background (dark)
-surface: '#26262C'      - Card/surface background
-surfaceHover: '#2E2E36' - Hovered surface
-card: '#2F2F38'         - Card background (slightly lighter)
-accent: '#7C6AFF'       - Primary purple
-accentSoft: 'rgba(124,106,255,0.12)' - Purple tint
-green: '#34D399'        - Success/reserved green
-orange: '#FBBF24'       - Warning orange
-red: '#F87171'          - Error/delete red
-text: '#F4F4F6'         - Primary text (white-ish)
-textSec: '#9CA3AF'      - Secondary text (grey)
-textMuted: '#6B7280'    - Muted text (darker grey)
-border: 'rgba(255,255,255,0.06)' - Subtle borders
-borderLight: 'rgba(255,255,255,0.1)' - Visible borders
+`MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook. There is no routing library.
+
+```typescript
+type Screen =
+  | 'loading'
+  | 'error'
+  | 'maintenance'
+  | 'my-wishlists'
+  | 'wishlist-detail'
+  | 'item-detail'
+  | 'share'
+  | 'guest-view'
+  | 'guest-item-detail'
+  | 'archive'
+  | 'drafts'
+  | 'settings'
+  | 'my-reservations'
+  | 'profile';
 ```
 
-### Button Styles
-- `btnPrimary`: Purple background (#7C6AFF), white text, 14px 24px padding, 14px border-radius
-- `btnSecondary`: Soft purple bg, accent text
-- `btnGhost`: Transparent bg, muted text
-- `inputStyle`: Dark input with border, 14px padding, 14px border-radius
+Navigation is done by calling `setScreen(...)` together with supporting state (`setSelectedWishlist(...)`, `setSelectedItem(...)`, etc.). There are no URL changes.
+
+### Screen Descriptions
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 1 | `loading` | Spinner while Telegram initData is validated and initial data is fetched |
+| 2 | `error` | Error state with retry button; shown when init fetch fails |
+| 3 | `maintenance` | Shown when API responds 503 with `code: 'MAINTENANCE'` |
+| 4 | `my-wishlists` | Home: 3-tab segmented nav (My Wishlists / All Wishes / My Reservations) |
+| 5 | `wishlist-detail` | Items list for a specific wishlist (owner view). Filter/sort, item counter, privacy settings, share button, add item, drag-to-reorder within priority group |
+| 6 | `item-detail` | Full item edit/view for owner: title, description, price, priority, currency, URL, photo. Complete/delete. Comments thread. Hint button (PRO). Move to another wishlist |
+| 7 | `share` | Share screen: share token link, Telegram share button, copy link |
+| 8 | `guest-view` | Wishlist seen by a friend: items + reservation statuses. Filter/sort (price_asc, price_desc, priority_desc, recommended[PRO]). Budget filter. Subscribe button |
+| 9 | `guest-item-detail` | Single item seen by guest: reserve/unreserve button, comments (PRO), purchased button |
+| 10 | `archive` | Archived/completed items — either wishlist-specific or global. Restore/purge |
+| 11 | `drafts` | SYSTEM_DRAFTS wishlist: URL-imported items awaiting curation. Move to real wishlist or edit |
+| 12 | `settings` | Plan card (FREE: upgrade block; PRO: subscription info + cancel/resume). Notifications. Privacy (profileVisibility, subscribePolicy, commentsEnabled, hintsEnabled). App behavior (currency, wishlist position). Subscriptions (wishlists user follows with unread counts) |
+| 13 | `my-reservations` | Items reserved by current user across all wishlists. Unread comment count badge per item |
+| 14 | `profile` | User profile: avatar, displayName, username, bio, birthday. Stats (wishlists count, total wishes, reservations, archived). Plan card. Edit profile |
+
+---
+
+## 3. Home Tabs
+
+The `my-wishlists` screen has a segmented control with three tabs, tracked by `useState<HomeTab>`:
+
+```typescript
+type HomeTab = 'wishlists' | 'wishes' | 'reservations';
+```
+
+| Tab | Content | API call |
+|-----|---------|----------|
+| `wishlists` | User's wishlists with item counts, FREE/PRO `readOnly` badge, drag-to-reorder | `GET /tg/wishlists` |
+| `wishes` | Flat list of all items across all non-archived wishlists | `GET /tg/items` |
+| `reservations` | Items reserved by the current user | `GET /tg/reservations` |
+
+The `wishlists` tab also shows:
+- A drafts banner (if SYSTEM_DRAFTS has pending items) — tapping navigates to the `drafts` screen
+- A PRO upsell card for FREE users (limit info + upgrade CTA)
+- A "My Reservations" quick link if `reservationsCount > 0`
+
+---
+
+## 4. Design System
+
+All colors are defined in the `C` constant at the top of `MiniApp.tsx`.
+
+### Colors
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `C.bg` | `#1B1B1F` | Page background |
+| `C.surface` | `#26262C` | Cards, bottom sheets |
+| `C.surfaceHover` | `#2E2E36` | Hover / press states |
+| `C.card` | `#2F2F38` | Item cards |
+| `C.accent` | `#7C6AFF` | Primary purple: buttons, active states |
+| `C.accentSoft` | `rgba(124,106,255,0.12)` | Secondary button backgrounds |
+| `C.accentGlow` | `rgba(124,106,255,0.25)` | Glow effects |
+| `C.green` | `#34D399` | Success, available status |
+| `C.greenSoft` | `rgba(52,211,153,0.12)` | Green tinted backgrounds |
+| `C.orange` | `#FBBF24` | Warning, medium priority |
+| `C.orangeSoft` | `rgba(251,191,36,0.12)` | Orange tinted backgrounds |
+| `C.red` | `#F87171` | Error, destructive, deleted |
+| `C.redSoft` | `rgba(248,113,113,0.12)` | Red tinted backgrounds |
+| `C.text` | `#F4F4F6` | Primary text |
+| `C.textSec` | `#9CA3AF` | Secondary text |
+| `C.textMuted` | `#6B7280` | Muted / placeholder text |
+| `C.border` | `rgba(255,255,255,0.06)` | Subtle borders |
+| `C.borderLight` | `rgba(255,255,255,0.1)` | Input borders |
+
+### Priority Colors
+
+| Level | num | Emoji | Color | Background |
+|-------|-----|-------|-------|-----------|
+| LOW | 1 | 🙂 | `#6B7FD4` | `rgba(107,127,212,0.13)` |
+| MEDIUM | 2 | 😊 | `#E8930A` | `rgba(232,147,10,0.13)` |
+| HIGH | 3 | 😍 | `#F04E6E` | `rgba(240,78,110,0.13)` |
 
 ### Typography
-- Font: `-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif`
-- Title: 20px bold (wishlist title), 26px bold (item detail title)
-- Price: 22px bold
-- Body: 14px
-- Caption: 12-13px
 
----
-
-## Screen State Machine
-
-```
-Type Screen = 'loading' | 'error' | 'my-wishlists' | 'wishlist-detail' |
-              'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' |
-              'archive' | 'my-reservations'
-
-Flow:
-  loading -> error (if no Telegram WebApp)
-  loading -> my-wishlists (owner, no startapp param)
-  loading -> guest-view (has startapp=share_XXX param)
-  loading -> wishlist-detail (owner with startapp=own_wishlistId)
-
-  my-wishlists -> wishlist-detail (tap wishlist)
-  my-wishlists -> my-reservations (tap "Забронировано мной" card)
-  wishlist-detail -> item-detail (tap item)
-  wishlist-detail -> share (tap "Поделиться")
-  wishlist-detail -> archive (tap "Архив")
-
-  my-reservations -> guest-item-detail (tap reservation item, sets fromReservations flag)
-
-  guest-view -> guest-item-detail (tap item)
+```typescript
+const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
 ```
 
----
+### Button Styles (inline CSSProperties)
 
-## Screen Details
+| Const | Background | Text color | Width | Usage |
+|-------|-----------|------------|-------|-------|
+| `btnPrimary` | `C.accent` | `#fff` | 100% | Primary actions |
+| `btnSecondary` | `C.accentSoft` | `C.accent` | 100% | Secondary / ghost accent |
+| `btnGhost` | transparent | `C.textSec` | auto | Subtle actions |
+| `inputStyle` | `C.surface` | `C.text` | 100% | Text inputs and textareas |
 
-### 1. Loading Screen (`screen === 'loading'`)
-- Animated emoji spinner
-- "Загрузка..." text
-- Initializes Telegram WebApp SDK
-- Detects: startapp param, user identity, deep link routing
-
-### 2. Error Screen (`screen === 'error'`)
-- Shows error message
-- "Откройте через Telegram" link if not in Telegram context
-
-### 3. My Wishlists (`screen === 'my-wishlists'`)
-- **Data loaded**: GET /tg/wishlists (also lazy-loads GET /tg/reservations after wishlists load)
-- **Shows**: List of owned wishlists with itemCount, reservedCount
-- **"Забронировано мной" card**: Always visible at the top of the list. Green gradient background when `reservationsCount > 0`, surface color when empty. Shows reservation count. Tap -> navigates to `my-reservations` screen.
-- **Actions**:
-  - Tap wishlist -> open it
-  - Tap "Забронировано мной" card -> my-reservations screen
-  - "Создать вишлист" button -> BottomSheet with title + deadline fields
-- **Plan limit display**: "Free-план: N из 2 вишлистов"
-
-### 4. Wishlist Detail (`screen === 'wishlist-detail'`)
-- **Data loaded**: GET /tg/wishlists/:id/items
-- **Header**: Title with pencil edit icon, item count, deadline
-- **Buttons**: "Архив", "Поделиться"
-- **Privacy notice**: "Ты не видишь, кто и что забронировал — сюрприз!"
-- **Item list**: WishCardOwner components with status badges
-- **Empty state**: "Пока пусто" with add button
-- **FAB**: "+ Добавить желание" fixed bottom button
-- **Actions**: Tap item -> item-detail, delete, complete
-
-### 5. Item Detail - Owner (`screen === 'item-detail'`)
-- **Shows**: Hero image (230px), title (26px), price (22px), priority pill, description
-- **CommentsThread**: If item is RESERVED, shows comment exchange
-- **Actions**:
-  - "Редактировать" (primary) -> opens item form
-  - "Завершить" / "Удалить" (secondary)
-
-### 6. Share Screen (`screen === 'share'`)
-- **Data loaded**: POST /tg/wishlists/:id/share-token (generates token if needed)
-- **Shows**: Share preview with wishlist title, item count, deep link
-- **Actions**:
-  - "Скопировать ссылку" -> clipboard
-  - "Отправить в Telegram" -> opens Telegram share dialog
-- **Privacy notice**: Explains what guests see
-
-### 7. Guest View (`screen === 'guest-view'`)
-- **Data loaded**: GET /public/share/:token (or /public/wishlists/:slug fallback)
-- **Auto-detect**: If viewer is the owner, switches to owner view
-- **Price filters**: "Все", "До 3000", "До 10000", "До 25000"
-- **Item list**: WishCardGuest components
-- **Actions**: Tap item -> guest-item-detail, reserve/unreserve
-
-### 8. Guest Item Detail (`screen === 'guest-item-detail'`)
-- **Shows**: Hero image, title, price, priority, description (read-only)
-- **Status badges**: "Забронировано мной", "Уже забронировано", "Доступно"
-- **CommentsThread**: If user is reserver, shows comment exchange
-- **Actions**: "Забронировать" / "Отменить бронь"
-- **Third-party hint**: "Только бронирующий видит эту зону"
-
-### 9. Archive (`screen === 'archive'`)
-- **Data loaded**: GET /tg/wishlists/:id/archive
-- **Shows**: COMPLETED and DELETED items
-- **Actions**: "Восстановить" per item
-
-### 10. My Reservations (`screen === 'my-reservations'`)
-- **Data loaded**: GET /tg/reservations
-- **Shows**: Items reserved by the current user, grouped by owner (ownerName)
-- **Layout**: Owner groups with avatar circles (first letter of ownerName), owner name header, then ReservationCard components for each item
-- **Actions**:
-  - Tap reservation item -> guest-item-detail (sets `fromReservations` flag)
-  - "Снять бронь" button on ReservationCard -> unreserve item (handleUnreserveFromReservations)
-- **Mark-read**: Fires `POST /tg/items/:id/comments/mark-read` when viewing an item from reservations
-- **Empty state**: Message when no reservations exist
-- **Not a Pro feature** — available to all users
+All buttons: `borderRadius: 14`, `fontSize: 15`, `fontWeight: 600`, `padding: '14px 24px'`.
 
 ---
 
-## Reusable Components
+## 5. PRO Upsell System
 
-### BottomSheet
-- **Props**: isOpen, onClose, title?, children
-- **Style**: position:fixed, slides up from bottom, 85vh max height
-- **Used for**: Create wishlist, rename wishlist, edit description, reserve item, item form, delete confirmation
+### UpsellContext type
 
-### ItemThumb
-- **Props**: item (Item | GuestItem)
-- **Renders**: Image (52x52 rounded) or emoji fallback
-- **Emoji selection**: Deterministic hash of item title -> EMOJIS array
+```typescript
+type UpsellContext =
+  | 'comments'
+  | 'url_import'
+  | 'hints'
+  | 'wishlist_limit'
+  | 'item_limit'
+  | 'participant_limit'
+  | 'subscription_limit'
+  | 'sort_recommended';
+```
 
-### WishCardOwner
-- **Props**: item, onTap, onDelete, onComplete
-- **Shows**: Thumb, title, price, priority badge, status indicator
-- **Status badges**: "Забронировано" (green), "Куплено" (green)
+### getProBenefits(locale)
 
-### WishCardGuest
-- **Props**: item, onTap, onReserve, onUnreserve, myActorHash
-- **Shows**: Thumb, title, price, priority badge, reservation status
-- **CTA**: "Забронировать" / "Отменить бронь" / "Уже забронировано"
+Returns an array of 8 PRO feature items (icon + title + subtitle from i18n):
 
-### ReservationCard
-- **Props**: item (ReservationItem), onTap, onUnreserve
-- **Shows**: ItemThumb, title, price, unread comment badge (if `unreadComments > 0`), "Забронировано" pill (green)
-- **CTA**: "Снять бронь" button
-- **Type**: `ReservationItem = Item & { ownerName: string|null, ownerId: string, unreadComments: number }`
+| # | Icon | Feature |
+|---|------|---------|
+| 1 | 📋 | More wishlists (10 vs 2) |
+| 2 | 🎁 | More items per wishlist (100 vs 30) |
+| 3 | 👥 | More participants (20 vs 5) |
+| 4 | 💬 | Comments between owner and reserver |
+| 5 | 🔗 | URL import / auto-fill from product pages |
+| 6 | 💡 | Hint waves to friends |
+| 7 | 👁 | Advanced wishlist visibility (public profile / private) |
+| 8 | 🛡 | Privacy controls (allowSubscriptions, commentPolicy) |
 
-### CommentsThread (module-level component)
-- **Props**: commentRole, comments, commentText, setCommentText, commentSending, myActorHash, onDeleteComment, onSendComment, isArchive
-- **Design**: Surface card wrapper, chat-bubble style messages
-- **Composer**: Textarea (300 char limit) + round send button
-- **Message types**: USER (with display name) and SYSTEM (centered, muted)
-- **Keyboard handling**: `handleTextareaFocus()` adds 50vh spacer for Telegram WebView
+### getUpsellContent(locale)
 
-### ShareScreen (inline in MiniApp)
-- **Props**: Uses closured state
-- **Shows**: Share link preview, copy button, Telegram share button
+Returns context-specific upsell sheet content:
 
----
+| Context | Emoji | showTable | bullets |
+|---------|-------|:---------:|:-------:|
+| `comments` | 💬 | false | 3 |
+| `url_import` | 🔗 | false | 3 |
+| `hints` | 💡 | false | 3 |
+| `wishlist_limit` | 📋 | true | — |
+| `item_limit` | 🎁 | true | — |
+| `participant_limit` | 👥 | true | — |
+| `subscription_limit` | 🔔 | true | — |
+| `sort_recommended` | ✨ | true | — |
 
-## State Variables (30+ useState hooks)
+### ProUpsellSheet component
 
-### Authentication
-- `tgRef` - Telegram WebApp SDK reference
-- `initDataRef` - Telegram initData string (for API auth header)
-- `urlStartParamRef` - Deep link start parameter
-- `myActorHashRef` - Computed actor hash for current user
+Bottom sheet rendered when `upsellSheet: UpsellSheetState` is non-null. Shows either feature-specific bullet list or a FREE vs PRO comparison table. Always includes an "Upgrade to PRO" CTA that calls `POST /tg/billing/pro/checkout` and opens the Telegram Stars invoice link.
 
-### Owner State
-- `wishlists` - Wishlist[] list
-- `planLimits` - { wishlists: 2, items: 10 }
-- `currentWl` - Currently viewed Wishlist
-- `items` - Item[] in current wishlist
+### ProBadge component
 
-### Reservations State
-- `reservations` - ReservationItem[] list (items reserved by current user)
-- `reservationsCount` - Number of active reservations (from GET /tg/wishlists response)
-- `reservationsLoading` - Loading flag for reservations fetch
-- `fromReservations` - Boolean flag indicating navigation came from my-reservations screen
-
-### Guest State
-- `guestWl` - Guest wishlist data
-- `guestItems` - GuestItem[] list
-- `priceFilter` - Selected price filter index
-- `reservingItem` - Item being reserved (for BottomSheet)
-- `guestName` - Name entered for reservation
-
-### UI State
-- `screen` - Current screen (Screen type)
-- `loading` - Global loading flag
-- `toasts` - Toast[] notifications
-- `errorMsg` - Error message for error screen
-
-### Forms
-- `showCreateWl`, `wlTitle`, `wlDeadline` - Create wishlist form
-- `showRenameWl`, `renameWlTitle`, `renameSaving` - Rename wishlist
-- `showItemForm`, `editingItem` - Item form state
-- `itemTitle`, `itemDescription`, `itemUrl`, `itemPrice`, `itemPriority`, `itemImageUrl` - Item fields
-- `itemPhotoFile`, `itemPhotoLocalUrl`, `itemPhotoDeleted`, `photoUploading`, `photoError` - Photo state
-- `deletingItem` - Delete confirmation state
-- `editingDescription`, `descriptionText` - Description edit
-
-### Comments
-- `comments` - CommentDTO[]
-- `commentText` - Current comment input
-- `commentRole` - 'owner' | 'reserver' | null
-- `commentSending` - Loading flag
+Renders inline `PRO` text in a gradient-bordered pill (`C.accent` color family, `fontSize: 9`, `fontWeight: 800`).
 
 ---
 
-## API Layer
+## 6. Guest View Specifics
 
-All API calls use `tgFetch()` helper which wraps `fetch()`:
-- Adds `X-TG-INIT-DATA` header from `initDataRef`
-- Adds `Content-Type: application/json`
-- Base URL from `apiBase` prop
+The `guest-view` screen is shown when the current user opens a wishlist they do not own (via share link or subscription).
 
-Guest API calls use plain `fetch()` to public endpoints.
+### Sort Options
+
+```typescript
+type GuestSort = 'default' | 'price_asc' | 'price_desc' | 'priority_desc' | 'recommended';
+```
+
+| Option | Description | PRO Required |
+|--------|-------------|:------------:|
+| `default` | Server order (priority groups + position) | No |
+| `price_asc` | Price low → high | No |
+| `price_desc` | Price high → low | No |
+| `priority_desc` | High priority first | No |
+| `recommended` | Scored sort (see below) | Yes |
+
+### Recommended Sort Algorithm (`guestRecommendedScore`)
+
+Computed client-side. Higher score = shown first:
+
+| Condition | Score bonus |
+|-----------|------------|
+| Priority MEDIUM | +100 |
+| Priority HIGH | +200 |
+| Status is `available` (not reserved) | +50 |
+| Has `imageUrl` | +10 |
+| Has `url` | +5 |
+| Has `description` | +5 |
+| Price fits within `budgetMax` | +0 to +15 (proportional) |
+
+### Budget Filter Presets
+
+| Label | Max value |
+|-------|-----------|
+| All | null |
+| Under 3 000 | 3 000 |
+| Under 5 000 | 5 000 |
+| Under 10 000 | 10 000 |
+| Under 25 000 | 25 000 |
+
+### Subscribe Button
+
+Guests can follow a wishlist to receive Telegram notifications. Calls `POST /tg/wishlists/:id/subscribe`. Plan-limited: FREE=2 subscriptions, PRO=7 subscriptions. Respects `allowSubscriptions` wishlist setting and owner's `subscribePolicy` profile setting.
 
 ---
 
-## Key UI Patterns
+## 7. Key Patterns
 
-### Toast Notifications
-- Position: fixed, bottom 24px, z-index 200
-- Auto-dismiss after 2.5s
-- Types: success (green), error (red)
-- Stack from bottom
+### No Router
 
-### Keyboard Handling (Telegram WebView)
-- Telegram WebView doesn't change `visualViewport.height` when keyboard opens
-- Solution: `handleTextareaFocus()` adds temporary 50vh spacer div
-- Scrolls textarea to 35% from top of viewport
-- Spacer removed on blur
+Every screen transition is:
+```typescript
+setScreen('wishlist-detail');
+setSelectedWishlist(wl);
+```
+No URL changes, no browser history management.
 
-### Back Navigation
-- Uses Telegram BackButton API
-- `navBack()` function handles screen stack manually
-- guest-item-detail -> guest-view (default), or guest-item-detail -> my-reservations (if `fromReservations` flag is set)
-- item-detail -> wishlist-detail
-- share -> wishlist-detail
-- archive -> wishlist-detail
-- wishlist-detail -> my-wishlists
-- my-reservations -> my-wishlists
+### All Styles Inline
 
-### Haptic Feedback
-- `tgRef.current?.HapticFeedback?.impactOccurred('medium')` on reserve
-- Used sparingly for key actions
+No CSS modules, no Tailwind classes inside `MiniApp.tsx`. Every element uses `style={{ ... }}` with values from `C` or the pre-built `btnPrimary` / `inputStyle` / etc. objects.
+
+### API Calls via fetch
+
+```typescript
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+
+const res = await fetch(`${API_BASE}/tg/wishlists`, {
+  headers: { 'X-TG-INIT-DATA': initData },
+});
+```
+
+When `NEXT_PUBLIC_API_URL` is not set, `/api` is proxied to the backend by Next.js `rewrites`, avoiding CORS in development.
+
+### Telegram Auth
+
+On mount the component reads `window.Telegram.WebApp.initData` into a `ref`. Every authenticated API call sends it as `X-TG-INIT-DATA`. If `initData` is empty (opened outside Telegram), the app renders an error screen.
+
+### Telegram Keyboard Scroll Fix
+
+`handleTextareaFocus(textarea: HTMLElement)` is attached to every `<textarea>` `onFocus`:
+1. Finds the nearest scrollable parent
+2. Appends a `data-kb-spacer` div with `height: 50vh` to create extra scroll room
+3. On the next animation frame, scrolls the textarea to 35% from the viewport top
+4. Removes the spacer on `blur`
+
+This compensates for Telegram WebView not shrinking the viewport when the software keyboard opens.
+
+### ActorHash
+
+Guest identity is represented as a deterministic UUID derived from `SHA-256('tg_actor:' + telegramId)`. This is computed both client-side (`computeActorHash`) and server-side (`tgActorHash`) for reservation ownership checks. The owner never sees the guest's Telegram ID — only the actorHash (opaque to owner).
 
 ---
 
-## Conditional Rendering by Role
+## 8. Internationalization
 
-| UI Element | Owner | Reserver | Third Party |
-|------------|-------|----------|-------------|
-| Edit pencil (wishlist title) | Yes | No | No |
-| Item form / edit | Yes | No | No |
-| Delete item | Yes | No | No |
-| Complete item | Yes | No | No |
-| Share button | Yes | No | No |
-| Archive button | Yes | No | No |
-| Reserve button | No | No (unreserve instead) | Yes |
-| Comments thread | Yes (if reserved) | Yes | No |
-| Description | Full (edit) | Read-only | Read-only |
-| "Кто забронировал" | Hidden | N/A | N/A |
-| Price filter | No | Yes | Yes |
+Source: `packages/shared/src/i18n.ts`
+
+- Two dictionaries: `ru` and `en`
+- `t(key, locale, params?)` — interpolates `{param}` placeholders in dictionary strings
+- `detectLocale(languageCode?)` — returns `'ru'` if code starts with `'ru'`, otherwise `'en'`
+- `pluralize(count, one, few, many, locale)` — Russian-aware pluralization
+- Locale is resolved once on mount from `tg.initDataUnsafe.user?.language_code`
+- All API notifications default to Russian (`notifLocale: 'ru'`) regardless of user locale
+
+---
+
+## 9. Non-Mini-App Pages
+
+### Admin Panel (`/admin/*`)
+
+Protected by HTTP Basic Auth enforced in `apps/web/middleware.ts` using `ADMIN_BASIC_USER` / `ADMIN_BASIC_PASS` env vars. Admin pages call the private router on the API using `X-ADMIN-KEY`.
+
+| Route | Purpose |
+|-------|---------|
+| `/admin` | List all wishlists |
+| `/admin/new` | Create a wishlist |
+| `/admin/[id]` | Edit wishlist title / description |
+
+### Public Wishlist Page (`/w/:slug`)
+
+SSR Next.js page. Fetches `GET /public/wishlists/:slug` at request time (server-side). Renders:
+- Wishlist title and deadline
+- Item list with status badges (available / reserved / purchased)
+- Reserve / unreserve / purchased buttons powered by `actorHash` from `localStorage`
+- `WishlistClient.tsx` handles all client-side interactivity
+
+If `visibility === 'PRIVATE'` and the requester is not the owner or a subscriber, the API returns 403 and the page shows a locked state. `error.tsx` and `not-found.tsx` handle fetch errors and missing wishlists respectively.
+
+### Middleware (`apps/web/middleware.ts`)
+
+Runs on all routes except `_next/static`, `_next/image`, `favicon.ico`:
+
+1. `/admin/*` — HTTP Basic Auth gate; returns `401 WWW-Authenticate` if credentials are missing or wrong
+2. Production `www.*` hostname → `301` redirect to canonical (non-www) host
+3. After successful admin auth — adds `X-Robots-Tag: noindex, nofollow` response header

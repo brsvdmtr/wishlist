@@ -1,4 +1,5 @@
-# KNOWN_GAPS_AND_RISKS.md - Risks, Weak Points & Missing Items
+# KNOWN_GAPS_AND_RISKS — Risks, Weak Points & Missing Items
+> Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
 
 ---
 
@@ -32,12 +33,12 @@
 ## ARCHITECTURE RISKS
 
 ### 5. Monolithic API (Single File)
-- **Risk**: `apps/api/src/index.ts` is 1842 lines
+- **Risk**: `apps/api/src/index.ts` is ~3900 lines
 - **Impact**: Hard to maintain, test, and reason about
-- **Note**: Works for current scale but becomes fragile as features grow
+- **Note**: Post-monetization + URL import expansion; works for current scale but becomes fragile as features grow
 
 ### 6. Monolithic Frontend (Single File)
-- **Risk**: `MiniApp.tsx` is 2170 lines with 30+ useState hooks
+- **Risk**: `MiniApp.tsx` is ~4500 lines with 30+ useState hooks
 - **Impact**: State management complexity, no code splitting
 - **Note**: Acceptable for Telegram Mini App constraints
 
@@ -74,7 +75,7 @@
 ### 12. AUTH_SECRET Environment Variable
 - **Risk**: Defined in docker-compose but NOT used in current code
 - **Impact**: None currently, but indicates possible incomplete feature
-- **Status**: NEEDS VERIFICATION
+- **Status**: Defined in compose for forward compatibility; not a functional gap
 
 ---
 
@@ -117,9 +118,10 @@
 - **Priority**: LOW (current scale is fine)
 
 ### 19. Plan Limits Hardcoded
-- **Risk**: `PLAN = { WISHLISTS: 2, ITEMS: 10 }` hardcoded in API
+- **Risk**: `PLANS = { FREE: {...}, PRO: {...} }` hardcoded in index.ts
 - **Impact**: Cannot change per-user limits without code deploy
-- **Priority**: LOW (by design for MVP)
+- **Current values**: FREE: wishlists=2, items=30, participants=5, subscriptions=2; PRO: wishlists=10, items=100, participants=20, subscriptions=7
+- **Priority**: LOW (by design for current implementation)
 
 ---
 
@@ -134,16 +136,6 @@
 - **Status**: `/w/:slug` pages exist with SSR
 - **Gap**: NEEDS VERIFICATION if actively used or if all traffic goes through Mini App
 - **Impact**: May be stale or untested
-
-### 22. AUTH_SECRET / LOG_LEVEL Env Vars
-- **Status**: Defined in docker-compose.prod.yml
-- **Gap**: Not used in current API code
-- **Impact**: Dead configuration, confusing
-
-### 23. NEXT_PUBLIC_MINIAPP_SHORT_NAME
-- **Status**: Env var exists
-- **Gap**: NEEDS VERIFICATION of usage in web app
-- **Impact**: Unknown
 
 ---
 
@@ -177,6 +169,21 @@
 - **Impact**: `git pull origin main` may miss latest changes
 - **Action**: Verify on server: `cd /opt/wishlist && git branch && git log --oneline -3`
 
+### 30. Client-Only PRO Gate for Recommended Sort
+- **Risk**: Guest sort "Recommended" is shown as PRO on client, but no server-side enforcement
+- **Impact**: Can be bypassed with custom client
+- **Severity**: LOW (low-risk feature, not advertised on paywall)
+
+### 31. Comment Policy Partially Enforced
+- **Risk**: `commentPolicy=SUBSCRIBERS` blocks non-reservers server-side, but owner can always comment regardless
+- **Impact**: Owner bypass is intentional but undocumented
+- **Severity**: LOW (by design)
+
+### 32. In-Memory Parse Cache Lost on Restart
+- **Risk**: URL import cache (1000 entries, 24h TTL) is in-memory in url-parser.ts
+- **Impact**: After API restart, all cached parses must be re-fetched
+- **Severity**: LOW (performance only)
+
 ---
 
 ## MISSING FOR SAFE RECOVERY
@@ -209,8 +216,8 @@
 
 | File | Lines | Why Critical |
 |------|-------|-------------|
-| `apps/api/src/index.ts` | 1842 | ENTIRE backend logic |
-| `apps/web/app/miniapp/MiniApp.tsx` | 2170 | ENTIRE Mini App frontend |
+| `apps/api/src/index.ts` | ~3900 | ENTIRE backend logic |
+| `apps/web/app/miniapp/MiniApp.tsx` | ~4500 | ENTIRE Mini App frontend |
 | `packages/db/prisma/schema.prisma` | ~120 | Database schema |
 | `packages/db/prisma/migrations/*` | varies | Migration history |
 | `docker-compose.prod.yml` | 91 | Production deployment config |

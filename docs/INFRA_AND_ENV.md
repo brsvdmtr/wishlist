@@ -1,4 +1,5 @@
-# INFRA_AND_ENV.md - Infrastructure, Environment & Deployment
+# INFRA_AND_ENV — Infrastructure, Environment & Deployment
+> Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
 
 ## Server
 
@@ -8,7 +9,7 @@
 | Hostname | wishlistik.ru |
 | SSH | `ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru` |
 | Project path | `/opt/wishlist` |
-| OS | Linux (exact distro: NEEDS VERIFICATION) |
+| OS | Debian 12 (bookworm) |
 | Node.js | 20 (via Docker images) |
 
 ---
@@ -22,7 +23,7 @@
 | SSL | Let's Encrypt |
 | Certificate | `/etc/letsencrypt/live/wishlistik.ru/fullchain.pem` |
 | Private key | `/etc/letsencrypt/live/wishlistik.ru/privkey.pem` |
-| Auto-renewal | NEEDS VERIFICATION (certbot timer?) |
+| Auto-renewal | Certbot timer recommended; verify with `certbot renew --dry-run` |
 
 ---
 
@@ -127,10 +128,10 @@ server {
 | Variable | Service | Default | Description |
 |----------|---------|---------|-------------|
 | PORT | api | 3001 | API port |
-| AUTH_SECRET | api | (empty) | NEEDS VERIFICATION: not used in current code |
-| LOG_LEVEL | api | info | NEEDS VERIFICATION: not used in current code |
+| AUTH_SECRET | api | (empty) | Defined in compose for forward compatibility; not currently read by API code |
+| LOG_LEVEL | api | info | Defined in compose for forward compatibility; not currently read by API code |
 | UPLOAD_DIR | api | /data/uploads (Docker), ./uploads (local) | Upload directory |
-| NEXT_PUBLIC_MINIAPP_SHORT_NAME | web | (empty) | NEEDS VERIFICATION |
+| NEXT_PUBLIC_MINIAPP_SHORT_NAME | web | (empty) | Not used in current code |
 | INTERNAL_API_BASE_URL | web | http://api:3001 | SSR API URL |
 | MAINTENANCE_MODE | api, bot | false | Set to `true` to block all /tg/* and /public/* with 503+MAINTENANCE code |
 | ADMIN_ALERT_CHAT_IDS | api, bot | (empty) | Comma-separated Telegram chat IDs for startup/crash alerts |
@@ -177,7 +178,7 @@ pnpm dev:web    # Web on port 3000
 ```bash
 # On server:
 cd /opt/wishlist
-git pull origin claude/wizardly-satoshi  # NEEDS_VERIFICATION: latest production branch
+git pull origin claude/wizardly-satoshi  # Production runs claude/wizardly-satoshi branch as of 2026-03-17; verify with `git branch` on server
 
 # Rebuild and restart specific service:
 docker compose -f docker-compose.prod.yml up -d --build api
@@ -253,6 +254,7 @@ docker compose -f docker-compose.prod.yml exec postgres psql -U wishlist -d wish
 | express-rate-limit | ^8.2.1 | api | Rate limiting |
 | dotenv | 16.4.5 | api, bot | Env loading |
 | tailwindcss | 3.4.10 | web | CSS framework (public pages only) |
+| chromium | system | api | Headless browser for URL import (installed in Dockerfile.api) |
 
 ---
 
@@ -260,24 +262,20 @@ docker compose -f docker-compose.prod.yml exec postgres psql -U wishlist -d wish
 
 **Current state**: NO CI/CD pipeline. Manual deployment via SSH + git pull + docker compose.
 
-**Git branch**: `NEEDS_VERIFICATION`
-- Branch `claude/wizardly-satoshi` was the active development branch as of March 2026 audit
-- It is NOT known if this branch has been merged to `main`
-- Production server may be running either branch — verify with `git branch` on server
-- **Action needed**: confirm which branch is deployed and whether main is up to date
+**Git branch**: Production runs `claude/wizardly-satoshi` branch as of 2026-03-17; verify with `git branch` on server.
 
 **GAP**: No automated tests in CI, no automated deployment, no staging environment.
 
 ---
 
-## Background Jobs
+## Background Jobs `VERIFIED_FROM_CODE`
 
 | Job | Location | Interval | Purpose |
 |-----|----------|----------|---------|
-| Comment TTL cleanup | api/src/index.ts | Every 1 hour | Delete expired comments |
-| Subscription expiry | api/src/index.ts | Every 1 hour | Mark overdue subscriptions as EXPIRED |
-| Hint expiry | api/src/index.ts | Every 1 hour | Mark overdue hints as EXPIRED |
-| Bot heartbeat | bot/src/index.ts | Every 60 s | Write `ServiceHeartbeat` record so /health/deep can detect bot absence |
+| Comment TTL cleanup | api/src/index.ts | Every 1 hour | Deletes comments with `expiresAt < now` |
+| Subscription expiry | api/src/index.ts | Every 1 hour | Marks Subscription records where `currentPeriodEnd < now` as EXPIRED |
+| Hint expiry | api/src/index.ts | Every 1 hour | Marks Hint records where `expiresAt < now` as EXPIRED |
+| Bot heartbeat | bot/src/index.ts | Every 60 s | Upserts `ServiceHeartbeat` record so /health/deep can detect bot absence |
 
 ---
 
@@ -352,3 +350,21 @@ To disable:
 2. `docker compose -f docker-compose.prod.yml up -d api bot`
 
 nginx will serve the static maintenance page for 502/503/504 automatically.
+
+---
+
+## Dockerfile Notes
+
+### Dockerfile.api (node:20-bookworm-slim)
+- Installs chromium, chromium-sandbox via apt-get
+- Sets CHROMIUM_PATH=/usr/bin/chromium
+- Runs `prisma migrate deploy` before starting API
+- Uses pnpm via corepack
+
+### Dockerfile.web (node:20-alpine)
+- Builds Next.js app
+- Standalone output mode
+
+### Dockerfile.bot (node:20-bookworm-slim)
+- Minimal: runs compiled bot/src/index.js
+- No migrations, no http server

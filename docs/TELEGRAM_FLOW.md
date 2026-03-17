@@ -1,4 +1,5 @@
-# TELEGRAM_FLOW.md - Telegram Bot & Mini App Integration
+# TELEGRAM_FLOW — Telegram Bot & Mini App Integration
+> Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
 
 ## Bot Overview
 
@@ -126,7 +127,7 @@ buildTgShareUrl(url, text)
 ### BackButton Management
 ```
 Shown on: wishlist-detail, item-detail, share, guest-view,
-          guest-item-detail, archive
+          guest-item-detail, archive, settings
 Hidden on: my-wishlists, loading, error
 
 onClick handlers:
@@ -180,6 +181,7 @@ In non-production (NODE_ENV !== 'production'):
 | Comment (owner -> reserver) | Reserver | `💬 Автор прокомментировал «{title}»:\n{text}` |
 | Description updated | Reserver | `📝 Описание обновлено в «{title}»` |
 | Batch comments | Recipient | `💬 У вас {N} новых комментариев в «{title}»` |
+| Wishlist item added/removed/reserved | Subscriber | `🔔 В вишлисте «{title}» у {ownerName} появилось новое желание` |
 
 ### Display Name Source
 - **Reservation notifications**: `displayName` from reserve request body
@@ -192,6 +194,51 @@ In non-production (NODE_ENV !== 'production'):
 - Subsequent within window: count accumulated
 - After 30s: sends batch summary if count > 0
 - In-memory (Map) - lost on server restart (acceptable)
+
+---
+
+## Support Ticket Bridge
+
+A ForceReply-based bridge between user DMs and a Telegram support group.
+
+### Flow:
+1. User sends message to bot (any text, not a command)
+2. Bot routes message to SUPPORT_GROUP_CHAT_ID (env var)
+   → Forwards to group with user's Telegram profile link
+3. Support team replies to the forwarded message in the group
+4. Bot detects reply to forwarded message
+   → Sends reply to original user's chatId via bot.telegram.sendMessage
+5. User receives support reply in bot DM
+
+### Configuration:
+- `SUPPORT_GROUP_CHAT_ID` env var — Telegram group/channel chat ID
+- Support team must have `SUPPORT_GROUP_CHAT_ID` configured
+- Bot must be admin in the support group
+
+### Notes:
+- One-directional: user → group → user
+- Reply routing uses `reply_to_message.forward_origin` to identify original user
+- No ticket IDs or threading beyond Telegram message replies
+
+---
+
+## Telegram Billing Webhooks
+
+### Pre-checkout Query
+- Telegram sends `pre_checkout_query` when user confirms payment intent
+- Bot must answer within 10 seconds: `bot.telegram.answerPreCheckoutQuery(id, true)`
+- If not answered: payment fails on user side
+
+### Successful Payment
+- Telegram sends `message.successful_payment` after Stars payment
+- Bot calls: `POST {API_BASE_URL}/internal/activate-subscription`
+  Body: `{ telegramId, chargeId, amount, currency }`
+- API creates/extends Subscription record
+
+### Internal activate-subscription endpoint
+- `POST /internal/activate-subscription`
+- Requires `Authorization: Bearer {ADMIN_KEY}`
+- Creates or extends Subscription with 30-day period
 
 ---
 
