@@ -386,7 +386,6 @@ function BottomSheet({ isOpen, onClose, title, children }: {
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
-  const [dragOffset, setDragOffset] = useState(0);
   // Keep onClose stable inside native listeners without re-subscribing
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
@@ -401,83 +400,92 @@ function BottomSheet({ isOpen, onClose, title, children }: {
   }, [isOpen]);
 
   // Sheet: take FULL ownership of scrolling + swipe-to-dismiss.
-  // iOS WKWebView (used by Telegram) claims the touch gesture once native scroll
-  // starts and stops honouring preventDefault() in subsequent touchmove events.
-  // The only reliable fix: always preventDefault and drive el.scrollTop manually.
-  // This gives us full control over the scroll↔dismiss transition at any point
-  // in the gesture, including mid-gesture direction reversals.
+  // iOS WKWebView (Telegram) claims the gesture once native scroll starts and
+  // stops honouring preventDefault() after that point. Fix: always preventDefault
+  // and drive el.scrollTop + el.style.transform directly — zero React re-renders
+  // in the hot path means buttery-smooth 60 fps on the GPU compositor thread.
   useEffect(() => {
-    const el = sheetRef.current;
-    if (!el || !isOpen) return;
+    const sheet = sheetRef.current;
+    if (!sheet || !isOpen) return;
     let prevY: number | null = null;
-    let dismissOffset = 0; // plain var, no stale-closure risk
+    let dismissOffset = 0;
+
+    const setTranslate = (y: number) => {
+      sheet.style.transform = y === 0 ? '' : `translateY(${y}px)`;
+    };
 
     const onStart = (e: TouchEvent) => {
       if (!e.touches[0]) return;
       prevY = e.touches[0].clientY;
       dismissOffset = 0;
+      // Freeze any in-progress spring-back transition
+      sheet.style.transition = 'none';
     };
 
     const onMove = (e: TouchEvent) => {
       if (prevY === null || !e.touches[0]) return;
-      // Always prevent — we own all scroll behaviour on the sheet.
-      // This is the key: iOS cannot claim the gesture after this.
-      e.preventDefault();
+      e.preventDefault(); // always prevent — we own all scroll behaviour
 
       const currentY = e.touches[0].clientY;
       const dy = currentY - prevY; // positive = finger moved down
-      prevY = currentY;            // incremental per-frame delta
+      prevY = currentY;
 
       if (dy < 0) {
-        // Finger moving up → scroll sheet content downward (show more below)
-        el.scrollTop = Math.min(
-          el.scrollTop - dy, // -dy > 0
-          el.scrollHeight - el.clientHeight,
+        // Finger up → scroll content down
+        sheet.scrollTop = Math.min(
+          sheet.scrollTop - dy,
+          sheet.scrollHeight - sheet.clientHeight,
         );
-        // Exit dismiss mode if user reverses direction mid-gesture
         if (dismissOffset > 0) {
           dismissOffset = 0;
-          setDragOffset(0);
+          setTranslate(0);
         }
       } else if (dy > 0) {
-        if (el.scrollTop > 0) {
-          // Finger moving down + content has scroll → scroll content back up
-          const next = el.scrollTop - dy;
+        if (sheet.scrollTop > 0) {
+          // Scroll content back toward top
+          const next = sheet.scrollTop - dy;
           if (next > 0) {
-            el.scrollTop = next;
+            sheet.scrollTop = next;
           } else {
-            // Consumed all scroll; leftover delta becomes the dismiss offset
-            el.scrollTop = 0;
-            dismissOffset = -next; // -next > 0
-            setDragOffset(dismissOffset);
+            // Hit top; leftover delta kicks off dismiss
+            sheet.scrollTop = 0;
+            dismissOffset = -next;
+            setTranslate(dismissOffset);
           }
         } else {
-          // Already at top → dismiss gesture
+          // At top → dismiss gesture
           dismissOffset += dy;
-          setDragOffset(dismissOffset);
+          setTranslate(dismissOffset);
         }
       }
     };
 
     const onEnd = () => {
-      if (dismissOffset > 80) onCloseRef.current();
-      dismissOffset = 0;
-      setDragOffset(0);
       prevY = null;
+      if (dismissOffset > 80) {
+        // Animate slide-out then call onClose (no React state flip needed)
+        sheet.style.transition = 'transform 0.22s ease-in';
+        setTranslate(sheet.offsetHeight + 40);
+        setTimeout(() => onCloseRef.current(), 220);
+      } else if (dismissOffset > 0) {
+        // Spring back
+        sheet.style.transition = 'transform 0.3s cubic-bezier(0.32,0.72,0,1)';
+        setTranslate(0);
+      }
+      dismissOffset = 0;
     };
 
-    el.addEventListener('touchstart', onStart, { passive: true });
-    el.addEventListener('touchmove', onMove, { passive: false });
-    el.addEventListener('touchend', onEnd, { passive: true });
+    sheet.addEventListener('touchstart', onStart, { passive: true });
+    sheet.addEventListener('touchmove', onMove, { passive: false });
+    sheet.addEventListener('touchend', onEnd, { passive: true });
     return () => {
-      el.removeEventListener('touchstart', onStart);
-      el.removeEventListener('touchmove', onMove);
-      el.removeEventListener('touchend', onEnd);
+      sheet.removeEventListener('touchstart', onStart);
+      sheet.removeEventListener('touchmove', onMove);
+      sheet.removeEventListener('touchend', onEnd);
     };
   }, [isOpen]);
 
   if (!isOpen) return null;
-  const dragging = dragOffset > 0;
   return (
     <>
       <div
@@ -491,9 +499,7 @@ function BottomSheet({ isOpen, onClose, title, children }: {
           position: 'fixed', bottom: 0, left: 0, right: 0,
           background: C.surface, borderRadius: '20px 20px 0 0',
           padding: 24, zIndex: 101, maxHeight: '85vh', overflowY: 'auto',
-          animation: dragging ? 'none' : 'slideUp 0.3s ease',
-          transform: `translateY(${dragOffset}px)`,
-          transition: dragging ? 'none' : 'transform 0.25s ease',
+          animation: 'slideUp 0.3s ease',
           willChange: 'transform',
         }}
       >
