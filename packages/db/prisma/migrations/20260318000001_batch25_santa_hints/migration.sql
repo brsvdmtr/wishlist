@@ -4,19 +4,18 @@
 -- with APPROVED/REJECTED statuses and requester/responder relations.
 -- Batch 2.5 replaces this entirely with a wishlist-item-selection model.
 --
--- No production data in santa_hint_requests (endpoints were never implemented in Batch 1),
+-- No production data in SantaHintRequest (endpoints were never implemented in Batch 1),
 -- so DROP + recreate is safe.
 --
 -- STATE MACHINE: PENDING → FULFILLED | EXPIRED | CANCELLED (all terminal)
 -- ANONYMITY: receiverParticipantId / giverParticipantId stored in DB but NEVER exposed
 --            to the opposite party via API.
+--
+-- NOTE: All Santa tables use PascalCase naming (Prisma default, no @@map).
 
--- ─── 1. Drop old hint table ───────────────────────────────────────────────────
--- Batch 1 created the table as "SantaHintRequest" (Prisma PascalCase default).
--- Batch 2.5 renames to "santa_hint_requests" via @@map. Drop both names defensively.
+-- ─── 1. Drop old hint table (Batch 1 stub) ────────────────────────────────────
 
 DROP TABLE IF EXISTS "SantaHintRequest" CASCADE;
-DROP TABLE IF EXISTS "santa_hint_requests" CASCADE;
 
 -- ─── 2. Replace SantaHintStatus enum ─────────────────────────────────────────
 
@@ -29,9 +28,9 @@ CREATE TYPE "SantaHintStatus" AS ENUM (
   'CANCELLED'   -- campaign cancelled or draw context invalidated (terminal)
 );
 
--- ─── 3. Create new santa_hint_requests table ─────────────────────────────────
+-- ─── 3. Create new SantaHintRequest table ─────────────────────────────────────
 
-CREATE TABLE "santa_hint_requests" (
+CREATE TABLE "SantaHintRequest" (
   "id"                    TEXT         NOT NULL,
   "campaignId"            TEXT         NOT NULL,
   "roundId"               TEXT         NOT NULL,
@@ -49,56 +48,56 @@ CREATE TABLE "santa_hint_requests" (
   -- Prevents duplicate HINT_REQUEST notifications to receiver on idempotent retry
   "notificationSentAt"    TIMESTAMP(3),
 
-  CONSTRAINT "santa_hint_requests_pkey" PRIMARY KEY ("id")
+  CONSTRAINT "SantaHintRequest_pkey" PRIMARY KEY ("id")
 );
 
 -- ─── 4. Indexes ───────────────────────────────────────────────────────────────
 
 -- Giver-side lookup: find my hint(s) for a given assignment
-CREATE INDEX "santa_hint_requests_assignmentId_status_idx"
-  ON "santa_hint_requests"("assignmentId", "status");
+CREATE INDEX "SantaHintRequest_assignmentId_status_idx"
+  ON "SantaHintRequest"("assignmentId", "status");
 
 -- Receiver-side lookup: find pending hints for a given receiver participant
-CREATE INDEX "santa_hint_requests_receiverParticipantId_status_idx"
-  ON "santa_hint_requests"("receiverParticipantId", "status");
+CREATE INDEX "SantaHintRequest_receiverParticipantId_status_idx"
+  ON "SantaHintRequest"("receiverParticipantId", "status");
 
 -- Campaign-centric receiver lookup (primary receiver endpoint path)
-CREATE INDEX "santa_hint_requests_campaignId_receiverParticipantId_status_idx"
-  ON "santa_hint_requests"("campaignId", "receiverParticipantId", "status");
+CREATE INDEX "SantaHintRequest_campaignId_receiverParticipantId_status_idx"
+  ON "SantaHintRequest"("campaignId", "receiverParticipantId", "status");
 
 -- TTL expiry job: find PENDING hints past their TTL
-CREATE INDEX "santa_hint_requests_expiresAt_status_idx"
-  ON "santa_hint_requests"("expiresAt", "status");
+CREATE INDEX "SantaHintRequest_expiresAt_status_idx"
+  ON "SantaHintRequest"("expiresAt", "status");
 
 -- ─── 5. Foreign key constraints ──────────────────────────────────────────────
 
 -- Campaign: cascade-delete all hints when campaign is deleted
-ALTER TABLE "santa_hint_requests"
-  ADD CONSTRAINT "santa_hint_requests_campaignId_fkey"
-  FOREIGN KEY ("campaignId") REFERENCES "santa_campaigns"("id")
+ALTER TABLE "SantaHintRequest"
+  ADD CONSTRAINT "SantaHintRequest_campaignId_fkey"
+  FOREIGN KEY ("campaignId") REFERENCES "SantaCampaign"("id")
   ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Round: cascade-delete hints when round is deleted (draw reset scenario)
-ALTER TABLE "santa_hint_requests"
-  ADD CONSTRAINT "santa_hint_requests_roundId_fkey"
-  FOREIGN KEY ("roundId") REFERENCES "santa_rounds"("id")
+ALTER TABLE "SantaHintRequest"
+  ADD CONSTRAINT "SantaHintRequest_roundId_fkey"
+  FOREIGN KEY ("roundId") REFERENCES "SantaRound"("id")
   ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Assignment: cascade-delete hints when assignment is deleted (draw reset)
 -- This is the primary draw-reset guard: deleted assignments → deleted hints
-ALTER TABLE "santa_hint_requests"
-  ADD CONSTRAINT "santa_hint_requests_assignmentId_fkey"
-  FOREIGN KEY ("assignmentId") REFERENCES "santa_assignments"("id")
+ALTER TABLE "SantaHintRequest"
+  ADD CONSTRAINT "SantaHintRequest_assignmentId_fkey"
+  FOREIGN KEY ("assignmentId") REFERENCES "SantaAssignment"("id")
   ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Giver participant: cascade-delete if participant removed
-ALTER TABLE "santa_hint_requests"
-  ADD CONSTRAINT "santa_hint_requests_giverParticipantId_fkey"
-  FOREIGN KEY ("giverParticipantId") REFERENCES "santa_participants"("id")
+ALTER TABLE "SantaHintRequest"
+  ADD CONSTRAINT "SantaHintRequest_giverParticipantId_fkey"
+  FOREIGN KEY ("giverParticipantId") REFERENCES "SantaParticipant"("id")
   ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Receiver participant: cascade-delete if participant removed
-ALTER TABLE "santa_hint_requests"
-  ADD CONSTRAINT "santa_hint_requests_receiverParticipantId_fkey"
-  FOREIGN KEY ("receiverParticipantId") REFERENCES "santa_participants"("id")
+ALTER TABLE "SantaHintRequest"
+  ADD CONSTRAINT "SantaHintRequest_receiverParticipantId_fkey"
+  FOREIGN KEY ("receiverParticipantId") REFERENCES "SantaParticipant"("id")
   ON DELETE CASCADE ON UPDATE CASCADE;
