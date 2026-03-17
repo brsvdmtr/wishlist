@@ -236,7 +236,7 @@ type CommentDTO = {
 };
 
 type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile';
-type Toast = { id: string; message: string; kind: 'success' | 'error' };
+type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
   const data = new TextEncoder().encode(`tg_actor:${telegramId}`);
@@ -990,7 +990,7 @@ function getAddonOffers(locale: Locale): Record<string, { title: string; tag: st
 // PRO UPSELL SHEET (context-aware)
 // ═══════════════════════════════════════════════════════
 
-function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, availableSkus, locale }: {
+function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, availableSkus, cappedAddonCodes, locale }: {
   state: UpsellSheetState;
   onClose: () => void;
   onUpgrade: () => void;
@@ -998,6 +998,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
   onBuyAddon: (skuCode: string, targetId?: string) => void;
   addonCheckoutLoading: boolean;
   availableSkus: SkuInfo[];
+  cappedAddonCodes: string[];
   locale: Locale;
 }) {
   const content = state ? getUpsellContent(locale)[state.context] : null;
@@ -1120,53 +1121,67 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
                   {skusToShow.map(sku => {
                     const offer = offers[sku.code];
                     if (!offer) return null;
+                    const isCapped = cappedAddonCodes.includes(sku.code);
                     return (
                       <div
                         key={sku.code}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 12,
-                          background: C.surface,
+                          background: isCapped ? C.card : C.surface,
                           borderRadius: 14,
                           padding: '12px 14px',
-                          border: `1px solid ${C.border}`,
+                          border: `1px solid ${isCapped ? C.borderLight : C.border}`,
                           textAlign: 'left',
+                          opacity: isCapped ? 0.7 : 1,
                         }}
                       >
-                        {/* Left: title + tag */}
+                        {/* Left: title + tag (or cap message) */}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: isCapped ? C.textSec : C.text, lineHeight: 1.3 }}>
                             {offer.title}
                           </div>
                           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3, lineHeight: 1.4 }}>
-                            {offer.tag}
+                            {isCapped ? t('addon_cap_reached_sub', locale) : offer.tag}
                           </div>
                         </div>
 
-                        {/* Right: price + buy button */}
+                        {/* Right: cap badge OR price + buy button */}
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: C.textSec, whiteSpace: 'nowrap' }}>
-                            {sku.price} ⭐
-                          </div>
-                          <button
-                            onClick={() => onBuyAddon(sku.code, state?.wishlistId)}
-                            disabled={isLoading}
-                            style={{
-                              background: isLoading ? C.surface : C.accentSoft,
-                              color: C.accent,
-                              border: `1px solid ${C.accent}40`,
-                              borderRadius: 8,
-                              padding: '5px 12px',
-                              fontSize: 13,
-                              fontWeight: 700,
-                              cursor: isLoading ? 'default' : 'pointer',
-                              fontFamily: font,
-                              whiteSpace: 'nowrap',
-                              opacity: isLoading ? 0.5 : 1,
-                              transition: 'opacity 0.15s',
-                            }}
-                          >
-                            {addonCheckoutLoading ? '…' : t('addon_cta_buy', locale)}
-                          </button>
+                          {isCapped ? (
+                            <div style={{
+                              fontSize: 12, fontWeight: 600, color: C.textSec,
+                              background: C.surface, border: `1px solid ${C.border}`,
+                              borderRadius: 8, padding: '5px 10px', whiteSpace: 'nowrap',
+                            }}>
+                              {t('addon_cap_reached', locale)}
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: C.textSec, whiteSpace: 'nowrap' }}>
+                                {sku.price} ⭐
+                              </div>
+                              <button
+                                onClick={() => onBuyAddon(sku.code, state?.wishlistId)}
+                                disabled={isLoading}
+                                style={{
+                                  background: isLoading ? C.surface : C.accentSoft,
+                                  color: C.accent,
+                                  border: `1px solid ${C.accent}40`,
+                                  borderRadius: 8,
+                                  padding: '5px 12px',
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  cursor: isLoading ? 'default' : 'pointer',
+                                  fontFamily: font,
+                                  whiteSpace: 'nowrap',
+                                  opacity: isLoading ? 0.5 : 1,
+                                  transition: 'opacity 0.15s',
+                                }}
+                              >
+                                {addonCheckoutLoading ? '…' : t('addon_cta_buy', locale)}
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -1229,6 +1244,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [addonCheckoutLoading, setAddonCheckoutLoading] = useState(false);
   // Wishlist picker for item-scoped SKUs when user has multiple wishlists
   const [wishlistPickerSku, setWishlistPickerSku] = useState<string | null>(null);
+  // Track which addon SKU codes have hit their purchase cap this session
+  const [cappedAddonCodes, setCappedAddonCodes] = useState<string[]>([]);
   const [addOns, setAddOns] = useState<AddOnsInfo>({ extraWishlistSlots: 0, extraSubscriptionSlots: 0, seasonalWishlists: [] });
   const [credits, setCredits] = useState<CreditsInfo>({ hintCredits: 0, importCredits: 0 });
   const [availableSkus, setAvailableSkus] = useState<SkuInfo[]>([]);
@@ -2361,7 +2378,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         body: JSON.stringify({ skuCode, targetId }),
       });
       if (res.status === 409) {
-        pushToast(t('addon_cap_reached', locale), 'error');
+        // Mark this SKU as capped so the card shows the limit-reached state
+        setCappedAddonCodes(prev => prev.includes(skuCode) ? prev : [...prev, skuCode]);
+        pushToast(t('addon_cap_reached', locale), 'info');
         setAddonCheckoutLoading(false);
         return;
       }
@@ -5884,57 +5903,70 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             if (!offer) return null;
                             // item-slot SKUs require a target wishlist — skip if no wishlists yet
                             if ((sku.code === 'extra_items_5' || sku.code === 'extra_items_15') && wishlists.length === 0) return null;
+                            const isCapped = cappedAddonCodes.includes(sku.code);
                             return (
                               <div
                                 key={sku.code}
                                 style={{
                                   display: 'flex', alignItems: 'center', gap: 12,
-                                  background: C.card, borderRadius: 14, padding: '12px 14px',
-                                  border: `1px solid ${C.border}`,
+                                  background: isCapped ? C.surface : C.card,
+                                  borderRadius: 14, padding: '12px 14px',
+                                  border: `1px solid ${isCapped ? C.borderLight : C.border}`,
+                                  opacity: isCapped ? 0.7 : 1,
                                 }}
                               >
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>
+                                  <div style={{ fontSize: 14, fontWeight: 700, color: isCapped ? C.textSec : C.text, lineHeight: 1.3 }}>
                                     {offer.title}
                                   </div>
                                   <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3, lineHeight: 1.4 }}>
-                                    {offer.tag}
+                                    {isCapped ? t('addon_cap_reached_sub', locale) : offer.tag}
                                   </div>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-                                  <div style={{ fontSize: 12, fontWeight: 700, color: C.textSec, whiteSpace: 'nowrap' }}>
-                                    {sku.price} ⭐
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      const needsTarget = sku.code === 'extra_items_5' || sku.code === 'extra_items_15';
-                                      if (needsTarget) {
-                                        if (wishlists.length === 1 && wishlists[0]) {
-                                          // Only one wishlist — buy directly for it
-                                          void handleBuyAddon(sku.code, wishlists[0].id);
-                                        } else {
-                                          // Multiple wishlists — show picker
-                                          setWishlistPickerSku(sku.code);
-                                        }
-                                      } else {
-                                        void handleBuyAddon(sku.code, undefined);
-                                      }
-                                    }}
-                                    disabled={isLoading}
-                                    style={{
-                                      background: isLoading ? C.surface : C.accentSoft,
-                                      color: C.accent,
-                                      border: `1px solid ${C.accent}40`,
-                                      borderRadius: 8, padding: '5px 12px',
-                                      fontSize: 13, fontWeight: 700,
-                                      cursor: isLoading ? 'default' : 'pointer',
-                                      fontFamily: font, whiteSpace: 'nowrap',
-                                      opacity: isLoading ? 0.5 : 1,
-                                      transition: 'opacity 0.15s',
-                                    }}
-                                  >
-                                    {addonCheckoutLoading ? '…' : t('addon_cta_buy', locale)}
-                                  </button>
+                                  {isCapped ? (
+                                    <div style={{
+                                      fontSize: 12, fontWeight: 600, color: C.textSec,
+                                      background: C.card, border: `1px solid ${C.border}`,
+                                      borderRadius: 8, padding: '5px 10px', whiteSpace: 'nowrap',
+                                    }}>
+                                      {t('addon_cap_reached', locale)}
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div style={{ fontSize: 12, fontWeight: 700, color: C.textSec, whiteSpace: 'nowrap' }}>
+                                        {sku.price} ⭐
+                                      </div>
+                                      <button
+                                        onClick={() => {
+                                          const needsTarget = sku.code === 'extra_items_5' || sku.code === 'extra_items_15';
+                                          if (needsTarget) {
+                                            if (wishlists.length === 1 && wishlists[0]) {
+                                              void handleBuyAddon(sku.code, wishlists[0].id);
+                                            } else {
+                                              setWishlistPickerSku(sku.code);
+                                            }
+                                          } else {
+                                            void handleBuyAddon(sku.code, undefined);
+                                          }
+                                        }}
+                                        disabled={isLoading}
+                                        style={{
+                                          background: isLoading ? C.surface : C.accentSoft,
+                                          color: C.accent,
+                                          border: `1px solid ${C.accent}40`,
+                                          borderRadius: 8, padding: '5px 12px',
+                                          fontSize: 13, fontWeight: 700,
+                                          cursor: isLoading ? 'default' : 'pointer',
+                                          fontFamily: font, whiteSpace: 'nowrap',
+                                          opacity: isLoading ? 0.5 : 1,
+                                          transition: 'opacity 0.15s',
+                                        }}
+                                      >
+                                        {addonCheckoutLoading ? '…' : t('addon_cta_buy', locale)}
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -7635,6 +7667,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         onBuyAddon={handleBuyAddon}
         addonCheckoutLoading={addonCheckoutLoading}
         availableSkus={availableSkus}
+        cappedAddonCodes={cappedAddonCodes}
         locale={locale}
       />
 
@@ -7971,7 +8004,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             border: `1px solid ${C.borderLight}`,
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
             animation: 'toastIn 0.3s ease',
-            color: t.kind === 'success' ? C.green : C.red,
+            color: t.kind === 'success' ? C.green : t.kind === 'info' ? C.textSec : C.red,
           }}>
             {t.message}
           </div>
