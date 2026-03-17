@@ -4903,7 +4903,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   setEditProfileName(profileData.displayName || '');
                   setEditProfileUsername(profileData.username || '');
                   setEditProfileBio(profileData.bio || '');
-                  setEditProfileBirthday(profileData.birthday || '');
+                  setEditProfileBirthday(profileData.birthday ? profileData.birthday.slice(0, 10) : '');
                   setEditingProfile(true);
                 }} style={{ ...btnGhost, marginTop: 12, fontSize: 13 }}>
                   {t('edit_btn', locale)}
@@ -6594,40 +6594,48 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('profile_birthday', locale)}</label>
-            <input style={{ ...inputStyle, colorScheme: 'dark' }} type="date" value={editProfileBirthday} onChange={(e) => setEditProfileBirthday(e.target.value)} />
+            <input
+              style={{ ...inputStyle, colorScheme: 'dark' }}
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              value={editProfileBirthday}
+              onChange={(e) => setEditProfileBirthday(e.target.value)}
+            />
           </div>
-          <button
-            style={{ ...btnPrimary, opacity: editProfileSaving ? 0.5 : 1 }}
-            onClick={async () => {
-              setEditProfileSaving(true);
-              try {
-                const res = await tgFetch('/tg/me/profile', {
-                  method: 'PATCH',
-                  body: JSON.stringify({
-                    displayName: editProfileName.trim() || null,
-                    username: editProfileUsername.trim() || null,
-                    bio: editProfileBio.trim() || null,
-                    birthday: editProfileBirthday || null,
-                  }),
-                });
-                if (!res.ok) {
-                  const body = await res.json().catch(() => ({})) as { error?: string };
-                  pushToast(body.error || t('toast_save_error', locale), 'error');
-                  return;
+          <div style={{ position: 'sticky', bottom: 0, paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))', paddingTop: 4, background: C.bg }}>
+            <button
+              style={{ ...btnPrimary, opacity: editProfileSaving ? 0.5 : 1 }}
+              onClick={async () => {
+                setEditProfileSaving(true);
+                try {
+                  const res = await tgFetch('/tg/me/profile', {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                      displayName: editProfileName.trim() || null,
+                      username: editProfileUsername.trim() || null,
+                      bio: editProfileBio.trim() || null,
+                      birthday: editProfileBirthday || null,
+                    }),
+                  });
+                  if (!res.ok) {
+                    const body = await res.json().catch(() => ({})) as { error?: string };
+                    pushToast(body.error || t('toast_save_error', locale), 'error');
+                    return;
+                  }
+                  pushToast(t('profile_saved', locale), 'success');
+                  setEditingProfile(false);
+                  loadProfile();
+                } catch {
+                  pushToast(t('toast_save_error', locale), 'error');
+                } finally {
+                  setEditProfileSaving(false);
                 }
-                pushToast(t('profile_saved', locale), 'success');
-                setEditingProfile(false);
-                loadProfile();
-              } catch {
-                pushToast(t('toast_save_error', locale), 'error');
-              } finally {
-                setEditProfileSaving(false);
-              }
-            }}
-            disabled={editProfileSaving}
-          >
-            {editProfileSaving ? '\u2026' : t('save', locale)}
-          </button>
+              }}
+              disabled={editProfileSaving}
+            >
+              {editProfileSaving ? '\u2026' : t('save', locale)}
+            </button>
+          </div>
         </div>
       </BottomSheet>
 
