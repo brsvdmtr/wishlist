@@ -235,7 +235,49 @@ type CommentDTO = {
   createdAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile';
+type SantaCampaignStatus = 'DRAFT' | 'OPEN' | 'LOCKED' | 'DRAW_IN_PROGRESS' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+
+type SantaCampaignSummary = {
+  id: string;
+  title: string;
+  status: SantaCampaignStatus;
+  type: 'CLASSIC' | 'MULTI_WAVE';
+  seasonYear: number;
+  createdAt: string;
+  participantCount: number;
+  ownerName?: string | null;
+};
+
+type SantaParticipant = {
+  id: string;
+  status: string;
+  joinedAt: string;
+  userId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  hasLinkedWishlist: boolean;
+  linkedWishlist: { id: string; title: string; slug: string } | null;
+};
+
+type SantaCampaignDetail = {
+  campaign: {
+    id: string; title: string; description: string | null; type: string; status: SantaCampaignStatus;
+    isOwner: boolean; inviteToken?: string; minBudget: number | null; maxBudget: number | null;
+    currency: string; drawAt: string | null; seasonYear: number; cancelledAt: string | null;
+    cancelReason: string | null; createdAt: string;
+  };
+  participants: SantaParticipant[];
+  rounds: { id: string; roundNumber: number; drawStatus: string; drawnAt: string | null }[];
+  myAssignment: { id: string; giftStatus: string; giftNote: string | null } | null;
+};
+
+type SantaJoinPreview = {
+  id: string; title: string; description: string | null; status: string; type: string;
+  minBudget: number | null; maxBudget: number | null; currency: string;
+  participantCount: number; ownerName: string | null; ownerAvatarUrl: string | null;
+};
+
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1499,6 +1541,30 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [draftsBulkLoading, setDraftsBulkLoading] = useState(false);
 
+  // ── Secret Santa state ───────────────────────────────────────────────────
+  const [santaSeason, setSantaSeason] = useState<{ inSeason: boolean; canCreate: boolean; seasonStart: string | null; seasonEnd: string | null; testMode: boolean } | null>(null);
+  const [santaCampaigns, setSantaCampaigns] = useState<{ owned: SantaCampaignSummary[]; joined: SantaCampaignSummary[] }>({ owned: [], joined: [] });
+  const [santaCampaignsLoading, setSantaCampaignsLoading] = useState(false);
+  const [currentSantaCampaign, setCurrentSantaCampaign] = useState<SantaCampaignDetail | null>(null);
+  const [santaCreateLoading, setSantaCreateLoading] = useState(false);
+  // Create form
+  const [santaCreateTitle, setSantaCreateTitle] = useState('');
+  const [santaCreateDesc, setSantaCreateDesc] = useState('');
+  const [santaCreateMinBudget, setSantaCreateMinBudget] = useState('');
+  const [santaCreateMaxBudget, setSantaCreateMaxBudget] = useState('');
+  const [santaCreateCurrency, setSantaCreateCurrency] = useState<'RUB' | 'USD'>('RUB');
+  // Join (from deep link)
+  const [santaJoinToken, setSantaJoinToken] = useState<string | null>(null);
+  const [santaJoinPreview, setSantaJoinPreview] = useState<SantaJoinPreview | null>(null);
+  const [santaJoinLoading, setSantaJoinLoading] = useState(false);
+  const [santaJoinDone, setSantaJoinDone] = useState(false);
+  // Link wishlist to campaign
+  const [showSantaWishlistPicker, setShowSantaWishlistPicker] = useState(false);
+  const [santaWishlistPickerLoading, setSantaWishlistPickerLoading] = useState(false);
+  // Receiver's wishlist
+  const [santaReceiverWishlist, setSantaReceiverWishlist] = useState<{ receiverName: string; wishlist: { title: string } | null; items: { id: string; title: string; url: string; priceText: string | null; currency: string; priority: number; imageUrl: string | null; status: string }[] } | null>(null);
+  const [santaReceiverWishlistLoading, setSantaReceiverWishlistLoading] = useState(false);
+
   // ── Wishes tab: filtered by priority ─────────────────────────────────────
   const filteredAllItems = useMemo(() => {
     if (allItemsPriorityFilter === null) return allItems;
@@ -2547,6 +2613,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // Return to the screen the user came from; fall back to my-wishlists if unknown
       const origin = settingsOriginScreen && settingsOriginScreen !== 'settings' ? settingsOriginScreen : 'my-wishlists';
       setScreen(origin);
+    } else if (screen === 'santa-hub') {
+      setScreen('my-wishlists');
+    } else if (screen === 'santa-create') {
+      setScreen('santa-hub');
+    } else if (screen === 'santa-campaign') {
+      setCurrentSantaCampaign(null);
+      setScreen('santa-hub');
+    } else if (screen === 'santa-join') {
+      setSantaJoinPreview(null);
+      setSantaJoinDone(false);
+      setScreen('my-wishlists');
     } else if (screen === 'share') {
       setScreen('wishlist-detail');
     } else if (screen === 'archive') {
@@ -2651,7 +2728,31 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         }
       };
 
-      if (startParam && startParam.startsWith('draft_')) {
+      if (startParam && startParam.startsWith('santa_join_')) {
+        // Deep link from Santa invite: santa_join_{token}
+        const token = startParam.slice('santa_join_'.length);
+        setSantaJoinToken(token);
+        setSantaJoinDone(false);
+        setSantaJoinLoading(true);
+        tgFetch(`/tg/santa/invite/${encodeURIComponent(token)}`)
+          .then(async (res) => {
+            if (res.ok) {
+              const json = await res.json() as { campaign: SantaJoinPreview };
+              setSantaJoinPreview(json.campaign);
+              setScreen('santa-join');
+            } else {
+              const json = await res.json() as { error?: string };
+              setSantaJoinPreview(null);
+              if (json.error === 'Campaign cancelled') {
+                setSantaJoinPreview({ id: '', title: '', description: null, status: 'CANCELLED', type: 'CLASSIC', minBudget: null, maxBudget: null, currency: 'RUB', participantCount: 0, ownerName: null, ownerAvatarUrl: null });
+              }
+              setScreen('santa-join');
+            }
+          })
+          .catch(() => setScreen('my-wishlists'))
+          .finally(() => setSantaJoinLoading(false));
+        loadWishlists().catch(() => {});
+      } else if (startParam && startParam.startsWith('draft_')) {
         // Deep link from bot: open draft item
         const draftItemId = startParam.slice(6); // strip "draft_"
         loadWishlists()
@@ -2718,6 +2819,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // Always pre-load profile data so ownerName is available on the
       // Share screen without requiring the user to visit Profile first.
       loadProfile().catch(() => { /* non-critical — share screen has fallback */ });
+      // Pre-load Santa season info
+      tgFetch('/tg/santa/season').then(async (r) => {
+        if (r.ok) setSantaSeason(await r.json() as typeof santaSeason);
+      }).catch(() => {});
     };
     tryInit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3921,6 +4026,35 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </div>
                 </div>
                 <span style={{ fontSize: 20, color: C.orange }}>›</span>
+              </div>
+            )}
+
+            {/* ── Santa Home Block ──────────────────────────────────────── */}
+            {santaSeason?.inSeason && (
+              <div
+                onClick={async () => {
+                  setSantaCampaignsLoading(true);
+                  const res = await tgFetch('/tg/santa/campaigns');
+                  if (res.ok) setSantaCampaigns(await res.json() as typeof santaCampaigns);
+                  setSantaCampaignsLoading(false);
+                  setScreen('santa-hub');
+                }}
+                style={{
+                  background: `linear-gradient(135deg, rgba(124,106,255,0.15), rgba(124,106,255,0.05))`,
+                  borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
+                  border: `1px solid ${C.accent}25`,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  animation: 'fadeIn 0.3s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>🎅</span>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{t('santa_home_title', locale)}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>{t('santa_home_subtitle', locale)}</div>
+                  </div>
+                </div>
+                <span style={{ fontSize: 20, color: C.accent }}>›</span>
               </div>
             )}
 
@@ -8048,6 +8182,628 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </div>
           </div>
         </>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          SECRET SANTA — HUB
+          ══════════════════════════════════════════════ */}
+      {screen === 'santa-hub' && (
+        <div style={{ padding: '16px 20px 120px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>🎅 {t('santa_hub_title', locale)}</h1>
+            {santaSeason?.canCreate && (
+              <button
+                onClick={() => {
+                  setSantaCreateTitle(''); setSantaCreateDesc('');
+                  setSantaCreateMinBudget(''); setSantaCreateMaxBudget('');
+                  setScreen('santa-create');
+                }}
+                style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 600, padding: '8px 16px', cursor: 'pointer' }}
+              >
+                {t('santa_home_create_btn', locale)}
+              </button>
+            )}
+          </div>
+
+          {santaCampaignsLoading && (
+            <div style={{ color: C.textMuted, fontSize: 14, textAlign: 'center', padding: 40 }}>{t('loading', locale)}</div>
+          )}
+
+          {!santaCampaignsLoading && santaCampaigns.owned.length === 0 && santaCampaigns.joined.length === 0 && (
+            <div style={{ background: C.card, borderRadius: 16, padding: 24, textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🎁</div>
+              <div style={{ color: C.textMuted, fontSize: 14 }}>{t('santa_home_empty', locale)}</div>
+              {santaSeason?.canCreate && (
+                <button
+                  onClick={() => setScreen('santa-create')}
+                  style={{ marginTop: 16, background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 15, fontWeight: 600, padding: '12px 24px', cursor: 'pointer' }}
+                >
+                  {t('santa_home_create_btn', locale)}
+                </button>
+              )}
+            </div>
+          )}
+
+          {santaCampaigns.owned.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('santa_hub_owned', locale)}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {santaCampaigns.owned.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={async () => {
+                      const res = await tgFetch(`/tg/santa/campaigns/${c.id}`);
+                      if (res.ok) {
+                        const json = await res.json() as SantaCampaignDetail;
+                        setCurrentSantaCampaign(json);
+                        setScreen('santa-campaign');
+                      }
+                    }}
+                    style={{ background: C.card, border: 'none', borderRadius: 14, padding: '14px 16px', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{c.title}</div>
+                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('santa_campaign_participants', locale, { count: c.participantCount })} · {c.status}</div>
+                    </div>
+                    <div style={{ color: C.textMuted, fontSize: 18 }}>›</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {santaCampaigns.joined.length > 0 && (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('santa_hub_joined', locale)}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {santaCampaigns.joined.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={async () => {
+                      const res = await tgFetch(`/tg/santa/campaigns/${c.id}`);
+                      if (res.ok) {
+                        const json = await res.json() as SantaCampaignDetail;
+                        setCurrentSantaCampaign(json);
+                        setScreen('santa-campaign');
+                      }
+                    }}
+                    style={{ background: C.card, border: 'none', borderRadius: 14, padding: '14px 16px', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{c.title}</div>
+                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                        {c.ownerName ? `${c.ownerName} · ` : ''}{t('santa_campaign_participants', locale, { count: c.participantCount })}
+                      </div>
+                    </div>
+                    <div style={{ color: C.textMuted, fontSize: 18 }}>›</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          SECRET SANTA — CREATE
+          ══════════════════════════════════════════════ */}
+      {screen === 'santa-create' && (
+        <div style={{ padding: '16px 20px 120px' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, marginTop: 8, marginBottom: 24 }}>
+            {t('santa_create_title', locale)}
+          </h1>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, display: 'block', marginBottom: 6 }}>{t('santa_create_name_label', locale)}</label>
+              <input
+                value={santaCreateTitle}
+                onChange={e => setSantaCreateTitle(e.target.value)}
+                placeholder={t('santa_create_name_placeholder', locale)}
+                maxLength={80}
+                style={{ width: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', fontSize: 15, color: C.text, fontFamily: font, boxSizing: 'border-box' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, display: 'block', marginBottom: 6 }}>{t('santa_create_desc_label', locale)}</label>
+              <textarea
+                value={santaCreateDesc}
+                onChange={e => setSantaCreateDesc(e.target.value)}
+                placeholder={t('santa_create_desc_placeholder', locale)}
+                maxLength={500}
+                rows={3}
+                style={{ width: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', fontSize: 14, color: C.text, fontFamily: font, boxSizing: 'border-box', resize: 'none' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, display: 'block', marginBottom: 6 }}>{t('santa_create_budget_min', locale)}</label>
+                <input
+                  type="number"
+                  value={santaCreateMinBudget}
+                  onChange={e => setSantaCreateMinBudget(e.target.value)}
+                  placeholder="0"
+                  min={0}
+                  style={{ width: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', fontSize: 15, color: C.text, fontFamily: font, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, display: 'block', marginBottom: 6 }}>{t('santa_create_budget_max', locale)}</label>
+                <input
+                  type="number"
+                  value={santaCreateMaxBudget}
+                  onChange={e => setSantaCreateMaxBudget(e.target.value)}
+                  placeholder="0"
+                  min={0}
+                  style={{ width: '100%', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', fontSize: 15, color: C.text, fontFamily: font, boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, display: 'block', marginBottom: 6 }}>{t('santa_create_currency_label', locale)}</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['RUB', 'USD'] as const).map(cur => (
+                  <button
+                    key={cur}
+                    onClick={() => setSantaCreateCurrency(cur)}
+                    style={{
+                      flex: 1, padding: '10px 0', borderRadius: 12, border: `2px solid ${santaCreateCurrency === cur ? C.accent : C.border}`,
+                      background: santaCreateCurrency === cur ? `${C.accent}20` : C.card,
+                      color: santaCreateCurrency === cur ? C.accent : C.textMuted,
+                      fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                    }}
+                  >
+                    {cur === 'RUB' ? '₽ RUB' : '$ USD'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              disabled={!santaCreateTitle.trim() || santaCreateLoading}
+              onClick={async () => {
+                if (!santaCreateTitle.trim()) return;
+                setSantaCreateLoading(true);
+                try {
+                  const body: Record<string, unknown> = { title: santaCreateTitle.trim(), currency: santaCreateCurrency };
+                  if (santaCreateDesc.trim()) body.description = santaCreateDesc.trim();
+                  if (santaCreateMinBudget) body.minBudget = parseInt(santaCreateMinBudget, 10);
+                  if (santaCreateMaxBudget) body.maxBudget = parseInt(santaCreateMaxBudget, 10);
+                  const res = await tgFetch('/tg/santa/campaigns', { method: 'POST', body: JSON.stringify(body) });
+                  if (res.ok) {
+                    const json = await res.json() as { campaign: SantaCampaignSummary };
+                    // Open the campaign immediately
+                    const detailRes = await tgFetch(`/tg/santa/campaigns/${json.campaign.id}`);
+                    if (detailRes.ok) {
+                      const detail = await detailRes.json() as SantaCampaignDetail;
+                      setCurrentSantaCampaign(detail);
+                    }
+                    setSantaCampaigns(prev => ({ ...prev, owned: [{ ...json.campaign, participantCount: 0 }, ...prev.owned] }));
+                    pushToast(t('done', locale), 'success');
+                    setScreen('santa-campaign');
+                  } else {
+                    pushToast(t('error_generic', locale), 'error');
+                  }
+                } catch {
+                  pushToast(t('error_network', locale), 'error');
+                } finally {
+                  setSantaCreateLoading(false);
+                }
+              }}
+              style={{
+                background: !santaCreateTitle.trim() || santaCreateLoading ? C.textMuted : C.accent,
+                border: 'none', borderRadius: 14, color: '#fff', fontSize: 15, fontWeight: 700,
+                padding: '14px 0', cursor: !santaCreateTitle.trim() || santaCreateLoading ? 'not-allowed' : 'pointer',
+                fontFamily: font, width: '100%',
+              }}
+            >
+              {santaCreateLoading ? t('loading', locale) : t('santa_create_submit', locale)}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          SECRET SANTA — CAMPAIGN DETAIL
+          ══════════════════════════════════════════════ */}
+      {screen === 'santa-campaign' && currentSantaCampaign && (() => {
+        const camp = currentSantaCampaign.campaign;
+        const participants = currentSantaCampaign.participants;
+        const myAssignment = currentSantaCampaign.myAssignment;
+        const isOwner = camp.isOwner;
+        const statusKey = `santa_campaign_status_${camp.status.toLowerCase().replace('_', '_')}` as string;
+
+        const copyInviteLink = () => {
+          const botLink = `https://t.me/${botUsername}?start=santa_${camp.inviteToken}`;
+          void navigator.clipboard.writeText(botLink).then(() => pushToast(t('santa_campaign_invite_copied', locale), 'success'));
+        };
+
+        return (
+          <div style={{ padding: '16px 20px 120px' }}>
+            <div style={{ marginBottom: 20 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '8px 0 4px' }}>{camp.title}</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 8,
+                  background: camp.status === 'ACTIVE' ? C.greenSoft : camp.status === 'CANCELLED' ? C.redSoft : `${C.accent}20`,
+                  color: camp.status === 'ACTIVE' ? C.green : camp.status === 'CANCELLED' ? C.red : C.accent,
+                }}>
+                  {t(statusKey, locale) || camp.status}
+                </span>
+                {isOwner && <span style={{ fontSize: 12, color: C.textMuted }}>👑 {locale === 'ru' ? 'Организатор' : 'Organizer'}</span>}
+              </div>
+              {camp.description && (
+                <p style={{ fontSize: 14, color: C.textSec, marginTop: 8, lineHeight: 1.5 }}>{camp.description}</p>
+              )}
+              {(camp.minBudget || camp.maxBudget) && (
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
+                  {camp.minBudget && camp.maxBudget
+                    ? t('santa_campaign_budget', locale, { min: camp.minBudget, max: camp.maxBudget, currency: camp.currency })
+                    : camp.minBudget
+                      ? t('santa_campaign_budget_from', locale, { min: camp.minBudget, currency: camp.currency })
+                      : t('santa_campaign_budget_to', locale, { max: camp.maxBudget!, currency: camp.currency })}
+                </div>
+              )}
+            </div>
+
+            {/* Owner controls */}
+            {isOwner && camp.status !== 'COMPLETED' && camp.status !== 'CANCELLED' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+                {camp.status === 'DRAFT' && (
+                  <button
+                    onClick={async () => {
+                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/open`, { method: 'POST' });
+                      if (res.ok) {
+                        const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                        if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                        pushToast(t('done', locale), 'success');
+                      } else pushToast(t('error_generic', locale), 'error');
+                    }}
+                    style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 0', cursor: 'pointer', fontFamily: font }}
+                  >
+                    {t('santa_campaign_open_btn', locale)}
+                  </button>
+                )}
+                {camp.status === 'OPEN' && participants.filter(p => p.status === 'JOINED').length >= 2 && (
+                  <button
+                    onClick={async () => {
+                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/lock`, { method: 'POST' });
+                      if (res.ok) {
+                        const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                        if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                        pushToast(t('done', locale), 'success');
+                      } else pushToast(t('error_generic', locale), 'error');
+                    }}
+                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, fontWeight: 600, padding: '12px 0', cursor: 'pointer', fontFamily: font }}
+                  >
+                    {t('santa_campaign_lock_btn', locale)}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Invite link (owner only, OPEN campaigns) */}
+            {isOwner && camp.inviteToken && ['DRAFT', 'OPEN'].includes(camp.status) && (
+              <div style={{ background: C.card, borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>{t('santa_campaign_invite_link', locale)}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, color: C.textSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {`t.me/${botUsername}?start=santa_${camp.inviteToken}`}
+                  </span>
+                  <button onClick={copyInviteLink} style={{ background: C.accent, border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 600, padding: '6px 12px', cursor: 'pointer', flexShrink: 0 }}>
+                    {t('copy', locale)}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Participants */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                {t('santa_campaign_participants', locale, { count: participants.filter(p => p.status === 'JOINED').length })}
+              </div>
+              <div style={{ background: C.card, borderRadius: 14, overflow: 'hidden' }}>
+                {participants.filter(p => p.status === 'JOINED').map((p, idx) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10,
+                      borderBottom: idx < participants.filter(px => px.status === 'JOINED').length - 1 ? `1px solid ${C.border}` : 'none',
+                    }}
+                  >
+                    <UserAvatar avatarUrl={p.avatarUrl} name={p.displayName || '?'} size={32} accent={C.accent} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.displayName || (locale === 'ru' ? 'Участник' : 'Participant')}</div>
+                      {p.hasLinkedWishlist && <div style={{ fontSize: 12, color: C.green }}>🎁 {locale === 'ru' ? 'Вишлист привязан' : 'Wishlist linked'}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* My assignment (post-draw) */}
+            {myAssignment && camp.status === 'ACTIVE' && (
+              <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>{t('santa_campaign_my_assignment', locale)}</div>
+                <div style={{ fontSize: 13, color: C.textSec }}>
+                  {t(`santa_campaign_gift_status_${myAssignment.giftStatus.toLowerCase()}` as string, locale) || myAssignment.giftStatus}
+                </div>
+                {myAssignment.giftStatus !== 'SENT' && myAssignment.giftStatus !== 'RECEIVED' && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    {myAssignment.giftStatus === 'PENDING' && (
+                      <button
+                        onClick={async () => {
+                          const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/gift-status`, { method: 'PATCH', body: JSON.stringify({ status: 'BUYING' }) });
+                          if (res.ok) {
+                            const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                            if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                          }
+                        }}
+                        style={{ background: C.accent, border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer' }}
+                      >
+                        {t('santa_campaign_mark_buying', locale)}
+                      </button>
+                    )}
+                    {myAssignment.giftStatus === 'BUYING' && (
+                      <button
+                        onClick={async () => {
+                          const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/gift-status`, { method: 'PATCH', body: JSON.stringify({ status: 'SENT' }) });
+                          if (res.ok) {
+                            const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                            if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                          }
+                        }}
+                        style={{ background: C.accent, border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer' }}
+                      >
+                        {t('santa_campaign_mark_sent', locale)}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {/* View receiver's wishlist */}
+                <button
+                  onClick={async () => {
+                    setSantaReceiverWishlistLoading(true);
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/wishlist`);
+                    if (res.ok) setSantaReceiverWishlist(await res.json() as typeof santaReceiverWishlist);
+                    setSantaReceiverWishlistLoading(false);
+                  }}
+                  style={{ marginTop: 12, background: 'none', border: `1px solid ${C.accent}`, borderRadius: 10, color: C.accent, fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer', width: '100%' }}
+                >
+                  {t('santa_campaign_receiver_wishlist', locale)}
+                </button>
+                {santaReceiverWishlist && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6 }}>
+                      {santaReceiverWishlist.receiverName} · {santaReceiverWishlist.wishlist?.title ?? t('santa_campaign_no_wishlist', locale)}
+                    </div>
+                    {santaReceiverWishlist.items.map(item => (
+                      <div key={item.id} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{item.title}</div>
+                        {item.priceText && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{item.priceText} {item.currency}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Non-owner: confirm received */}
+            {!isOwner && camp.status === 'ACTIVE' && (() => {
+              const myParticipant = participants.find(p => p.userId === tgUser?.id?.toString());
+              const myReceiverAssignment = currentSantaCampaign.rounds.length > 0 ? null : null; // simplified — would check rounds
+              return myParticipant ? (
+                <button
+                  onClick={async () => {
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/confirm-received`, { method: 'POST' });
+                    if (res.ok) {
+                      const json = await res.json() as { campaignCompleted: boolean };
+                      pushToast(json.campaignCompleted ? (locale === 'ru' ? 'Кампания завершена! 🎉' : 'Campaign completed! 🎉') : t('done', locale), 'success');
+                      const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                      if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                    }
+                  }}
+                  style={{ background: C.green, border: 'none', borderRadius: 12, color: '#000', fontSize: 14, fontWeight: 700, padding: '12px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginBottom: 12 }}
+                >
+                  {t('santa_campaign_confirm_received', locale)}
+                </button>
+              ) : null;
+            })()}
+
+            {/* Leave campaign (non-owner, pre-draw) */}
+            {!isOwner && ['OPEN', 'DRAFT'].includes(camp.status) && (
+              <button
+                onClick={async () => {
+                  if (!confirm(t('santa_leave_confirm', locale, { title: camp.title }))) return;
+                  const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/leave`, { method: 'POST' });
+                  if (res.ok) {
+                    setCurrentSantaCampaign(null);
+                    setSantaCampaigns(prev => ({
+                      ...prev,
+                      joined: prev.joined.filter(c => c.id !== camp.id),
+                    }));
+                    setScreen('santa-hub');
+                  }
+                }}
+                style={{ background: 'none', border: `1px solid ${C.red}40`, borderRadius: 12, color: C.red, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginTop: 8 }}
+              >
+                {t('santa_leave_btn', locale)}
+              </button>
+            )}
+
+            {/* Cancel campaign (owner only) */}
+            {isOwner && !['COMPLETED', 'CANCELLED'].includes(camp.status) && (
+              <button
+                onClick={async () => {
+                  if (!confirm(t('santa_campaign_cancel_confirm', locale))) return;
+                  const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/cancel`, { method: 'POST' });
+                  if (res.ok) {
+                    const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                    if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                    pushToast(t('done', locale), 'success');
+                  }
+                }}
+                style={{ background: 'none', border: `1px solid ${C.red}40`, borderRadius: 12, color: C.red, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginTop: 8 }}
+              >
+                {t('santa_campaign_cancel_btn', locale)}
+              </button>
+            )}
+
+            {/* Wishlist picker for linking */}
+            {camp.status !== 'ACTIVE' && camp.status !== 'COMPLETED' && camp.status !== 'CANCELLED' && (
+              <div style={{ marginTop: 16 }}>
+                {(() => {
+                  const me = participants.find(p => p.userId === tgUser?.id?.toString());
+                  if (!me) return null;
+                  return me.linkedWishlist ? (
+                    <div style={{ background: C.card, borderRadius: 14, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontSize: 14, color: C.text }}>
+                        {t('santa_campaign_linked_wishlist', locale, { title: me.linkedWishlist.title })}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          await tgFetch(`/tg/santa/campaigns/${camp.id}/wishlist`, { method: 'PATCH', body: JSON.stringify({ wishlistId: null }) });
+                          const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                          if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                        }}
+                        style={{ background: 'none', border: 'none', color: C.red, fontSize: 13, cursor: 'pointer', padding: 0 }}
+                      >
+                        {t('santa_campaign_unlink_wishlist', locale)}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowSantaWishlistPicker(true)}
+                      style={{ background: C.card, border: `1px dashed ${C.border}`, borderRadius: 14, color: C.accent, fontSize: 14, fontWeight: 600, padding: '12px 16px', cursor: 'pointer', width: '100%', fontFamily: font }}
+                    >
+                      {t('santa_campaign_link_wishlist', locale)}
+                    </button>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Wishlist picker sheet */}
+            <BottomSheet isOpen={showSantaWishlistPicker} onClose={() => setShowSantaWishlistPicker(false)} title={t('santa_campaign_link_wishlist', locale)}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {wishlists.map(wl => (
+                  <button
+                    key={wl.id}
+                    onClick={async () => {
+                      setSantaWishlistPickerLoading(true);
+                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/wishlist`, { method: 'PATCH', body: JSON.stringify({ wishlistId: wl.id }) });
+                      if (res.ok) {
+                        const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                        if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                        setShowSantaWishlistPicker(false);
+                      } else pushToast(t('error_generic', locale), 'error');
+                      setSantaWishlistPickerLoading(false);
+                    }}
+                    disabled={santaWishlistPickerLoading}
+                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  >
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{wl.title}</span>
+                    <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>
+                  </button>
+                ))}
+              </div>
+            </BottomSheet>
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          SECRET SANTA — JOIN
+          ══════════════════════════════════════════════ */}
+      {screen === 'santa-join' && (
+        <div style={{ padding: '16px 20px 120px' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '8px 0 24px' }}>
+            🎅 {t('santa_join_title', locale)}
+          </h1>
+
+          {santaJoinLoading && (
+            <div style={{ color: C.textMuted, fontSize: 14, textAlign: 'center', padding: 40 }}>{t('loading', locale)}</div>
+          )}
+
+          {!santaJoinLoading && santaJoinPreview && santaJoinPreview.status === 'CANCELLED' && (
+            <div style={{ background: C.redSoft, borderRadius: 16, padding: 24, textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>❌</div>
+              <div style={{ color: C.red, fontSize: 14, fontWeight: 600 }}>{t('santa_join_cancelled', locale)}</div>
+            </div>
+          )}
+
+          {!santaJoinLoading && santaJoinPreview && santaJoinPreview.status !== 'CANCELLED' && (
+            <div>
+              <div style={{ background: C.card, borderRadius: 16, padding: 20, marginBottom: 20 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: C.text, margin: '0 0 8px' }}>{santaJoinPreview.title}</h2>
+                {santaJoinPreview.ownerName && (
+                  <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>
+                    {t('santa_join_organizer', locale, { name: santaJoinPreview.ownerName })}
+                  </div>
+                )}
+                <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>
+                  {t('santa_join_participants', locale, { count: santaJoinPreview.participantCount })}
+                </div>
+                {santaJoinPreview.minBudget && santaJoinPreview.maxBudget && (
+                  <div style={{ fontSize: 13, color: C.textMuted }}>
+                    {t('santa_join_budget', locale, { min: santaJoinPreview.minBudget, max: santaJoinPreview.maxBudget, currency: santaJoinPreview.currency })}
+                  </div>
+                )}
+                {santaJoinPreview.description && (
+                  <p style={{ fontSize: 13, color: C.textSec, marginTop: 8, lineHeight: 1.5 }}>{santaJoinPreview.description}</p>
+                )}
+              </div>
+
+              {santaJoinDone ? (
+                <div style={{ background: C.greenSoft, borderRadius: 16, padding: 20, textAlign: 'center' }}>
+                  <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
+                  <div style={{ color: C.green, fontSize: 15, fontWeight: 700 }}>
+                    {t('santa_join_success', locale, { title: santaJoinPreview.title })}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setSantaCampaignsLoading(true);
+                      const res = await tgFetch('/tg/santa/campaigns');
+                      if (res.ok) setSantaCampaigns(await res.json() as typeof santaCampaigns);
+                      setSantaCampaignsLoading(false);
+                      setScreen('santa-hub');
+                    }}
+                    style={{ marginTop: 16, background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 15, fontWeight: 600, padding: '12px 24px', cursor: 'pointer' }}
+                  >
+                    {t('santa_home_my_campaigns', locale)}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  disabled={santaJoinLoading || !['OPEN', 'DRAFT'].includes(santaJoinPreview.status)}
+                  onClick={async () => {
+                    if (!santaJoinToken) return;
+                    setSantaJoinLoading(true);
+                    try {
+                      const res = await tgFetch(`/tg/santa/campaigns/${santaJoinPreview.id}/join`, { method: 'POST' });
+                      if (res.ok) {
+                        setSantaJoinDone(true);
+                      } else {
+                        const json = await res.json() as { error?: string };
+                        pushToast(json.error === 'Not accepting' ? t('santa_join_closed', locale) : t('error_generic', locale), 'error');
+                      }
+                    } catch {
+                      pushToast(t('error_network', locale), 'error');
+                    } finally {
+                      setSantaJoinLoading(false);
+                    }
+                  }}
+                  style={{
+                    background: !['OPEN', 'DRAFT'].includes(santaJoinPreview.status) ? C.textMuted : C.accent,
+                    border: 'none', borderRadius: 14, color: '#fff', fontSize: 15, fontWeight: 700,
+                    padding: '14px 0', cursor: !['OPEN', 'DRAFT'].includes(santaJoinPreview.status) ? 'not-allowed' : 'pointer',
+                    fontFamily: font, width: '100%',
+                  }}
+                >
+                  {!['OPEN', 'DRAFT'].includes(santaJoinPreview.status) ? t('santa_join_closed', locale) : t('santa_join_btn', locale)}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── TOASTS ── */}

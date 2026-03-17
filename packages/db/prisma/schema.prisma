@@ -106,6 +106,10 @@ model User {
   addOns                 UserAddOn[]
   credits                UserCredits?
   purchases              Purchase[]
+  santaTestMode          Boolean              @default(false)
+  ownedSantaCampaigns    SantaCampaign[]      @relation("OwnedSantaCampaigns")
+  santaParticipations    SantaParticipant[]   @relation("SantaParticipations")
+  santaNotifications     SantaNotification[]  @relation("SantaNotifications")
 }
 
 model Wishlist {
@@ -130,6 +134,7 @@ model Wishlist {
   items Item[]
   tags  Tag[]
   wishlistSubscriptions WishlistSubscription[]
+  santaParticipants     SantaParticipant[]    @relation("SantaLinkedWishlists")
 
   @@index([ownerId])
   @@index([ownerId, position])
@@ -502,4 +507,297 @@ model Purchase {
   @@index([userId])
   @@index([telegramChargeId])
   @@index([userId, skuCode])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Secret Santa feature
+// ─────────────────────────────────────────────────────────────
+
+enum SantaCampaignStatus {
+  DRAFT
+  OPEN
+  LOCKED
+  DRAW_IN_PROGRESS
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum SantaCampaignType {
+  CLASSIC
+  MULTI_WAVE
+}
+
+enum SantaParticipantStatus {
+  INVITED
+  JOINED
+  LEFT
+  REMOVED
+}
+
+enum SantaGiftStatus {
+  PENDING
+  BUYING
+  SENT
+  RECEIVED
+}
+
+enum SantaDrawStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  FAILED
+}
+
+enum SantaHintStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SantaNotificationType {
+  JOINED
+  LEFT
+  DRAW_DONE
+  GIFT_STATUS_CHANGED
+  HINT_REQUEST
+  HINT_RESPONDED
+  CAMPAIGN_CANCELLED
+}
+
+// Admin-controlled season window. One row per year.
+// canCreateCampaign = effectiveInSeason && campaignCreateEnabled (computed, never mutated automatically).
+model SantaSeasonConfig {
+  id                    String   @id @default(cuid())
+  seasonYear            Int      @unique
+  seasonStartAt         DateTime
+  seasonEndAt           DateTime
+  campaignCreateEnabled Boolean  @default(true)
+  updatedAt             DateTime @updatedAt
+}
+
+model SantaCampaign {
+  id          String              @id @default(cuid())
+  title       String
+  description String?
+  type        SantaCampaignType   @default(CLASSIC)
+  status      SantaCampaignStatus @default(DRAFT)
+  ownerId     String
+  // inviteToken is always non-null. Revocation = campaign CANCELLED status. No rotation in Batch 1.
+  inviteToken String              @unique @default(cuid())
+  minBudget   Int?
+  maxBudget   Int?
+  currency    String              @default("RUB")
+  drawAt      DateTime?
+  seasonYear  Int
+  cancelledAt DateTime?
+  cancelReason String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  // onDelete: Restrict — prevents user account deletion while owning an active campaign.
+  owner        User               @relation("OwnedSantaCampaigns", fields: [ownerId], references: [id], onDelete: Restrict)
+  participants SantaParticipant[]
+  rounds       SantaRound[]
+  chatMessages SantaChatMessage[]
+  readCursors  SantaChatReadCursor[]
+  notifications SantaNotification[]
+  auditLogs    SantaAdminAuditLog[]
+
+  @@index([ownerId])
+  @@index([inviteToken])
+  @@index([seasonYear])
+}
+
+model SantaParticipant {
+  id               String                 @id @default(cuid())
+  campaignId       String
+  userId           String
+  status           SantaParticipantStatus @default(JOINED)
+  linkedWishlistId String?
+  joinedAt         DateTime               @default(now())
+  leftAt           DateTime?
+
+  campaign         SantaCampaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user             User                   @relation("SantaParticipations", fields: [userId], references: [id], onDelete: Cascade)
+  // onDelete: SetNull — DB-level emergency fallback only. Service layer blocks wishlist deletion if linked to active campaign.
+  linkedWishlist   Wishlist?              @relation("SantaLinkedWishlists", fields: [linkedWishlistId], references: [id], onDelete: SetNull)
+  giverAssignments    SantaAssignment[]   @relation("GiverAssignments")
+  receiverAssignments SantaAssignment[]   @relation("ReceiverAssignments")
+  chatMessages     SantaChatMessage[]
+  readCursors      SantaChatReadCursor[]
+  pollVotes        SantaPollVote[]
+  hintRequests     SantaHintRequest[]     @relation("HintRequester")
+  hintResponses    SantaHintRequest[]     @relation("HintResponder")
+
+  @@unique([campaignId, userId])
+  @@index([campaignId])
+  @@index([userId])
+  @@index([linkedWishlistId])
+}
+
+model SantaRound {
+  id          String          @id @default(cuid())
+  campaignId  String
+  roundNumber Int             @default(1)
+  drawStatus  SantaDrawStatus @default(PENDING)
+  drawJobId   String?
+  drawnAt     DateTime?
+  createdAt   DateTime        @default(now())
+
+  campaign    SantaCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  assignments SantaAssignment[]
+  polls       SantaPoll[]
+
+  @@unique([campaignId, roundNumber])
+  @@index([campaignId])
+}
+
+model SantaAssignment {
+  id                    String          @id @default(cuid())
+  roundId               String
+  giverParticipantId    String
+  receiverParticipantId String
+  giftStatus            SantaGiftStatus @default(PENDING)
+  giftNote              String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  round        SantaRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  giver        SantaParticipant @relation("GiverAssignments", fields: [giverParticipantId], references: [id], onDelete: Cascade)
+  receiver     SantaParticipant @relation("ReceiverAssignments", fields: [receiverParticipantId], references: [id], onDelete: Cascade)
+  giftProgress SantaGiftProgress[]
+  hintRequests SantaHintRequest[]
+
+  // Both uniques enforced: one person gives once AND receives once per round.
+  @@unique([roundId, giverParticipantId])
+  @@unique([roundId, receiverParticipantId])
+  @@index([roundId])
+}
+
+model SantaGiftProgress {
+  id           String          @id @default(cuid())
+  assignmentId String
+  status       SantaGiftStatus
+  note         String?
+  createdAt    DateTime        @default(now())
+
+  assignment   SantaAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId])
+}
+
+model SantaExclusion {
+  id         String   @id @default(cuid())
+  campaignId String
+  userId1    String
+  userId2    String
+  createdAt  DateTime @default(now())
+
+  @@unique([campaignId, userId1, userId2])
+  @@index([campaignId])
+}
+
+model SantaHintRequest {
+  id                     String          @id @default(cuid())
+  assignmentId           String
+  requesterParticipantId String
+  responderParticipantId String
+  question               String
+  answer                 String?
+  status                 SantaHintStatus @default(PENDING)
+  createdAt              DateTime        @default(now())
+  respondedAt            DateTime?
+
+  assignment  SantaAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  requester   SantaParticipant @relation("HintRequester", fields: [requesterParticipantId], references: [id], onDelete: Cascade)
+  responder   SantaParticipant @relation("HintResponder", fields: [responderParticipantId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId])
+  @@index([responderParticipantId])
+}
+
+// Campaign-level group chat. Messages ordered by (createdAt, id).
+model SantaChatMessage {
+  id            String           @id @default(cuid())
+  campaignId    String
+  participantId String
+  body          String
+  createdAt     DateTime         @default(now())
+
+  campaign    SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, createdAt, id])
+}
+
+// Read cursor for unread count. Unread = messages WHERE (createdAt, id) > cursor pair.
+model SantaChatReadCursor {
+  id                String           @id @default(cuid())
+  campaignId        String
+  participantId     String
+  lastReadMessageId String?
+  lastReadAt        DateTime?
+  updatedAt         DateTime         @updatedAt
+
+  campaign    SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, participantId])
+}
+
+model SantaPoll {
+  id        String    @id @default(cuid())
+  roundId   String
+  question  String
+  options   Json
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  round  SantaRound    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  votes  SantaPollVote[]
+
+  @@index([roundId])
+}
+
+model SantaPollVote {
+  id            String           @id @default(cuid())
+  pollId        String
+  participantId String
+  optionIndex   Int
+  createdAt     DateTime         @default(now())
+
+  poll        SantaPoll        @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, participantId])
+}
+
+model SantaNotification {
+  id         String                @id @default(cuid())
+  campaignId String
+  userId     String
+  type       SantaNotificationType
+  payload    Json?
+  readAt     DateTime?
+  createdAt  DateTime              @default(now())
+
+  campaign SantaCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User          @relation("SantaNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([campaignId])
+}
+
+model SantaAdminAuditLog {
+  id         String        @id @default(cuid())
+  campaignId String
+  actorId    String
+  action     String
+  payload    Json?
+  createdAt  DateTime      @default(now())
+
+  campaign SantaCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
 }

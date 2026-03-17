@@ -412,6 +412,33 @@ if (!token) {
     }).catch(() => { /* user may not exist yet — will be created by API later */ });
 
     const payload = ctx.startPayload; // slug passed via ?start=SLUG deep link
+    if (payload?.startsWith('santa_')) {
+      // Secret Santa invite deep link
+      const token = payload.slice('santa_'.length);
+      try {
+        const campaign = await prisma.santaCampaign.findUnique({
+          where: { inviteToken: token },
+          select: { id: true, title: true, status: true, owner: { select: { firstName: true, profile: { select: { displayName: true } } } } },
+        });
+        if (!campaign || campaign.status === 'CANCELLED') {
+          return ctx.reply(t('bot_santa_invite_expired', locale));
+        }
+        if (!['OPEN', 'DRAFT'].includes(campaign.status)) {
+          return ctx.reply(t('bot_santa_invite_closed', locale));
+        }
+        const ownerName = campaign.owner.profile?.displayName || campaign.owner.firstName || t('api_user_fallback', locale);
+        return ctx.reply(
+          t('bot_santa_invite_msg', locale, { owner: ownerName, title: campaign.title }),
+          Markup.inlineKeyboard([
+            Markup.button.webApp(t('bot_santa_join_btn', locale), `${MINI_APP_URL}?startapp=santa_join_${token}`),
+          ]),
+        );
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[bot] santa deep link error:', err);
+        return ctx.reply(t('bot_error', locale));
+      }
+    }
     if (payload?.startsWith('hint_')) {
       // Hint deep link — friend clicks a gift hint link
       const itemId = payload.slice(5);

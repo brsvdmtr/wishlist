@@ -1963,6 +1963,15 @@ tgRouter.delete(
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
+    // Block deletion if wishlist is linked to an active Santa campaign
+    const activeSantaLink = await prisma.santaParticipant.findFirst({
+      where: { linkedWishlistId: id, campaign: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } },
+      include: { campaign: { select: { title: true } } },
+    });
+    if (activeSantaLink) {
+      return res.status(409).json({ error: 'wishlist_in_santa_campaign', campaignTitle: activeSantaLink.campaign.title });
+    }
+
     await prisma.wishlist.delete({ where: { id } });
 
     // Repack positions for remaining REGULAR non-archived wishlists to keep them contiguous
@@ -2060,6 +2069,15 @@ tgRouter.post(
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
     if (wishlist.archivedAt) return res.status(409).json({ error: 'Already archived' });
+
+    // Block archiving if wishlist is linked to an active Santa campaign
+    const activeSantaLink = await prisma.santaParticipant.findFirst({
+      where: { linkedWishlistId: id, campaign: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } },
+      include: { campaign: { select: { title: true } } },
+    });
+    if (activeSantaLink) {
+      return res.status(409).json({ error: 'wishlist_in_santa_campaign', campaignTitle: activeSantaLink.campaign.title });
+    }
 
     await prisma.wishlist.update({ where: { id }, data: { archivedAt: new Date() } });
     return res.json({ ok: true });
@@ -4149,6 +4167,20 @@ tgRouter.delete(
   '/me/account',
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
+
+    // Block if user owns active Santa campaigns (must cancel first)
+    const activeSantaCampaigns = await prisma.santaCampaign.findMany({
+      where: { ownerId: user.id, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+      select: { id: true, title: true, status: true },
+    });
+    if (activeSantaCampaigns.length > 0) {
+      return res.status(409).json({
+        error: 'active_santa_campaigns',
+        message: 'Cancel or complete your Secret Santa campaigns before deleting your account.',
+        campaigns: activeSantaCampaigns,
+      });
+    }
+
     await prisma.user.delete({ where: { id: user.id } });
     return res.json({ success: true });
   }),
@@ -4524,6 +4556,613 @@ internalRouter.post(
     }
   }),
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Secret Santa endpoints
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Compute whether the user can currently create a Santa campaign. Pure function — never mutates DB. */
+async function getSantaSeasonInfo(userId: string, santaTestMode: boolean) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const config = await prisma.santaSeasonConfig.findUnique({ where: { seasonYear: year } });
+  if (!config) return { inSeason: false, canCreate: false, seasonStart: null, seasonEnd: null, config: null };
+  const effectiveInSeason = santaTestMode ? true : (now >= config.seasonStartAt && now <= config.seasonEndAt);
+  const canCreate = effectiveInSeason && config.campaignCreateEnabled;
+  return {
+    inSeason: effectiveInSeason,
+    canCreate,
+    seasonStart: config.seasonStartAt.toISOString(),
+    seasonEnd: config.seasonEndAt.toISOString(),
+    config,
+  };
+}
+
+// GET /tg/santa/season — season status and canCreate flag
+tgRouter.get('/santa/season', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const info = await getSantaSeasonInfo(user.id, user.santaTestMode);
+  return res.json({
+    inSeason: info.inSeason,
+    canCreate: info.canCreate,
+    seasonStart: info.seasonStart,
+    seasonEnd: info.seasonEnd,
+    testMode: user.santaTestMode,
+  });
+}));
+
+// POST /tg/santa/season/test-mode — toggle santa test mode (godMode users only)
+tgRouter.post('/santa/season/test-mode', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  if (!user.godMode) return res.status(403).json({ error: 'Forbidden' });
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { santaTestMode: !user.santaTestMode },
+    select: { santaTestMode: true },
+  });
+  return res.json({ santaTestMode: updated.santaTestMode });
+}));
+
+// POST /tg/santa/campaigns — create a new campaign
+tgRouter.post('/santa/campaigns', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const parsed = z.object({
+    title: z.string().min(1).max(80),
+    description: z.string().max(500).optional(),
+    type: z.enum(['CLASSIC', 'MULTI_WAVE']).default('CLASSIC'),
+    minBudget: z.number().int().positive().optional(),
+    maxBudget: z.number().int().positive().optional(),
+    currency: z.string().max(3).default('RUB'),
+    drawAt: z.string().datetime().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const info = await getSantaSeasonInfo(user.id, user.santaTestMode);
+  if (!info.canCreate) return res.status(403).json({ error: 'santa_not_in_season' });
+
+  // PRO gate for MULTI_WAVE
+  if (parsed.data.type === 'MULTI_WAVE') {
+    const ent = await getUserEntitlement(user.id);
+    if (!ent.isPro) return res.status(402).json({ error: 'pro_required', feature: 'santa_multi_wave' });
+  }
+
+  const now = new Date();
+  const campaign = await prisma.santaCampaign.create({
+    data: {
+      title: parsed.data.title,
+      description: parsed.data.description,
+      type: parsed.data.type,
+      status: 'DRAFT',
+      ownerId: user.id,
+      minBudget: parsed.data.minBudget,
+      maxBudget: parsed.data.maxBudget,
+      currency: parsed.data.currency,
+      drawAt: parsed.data.drawAt ? new Date(parsed.data.drawAt) : undefined,
+      seasonYear: now.getFullYear(),
+    },
+    select: { id: true, title: true, status: true, inviteToken: true, type: true, seasonYear: true, createdAt: true },
+  });
+
+  await prisma.santaAdminAuditLog.create({
+    data: { campaignId: campaign.id, actorId: user.id, action: 'campaign_created' },
+  });
+
+  return res.status(201).json({ campaign });
+}));
+
+// GET /tg/santa/campaigns — list my campaigns (owned + joined)
+tgRouter.get('/santa/campaigns', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+
+  const [owned, joined] = await Promise.all([
+    prisma.santaCampaign.findMany({
+      where: { ownerId: user.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, title: true, status: true, type: true, seasonYear: true, createdAt: true,
+        _count: { select: { participants: { where: { status: 'JOINED' } } } },
+      },
+    }),
+    prisma.santaParticipant.findMany({
+      where: { userId: user.id, status: 'JOINED', campaign: { ownerId: { not: user.id } } },
+      orderBy: { joinedAt: 'desc' },
+      select: {
+        campaign: {
+          select: {
+            id: true, title: true, status: true, type: true, seasonYear: true, createdAt: true,
+            _count: { select: { participants: { where: { status: 'JOINED' } } } },
+            owner: { select: { firstName: true, profile: { select: { displayName: true } } } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  return res.json({
+    owned: owned.map(c => ({ ...c, participantCount: c._count.participants })),
+    joined: joined.map(j => ({
+      ...j.campaign,
+      participantCount: j.campaign._count.participants,
+      ownerName: j.campaign.owner.profile?.displayName || j.campaign.owner.firstName || null,
+    })),
+  });
+}));
+
+// GET /tg/santa/campaigns/:id — campaign detail (participants only)
+tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    include: {
+      participants: {
+        where: { status: { in: ['JOINED', 'INVITED'] } },
+        select: {
+          id: true, status: true, joinedAt: true,
+          user: { select: { id: true, firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+          linkedWishlist: { select: { id: true, title: true, slug: true } },
+        },
+        orderBy: { joinedAt: 'asc' },
+      },
+      rounds: { orderBy: { roundNumber: 'asc' }, select: { id: true, roundNumber: true, drawStatus: true, drawnAt: true } },
+    },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+  const isOwner = campaign.ownerId === user.id;
+  const isParticipant = campaign.participants.some(p => p.user.id === user.id);
+  if (!isOwner && !isParticipant) return res.status(403).json({ error: 'Forbidden' });
+
+  // Find caller's own assignment (post-draw)
+  let myAssignment = null;
+  const myParticipant = campaign.participants.find(p => p.user.id === user.id);
+  if (myParticipant && campaign.rounds.length > 0 && campaign.status === 'ACTIVE') {
+    const assignment = await prisma.santaAssignment.findUnique({
+      where: { roundId_giverParticipantId: { roundId: campaign.rounds[0]!.id, giverParticipantId: myParticipant.id } },
+      select: { id: true, giftStatus: true, giftNote: true },
+    });
+    if (assignment) {
+      myAssignment = { ...assignment };
+    }
+  }
+
+  return res.json({
+    campaign: {
+      id: campaign.id,
+      title: campaign.title,
+      description: campaign.description,
+      type: campaign.type,
+      status: campaign.status,
+      isOwner,
+      inviteToken: isOwner ? campaign.inviteToken : undefined,
+      minBudget: campaign.minBudget,
+      maxBudget: campaign.maxBudget,
+      currency: campaign.currency,
+      drawAt: campaign.drawAt,
+      seasonYear: campaign.seasonYear,
+      cancelledAt: campaign.cancelledAt,
+      cancelReason: campaign.cancelReason,
+      createdAt: campaign.createdAt,
+    },
+    participants: campaign.participants.map(p => ({
+      id: p.id,
+      status: p.status,
+      joinedAt: p.joinedAt,
+      userId: p.user.id,
+      displayName: p.user.profile?.displayName || p.user.firstName || null,
+      avatarUrl: p.user.profile?.avatarUrl || null,
+      hasLinkedWishlist: !!p.linkedWishlist,
+      linkedWishlist: isOwner ? p.linkedWishlist : (p.user.id === user.id ? p.linkedWishlist : null),
+    })),
+    rounds: campaign.rounds,
+    myAssignment,
+  });
+}));
+
+// PATCH /tg/santa/campaigns/:id — update campaign (owner only, non-COMPLETED/CANCELLED)
+tgRouter.patch('/santa/campaigns/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const parsed = z.object({
+    title: z.string().min(1).max(80).optional(),
+    description: z.string().max(500).nullable().optional(),
+    minBudget: z.number().int().positive().nullable().optional(),
+    maxBudget: z.number().int().positive().nullable().optional(),
+    currency: z.string().max(3).optional(),
+    drawAt: z.string().datetime().nullable().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, status: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+  if (['COMPLETED', 'CANCELLED'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign is finished' });
+
+  const data: Record<string, unknown> = {};
+  if (parsed.data.title !== undefined) data.title = parsed.data.title;
+  if (parsed.data.description !== undefined) data.description = parsed.data.description;
+  if (parsed.data.minBudget !== undefined) data.minBudget = parsed.data.minBudget;
+  if (parsed.data.maxBudget !== undefined) data.maxBudget = parsed.data.maxBudget;
+  if (parsed.data.currency !== undefined) data.currency = parsed.data.currency;
+  if (parsed.data.drawAt !== undefined) data.drawAt = parsed.data.drawAt ? new Date(parsed.data.drawAt) : null;
+
+  const updated = await prisma.santaCampaign.update({ where: { id: campaignId }, data });
+  return res.json({ campaign: updated });
+}));
+
+// POST /tg/santa/campaigns/:id/open — DRAFT → OPEN
+tgRouter.post('/santa/campaigns/:id/open', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, status: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+  if (campaign.status !== 'DRAFT') return res.status(409).json({ error: 'Campaign is not in DRAFT status' });
+
+  await prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'OPEN' } });
+  await prisma.santaAdminAuditLog.create({ data: { campaignId, actorId: user.id, action: 'status_changed', payload: { from: 'DRAFT', to: 'OPEN' } } });
+  return res.json({ ok: true });
+}));
+
+// POST /tg/santa/campaigns/:id/lock — OPEN → LOCKED
+tgRouter.post('/santa/campaigns/:id/lock', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { ownerId: true, status: true, _count: { select: { participants: { where: { status: 'JOINED' } } } } },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+  if (campaign.status !== 'OPEN') return res.status(409).json({ error: 'Campaign is not OPEN' });
+  if (campaign._count.participants < 2) return res.status(422).json({ error: 'Need at least 2 participants to lock' });
+
+  await prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'LOCKED' } });
+  await prisma.santaAdminAuditLog.create({ data: { campaignId, actorId: user.id, action: 'status_changed', payload: { from: 'OPEN', to: 'LOCKED' } } });
+  return res.json({ ok: true });
+}));
+
+// POST /tg/santa/campaigns/:id/cancel — cancel campaign (owner only)
+tgRouter.post('/santa/campaigns/:id/cancel', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const parsed = z.object({ reason: z.string().max(200).optional() }).safeParse(req.body);
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, status: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+  if (['COMPLETED', 'CANCELLED'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign is already finished' });
+
+  await prisma.santaCampaign.update({
+    where: { id: campaignId },
+    data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: parsed.success ? (parsed.data.reason ?? null) : null },
+  });
+  await prisma.santaAdminAuditLog.create({ data: { campaignId, actorId: user.id, action: 'campaign_cancelled', payload: { reason: parsed.success ? parsed.data.reason : undefined } } });
+  return res.json({ ok: true });
+}));
+
+// GET /tg/santa/invite/:token — resolve invite token → campaign preview
+tgRouter.get('/santa/invite/:token', asyncHandler(async (req, res) => {
+  const token = req.params.token ?? '';
+  if (!token) return res.status(400).json({ error: 'Missing token' });
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { inviteToken: token },
+    select: {
+      id: true, title: true, description: true, status: true, type: true, seasonYear: true,
+      minBudget: true, maxBudget: true, currency: true,
+      owner: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+      _count: { select: { participants: { where: { status: 'JOINED' } } } },
+    },
+  });
+
+  if (!campaign) return res.status(404).json({ error: 'Invite not found' });
+  if (campaign.status === 'CANCELLED') return res.status(410).json({ error: 'Campaign cancelled' });
+  if (!['OPEN', 'DRAFT'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign is not accepting new members' });
+
+  return res.json({
+    campaign: {
+      id: campaign.id,
+      title: campaign.title,
+      description: campaign.description,
+      status: campaign.status,
+      type: campaign.type,
+      seasonYear: campaign.seasonYear,
+      minBudget: campaign.minBudget,
+      maxBudget: campaign.maxBudget,
+      currency: campaign.currency,
+      participantCount: campaign._count.participants,
+      ownerName: campaign.owner.profile?.displayName || campaign.owner.firstName || null,
+      ownerAvatarUrl: campaign.owner.profile?.avatarUrl || null,
+    },
+  });
+}));
+
+// POST /tg/santa/campaigns/:id/join — join via invite token
+tgRouter.post('/santa/campaigns/:id/join', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { status: true, ownerId: true },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.status === 'CANCELLED') return res.status(410).json({ error: 'Campaign cancelled' });
+  if (!['OPEN', 'DRAFT'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign is not accepting new members' });
+
+  // Already a participant?
+  const existing = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+  });
+  if (existing) {
+    if (existing.status === 'JOINED') return res.json({ ok: true, alreadyJoined: true });
+    // Rejoin if left/removed
+    await prisma.santaParticipant.update({
+      where: { id: existing.id },
+      data: { status: 'JOINED', leftAt: null, joinedAt: new Date() },
+    });
+    return res.json({ ok: true });
+  }
+
+  await prisma.santaParticipant.create({
+    data: { campaignId, userId: user.id, status: 'JOINED' },
+  });
+
+  return res.status(201).json({ ok: true });
+}));
+
+// POST /tg/santa/campaigns/:id/leave — leave campaign (before draw)
+tgRouter.post('/santa/campaigns/:id/leave', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+    include: { campaign: { select: { status: true } } },
+  });
+  if (!participant || participant.status !== 'JOINED') return res.status(404).json({ error: 'Not a participant' });
+  if (['ACTIVE', 'COMPLETED'].includes(participant.campaign.status)) {
+    return res.status(409).json({ error: 'Cannot leave after draw is complete' });
+  }
+  if (['DRAW_IN_PROGRESS', 'LOCKED'].includes(participant.campaign.status)) {
+    return res.status(409).json({ error: 'Campaign is locked for draw' });
+  }
+
+  await prisma.santaParticipant.update({
+    where: { id: participant.id },
+    data: { status: 'LEFT', leftAt: new Date() },
+  });
+  return res.json({ ok: true });
+}));
+
+// DELETE /tg/santa/campaigns/:id/participants/:userId — remove participant (owner only, before draw)
+tgRouter.delete('/santa/campaigns/:id/participants/:userId', asyncHandler(async (req, res) => {
+  const owner = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const targetUserId = req.params.userId ?? '';
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, status: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== owner.id) return res.status(403).json({ error: 'Forbidden' });
+  if (['ACTIVE', 'COMPLETED', 'DRAW_IN_PROGRESS'].includes(campaign.status)) {
+    return res.status(409).json({ error: 'Cannot remove after draw' });
+  }
+
+  const participant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: targetUserId, status: 'JOINED' },
+  });
+  if (!participant) return res.status(404).json({ error: 'Participant not found' });
+
+  await prisma.santaParticipant.update({
+    where: { id: participant.id },
+    data: { status: 'REMOVED', leftAt: new Date() },
+  });
+  return res.json({ ok: true });
+}));
+
+// PATCH /tg/santa/campaigns/:id/wishlist — link or unlink wishlist (participant only)
+tgRouter.patch('/santa/campaigns/:id/wishlist', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const parsed = z.object({ wishlistId: z.string().nullable() }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+    include: { campaign: { select: { status: true } } },
+  });
+  if (!participant || participant.status !== 'JOINED') return res.status(404).json({ error: 'Not a participant' });
+  if (['ACTIVE', 'COMPLETED', 'DRAW_IN_PROGRESS'].includes(participant.campaign.status)) {
+    return res.status(409).json({ error: 'Cannot change wishlist after draw' });
+  }
+
+  if (parsed.data.wishlistId) {
+    // Verify user owns this wishlist
+    const wishlist = await prisma.wishlist.findUnique({ where: { id: parsed.data.wishlistId }, select: { ownerId: true } });
+    if (!wishlist || wishlist.ownerId !== user.id) return res.status(404).json({ error: 'Wishlist not found' });
+  }
+
+  await prisma.santaParticipant.update({
+    where: { id: participant.id },
+    data: { linkedWishlistId: parsed.data.wishlistId },
+  });
+  return res.json({ ok: true });
+}));
+
+// GET /tg/santa/campaigns/:id/exclusions — list exclusions (owner only)
+tgRouter.get('/santa/campaigns/:id/exclusions', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+  const exclusions = await prisma.santaExclusion.findMany({
+    where: { campaignId },
+    orderBy: { createdAt: 'asc' },
+  });
+  return res.json({ exclusions });
+}));
+
+// POST /tg/santa/campaigns/:id/exclusions — add exclusion (owner + PRO only)
+tgRouter.post('/santa/campaigns/:id/exclusions', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const parsed = z.object({ userId1: z.string().min(1), userId2: z.string().min(1) }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+  const ent = await getUserEntitlement(user.id);
+  if (!ent.isPro) return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusions' });
+
+  const { userId1, userId2 } = parsed.data;
+  // Normalize order to prevent (A,B) and (B,A) both existing
+  const [uid1, uid2] = userId1 < userId2 ? [userId1, userId2] : [userId2, userId1];
+
+  try {
+    const exclusion = await prisma.santaExclusion.create({ data: { campaignId, userId1: uid1, userId2: uid2 } });
+    return res.status(201).json({ exclusion });
+  } catch {
+    return res.status(409).json({ error: 'Exclusion already exists' });
+  }
+}));
+
+// DELETE /tg/santa/campaigns/:id/exclusions/:exclusionId — remove exclusion (owner only)
+tgRouter.delete('/santa/campaigns/:id/exclusions/:exclusionId', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const exclusionId = req.params.exclusionId ?? '';
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+  const exclusion = await prisma.santaExclusion.findUnique({ where: { id: exclusionId } });
+  if (!exclusion || exclusion.campaignId !== campaignId) return res.status(404).json({ error: 'Exclusion not found' });
+
+  await prisma.santaExclusion.delete({ where: { id: exclusionId } });
+  return res.json({ ok: true });
+}));
+
+// POST /tg/santa/campaigns/:id/gift-status — update gift status (giver only, post-draw)
+tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const parsed = z.object({
+    status: z.enum(['BUYING', 'SENT']),
+    note: z.string().max(300).optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+  });
+  if (!participant) return res.status(404).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' } } } });
+  if (!campaign || campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign is not ACTIVE' });
+  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
+
+  const roundId = campaign.rounds[0]!.id;
+  const assignment = await prisma.santaAssignment.findUnique({
+    where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
+  });
+  if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+  const updated = await prisma.santaAssignment.update({
+    where: { id: assignment.id },
+    data: { giftStatus: parsed.data.status, giftNote: parsed.data.note ?? assignment.giftNote },
+  });
+
+  await prisma.santaGiftProgress.create({ data: { assignmentId: assignment.id, status: parsed.data.status, note: parsed.data.note } });
+
+  return res.json({ giftStatus: updated.giftStatus });
+}));
+
+// POST /tg/santa/campaigns/:id/confirm-received — receiver confirms gift received
+tgRouter.post('/santa/campaigns/:id/confirm-received', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+  });
+  if (!participant) return res.status(404).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' } } } });
+  if (!campaign || campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign is not ACTIVE' });
+  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
+
+  const roundId = campaign.rounds[0]!.id;
+  // Find assignment where this user is the receiver
+  const assignment = await prisma.santaAssignment.findUnique({
+    where: { roundId_receiverParticipantId: { roundId, receiverParticipantId: participant.id } },
+  });
+  if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+  await prisma.santaAssignment.update({ where: { id: assignment.id }, data: { giftStatus: 'RECEIVED' } });
+  await prisma.santaGiftProgress.create({ data: { assignmentId: assignment.id, status: 'RECEIVED' } });
+
+  // Check if all gifts received → complete campaign
+  const allAssignments = await prisma.santaAssignment.findMany({ where: { roundId }, select: { giftStatus: true } });
+  const allReceived = allAssignments.every(a => a.giftStatus === 'RECEIVED');
+  if (allReceived) {
+    await prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'COMPLETED' } });
+  }
+
+  return res.json({ ok: true, campaignCompleted: allReceived });
+}));
+
+// ─── Santa — inbound (receiver-centric, post-draw) ────────────────────────────
+
+// GET /tg/santa/campaigns/:id/inbound/wishlist — giver gets receiver's wishlist items
+tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const participant = await prisma.santaParticipant.findUnique({ where: { campaignId_userId: { campaignId, userId: user.id } } });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' } } } });
+  if (!campaign || campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign not ACTIVE' });
+  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round' });
+
+  const roundId = campaign.rounds[0]!.id;
+  const assignment = await prisma.santaAssignment.findUnique({
+    where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
+    include: { receiver: { select: { linkedWishlistId: true, user: { select: { firstName: true, profile: { select: { displayName: true } } } } } } },
+  });
+  if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+  const receiverWishlistId = assignment.receiver.linkedWishlistId;
+  // Receiver display name visible to giver (anonymized — only first name or display name, no Telegram ID)
+  const receiverName = assignment.receiver.user.profile?.displayName || assignment.receiver.user.firstName || 'Получатель';
+
+  if (!receiverWishlistId) return res.json({ receiverName, wishlist: null, items: [] });
+
+  const items = await prisma.item.findMany({
+    where: { wishlistId: receiverWishlistId, status: { in: ['AVAILABLE', 'RESERVED', 'PURCHASED'] } },
+    orderBy: ITEM_ORDER_BY,
+    select: { id: true, title: true, url: true, priceText: true, currency: true, priority: true, imageUrl: true, status: true, description: true },
+  });
+  const wishlist = await prisma.wishlist.findUnique({ where: { id: receiverWishlistId }, select: { title: true } });
+
+  return res.json({ receiverName, wishlist: wishlist ? { title: wishlist.title } : null, items });
+}));
 
 // ─── Maintenance mode middleware ──────────────────────────────────────────────
 // When MAINTENANCE_MODE=true, block /tg/* and /public/* with 503 + code=MAINTENANCE.
