@@ -1067,6 +1067,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     privacy: { profileVisibility: string; subscribePolicy: string; commentsEnabled: boolean; hintsEnabled: boolean };
     appBehavior: { newWishlistPosition: string };
     isPro: boolean;
+    supportId?: string | null;
   } | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
@@ -5409,6 +5410,70 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <SettingsActionRow label={t('settings_legal', locale)} onClick={() => pushToast(t('settings_coming_soon', locale), 'success')} />
                 <SettingsActionRow label={t('settings_delete_account', locale)} color={C.red} onClick={() => setShowDeleteAccount(true)} />
               </SettingsSection>
+
+              {/* Support ID — owner-only, read-only copy block */}
+              {settingsData.supportId && (
+                <div style={{
+                  background: C.surface, borderRadius: 16, padding: '14px 16px',
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                      <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        {t('support_id_label', locale)}
+                      </span>
+                      <span style={{
+                        fontSize: 14, color: C.text, fontFamily: 'monospace',
+                        wordBreak: 'break-all', letterSpacing: '0.05em',
+                      }}>
+                        {settingsData.supportId}
+                      </span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const id = settingsData.supportId!;
+                        try {
+                          // Telegram Mini App clipboard API (preferred in TG environment)
+                          if (typeof window !== 'undefined' && window.Telegram?.WebApp?.writeToClipboard) {
+                            window.Telegram.WebApp.writeToClipboard(id);
+                            pushToast(t('support_id_copied', locale), 'success');
+                            return;
+                          }
+                          // Standard Clipboard API
+                          await navigator.clipboard.writeText(id);
+                          pushToast(t('support_id_copied', locale), 'success');
+                        } catch {
+                          // Fallback: execCommand (legacy browsers / restricted contexts)
+                          try {
+                            const ta = document.createElement('textarea');
+                            ta.value = id;
+                            ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+                            document.body.appendChild(ta);
+                            ta.focus(); ta.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(ta);
+                            pushToast(t('support_id_copied', locale), 'success');
+                          } catch {
+                            pushToast(t('support_id_copy_error', locale), 'error');
+                          }
+                        }
+                      }}
+                      style={{
+                        flexShrink: 0,
+                        padding: '8px 14px', borderRadius: 10, border: 'none',
+                        background: C.accent + '18', color: C.accent,
+                        fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {t('support_id_copy', locale)}
+                    </button>
+                  </div>
+                  <span style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>
+                    {t('support_id_hint', locale)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

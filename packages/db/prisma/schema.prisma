@@ -326,6 +326,9 @@ model UserProfile {
   // Settings — App Behavior
   newWishlistPosition String  @default("bottom")
 
+  // Support
+  supportId String? @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

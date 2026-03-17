@@ -443,6 +443,19 @@ async function generateUniqueShareToken(): Promise<string> {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 }
 
+/** Generate a cryptographically random, opaque, collision-safe Support ID.
+ *  Format: 16-char lowercase hex (e.g. "8c7f0c2e9a4b1d63").
+ *  Not derived from Telegram ID or any user-identifying data. */
+async function generateUniqueSupportId(): Promise<string> {
+  for (let i = 0; i < 10; i++) {
+    const id = crypto.randomBytes(8).toString('hex'); // 16-char lowercase hex
+    const existing = await prisma.userProfile.findUnique({ where: { supportId: id } });
+    if (!existing) return id;
+  }
+  // Ultra-safe fallback: 32 hex chars — probability of collision is negligible
+  return crypto.randomBytes(16).toString('hex');
+}
+
 async function getSystemUser() {
   const email = (process.env.SYSTEM_USER_EMAIL ?? 'owner@local').trim() || 'owner@local';
   return prisma.user.upsert({ where: { email }, update: {}, create: { email } });
@@ -1379,14 +1392,29 @@ async function getOrCreateTgUser(tgUser: TelegramUser) {
 }
 
 async function getOrCreateProfile(userId: string, locale?: Locale) {
-  return prisma.userProfile.upsert({
-    where: { userId },
-    update: {},
-    create: {
-      userId,
-      defaultCurrency: locale === 'ru' ? 'RUB' : 'USD',
-    },
-  });
+  // Try to fetch an existing profile first to avoid generating a supportId we won't use.
+  let profile = await prisma.userProfile.findUnique({ where: { userId } });
+
+  if (!profile) {
+    // New user: create with a fresh supportId immediately.
+    const supportId = await generateUniqueSupportId();
+    profile = await prisma.userProfile.create({
+      data: {
+        userId,
+        defaultCurrency: locale === 'ru' ? 'RUB' : 'USD',
+        supportId,
+      },
+    });
+  } else if (!profile.supportId) {
+    // Existing user without supportId (pre-migration row): lazy backfill.
+    const supportId = await generateUniqueSupportId();
+    profile = await prisma.userProfile.update({
+      where: { userId },
+      data: { supportId },
+    });
+  }
+
+  return profile;
 }
 
 type ItemRole = 'owner' | 'reserver' | 'third_party';
@@ -3423,6 +3451,8 @@ tgRouter.get(
         birthday: profile.birthday?.toISOString() ?? null,
         hideYear: profile.hideYear,
         defaultCurrency: profile.defaultCurrency,
+        // Owner-only — never exposed in public/share API responses
+        supportId: profile.supportId,
       },
       stats: {
         wishlists,
@@ -3585,6 +3615,8 @@ tgRouter.get(
         newWishlistPosition: isPro ? profile.newWishlistPosition : 'bottom',
       },
       isPro,
+      // Owner-only — never exposed in public/share API responses
+      supportId: profile.supportId,
     });
   }),
 );
@@ -3688,6 +3720,8 @@ tgRouter.patch(
         newWishlistPosition: isPro ? profile.newWishlistPosition : 'bottom',
       },
       isPro,
+      // Owner-only — never exposed in public/share API responses
+      supportId: profile.supportId,
     });
   }),
 );

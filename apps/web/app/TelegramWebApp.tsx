@@ -28,6 +28,7 @@ declare global {
         openInvoice?(url: string, callback?: (status: string) => void): void;
         disableVerticalSwipes?(): void;
         enableVerticalSwipes?(): void;
+        writeToClipboard?(text: string): void;
       };
     };
   }

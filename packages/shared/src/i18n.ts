@@ -587,6 +587,13 @@ const ru: Dict = {
   settings_pro_required: 'Доступно в Pro',
   settings_pro_badge: 'Pro',
 
+  // ── Support ID ───────────────────────────────────────────────────────────
+  support_id_label: 'ID для поддержки',
+  support_id_hint: 'Отправь этот ID в поддержку, если возникнут проблемы',
+  support_id_copy: 'Скопировать',
+  support_id_copied: 'Скопировано',
+  support_id_copy_error: 'Не удалось скопировать',
+
   // ── Visibility / Policy options ─────────────────────────────────────────
   visibility_all: 'Всем',
   visibility_link_only: 'Только по ссылке',
@@ -1269,6 +1276,13 @@ const en: Dict = {
   settings_delete_btn: 'Delete permanently',
   settings_pro_required: 'Available in Pro',
   settings_pro_badge: 'Pro',
+
+  // ── Support ID ───────────────────────────────────────────────────────────
+  support_id_label: 'Support ID',
+  support_id_hint: 'Share this ID with support if you have any issues',
+  support_id_copy: 'Copy',
+  support_id_copied: 'Copied',
+  support_id_copy_error: 'Could not copy',
 
   // ── Visibility / Policy options ─────────────────────────────────────────
   visibility_all: 'Everyone',
