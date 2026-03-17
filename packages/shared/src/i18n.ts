@@ -929,6 +929,23 @@ const ru: Dict = {
   santa_reveal_giver: 'Ваш Тайный Санта — {{name}}',
   santa_reveal_not_ready: 'Раскрытие доступно после завершения кампании',
 
+  // ── Hints (Batch 2.5) ────────────────────────────────────────────────────
+  santa_hint_request_btn: 'Запросить подсказку',
+  santa_hint_pending: 'Ожидаем ответа получателя…',
+  santa_hint_fulfilled: 'Получатель выбрал желания',
+  santa_hint_expired: 'Подсказка истекла — запросите снова',
+  santa_hint_cancelled: 'Подсказка отменена',
+  santa_hint_selected_items_title: 'Что хочет получатель:',
+  santa_hint_no_wishlist: 'У получателя нет привязанного вишлиста',
+  santa_hint_pro_required: 'Запросить подсказку могут только Pro-участники',
+  santa_hint_inbound_title: 'Ваш Санта хочет подсказку',
+  santa_hint_inbound_desc: 'Выберите 1–3 желания, которые хотели бы получить. Ваш Санта увидит их анонимно.',
+  santa_hint_inbound_select_items: 'Выберите желания',
+  santa_hint_inbound_submit: 'Отправить подсказку',
+  santa_hint_inbound_submitted: 'Подсказка отправлена!',
+  santa_hint_inbound_no_items: 'В вашем вишлисте нет доступных желаний',
+  santa_hint_expires_in: 'Истекает через {{time}}',
+
   // ── Campaign completion ───────────────────────────────────────────────────
   santa_campaign_completed_title: 'Кампания завершена',
   santa_campaign_completed_msg: 'Все подарки получены! Спасибо за участие',
@@ -1850,6 +1867,23 @@ const en: Dict = {
   santa_reveal_btn: 'Reveal your Santa',
   santa_reveal_giver: 'Your Secret Santa was {{name}}',
   santa_reveal_not_ready: 'Reveal is available after the campaign is completed',
+
+  // ── Hints (Batch 2.5) ────────────────────────────────────────────────────
+  santa_hint_request_btn: 'Request a hint',
+  santa_hint_pending: 'Waiting for recipient to respond…',
+  santa_hint_fulfilled: 'Recipient chose their wishes',
+  santa_hint_expired: 'Hint expired — request a new one',
+  santa_hint_cancelled: 'Hint cancelled',
+  santa_hint_selected_items_title: 'What your recipient wants:',
+  santa_hint_no_wishlist: 'Your recipient has no linked wishlist',
+  santa_hint_pro_required: 'Hint requests are available for Pro members only',
+  santa_hint_inbound_title: 'Your Santa wants a hint',
+  santa_hint_inbound_desc: 'Select 1–3 wishes you would like to receive. Your Santa will see them anonymously.',
+  santa_hint_inbound_select_items: 'Select wishes',
+  santa_hint_inbound_submit: 'Send hint',
+  santa_hint_inbound_submitted: 'Hint sent!',
+  santa_hint_inbound_no_items: 'Your linked wishlist has no available wishes',
+  santa_hint_expires_in: 'Expires in {{time}}',
 
   // ── Campaign completion ───────────────────────────────────────────────────
   santa_campaign_completed_title: 'Campaign completed',

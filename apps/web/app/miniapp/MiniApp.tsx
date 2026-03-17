@@ -1592,6 +1592,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Reveal state
   const [santaReveal, setSantaReveal] = useState<{ revealed: boolean; giver?: { displayName: string; avatarUrl: string | null } } | null>(null);
   const [santaRevealLoading, setSantaRevealLoading] = useState(false);
+  // Hint state (Batch 2.5) — giver-side
+  const [santaHintRequest, setSantaHintRequest] = useState<{
+    id: string; status: string; requestedAt: string; expiresAt: string; fulfilledAt: string | null;
+    selectedItems: { id: string; title: string; priceText: string | null; url: string | null }[] | null;
+  } | null>(null);
+  const [santaHintRequestLoading, setSantaHintRequestLoading] = useState(false);
+  // Hint state — receiver-side (inbound)
+  const [santaHintInbound, setSantaHintInbound] = useState<{
+    hasPendingHint: boolean; hint: { id: string; status: string; requestedAt: string; expiresAt: string } | null;
+  } | null>(null);
+  const [santaHintInboundLoading, setSantaHintInboundLoading] = useState(false);
+  const [santaHintPickerOpen, setSantaHintPickerOpen] = useState(false);
+  const [santaHintPickerItems, setSantaHintPickerItems] = useState<{ id: string; title: string; priceText: string | null }[]>([]);
+  const [santaHintPickerSelectedIds, setSantaHintPickerSelectedIds] = useState<string[]>([]);
+  const [santaHintFulfillLoading, setSantaHintFulfillLoading] = useState(false);
 
   // ── Wishes tab: filtered by priority ─────────────────────────────────────
   const filteredAllItems = useMemo(() => {
@@ -2651,6 +2666,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setSantaInboundStatus(null);
       setSantaDrawValidation(null);
       setSantaReveal(null);
+      setSantaHintRequest(null);
+      setSantaHintInbound(null);
+      setSantaHintPickerOpen(false);
+      setSantaHintPickerItems([]);
+      setSantaHintPickerSelectedIds([]);
       setScreen('santa-hub');
     } else if (screen === 'santa-join') {
       setSantaJoinPreview(null);
@@ -8755,6 +8775,102 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     ))}
                   </div>
                 )}
+
+                {/* ── Hint section (Batch 2.5) — giver requests anonymous wishlist hint ── */}
+                {camp.status === 'ACTIVE' && (
+                  <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                    {/* No hint yet — show request button */}
+                    {!santaHintRequest && (
+                      <button
+                        disabled={santaHintRequestLoading}
+                        onClick={async () => {
+                          setSantaHintRequestLoading(true);
+                          const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/hints`, { method: 'POST' });
+                          if (res.ok) {
+                            const data = await res.json() as typeof santaHintRequest;
+                            setSantaHintRequest(data);
+                          } else {
+                            const err = await res.json() as { error?: string };
+                            if (err.error === 'pro_required') pushToast(t('santa_hint_pro_required', locale), 'error');
+                            else if (err.error === 'receiver_no_wishlist') pushToast(t('santa_hint_no_wishlist', locale), 'error');
+                            else pushToast(t('error_generic', locale), 'error');
+                          }
+                          setSantaHintRequestLoading(false);
+                        }}
+                        style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 10, color: C.textSec, fontSize: 13, padding: '8px 16px', cursor: santaHintRequestLoading ? 'wait' : 'pointer', width: '100%', fontFamily: font }}
+                      >
+                        {santaHintRequestLoading ? t('loading', locale) : `💡 ${t('santa_hint_request_btn', locale)}`}
+                      </button>
+                    )}
+
+                    {/* Hint exists — show status */}
+                    {santaHintRequest && (
+                      <div>
+                        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6 }}>💡</div>
+                        {santaHintRequest.status === 'PENDING' && (
+                          <div style={{ fontSize: 13, color: C.textSec }}>{t('santa_hint_pending', locale)}</div>
+                        )}
+                        {santaHintRequest.status === 'FULFILLED' && (
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 8 }}>✓ {t('santa_hint_fulfilled', locale)}</div>
+                            {santaHintRequest.selectedItems && santaHintRequest.selectedItems.length > 0 && (
+                              <div>
+                                <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>{t('santa_hint_selected_items_title', locale)}</div>
+                                {santaHintRequest.selectedItems.map(item => (
+                                  <div key={item.id} style={{ background: C.surface, borderRadius: 8, padding: '8px 10px', marginBottom: 4 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{item.title}</div>
+                                    {item.priceText && <div style={{ fontSize: 12, color: C.textMuted }}>{item.priceText}</div>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {santaHintRequest.status === 'EXPIRED' && (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <div style={{ fontSize: 13, color: C.textMuted }}>{t('santa_hint_expired', locale)}</div>
+                            <button
+                              disabled={santaHintRequestLoading}
+                              onClick={async () => {
+                                setSantaHintRequest(null);
+                                setSantaHintRequestLoading(true);
+                                const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/hints`, { method: 'POST' });
+                                if (res.ok) setSantaHintRequest(await res.json() as typeof santaHintRequest);
+                                else pushToast(t('error_generic', locale), 'error');
+                                setSantaHintRequestLoading(false);
+                              }}
+                              style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, color: C.textSec, fontSize: 12, padding: '6px 12px', cursor: 'pointer', fontFamily: font }}
+                            >
+                              {santaHintRequestLoading ? t('loading', locale) : t('santa_hint_request_btn', locale)}
+                            </button>
+                          </div>
+                        )}
+                        {santaHintRequest.status === 'CANCELLED' && (
+                          <div style={{ fontSize: 13, color: C.textMuted }}>{t('santa_hint_cancelled', locale)}</div>
+                        )}
+
+                        {/* Poll for updates — refresh hint status */}
+                        {santaHintRequest.status === 'PENDING' && (
+                          <button
+                            disabled={santaHintRequestLoading}
+                            onClick={async () => {
+                              setSantaHintRequestLoading(true);
+                              const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/hints`);
+                              if (res.ok) {
+                                const data = await res.json() as { hint: typeof santaHintRequest };
+                                if (data.hint) setSantaHintRequest(data.hint);
+                              }
+                              setSantaHintRequestLoading(false);
+                            }}
+                            style={{ marginTop: 8, background: 'none', border: 'none', color: C.textMuted, fontSize: 12, padding: '4px 0', cursor: 'pointer', fontFamily: font }}
+                          >
+                            {santaHintRequestLoading ? t('loading', locale) : '↻ ' + (locale === 'ru' ? 'Обновить' : 'Refresh')}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -8813,6 +8929,86 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         </button>
                       )}
                     </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Receiver inbound hint card (Batch 2.5) — shown when receiver has a PENDING hint request */}
+            {!isOwner && camp.status === 'ACTIVE' && (() => {
+              const myParticipant = participants.find(p => p.userId === tgUser?.id?.toString());
+              if (!myParticipant) return null;
+              return (
+                <div>
+                  {/* Load hint on demand (lazy — don't auto-poll to preserve anonymity perception) */}
+                  {!santaHintInbound && (
+                    <button
+                      disabled={santaHintInboundLoading}
+                      onClick={async () => {
+                        setSantaHintInboundLoading(true);
+                        const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/hint`);
+                        if (res.ok) setSantaHintInbound(await res.json() as typeof santaHintInbound);
+                        setSantaHintInboundLoading(false);
+                      }}
+                      style={{ display: 'none' }} // Trigger is the card below; this is just a mount-guard
+                    />
+                  )}
+
+                  {/* Only render the hint card when there's an active PENDING hint */}
+                  {santaHintInbound?.hasPendingHint && santaHintInbound.hint && (
+                    <div style={{ background: `${C.accent}15`, borderRadius: 14, padding: 16, marginBottom: 16, border: `1px solid ${C.accent}30` }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+                        💡 {t('santa_hint_inbound_title', locale)}
+                      </div>
+                      <div style={{ fontSize: 13, color: C.textSec, marginBottom: 12 }}>
+                        {t('santa_hint_inbound_desc', locale)}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          // Load receiver's own linked wishlist items for selection
+                          if (!myParticipant.linkedWishlist?.id) {
+                            pushToast(t('santa_hint_inbound_no_items', locale), 'error');
+                            return;
+                          }
+                          setSantaHintInboundLoading(true);
+                          const res = await tgFetch(`/tg/wishlists/${myParticipant.linkedWishlist.id}/items`);
+                          if (res.ok) {
+                            const data = await res.json() as { items?: { id: string; title: string; priceText: string | null; status: string }[] };
+                            const available = (data.items ?? []).filter(i => i.status === 'AVAILABLE');
+                            if (available.length === 0) {
+                              pushToast(t('santa_hint_inbound_no_items', locale), 'error');
+                            } else {
+                              setSantaHintPickerItems(available);
+                              setSantaHintPickerSelectedIds([]);
+                              setSantaHintPickerOpen(true);
+                            }
+                          } else {
+                            pushToast(t('error_generic', locale), 'error');
+                          }
+                          setSantaHintInboundLoading(false);
+                        }}
+                        disabled={santaHintInboundLoading}
+                        style={{ background: C.accent, border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: santaHintInboundLoading ? 'wait' : 'pointer', width: '100%', fontFamily: font }}
+                      >
+                        {santaHintInboundLoading ? t('loading', locale) : t('santa_hint_inbound_select_items', locale)}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Lazy-load trigger: check for pending hint when component first mounts */}
+                  {santaHintInbound === null && !santaHintInboundLoading && camp.status === 'ACTIVE' && (
+                    <div
+                      ref={(el) => {
+                        if (el && santaHintInbound === null && !santaHintInboundLoading) {
+                          void (async () => {
+                            setSantaHintInboundLoading(true);
+                            const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/hint`);
+                            if (res.ok) setSantaHintInbound(await res.json() as typeof santaHintInbound);
+                            setSantaHintInboundLoading(false);
+                          })();
+                        }
+                      }}
+                    />
                   )}
                 </div>
               );
@@ -8927,6 +9123,84 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 })()}
               </div>
             )}
+
+            {/* Hint item picker sheet (Batch 2.5) — receiver selects 1–3 items for their giver */}
+            <BottomSheet
+              isOpen={santaHintPickerOpen}
+              onClose={() => {
+                setSantaHintPickerOpen(false);
+                setSantaHintPickerSelectedIds([]);
+              }}
+              title={t('santa_hint_inbound_select_items', locale)}
+            >
+              <div>
+                <div style={{ fontSize: 13, color: C.textSec, marginBottom: 12 }}>
+                  {t('santa_hint_inbound_desc', locale)}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                  {santaHintPickerItems.map(item => {
+                    const selected = santaHintPickerSelectedIds.includes(item.id);
+                    const maxReached = santaHintPickerSelectedIds.length >= 3 && !selected;
+                    return (
+                      <button
+                        key={item.id}
+                        disabled={maxReached}
+                        onClick={() => {
+                          setSantaHintPickerSelectedIds(prev =>
+                            selected ? prev.filter(id => id !== item.id) : [...prev, item.id]
+                          );
+                        }}
+                        style={{
+                          background: selected ? `${C.accent}20` : C.surface,
+                          border: `1.5px solid ${selected ? C.accent : C.border}`,
+                          borderRadius: 12, padding: '10px 14px', cursor: maxReached ? 'not-allowed' : 'pointer',
+                          textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          opacity: maxReached ? 0.4 : 1,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{item.title}</div>
+                          {item.priceText && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{item.priceText}</div>}
+                        </div>
+                        {selected && <span style={{ color: C.accent, fontSize: 18, fontWeight: 700 }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  disabled={santaHintPickerSelectedIds.length === 0 || santaHintFulfillLoading}
+                  onClick={async () => {
+                    if (!santaHintInbound?.hint) return;
+                    setSantaHintFulfillLoading(true);
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/hint/fulfill`, {
+                      method: 'POST',
+                      body: JSON.stringify({ hintId: santaHintInbound.hint.id, selectedItemIds: santaHintPickerSelectedIds }),
+                    });
+                    if (res.ok) {
+                      pushToast(t('santa_hint_inbound_submitted', locale), 'success');
+                      setSantaHintInbound({ hasPendingHint: false, hint: { ...santaHintInbound.hint, status: 'FULFILLED' } });
+                      setSantaHintPickerOpen(false);
+                      setSantaHintPickerSelectedIds([]);
+                    } else {
+                      const err = await res.json() as { error?: string };
+                      if (err.error === 'invalid_items') pushToast(locale === 'ru' ? 'Некоторые желания недоступны' : 'Some items are unavailable', 'error');
+                      else pushToast(t('error_generic', locale), 'error');
+                    }
+                    setSantaHintFulfillLoading(false);
+                  }}
+                  style={{
+                    background: santaHintPickerSelectedIds.length === 0 ? C.border : C.accent,
+                    border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 700,
+                    padding: '12px 0', cursor: santaHintPickerSelectedIds.length === 0 ? 'not-allowed' : 'pointer',
+                    width: '100%', fontFamily: font,
+                  }}
+                >
+                  {santaHintFulfillLoading
+                    ? t('loading', locale)
+                    : `${t('santa_hint_inbound_submit', locale)} (${santaHintPickerSelectedIds.length}/3)`}
+                </button>
+              </div>
+            </BottomSheet>
 
             {/* Wishlist picker sheet */}
             <BottomSheet isOpen={showSantaWishlistPicker} onClose={() => setShowSantaWishlistPicker(false)} title={t('santa_campaign_link_wishlist', locale)}>

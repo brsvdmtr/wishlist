@@ -550,9 +550,10 @@ enum SantaDrawStatus {
 }
 
 enum SantaHintStatus {
-  PENDING
-  APPROVED
-  REJECTED
+  PENDING    // giver requested, receiver hasn't responded yet
+  FULFILLED  // receiver selected wishlist items; giver can see them
+  EXPIRED    // TTL exceeded (48h) without receiver response
+  CANCELLED  // campaign cancelled or draw context invalidated
 }
 
 enum SantaNotificationType {
@@ -596,13 +597,14 @@ model SantaCampaign {
   updatedAt   DateTime            @updatedAt
 
   // onDelete: Restrict — prevents user account deletion while owning an active campaign.
-  owner        User               @relation("OwnedSantaCampaigns", fields: [ownerId], references: [id], onDelete: Restrict)
-  participants SantaParticipant[]
-  rounds       SantaRound[]
-  chatMessages SantaChatMessage[]
-  readCursors  SantaChatReadCursor[]
+  owner         User                @relation("OwnedSantaCampaigns", fields: [ownerId], references: [id], onDelete: Restrict)
+  participants  SantaParticipant[]
+  rounds        SantaRound[]
+  chatMessages  SantaChatMessage[]
+  readCursors   SantaChatReadCursor[]
   notifications SantaNotification[]
-  auditLogs    SantaAdminAuditLog[]
+  auditLogs     SantaAdminAuditLog[]
+  hintRequests  SantaHintRequest[]
 
   @@index([ownerId])
   @@index([inviteToken])
@@ -627,8 +629,8 @@ model SantaParticipant {
   chatMessages     SantaChatMessage[]
   readCursors      SantaChatReadCursor[]
   pollVotes        SantaPollVote[]
-  hintRequests     SantaHintRequest[]     @relation("HintRequester")
-  hintResponses    SantaHintRequest[]     @relation("HintResponder")
+  giverHintRequests    SantaHintRequest[]   @relation("HintGiverRequests")
+  receiverHintRequests SantaHintRequest[]   @relation("HintReceiverRequests")
 
   @@unique([campaignId, userId])
   @@index([campaignId])
@@ -645,9 +647,10 @@ model SantaRound {
   drawnAt     DateTime?
   createdAt   DateTime        @default(now())
 
-  campaign    SantaCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  assignments SantaAssignment[]
-  polls       SantaPoll[]
+  campaign     SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  assignments  SantaAssignment[]
+  polls        SantaPoll[]
+  hintRequests SantaHintRequest[]
 
   @@unique([campaignId, roundNumber])
   @@index([campaignId])
@@ -698,23 +701,59 @@ model SantaExclusion {
   @@index([campaignId])
 }
 
+// Santa Hint Request — Batch 2.5
+// A giver (anonymously) requests the receiver to hint which wishlist items they'd like.
+// Receiver selects 1–3 items from their linked wishlist; giver sees the selection (no receiver identity).
+//
+// STATE MACHINE:
+//   PENDING   → FULFILLED  (receiver selects items within TTL)
+//   PENDING   → EXPIRED    (TTL job: expiresAt < now && status=PENDING)
+//   PENDING   → CANCELLED  (campaign cancelled; cancel endpoint bulk-updates)
+//   All terminal states: FULFILLED, EXPIRED, CANCELLED
+//
+// CONSTRAINT: at most one PENDING hint per assignment (application-enforced, not DB unique).
+// Sequential hints are allowed: after FULFILLED/EXPIRED, giver may create a new PENDING request.
+// After CANCELLED: no new requests (campaign/draw context gone).
+//
+// DRAW RESET: if assignments are ever deleted and re-drawn, all PENDING hints for those
+// assignment IDs cascade-delete via onDelete: Cascade on assignmentId FK.
+//
+// ANONYMITY:
+//   - receiverParticipantId is stored in DB but NEVER returned in any API response to giver
+//   - giverParticipantId is stored in DB but NEVER returned in any API response to receiver
+//   - Receiver endpoints use campaignId only — server resolves assignment internally
 model SantaHintRequest {
-  id                     String          @id @default(cuid())
-  assignmentId           String
-  requesterParticipantId String
-  responderParticipantId String
-  question               String
-  answer                 String?
-  status                 SantaHintStatus @default(PENDING)
-  createdAt              DateTime        @default(now())
-  respondedAt            DateTime?
+  id                    String          @id @default(cuid())
+  // Campaign and round context — for lifecycle management and campaign-centric receiver lookup
+  campaignId            String
+  roundId               String
+  // Assignment context — owns the hint; cascade-deletes on draw reset
+  assignmentId          String
+  // Denormalized for efficient one-sided queries (never exposed via API to the other side)
+  giverParticipantId    String
+  receiverParticipantId String
 
-  assignment  SantaAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  requester   SantaParticipant @relation("HintRequester", fields: [requesterParticipantId], references: [id], onDelete: Cascade)
-  responder   SantaParticipant @relation("HintResponder", fields: [responderParticipantId], references: [id], onDelete: Cascade)
+  status                SantaHintStatus @default(PENDING)
+  // Wishlist item IDs selected by receiver. Null until FULFILLED. Max 3 items.
+  // Stored as JSON array of item IDs; items validated against receiver's wishlist at fulfill time.
+  selectedItemIds       Json?           // String[]
+  requestedAt           DateTime        @default(now())
+  fulfilledAt           DateTime?
+  expiresAt             DateTime        // requestedAt + 48h; set at creation
+  cancelledAt           DateTime?
+  // Tracks whether HINT_REQUEST notification was sent to receiver (prevents duplicate sends)
+  notificationSentAt    DateTime?
 
-  @@index([assignmentId])
-  @@index([responderParticipantId])
+  campaign              SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  round                 SantaRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  assignment            SantaAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  giverParticipant      SantaParticipant @relation("HintGiverRequests", fields: [giverParticipantId], references: [id], onDelete: Cascade)
+  receiverParticipant   SantaParticipant @relation("HintReceiverRequests", fields: [receiverParticipantId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId, status])
+  @@index([receiverParticipantId, status])
+  @@index([campaignId, receiverParticipantId, status])
+  @@index([expiresAt, status])
 }
 
 // Campaign-level group chat. Messages ordered by (createdAt, id).

@@ -4863,11 +4863,21 @@ tgRouter.post('/santa/campaigns/:id/cancel', asyncHandler(async (req, res) => {
   if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
   if (['COMPLETED', 'CANCELLED'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign is already finished' });
 
-  await prisma.santaCampaign.update({
-    where: { id: campaignId },
-    data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: parsed.success ? (parsed.data.reason ?? null) : null },
-  });
-  await prisma.santaAdminAuditLog.create({ data: { campaignId, actorId: user.id, action: 'campaign_cancelled', payload: { reason: parsed.success ? parsed.data.reason : undefined } } });
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.santaCampaign.update({
+      where: { id: campaignId },
+      data: { status: 'CANCELLED', cancelledAt: now, cancelReason: parsed.success ? (parsed.data.reason ?? null) : null },
+    }),
+    // Bulk-cancel all PENDING hint requests for this campaign (lifecycle rule: campaign cancel → hints CANCELLED)
+    prisma.santaHintRequest.updateMany({
+      where: { campaignId, status: 'PENDING' },
+      data: { status: 'CANCELLED', cancelledAt: now },
+    }),
+    prisma.santaAdminAuditLog.create({
+      data: { campaignId, actorId: user.id, action: 'campaign_cancelled', payload: { reason: parsed.success ? parsed.data.reason : undefined } },
+    }),
+  ]);
   return res.json({ ok: true });
 }));
 
@@ -5795,6 +5805,273 @@ tgRouter.get('/santa/campaigns/:id/reveal', asyncHandler(async (req, res) => {
   });
 }));
 
+// ─── Santa Hints (Batch 2.5) ──────────────────────────────────────────────────
+
+const SANTA_HINT_TTL_HOURS = 48;
+const SANTA_HINT_MAX_ITEMS = 3;
+
+// Serializer: giver side — exposes selection results, NEVER receiver identity
+type SantaHintForGiver = {
+  id: string;
+  status: string;
+  requestedAt: string;
+  expiresAt: string;
+  fulfilledAt: string | null;
+  // null until FULFILLED; array of item shapes after receiver selects
+  selectedItems: { id: string; title: string; priceText: string | null; url: string | null }[] | null;
+};
+
+function serializeSantaHintForGiver(
+  hint: { id: string; status: string; requestedAt: Date; expiresAt: Date; fulfilledAt: Date | null; selectedItemIds: unknown },
+  itemsMap?: Map<string, { id: string; title: string; priceText: string | null; url: string | null }>,
+): SantaHintForGiver {
+  let selectedItems: { id: string; title: string; priceText: string | null; url: string | null }[] | null = null;
+  if (hint.status === 'FULFILLED' && Array.isArray(hint.selectedItemIds)) {
+    selectedItems = (hint.selectedItemIds as string[])
+      .map(id => itemsMap?.get(id))
+      .filter((item): item is { id: string; title: string; priceText: string | null; url: string | null } => item !== undefined);
+  }
+  return {
+    id: hint.id,
+    status: hint.status,
+    requestedAt: hint.requestedAt.toISOString(),
+    expiresAt: hint.expiresAt.toISOString(),
+    fulfilledAt: hint.fulfilledAt?.toISOString() ?? null,
+    selectedItems,
+    // ⚠ receiverParticipantId / receiverUserId deliberately omitted — anonymity contract
+  };
+}
+
+// Serializer: receiver side — exposes request metadata, NEVER giver identity
+type SantaHintInboundForReceiver = {
+  hasPendingHint: boolean;
+  hint: { id: string; status: string; requestedAt: string; expiresAt: string } | null;
+};
+
+function serializeSantaHintInboundForReceiver(
+  hint: { id: string; status: string; requestedAt: Date; expiresAt: Date } | null,
+): SantaHintInboundForReceiver {
+  if (!hint) return { hasPendingHint: false, hint: null };
+  return {
+    hasPendingHint: hint.status === 'PENDING',
+    hint: {
+      id: hint.id,
+      status: hint.status,
+      requestedAt: hint.requestedAt.toISOString(),
+      expiresAt: hint.expiresAt.toISOString(),
+      // ⚠ giverParticipantId / giverUserId deliberately omitted — anonymity contract
+    },
+  };
+}
+
+// POST /tg/santa/campaigns/:id/hints — giver requests a hint (idempotent; PRO-gated)
+tgRouter.post('/santa/campaigns/:id/hints', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  // 1. Participant lookup
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+  });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+
+  // 2. Campaign must be ACTIVE
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'campaign_not_active', message: 'Hint requests can only be sent in ACTIVE campaigns' });
+  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
+  const roundId = campaign.rounds[0]!.id;
+
+  // 3. PRO-gate: only giver's effective plan is checked — receiver's plan is irrelevant
+  const ent = await getUserEntitlement(user.id, user.godMode);
+  if (!ent.isPro) return res.status(403).json({ error: 'pro_required', message: 'Hint requests require a Pro subscription' });
+
+  // 4. Resolve giver's assignment (giver-centric: roundId + giverParticipantId)
+  const assignment = await prisma.santaAssignment.findUnique({
+    where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
+    select: { id: true, receiverParticipantId: true, receiver: { select: { linkedWishlistId: true } } },
+  });
+  if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+  // 5. Receiver must have a linked wishlist — no point in requesting a hint otherwise
+  if (!assignment.receiver.linkedWishlistId) {
+    return res.status(409).json({ error: 'receiver_no_wishlist', message: 'Your gift recipient has no linked wishlist' });
+  }
+
+  // 6. Idempotency: if PENDING hint already exists for this assignment, return it (don't duplicate)
+  const existing = await prisma.santaHintRequest.findFirst({
+    where: { assignmentId: assignment.id, status: 'PENDING' },
+  });
+  if (existing) {
+    return res.status(200).json(serializeSantaHintForGiver(existing));
+  }
+
+  // 7. Create hint request with 48h TTL
+  const expiresAt = new Date(Date.now() + SANTA_HINT_TTL_HOURS * 60 * 60 * 1000);
+  const hint = await prisma.santaHintRequest.create({
+    data: {
+      campaignId,
+      roundId,
+      assignmentId: assignment.id,
+      giverParticipantId: participant.id,
+      receiverParticipantId: assignment.receiverParticipantId,
+      status: 'PENDING',
+      expiresAt,
+    },
+  });
+
+  // Notification to receiver is sent by the TTL/polling loop or bot layer.
+  // notificationSentAt is set by the notification sender — not here — to allow dedup on retry.
+
+  return res.status(201).json(serializeSantaHintForGiver(hint));
+}));
+
+// GET /tg/santa/campaigns/:id/hints — giver polls hint status (includes fulfilled item preview)
+tgRouter.get('/santa/campaigns/:id/hints', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+  });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign not ACTIVE or COMPLETED' });
+  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
+  const roundId = campaign.rounds[0]!.id;
+
+  // Giver-centric assignment lookup
+  const assignment = await prisma.santaAssignment.findUnique({
+    where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
+    select: { id: true },
+  });
+  if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+  // Most recent hint for this assignment (draw reset via cascade-delete clears old hints)
+  const hint = await prisma.santaHintRequest.findFirst({
+    where: { assignmentId: assignment.id },
+    orderBy: { requestedAt: 'desc' },
+  });
+  if (!hint) return res.json({ hint: null });
+
+  // Resolve item details for FULFILLED hints
+  let itemsMap: Map<string, { id: string; title: string; priceText: string | null; url: string | null }> | undefined;
+  if (hint.status === 'FULFILLED' && Array.isArray(hint.selectedItemIds) && hint.selectedItemIds.length > 0) {
+    const ids = hint.selectedItemIds as string[];
+    const items = await prisma.item.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, title: true, priceText: true, url: true },
+    });
+    itemsMap = new Map(items.map(i => [i.id, i]));
+  }
+
+  return res.json({ hint: serializeSantaHintForGiver(hint, itemsMap) });
+}));
+
+// GET /tg/santa/campaigns/:id/inbound/hint — receiver checks for pending hint request
+// Role: receiver only. Anonymity: NEVER exposes giverParticipantId or giverUserId.
+tgRouter.get('/santa/campaigns/:id/inbound/hint', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+  });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { status: true },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign not ACTIVE' });
+
+  // Campaign-centric receiver lookup — receiverParticipantId, never assignmentId
+  // Returns the most recently created PENDING hint (there should be at most one per assignment,
+  // but we guard against duplicates by taking the latest)
+  const hint = await prisma.santaHintRequest.findFirst({
+    where: { campaignId, receiverParticipantId: participant.id, status: 'PENDING' },
+    orderBy: { requestedAt: 'desc' },
+  });
+
+  return res.json(serializeSantaHintInboundForReceiver(hint));
+}));
+
+// POST /tg/santa/campaigns/:id/inbound/hint/fulfill — receiver selects 1–3 items, marks hint FULFILLED
+tgRouter.post('/santa/campaigns/:id/inbound/hint/fulfill', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const parsed = z.object({
+    hintId: z.string().min(1),
+    selectedItemIds: z.array(z.string().min(1)).min(1).max(SANTA_HINT_MAX_ITEMS),
+  }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+
+  const { hintId, selectedItemIds } = parsed.data;
+
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+    select: { id: true, status: true, linkedWishlistId: true },
+  });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { status: true },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign not ACTIVE' });
+
+  // Fetch hint — must belong to this receiver and be PENDING
+  const hint = await prisma.santaHintRequest.findUnique({
+    where: { id: hintId },
+    select: { id: true, campaignId: true, receiverParticipantId: true, status: true, expiresAt: true },
+  });
+  if (!hint) return res.status(404).json({ error: 'Hint not found' });
+  // Verify ownership (campaignId + receiverParticipantId) — never trust hintId alone
+  if (hint.campaignId !== campaignId) return res.status(404).json({ error: 'Hint not found' });
+  if (hint.receiverParticipantId !== participant.id) return res.status(403).json({ error: 'Forbidden' });
+  if (hint.status !== 'PENDING') return res.status(409).json({ error: 'hint_not_pending', message: `Hint status is ${hint.status}` });
+  if (hint.expiresAt <= new Date()) return res.status(409).json({ error: 'hint_expired', message: 'Hint TTL exceeded; request a new one' });
+
+  // Receiver must have a linked wishlist to select from
+  if (!participant.linkedWishlistId) {
+    return res.status(409).json({ error: 'no_linked_wishlist', message: 'Link a wishlist to your Secret Santa profile first' });
+  }
+
+  // Validate: all selectedItemIds must belong to receiver's current linked wishlist and be AVAILABLE
+  // This guards against stale selections (wishlist changed between request and fulfill)
+  const validItems = await prisma.item.findMany({
+    where: { id: { in: selectedItemIds }, wishlistId: participant.linkedWishlistId, status: 'AVAILABLE' },
+    select: { id: true },
+  });
+  if (validItems.length !== selectedItemIds.length) {
+    return res.status(400).json({
+      error: 'invalid_items',
+      message: 'Some selected items are not available in your linked wishlist',
+    });
+  }
+
+  // Mark FULFILLED
+  await prisma.santaHintRequest.update({
+    where: { id: hintId },
+    data: { status: 'FULFILLED', selectedItemIds, fulfilledAt: new Date() },
+  });
+
+  // Notify giver — deduped via notificationSentAt on the hint record (handled by bot polling layer)
+
+  return res.json({ ok: true });
+}));
+
 // ─── Maintenance mode middleware ──────────────────────────────────────────────
 // When MAINTENANCE_MODE=true, block /tg/* and /public/* with 503 + code=MAINTENANCE.
 // /health, /health/deep, /uploads, /internal remain accessible.
@@ -5907,20 +6184,20 @@ setInterval(async () => {
   }
 }, 60 * 60 * 1000);
 
-// Hint expiry: mark overdue hints as EXPIRED (hourly)
+// Santa hint expiry: mark PENDING santa hint requests past their TTL as EXPIRED (hourly)
 setInterval(async () => {
   try {
-    const expired = await prisma.hint.updateMany({
-      where: { status: 'SENT', expiresAt: { lte: new Date() } },
+    const expired = await prisma.santaHintRequest.updateMany({
+      where: { status: 'PENDING', expiresAt: { lte: new Date() } },
       data: { status: 'EXPIRED' },
     });
     if (expired.count > 0) {
       // eslint-disable-next-line no-console
-      console.log(`[hints] expired ${expired.count} hints`);
+      console.log(`[santa-hints] expired ${expired.count} hint requests`);
     }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error('[hints] expiry check failed:', err);
+    console.error('[santa-hints] expiry check failed:', err);
   }
 }, 60 * 60 * 1000);
 
