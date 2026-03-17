@@ -5226,13 +5226,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
         const SettingsRow = ({ label, value, hint, onClick, proBadge }: { label: string; value: string; hint?: string; onClick?: () => void; proBadge?: boolean }) => (
           <div onClick={onClick} style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}`, cursor: onClick ? 'pointer' : 'default' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
                 <span style={{ fontSize: 14, color: C.text }}>{label}</span>
                 {proBadge && <ProBadge />}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: 14, color: C.textMuted }}>{value}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, paddingTop: 1 }}>
+                <span style={{ fontSize: 14, color: C.textMuted, textAlign: 'right' }}>{value}</span>
                 {onClick && <span style={{ fontSize: 18, color: C.textMuted, lineHeight: 1 }}>›</span>}
               </div>
             </div>
