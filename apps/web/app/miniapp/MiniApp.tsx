@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { t, detectLocale, pluralize, type Locale } from '@wishlist/shared';
 
 // ═══════════════════════════════════════════════════════
@@ -288,10 +288,14 @@ function handleTextareaFocus(textarea: HTMLElement) {
   textarea.addEventListener('blur', cleanup);
 }
 
-/** Auto-size a textarea to its content height. Call on mount (via ref callback)
- *  and on every onChange to keep height in sync with content. */
+/** Auto-size a textarea to its content height.
+ *  IMPORTANT: must use height:'0px' (not 'auto') before reading scrollHeight.
+ *  With height:'auto' the browser renders rows=2 intrinsic height (~68px) which
+ *  inflates scrollHeight via max(content, clientHeight) — so we'd always write
+ *  back the same large value. Setting to 0 collapses clientHeight to min-height,
+ *  so scrollHeight correctly reflects only the actual text content. */
 function growTextarea(el: HTMLTextAreaElement) {
-  el.style.height = 'auto';
+  el.style.height = '0px';
   el.style.height = el.scrollHeight + 'px';
 }
 
@@ -1338,30 +1342,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toast.id)), 2800);
   }, []);
 
-  // Auto-grow textareas: use useEffect + rAF so measurement runs after the
-  // BottomSheet has finished its slideUp animation and layout is fully settled.
-  useEffect(() => {
-    if (!editingProfile) return;
-    const el = bioTextareaRef.current;
-    if (!el) return;
-    const raf = requestAnimationFrame(() => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; });
-    return () => cancelAnimationFrame(raf);
+  // Auto-grow textareas using useLayoutEffect (fires before paint, synchronous).
+  // height:'0px' → not 'auto' → so scrollHeight = content only, not rows=2 intrinsic height.
+  useLayoutEffect(() => {
+    if (!editingProfile || !bioTextareaRef.current) return;
+    growTextarea(bioTextareaRef.current);
   }, [editingProfile, editProfileBio]);
 
-  useEffect(() => {
-    if (!showItemForm) return;
-    const el = itemDescTextareaRef.current;
-    if (!el) return;
-    const raf = requestAnimationFrame(() => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; });
-    return () => cancelAnimationFrame(raf);
+  useLayoutEffect(() => {
+    if (!showItemForm || !itemDescTextareaRef.current) return;
+    growTextarea(itemDescTextareaRef.current);
   }, [showItemForm, itemDescription]);
 
-  useEffect(() => {
-    if (!editingDescription) return;
-    const el = descTextareaRef.current;
-    if (!el) return;
-    const raf = requestAnimationFrame(() => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; });
-    return () => cancelAnimationFrame(raf);
+  useLayoutEffect(() => {
+    if (!editingDescription || !descTextareaRef.current) return;
+    growTextarea(descTextareaRef.current);
   }, [editingDescription, descriptionText]);
 
   const tgFetch = useCallback(async (path: string, init?: RequestInit) => {
