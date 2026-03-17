@@ -384,17 +384,63 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
 function BottomSheet({ isOpen, onClose, title, children }: {
   isOpen: boolean; onClose: () => void; title?: string; children: React.ReactNode;
 }) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const dragStartY = useRef<number | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
+
+  // Swipe-to-dismiss: track vertical drag, close when dragged down > 80px
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!e.touches[0]) return;
+    dragStartY.current = e.touches[0].clientY;
+    setDragOffset(0);
+  }, []);
+
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    // Always stop propagation so the scroll container underneath never scrolls
+    e.stopPropagation();
+    if (dragStartY.current === null || !e.touches[0]) return;
+    const delta = e.touches[0].clientY - dragStartY.current;
+    if (delta <= 0) return; // only track downward drag
+    const el = sheetRef.current;
+    // Only allow dismiss drag when sheet content is scrolled to top (or not scrollable)
+    if (el && el.scrollTop > 0) return;
+    e.preventDefault();
+    setDragOffset(delta);
+  }, []);
+
+  const onTouchEnd = useCallback(() => {
+    if (dragOffset > 80) {
+      onClose();
+    }
+    setDragOffset(0);
+    dragStartY.current = null;
+  }, [dragOffset, onClose]);
+
   if (!isOpen) return null;
+  const dragging = dragOffset > 0;
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100 }} />
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        background: C.surface, borderRadius: '20px 20px 0 0',
-        padding: 24, zIndex: 101, maxHeight: '85vh', overflowY: 'auto',
-        animation: 'slideUp 0.3s ease',
-      }}>
-        <div style={{ width: 40, height: 4, background: C.textMuted, borderRadius: 100, margin: '0 auto 16px', opacity: 0.3 }} />
+      <div
+        onClick={onClose}
+        onTouchMove={e => e.stopPropagation()}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100 }}
+      />
+      <div
+        ref={sheetRef}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          background: C.surface, borderRadius: '20px 20px 0 0',
+          padding: 24, zIndex: 101, maxHeight: '85vh', overflowY: 'auto',
+          animation: dragging ? 'none' : 'slideUp 0.3s ease',
+          transform: `translateY(${dragOffset}px)`,
+          transition: dragging ? 'none' : 'transform 0.25s ease',
+          willChange: 'transform',
+        }}
+      >
+        <div style={{ width: 40, height: 4, background: C.textMuted, borderRadius: 100, margin: '0 auto 16px', opacity: 0.3, cursor: 'grab' }} />
         {title && <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 16, fontFamily: font, color: C.text }}>{title}</div>}
         {children}
       </div>
