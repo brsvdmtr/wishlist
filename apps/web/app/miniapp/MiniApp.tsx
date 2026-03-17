@@ -1122,6 +1122,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [archiveItems, setArchiveItems] = useState<Item[]>([]);
   const [archiveMode, setArchiveMode] = useState<ArchiveMode>('wishlist');
   const [globalArchiveItems, setGlobalArchiveItems] = useState<GlobalArchiveItem[]>([]);
+  // Archive multi-select state
+  const [archiveSelectMode, setArchiveSelectMode] = useState(false);
+  const [archiveSelected, setArchiveSelected] = useState<string[]>([]);
+  const [showArchiveBulkDeleteConfirm, setShowArchiveBulkDeleteConfirm] = useState(false);
+  const [showArchivePurgeConfirm, setShowArchivePurgeConfirm] = useState(false);
+  const [archivePurgeStep, setArchivePurgeStep] = useState<1 | 2>(1);
+  const [archiveBulkLoading, setArchiveBulkLoading] = useState(false);
 
   // My Reservations state
   const [reservations, setReservations] = useState<ReservationItem[]>([]);
@@ -2173,7 +2180,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } else if (screen === 'share') {
       setScreen('wishlist-detail');
     } else if (screen === 'archive') {
-      if (archiveMode === 'global') {
+      if (archiveSelectMode) {
+        setArchiveSelectMode(false);
+        setArchiveSelected([]);
+      } else if (archiveMode === 'global') {
         setScreen('profile');
       } else {
         setScreen('wishlist-detail');
@@ -2946,6 +2956,106 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setLoading(false);
     }
   };
+
+  const handleBulkRestore = useCallback(async () => {
+    if (archiveSelected.length === 0) return;
+    setArchiveBulkLoading(true);
+    try {
+      const res = await tgFetch('/tg/items/bulk-restore', {
+        method: 'POST',
+        body: JSON.stringify({ itemIds: archiveSelected }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        pushToast(body.error || t('toast_error_generic', locale), 'error');
+        return;
+      }
+      const data = await res.json() as { ok: boolean; restored: string[]; failed: Array<{ itemId: string; reason: string }> };
+      const restoredCount = data.restored.length;
+      const failedArchived = data.failed.filter((f) => f.reason === 'wishlist_archived').length;
+      const total = archiveSelected.length;
+
+      // Remove restored items from the display list
+      const restoredSet = new Set(data.restored);
+      if (archiveMode === 'global') {
+        setGlobalArchiveItems((prev) => prev.filter((i) => !restoredSet.has(i.id)));
+      } else {
+        setArchiveItems((prev) => prev.filter((i) => !restoredSet.has(i.id)));
+      }
+      // Update profile stats
+      setProfileStats((prev) => prev ? { ...prev, archived: Math.max(0, prev.archived - restoredCount) } : prev);
+
+      setArchiveSelectMode(false);
+      setArchiveSelected([]);
+
+      if (restoredCount === total) {
+        pushToast(t('archive_bulk_restored', locale, { n: restoredCount }), 'success');
+      } else if (restoredCount > 0) {
+        pushToast(t('archive_bulk_restored_partial', locale, { restored: restoredCount, total, failed: failedArchived }), 'success');
+      } else {
+        pushToast(t('toast_error_generic', locale), 'error');
+      }
+    } catch {
+      pushToast(t('toast_error_generic', locale), 'error');
+    } finally {
+      setArchiveBulkLoading(false);
+    }
+  }, [archiveSelected, tgFetch, pushToast, locale, archiveMode]);
+
+  const handleBulkHardDelete = useCallback(async () => {
+    if (archiveSelected.length === 0) return;
+    setArchiveBulkLoading(true);
+    try {
+      const res = await tgFetch('/tg/items/bulk-hard-delete', {
+        method: 'POST',
+        body: JSON.stringify({ itemIds: archiveSelected }),
+      });
+      if (!res.ok) {
+        pushToast(t('toast_error_generic', locale), 'error');
+        return;
+      }
+      const data = await res.json() as { deleted: number };
+      const deletedSet = new Set(archiveSelected);
+      if (archiveMode === 'global') {
+        setGlobalArchiveItems((prev) => prev.filter((i) => !deletedSet.has(i.id)));
+      } else {
+        setArchiveItems((prev) => prev.filter((i) => !deletedSet.has(i.id)));
+      }
+      setProfileStats((prev) => prev ? { ...prev, archived: Math.max(0, prev.archived - data.deleted) } : prev);
+      setShowArchiveBulkDeleteConfirm(false);
+      setArchiveSelectMode(false);
+      setArchiveSelected([]);
+      pushToast(t('archive_bulk_deleted', locale, { n: data.deleted }), 'success');
+    } catch {
+      pushToast(t('toast_error_generic', locale), 'error');
+    } finally {
+      setArchiveBulkLoading(false);
+    }
+  }, [archiveSelected, tgFetch, pushToast, locale, archiveMode]);
+
+  const handlePurgeArchive = useCallback(async () => {
+    setArchiveBulkLoading(true);
+    try {
+      const res = await tgFetch('/tg/archive/purge', { method: 'POST' });
+      if (!res.ok) {
+        pushToast(t('toast_error_generic', locale), 'error');
+        return;
+      }
+      const data = await res.json() as { deleted: number };
+      setGlobalArchiveItems([]);
+      setArchiveItems([]);
+      setProfileStats((prev) => prev ? { ...prev, archived: 0 } : prev);
+      setShowArchivePurgeConfirm(false);
+      setArchivePurgeStep(1);
+      setArchiveSelectMode(false);
+      setArchiveSelected([]);
+      pushToast(t('archive_purged', locale, { n: data.deleted }), 'success');
+    } catch {
+      pushToast(t('toast_error_generic', locale), 'error');
+    } finally {
+      setArchiveBulkLoading(false);
+    }
+  }, [tgFetch, pushToast, locale]);
 
   const handleArchiveWishlist = async () => {
     if (!currentWl) return;
@@ -5057,16 +5167,113 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const displayItems = archiveMode === 'global' ? globalArchiveItems : archiveItems;
         return (
           <div style={{ padding: '16px 20px 120px' }}>
+            {/* ── Header ── */}
             <div style={{ marginBottom: 16 }}>
-              <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0 }}>
-                📦 {t('archive_title', locale)}
-              </h1>
-              {archiveMode === 'wishlist' && currentWl && (
-                <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0' }}>{currentWl.title}</p>
-              )}
-              <p style={{ fontSize: 11, color: C.orange, margin: '6px 0 0' }}>{t('archive_retention', locale)}</p>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0 }}>
+                    📦 {archiveSelectMode ? t('archive_selected_n', locale, { n: archiveSelected.length }) : t('archive_title', locale)}
+                  </h1>
+                  {archiveMode === 'wishlist' && currentWl && !archiveSelectMode && (
+                    <p style={{ fontSize: 12, color: C.textMuted, margin: '2px 0 0' }}>{currentWl.title}</p>
+                  )}
+                  {!archiveSelectMode && (
+                    <p style={{ fontSize: 11, color: C.orange, margin: '6px 0 0' }}>{t('archive_retention', locale)}</p>
+                  )}
+                </div>
+                {/* Right header actions */}
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginTop: 2 }}>
+                  {displayItems.length > 0 && !archiveSelectMode && (
+                    <>
+                      {/* Trash icon → enter select mode */}
+                      <button
+                        style={{ background: 'none', border: 'none', padding: '6px 8px', cursor: 'pointer', color: C.textMuted, borderRadius: 8 }}
+                        onClick={() => { setArchiveSelectMode(true); setArchiveSelected([]); }}
+                        title={t('archive_purge_btn', locale)}
+                      >
+                        🗑
+                      </button>
+                      {/* Select button */}
+                      <button
+                        style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}
+                        onClick={() => { setArchiveSelectMode(true); setArchiveSelected([]); }}
+                      >
+                        {t('archive_select', locale)}
+                      </button>
+                    </>
+                  )}
+                  {archiveSelectMode && (
+                    <button
+                      style={{ ...btnGhost, padding: '6px 12px', fontSize: 13, color: C.textMuted }}
+                      onClick={() => { setArchiveSelectMode(false); setArchiveSelected([]); }}
+                    >
+                      {t('archive_cancel_select', locale)}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
+            {/* ── Sticky action bar in select mode ── */}
+            {archiveSelectMode && (
+              <div style={{
+                position: 'sticky', top: 0, zIndex: 10,
+                background: C.surface, borderBottom: `1px solid ${C.border}`,
+                padding: '10px 0', marginBottom: 14,
+                display: 'flex', gap: 8, alignItems: 'center',
+              }}>
+                {/* Select all / Deselect all */}
+                <button
+                  style={{ ...btnGhost, padding: '8px 12px', fontSize: 13, flex: 1 }}
+                  onClick={() => {
+                    if (archiveSelected.length === displayItems.length) {
+                      setArchiveSelected([]);
+                    } else {
+                      setArchiveSelected(displayItems.map((i) => i.id));
+                    }
+                  }}
+                >
+                  {archiveSelected.length === displayItems.length ? t('archive_deselect_all', locale) : t('archive_select_all', locale)}
+                </button>
+                {/* Restore */}
+                <button
+                  style={{
+                    ...btnPrimary, padding: '8px 12px', fontSize: 13,
+                    opacity: archiveSelected.length > 0 && !archiveBulkLoading ? 1 : 0.4,
+                  }}
+                  disabled={archiveSelected.length === 0 || archiveBulkLoading}
+                  onClick={() => void handleBulkRestore()}
+                >
+                  {archiveBulkLoading ? '…' : t('archive_bulk_restore_btn', locale)}
+                </button>
+                {/* Hard delete */}
+                <button
+                  style={{
+                    ...btnGhost, padding: '8px 12px', fontSize: 13, color: C.red,
+                    opacity: archiveSelected.length > 0 && !archiveBulkLoading ? 1 : 0.4,
+                  }}
+                  disabled={archiveSelected.length === 0 || archiveBulkLoading}
+                  onClick={() => setShowArchiveBulkDeleteConfirm(true)}
+                >
+                  🗑
+                </button>
+                {/* Purge entire archive (only in global mode) */}
+                {archiveMode === 'global' && displayItems.length > 0 && (
+                  <button
+                    style={{
+                      ...btnGhost, padding: '8px 10px', fontSize: 12, color: C.textMuted,
+                    }}
+                    disabled={archiveBulkLoading}
+                    onClick={() => { setArchivePurgeStep(1); setShowArchivePurgeConfirm(true); }}
+                    title={t('archive_purge_btn', locale)}
+                  >
+                    ☠️
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ── Empty state ── */}
             {displayItems.length === 0 && !loading && (
               <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
@@ -5075,40 +5282,75 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
+            {/* ── Item list ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {displayItems.map((item, i) => (
-                <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                  <div style={{
-                    background: C.card, borderRadius: 14, padding: 16,
-                    display: 'flex', gap: 14, alignItems: 'flex-start',
-                    border: `1px solid ${C.border}`, opacity: 0.7,
-                  }}>
-                    <ItemThumb item={item} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, color: C.textMuted, lineHeight: 1.3, textDecoration: 'line-through' }}>
-                        {item.title}
-                      </div>
-                      {archiveMode === 'global' && (item as GlobalArchiveItem).wishlistTitle && (
-                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>
-                          📋 {(item as GlobalArchiveItem).wishlistTitle}
+              {displayItems.map((item, i) => {
+                const isSelected = archiveSelected.includes(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}
+                    onClick={archiveSelectMode ? () => {
+                      setArchiveSelected((prev) =>
+                        prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
+                      );
+                    } : undefined}
+                  >
+                    <div style={{
+                      background: archiveSelectMode && isSelected ? C.accentSoft : C.card,
+                      borderRadius: 14, padding: 16,
+                      display: 'flex', gap: 14, alignItems: 'flex-start',
+                      border: archiveSelectMode && isSelected ? `1.5px solid ${C.accent}` : `1px solid ${C.border}`,
+                      opacity: archiveSelectMode ? 1 : 0.7,
+                      cursor: archiveSelectMode ? 'pointer' : 'default',
+                      WebkitTapHighlightColor: 'transparent',
+                      transition: 'background 0.15s, border-color 0.15s',
+                    }}>
+                      {/* Checkbox in select mode */}
+                      {archiveSelectMode && (
+                        <div style={{
+                          width: 22, height: 22, borderRadius: 11, flexShrink: 0, marginTop: 2,
+                          border: `2px solid ${isSelected ? C.accent : C.border}`,
+                          background: isSelected ? C.accent : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          transition: 'background 0.15s, border-color 0.15s',
+                        }}>
+                          {isSelected && <span style={{ color: '#fff', fontSize: 12, lineHeight: 1 }}>✓</span>}
                         </div>
                       )}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                        {item.status === 'completed' && (
-                          <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_received', locale)}</span>
+                      {!archiveSelectMode && <ItemThumb item={item} />}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, color: C.textMuted, lineHeight: 1.3, textDecoration: 'line-through' }}>
+                          {item.title}
+                        </div>
+                        {archiveMode === 'global' && (item as GlobalArchiveItem).wishlistTitle && (
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>
+                            📋 {(item as GlobalArchiveItem).wishlistTitle}
+                            {(item as GlobalArchiveItem).wishlistIsArchived && (
+                              <span style={{ marginLeft: 4, color: C.orange, fontSize: 10 }}>📦</span>
+                            )}
+                          </div>
                         )}
-                        {item.status === 'deleted' && (
-                          <span style={{ fontSize: 11, background: C.surface, color: C.textMuted, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_deleted', locale)}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                          {item.status === 'completed' && (
+                            <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_received', locale)}</span>
+                          )}
+                          {item.status === 'deleted' && (
+                            <span style={{ fontSize: 11, background: C.surface, color: C.textMuted, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_deleted', locale)}</span>
+                          )}
+                          {item.price != null && <span style={{ fontSize: 13, color: C.textMuted }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
+                        </div>
+                        {/* Restore button — hidden in select mode */}
+                        {!archiveSelectMode && (
+                          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                            <button onClick={() => void handleRestoreItem(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.accent }}>{t('archive_restore', locale)}</button>
+                          </div>
                         )}
-                        {item.price != null && <span style={{ fontSize: 13, color: C.textMuted }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                        <button onClick={() => void handleRestoreItem(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.accent }}>{t('archive_restore', locale)}</button>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         );
@@ -5901,6 +6143,92 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           >
             {t('drafts_cancel_select', locale)}
           </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Archive bulk hard-delete confirmation ── */}
+      <BottomSheet
+        isOpen={showArchiveBulkDeleteConfirm}
+        onClose={() => { if (!archiveBulkLoading) setShowArchiveBulkDeleteConfirm(false); }}
+        title={t('archive_bulk_delete_title', locale)}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <p style={{ margin: 0, fontSize: 14, color: C.textSec, lineHeight: 1.5 }}>
+            {t('archive_bulk_delete_desc', locale)}
+          </p>
+          <button
+            style={{
+              ...btnPrimary,
+              background: C.red, width: '100%', padding: '14px 0', fontSize: 15,
+              opacity: archiveBulkLoading ? 0.6 : 1,
+            }}
+            disabled={archiveBulkLoading}
+            onClick={() => void handleBulkHardDelete()}
+          >
+            {archiveBulkLoading ? '…' : t('archive_bulk_delete_cta', locale, { n: archiveSelected.length })}
+          </button>
+          <button
+            style={{ ...btnGhost, width: '100%', padding: '14px 0', fontSize: 15, color: C.textMuted }}
+            disabled={archiveBulkLoading}
+            onClick={() => setShowArchiveBulkDeleteConfirm(false)}
+          >
+            {t('archive_cancel_select', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Archive purge — 2-step confirmation ── */}
+      <BottomSheet
+        isOpen={showArchivePurgeConfirm}
+        onClose={() => { if (!archiveBulkLoading) { setShowArchivePurgeConfirm(false); setArchivePurgeStep(1); } }}
+        title={archivePurgeStep === 1 ? t('archive_purge_step1_title', locale) : t('archive_purge_step2_title', locale)}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {archivePurgeStep === 1 ? (
+            <>
+              <p style={{ margin: 0, fontSize: 14, color: C.textSec, lineHeight: 1.5 }}>
+                {t('archive_purge_step1_desc', locale)}
+              </p>
+              <button
+                style={{ ...btnPrimary, background: C.red, width: '100%', padding: '14px 0', fontSize: 15 }}
+                onClick={() => setArchivePurgeStep(2)}
+              >
+                {t('archive_purge_btn', locale)}
+              </button>
+              <button
+                style={{ ...btnGhost, width: '100%', padding: '14px 0', fontSize: 15, color: C.textMuted }}
+                onClick={() => { setShowArchivePurgeConfirm(false); setArchivePurgeStep(1); }}
+              >
+                {t('archive_cancel_select', locale)}
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{ margin: 0, fontSize: 14, color: C.textSec, lineHeight: 1.5 }}>
+                {t('archive_purge_step2_desc', locale, {
+                  n: archiveMode === 'global' ? globalArchiveItems.length : archiveItems.length,
+                })}
+              </p>
+              <button
+                style={{
+                  ...btnPrimary,
+                  background: C.red, width: '100%', padding: '14px 0', fontSize: 15,
+                  opacity: archiveBulkLoading ? 0.6 : 1,
+                }}
+                disabled={archiveBulkLoading}
+                onClick={() => void handlePurgeArchive()}
+              >
+                {archiveBulkLoading ? '…' : t('archive_purge_cta', locale)}
+              </button>
+              <button
+                style={{ ...btnGhost, width: '100%', padding: '14px 0', fontSize: 15, color: C.textMuted }}
+                disabled={archiveBulkLoading}
+                onClick={() => setArchivePurgeStep(1)}
+              >
+                ← {t('archive_cancel_select', locale)}
+              </button>
+            </>
+          )}
         </div>
       </BottomSheet>
 

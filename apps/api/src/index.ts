@@ -2417,6 +2417,129 @@ tgRouter.post(
   }),
 );
 
+// POST /tg/items/bulk-restore — restore multiple archived items
+// Must be placed before /items/:id to avoid route param collision.
+tgRouter.post(
+  '/items/bulk-restore',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      itemIds: z.array(z.string().min(1)).min(1).max(100),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const { itemIds } = parsed.data;
+
+    // Load all requested items with wishlist info for ownership + archived check
+    const items = await prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: {
+        id: true,
+        status: true,
+        wishlist: { select: { ownerId: true, archivedAt: true } },
+      },
+    });
+
+    const restored: string[] = [];
+    const failed: Array<{ itemId: string; reason: string }> = [];
+
+    const toRestore: string[] = [];
+    for (const req_id of itemIds) {
+      const item = items.find((i) => i.id === req_id);
+      if (!item || item.wishlist.ownerId !== user.id) {
+        failed.push({ itemId: req_id, reason: 'not_found_or_forbidden' });
+        continue;
+      }
+      if (item.status !== 'DELETED' && item.status !== 'COMPLETED') {
+        failed.push({ itemId: req_id, reason: 'not_archived' });
+        continue;
+      }
+      if (item.wishlist.archivedAt !== null) {
+        failed.push({ itemId: req_id, reason: 'wishlist_archived' });
+        continue;
+      }
+      toRestore.push(req_id);
+    }
+
+    if (toRestore.length > 0) {
+      await prisma.item.updateMany({
+        where: { id: { in: toRestore } },
+        data: { status: 'AVAILABLE', archivedAt: null, purgeAfter: null },
+      });
+      restored.push(...toRestore);
+    }
+
+    return res.json({ ok: true, restored, failed });
+  }),
+);
+
+// POST /tg/items/bulk-hard-delete — permanently delete archived items
+// Hard delete is only permitted for items in DELETED or COMPLETED status.
+// Must be placed before /items/:id to avoid route param collision.
+tgRouter.post(
+  '/items/bulk-hard-delete',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      itemIds: z.array(z.string().min(1)).min(1).max(100),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const { itemIds } = parsed.data;
+
+    // Only allow hard-delete for owned items that are already archived
+    const items = await prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: {
+        id: true,
+        status: true,
+        imageUrl: true,
+        wishlist: { select: { ownerId: true } },
+      },
+    });
+
+    const eligibleIds = items
+      .filter(
+        (i) =>
+          i.wishlist.ownerId === user.id &&
+          (i.status === 'DELETED' || i.status === 'COMPLETED'),
+      )
+      .map((i) => i.id);
+
+    if (eligibleIds.length === 0) return res.json({ deleted: 0 });
+
+    // Hard-delete — Prisma cascades handle child records (reservationEvents, itemTags, comments)
+    await prisma.item.deleteMany({ where: { id: { in: eligibleIds } } });
+
+    return res.json({ deleted: eligibleIds.length });
+  }),
+);
+
+// POST /tg/archive/purge — permanently delete ALL archived items for the current user
+// Two-step confirmation is enforced in the frontend; this endpoint is the final destructive step.
+tgRouter.post(
+  '/archive/purge',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const items = await prisma.item.findMany({
+      where: {
+        status: { in: ['DELETED', 'COMPLETED'] },
+        wishlist: { ownerId: user.id },
+      },
+      select: { id: true },
+    });
+
+    if (items.length === 0) return res.json({ deleted: 0 });
+
+    await prisma.item.deleteMany({
+      where: { id: { in: items.map((i) => i.id) } },
+    });
+
+    return res.json({ deleted: items.length });
+  }),
+);
+
 // PATCH /tg/items/:id — edit item
 tgRouter.patch(
   '/items/:id',
