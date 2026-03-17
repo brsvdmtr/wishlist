@@ -268,7 +268,17 @@ type SantaCampaignDetail = {
   };
   participants: SantaParticipant[];
   rounds: { id: string; roundNumber: number; drawStatus: string; drawnAt: string | null }[];
-  myAssignment: { id: string; giftStatus: string; giftNote: string | null } | null;
+  // role-aware assignment: giver sees receiver display info; owner sees aggregate progress
+  myAssignment: {
+    role: 'giver';
+    giftStatus: string;
+    giftNote: string | null;
+    receiver: { displayName: string; avatarUrl: string | null };
+  } | null;
+  ownerProgress: {
+    role: 'owner';
+    progress: { pending: number; buying: number; sent: number; received: number };
+  } | null;
 };
 
 type SantaJoinPreview = {
@@ -1561,9 +1571,27 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Link wishlist to campaign
   const [showSantaWishlistPicker, setShowSantaWishlistPicker] = useState(false);
   const [santaWishlistPickerLoading, setSantaWishlistPickerLoading] = useState(false);
-  // Receiver's wishlist
-  const [santaReceiverWishlist, setSantaReceiverWishlist] = useState<{ receiverName: string; wishlist: { title: string } | null; items: { id: string; title: string; url: string; priceText: string | null; currency: string; priority: number; imageUrl: string | null; status: string }[] } | null>(null);
+  // Receiver's wishlist (giver view — role-aware, no receiver userId)
+  const [santaReceiverWishlist, setSantaReceiverWishlist] = useState<{
+    role: 'giver'; giftStatus: string; giftNote: string | null;
+    receiver: { displayName: string; avatarUrl: string | null };
+    wishlist: { title: string } | null;
+    items: { id: string; title: string; url: string | null; priceText: string | null; currency: string; priority: number; imageUrl: string | null; status: string }[];
+  } | null>(null);
   const [santaReceiverWishlistLoading, setSantaReceiverWishlistLoading] = useState(false);
+  // Receiver inbound status (no giver identity)
+  const [santaInboundStatus, setSantaInboundStatus] = useState<{ role: 'receiver'; giftStatus: string; hasGiver: boolean } | null>(null);
+  const [santaInboundLoading, setSantaInboundLoading] = useState(false);
+  // Draw state
+  const [santaDrawLoading, setSantaDrawLoading] = useState(false);
+  const [santaDrawValidation, setSantaDrawValidation] = useState<{
+    feasible: boolean; participantCount?: number;
+    reason?: string; problematicExclusions?: { userId1: string; name1: string; userId2: string; name2: string }[];
+  } | null>(null);
+  const [santaDrawValidationLoading, setSantaDrawValidationLoading] = useState(false);
+  // Reveal state
+  const [santaReveal, setSantaReveal] = useState<{ revealed: boolean; giver?: { displayName: string; avatarUrl: string | null } } | null>(null);
+  const [santaRevealLoading, setSantaRevealLoading] = useState(false);
 
   // ── Wishes tab: filtered by priority ─────────────────────────────────────
   const filteredAllItems = useMemo(() => {
@@ -2619,6 +2647,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('santa-hub');
     } else if (screen === 'santa-campaign') {
       setCurrentSantaCampaign(null);
+      setSantaReceiverWishlist(null);
+      setSantaInboundStatus(null);
+      setSantaDrawValidation(null);
+      setSantaReveal(null);
       setScreen('santa-hub');
     } else if (screen === 'santa-join') {
       setSantaJoinPreview(null);
@@ -8477,6 +8509,99 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     {t('santa_campaign_lock_btn', locale)}
                   </button>
                 )}
+
+                {/* Draw controls — only when LOCKED */}
+                {camp.status === 'LOCKED' && (
+                  <div style={{ background: C.card, borderRadius: 14, padding: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 10 }}>
+                      {locale === 'ru' ? 'Жеребьёвка' : 'Draw'}
+                    </div>
+
+                    {/* Validate button */}
+                    {!santaDrawValidation && (
+                      <button
+                        disabled={santaDrawValidationLoading}
+                        onClick={async () => {
+                          setSantaDrawValidationLoading(true);
+                          const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/draw/validate`);
+                          if (res.ok) setSantaDrawValidation(await res.json() as typeof santaDrawValidation);
+                          else pushToast(t('error_generic', locale), 'error');
+                          setSantaDrawValidationLoading(false);
+                        }}
+                        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: santaDrawValidationLoading ? 'wait' : 'pointer', width: '100%', fontFamily: font }}
+                      >
+                        {santaDrawValidationLoading ? t('loading', locale) : t('santa_draw_validate_btn', locale)}
+                      </button>
+                    )}
+
+                    {/* Validation result */}
+                    {santaDrawValidation && (
+                      <div style={{ marginBottom: 10 }}>
+                        {santaDrawValidation.feasible ? (
+                          <div style={{ fontSize: 13, color: C.green, marginBottom: 8 }}>
+                            ✓ {t('santa_draw_feasible', locale, { count: santaDrawValidation.participantCount ?? 0 })}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 13, color: C.red, marginBottom: 8 }}>
+                            ✗ {t('santa_draw_infeasible', locale)}
+                            {santaDrawValidation.problematicExclusions && santaDrawValidation.problematicExclusions.length > 0 && (
+                              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
+                                {t('santa_draw_infeasible_hint', locale, {
+                                  names: santaDrawValidation.problematicExclusions.map(e => `${e.name1} & ${e.name2}`).join(', '),
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => setSantaDrawValidation(null)}
+                          style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 12, cursor: 'pointer', padding: 0 }}
+                        >
+                          {locale === 'ru' ? 'Перепроверить' : 'Re-check'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Run draw button — enabled only if validated feasible */}
+                    <button
+                      disabled={santaDrawLoading || (santaDrawValidation !== null && !santaDrawValidation.feasible)}
+                      onClick={async () => {
+                        if (!confirm(locale === 'ru' ? `Запустить жеребьёвку для ${participants.filter(p => p.status === 'JOINED').length} участников?` : `Run draw for ${participants.filter(p => p.status === 'JOINED').length} participants?`)) return;
+                        setSantaDrawLoading(true);
+                        const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/draw`, { method: 'POST' });
+                        setSantaDrawLoading(false);
+                        if (res.ok) {
+                          const json = await res.json() as { assignmentCount: number };
+                          setSantaDrawValidation(null);
+                          pushToast(t('santa_draw_success', locale, { count: json.assignmentCount }), 'success');
+                          const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                          if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                        } else {
+                          const err = await res.json() as { error: string; reason?: string; problematicExclusions?: { userId1: string; name1: string; userId2: string; name2: string }[] };
+                          if (err.error === 'draw_already_running') pushToast(t('santa_draw_already_running', locale), 'error');
+                          else if (err.error === 'draw_infeasible') {
+                            setSantaDrawValidation({ feasible: false, reason: err.reason, problematicExclusions: err.problematicExclusions });
+                            pushToast(t('santa_draw_infeasible', locale), 'error');
+                          } else pushToast(t('santa_draw_failed', locale), 'error');
+                        }
+                      }}
+                      style={{
+                        background: santaDrawLoading || (santaDrawValidation !== null && !santaDrawValidation.feasible)
+                          ? C.textMuted : C.accent,
+                        border: 'none', borderRadius: 10, color: '#fff', fontSize: 14, fontWeight: 700,
+                        padding: '12px 0', cursor: santaDrawLoading ? 'wait' : 'pointer', width: '100%', fontFamily: font, marginTop: 4,
+                      }}
+                    >
+                      {santaDrawLoading ? t('santa_draw_in_progress', locale) : t('santa_draw_btn', locale)}
+                    </button>
+                  </div>
+                )}
+
+                {camp.status === 'DRAW_IN_PROGRESS' && (
+                  <div style={{ background: `${C.accent}15`, borderRadius: 12, padding: '12px 16px', fontSize: 13, color: C.accent, fontWeight: 600, textAlign: 'center' }}>
+                    ⏳ {t('santa_draw_in_progress', locale)}
+                  </div>
+                )}
               </div>
             )}
 
@@ -8519,15 +8644,55 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             </div>
 
-            {/* My assignment (post-draw) */}
-            {myAssignment && camp.status === 'ACTIVE' && (
+            {/* Owner progress view (post-draw) — aggregate only, no individual pairs */}
+            {isOwner && currentSantaCampaign.ownerProgress && ['ACTIVE', 'COMPLETED'].includes(camp.status) && (
               <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>{t('santa_campaign_my_assignment', locale)}</div>
-                <div style={{ fontSize: 13, color: C.textSec }}>
-                  {t(`santa_campaign_gift_status_${myAssignment.giftStatus.toLowerCase()}` as string, locale) || myAssignment.giftStatus}
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 12 }}>
+                  {t('santa_gift_status_title', locale)}
                 </div>
-                {myAssignment.giftStatus !== 'SENT' && myAssignment.giftStatus !== 'RECEIVED' && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                {(() => {
+                  const p = currentSantaCampaign.ownerProgress!.progress;
+                  const total = p.pending + p.buying + p.sent + p.received;
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {p.received === total && total > 0 && (
+                        <div style={{ fontSize: 14, fontWeight: 700, color: C.green, marginBottom: 4 }}>
+                          {t('santa_gift_all_received', locale)}
+                        </div>
+                      )}
+                      {[
+                        { key: 'pending', count: p.pending, label: t('santa_gift_progress_pending', locale, { count: p.pending, total }) },
+                        { key: 'buying', count: p.buying, label: t('santa_gift_progress_buying', locale, { count: p.buying }) },
+                        { key: 'sent', count: p.sent, label: t('santa_gift_progress_sent', locale, { count: p.sent }) },
+                        { key: 'received', count: p.received, label: t('santa_gift_progress_received', locale, { count: p.received }) },
+                      ].filter(row => row.count > 0).map(row => (
+                        <div key={row.key} style={{ fontSize: 13, color: C.textSec }}>{row.label}</div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Giver view (post-draw) — role: giver, no receiverUserId/participantId exposed */}
+            {myAssignment && myAssignment.role === 'giver' && ['ACTIVE', 'COMPLETED'].includes(camp.status) && (
+              <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>
+                  {t('santa_gift_my_recipient', locale)}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <UserAvatar avatarUrl={myAssignment.receiver.avatarUrl} name={myAssignment.receiver.displayName} size={36} accent={C.accent} />
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{myAssignment.receiver.displayName}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>
+                      {t(`santa_campaign_gift_status_${myAssignment.giftStatus.toLowerCase()}` as string, locale) || myAssignment.giftStatus}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Gift status controls — only PENDING→BUYING→SENT */}
+                {myAssignment.giftStatus !== 'RECEIVED' && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                     {myAssignment.giftStatus === 'PENDING' && (
                       <button
                         onClick={async () => {
@@ -8539,7 +8704,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         }}
                         style={{ background: C.accent, border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer' }}
                       >
-                        {t('santa_campaign_mark_buying', locale)}
+                        {t('santa_gift_mark_buying', locale)}
                       </button>
                     )}
                     {myAssignment.giftStatus === 'BUYING' && (
@@ -8553,11 +8718,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         }}
                         style={{ background: C.accent, border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer' }}
                       >
-                        {t('santa_campaign_mark_sent', locale)}
+                        {t('santa_gift_mark_sent', locale)}
                       </button>
+                    )}
+                    {myAssignment.giftStatus === 'SENT' && (
+                      <div style={{ fontSize: 13, color: C.green }}>✓ {t('santa_campaign_gift_status_sent', locale)}</div>
                     )}
                   </div>
                 )}
+
                 {/* View receiver's wishlist */}
                 <button
                   onClick={async () => {
@@ -8566,19 +8735,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     if (res.ok) setSantaReceiverWishlist(await res.json() as typeof santaReceiverWishlist);
                     setSantaReceiverWishlistLoading(false);
                   }}
-                  style={{ marginTop: 12, background: 'none', border: `1px solid ${C.accent}`, borderRadius: 10, color: C.accent, fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer', width: '100%' }}
+                  style={{ background: 'none', border: `1px solid ${C.accent}`, borderRadius: 10, color: C.accent, fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer', width: '100%' }}
                 >
-                  {t('santa_campaign_receiver_wishlist', locale)}
+                  {santaReceiverWishlistLoading ? t('loading', locale) : t('santa_campaign_receiver_wishlist', locale)}
                 </button>
                 {santaReceiverWishlist && (
                   <div style={{ marginTop: 12 }}>
                     <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6 }}>
-                      {santaReceiverWishlist.receiverName} · {santaReceiverWishlist.wishlist?.title ?? t('santa_campaign_no_wishlist', locale)}
+                      {santaReceiverWishlist.receiver.displayName} · {santaReceiverWishlist.wishlist?.title ?? t('santa_campaign_no_wishlist', locale)}
                     </div>
+                    {santaReceiverWishlist.items.length === 0 && (
+                      <div style={{ fontSize: 13, color: C.textMuted }}>{t('santa_campaign_no_wishlist', locale)}</div>
+                    )}
                     {santaReceiverWishlist.items.map(item => (
                       <div key={item.id} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{item.title}</div>
-                        {item.priceText && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{item.priceText} {item.currency}</div>}
+                        {item.priceText && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{item.priceText}</div>}
                       </div>
                     ))}
                   </div>
@@ -8586,26 +8758,101 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            {/* Non-owner: confirm received */}
-            {!isOwner && camp.status === 'ACTIVE' && (() => {
+            {/* Receiver inbound view (post-draw) — role: receiver, no giver identity */}
+            {!isOwner && ['ACTIVE', 'COMPLETED'].includes(camp.status) && (() => {
               const myParticipant = participants.find(p => p.userId === tgUser?.id?.toString());
-              const myReceiverAssignment = currentSantaCampaign.rounds.length > 0 ? null : null; // simplified — would check rounds
-              return myParticipant ? (
-                <button
-                  onClick={async () => {
-                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/confirm-received`, { method: 'POST' });
-                    if (res.ok) {
-                      const json = await res.json() as { campaignCompleted: boolean };
-                      pushToast(json.campaignCompleted ? (locale === 'ru' ? 'Кампания завершена! 🎉' : 'Campaign completed! 🎉') : t('done', locale), 'success');
-                      const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
-                      if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
-                    }
-                  }}
-                  style={{ background: C.green, border: 'none', borderRadius: 12, color: '#000', fontSize: 14, fontWeight: 700, padding: '12px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginBottom: 12 }}
-                >
-                  {t('santa_campaign_confirm_received', locale)}
-                </button>
-              ) : null;
+              if (!myParticipant) return null;
+              return (
+                <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>
+                    {locale === 'ru' ? 'Мой подарок' : 'My gift'}
+                  </div>
+
+                  {/* Load inbound status on demand */}
+                  {!santaInboundStatus && (
+                    <button
+                      disabled={santaInboundLoading}
+                      onClick={async () => {
+                        setSantaInboundLoading(true);
+                        const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/status`);
+                        if (res.ok) setSantaInboundStatus(await res.json() as typeof santaInboundStatus);
+                        setSantaInboundLoading(false);
+                      }}
+                      style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 13, padding: '8px 16px', cursor: 'pointer', width: '100%' }}
+                    >
+                      {santaInboundLoading ? t('loading', locale) : (locale === 'ru' ? 'Проверить статус' : 'Check status')}
+                    </button>
+                  )}
+
+                  {santaInboundStatus && (
+                    <div>
+                      {santaInboundStatus.giftStatus === 'PENDING' || santaInboundStatus.giftStatus === 'BUYING' ? (
+                        <div style={{ fontSize: 13, color: C.textSec }}>{t('santa_inbound_waiting', locale)}</div>
+                      ) : santaInboundStatus.giftStatus === 'SENT' ? (
+                        <div style={{ fontSize: 13, color: C.accent, fontWeight: 600 }}>{t('santa_inbound_sent', locale)}</div>
+                      ) : santaInboundStatus.giftStatus === 'RECEIVED' ? (
+                        <div style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>{t('santa_inbound_received', locale)}</div>
+                      ) : null}
+
+                      {/* Confirm received — only when gift was SENT and not yet confirmed */}
+                      {santaInboundStatus.giftStatus === 'SENT' && (
+                        <button
+                          onClick={async () => {
+                            const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/confirm-received`, { method: 'POST' });
+                            if (res.ok) {
+                              const json = await res.json() as { campaignCompleted: boolean };
+                              setSantaInboundStatus(prev => prev ? { ...prev, giftStatus: 'RECEIVED' } : prev);
+                              pushToast(json.campaignCompleted ? t('santa_gift_all_received', locale) : t('done', locale), 'success');
+                              const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                              if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                            }
+                          }}
+                          style={{ marginTop: 12, background: C.green, border: 'none', borderRadius: 10, color: '#000', fontSize: 13, fontWeight: 700, padding: '10px 0', cursor: 'pointer', width: '100%', fontFamily: font }}
+                        >
+                          {t('santa_campaign_confirm_received', locale)}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Reveal section — shown after campaign COMPLETED (skeleton: works for completed campaigns) */}
+            {camp.status === 'COMPLETED' && (() => {
+              const myParticipant = participants.find(p => p.userId === tgUser?.id?.toString());
+              if (!myParticipant) return null;
+              return (
+                <div style={{ background: `${C.accent}10`, borderRadius: 14, padding: 16, marginBottom: 16, border: `1px solid ${C.accent}30` }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 8 }}>
+                    🎅 {t('santa_reveal_title', locale)}
+                  </div>
+                  {!santaReveal ? (
+                    <button
+                      disabled={santaRevealLoading}
+                      onClick={async () => {
+                        setSantaRevealLoading(true);
+                        const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/reveal`);
+                        if (res.ok) setSantaReveal(await res.json() as typeof santaReveal);
+                        else pushToast(t('error_generic', locale), 'error');
+                        setSantaRevealLoading(false);
+                      }}
+                      style={{ background: C.accent, border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: santaRevealLoading ? 'wait' : 'pointer', width: '100%', fontFamily: font }}
+                    >
+                      {santaRevealLoading ? t('loading', locale) : t('santa_reveal_btn', locale)}
+                    </button>
+                  ) : santaReveal.revealed && santaReveal.giver ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <UserAvatar avatarUrl={santaReveal.giver.avatarUrl} name={santaReveal.giver.displayName} size={40} accent={C.accent} />
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                        {t('santa_reveal_giver', locale, { name: santaReveal.giver.displayName })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 13, color: C.textMuted }}>{t('santa_reveal_not_ready', locale)}</div>
+                  )}
+                </div>
+              );
             })()}
 
             {/* Leave campaign (non-owner, pre-draw) */}

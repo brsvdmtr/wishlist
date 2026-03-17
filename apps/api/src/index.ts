@@ -4715,16 +4715,41 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
   const isParticipant = campaign.participants.some(p => p.user.id === user.id);
   if (!isOwner && !isParticipant) return res.status(403).json({ error: 'Forbidden' });
 
-  // Find caller's own assignment (post-draw)
-  let myAssignment = null;
+  // Find caller's own assignment (post-draw) — role-aware, never leaks pairs
+  let myAssignment: SantaAssignmentForGiver | null = null;
+  let ownerProgress: SantaAssignmentForOwner | null = null;
   const myParticipant = campaign.participants.find(p => p.user.id === user.id);
-  if (myParticipant && campaign.rounds.length > 0 && campaign.status === 'ACTIVE') {
-    const assignment = await prisma.santaAssignment.findUnique({
-      where: { roundId_giverParticipantId: { roundId: campaign.rounds[0]!.id, giverParticipantId: myParticipant.id } },
-      select: { id: true, giftStatus: true, giftNote: true },
-    });
-    if (assignment) {
-      myAssignment = { ...assignment };
+  if (campaign.rounds.length > 0 && ['ACTIVE', 'COMPLETED'].includes(campaign.status)) {
+    const roundId = campaign.rounds[0]!.id;
+    if (isOwner) {
+      // Owner sees aggregate progress only — no individual pairs
+      const allAssignments = await prisma.santaAssignment.findMany({
+        where: { roundId },
+        select: { giftStatus: true },
+      });
+      ownerProgress = serializeAssignment('owner', { assignments: allAssignments });
+    }
+    if (myParticipant) {
+      // Giver view for all participants (including owner if they're also a participant)
+      const giverAssignment = await prisma.santaAssignment.findUnique({
+        where: { roundId_giverParticipantId: { roundId, giverParticipantId: myParticipant.id } },
+        select: {
+          giftStatus: true, giftNote: true,
+          receiver: {
+            select: { user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } },
+          },
+        },
+      });
+      if (giverAssignment) {
+        const receiverDisplayName = giverAssignment.receiver.user.profile?.displayName
+          || giverAssignment.receiver.user.firstName || 'Получатель';
+        const receiverAvatarUrl = giverAssignment.receiver.user.profile?.avatarUrl || null;
+        myAssignment = serializeAssignment('giver', {
+          giftStatus: giverAssignment.giftStatus,
+          giftNote: giverAssignment.giftNote,
+          receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl },
+        });
+      }
     }
   }
 
@@ -4758,6 +4783,7 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
     })),
     rounds: campaign.rounds,
     myAssignment,
+    ownerProgress: isOwner ? ownerProgress : undefined,
   });
 }));
 
@@ -4843,6 +4869,438 @@ tgRouter.post('/santa/campaigns/:id/cancel', asyncHandler(async (req, res) => {
   });
   await prisma.santaAdminAuditLog.create({ data: { campaignId, actorId: user.id, action: 'campaign_cancelled', payload: { reason: parsed.success ? parsed.data.reason : undefined } } });
   return res.json({ ok: true });
+}));
+
+// ─── Santa draw algorithm helpers ─────────────────────────────────────────────
+
+/**
+ * Build exclusion set as "smallerUserId:largerUserId" strings for O(1) lookup.
+ */
+function buildExclusionSet(exclusions: { userId1: string; userId2: string }[]): Set<string> {
+  const set = new Set<string>();
+  for (const e of exclusions) {
+    const key = [e.userId1, e.userId2].sort().join(':');
+    set.add(key);
+  }
+  return set;
+}
+
+function exclusionKey(userIdA: string, userIdB: string): string {
+  return [userIdA, userIdB].sort().join(':');
+}
+
+/**
+ * Hopcroft-Karp bipartite matching.
+ * givers[i] can be assigned to receivers[j] if allowed[i][j] is true.
+ * Returns maximum matching size. If size == N, a valid assignment exists.
+ */
+function hopcroftKarp(
+  n: number,
+  adj: number[][],   // adj[giver_index] = list of valid receiver_indexes
+): { matchingSize: number; matchG: number[]; matchR: number[] } {
+  const INF = Number.MAX_SAFE_INTEGER;
+  const matchG = new Array<number>(n).fill(-1); // matchG[giver] = receiver index (-1 = unmatched)
+  const matchR = new Array<number>(n).fill(-1); // matchR[receiver] = giver index
+  const dist = new Array<number>(n);
+
+  function bfs(): boolean {
+    const queue: number[] = [];
+    for (let u = 0; u < n; u++) {
+      if (matchG[u] === -1) { dist[u] = 0; queue.push(u); }
+      else dist[u] = INF;
+    }
+    let found = false;
+    let qi = 0;
+    while (qi < queue.length) {
+      const u = queue[qi++]!;
+      for (const v of adj[u]!) {
+        const w = matchR[v]!;
+        if (w === -1) { found = true; }
+        else if (dist[w] === INF) { dist[w] = (dist[u] ?? 0) + 1; queue.push(w); }
+      }
+    }
+    return found;
+  }
+
+  function dfs(u: number): boolean {
+    for (const v of adj[u]!) {
+      const w = matchR[v]!;
+      if (w === -1 || (dist[w] === (dist[u] ?? 0) + 1 && dfs(w))) {
+        matchG[u] = v; matchR[v] = u; return true;
+      }
+    }
+    dist[u] = INF;
+    return false;
+  }
+
+  let matchingSize = 0;
+  while (bfs()) {
+    for (let u = 0; u < n; u++) {
+      if (matchG[u] === -1 && dfs(u)) matchingSize++;
+    }
+  }
+  return { matchingSize, matchG, matchR };
+}
+
+/**
+ * Check draw feasibility. Returns { feasible, problematic } without any side effects.
+ * "problematic" lists participant userId pairs whose exclusion is most constraining.
+ */
+function checkDrawFeasibility(
+  participants: { id: string; userId: string }[],
+  exclusionSet: Set<string>,
+): { feasible: boolean; problematic: { userId1: string; userId2: string }[] } {
+  const n = participants.length;
+  const idx = new Map<string, number>(); // participantId → index
+  participants.forEach((p, i) => idx.set(p.id, i));
+
+  const adj: number[][] = participants.map((giver, i) =>
+    participants
+      .map((receiver, j) => ({ receiver, j }))
+      .filter(({ receiver, j }) =>
+        j !== i && !exclusionSet.has(exclusionKey(giver.userId, receiver.userId))
+      )
+      .map(({ j }) => j)
+  );
+
+  const { matchingSize } = hopcroftKarp(n, adj);
+  if (matchingSize === n) return { feasible: true, problematic: [] };
+
+  // Identify most constrained participants (fewest valid receivers)
+  const constrained = participants
+    .map((p, i) => ({ userId: p.userId, options: adj[i]!.length }))
+    .sort((a, b) => a.options - b.options)
+    .slice(0, 3);
+
+  // Find exclusions among the most constrained to give actionable feedback
+  const problematic: { userId1: string; userId2: string }[] = [];
+  for (let i = 0; i < constrained.length; i++) {
+    for (let j = i + 1; j < constrained.length; j++) {
+      const a = constrained[i]!.userId;
+      const b = constrained[j]!.userId;
+      if (exclusionSet.has(exclusionKey(a, b))) problematic.push({ userId1: a, userId2: b });
+    }
+  }
+  // Also add exclusions where a participant has 0 valid receivers
+  for (const c of constrained) {
+    if (c.options === 0) {
+      // Find all exclusions involving this participant
+      for (const p2 of participants) {
+        if (p2.userId !== c.userId && exclusionSet.has(exclusionKey(c.userId, p2.userId))) {
+          problematic.push({ userId1: c.userId, userId2: p2.userId });
+        }
+      }
+    }
+  }
+
+  return { feasible: false, problematic };
+}
+
+/**
+ * Generate a random valid derangement (Secret Santa assignment) using Fisher-Yates + backtracking.
+ * Returns array of { giverParticipantId, receiverParticipantId } or null if exhausted retries.
+ */
+function drawRandomAssignments(
+  participants: { id: string; userId: string }[],
+  exclusionSet: Set<string>,
+  maxRetries = 1000,
+): { giverParticipantId: string; receiverParticipantId: string }[] | null {
+  const n = participants.length;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // Fisher-Yates shuffle of receiver indexes
+    const receivers = [...participants];
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [receivers[i], receivers[j]] = [receivers[j]!, receivers[i]!];
+    }
+
+    // Check all constraints
+    let valid = true;
+    for (let i = 0; i < n; i++) {
+      const giver = participants[i]!;
+      const receiver = receivers[i]!;
+      if (giver.id === receiver.id) { valid = false; break; } // self-pair
+      if (exclusionSet.has(exclusionKey(giver.userId, receiver.userId))) { valid = false; break; }
+    }
+
+    if (valid) {
+      return participants.map((giver, i) => ({
+        giverParticipantId: giver.id,
+        receiverParticipantId: receivers[i]!.id,
+      }));
+    }
+  }
+
+  // Random approach exhausted → use deterministic backtracking
+  const assignment = new Array<number>(n).fill(-1);
+  const used = new Array<boolean>(n).fill(false);
+
+  // Build adjacency list for each giver
+  const adj: number[][] = participants.map((giver, i) => {
+    const options: number[] = [];
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue;
+      if (!exclusionSet.has(exclusionKey(giver.userId, participants[j]!.userId))) options.push(j);
+    }
+    // Shuffle options for randomness
+    for (let k = options.length - 1; k > 0; k--) {
+      const r = Math.floor(Math.random() * (k + 1));
+      [options[k], options[r]] = [options[r]!, options[k]!];
+    }
+    return options;
+  });
+
+  function backtrack(pos: number): boolean {
+    if (pos === n) return true;
+    for (const j of adj[pos]!) {
+      if (!used[j]) {
+        assignment[pos] = j;
+        used[j] = true;
+        if (backtrack(pos + 1)) return true;
+        assignment[pos] = -1;
+        used[j] = false;
+      }
+    }
+    return false;
+  }
+
+  if (!backtrack(0)) return null;
+  return participants.map((giver, i) => ({
+    giverParticipantId: giver.id,
+    receiverParticipantId: participants[assignment[i]!]!.id,
+  }));
+}
+
+// ─── Santa — role-aware assignment serializer ─────────────────────────────────
+
+type SantaAssignmentForGiver = {
+  role: 'giver';
+  giftStatus: string;
+  giftNote: string | null;
+  receiver: { displayName: string; avatarUrl: string | null };
+};
+
+type SantaAssignmentForReceiver = {
+  role: 'receiver';
+  giftStatus: string;
+  hasGiver: true;
+};
+
+type SantaAssignmentForOwner = {
+  role: 'owner';
+  progress: { pending: number; buying: number; sent: number; received: number };
+};
+
+/**
+ * Single serialization codepath for assignment data.
+ * NEVER expose receiverUserId/receiverParticipantId to giver.
+ * NEVER expose giver identity to receiver.
+ * NEVER expose individual pairs to owner.
+ */
+function serializeAssignment(
+  role: 'giver',
+  data: { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null } }
+): SantaAssignmentForGiver;
+function serializeAssignment(
+  role: 'receiver',
+  data: { giftStatus: string }
+): SantaAssignmentForReceiver;
+function serializeAssignment(
+  role: 'owner',
+  data: { assignments: { giftStatus: string }[] }
+): SantaAssignmentForOwner;
+function serializeAssignment(
+  role: 'giver' | 'receiver' | 'owner',
+  data: unknown,
+): SantaAssignmentForGiver | SantaAssignmentForReceiver | SantaAssignmentForOwner {
+  if (role === 'giver') {
+    const d = data as { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null } };
+    return { role: 'giver', giftStatus: d.giftStatus, giftNote: d.giftNote, receiver: { displayName: d.receiver.displayName, avatarUrl: d.receiver.avatarUrl } };
+  }
+  if (role === 'receiver') {
+    const d = data as { giftStatus: string };
+    return { role: 'receiver', giftStatus: d.giftStatus, hasGiver: true };
+  }
+  // owner
+  const d = data as { assignments: { giftStatus: string }[] };
+  const progress = { pending: 0, buying: 0, sent: 0, received: 0 };
+  for (const a of d.assignments) {
+    if (a.giftStatus === 'PENDING') progress.pending++;
+    else if (a.giftStatus === 'BUYING') progress.buying++;
+    else if (a.giftStatus === 'SENT') progress.sent++;
+    else if (a.giftStatus === 'RECEIVED') progress.received++;
+  }
+  return { role: 'owner', progress };
+}
+
+// ─── Santa draw endpoints ──────────────────────────────────────────────────────
+
+// GET /tg/santa/campaigns/:id/draw/validate — feasibility check, ZERO side effects
+tgRouter.get('/santa/campaigns/:id/draw/validate', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: {
+      ownerId: true,
+      status: true,
+      participants: {
+        where: { status: 'JOINED' },
+        select: { id: true, userId: true, user: { select: { firstName: true } } },
+      },
+      // SantaExclusion is not directly on campaign; query separately
+    },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+  if (!['LOCKED', 'OPEN', 'DRAFT'].includes(campaign.status)) {
+    return res.status(409).json({ error: 'Draw can only be validated when campaign is LOCKED, OPEN or DRAFT' });
+  }
+
+  const exclusions = await prisma.santaExclusion.findMany({
+    where: { campaignId },
+    select: { userId1: true, userId2: true },
+  });
+
+  const participants = campaign.participants;
+  if (participants.length < 2) {
+    return res.json({ feasible: false, reason: 'not_enough_participants', minRequired: 2, actual: participants.length });
+  }
+
+  const exclusionSet = buildExclusionSet(exclusions);
+  const { feasible, problematic } = checkDrawFeasibility(participants, exclusionSet);
+
+  if (feasible) {
+    return res.json({ feasible: true, participantCount: participants.length });
+  }
+
+  // Build human-readable names for problematic pair
+  const userIdToName = new Map(participants.map(p => [p.userId, p.user.firstName || p.userId]));
+  const problematicWithNames = problematic.map(p => ({
+    userId1: p.userId1, name1: userIdToName.get(p.userId1) ?? p.userId1,
+    userId2: p.userId2, name2: userIdToName.get(p.userId2) ?? p.userId2,
+  }));
+
+  return res.json({
+    feasible: false,
+    reason: 'exclusions_prevent_valid_assignment',
+    participantCount: participants.length,
+    problematicExclusions: problematicWithNames,
+  });
+}));
+
+// POST /tg/santa/campaigns/:id/draw — execute draw with atomic lock
+tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  // 1. Verify caller is owner and campaign is LOCKED
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { ownerId: true, status: true, id: true },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+  if (campaign.status === 'DRAW_IN_PROGRESS') {
+    return res.status(409).json({ error: 'draw_already_running', message: 'A draw is already in progress for this campaign.' });
+  }
+  if (campaign.status !== 'LOCKED') {
+    return res.status(409).json({ error: 'campaign_not_locked', message: 'Campaign must be in LOCKED status to start draw.' });
+  }
+
+  // 2. Load participants and exclusions
+  const participants = await prisma.santaParticipant.findMany({
+    where: { campaignId, status: 'JOINED' },
+    select: { id: true, userId: true, user: { select: { firstName: true } } },
+  });
+  if (participants.length < 2) {
+    return res.status(422).json({ error: 'not_enough_participants', minRequired: 2, actual: participants.length });
+  }
+
+  const exclusions = await prisma.santaExclusion.findMany({
+    where: { campaignId },
+    select: { userId1: true, userId2: true },
+  });
+  const exclusionSet = buildExclusionSet(exclusions);
+
+  // 3. Pre-check feasibility before acquiring lock
+  const { feasible, problematic } = checkDrawFeasibility(participants, exclusionSet);
+  if (!feasible) {
+    const userIdToName = new Map(participants.map(p => [p.userId, p.user.firstName || p.userId]));
+    const problematicWithNames = problematic.map(p => ({
+      userId1: p.userId1, name1: userIdToName.get(p.userId1) ?? p.userId1,
+      userId2: p.userId2, name2: userIdToName.get(p.userId2) ?? p.userId2,
+    }));
+    return res.status(422).json({
+      error: 'draw_infeasible',
+      reason: 'exclusions_prevent_valid_assignment',
+      message: 'С текущими ограничениями жеребьёвка невозможна. Уберите одно из ограничений, чтобы продолжить.',
+      problematicExclusions: problematicWithNames,
+    });
+  }
+
+  // 4. Atomic lock: UPDATE only if still LOCKED (prevents double-draw)
+  const drawJobId = crypto.randomUUID();
+  const locked = await prisma.santaCampaign.updateMany({
+    where: { id: campaignId, status: 'LOCKED' },
+    data: { status: 'DRAW_IN_PROGRESS' },
+  });
+  if (locked.count === 0) {
+    return res.status(409).json({ error: 'draw_already_running', message: 'Another draw job already acquired the lock.' });
+  }
+
+  // 5. Create (or reuse) the round, set drawJobId
+  let round = await prisma.santaRound.findFirst({ where: { campaignId, roundNumber: 1 } });
+  if (!round) {
+    round = await prisma.santaRound.create({ data: { campaignId, roundNumber: 1, drawStatus: 'IN_PROGRESS', drawJobId } });
+  } else {
+    await prisma.santaRound.update({ where: { id: round.id }, data: { drawStatus: 'IN_PROGRESS', drawJobId } });
+  }
+  const roundId = round.id;
+
+  try {
+    // 6. Generate assignment (Fisher-Yates + backtracking)
+    const assignments = drawRandomAssignments(participants, exclusionSet);
+    if (!assignments) {
+      // Should not happen since we pre-checked feasibility, but handle gracefully
+      await prisma.$transaction([
+        prisma.santaRound.update({ where: { id: roundId }, data: { drawStatus: 'FAILED' } }),
+        prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'LOCKED' } }),
+      ]);
+      return res.status(500).json({ error: 'draw_failed', message: 'Draw algorithm failed despite feasibility check. Please retry.' });
+    }
+
+    // 7. Atomically persist assignments + mark ACTIVE
+    await prisma.$transaction([
+      prisma.santaAssignment.createMany({
+        data: assignments.map(a => ({ roundId, ...a, giftStatus: 'PENDING' })),
+      }),
+      prisma.santaRound.update({ where: { id: roundId }, data: { drawStatus: 'DONE', drawnAt: new Date() } }),
+      prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'ACTIVE' } }),
+    ]);
+
+    // 8. Audit log
+    await prisma.santaAdminAuditLog.create({
+      data: { campaignId, actorId: user.id, action: 'draw_completed', payload: { drawJobId, assignmentCount: assignments.length } },
+    });
+
+    return res.json({ ok: true, assignmentCount: assignments.length });
+
+  } catch (err) {
+    // Rollback: mark round FAILED, campaign back to LOCKED for retry
+    try {
+      await prisma.$transaction([
+        prisma.santaRound.update({ where: { id: roundId }, data: { drawStatus: 'FAILED' } }),
+        prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'LOCKED' } }),
+      ]);
+    } catch (_rollbackErr) {
+      // Best-effort rollback
+    }
+    throw err; // Re-throw for asyncHandler to catch
+  }
 }));
 
 // GET /tg/santa/invite/:token — resolve invite token → campaign preview
@@ -5086,11 +5544,23 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
   const updated = await prisma.santaAssignment.update({
     where: { id: assignment.id },
     data: { giftStatus: parsed.data.status, giftNote: parsed.data.note ?? assignment.giftNote },
+    include: {
+      receiver: {
+        select: { user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } },
+      },
+    },
   });
 
   await prisma.santaGiftProgress.create({ data: { assignmentId: assignment.id, status: parsed.data.status, note: parsed.data.note } });
 
-  return res.json({ giftStatus: updated.giftStatus });
+  // Return role-aware serialized response — never expose receiverUserId/receiverParticipantId
+  const receiverDisplayName = updated.receiver.user.profile?.displayName || updated.receiver.user.firstName || 'Получатель';
+  const receiverAvatarUrl = updated.receiver.user.profile?.avatarUrl || null;
+  return res.json(serializeAssignment('giver', {
+    giftStatus: updated.giftStatus,
+    giftNote: updated.giftNote,
+    receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl },
+  }));
 }));
 
 // POST /tg/santa/campaigns/:id/confirm-received — receiver confirms gift received
@@ -5108,11 +5578,13 @@ tgRouter.post('/santa/campaigns/:id/confirm-received', asyncHandler(async (req, 
   if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
 
   const roundId = campaign.rounds[0]!.id;
-  // Find assignment where this user is the receiver
+  // Receiver addresses via campaign-centric path — NOT assignmentId
   const assignment = await prisma.santaAssignment.findUnique({
     where: { roundId_receiverParticipantId: { roundId, receiverParticipantId: participant.id } },
+    select: { id: true, giftStatus: true }, // Only what we need — never select giverParticipantId here
   });
   if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+  if (assignment.giftStatus === 'RECEIVED') return res.json({ ok: true, campaignCompleted: false, alreadyReceived: true });
 
   await prisma.santaAssignment.update({ where: { id: assignment.id }, data: { giftStatus: 'RECEIVED' } });
   await prisma.santaGiftProgress.create({ data: { assignmentId: assignment.id, status: 'RECEIVED' } });
@@ -5144,15 +5616,22 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
   const roundId = campaign.rounds[0]!.id;
   const assignment = await prisma.santaAssignment.findUnique({
     where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
-    include: { receiver: { select: { linkedWishlistId: true, user: { select: { firstName: true, profile: { select: { displayName: true } } } } } } },
+    include: { receiver: { select: { linkedWishlistId: true, user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } } } },
   });
   if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
 
   const receiverWishlistId = assignment.receiver.linkedWishlistId;
-  // Receiver display name visible to giver (anonymized — only first name or display name, no Telegram ID)
-  const receiverName = assignment.receiver.user.profile?.displayName || assignment.receiver.user.firstName || 'Получатель';
+  // Receiver display name visible to giver: only display name or first name — no userId, no participantId
+  const receiverDisplayName = assignment.receiver.user.profile?.displayName || assignment.receiver.user.firstName || 'Получатель';
+  const receiverAvatarUrl = assignment.receiver.user.profile?.avatarUrl || null;
 
-  if (!receiverWishlistId) return res.json({ receiverName, wishlist: null, items: [] });
+  const giverView = serializeAssignment('giver', {
+    giftStatus: assignment.giftStatus,
+    giftNote: assignment.giftNote,
+    receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl },
+  });
+
+  if (!receiverWishlistId) return res.json({ ...giverView, wishlist: null, items: [] });
 
   const items = await prisma.item.findMany({
     where: { wishlistId: receiverWishlistId, status: { in: ['AVAILABLE', 'RESERVED', 'PURCHASED'] } },
@@ -5161,7 +5640,159 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
   });
   const wishlist = await prisma.wishlist.findUnique({ where: { id: receiverWishlistId }, select: { title: true } });
 
-  return res.json({ receiverName, wishlist: wishlist ? { title: wishlist.title } : null, items });
+  return res.json({ ...giverView, wishlist: wishlist ? { title: wishlist.title } : null, items });
+}));
+
+// GET /tg/santa/campaigns/:id/inbound/status — receiver gets their inbound gift signal
+// Role: receiver only. Returns gift status WITHOUT giver identity. Campaign-centric addressing.
+tgRouter.get('/santa/campaigns/:id/inbound/status', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+  });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) {
+    return res.json({ hasGiver: false, giftStatus: null, campaignStatus: campaign.status });
+  }
+  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
+
+  const roundId = campaign.rounds[0]!.id;
+  // Resolve via receiver side — campaign-centric, NOT assignment-id-centric
+  const assignment = await prisma.santaAssignment.findUnique({
+    where: { roundId_receiverParticipantId: { roundId, receiverParticipantId: participant.id } },
+    select: { giftStatus: true }, // ONLY giftStatus — no giverParticipantId exposed
+  });
+  if (!assignment) return res.json({ hasGiver: false, giftStatus: null, campaignStatus: campaign.status });
+
+  return res.json(serializeAssignment('receiver', { giftStatus: assignment.giftStatus }));
+}));
+
+// GET /tg/santa/campaigns/:id/assignment — giver's own assignment summary (role-aware)
+tgRouter.get('/santa/campaigns/:id/assignment', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+  });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { ownerId: true, status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+  const isOwner = campaign.ownerId === user.id;
+
+  if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) {
+    return res.json({ status: campaign.status, ready: false });
+  }
+  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
+  const roundId = campaign.rounds[0]!.id;
+
+  // Owner: return aggregate progress only
+  if (isOwner) {
+    const allAssignments = await prisma.santaAssignment.findMany({
+      where: { roundId },
+      select: { giftStatus: true },
+    });
+    return res.json({ ready: true, ...serializeAssignment('owner', { assignments: allAssignments }) });
+  }
+
+  // Giver view
+  const giverAssignment = await prisma.santaAssignment.findUnique({
+    where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
+    select: {
+      giftStatus: true,
+      giftNote: true,
+      receiver: {
+        select: {
+          user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+        },
+      },
+    },
+  });
+  if (!giverAssignment) return res.json({ ready: false, role: 'giver' });
+
+  const receiverDisplayName = giverAssignment.receiver.user.profile?.displayName
+    || giverAssignment.receiver.user.firstName || 'Получатель';
+  const receiverAvatarUrl = giverAssignment.receiver.user.profile?.avatarUrl || null;
+
+  return res.json({
+    ready: true,
+    ...serializeAssignment('giver', {
+      giftStatus: giverAssignment.giftStatus,
+      giftNote: giverAssignment.giftNote,
+      receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl },
+    }),
+  });
+}));
+
+// GET /tg/santa/campaigns/:id/reveal — reveal skeleton (Batch 2 stub)
+// This endpoint will return giver identity to receiver AFTER campaign is COMPLETED.
+// In Batch 2, returns a stub with the contract shape. Actual reveal logic ships in Batch 3.
+tgRouter.get('/santa/campaigns/:id/reveal', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const participant = await prisma.santaParticipant.findUnique({
+    where: { campaignId_userId: { campaignId, userId: user.id } },
+  });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+  if (campaign.status !== 'COMPLETED') {
+    return res.status(409).json({
+      error: 'reveal_not_available',
+      message: 'Reveal is only available when the campaign is completed.',
+      campaignStatus: campaign.status,
+    });
+  }
+  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
+  const roundId = campaign.rounds[0]!.id;
+
+  // Reveal: find who gave to this user (receiver-side lookup)
+  const receiverAssignment = await prisma.santaAssignment.findUnique({
+    where: { roundId_receiverParticipantId: { roundId, receiverParticipantId: participant.id } },
+    select: {
+      giver: {
+        select: {
+          user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+        },
+      },
+    },
+  });
+
+  if (!receiverAssignment) {
+    // Stub: reveal not yet available (shouldn't happen for COMPLETED campaigns, but guard gracefully)
+    return res.json({ revealed: false, _stub: true, message: 'Reveal logic ships in Batch 3.' });
+  }
+
+  // Reveal: expose giver identity now that campaign is complete
+  const giverName = receiverAssignment.giver.user.profile?.displayName
+    || receiverAssignment.giver.user.firstName || 'Санта';
+  const giverAvatarUrl = receiverAssignment.giver.user.profile?.avatarUrl || null;
+
+  return res.json({
+    revealed: true,
+    giver: { displayName: giverName, avatarUrl: giverAvatarUrl },
+    // Note: giverUserId deliberately omitted — only display layer exposed.
+    // Full profile linking (if ever) requires separate consent design.
+  });
 }));
 
 // ─── Maintenance mode middleware ──────────────────────────────────────────────

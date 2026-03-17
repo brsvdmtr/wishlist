@@ -1,8 +1,9 @@
-# Secret Santa — Architecture Document v2.1
+# Secret Santa — Architecture Document v2.2
 
-> **Status:** Approved for Batch 1 implementation
+> **Status:** Batch 1 deployed. Batch 2 approved to start.
 > **Last updated:** 2026-03-18
-> Incorporates all v2 mandatory fixes, improvements, and 5 final clarifications.
+> v2.1 — 5 final clarifications codified
+> v2.2 — 8 pre-Batch-2 invariant rules added (§19)
 
 ---
 
@@ -636,6 +637,202 @@ if (startParam.startsWith('santa_')) {
 - Admin tools, audit log viewer
 - Export, season config management
 - Edge cases, anonymity test suite completion
+
+---
+
+## 19. Pre-Batch-2 Invariant Rules (Addendum v2.2)
+
+These 8 rules are binding constraints for all Batch 2+ implementation. Violating any of them is a hard defect.
+
+---
+
+### Rule 1 — Draw cannot be triggered twice
+
+- `POST /tg/santa/campaigns/:id/draw` MUST use an atomic status transition:
+  ```sql
+  UPDATE santa_campaigns SET status='DRAW_IN_PROGRESS'
+  WHERE id=? AND status='LOCKED'
+  ```
+  If 0 rows updated → return **409 Conflict** (`draw_already_running`). No second draw starts.
+- No reset, re-draw, or retry path runs in parallel with an active draw job. Any retry requires campaign to be back in `LOCKED` state (only possible after `round.drawStatus = FAILED`).
+- State transitions (`LOCKED → DRAW_IN_PROGRESS → ACTIVE` and `LOCKED → DRAW_IN_PROGRESS → LOCKED` on failure) must be covered by integration tests, not just code comments.
+- `SantaRound.drawJobId` is set to a UUID **before** the draw starts; a duplicate job for the same `drawJobId` exits immediately.
+
+---
+
+### Rule 2 — DB invariants are enforced at the schema level
+
+The following invariants must hold and are enforced by the schema's `@@unique` constraints — not application logic alone:
+
+| Invariant | Enforcement |
+|-----------|------------|
+| One giver per round | `@@unique([roundId, giverParticipantId])` on `SantaAssignment` |
+| One receiver per round | `@@unique([roundId, receiverParticipantId])` on `SantaAssignment` |
+| Self-pair impossible | Application MUST check `giverParticipantId != receiverParticipantId` before insert; this is NOT enforced at DB level and MUST be enforced in the draw algorithm |
+| CLASSIC: N participants → exactly N assignments | Verified post-insert: `count(assignments) == count(activeParticipants)` |
+| ONE_TO_ONE pair: exactly 2 assignments A→B and B→A | Not a current type but documented for future: if added, requires a round-type check post-insert |
+
+Tests that must exist:
+- Attempt to insert duplicate giver → expect unique constraint violation
+- Attempt to insert duplicate receiver → expect unique constraint violation
+- Attempt to insert self-pair → expect application error before insert
+- Draw produces exactly N assignments for N participants
+
+---
+
+### Rule 3 — Anonymity must not leak through serializers
+
+The serialization layer is the last defense. Rules:
+
+| Caller role | What they get |
+|-------------|--------------|
+| Owner | Aggregate progress only: `{ pending: N, buying: N, sent: N, received: N }`. No individual pairs ever. |
+| Giver | Their own assignment: `{ receiver: { displayName, avatarUrl, wishlistPreview } }`. No `receiverUserId`, no `receiverParticipantId` in any response body. |
+| Receiver (inbound) | Signal only: `{ hasGiver: true, giftStatus }`. No giver identity at any point before reveal. |
+| Other participant | Zero cross-participant data. |
+
+**`serializeAssignment(assignment, role)`** — this function must exist as a dedicated serializer and be the only place assignment data leaves the service layer. It must be impossible to accidentally return a raw `SantaAssignment` Prisma object to a route handler.
+
+**Stat/aggregate endpoints** (e.g., campaign detail, participant list) must not include fields that allow de-anonymization by correlation (e.g., no "participant X has linked wishlist Y" exposed to other participants if Y uniquely identifies the person post-draw).
+
+**Mandatory anonymity checklist** (must pass before Batch 2 merge):
+- [ ] Receiver cannot discover their assignment ID by any API call
+- [ ] Giver response does not contain `receiverUserId` or `receiverParticipantId`
+- [ ] Owner campaign detail does not expose individual giver↔receiver pairs
+- [ ] Cross-participant access: user A cannot GET user B's assignment detail
+- [ ] No aggregate/stat endpoint leaks pairing information by correlation
+
+---
+
+### Rule 4 — Receiver flow is permanently campaign-centric
+
+The receiver never addresses resources via `assignmentId`. Receiver endpoints are locked to:
+
+```
+/tg/santa/campaigns/:id/inbound/*
+```
+
+The server resolves the receiver's assignment by:
+```typescript
+const participant = await prisma.santaParticipant.findUnique({ where: { campaignId_userId: { campaignId: id, userId: user.id } } });
+const assignment = await prisma.santaAssignment.findUnique({ where: { roundId_receiverParticipantId: { roundId, receiverParticipantId: participant.id } } });
+```
+
+No shortcut via `GET /tg/santa/assignments/:assignmentId` is ever exposed to receivers. This rule cannot be relaxed in future batches without a full anonymity re-review.
+
+---
+
+### Rule 5 — Validate and execute draw are separate operations
+
+```
+GET  /tg/santa/campaigns/:id/draw/validate   → feasibility check only, no side effects
+POST /tg/santa/campaigns/:id/draw            → execute draw, triggers full state machine
+```
+
+`GET /draw/validate` contract:
+- Reads participants + exclusions
+- Runs Hopcroft-Karp feasibility check **in memory only**
+- Returns `{ feasible: boolean, reason?: string, problematicExclusions?: [...] }`
+- **Zero DB writes.** Zero state mutations. Can be called repeatedly.
+
+`POST /draw` contract:
+- Does NOT call validate internally (validate is for the UI only)
+- Runs its own feasibility pre-check before acquiring the lock
+- If infeasible at lock time → returns 422 with reason (not 500)
+- If feasible → acquires lock → runs Fisher-Yates → commits atomically
+
+The validate endpoint is specifically for the owner's UI: "Show me if this draw is possible before I commit."
+
+---
+
+### Rule 6 — Impossible constraints produce human-readable errors
+
+When draw is infeasible due to exclusions:
+
+```json
+{
+  "error": "draw_infeasible",
+  "reason": "exclusions_prevent_valid_assignment",
+  "message": "С текущими ограничениями жеребьёвка невозможна. Уберите одно из ограничений, чтобы продолжить.",
+  "problematicExclusions": [
+    { "userId1": "...", "name1": "Анна", "userId2": "...", "name2": "Борис" }
+  ],
+  "suggestion": "Remove exclusion between Анна and Борис to make draw possible."
+}
+```
+
+A generic 500 or opaque 422 is never acceptable when the infeasibility is user-caused. The error must name the constraints that prevent the draw. The Hopcroft-Karp analysis naturally produces the minimal vertex cover (König's theorem) — use it to identify the problematic exclusion edges.
+
+---
+
+### Rule 7 — Gift flow is role-aware from day one
+
+Post-draw, no "temporary wide response" that gets narrowed later. The contract is fixed at Batch 2 launch:
+
+**Giver view** (`GET /tg/santa/campaigns/:id/gift-status` with role=giver):
+```json
+{
+  "role": "giver",
+  "giftStatus": "BUYING",
+  "receiver": {
+    "displayName": "Анна К.",
+    "avatarUrl": "...",
+    "wishlistItems": [...]
+  }
+}
+```
+No `receiverUserId`, `receiverParticipantId`, or any cross-linkable identifier.
+
+**Receiver view** (inbound endpoint):
+```json
+{
+  "role": "receiver",
+  "giftStatus": "SENT",
+  "hasGiver": true
+}
+```
+No giver identity until reveal. `giftStatus` is the only signal exposed before reveal.
+
+**Organizer view** (campaign detail):
+```json
+{
+  "progress": { "pending": 2, "buying": 3, "sent": 1, "received": 0 }
+}
+```
+Individual pairs never exposed to organizer.
+
+---
+
+### Rule 8 — Hints are separate from core draw in Batch 2
+
+Batch 2 scope:
+1. Draw validation (`GET /draw/validate`)
+2. Draw execution + lock/idempotency (`POST /draw`)
+3. Assignment persistence + role-aware serializer
+4. Giver view (receiver's wishlist, gift status controls)
+5. Receiver inbound view (signal only, no giver identity)
+6. Reveal contract skeleton (stubbed, not functional — defines the future interface)
+
+**Hints are Batch 2.5 or Batch 3**, because they independently introduce:
+- A new anonymous routing path (`giver → receiver` question without identity exposure)
+- A new notification flow (hint request + answer notification)
+- A new access-rights matrix (only giver can request; only receiver can answer; neither sees the other's identity in the process)
+
+Adding hints in the same batch as the draw engine risks cascading complexity. They ship when the draw + gift flow is stable.
+
+---
+
+### Batch 2 Implementation Order (binding)
+
+| Step | Endpoint / Component | Notes |
+|------|---------------------|-------|
+| 1 | `GET /draw/validate` | Hopcroft-Karp, no side effects |
+| 2 | `POST /draw` | Lock + Fisher-Yates + atomic commit |
+| 3 | Assignment serializer | `serializeAssignment(a, role)` — single codepath |
+| 4 | Giver view endpoints | `/gift-status`, `/inbound/wishlist` |
+| 5 | Receiver inbound view | `/inbound/*` campaign-centric |
+| 6 | Reveal skeleton | Stub with correct interface, no logic yet |
+| 7 | Hints (optional, end of batch or 2.5) | Only after steps 1–6 are stable |
 
 ---
 

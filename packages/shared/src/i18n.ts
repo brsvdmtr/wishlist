@@ -890,6 +890,49 @@ const ru: Dict = {
   santa_wishlist_locked: 'Вишлист нельзя удалить или архивировать — он привязан к кампании «{{title}}»',
   santa_account_blocked: 'Нельзя удалить аккаунт, пока есть активные кампании Тайного Санты',
 
+  // ── Draw (Batch 2) ────────────────────────────────────────────────────────
+  santa_draw_btn: 'Провести жеребьёвку',
+  santa_draw_validate_btn: 'Проверить возможность',
+  santa_draw_feasible: 'Жеребьёвка возможна для {{count}} участников',
+  santa_draw_infeasible: 'Жеребьёвка невозможна с текущими ограничениями',
+  santa_draw_infeasible_hint: 'Уберите ограничения для: {{names}}',
+  santa_draw_not_enough: 'Нужно минимум 2 участника (сейчас: {{count}})',
+  santa_draw_already_running: 'Жеребьёвка уже запущена, подождите',
+  santa_draw_success: 'Жеребьёвка прошла! {{count}} пар сформировано',
+  santa_draw_failed: 'Ошибка жеребьёвки. Попробуйте ещё раз',
+  santa_draw_in_progress: 'Идёт жеребьёвка…',
+
+  // ── Gift flow (Batch 2) ────────────────────────────────────────────────────
+  santa_gift_my_recipient: 'Мой получатель',
+  santa_gift_recipient_name: 'Получатель: {{name}}',
+  santa_gift_status_title: 'Статус подарка',
+  santa_gift_mark_buying: 'Отметить «Покупаю»',
+  santa_gift_mark_sent: 'Отметить «Отправил»',
+  santa_gift_confirm_received_title: 'Подтвердите получение',
+  santa_gift_confirm_received_msg: 'Вы получили подарок?',
+  santa_gift_already_received: 'Вы уже подтвердили получение',
+  santa_gift_progress_pending: '{{count}} из {{total}} ещё не начали',
+  santa_gift_progress_buying: '{{count}} покупают',
+  santa_gift_progress_sent: '{{count}} отправили',
+  santa_gift_progress_received: '{{count}} получили',
+  santa_gift_all_received: 'Все подарки получены! 🎉',
+
+  // ── Receiver inbound (Batch 2) ────────────────────────────────────────────
+  santa_inbound_waiting: 'Ваш Санта готовит подарок…',
+  santa_inbound_sent: 'Подарок отправлен! Подтвердите получение, когда он придёт',
+  santa_inbound_received: 'Вы подтвердили получение подарка',
+  santa_inbound_no_giver: 'Жеребьёвка ещё не проведена',
+
+  // ── Reveal (Batch 2 skeleton) ─────────────────────────────────────────────
+  santa_reveal_title: 'Кто был вашим Сантой?',
+  santa_reveal_btn: 'Узнать своего Санту',
+  santa_reveal_giver: 'Ваш Тайный Санта — {{name}}',
+  santa_reveal_not_ready: 'Раскрытие доступно после завершения кампании',
+
+  // ── Campaign completion ───────────────────────────────────────────────────
+  santa_campaign_completed_title: 'Кампания завершена',
+  santa_campaign_completed_msg: 'Все подарки получены! Спасибо за участие',
+
   // ── Bot — Santa ───────────────────────────────────────────────────────────
   bot_santa_invite_msg: '🎅 {{owner}} приглашает тебя в «{{title}}»!\nНажми кнопку ниже, чтобы вступить.',
   bot_santa_join_btn: 'Вступить',
@@ -1768,6 +1811,49 @@ const en: Dict = {
   santa_leave_confirm: 'Leave «{{title}}»?',
   santa_wishlist_locked: 'This wishlist can\'t be deleted or archived — it\'s linked to campaign «{{title}}»',
   santa_account_blocked: 'Can\'t delete account while you have active Secret Santa campaigns',
+
+  // ── Draw (Batch 2) ────────────────────────────────────────────────────────
+  santa_draw_btn: 'Run draw',
+  santa_draw_validate_btn: 'Check feasibility',
+  santa_draw_feasible: 'Draw is feasible for {{count}} participants',
+  santa_draw_infeasible: 'Draw is not possible with current exclusions',
+  santa_draw_infeasible_hint: 'Remove exclusions for: {{names}}',
+  santa_draw_not_enough: 'At least 2 participants required (current: {{count}})',
+  santa_draw_already_running: 'Draw already running, please wait',
+  santa_draw_success: 'Draw complete! {{count}} pairs assigned',
+  santa_draw_failed: 'Draw failed. Please try again',
+  santa_draw_in_progress: 'Running draw…',
+
+  // ── Gift flow (Batch 2) ────────────────────────────────────────────────────
+  santa_gift_my_recipient: 'My recipient',
+  santa_gift_recipient_name: 'Recipient: {{name}}',
+  santa_gift_status_title: 'Gift status',
+  santa_gift_mark_buying: 'Mark as buying',
+  santa_gift_mark_sent: 'Mark as sent',
+  santa_gift_confirm_received_title: 'Confirm receipt',
+  santa_gift_confirm_received_msg: 'Have you received your gift?',
+  santa_gift_already_received: 'You already confirmed receipt',
+  santa_gift_progress_pending: '{{count}} of {{total}} not started',
+  santa_gift_progress_buying: '{{count}} buying',
+  santa_gift_progress_sent: '{{count}} sent',
+  santa_gift_progress_received: '{{count}} received',
+  santa_gift_all_received: 'All gifts received! 🎉',
+
+  // ── Receiver inbound (Batch 2) ────────────────────────────────────────────
+  santa_inbound_waiting: 'Your Santa is preparing a gift…',
+  santa_inbound_sent: 'Gift is on its way! Confirm receipt when it arrives',
+  santa_inbound_received: 'You confirmed receiving your gift',
+  santa_inbound_no_giver: 'Draw hasn\'t been run yet',
+
+  // ── Reveal (Batch 2 skeleton) ─────────────────────────────────────────────
+  santa_reveal_title: 'Who was your Santa?',
+  santa_reveal_btn: 'Reveal your Santa',
+  santa_reveal_giver: 'Your Secret Santa was {{name}}',
+  santa_reveal_not_ready: 'Reveal is available after the campaign is completed',
+
+  // ── Campaign completion ───────────────────────────────────────────────────
+  santa_campaign_completed_title: 'Campaign completed',
+  santa_campaign_completed_msg: 'All gifts received! Thank you for participating',
 
   // ── Bot — Santa ───────────────────────────────────────────────────────────
   bot_santa_invite_msg: '🎅 {{owner}} invites you to join «{{title}}»!\nTap the button below to participate.',
