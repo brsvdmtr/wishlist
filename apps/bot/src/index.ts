@@ -497,28 +497,59 @@ if (!token) {
   // ─── Payment handlers (must be registered BEFORE bot.on('text')) ──────────
 
   // pre_checkout_query — Telegram requires a response within 10 seconds
+  // Handles both subscription (pro_monthly:...) and one-time addon (addon:...) payments
   bot.on('pre_checkout_query', async (ctx) => {
     try {
       const raw = ctx.preCheckoutQuery.invoice_payload;
       // eslint-disable-next-line no-console
       console.log('[bot] pre_checkout_received:', raw);
 
-      // New format: pro_monthly:<telegramId>:<uuid>
       const parts = raw.split(':');
-      if (parts.length < 3 || parts[0] !== 'pro_monthly') {
+      const payloadType = parts[0];
+
+      if (payloadType === 'pro_monthly') {
+        // pro_monthly:<telegramId>:<uuid>
+        if (parts.length < 3) {
+          await ctx.answerPreCheckoutQuery(false, 'Invalid payment');
+          return;
+        }
+        const telegramId = parts[1];
+        const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
+        if (!user) {
+          await ctx.answerPreCheckoutQuery(false, 'User not found');
+          return;
+        }
+        await ctx.answerPreCheckoutQuery(true);
+
+      } else if (payloadType === 'addon') {
+        // addon:<skuCode>:<telegramId>:<targetId|_>:<sessionId>
+        if (parts.length < 5) {
+          await ctx.answerPreCheckoutQuery(false, 'Invalid addon payload');
+          return;
+        }
+        const skuCode = parts[1];
+        const telegramId = parts[2];
+        const KNOWN_SKUS = new Set([
+          'extra_wishlist_slot', 'extra_subscription_slot',
+          'extra_items_5', 'extra_items_15',
+          'hints_pack_5', 'hints_pack_10',
+          'import_pack_10', 'import_pack_25',
+          'seasonal_decoration',
+        ]);
+        if (!skuCode || !KNOWN_SKUS.has(skuCode)) {
+          await ctx.answerPreCheckoutQuery(false, 'Unknown SKU');
+          return;
+        }
+        const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
+        if (!user) {
+          await ctx.answerPreCheckoutQuery(false, 'User not found');
+          return;
+        }
+        await ctx.answerPreCheckoutQuery(true);
+
+      } else {
         await ctx.answerPreCheckoutQuery(false, 'Invalid payment');
-        return;
       }
-      const telegramId = parts[1];
-      const user = await prisma.user.findUnique({
-        where: { telegramId },
-        select: { id: true },
-      });
-      if (!user) {
-        await ctx.answerPreCheckoutQuery(false, 'User not found');
-        return;
-      }
-      await ctx.answerPreCheckoutQuery(true);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[bot] pre_checkout error:', err);
