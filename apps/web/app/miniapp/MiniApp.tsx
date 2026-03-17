@@ -1081,6 +1081,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     username: string | null;
     bio: string | null;
     avatarUrl: string | null;
+    avatarThumbUrl: string | null;
+    avatarUpdatedAt: string | null;
+    avatarPublic: boolean;
     birthday: string | null;
     hideYear: boolean;
     defaultCurrency: 'RUB' | 'USD';
@@ -1099,6 +1102,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [editProfileBirthday, setEditProfileBirthday] = useState('');
   const [editProfileSaving, setEditProfileSaving] = useState(false);
   const bioTextareaRef = useRef<HTMLTextAreaElement>(null);
+  // ── Avatar upload ─────────────────────────────────────────────────────────
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [showAvatarSheet, setShowAvatarSheet] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   // Settings state
   const [settingsData, setSettingsData] = useState<{
@@ -1592,6 +1599,57 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setProfileLoading(false);
     }
   }, [tgFetch, locale, pushToast]);
+
+  const handleAvatarFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (avatarInputRef.current) avatarInputRef.current.value = '';
+    if (!file.type.startsWith('image/')) {
+      pushToast(t('item_photo_only_images', locale), 'error');
+      return;
+    }
+    if (file.size > 30 * 1024 * 1024) {
+      pushToast(t('item_photo_too_large', locale), 'error');
+      return;
+    }
+    setAvatarUploading(true);
+    setShowAvatarSheet(false);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+      const res = await fetch(`${apiBase}/tg/me/profile/avatar`, {
+        method: 'POST',
+        headers: { 'X-TG-INIT-DATA': initDataRef.current },
+        body: formData,
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { avatarUrl: string; avatarThumbUrl: string; avatarUpdatedAt: string };
+      setProfileData(prev => prev ? { ...prev, avatarUrl: data.avatarUrl, avatarThumbUrl: data.avatarThumbUrl, avatarUpdatedAt: data.avatarUpdatedAt } : prev);
+      pushToast(t('profile_avatar_saved', locale), 'success');
+    } catch {
+      pushToast(t('toast_save_error', locale), 'error');
+    } finally {
+      setAvatarUploading(false);
+    }
+  }, [apiBase, locale, pushToast]);
+
+  const handleAvatarDelete = useCallback(async () => {
+    setAvatarUploading(true);
+    setShowAvatarSheet(false);
+    try {
+      const res = await fetch(`${apiBase}/tg/me/profile/avatar`, {
+        method: 'DELETE',
+        headers: { 'X-TG-INIT-DATA': initDataRef.current },
+      });
+      if (!res.ok) throw new Error();
+      setProfileData(prev => prev ? { ...prev, avatarUrl: null, avatarThumbUrl: null, avatarUpdatedAt: null } : prev);
+      pushToast(t('profile_avatar_removed', locale), 'success');
+    } catch {
+      pushToast(t('toast_save_error', locale), 'error');
+    } finally {
+      setAvatarUploading(false);
+    }
+  }, [apiBase, locale, pushToast]);
 
   const loadSettings = useCallback(async () => {
     setSettingsLoading(true);
@@ -5377,15 +5435,25 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <>
               {/* Avatar + Name + Badge section */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
-                <div style={{
-                  width: 80, height: 80, borderRadius: '50%',
-                  background: `linear-gradient(135deg, ${C.accent}, ${C.accent}80)`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 32, fontWeight: 700, color: '#fff', marginBottom: 12,
-                  position: 'relative',
-                  ...(profileData.avatarUrl ? { backgroundImage: `url(${profileData.avatarUrl})`, backgroundSize: 'cover' } : {}),
-                }}>
-                  {!profileData.avatarUrl && (profileData.displayName || tgUser?.first_name || '?')[0]!.toUpperCase()}
+                <div
+                  onClick={() => setShowAvatarSheet(true)}
+                  style={{
+                    width: 80, height: 80, borderRadius: '50%',
+                    background: `linear-gradient(135deg, ${C.accent}, ${C.accent}80)`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 32, fontWeight: 700, color: '#fff', marginBottom: 12,
+                    position: 'relative', cursor: 'pointer', flexShrink: 0,
+                    ...(profileData.avatarUrl ? { backgroundImage: `url(${profileData.avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                  }}>
+                  {!profileData.avatarUrl && !avatarUploading && (profileData.displayName || tgUser?.first_name || '?')[0]!.toUpperCase()}
+                  {avatarUploading && (
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#fff' }}>…</div>
+                  )}
+                  {!avatarUploading && (
+                    <div style={{ position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${C.bg}` }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font }}>
@@ -5646,7 +5714,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       }) : '\u2014'}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
                     <span style={{ fontSize: 14, color: C.text }}>{t('profile_hide_year', locale)}</span>
                     <button
                       onClick={async () => {
@@ -5670,6 +5738,40 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         width: 22, height: 22, borderRadius: 11,
                         background: '#fff', position: 'absolute', top: 3,
                         left: profileData.hideYear ? 25 : 3,
+                        transition: 'left 0.2s',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      }} />
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
+                    <div>
+                      <div style={{ fontSize: 14, color: C.text }}>{t('profile_avatar_public', locale)}</div>
+                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('profile_avatar_public_hint', locale)}</div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const next = !profileData.avatarPublic;
+                        setProfileData(prev => prev ? { ...prev, avatarPublic: next } : prev);
+                        try {
+                          await tgFetch('/tg/me/profile', {
+                            method: 'PATCH',
+                            body: JSON.stringify({ avatarPublic: next }),
+                          });
+                        } catch {
+                          // Revert on error
+                          setProfileData(prev => prev ? { ...prev, avatarPublic: !next } : prev);
+                        }
+                      }}
+                      style={{
+                        width: 50, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                        background: profileData.avatarPublic ? C.accent : C.surface,
+                        position: 'relative', transition: 'background 0.2s', flexShrink: 0, marginLeft: 12,
+                      }}
+                    >
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 11,
+                        background: '#fff', position: 'absolute', top: 3,
+                        left: profileData.avatarPublic ? 25 : 3,
                         transition: 'left 0.2s',
                         boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                       }} />
@@ -7347,6 +7449,38 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </button>
         </div>
       </BottomSheet>
+
+      {/* ── Avatar action sheet ── */}
+      <BottomSheet isOpen={showAvatarSheet} onClose={() => setShowAvatarSheet(false)} title={t('profile_change_avatar', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            onClick={() => { setShowAvatarSheet(false); setTimeout(() => avatarInputRef.current?.click(), 50); }}
+            style={{ ...btnPrimary, width: '100%', background: C.accent }}
+          >
+            {t('profile_avatar_upload', locale)}
+          </button>
+          {profileData?.avatarUrl && (
+            <button
+              onClick={() => void handleAvatarDelete()}
+              style={{ ...btnSecondary, width: '100%', color: C.red, borderColor: C.red + '40' }}
+            >
+              {t('profile_avatar_remove', locale)}
+            </button>
+          )}
+          <button onClick={() => setShowAvatarSheet(false)} style={{ ...btnGhost, width: '100%' }}>
+            {t('cancel', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Hidden avatar file input */}
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => void handleAvatarFileSelect(e)}
+      />
 
       {/* ── HINT CLOSING OVERLAY ── */}
       {hintClosing && (

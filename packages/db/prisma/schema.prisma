@@ -305,6 +305,9 @@ model UserProfile {
   username        String?  @unique
   bio             String?  @db.VarChar(300)
   avatarUrl       String?
+  avatarThumbUrl  String?
+  avatarUpdatedAt DateTime?
+  avatarPublic    Boolean  @default(true)
   birthday        DateTime?
   hideYear        Boolean  @default(false)
 

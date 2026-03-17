@@ -726,6 +726,9 @@ publicRouter.get(
         username: true,
         bio: true,
         avatarUrl: true,
+        avatarThumbUrl: true,
+        avatarUpdatedAt: true,
+        avatarPublic: true,
         profileVisibility: true,
       },
     });
@@ -763,12 +766,18 @@ publicRouter.get(
       }));
     }
 
+    // Respect avatarPublic — hide avatar URL in public contexts if user set photo to private
+    const publicAvatarUrl = profile.avatarPublic ? profile.avatarUrl : null;
+    const publicAvatarThumbUrl = profile.avatarPublic ? profile.avatarThumbUrl : null;
+
     return res.json({
       profile: {
         displayName: profile.displayName,
         username: profile.username,
         bio: profile.bio,
-        avatarUrl: profile.avatarUrl,
+        avatarUrl: publicAvatarUrl,
+        avatarThumbUrl: publicAvatarThumbUrl,
+        avatarUpdatedAt: profile.avatarUpdatedAt?.toISOString() ?? null,
         isPublic,
       },
       wishlists: publicWishlists,
@@ -3703,6 +3712,9 @@ tgRouter.get(
         username: profile.username,
         bio: profile.bio,
         avatarUrl: profile.avatarUrl,
+        avatarThumbUrl: profile.avatarThumbUrl,
+        avatarUpdatedAt: profile.avatarUpdatedAt?.toISOString() ?? null,
+        avatarPublic: profile.avatarPublic,
         birthday: profile.birthday?.toISOString() ?? null,
         hideYear: profile.hideYear,
         defaultCurrency: profile.defaultCurrency,
@@ -3741,6 +3753,7 @@ tgRouter.patch(
       bio: z.string().max(300).nullable().optional(),
       birthday: z.string().nullable().optional(),
       hideYear: z.boolean().optional(),
+      avatarPublic: z.boolean().optional(),
     }).safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
 
@@ -3764,6 +3777,7 @@ tgRouter.patch(
     if (parsed.data.bio !== undefined) updateData.bio = parsed.data.bio;
     if (parsed.data.birthday !== undefined) updateData.birthday = parsed.data.birthday ? new Date(parsed.data.birthday) : null;
     if (parsed.data.hideYear !== undefined) updateData.hideYear = parsed.data.hideYear;
+    if (parsed.data.avatarPublic !== undefined) updateData.avatarPublic = parsed.data.avatarPublic;
 
     const profile = await prisma.userProfile.upsert({
       where: { userId: user.id },
@@ -3781,6 +3795,9 @@ tgRouter.patch(
         username: profile.username,
         bio: profile.bio,
         avatarUrl: profile.avatarUrl,
+        avatarThumbUrl: profile.avatarThumbUrl,
+        avatarUpdatedAt: profile.avatarUpdatedAt?.toISOString() ?? null,
+        avatarPublic: profile.avatarPublic,
         birthday: profile.birthday?.toISOString() ?? null,
         hideYear: profile.hideYear,
         defaultCurrency: profile.defaultCurrency,
@@ -3789,7 +3806,7 @@ tgRouter.patch(
   }),
 );
 
-// POST /tg/me/profile/avatar — upload profile avatar
+// POST /tg/me/profile/avatar — upload profile avatar (generates full 512px + thumb 256px)
 tgRouter.post(
   '/me/profile/avatar',
   upload.single('avatar'),
@@ -3800,19 +3817,26 @@ tgRouter.post(
     const locale = getRequestLocale(req);
     const profile = await getOrCreateProfile(user.id, locale);
 
-    // Process image
-    const result = await processImage(req.file.buffer, { maxDim: 512, quality: 80, suffix: 'avatar' });
+    // Process image — generate full (512px) and thumbnail (256px) simultaneously
+    const [full, thumb] = await Promise.all([
+      processImage(req.file.buffer, { maxDim: 512, quality: 80, suffix: 'avatar' }),
+      processImage(req.file.buffer, { maxDim: 256, quality: 75, suffix: 'avatar-thumb' }),
+    ]);
 
-    // Delete old avatar file if exists
+    // Delete old avatar files if they exist
     deleteUploadFile(profile.avatarUrl);
+    deleteUploadFile(profile.avatarThumbUrl);
 
-    const avatarUrl = `/api/uploads/${result.filename}`;
+    const avatarUrl = `/api/uploads/${full.filename}`;
+    const avatarThumbUrl = `/api/uploads/${thumb.filename}`;
+    const avatarUpdatedAt = new Date();
+
     await prisma.userProfile.update({
       where: { userId: user.id },
-      data: { avatarUrl },
+      data: { avatarUrl, avatarThumbUrl, avatarUpdatedAt },
     });
 
-    return res.json({ avatarUrl });
+    return res.json({ avatarUrl, avatarThumbUrl, avatarUpdatedAt: avatarUpdatedAt.toISOString() });
   }),
 );
 
@@ -3825,9 +3849,10 @@ tgRouter.delete(
     const profile = await getOrCreateProfile(user.id, locale);
 
     deleteUploadFile(profile.avatarUrl);
+    deleteUploadFile(profile.avatarThumbUrl);
     await prisma.userProfile.update({
       where: { userId: user.id },
-      data: { avatarUrl: null },
+      data: { avatarUrl: null, avatarThumbUrl: null, avatarUpdatedAt: null },
     });
 
     return res.json({ success: true });

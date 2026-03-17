@@ -582,6 +582,11 @@ const ru: Dict = {
   profile_saved: 'Сохранено',
   profile_avatar_uploaded: 'Фото обновлено',
   profile_avatar_removed: 'Фото удалено',
+  profile_avatar_saved: 'Фото обновлено',
+  profile_avatar_upload: 'Загрузить фото',
+  profile_avatar_remove: 'Удалить фото',
+  profile_avatar_public: 'Публичное фото',
+  profile_avatar_public_hint: 'Показывать фото другим пользователям',
 
   // ── Settings (extended) ─────────────────────────────────────────────────
   settings_general: 'Общие',
@@ -1309,6 +1314,11 @@ const en: Dict = {
   profile_saved: 'Saved',
   profile_avatar_uploaded: 'Photo updated',
   profile_avatar_removed: 'Photo removed',
+  profile_avatar_saved: 'Photo updated',
+  profile_avatar_upload: 'Upload photo',
+  profile_avatar_remove: 'Remove photo',
+  profile_avatar_public: 'Public photo',
+  profile_avatar_public_hint: 'Show photo to other users',
 
   // ── Settings (extended) ─────────────────────────────────────────────────
   settings_general: 'General',
