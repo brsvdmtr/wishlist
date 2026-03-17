@@ -4380,11 +4380,12 @@ tgRouter.post(
     }
     if (skuCode === 'extra_items_5' && targetId) {
       const existing = ent.addOns.filter(a => a.addonType === 'item_slot_5' && a.targetId === targetId).length;
-      if (existing >= ADDON_CAPS.extraItems5PerWishlist) return res.status(409).json({ error: 'cap_reached', cap: ADDON_CAPS.extraItems5PerWishlist, current: existing });
+      // wishlist_cap_reached ≠ cap_reached: this is a per-wishlist limit, not a global SKU cap
+      if (existing >= ADDON_CAPS.extraItems5PerWishlist) return res.status(409).json({ error: 'wishlist_cap_reached', cap: ADDON_CAPS.extraItems5PerWishlist, current: existing });
     }
     if (skuCode === 'extra_items_15' && targetId) {
       const existing = ent.addOns.filter(a => a.addonType === 'item_slot_15' && a.targetId === targetId).length;
-      if (existing >= ADDON_CAPS.extraItems15PerWishlist) return res.status(409).json({ error: 'cap_reached', cap: ADDON_CAPS.extraItems15PerWishlist, current: existing });
+      if (existing >= ADDON_CAPS.extraItems15PerWishlist) return res.status(409).json({ error: 'wishlist_cap_reached', cap: ADDON_CAPS.extraItems15PerWishlist, current: existing });
     }
 
     const botToken = process.env.BOT_TOKEN;

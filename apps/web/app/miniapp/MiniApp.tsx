@@ -1244,11 +1244,30 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [addonCheckoutLoading, setAddonCheckoutLoading] = useState(false);
   // Wishlist picker for item-scoped SKUs when user has multiple wishlists
   const [wishlistPickerSku, setWishlistPickerSku] = useState<string | null>(null);
-  // Track which addon SKU codes have hit their purchase cap this session
-  const [cappedAddonCodes, setCappedAddonCodes] = useState<string[]>([]);
+  // Account-scoped SKUs that hit their global purchase cap this session
+  const [globalCappedSkus, setGlobalCappedSkus] = useState<string[]>([]);
+  // Wishlist-scoped cap: wishlistId → array of SKU codes that are capped for that wishlist
+  const [wishlistCappedSkus, setWishlistCappedSkus] = useState<Record<string, string[]>>({});
   const [addOns, setAddOns] = useState<AddOnsInfo>({ extraWishlistSlots: 0, extraSubscriptionSlots: 0, seasonalWishlists: [] });
   const [credits, setCredits] = useState<CreditsInfo>({ hintCredits: 0, importCredits: 0 });
   const [availableSkus, setAvailableSkus] = useState<SkuInfo[]>([]);
+
+  // SKU codes that are visually "globally capped" on offer cards.
+  // Wishlist-scoped SKUs (extra_items_5/15, seasonal_decoration) are only globally
+  // capped if EVERY wishlist has hit the cap — otherwise the card stays active so the
+  // user can pick a different wishlist.
+  const WISHLIST_SCOPED_SKUS = ['extra_items_5', 'extra_items_15', 'seasonal_decoration'];
+  const cappedAddonCodes = useMemo<string[]>(() => {
+    const result = [...globalCappedSkus];
+    for (const sku of WISHLIST_SCOPED_SKUS) {
+      if (wishlists.length > 0 && wishlists.every(wl => wishlistCappedSkus[wl.id]?.includes(sku))) {
+        if (!result.includes(sku)) result.push(sku);
+      }
+    }
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalCappedSkus, wishlistCappedSkus, wishlists]);
+
   const [showCancelSub, setShowCancelSub] = useState(false);
   const [cancelSubLoading, setCancelSubLoading] = useState(false);
   const [godMode, setGodMode] = useState(false);
@@ -2378,9 +2397,33 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         body: JSON.stringify({ skuCode, targetId }),
       });
       if (res.status === 409) {
-        // Mark this SKU as capped so the card shows the limit-reached state
-        setCappedAddonCodes(prev => prev.includes(skuCode) ? prev : [...prev, skuCode]);
-        pushToast(t('addon_cap_reached', locale), 'info');
+        let errCode = 'cap_reached';
+        try { errCode = ((await res.json()) as { error?: string }).error ?? 'cap_reached'; } catch { /* ignore */ }
+
+        if (errCode === 'wishlist_cap_reached' && targetId) {
+          // Per-wishlist cap — only this wishlist+SKU is capped, not the whole SKU.
+          // Compute the new capped map synchronously so we can check remaining eligibility.
+          const prevForWl = wishlistCappedSkus[targetId] ?? [];
+          const newForWl = prevForWl.includes(skuCode) ? prevForWl : [...prevForWl, skuCode];
+          const newCapped = { ...wishlistCappedSkus, [targetId]: newForWl };
+          setWishlistCappedSkus(newCapped);
+
+          // Are there other wishlists still eligible for this SKU?
+          const remaining = wishlists.filter(wl => !newCapped[wl.id]?.includes(skuCode));
+          if (remaining.length > 0) {
+            // Re-open the picker with remaining eligible wishlists highlighted
+            pushToast(t('addon_wishlist_cap_toast', locale), 'info');
+            setWishlistPickerSku(skuCode);
+          } else {
+            // All wishlists are now capped — treat as global cap
+            setGlobalCappedSkus(prev => prev.includes(skuCode) ? prev : [...prev, skuCode]);
+            pushToast(t('addon_cap_reached', locale), 'info');
+          }
+        } else {
+          // Account-scoped global cap (extra_wishlist_slot, extra_subscription_slot)
+          setGlobalCappedSkus(prev => prev.includes(skuCode) ? prev : [...prev, skuCode]);
+          pushToast(t('addon_cap_reached', locale), 'info');
+        }
         setAddonCheckoutLoading(false);
         return;
       }
@@ -2447,7 +2490,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       pushToast(t('addon_checkout_error', locale), 'error');
       setAddonCheckoutLoading(false);
     }
-  }, [tgFetch, pushToast, trackEvent, loadWishlists, locale]);
+  }, [tgFetch, pushToast, trackEvent, loadWishlists, locale, wishlistCappedSkus, wishlists]);
 
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(() => {
@@ -7932,32 +7975,44 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
           {wishlists.map(wl => {
             const extraSlots = addOns.extraItemsPerWishlist?.[wl.id] ?? 0;
+            // Per-wishlist eligibility: capped if this specific wishlist+SKU hit the limit
+            const isWlCapped = !!(wishlistPickerSku && wishlistCappedSkus[wl.id]?.includes(wishlistPickerSku));
             return (
               <button
                 key={wl.id}
                 onClick={() => {
+                  if (isWlCapped) return; // already at max for this wishlist
                   const sku = wishlistPickerSku;
                   setWishlistPickerSku(null);
                   if (sku) void handleBuyAddon(sku, wl.id);
                 }}
-                disabled={addonCheckoutLoading}
+                disabled={addonCheckoutLoading || isWlCapped}
                 style={{
-                  background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
-                  padding: '12px 14px', textAlign: 'left', cursor: 'pointer', fontFamily: font,
+                  background: isWlCapped ? C.card : C.surface,
+                  border: `1px solid ${isWlCapped ? C.borderLight : C.border}`,
+                  borderRadius: 12, padding: '12px 14px', textAlign: 'left',
+                  cursor: isWlCapped ? 'default' : 'pointer', fontFamily: font,
                   display: 'flex', alignItems: 'center', gap: 10,
-                  opacity: addonCheckoutLoading ? 0.5 : 1,
+                  opacity: (addonCheckoutLoading || isWlCapped) ? 0.55 : 1,
                 }}
               >
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: isWlCapped ? C.textMuted : C.text }}>
+                    {wl.title}
+                  </div>
                   <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
                     {wl.itemCount} {locale === 'ru' ? 'желаний' : 'wishes'}
                     {' · '}
                     {locale === 'ru' ? 'лимит' : 'limit'}: {planLimits.items + extraSlots}
                     {extraSlots > 0 && <span style={{ color: C.accent }}> (+{extraSlots})</span>}
+                    {isWlCapped && (
+                      <span style={{ color: C.textMuted }}> · {t('addon_wishlist_cap_label', locale)}</span>
+                    )}
                   </div>
                 </div>
-                <div style={{ fontSize: 18, color: C.textMuted }}>›</div>
+                {isWlCapped
+                  ? <div style={{ fontSize: 13, color: C.textMuted, flexShrink: 0 }}>✓</div>
+                  : <div style={{ fontSize: 18, color: C.textMuted, flexShrink: 0 }}>›</div>}
               </button>
             );
           })}
