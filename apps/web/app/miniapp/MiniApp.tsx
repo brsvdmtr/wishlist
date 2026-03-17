@@ -1074,6 +1074,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     reservedByMe: number; archived: number;
   } | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [titlePressed, setTitlePressed] = useState(false); // pressed-state for tappable item title
   const [editingProfile, setEditingProfile] = useState(false);
   const [editProfileName, setEditProfileName] = useState('');
   const [editProfileUsername, setEditProfileUsername] = useState('');
@@ -4128,13 +4129,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div style={{ padding: '20px 20px 0' }}>
             {/* Title (left) + Meta-block: price + priority centered on same axis (right) */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-              <h1 style={{
-                flex: 1, minWidth: 0,
-                fontSize: 22, fontWeight: 700, fontFamily: font, color: C.text,
-                margin: 0, lineHeight: 1.25,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-                overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{displayTitle}</h1>
+              <h1
+                onClick={() => { if (displayTitle) void copyTitle(); }}
+                onPointerDown={() => { if (displayTitle) setTitlePressed(true); }}
+                onPointerUp={() => setTitlePressed(false)}
+                onPointerLeave={() => setTitlePressed(false)}
+                onPointerCancel={() => setTitlePressed(false)}
+                style={{
+                  flex: 1, minWidth: 0,
+                  fontSize: 22, fontWeight: 700, fontFamily: font, color: C.text,
+                  margin: 0, lineHeight: 1.25,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                  cursor: displayTitle ? 'pointer' : 'default',
+                  opacity: titlePressed ? 0.55 : 1,
+                  transition: titlePressed ? 'none' : 'opacity 0.2s',
+                  userSelect: 'none', WebkitUserSelect: 'none',
+                }}
+              >{displayTitle}</h1>
               {/* Meta-block: width = max-content so both items share same center axis */}
               <div style={{
                 flexShrink: 0,
@@ -4303,39 +4315,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               const isDraftItem = fromDrafts || draftsItems.some(d => d.id === (viewingItem as Item).id);
               return (
                 <div style={{ marginTop: 24, marginBottom: 32 }}>
-                  {/* Primary CTA row — Edit or Move, with copy icon when title exists */}
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    {isDraftItem ? (
-                      <button
-                        onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }}
-                        style={{ ...btnPrimary, flex: 1, width: 'auto', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}
-                      >
-                        {t('item_move_cta', locale)}
-                      </button>
-                    ) : (
-                      <button onClick={() => {
-                        setPendingEditItem(viewingItem as Item);
-                        setViewingItem(null);
-                        setScreen('wishlist-detail');
-                      }} style={{ ...btnPrimary, flex: 1, width: 'auto', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
-                        {t('edit_btn', locale)}
-                      </button>
-                    )}
-                    {displayTitle && (
-                      <button
-                        onClick={() => void copyTitle()}
-                        title={t('title_copied', locale)}
-                        style={{
-                          ...btnBase, width: 52, flexShrink: 0,
-                          background: C.surface, color: C.textSec,
-                          border: `1px solid ${C.borderLight}`,
-                          borderRadius: 16, padding: 0, fontSize: 18,
-                        }}
-                      >
-                        ⧉
-                      </button>
-                    )}
-                  </div>
+                  {isDraftItem ? (
+                    <button
+                      onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }}
+                      style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}
+                    >
+                      {t('item_move_cta', locale)}
+                    </button>
+                  ) : (
+                    <button onClick={() => {
+                      setPendingEditItem(viewingItem as Item);
+                      setViewingItem(null);
+                      setScreen('wishlist-detail');
+                    }} style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
+                      {t('edit_btn', locale)}
+                    </button>
+                  )}
                   <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
                     {isDraftItem ? (
                       // Draft: Edit in secondary slot (no Received).
