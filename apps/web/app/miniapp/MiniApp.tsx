@@ -1227,6 +1227,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [upsellSheet, setUpsellSheet] = useState<UpsellSheetState>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [addonCheckoutLoading, setAddonCheckoutLoading] = useState(false);
+  // Wishlist picker for item-scoped SKUs when user has multiple wishlists
+  const [wishlistPickerSku, setWishlistPickerSku] = useState<string | null>(null);
   const [addOns, setAddOns] = useState<AddOnsInfo>({ extraWishlistSlots: 0, extraSubscriptionSlots: 0, seasonalWishlists: [] });
   const [credits, setCredits] = useState<CreditsInfo>({ hintCredits: 0, importCredits: 0 });
   const [availableSkus, setAvailableSkus] = useState<SkuInfo[]>([]);
@@ -3127,7 +3129,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           if (planInfo.code === 'FREE') {
             showUpsell('item_limit', { auto: true, wishlistId: currentWl!.id });
           } else {
-            pushToast(t('toast_max_items', locale, { n: planLimits.items }), 'error');
+            pushToast(t('toast_max_items', locale, { n: planLimits.items + (addOns.extraItemsPerWishlist?.[currentWl!.id] ?? 0) }), 'error');
           }
           return;
         }
@@ -4663,7 +4665,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             {!itemReorderMode && !currentWl.readOnly && (
               <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
-                {t('items_limit_status', locale, { count: items.length, max: planLimits.items })}
+                {t('items_limit_status', locale, { count: items.length, max: planLimits.items + (addOns.extraItemsPerWishlist?.[currentWl.id] ?? 0) })}
               </div>
             )}
           </div>
@@ -5905,12 +5907,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                   </div>
                                   <button
                                     onClick={() => {
-                                      // For wishlist-scoped SKUs, open the upsell with the first wishlist as target
-                                      // (user can always buy from the wishlist detail view for a specific one)
-                                      const targetId = (sku.code === 'extra_items_5' || sku.code === 'extra_items_15')
-                                        ? wishlists[0]?.id
-                                        : undefined;
-                                      void handleBuyAddon(sku.code, targetId);
+                                      const needsTarget = sku.code === 'extra_items_5' || sku.code === 'extra_items_15';
+                                      if (needsTarget) {
+                                        if (wishlists.length === 1 && wishlists[0]) {
+                                          // Only one wishlist — buy directly for it
+                                          void handleBuyAddon(sku.code, wishlists[0].id);
+                                        } else {
+                                          // Multiple wishlists — show picker
+                                          setWishlistPickerSku(sku.code);
+                                        }
+                                      } else {
+                                        void handleBuyAddon(sku.code, undefined);
+                                      }
                                     }}
                                     disabled={isLoading}
                                     style={{
@@ -7872,6 +7880,58 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </button>
           )}
           <button onClick={() => setShowAvatarSheet(false)} style={{ ...btnGhost, width: '100%' }}>
+            {t('cancel', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Wishlist picker for item-scoped add-on purchases */}
+      <BottomSheet
+        isOpen={!!wishlistPickerSku}
+        onClose={() => setWishlistPickerSku(null)}
+        title={locale === 'ru' ? 'Выберите вишлист' : 'Choose a wishlist'}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8 }}>
+          <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>
+            {locale === 'ru'
+              ? 'Для какого вишлиста добавить слоты желаний?'
+              : 'Which wishlist should get extra item slots?'}
+          </div>
+          {wishlists.map(wl => {
+            const extraSlots = addOns.extraItemsPerWishlist?.[wl.id] ?? 0;
+            return (
+              <button
+                key={wl.id}
+                onClick={() => {
+                  const sku = wishlistPickerSku;
+                  setWishlistPickerSku(null);
+                  if (sku) void handleBuyAddon(sku, wl.id);
+                }}
+                disabled={addonCheckoutLoading}
+                style={{
+                  background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
+                  padding: '12px 14px', textAlign: 'left', cursor: 'pointer', fontFamily: font,
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  opacity: addonCheckoutLoading ? 0.5 : 1,
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                    {wl.itemCount} {locale === 'ru' ? 'желаний' : 'wishes'}
+                    {' · '}
+                    {locale === 'ru' ? 'лимит' : 'limit'}: {planLimits.items + extraSlots}
+                    {extraSlots > 0 && <span style={{ color: C.accent }}> (+{extraSlots})</span>}
+                  </div>
+                </div>
+                <div style={{ fontSize: 18, color: C.textMuted }}>›</div>
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setWishlistPickerSku(null)}
+            style={{ ...btnGhost, marginTop: 4 }}
+          >
             {t('cancel', locale)}
           </button>
         </div>
