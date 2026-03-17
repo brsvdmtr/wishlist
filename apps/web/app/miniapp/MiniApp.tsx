@@ -972,17 +972,17 @@ const CONTEXT_ADDON_SKUS: Partial<Record<UpsellContext, string[]>> = {
   url_import:        ['import_pack_10', 'import_pack_25'],
 };
 
-function getAddonOffers(locale: Locale): Record<string, { title: string; desc: string }> {
+function getAddonOffers(locale: Locale): Record<string, { title: string; tag: string }> {
   return {
-    extra_wishlist_slot:     { title: t('addon_extra_wishlist_title', locale),       desc: t('addon_extra_wishlist_desc', locale) },
-    extra_subscription_slot:{ title: t('addon_extra_subscription_title', locale),   desc: t('addon_extra_subscription_desc', locale) },
-    extra_items_5:          { title: t('addon_extra_items_5_title', locale),         desc: t('addon_extra_items_5_desc', locale) },
-    extra_items_15:         { title: t('addon_extra_items_15_title', locale),        desc: t('addon_extra_items_15_desc', locale) },
-    hints_pack_5:           { title: t('addon_hints_pack_5_title', locale),          desc: t('addon_hints_pack_5_desc', locale) },
-    hints_pack_10:          { title: t('addon_hints_pack_10_title', locale),         desc: t('addon_hints_pack_10_desc', locale) },
-    import_pack_10:         { title: t('addon_import_pack_10_title', locale),        desc: t('addon_import_pack_10_desc', locale) },
-    import_pack_25:         { title: t('addon_import_pack_25_title', locale),        desc: t('addon_import_pack_25_desc', locale) },
-    seasonal_decoration:    { title: t('addon_seasonal_decoration_title', locale),   desc: t('addon_seasonal_decoration_desc', locale) },
+    extra_wishlist_slot:     { title: t('addon_extra_wishlist_title', locale),      tag: t('addon_tag_extra_wishlist_slot', locale) },
+    extra_subscription_slot:{ title: t('addon_extra_subscription_title', locale),  tag: t('addon_tag_extra_subscription_slot', locale) },
+    extra_items_5:          { title: t('addon_extra_items_5_title', locale),        tag: t('addon_tag_extra_items_5', locale) },
+    extra_items_15:         { title: t('addon_extra_items_15_title', locale),       tag: t('addon_tag_extra_items_15', locale) },
+    hints_pack_5:           { title: t('addon_hints_pack_5_title', locale),         tag: t('addon_tag_hints_pack_5', locale) },
+    hints_pack_10:          { title: t('addon_hints_pack_10_title', locale),        tag: t('addon_tag_hints_pack_10', locale) },
+    import_pack_10:         { title: t('addon_import_pack_10_title', locale),       tag: t('addon_tag_import_pack_10', locale) },
+    import_pack_25:         { title: t('addon_import_pack_25_title', locale),       tag: t('addon_tag_import_pack_25', locale) },
+    seasonal_decoration:    { title: t('addon_seasonal_decoration_title', locale),  tag: t('addon_seasonal_decoration_desc', locale) },
   };
 }
 
@@ -1094,7 +1094,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
             {checkoutLoading ? t('upsell_checkout_loading', locale) : t('upsell_cta', locale)}
           </button>
 
-          {/* One-time add-on offers (for limit-gate contexts) */}
+          {/* ── One-time add-on offers (for limit-gate contexts) ── */}
           {(() => {
             const contextSkuCodes = state?.context ? (CONTEXT_ADDON_SKUS[state.context] ?? []) : [];
             const skusToShow = contextSkuCodes
@@ -1102,19 +1102,20 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
               .filter((s): s is SkuInfo => s !== undefined);
             if (skusToShow.length === 0) return null;
             const offers = getAddonOffers(locale);
+            const isLoading = addonCheckoutLoading || checkoutLoading;
             return (
-              <div style={{ marginTop: 20 }}>
-                {/* Section divider */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <div style={{ flex: 1, height: 1, background: C.border }} />
-                  <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              <div style={{ marginTop: 24 }}>
+                {/* Section header */}
+                <div style={{ textAlign: 'left', marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.textSec, letterSpacing: 0.1 }}>
                     {t('addon_section_header', locale)}
                   </div>
-                  <div style={{ flex: 1, height: 1, background: C.border }} />
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                    {t('addon_section_hint', locale)}
+                  </div>
                 </div>
-                <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', marginBottom: 10 }}>
-                  {t('addon_section_hint', locale)}
-                </div>
+
+                {/* Offer cards */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {skusToShow.map(sku => {
                     const offer = offers[sku.code];
@@ -1123,33 +1124,50 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
                       <div
                         key={sku.code}
                         style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          background: C.surface, borderRadius: 12, padding: '10px 12px',
+                          display: 'flex', alignItems: 'center', gap: 12,
+                          background: C.surface,
+                          borderRadius: 14,
+                          padding: '12px 14px',
+                          border: `1px solid ${C.border}`,
                           textAlign: 'left',
                         }}
                       >
+                        {/* Left: title + tag */}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>
                             {offer.title}
                           </div>
-                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, lineHeight: 1.4 }}>
-                            {offer.desc}
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3, lineHeight: 1.4 }}>
+                            {offer.tag}
                           </div>
                         </div>
-                        <button
-                          onClick={() => onBuyAddon(sku.code, state?.wishlistId)}
-                          disabled={addonCheckoutLoading || checkoutLoading}
-                          style={{
-                            background: C.accentSoft, color: C.accent,
-                            border: `1px solid ${C.accent}30`,
-                            borderRadius: 8, padding: '6px 10px',
-                            fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: font,
-                            flexShrink: 0, whiteSpace: 'nowrap',
-                            opacity: (addonCheckoutLoading || checkoutLoading) ? 0.5 : 1,
-                          }}
-                        >
-                          {addonCheckoutLoading ? '…' : t('addon_stars_price', locale, { price: String(sku.price) })}
-                        </button>
+
+                        {/* Right: price + buy button */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: C.textSec, whiteSpace: 'nowrap' }}>
+                            {sku.price} ⭐
+                          </div>
+                          <button
+                            onClick={() => onBuyAddon(sku.code, state?.wishlistId)}
+                            disabled={isLoading}
+                            style={{
+                              background: isLoading ? C.surface : C.accentSoft,
+                              color: C.accent,
+                              border: `1px solid ${C.accent}40`,
+                              borderRadius: 8,
+                              padding: '5px 12px',
+                              fontSize: 13,
+                              fontWeight: 700,
+                              cursor: isLoading ? 'default' : 'pointer',
+                              fontFamily: font,
+                              whiteSpace: 'nowrap',
+                              opacity: isLoading ? 0.5 : 1,
+                              transition: 'opacity 0.15s',
+                            }}
+                          >
+                            {addonCheckoutLoading ? '…' : t('addon_cta_buy', locale)}
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

@@ -1636,6 +1636,22 @@ tgRouter.get(
         : false,
       drafts,
       reservationsCount,
+      addOns: {
+        extraWishlistSlots: ent.addOns.filter(a => a.addonType === 'wishlist_slot').reduce((s, a) => s + a.quantity, 0),
+        extraSubscriptionSlots: ent.addOns.filter(a => a.addonType === 'subscription_slot').reduce((s, a) => s + a.quantity, 0),
+        seasonalWishlists: [...ent.seasonalWishlists],
+        extraItemsPerWishlist: ent.extraItemsPerWishlist,
+      },
+      credits: {
+        hintCredits: ent.hintCredits,
+        importCredits: ent.importCredits,
+      },
+      skus: Object.values(ONE_TIME_SKUS).map(s => ({
+        code: s.code,
+        price: s.price,
+        type: s.type,
+        targetRequired: s.targetRequired,
+      })),
     });
   }),
 );
