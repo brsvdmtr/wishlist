@@ -12,7 +12,10 @@
 --            to the opposite party via API.
 
 -- ─── 1. Drop old hint table ───────────────────────────────────────────────────
+-- Batch 1 created the table as "SantaHintRequest" (Prisma PascalCase default).
+-- Batch 2.5 renames to "santa_hint_requests" via @@map. Drop both names defensively.
 
+DROP TABLE IF EXISTS "SantaHintRequest" CASCADE;
 DROP TABLE IF EXISTS "santa_hint_requests" CASCADE;
 
 -- ─── 2. Replace SantaHintStatus enum ─────────────────────────────────────────
