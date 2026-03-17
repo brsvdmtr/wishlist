@@ -2189,7 +2189,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setScreen('wishlist-detail');
       }
     }
-  }, [screen, archiveMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode]);
+  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
