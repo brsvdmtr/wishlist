@@ -1594,7 +1594,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [importUrl, tgFetch, pushToast, loadDrafts, loadWishlists]);
 
-  const handleMoveItem = useCallback(async (itemId: string, targetWishlistId: string) => {
+  const handleMoveItem = useCallback(async (itemId: string, targetWishlistId: string, fromItemDetail = false) => {
     try {
       const res = await tgFetch(`/tg/items/${itemId}/move`, {
         method: 'POST',
@@ -1609,13 +1609,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       pushToast(t('drafts_moved', locale, { name: targetWl?.title || 'wishlist' }), 'success');
       setShowMovePicker(false);
       setMovingItem(null);
-      // Reload drafts + wishlists
+      if (fromItemDetail) {
+        // Navigate away from item-detail: optimistically remove from drafts,
+        // go to drafts if any remain, otherwise to main wishlist screen.
+        const remaining = draftsItems.filter(d => d.id !== itemId);
+        setDraftsItems(remaining);
+        setDraftsCount(Math.max(0, remaining.length));
+        setViewingItem(null);
+        setFromDrafts(false);
+        setScreen(remaining.length > 0 ? 'drafts' : 'my-wishlists');
+      }
+      // Reload drafts + wishlists to reconcile server state
       await loadDrafts();
       await loadWishlists();
     } catch {
       pushToast(t('toast_move_error_generic', locale), 'error');
     }
-  }, [tgFetch, pushToast, wishlists, loadDrafts, loadWishlists]);
+  }, [tgFetch, pushToast, wishlists, loadDrafts, loadWishlists, draftsItems]);
 
   const handleArchiveDraft = useCallback(async (item: Item) => {
     const res = await tgFetch(`/tg/items/${item.id}`, { method: 'DELETE' });
@@ -3676,38 +3686,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </div>
           )}
 
-          {/* Move to wishlist BottomSheet */}
-          <BottomSheet isOpen={showMovePicker} onClose={() => { setShowMovePicker(false); setMovingItem(null); }} title={t('drafts_move_title', locale)}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {wishlists.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                  <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 12 }}>{t('drafts_create_first', locale)}</div>
-                  <button style={btnPrimary} onClick={() => { setShowMovePicker(false); setMovingItem(null); setScreen('my-wishlists'); setShowCreateWl(true); }}>
-                    {t('create_wishlist_btn', locale)}
-                  </button>
-                </div>
-              )}
-              {wishlists.map((wl) => (
-                <button
-                  key={wl.id}
-                  style={{
-                    ...btnGhost,
-                    width: '100%', textAlign: 'left', padding: '14px 16px',
-                    borderRadius: 12, background: C.surface,
-                    border: `1px solid ${C.border}`,
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  }}
-                  onClick={() => { if (movingItem) void handleMoveItem(movingItem.id, wl.id); }}
-                >
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
-                    <div style={{ fontSize: 12, color: C.textMuted }}>{t('wishes_count', locale, { count: wl.itemCount })}</div>
-                  </div>
-                  <span style={{ color: C.textMuted }}>›</span>
-                </button>
-              ))}
-            </div>
-          </BottomSheet>
         </div>
       )}
 
@@ -4150,53 +4128,83 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            {/* Owner actions */}
-            {viewingItem.status !== 'purchased' && (
-              <div style={{ marginTop: 24, marginBottom: 32 }}>
-                <button onClick={() => {
-                  setPendingEditItem(viewingItem as Item);
-                  setViewingItem(null);
-                  setScreen('wishlist-detail');
-                }} style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
-                  {t('edit_btn', locale)}
-                </button>
-                <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
-                  <button onClick={() => {
-                    setShowItemForm(false);
-                    resetItemForm();
-                    handleCompleteItem(viewingItem as Item);
-                    setViewingItem(null);
-                    setScreen('wishlist-detail');
-                  }} style={{
-                    ...btnBase, flex: 1, background: C.surface, color: C.green,
-                    border: `1px solid ${C.borderLight}`, borderRadius: 14,
-                    padding: '12px 16px', fontSize: 14, fontWeight: 500,
-                  }}>
-                    {t('received_btn', locale)}
-                  </button>
-                  <button onClick={() => {
-                    const item = viewingItem as Item;
-                    setViewingItem(null);
-                    // Return to the screen we came from, not always wishlist-detail.
-                    // fromDrafts → go back to drafts; otherwise → wishlist-detail.
-                    // Clear fromDrafts now so navBack won't fire it again.
-                    if (fromDrafts) {
-                      setFromDrafts(false);
-                      setScreen('drafts');
-                    } else {
+            {/* Owner actions — layout depends on whether item lives in Drafts */}
+            {viewingItem.status !== 'purchased' && (() => {
+              // Detect draft: fromDrafts flag (set when opening from drafts screen)
+              // or membership in the local draftsItems list (handles edge cases where
+              // the flag was already cleared, e.g. after a navigation effect fires).
+              const isDraftItem = fromDrafts || draftsItems.some(d => d.id === (viewingItem as Item).id);
+              return (
+                <div style={{ marginTop: 24, marginBottom: 32 }}>
+                  {isDraftItem ? (
+                    // Draft item: primary CTA is "Move to another wishlist"
+                    <button
+                      onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }}
+                      style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}
+                    >
+                      {t('item_move_cta', locale)}
+                    </button>
+                  ) : (
+                    // Regular item: primary CTA is "Edit"
+                    <button onClick={() => {
+                      setPendingEditItem(viewingItem as Item);
+                      setViewingItem(null);
                       setScreen('wishlist-detail');
-                    }
-                    setDeletingItem(item);
-                  }} style={{
-                    ...btnBase, flex: 1, background: C.redSoft, color: C.red,
-                    border: 'none', borderRadius: 14,
-                    padding: '12px 16px', fontSize: 14, fontWeight: 600,
-                  }}>
-                    {t('delete_btn', locale)}
-                  </button>
+                    }} style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
+                      {t('edit_btn', locale)}
+                    </button>
+                  )}
+                  <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
+                    {isDraftItem ? (
+                      // Draft: Edit in secondary slot (no Received)
+                      <button onClick={() => {
+                        setPendingEditItem(viewingItem as Item);
+                        setViewingItem(null);
+                        setScreen('wishlist-detail');
+                      }} style={{
+                        ...btnBase, flex: 1, background: C.surface, color: C.text,
+                        border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                        padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                      }}>
+                        {t('edit_btn', locale)}
+                      </button>
+                    ) : (
+                      // Regular: Received
+                      <button onClick={() => {
+                        setShowItemForm(false);
+                        resetItemForm();
+                        handleCompleteItem(viewingItem as Item);
+                        setViewingItem(null);
+                        setScreen('wishlist-detail');
+                      }} style={{
+                        ...btnBase, flex: 1, background: C.surface, color: C.green,
+                        border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                        padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                      }}>
+                        {t('received_btn', locale)}
+                      </button>
+                    )}
+                    <button onClick={() => {
+                      const item = viewingItem as Item;
+                      setViewingItem(null);
+                      if (fromDrafts) {
+                        setFromDrafts(false);
+                        setScreen('drafts');
+                      } else {
+                        setScreen('wishlist-detail');
+                      }
+                      setDeletingItem(item);
+                    }} style={{
+                      ...btnBase, flex: 1, background: C.redSoft, color: C.red,
+                      border: 'none', borderRadius: 14,
+                      padding: '12px 16px', fontSize: 14, fontWeight: 600,
+                    }}>
+                      {t('delete_btn', locale)}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
       )}
@@ -5316,6 +5324,45 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       })()}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
+
+      {/* ── Move item to wishlist picker — triggered from Drafts screen or item-detail ── */}
+      <BottomSheet isOpen={showMovePicker} onClose={() => { setShowMovePicker(false); setMovingItem(null); }} title={t('drafts_move_title', locale)}>
+        {(() => {
+          const moveTargets = wishlists.filter(wl => wl.id !== draftsWishlistId);
+          const calledFromItemDetail = screen === 'item-detail';
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {moveTargets.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 12 }}>{t('drafts_create_first', locale)}</div>
+                  <button style={btnPrimary} onClick={() => { setShowMovePicker(false); setMovingItem(null); setScreen('my-wishlists'); setShowCreateWl(true); }}>
+                    {t('create_wishlist_btn', locale)}
+                  </button>
+                </div>
+              )}
+              {moveTargets.map((wl) => (
+                <button
+                  key={wl.id}
+                  style={{
+                    ...btnGhost,
+                    width: '100%', textAlign: 'left', padding: '14px 16px',
+                    borderRadius: 12, background: C.surface,
+                    border: `1px solid ${C.border}`,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}
+                  onClick={() => { if (movingItem) void handleMoveItem(movingItem.id, wl.id, calledFromItemDetail); }}
+                >
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>{t('wishes_count', locale, { count: wl.itemCount })}</div>
+                  </div>
+                  <span style={{ color: C.textMuted }}>›</span>
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+      </BottomSheet>
 
       {/* ── Profile visibility sheet ── */}
       <BottomSheet isOpen={showProfileVisibilitySheet} onClose={() => setShowProfileVisibilitySheet(false)} title={t('privacy_profile_sheet_title', locale)}>
