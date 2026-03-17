@@ -400,51 +400,70 @@ function BottomSheet({ isOpen, onClose, title, children }: {
     return () => el.removeEventListener('touchmove', block);
   }, [isOpen]);
 
-  // Sheet: swipe-to-dismiss with native non-passive listener so preventDefault works
+  // Sheet: take FULL ownership of scrolling + swipe-to-dismiss.
+  // iOS WKWebView (used by Telegram) claims the touch gesture once native scroll
+  // starts and stops honouring preventDefault() in subsequent touchmove events.
+  // The only reliable fix: always preventDefault and drive el.scrollTop manually.
+  // This gives us full control over the scroll↔dismiss transition at any point
+  // in the gesture, including mid-gesture direction reversals.
   useEffect(() => {
     const el = sheetRef.current;
     if (!el || !isOpen) return;
-    let startY: number | null = null;
-    // Mirror of dragOffset in a plain variable so onEnd can read it without
-    // capturing stale React state in the closure
-    let currentOffset = 0;
+    let prevY: number | null = null;
+    let dismissOffset = 0; // plain var, no stale-closure risk
 
     const onStart = (e: TouchEvent) => {
       if (!e.touches[0]) return;
-      startY = e.touches[0].clientY;
-      currentOffset = 0;
+      prevY = e.touches[0].clientY;
+      dismissOffset = 0;
     };
 
     const onMove = (e: TouchEvent) => {
-      if (startY === null || !e.touches[0]) return;
-      const currentY = e.touches[0].clientY;
+      if (prevY === null || !e.touches[0]) return;
+      // Always prevent — we own all scroll behaviour on the sheet.
+      // This is the key: iOS cannot claim the gesture after this.
+      e.preventDefault();
 
-      if (el.scrollTop === 0 && currentY > startY) {
-        // Sheet content is at top and finger moves down → dismiss gesture.
-        // preventDefault stops the root scroll container from moving.
-        e.preventDefault();
-        const offset = currentY - startY;
-        currentOffset = offset;
-        setDragOffset(offset);
-      } else {
-        // Sheet is still scrolling its own content.
-        // Continuously reset startY so that the dismiss delta starts cleanly
-        // from zero at the exact moment scrollTop reaches 0 — this is what
-        // makes "scroll-down-then-scroll-back-up-then-swipe-away" work in one
-        // uninterrupted gesture without needing to lift the finger.
-        startY = currentY;
-        if (currentOffset !== 0) {
-          currentOffset = 0;
+      const currentY = e.touches[0].clientY;
+      const dy = currentY - prevY; // positive = finger moved down
+      prevY = currentY;            // incremental per-frame delta
+
+      if (dy < 0) {
+        // Finger moving up → scroll sheet content downward (show more below)
+        el.scrollTop = Math.min(
+          el.scrollTop - dy, // -dy > 0
+          el.scrollHeight - el.clientHeight,
+        );
+        // Exit dismiss mode if user reverses direction mid-gesture
+        if (dismissOffset > 0) {
+          dismissOffset = 0;
           setDragOffset(0);
+        }
+      } else if (dy > 0) {
+        if (el.scrollTop > 0) {
+          // Finger moving down + content has scroll → scroll content back up
+          const next = el.scrollTop - dy;
+          if (next > 0) {
+            el.scrollTop = next;
+          } else {
+            // Consumed all scroll; leftover delta becomes the dismiss offset
+            el.scrollTop = 0;
+            dismissOffset = -next; // -next > 0
+            setDragOffset(dismissOffset);
+          }
+        } else {
+          // Already at top → dismiss gesture
+          dismissOffset += dy;
+          setDragOffset(dismissOffset);
         }
       }
     };
 
     const onEnd = () => {
-      if (currentOffset > 80) onCloseRef.current();
-      currentOffset = 0;
+      if (dismissOffset > 80) onCloseRef.current();
+      dismissOffset = 0;
       setDragOffset(0);
-      startY = null;
+      prevY = null;
     };
 
     el.addEventListener('touchstart', onStart, { passive: true });
