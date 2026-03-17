@@ -385,51 +385,73 @@ function BottomSheet({ isOpen, onClose, title, children }: {
   isOpen: boolean; onClose: () => void; title?: string; children: React.ReactNode;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
-  const dragStartY = useRef<number | null>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const [dragOffset, setDragOffset] = useState(0);
+  // Keep onClose stable inside native listeners without re-subscribing
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
-  // Swipe-to-dismiss: track vertical drag, close when dragged down > 80px
-  const onTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!e.touches[0]) return;
-    dragStartY.current = e.touches[0].clientY;
-    setDragOffset(0);
-  }, []);
+  // Backdrop: block ALL touch scroll on the underlying screen via native non-passive listener
+  useEffect(() => {
+    const el = backdropRef.current;
+    if (!el || !isOpen) return;
+    const block = (e: TouchEvent) => e.preventDefault();
+    el.addEventListener('touchmove', block, { passive: false });
+    return () => el.removeEventListener('touchmove', block);
+  }, [isOpen]);
 
-  const onTouchMove = useCallback((e: React.TouchEvent) => {
-    // Always stop propagation so the scroll container underneath never scrolls
-    e.stopPropagation();
-    if (dragStartY.current === null || !e.touches[0]) return;
-    const delta = e.touches[0].clientY - dragStartY.current;
-    if (delta <= 0) return; // only track downward drag
+  // Sheet: swipe-to-dismiss with native non-passive listener so preventDefault works
+  useEffect(() => {
     const el = sheetRef.current;
-    // Only allow dismiss drag when sheet content is scrolled to top (or not scrollable)
-    if (el && el.scrollTop > 0) return;
-    e.preventDefault();
-    setDragOffset(delta);
-  }, []);
+    if (!el || !isOpen) return;
+    let startY: number | null = null;
+    let startScrollTop = 0;
 
-  const onTouchEnd = useCallback(() => {
-    if (dragOffset > 80) {
-      onClose();
-    }
-    setDragOffset(0);
-    dragStartY.current = null;
-  }, [dragOffset, onClose]);
+    const onStart = (e: TouchEvent) => {
+      if (!e.touches[0]) return;
+      startY = e.touches[0].clientY;
+      startScrollTop = el.scrollTop;
+    };
+
+    const onMove = (e: TouchEvent) => {
+      if (startY === null || !e.touches[0]) return;
+      const delta = e.touches[0].clientY - startY;
+      // Dismiss gesture: downward drag only when sheet is scrolled to top
+      if (delta > 0 && startScrollTop === 0) {
+        e.preventDefault(); // block native scroll on the root container
+        setDragOffset(delta);
+      }
+    };
+
+    const onEnd = () => {
+      setDragOffset(prev => {
+        if (prev > 80) onCloseRef.current();
+        return 0;
+      });
+      startY = null;
+    };
+
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
   const dragging = dragOffset > 0;
   return (
     <>
       <div
+        ref={backdropRef}
         onClick={onClose}
-        onTouchMove={e => e.stopPropagation()}
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100 }}
       />
       <div
         ref={sheetRef}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
         style={{
           position: 'fixed', bottom: 0, left: 0, right: 0,
           background: C.surface, borderRadius: '20px 20px 0 0',
