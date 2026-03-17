@@ -2230,11 +2230,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   }, [screen, guestWl, wishlists, loadItems]);
 
 
-  // --- Deferred edit: open edit form AFTER navigating back to wishlist-detail
-  // (BottomSheet with position:fixed inside another position:fixed+overflowY:auto
-  //  glitches in Telegram WebView, so we navigate first, then open the form)
+  // --- Deferred edit: open edit form AFTER navigating to the target screen.
+  // For regular items: navigate to wishlist-detail first (BottomSheet inside
+  // position:fixed+overflowY:auto glitches in Telegram WebView).
+  // For draft items: navigate to 'drafts' — the form is a global BottomSheet
+  // (position:fixed) so it renders correctly on top of any screen.
   useEffect(() => {
-    if (pendingEditItem && screen === 'wishlist-detail') {
+    if (!pendingEditItem) return;
+    if (screen === 'wishlist-detail' || screen === 'drafts') {
       openEditItem(pendingEditItem);
       setPendingEditItem(null);
     }
@@ -2602,7 +2605,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   }, [apiBase, initDataRef]);
 
   const handleSaveItem = async () => {
-    if (!itemTitle.trim() || !currentWl) return;
+    if (!itemTitle.trim()) return;
+    // currentWl is only required when creating a new item; for edits we use editingItem.wishlistId
+    if (!editingItem && !currentWl) return;
     setLoading(true);
     setPhotoError(null);
     try {
@@ -2632,11 +2637,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           if (delRes.ok) finalItem = { ...finalItem, imageUrl: null };
         }
 
-        // Reload from API so list order reflects server-side sort (priority DESC)
-        await loadItems(editingItem.wishlistId ?? currentWl.id);
+        // Reload the right container. Draft items live in SYSTEM_DRAFTS — use
+        // loadDrafts() so the drafts list reflects the update. Regular items use
+        // loadItems() which reloads the current wishlist sorted by priority DESC.
+        const savingDraftItem = editingItem.wishlistId === draftsWishlistId;
+        if (savingDraftItem) {
+          await loadDrafts();
+          setScreen('drafts'); // Return to drafts screen after saving
+        } else {
+          await loadItems(editingItem.wishlistId ?? currentWl!.id);
+        }
         pushToast(t('item_saved', locale), 'success');
       } else {
-        const res = await tgFetch(`/tg/wishlists/${currentWl.id}/items`, { method: 'POST', body: JSON.stringify(body) });
+        // currentWl is guaranteed non-null here: the early return above
+        // (`if (!editingItem && !currentWl) return`) ensures this branch is only
+        // reached when creating a new item, which requires currentWl to be set.
+        const res = await tgFetch(`/tg/wishlists/${currentWl!.id}/items`, { method: 'POST', body: JSON.stringify(body) });
         if (res.status === 402) {
           if (planInfo.code === 'FREE') {
             showUpsell('item_limit', { auto: true });
@@ -2655,8 +2671,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         }
 
         // Reload from API to get correct sorted position
-        setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
-        await loadItems(currentWl.id);
+        setWishlists((prev) => prev.map((wl) => wl.id === currentWl!.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
+        await loadItems(currentWl!.id);
         pushToast(t('item_added', locale), 'success');
       }
       setShowItemForm(false);
@@ -4156,11 +4172,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   )}
                   <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
                     {isDraftItem ? (
-                      // Draft: Edit in secondary slot (no Received)
+                      // Draft: Edit in secondary slot (no Received).
+                      // Navigate to 'drafts' (not 'wishlist-detail') so pendingEditItem
+                      // effect fires with currentWl intact for the drafts flow.
                       <button onClick={() => {
                         setPendingEditItem(viewingItem as Item);
                         setViewingItem(null);
-                        setScreen('wishlist-detail');
+                        setScreen('drafts');
                       }} style={{
                         ...btnBase, flex: 1, background: C.surface, color: C.text,
                         border: `1px solid ${C.borderLight}`, borderRadius: 14,
