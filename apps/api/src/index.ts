@@ -5750,8 +5750,9 @@ tgRouter.delete('/santa/campaigns/:id/participants/:userId', asyncHandler(async 
 
   const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, status: true } });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-  if (!await checkIsOrganizer(campaignId, campaign, owner.id)) return res.status(403).json({ error: 'Forbidden' });
-  // Organizer cannot remove themselves via this endpoint
+  // M5: removal is owner-only (admins can manage participants but not remove them)
+  if (campaign.ownerId !== owner.id) return res.status(403).json({ error: 'Forbidden' });
+  // Owner cannot remove themselves via this endpoint
   if (targetUserId === owner.id) return res.status(400).json({ error: 'Cannot remove yourself via this endpoint' });
   if (['ACTIVE', 'COMPLETED', 'DRAW_IN_PROGRESS'].includes(campaign.status)) {
     return res.status(409).json({ error: 'Cannot remove after draw' });

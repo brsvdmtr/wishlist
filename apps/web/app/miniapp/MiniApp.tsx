@@ -1585,6 +1585,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Link wishlist to campaign
   const [showSantaWishlistPicker, setShowSantaWishlistPicker] = useState(false);
   const [santaWishlistPickerLoading, setSantaWishlistPickerLoading] = useState(false);
+  // P0: campaign id to return to after creating a new wishlist from Santa flow
+  const [santaWishlistPickerReturnId, setSantaWishlistPickerReturnId] = useState<string | null>(null);
   // Receiver's wishlist (giver view — role-aware, no receiver userId)
   const [santaReceiverWishlist, setSantaReceiverWishlist] = useState<{
     role: 'giver'; giftStatus: string; giftNote: string | null;
@@ -2706,7 +2708,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   }, [tgFetch, pushToast, trackEvent, loadWishlists, locale, wishlistCappedSkus, wishlists]);
 
   // --- Navigation with Telegram BackButton
-  const navBack = useCallback(() => {
+  const navBack = useCallback(async () => {
     // Cancel active reorder modes before navigating away
     if (itemReorderMode) { cancelItemReorderMode(); return; }
     if (reorderMode) { cancelReorderMode(); return; }
@@ -2760,6 +2762,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // Return to the screen the user came from; fall back to my-wishlists if unknown
       const origin = settingsOriginScreen && settingsOriginScreen !== 'settings' ? settingsOriginScreen : 'my-wishlists';
       setScreen(origin);
+    } else if (screen === 'my-wishlists' && santaWishlistPickerReturnId) {
+      // P0: Return to Santa campaign after creating a new wishlist from the picker
+      const returnCampId = santaWishlistPickerReturnId;
+      setSantaWishlistPickerReturnId(null);
+      const [detailRes] = await Promise.all([
+        tgFetch(`/tg/santa/campaigns/${returnCampId}`),
+        loadWishlists(), // refresh wishlists so the new one appears in the picker
+      ]);
+      if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+      setShowSantaWishlistPicker(true); // re-open picker with fresh wishlist list
+      setScreen('santa-campaign');
     } else if (screen === 'santa-hub') {
       setScreen('my-wishlists');
     } else if (screen === 'santa-create') {
@@ -2808,6 +2821,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setSantaHintPickerItems([]);
       setSantaHintPickerSelectedIds([]);
       setScreen('santa-hub');
+      // M2: refresh hub list so statuses (draw/cancel/complete) are not stale
+      void tgFetch('/tg/santa/campaigns').then(r => r.ok ? r.json().then(d => setSantaCampaigns(d as typeof santaCampaigns)) : null);
     } else if (screen === 'santa-join') {
       setSantaJoinPreview(null);
       setSantaJoinDone(false);
@@ -2824,7 +2839,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setScreen('wishlist-detail');
       }
     }
-  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode]);
+  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -2836,12 +2851,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (!tg) return;
-    if (screen === 'my-wishlists' || screen === 'loading' || screen === 'error' || screen === 'maintenance') {
+    if ((screen === 'my-wishlists' && !santaWishlistPickerReturnId) || screen === 'loading' || screen === 'error' || screen === 'maintenance') {
       tg.BackButton.hide();
     } else {
       tg.BackButton.show();
     }
-  }, [screen]);
+  }, [screen, santaWishlistPickerReturnId]);
 
   // --- Init
   useEffect(() => {
@@ -8497,7 +8512,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   >
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{c.title}</div>
-                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('santa_campaign_participants', locale, { count: c.participantCount })} · {c.status}</div>
+                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('santa_campaign_participants', locale, { count: c.participantCount })} · {t(`santa_campaign_status_${c.status.toLowerCase()}` as never, locale) || c.status}</div>
                     </div>
                     <div style={{ color: C.textMuted, fontSize: 18 }}>›</div>
                   </button>
@@ -9872,6 +9887,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     </div>
                     <button
                       onClick={() => {
+                        setSantaWishlistPickerReturnId(camp.id);
                         setShowSantaWishlistPicker(false);
                         setScreen('my-wishlists');
                       }}
