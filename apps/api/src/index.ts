@@ -696,6 +696,12 @@ publicRouter.get(
 
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
 
+    // Track link open — fire-and-forget, never blocks response
+    prisma.wishlist.update({
+      where: { shareToken: token },
+      data: { shareOpenCount: { increment: 1 } },
+    }).catch(() => { /* non-critical — ignore DB errors */ });
+
     const ownerNameToken =
       wishlist.owner?.profile?.displayName?.trim() ||
       wishlist.owner?.profile?.username?.trim() ||
@@ -1582,6 +1588,7 @@ tgRouter.get(
       select: {
         id: true, slug: true, title: true, description: true, deadline: true,
         visibility: true, allowSubscriptions: true, commentPolicy: true,
+        shareToken: true,
         items: { select: { status: true } },
       },
     });
@@ -1630,6 +1637,7 @@ tgRouter.get(
           visibility: (wl.visibility as string).toLowerCase() as 'link_only' | 'public_profile' | 'private',
           allowSubscriptions: (wl.allowSubscriptions as string).toLowerCase() as 'all' | 'nobody',
           commentPolicy: (wl.commentPolicy as string).toLowerCase() as 'all' | 'subscribers',
+          shareToken: wl.shareToken ?? null,
         };
       }),
       plan: {
@@ -4317,6 +4325,8 @@ tgRouter.get(
       withWishlistRows,
       withItemRows,
       withShareRows,
+      sharedLinkOpensRows,
+      wishlistsWithLinkOpenRows,
       withReservationRows,
       totalComments,
       totalHints,
@@ -4358,10 +4368,18 @@ tgRouter.get(
         SELECT COUNT(DISTINCT w."ownerId")::int AS count
         FROM "Item" i JOIN "Wishlist" w ON i."wishlistId" = w.id
         WHERE i.status != 'DELETED'`,
-      // Share proxy: ≥1 wishlist with shareToken explicitly generated
+      // Funnel share step 1: users who opened share screen (shareToken generated via POST /share-token)
       prisma.$queryRaw<CountRow[]>`
         SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist"
         WHERE "shareToken" IS NOT NULL AND type = 'REGULAR'`,
+      // Funnel share step 2: total link opens across all wishlists (SUM of shareOpenCount)
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COALESCE(SUM("shareOpenCount"), 0)::int AS count FROM "Wishlist"
+        WHERE "shareToken" IS NOT NULL AND type = 'REGULAR'`,
+      // Funnel share step 3: distinct wishlists that received ≥1 link open
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(*)::int AS count FROM "Wishlist"
+        WHERE "shareOpenCount" > 0 AND type = 'REGULAR'`,
       // Received ≥1 reservation on their wishlist items
       prisma.$queryRaw<CountRow[]>`
         SELECT COUNT(DISTINCT w."ownerId")::int AS count
@@ -4396,7 +4414,13 @@ tgRouter.get(
         activatedUsers: withWishlist,   // proxy: users with ≥1 regular wishlist
         usersWithWishlist: withWishlist,
         usersWithItem: n(withItemRows[0]),
-        usersWithShare: n(withShareRows[0]),
+        // Share funnel — three distinct steps:
+        // 1. Intent: user opened share screen → shareToken generated
+        usersWhoInitiatedShare: n(withShareRows[0]),
+        // 2. Actual link opens: total times guests opened a shared link (sum of shareOpenCount)
+        sharedLinkOpens: n(sharedLinkOpensRows[0]),
+        // 3. Wishlists with ≥1 link open (distinct reach)
+        wishlistsWithLinkOpen: n(wishlistsWithLinkOpenRows[0]),
         usersWithReservation: n(withReservationRows[0]),
       },
       engagement: {
@@ -4406,7 +4430,9 @@ tgRouter.get(
       },
       meta: {
         activeUserDef: 'users who created/updated a regular wishlist or item in the period',
-        shareProxy: 'users with ≥1 wishlist where shareToken was explicitly generated',
+        usersWhoInitiatedShareDef: 'users who opened share screen (shareToken generated via POST /share-token)',
+        sharedLinkOpensDef: 'total times a guest opened a shared link (GET /public/share/:token, fire-and-forget increment)',
+        wishlistsWithLinkOpenDef: 'distinct wishlists with shareOpenCount > 0',
         reservationDef: 'users whose wishlist items received ≥1 RESERVED event',
       },
       generatedAt: now.toISOString(),
