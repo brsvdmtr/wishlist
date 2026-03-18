@@ -1441,6 +1441,11 @@ async function isWishlistWritable(userId: string, wishlistId: string, planLimit:
 function trackEvent(event: string, userId?: string, props?: Record<string, unknown>) {
   // eslint-disable-next-line no-console
   console.log(`[analytics] ${event}`, userId ? `user=${userId}` : '', props ?? '');
+  // Persist feature gate hits to DB for god-mode analytics dashboard.
+  // Fire-and-forget — never blocks the request path.
+  if (event.startsWith('feature_gate_hit_') && userId) {
+    prisma.analyticsEvent.create({ data: { event, userId } }).catch(() => {});
+  }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -4327,10 +4332,14 @@ tgRouter.get(
       withShareRows,
       sharedLinkOpensRows,
       wishlistsWithLinkOpenRows,
+      usersWithLinkOpenRows,
       withReservationRows,
       totalComments,
       totalHints,
       totalWishlistSubs,
+      proLimitTotalRows,
+      proLimitUsersRows,
+      proLimitByTypeRows,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { createdAt: { gte: cut24 } } }),
@@ -4380,6 +4389,10 @@ tgRouter.get(
       prisma.$queryRaw<CountRow[]>`
         SELECT COUNT(*)::int AS count FROM "Wishlist"
         WHERE "shareOpenCount" > 0 AND type = 'REGULAR'`,
+      // Funnel share step 4: distinct users whose wishlist was opened ≥1 time via shared link
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist"
+        WHERE "shareOpenCount" > 0 AND type = 'REGULAR'`,
       // Received ≥1 reservation on their wishlist items
       prisma.$queryRaw<CountRow[]>`
         SELECT COUNT(DISTINCT w."ownerId")::int AS count
@@ -4389,13 +4402,32 @@ tgRouter.get(
         WHERE re.type = 'RESERVED'`,
       // Engagement: total user-authored comments
       prisma.comment.count({ where: { type: 'USER' } }),
-      // Engagement: total Santa hint requests
+      // Engagement: total hint requests
       prisma.santaHintRequest.count(),
       // Engagement: total wishlist subscriptions (social follows)
       prisma.wishlistSubscription.count(),
+      // PRO limits last 24h: total gate hits
+      prisma.analyticsEvent.count({
+        where: { event: { startsWith: 'feature_gate_hit_' }, createdAt: { gte: cut24 } },
+      }),
+      // PRO limits last 24h: unique users who hit any gate
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT "userId")::int AS count FROM "AnalyticsEvent"
+        WHERE event LIKE 'feature_gate_hit_%' AND "createdAt" >= ${cut24}`,
+      // PRO limits last 24h: hits by event type
+      prisma.$queryRaw<{ event: string; count: bigint }[]>`
+        SELECT event, COUNT(*)::int AS count FROM "AnalyticsEvent"
+        WHERE event LIKE 'feature_gate_hit_%' AND "createdAt" >= ${cut24}
+        GROUP BY event`,
     ]);
 
     const withWishlist = n(withWishlistRows[0]);
+
+    // Build PRO limits by-type map
+    const proByType: Record<string, number> = {};
+    for (const row of proLimitByTypeRows) {
+      proByType[row.event] = Number(row.count);
+    }
 
     return res.json({
       overview: {
@@ -4411,16 +4443,18 @@ tgRouter.get(
       },
       funnel: {
         totalUsers,
-        activatedUsers: withWishlist,   // proxy: users with ≥1 regular wishlist
+        activatedUsers: withWishlist,
         usersWithWishlist: withWishlist,
         usersWithItem: n(withItemRows[0]),
-        // Share funnel — three distinct steps:
-        // 1. Intent: user opened share screen → shareToken generated
+        // Share funnel:
+        // 1. Intent — user generated share token (opened share screen)
         usersWhoInitiatedShare: n(withShareRows[0]),
-        // 2. Actual link opens: total times guests opened a shared link (sum of shareOpenCount)
+        // 2. Total link opens (sum of shareOpenCount across all wishlists)
         sharedLinkOpens: n(sharedLinkOpensRows[0]),
-        // 3. Wishlists with ≥1 link open (distinct reach)
+        // 3. Wishlists with ≥1 link open
         wishlistsWithLinkOpen: n(wishlistsWithLinkOpenRows[0]),
+        // 4. Users whose wishlist was opened ≥1 time via shared link
+        usersWithLinkOpen: n(usersWithLinkOpenRows[0]),
         usersWithReservation: n(withReservationRows[0]),
       },
       engagement: {
@@ -4428,12 +4462,25 @@ tgRouter.get(
         totalHints,
         totalWishlistSubs,
       },
+      proLimits24h: {
+        totalHits: proLimitTotalRows,
+        uniqueUsers: n(proLimitUsersRows[0]),
+        byType: {
+          wishlistLimit: proByType['feature_gate_hit_wishlist_limit'] ?? 0,
+          itemLimit:     proByType['feature_gate_hit_item_limit'] ?? 0,
+          comments:      proByType['feature_gate_hit_comments'] ?? 0,
+          hints:         proByType['feature_gate_hit_hints'] ?? 0,
+          urlImport:     proByType['feature_gate_hit_url_import'] ?? 0,
+        },
+      },
       meta: {
         activeUserDef: 'users who created/updated a regular wishlist or item in the period',
         usersWhoInitiatedShareDef: 'users who opened share screen (shareToken generated via POST /share-token)',
-        sharedLinkOpensDef: 'total times a guest opened a shared link (GET /public/share/:token, fire-and-forget increment)',
+        usersWithLinkOpenDef: 'users whose wishlist was opened ≥1 time via shared link',
+        sharedLinkOpensDef: 'total times a guest opened a shared link (fire-and-forget increment)',
         wishlistsWithLinkOpenDef: 'distinct wishlists with shareOpenCount > 0',
         reservationDef: 'users whose wishlist items received ≥1 RESERVED event',
+        proLimits24hDef: 'feature gate hits in the last 24h — persisted on each hit via trackEvent',
       },
       generatedAt: now.toISOString(),
     });

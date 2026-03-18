@@ -322,11 +322,18 @@ type GodStats = {
     totalUsers: number; activatedUsers: number;
     usersWithWishlist: number; usersWithItem: number;
     usersWhoInitiatedShare: number; sharedLinkOpens: number;
-    wishlistsWithLinkOpen: number;
+    wishlistsWithLinkOpen: number; usersWithLinkOpen: number;
     usersWithReservation: number;
   };
   engagement: {
     totalComments: number; totalHints: number; totalWishlistSubs: number;
+  };
+  proLimits24h?: {
+    totalHits: number; uniqueUsers: number;
+    byType: {
+      wishlistLimit: number; itemLimit: number;
+      comments: number; hints: number; urlImport: number;
+    };
   };
   generatedAt: string;
 };
@@ -7113,12 +7120,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       return d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
                     };
 
+                    // Funnel = уникальные пользователи
                     const funnelSteps = godStats ? [
-                      { label: 'Все юзеры',           value: godStats.funnel.totalUsers },
-                      { label: 'Вишлист',             value: godStats.funnel.usersWithWishlist },
-                      { label: 'Желание',             value: godStats.funnel.usersWithItem },
-                      { label: 'Открыли шаринг',      value: godStats.funnel.usersWhoInitiatedShare },
-                      { label: 'Получили бронь',      value: godStats.funnel.usersWithReservation },
+                      { label: 'Все пользователи',                    value: godStats.funnel.totalUsers },
+                      { label: 'Создали хотя бы один вишлист',        value: godStats.funnel.usersWithWishlist },
+                      { label: 'Создали хотя бы одно желание',        value: godStats.funnel.usersWithItem },
+                      { label: 'Ссылку открыли хотя бы раз',         value: godStats.funnel.usersWithLinkOpen ?? godStats.funnel.usersWhoInitiatedShare },
+                      { label: 'Забронировали хотя бы один подарок', value: godStats.funnel.usersWithReservation },
                     ] : [];
 
                     return (
@@ -7160,20 +7168,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         {godStats && (() => {
                           const o = godStats.overview;
                           const e = godStats.engagement;
+                          const pro = godStats.proLimits24h;
                           const overviewRows: [string, string | number, string, string | number][] = [
-                            ['Юзеров',    o.totalUsers,        'Новых 24ч',   o.newUsers24h],
-                            ['Новых 7д',  o.newUsers7d,        'Акт. 7д',     o.activeUsers7d],
-                            ['Акт. 30д',  o.activeUsers30d,    'PRO',         o.proUsers],
-                            ['Вишлистов', o.totalWishlists,    'Желаний',     o.totalItems],
-                            ['Броней',    o.totalReservations, 'PRO %',       `${pct(o.proUsers, o.totalUsers)}%`],
+                            ['Пользователей', o.totalUsers,        'Новых 24ч',     o.newUsers24h],
+                            ['Новых 7д',      o.newUsers7d,        'Активных 7д',   o.activeUsers7d],
+                            ['Активных 30д',  o.activeUsers30d,    'PRO',           o.proUsers],
+                            ['Вишлистов',     o.totalWishlists,    'Желаний',       o.totalItems],
+                            ['Броней',        o.totalReservations, 'PRO %',         `${pct(o.proUsers, o.totalUsers)}%`],
                           ];
-                          // Derived coefficients
                           const avgItemsPerWl = fmt1(o.totalWishlists > 0 ? o.totalItems / o.totalWishlists : 0);
-                          const avgWlPerCreator = fmt1(godStats.funnel.usersWithWishlist > 0 ? o.totalWishlists / godStats.funnel.usersWithWishlist : 0);
+                          const avgWlPerUser  = fmt1(godStats.funnel.usersWithWishlist > 0 ? o.totalWishlists / godStats.funnel.usersWithWishlist : 0);
 
                           return (
                             <>
-                              {/* Overview grid */}
+                              {/* ── Обзор ── */}
                               <div style={{ marginBottom: 10 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
                                   Обзор
@@ -7190,27 +7198,27 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                     </div>
                                   </div>
                                 ))}
-                                {/* Derived coefficients — small muted row */}
                                 <div style={{ fontSize: 10, color: C.textMuted, marginTop: 5, lineHeight: 1.6 }}>
-                                  жел/вишлист <span style={{ color: C.textSec, fontWeight: 600 }}>{avgItemsPerWl}</span>
+                                  желаний/вишлист <span style={{ color: C.textSec, fontWeight: 600 }}>{avgItemsPerWl}</span>
                                   {' · '}
-                                  вишлист/юзер <span style={{ color: C.textSec, fontWeight: 600 }}>{avgWlPerCreator}</span>
+                                  вишлистов/польз. <span style={{ color: C.textSec, fontWeight: 600 }}>{avgWlPerUser}</span>
                                 </div>
                               </div>
 
-                              {/* Funnel */}
+                              {/* ── Воронка · уникальные пользователи ── */}
                               <div style={{ marginBottom: 10 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                  Воронка · % от всех юзеров
+                                  Воронка · % от всех пользователей
                                 </div>
                                 {funnelSteps.map((step, i) => {
                                   const p = pct(step.value, godStats.funnel.totalUsers);
                                   const isFirst = i === 0;
                                   return (
-                                    <div key={i} style={{ marginBottom: 5 }}>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                                        <span style={{ fontSize: 11, color: C.textSec }}>{step.label}</span>
-                                        <span style={{ fontSize: 11, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+                                    <div key={i} style={{ marginBottom: 6 }}>
+                                      {/* label on its own line, value right-aligned — prevents overlap on long RU text */}
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2, gap: 8 }}>
+                                        <span style={{ fontSize: 10, color: C.textSec, lineHeight: 1.4, flex: 1 }}>{step.label}</span>
+                                        <span style={{ fontSize: 11, color: C.text, fontVariantNumeric: 'tabular-nums', flexShrink: 0, whiteSpace: 'nowrap' }}>
                                           {step.value}
                                           {!isFirst && <span style={{ color: C.textMuted, marginLeft: 4 }}>{p}%</span>}
                                         </span>
@@ -7228,7 +7236,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                 })}
                               </div>
 
-                              {/* Expandable engagement details */}
+                              {/* ── Детали (expandable) ── */}
                               <div style={{ marginBottom: 8 }}>
                                 <button
                                   onClick={() => setGodStatsDetailsOpen(v => !v)}
@@ -7243,33 +7251,69 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                 </button>
                                 {godStatsDetailsOpen && (
                                   <div style={{ marginTop: 6 }}>
-                                    {/* Engagement */}
+                                    {/* Engagement totals */}
                                     {([
                                       ['Комментариев', e.totalComments],
-                                      ['Подсказок Santa', e.totalHints],
-                                      ['Подписок', e.totalWishlistSubs],
+                                      ['Подсказок',    e.totalHints],
+                                      ['Подписок',     e.totalWishlistSubs],
                                     ] as [string, number][]).map(([lbl, val]) => (
                                       <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                                         <span style={{ fontSize: 11, color: C.textMuted }}>{lbl}</span>
                                         <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
                                       </div>
                                     ))}
-                                    {/* Share funnel detail */}
+
+                                    {/* Шаринг */}
                                     <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>Шаринг</div>
+                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>
+                                        Шаринг
+                                      </div>
                                       {([
-                                        ['Открыли шаринг', godStats.funnel.usersWhoInitiatedShare, 'юзеров открыли экран шаринга (токен сгенерирован)'],
-                                        ['Открытий ссылки', godStats.funnel.sharedLinkOpens, 'суммарно гости перешли по shared-link'],
-                                        ['Вишлистов с открытием', godStats.funnel.wishlistsWithLinkOpen, 'уникальных вишлистов с ≥1 переходом'],
-                                      ] as [string, number, string][]).map(([lbl, val, hint]) => (
-                                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }} title={hint}>
+                                        ['Перешли по ссылке на вишлист', godStats.funnel.usersWithLinkOpen ?? godStats.funnel.usersWhoInitiatedShare],
+                                        ['Переходов по ссылке',          godStats.funnel.sharedLinkOpens],
+                                        ['Открыли чужой вишлист',        godStats.funnel.wishlistsWithLinkOpen],
+                                      ] as [string, number][]).map(([lbl, val]) => (
+                                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                                           <span style={{ fontSize: 11, color: C.textMuted }}>{lbl}</span>
                                           <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
                                         </div>
                                       ))}
                                     </div>
-                                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 5, lineHeight: 1.5 }}>
-                                      Акт = создали/обновили вишлист или желание · Открыли шаринг = ссылка явно сгенерирована · Бронь = получили чужую бронь
+
+                                    {/* PRO ограничения за 24ч */}
+                                    {pro && (
+                                      <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>
+                                          Ограничения PRO за 24 часа
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                                          <span style={{ fontSize: 11, color: C.textMuted }}>Срабатываний ограничений</span>
+                                          <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{pro.totalHits}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                                          <span style={{ fontSize: 11, color: C.textMuted }}>Пользователей столкнулись</span>
+                                          <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{pro.uniqueUsers}</span>
+                                        </div>
+                                        {([
+                                          ['Импорт по ссылке недоступен', pro.byType.urlImport],
+                                          ['Подсказки недоступны',        pro.byType.hints],
+                                          ['Комментарии недоступны',      pro.byType.comments],
+                                          ['Лимит по вишлистам',          pro.byType.wishlistLimit],
+                                          ['Лимит по желаниям',           pro.byType.itemLimit],
+                                        ] as [string, number][]).filter(([, v]) => v > 0).map(([lbl, val]) => (
+                                          <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                            <span style={{ fontSize: 10, color: C.textMuted }}>↳ {lbl}</span>
+                                            <span style={{ fontSize: 10, color: C.textSec, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Пояснения */}
+                                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8, lineHeight: 1.6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
+                                      <div>Активность = создали или обновили вишлист или желание</div>
+                                      <div>Переход по ссылке = открыли вишлист, которым поделились</div>
+                                      <div>Забронировали = создали бронь в чужом вишлисте</div>
                                     </div>
                                   </div>
                                 )}

@@ -1002,6 +1002,19 @@ model SantaExitRequest {
   @@index([participantId])
 }
 
+// Lightweight analytics event log — used for god-mode dashboard metrics.
+// Only specific server-side events are persisted here (feature gate hits, etc.).
+// Not a full event sourcing system — only what the god-stats endpoint queries.
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  event     String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([userId, event])
+}
+
 // Santa-flow item reservation: tracks which wishlist items the giver has "claimed"
 // for their Secret Santa assignment. Only Santa-flow reservations drive the
 // SELECTED_FROM_WISHLIST gift status and auto-sync back to PENDING on removal.
