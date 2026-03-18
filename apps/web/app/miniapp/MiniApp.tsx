@@ -10237,7 +10237,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'santa-receiver-wishlist' && currentSantaCampaign && (() => {
         const camp = currentSantaCampaign.campaign;
         const wl = santaReceiverWishlist;
-        const isReadOnly = camp.status !== 'ACTIVE';
+        const giftStatusTerminal = ['SENT', 'RECEIVED'].includes(wl?.giftStatus ?? '');
+        const isReadOnly = camp.status !== 'ACTIVE' || giftStatusTerminal;
 
         const handleReserve = async (itemId: string) => {
           if (isReadOnly) return;
@@ -10324,6 +10325,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   {(wl!.myReservations.length === 1)
                     ? t('santa_wishlist_my_reservations_one', locale).replace('{{title}}', wl!.myReservations[0]?.title ?? '')
                     : t('santa_wishlist_my_reservations_many', locale).replace('{{n}}', String(wl!.myReservations.length))}
+                </div>
+              </div>
+            )}
+
+            {/* Read-only banner for terminal gift status */}
+            {giftStatusTerminal && (
+              <div style={{ background: C.surface, padding: '10px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 15 }}>🔒</span>
+                <div style={{ fontSize: 13, color: C.textMuted }}>
+                  {t('santa_wishlist_read_only_sent', locale)}
                 </div>
               </div>
             )}
