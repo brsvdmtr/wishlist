@@ -335,6 +335,10 @@ type GodStats = {
       comments: number; hints: number; urlImport: number;
     };
   };
+  errors24h?: {
+    total: number; affectedUsers: number;
+    top: { method: string; route: string; status: number; count: number }[];
+  };
   generatedAt: string;
 };
 
@@ -7125,7 +7129,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       { label: 'Все пользователи',                    value: godStats.funnel.totalUsers },
                       { label: 'Создали хотя бы один вишлист',        value: godStats.funnel.usersWithWishlist },
                       { label: 'Создали хотя бы одно желание',        value: godStats.funnel.usersWithItem },
-                      { label: 'Ссылку открыли хотя бы раз',         value: godStats.funnel.usersWithLinkOpen ?? godStats.funnel.usersWhoInitiatedShare },
+                      { label: 'Перешли хотя бы по одной ссылке',    value: godStats.funnel.usersWithLinkOpen ?? godStats.funnel.usersWhoInitiatedShare },
                       { label: 'Забронировали хотя бы один подарок', value: godStats.funnel.usersWithReservation },
                     ] : [];
 
@@ -7254,7 +7258,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                     {/* Engagement totals */}
                                     {([
                                       ['Комментариев', e.totalComments],
-                                      ['Подсказок',    e.totalHints],
                                       ['Подписок',     e.totalWishlistSubs],
                                     ] as [string, number][]).map(([lbl, val]) => (
                                       <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
@@ -7280,6 +7283,38 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                       ))}
                                     </div>
 
+                                    {/* Ошибки за 24ч */}
+                                    {godStats.errors24h && (() => {
+                                      const errs = godStats.errors24h!;
+                                      return (
+                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
+                                          <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>
+                                            Ошибки за 24 часа
+                                          </div>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                                            <span style={{ fontSize: 11, color: C.textMuted }}>Всего ошибок</span>
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{errs.total}</span>
+                                          </div>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: errs.total > 0 ? 5 : 0 }}>
+                                            <span style={{ fontSize: 11, color: C.textMuted }}>Пользователей затронуто</span>
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{errs.affectedUsers}</span>
+                                          </div>
+                                          {errs.total === 0 ? (
+                                            <div style={{ fontSize: 10, color: C.textMuted, marginTop: 3 }}>Ошибок за последние 24 часа не было</div>
+                                          ) : (
+                                            errs.top.map((err, i) => (
+                                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                                <span style={{ fontSize: 10, color: C.textMuted, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                  {err.method} {err.route} · {err.status}
+                                                </span>
+                                                <span style={{ fontSize: 10, color: C.textSec, fontVariantNumeric: 'tabular-nums', flexShrink: 0, marginLeft: 6 }}>{err.count}</span>
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+
                                     {/* PRO ограничения за 24ч */}
                                     {pro && (
                                       <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
@@ -7291,7 +7326,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                           <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{pro.totalHits}</span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                                          <span style={{ fontSize: 11, color: C.textMuted }}>Пользователей столкнулись</span>
+                                          <span style={{ fontSize: 11, color: C.textMuted }}>Столкнулись с ограничениями</span>
                                           <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{pro.uniqueUsers}</span>
                                         </div>
                                         {([
