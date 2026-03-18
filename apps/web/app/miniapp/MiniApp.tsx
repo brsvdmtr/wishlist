@@ -4201,7 +4201,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       onClick={() => {
                         setHomeTab(seg.tab);
                         if (seg.tab === 'wishes') void loadAllItems();
-                        else if (seg.tab === 'reservations' && reservations.length === 0) void loadReservations();
+                        else if (seg.tab === 'reservations' && reservations.length === 0 && santaReservationItems.length === 0) void loadReservations();
                       }}
                       style={{
                         flex: 1, background: 'none', border: 'none', cursor: 'pointer',
@@ -4624,19 +4624,77 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {/* ── RESERVATIONS TAB ────────────────────────────────────── */}
           {homeTab === 'reservations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {reservationsLoading && reservations.length === 0 && (
+              {reservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                   <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
                   <div style={{ fontSize: 14, color: C.textMuted }}>{t('reservations_loading', locale)}</div>
                 </div>
               )}
-              {!reservationsLoading && reservations.length === 0 && (
+              {!reservationsLoading && !santaReservationItemsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('reservations_empty_title', locale)}</div>
                   <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('reservations_empty_hint', locale)}</div>
                 </div>
               )}
+              {/* Santa reservations sub-section */}
+              {santaReservationItems.length > 0 && (() => {
+                const campGroups: Record<string, { campaignTitle: string; campaignStatus: string; items: SantaReservationItem[] }> = {};
+                for (const r of santaReservationItems) {
+                  const g = campGroups[r.campaignId] ?? (campGroups[r.campaignId] = { campaignTitle: r.campaignTitle, campaignStatus: r.campaignStatus, items: [] });
+                  g.items.push(r);
+                }
+                let si = 0;
+                return (
+                  <div style={{ marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                      🎅 {t('santa_reservations_section_title', locale)}
+                    </div>
+                    {Object.entries(campGroups).map(([campaignId, group]) => (
+                      <div key={campaignId} style={{ marginBottom: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: font }}>{group.campaignTitle}</div>
+                          {group.campaignStatus === 'COMPLETED' && (
+                            <div style={{ fontSize: 10, fontWeight: 600, color: C.textMuted, background: C.surface, borderRadius: 5, padding: '2px 5px' }}>
+                              {t('santa_reservations_completed', locale)}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {group.items.map((item) => {
+                            const delay = si * 0.06; si++;
+                            return (
+                              <ReservationCard
+                                key={item.id}
+                                item={item as unknown as ReservationItem}
+                                animDelay={delay}
+                                locale={locale}
+                                onTap={async () => {
+                                  setSantaReceiverWishlistLoading(true);
+                                  try {
+                                    const [detailRes, wlRes] = await Promise.all([
+                                      tgFetch(`/tg/santa/campaigns/${campaignId}`),
+                                      tgFetch(`/tg/santa/campaigns/${campaignId}/inbound/wishlist`),
+                                    ]);
+                                    if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                                    if (wlRes.ok) setSantaReceiverWishlist(await wlRes.json() as typeof santaReceiverWishlist);
+                                    setScreen('santa-receiver-wishlist');
+                                  } catch {
+                                    pushToast(t('toast_error_generic', locale), 'error');
+                                  } finally {
+                                    setSantaReceiverWishlistLoading(false);
+                                  }
+                                }}
+                                onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveSantaItem(item))}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               {reservations.length > 0 && (() => {
                 const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: ReservationItem[] }> = {};
                 for (const r of reservations) {
