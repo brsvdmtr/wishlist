@@ -411,6 +411,16 @@ function normalizeTitle(raw: string | null | undefined): string {
   return el.value.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+type SantaItemReservationState = 'available' | 'reserved-by-me' | 'reserved-by-other';
+function getSantaItemReservationState(
+  status: string,
+  reservedByActorHash: string | null,
+  myActorHash: string | null,
+): SantaItemReservationState {
+  if (status !== 'reserved') return 'available';
+  return (myActorHash && reservedByActorHash === myActorHash) ? 'reserved-by-me' : 'reserved-by-other';
+}
+
 /** Auto-size a textarea to its content height.
  *  IMPORTANT: must use height:'0px' (not 'auto') before reading scrollHeight.
  *  With height:'auto' the browser renders rows=2 intrinsic height (~68px) which
@@ -1446,6 +1456,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [reservationsCount, setReservationsCount] = useState(0);
   const [reservationsLoading, setReservationsLoading] = useState(false);
   const [fromReservations, setFromReservations] = useState(false);
+  const [santaDetailContext, setSantaDetailContext] = useState<{
+    source: 'reservation' | 'receiver-wishlist';
+    campaignId: string;
+    campaignTitle: string;
+    campaignStatus: string;
+    giftStatus: string;
+  } | null>(null);
   // Santa reservations (items reserved via Secret Santa assignment)
   const [santaReservationItems, setSantaReservationItems] = useState<SantaReservationItem[]>([]);
   const [santaReservationItemsLoading, setSantaReservationItemsLoading] = useState(false);
@@ -2802,7 +2819,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       }
     } else if (screen === 'guest-item-detail') {
       setViewingItem(null);
-      if (homeReturnTab !== null) {
+      const ctx = santaDetailContext;
+      setSantaDetailContext(null);
+      if (ctx?.source === 'receiver-wishlist') {
+        setScreen('santa-receiver-wishlist');
+      } else if (homeReturnTab !== null) {
         const tab = homeReturnTab;
         setHomeReturnTab(null);
         setHomeTab(tab);
@@ -4056,18 +4077,91 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   };
 
-  const handleUnreserveSantaItem = async (item: SantaReservationItem) => {
+  const handleUnreserveSantaItem = async (item: SantaReservationItem, onSuccess?: () => void) => {
     setLoading(true);
     try {
       const res = await tgFetch(`/tg/santa/campaigns/${item.campaignId}/inbound/reserve/${item.id}`, { method: 'DELETE' });
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setSantaReservationItems((prev) => prev.filter((r) => r.id !== item.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
+      setProfileStats((prev) => prev ? { ...prev, reservedByMe: Math.max(0, prev.reservedByMe - 1) } : prev);
       pushToast(t('unreserve_success', locale), 'success');
+      onSuccess?.();
     } finally {
       setLoading(false);
     }
   };
+
+  const handleSantaReceiverReserve = useCallback(async (itemId: string) => {
+    const campId = currentSantaCampaign?.campaign.id;
+    if (!campId) return;
+    setSantaWishlistReservingId(itemId);
+    try {
+      const r = await tgFetch(`/tg/santa/campaigns/${campId}/inbound/reserve`, {
+        method: 'POST', body: JSON.stringify({ itemId }),
+      });
+      if (r.ok) {
+        const data = await r.json() as { myReservations: { id: string; title: string }[] };
+        setSantaReceiverWishlist(prev => prev ? {
+          ...prev,
+          myReservations: data.myReservations,
+          items: prev.items.map(it => ({ ...it, reservedByMe: data.myReservations.some(rv => rv.id === it.id) })),
+        } : prev);
+        setCurrentSantaCampaign(prev => prev?.myAssignment ? {
+          ...prev,
+          myAssignment: { ...prev.myAssignment, reservedItems: data.myReservations,
+            giftStatus: data.myReservations.length > 0 ? 'SELECTED_FROM_WISHLIST' : prev.myAssignment.giftStatus },
+        } : prev);
+        setViewingItem(prev => prev?.id === itemId
+          ? { ...prev, status: 'reserved', reservedByActorHash: myActorHashRef.current } as GuestItem
+          : prev);
+      } else { pushToast(t('toast_error_generic', locale), 'error'); }
+    } catch { pushToast(t('toast_error_generic', locale), 'error'); }
+    finally { setSantaWishlistReservingId(null); }
+  }, [tgFetch, currentSantaCampaign, locale]);
+
+  const handleSantaReceiverUnreserve = useCallback(async (itemId: string) => {
+    const campId = currentSantaCampaign?.campaign.id;
+    if (!campId) return;
+    setSantaWishlistReservingId(itemId);
+    try {
+      const r = await tgFetch(`/tg/santa/campaigns/${campId}/inbound/reserve/${itemId}`, { method: 'DELETE' });
+      if (r.ok) {
+        const data = await r.json() as { myReservations: { id: string; title: string }[] };
+        setSantaReceiverWishlist(prev => prev ? {
+          ...prev,
+          myReservations: data.myReservations,
+          items: prev.items.map(it => ({ ...it, reservedByMe: data.myReservations.some(rv => rv.id === it.id) })),
+        } : prev);
+        setCurrentSantaCampaign(prev => prev?.myAssignment ? {
+          ...prev,
+          myAssignment: { ...prev.myAssignment, reservedItems: data.myReservations,
+            giftStatus: data.myReservations.length === 0 ? 'PENDING' : prev.myAssignment.giftStatus },
+        } : prev);
+        setViewingItem(prev => prev?.id === itemId
+          ? { ...prev, status: 'available', reservedByActorHash: null } as GuestItem
+          : prev);
+      } else { pushToast(t('toast_error_generic', locale), 'error'); }
+    } catch { pushToast(t('toast_error_generic', locale), 'error'); }
+    finally { setSantaWishlistReservingId(null); }
+  }, [tgFetch, currentSantaCampaign, locale]);
+
+  const openSantaCampaignFromDetail = useCallback(async (ctx: NonNullable<typeof santaDetailContext>) => {
+    setSantaDetailContext(null);
+    setViewingItem(null);
+    setFromReservations(false);
+    if (ctx.source === 'receiver-wishlist' && currentSantaCampaign?.campaign.id === ctx.campaignId) {
+      setScreen('santa-campaign');
+      return;
+    }
+    setLoading(true);
+    try {
+      const r = await tgFetch(`/tg/santa/campaigns/${ctx.campaignId}`);
+      if (r.ok) { setCurrentSantaCampaign(await r.json() as SantaCampaignDetail); setScreen('santa-campaign'); }
+      else pushToast(t('toast_error_generic', locale), 'error');
+    } catch { pushToast(t('toast_error_generic', locale), 'error'); }
+    finally { setLoading(false); }
+  }, [tgFetch, currentSantaCampaign, locale]);
 
   const fmtDeadline = (d: string | null) => {
     if (!d) return null;
@@ -5105,22 +5199,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             item={item as unknown as ReservationItem}
                             animDelay={delay}
                             locale={locale}
-                            onTap={async () => {
-                              // Open receiver wishlist — most relevant Santa context
-                              setSantaReceiverWishlistLoading(true);
-                              try {
-                                const [detailRes, wlRes] = await Promise.all([
-                                  tgFetch(`/tg/santa/campaigns/${campaignId}`),
-                                  tgFetch(`/tg/santa/campaigns/${campaignId}/inbound/wishlist`),
-                                ]);
-                                if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
-                                if (wlRes.ok) setSantaReceiverWishlist(await wlRes.json() as typeof santaReceiverWishlist);
-                                setScreen('santa-receiver-wishlist');
-                              } catch {
-                                pushToast(t('toast_error_generic', locale), 'error');
-                              } finally {
-                                setSantaReceiverWishlistLoading(false);
-                              }
+                            onTap={() => {
+                              setSantaDetailContext({
+                                source: 'reservation',
+                                campaignId: item.campaignId,
+                                campaignTitle: item.campaignTitle,
+                                campaignStatus: item.campaignStatus,
+                                giftStatus: item.giftStatus,
+                              });
+                              setViewingItem({ ...item, reservedByDisplayName: null, reservedByActorHash: myActorHashRef.current } as unknown as GuestItem);
+                              setFromReservations(true);
+                              setScreen('guest-item-detail');
                             }}
                             onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveSantaItem(item))}
                           />
@@ -5669,6 +5758,31 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
           {/* Content */}
           <div style={{ padding: '20px 20px 0' }}>
+            {/* Santa context block */}
+            {santaDetailContext && (
+              <div style={{
+                background: 'rgba(124,106,255,0.08)', border: '1px solid rgba(124,106,255,0.2)',
+                borderRadius: 12, padding: '10px 14px', marginBottom: 16,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+              }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    🎅 Тайный Санта
+                  </div>
+                  <div style={{ fontSize: 13, color: C.text }}>{santaDetailContext.campaignTitle}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted }}>
+                    {t(`santa_gift_status_${santaDetailContext.giftStatus.toLowerCase()}` as never, locale) || santaDetailContext.giftStatus}
+                  </div>
+                </div>
+                <button
+                  onClick={() => void openSantaCampaignFromDetail(santaDetailContext)}
+                  style={{ fontSize: 12, color: C.accent, background: C.accentSoft, border: 'none',
+                    borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontFamily: font }}
+                >
+                  Открыть кампанию
+                </button>
+              </div>
+            )}
             {/* Title (left) + Meta-block: price + priority centered on same axis (right) */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
               <h1 style={{
@@ -5734,36 +5848,101 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             {/* Action zone */}
             <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {viewingItem.status === 'available' && (
-                <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }}
-                  style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
-                  {t('reserve_btn', locale)}
-                </button>
-              )}
-              {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && (
+              {santaDetailContext ? (() => {
+                const rState = getSantaItemReservationState(
+                  viewingItem.status,
+                  (viewingItem as GuestItem).reservedByActorHash ?? null,
+                  myActorHashRef.current,
+                );
+                if (santaDetailContext.source === 'reservation') {
+                  return (
+                    <>
+                      <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
+                        {t('reserved_by_me', locale)}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const si = santaReservationItems.find(i => i.id === viewingItem.id);
+                          if (si) setPendingUnreserveAction(() => () => handleUnreserveSantaItem(si, () => {
+                            setSantaDetailContext(null);
+                            setViewingItem(null);
+                            setFromReservations(false);
+                            setScreen('my-reservations');
+                          }));
+                        }}
+                        style={{
+                          ...btnBase, width: '100%', background: C.redSoft, color: C.red,
+                          border: '1px solid rgba(248,113,113,0.3)', borderRadius: 14,
+                          padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                        }}
+                      >
+                        {t('cancel_reservation', locale)}
+                      </button>
+                    </>
+                  );
+                } else {
+                  const isReserving = santaWishlistReservingId === viewingItem.id;
+                  const isReadOnly = !['OPEN', 'LOCKED', 'ACTIVE'].includes(santaDetailContext.campaignStatus);
+                  return (
+                    <>
+                      {rState === 'reserved-by-me' && (
+                        <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
+                          {t('reserved_by_me', locale)}
+                        </span>
+                      )}
+                      {rState === 'reserved-by-other' && (
+                        <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
+                          {t('already_reserved', locale)}
+                        </span>
+                      )}
+                      {(rState === 'available' || rState === 'reserved-by-me') && !isReadOnly && (
+                        <button
+                          disabled={isReserving}
+                          onClick={() => rState === 'reserved-by-me'
+                            ? void handleSantaReceiverUnreserve(viewingItem.id)
+                            : void handleSantaReceiverReserve(viewingItem.id)}
+                          style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16, opacity: isReserving ? 0.6 : 1 }}
+                        >
+                          {isReserving ? '…' : rState === 'reserved-by-me' ? t('cancel_reservation', locale) : t('reserve_btn', locale)}
+                        </button>
+                      )}
+                    </>
+                  );
+                }
+              })() : (
                 <>
-                  <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
-                    {t('reserved_by_me', locale)}
-                  </span>
-                  <button onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
-                    style={{
-                      ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                      border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 14,
-                      padding: '12px 16px', fontSize: 14, fontWeight: 500,
-                    }}>
-                    {t('cancel_reservation', locale)}
-                  </button>
+                  {viewingItem.status === 'available' && (
+                    <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }}
+                      style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
+                      {t('reserve_btn', locale)}
+                    </button>
+                  )}
+                  {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && (
+                    <>
+                      <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
+                        {t('reserved_by_me', locale)}
+                      </span>
+                      <button onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
+                        style={{
+                          ...btnBase, width: '100%', background: C.redSoft, color: C.red,
+                          border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 14,
+                          padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                        }}>
+                        {t('cancel_reservation', locale)}
+                      </button>
+                    </>
+                  )}
+                  {viewingItem.status === 'reserved' && !(!!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current) && (
+                    <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
+                      {t('already_reserved', locale)}
+                    </span>
+                  )}
+                  {viewingItem.status === 'purchased' && (
+                    <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
+                      {t('status_gifted', locale)}
+                    </span>
+                  )}
                 </>
-              )}
-              {viewingItem.status === 'reserved' && !(!!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current) && (
-                <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
-                  {t('already_reserved', locale)}
-                </span>
-              )}
-              {viewingItem.status === 'purchased' && (
-                <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
-                  {t('status_gifted', locale)}
-                </span>
               )}
             </div>
 
@@ -10760,11 +10939,38 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   const isReserving = santaWishlistReservingId === item.id;
 
                   return (
-                    <div key={item.id} style={{
-                      background: C.card, borderRadius: 12, padding: '12px 14px', marginBottom: 10,
-                      border: reservedByMe ? `2px solid ${C.accent}` : `1px solid ${C.border}`,
-                      opacity: reservedByOther ? 0.6 : 1,
-                    }}>
+                    <div key={item.id}
+                      style={{
+                        background: C.card, borderRadius: 12, padding: '12px 14px', marginBottom: 10,
+                        border: reservedByMe ? `2px solid ${C.accent}` : `1px solid ${C.border}`,
+                        opacity: reservedByOther ? 0.6 : 1,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => {
+                        setSantaDetailContext({
+                          source: 'receiver-wishlist',
+                          campaignId: camp.id,
+                          campaignTitle: camp.title,
+                          campaignStatus: camp.status,
+                          giftStatus: wl?.giftStatus ?? '',
+                        });
+                        setViewingItem({
+                          id: item.id,
+                          title: item.title,
+                          description: null,
+                          url: item.url,
+                          price: null,
+                          imageUrl: item.imageUrl,
+                          priority: (item.priority as 1 | 2 | 3) ?? 2,
+                          position: 0,
+                          status: item.status.toLowerCase() as GuestItem['status'],
+                          currency: (item.currency as GuestItem['currency']) ?? 'RUB',
+                          reservedByDisplayName: null,
+                          reservedByActorHash: reservedByMe ? myActorHashRef.current : null,
+                        } as GuestItem);
+                        setScreen('guest-item-detail');
+                      }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                         {/* Item image */}
                         {item.imageUrl && (
@@ -10790,7 +10996,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         {!isReadOnly && !reservedByOther && (
                           <button
                             disabled={isReserving}
-                            onClick={() => reservedByMe ? handleUnreserve(item.id) : handleReserve(item.id)}
+                            onClick={(e) => { e.stopPropagation(); void (reservedByMe ? handleSantaReceiverUnreserve(item.id) : handleSantaReceiverReserve(item.id)); }}
                             style={{
                               flexShrink: 0,
                               background: reservedByMe ? C.surface : C.accent,
@@ -10808,6 +11014,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         {item.url && (
                           <a
                             href={item.url} target="_blank" rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
                             style={{ flexShrink: 0, fontSize: 11, color: C.accent, textDecoration: 'none', padding: '6px 0' }}
                           >
                             🔗
