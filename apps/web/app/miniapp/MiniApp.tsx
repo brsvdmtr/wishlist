@@ -1658,7 +1658,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [santaPollCreateSubmitting, setSantaPollCreateSubmitting] = useState(false);
   // Exclusions state (Batch 5.1)
   type ExclusionPair = { id: string; userId1: string; name1: string; userId2: string; name2: string };
-  type ExclusionGroup = { id: string; label: string; members: { userId: string; displayName: string; avatarUrl: string | null }[] };
+  type ExclusionGroup = { id: string; label: string; activeCount: number; members: { userId: string; displayName: string; avatarUrl: string | null; isStale: boolean }[] };
   const [santaExclPairs, setSantaExclPairs] = useState<ExclusionPair[]>([]);
   const [santaExclGroups, setSantaExclGroups] = useState<ExclusionGroup[]>([]);
   const [santaExclLoading, setSantaExclLoading] = useState(false);
@@ -10167,14 +10167,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         </button>
                       </div>
 
+                      {/* Warn if fewer than 2 active members — group has no draw effect */}
+                      {group.activeCount < 2 && (
+                        <div style={{ fontSize: 11, color: C.orange ?? C.textMuted, marginBottom: 6 }}>
+                          ⚠️ {locale === 'ru'
+                            ? 'Группа не влияет на жеребьёвку (нужно ≥ 2 активных участника)'
+                            : 'Group has no effect on draw (need ≥ 2 active members)'}
+                        </div>
+                      )}
+
                       {group.members.map(member => {
-                        const participant = joinedParticipants.find(p => p.userId === member.userId);
-                        const name = member.displayName || participant?.displayName || member.userId;
+                        const name = member.displayName || member.userId;
                         return (
-                          <div key={member.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                          <div key={member.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', opacity: member.isStale ? 0.45 : 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <UserAvatar avatarUrl={member.avatarUrl} name={name} size={24} accent={C.accent} />
-                              <span style={{ fontSize: 13, color: C.textSec }}>{name}</span>
+                              <span style={{ fontSize: 13, color: member.isStale ? C.textMuted : C.textSec }}>
+                                {name}{member.isStale ? (locale === 'ru' ? ' (вышел)' : ' (left)') : ''}
+                              </span>
                             </div>
                             <button
                               onClick={() => void removeMember(group.id, member.userId)}
@@ -10184,12 +10194,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         );
                       })}
 
-                      <button
-                        onClick={() => { setSantaExclAddMemberGroupId(group.id); setSantaExclAddMemberUserId(''); }}
-                        style={{ background: 'none', border: 'none', color: C.accent, fontSize: 13, cursor: 'pointer', padding: '6px 0 0', fontFamily: font }}
-                      >
-                        + {t('santa_excl_member_add', locale)}
-                      </button>
+                      {isPro && (
+                        <button
+                          onClick={() => { setSantaExclAddMemberGroupId(group.id); setSantaExclAddMemberUserId(''); }}
+                          style={{ background: 'none', border: 'none', color: C.accent, fontSize: 13, cursor: 'pointer', padding: '6px 0 0', fontFamily: font }}
+                        >
+                          + {t('santa_excl_member_add', locale)}
+                        </button>
+                      )}
                     </div>
                   ))}
 

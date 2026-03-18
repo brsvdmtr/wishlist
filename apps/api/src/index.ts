@@ -4989,8 +4989,13 @@ function exclusionKey(userIdA: string, userIdB: string): string {
  *  - groups: raw group data used to annotate infeasible-draw errors with group labels
  *
  * Groups expand to C(n,2) pairs in-memory — no SantaExclusion rows are created.
+ *
+ * activeUserIds: Set of userIds who are currently JOINED in the campaign.
+ * Group members who are no longer JOINED (left / removed) are silently skipped
+ * during pair expansion so stale membership never blocks a valid draw.
+ * The raw groups list returned still contains ALL members for UI/annotation use.
  */
-async function loadExclusionSet(campaignId: string): Promise<{
+async function loadExclusionSet(campaignId: string, activeUserIds: Set<string>): Promise<{
   exclusionSet: Set<string>;
   groups: { id: string; label: string; members: { userId: string }[] }[];
 }> {
@@ -5008,9 +5013,11 @@ async function loadExclusionSet(campaignId: string): Promise<{
   // Start with individual pair exclusions
   const allPairs: { userId1: string; userId2: string }[] = [...individual];
 
-  // Expand each group: every pair of members becomes an exclusion pair
+  // Expand each group: only expand members who are still JOINED participants.
+  // Stale members (left / removed / deleted) are excluded from pair generation
+  // but kept in the raw `groups` return value for UI display.
   for (const group of groups) {
-    const members = group.members.map(m => m.userId);
+    const members = group.members.map(m => m.userId).filter(uid => activeUserIds.has(uid));
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
         allPairs.push({ userId1: members[i]!, userId2: members[j]! });
@@ -5373,7 +5380,8 @@ tgRouter.get('/santa/campaigns/:id/draw/validate', asyncHandler(async (req, res)
     return res.json({ feasible: false, reason: 'not_enough_participants', minRequired: 2, actual: participants.length });
   }
 
-  const { exclusionSet, groups } = await loadExclusionSet(campaignId);
+  const activeUserIds = new Set(participants.map(p => p.userId));
+  const { exclusionSet, groups } = await loadExclusionSet(campaignId, activeUserIds);
   const { feasible, problematic } = checkDrawFeasibility(participants, exclusionSet);
 
   if (feasible) {
@@ -5425,7 +5433,8 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
     return res.status(422).json({ error: 'not_enough_participants', minRequired: 2, actual: participants.length });
   }
 
-  const { exclusionSet, groups: excGroups } = await loadExclusionSet(campaignId);
+  const activeUserIds = new Set(participants.map(p => p.userId));
+  const { exclusionSet, groups: excGroups } = await loadExclusionSet(campaignId, activeUserIds);
 
   // 3. Pre-check feasibility before acquiring lock
   const { feasible, problematic } = checkDrawFeasibility(participants, exclusionSet);
@@ -5710,8 +5719,8 @@ tgRouter.get('/santa/campaigns/:id/exclusions', asyncHandler(async (req, res) =>
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
-  // Load individual exclusions + groups in parallel; enrich pairs with display names
-  const [rawExclusions, groups] = await Promise.all([
+  // Load individual exclusions + groups + joined participants in parallel
+  const [rawExclusions, groups, joinedParticipants] = await Promise.all([
     prisma.santaExclusion.findMany({ where: { campaignId }, orderBy: { createdAt: 'asc' } }),
     prisma.santaExclusionGroup.findMany({
       where: { campaignId },
@@ -5724,7 +5733,13 @@ tgRouter.get('/santa/campaigns/:id/exclusions', asyncHandler(async (req, res) =>
         },
       },
     }),
+    prisma.santaParticipant.findMany({
+      where: { campaignId, status: 'JOINED' },
+      select: { userId: true },
+    }),
   ]);
+
+  const joinedUserIds = new Set(joinedParticipants.map(p => p.userId));
 
   // Resolve display names for individual pair exclusions
   const allUserIds = new Set([...rawExclusions.map(e => e.userId1), ...rawExclusions.map(e => e.userId2)]);
@@ -5753,7 +5768,12 @@ tgRouter.get('/santa/campaigns/:id/exclusions', asyncHandler(async (req, res) =>
         userId: m.userId,
         displayName: m.user.profile?.displayName || m.user.firstName || m.userId,
         avatarUrl: m.user.profile?.avatarUrl ?? null,
+        // isStale: true means this member left/was removed; still shown in UI but
+        // excluded from draw expansion by loadExclusionSet(activeUserIds) at draw time
+        isStale: !joinedUserIds.has(m.userId),
       })),
+      // activeCount: how many members are still JOINED — UI can warn if < 2
+      activeCount: g.members.filter(m => joinedUserIds.has(m.userId)).length,
     })),
   });
 }));
@@ -5893,7 +5913,7 @@ tgRouter.delete('/santa/campaigns/:id/exclusions/groups/:gid', asyncHandler(asyn
   return res.json({ ok: true });
 }));
 
-// POST /tg/santa/campaigns/:id/exclusions/groups/:gid/members — add participant to group (owner only)
+// POST /tg/santa/campaigns/:id/exclusions/groups/:gid/members — add participant to group (owner + PRO only)
 tgRouter.post('/santa/campaigns/:id/exclusions/groups/:gid/members', asyncHandler(async (req, res) => {
   const user = await getOrCreateTgUser(req.tgUser!);
   const campaignId = req.params.id ?? '';
@@ -5905,6 +5925,9 @@ tgRouter.post('/santa/campaigns/:id/exclusions/groups/:gid/members', asyncHandle
   const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+  const ent = await getUserEntitlement(user.id);
+  if (!ent.isPro) return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusion_groups' });
 
   const group = await prisma.santaExclusionGroup.findUnique({ where: { id: gid } });
   if (!group || group.campaignId !== campaignId) return res.status(404).json({ error: 'Group not found' });
