@@ -1743,6 +1743,57 @@ tgRouter.get(
   }),
 );
 
+// GET /tg/santa/my-reservations — Santa items reserved by the current user (giver view)
+// Excludes: campaign CANCELLED, assignment giftStatus RECEIVED or ORPHANED (both terminal).
+// SELECTED_OUTSIDE already deletes SantaItemReservation rows in the status-change handler,
+// so those never appear here naturally.
+tgRouter.get('/santa/my-reservations', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+
+  const rows = await prisma.santaItemReservation.findMany({
+    where: {
+      assignment: {
+        giver: { userId: user.id },
+        giftStatus: { notIn: ['RECEIVED', 'ORPHANED'] },
+        round: { campaign: { status: { not: 'CANCELLED' } } },
+      },
+    },
+    select: {
+      assignmentId: true,
+      item: {
+        select: {
+          id: true, wishlistId: true, title: true, url: true, priceText: true,
+          imageUrl: true, priority: true, status: true, description: true,
+          sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+        },
+      },
+      assignment: {
+        select: {
+          id: true,
+          giftStatus: true,
+          round: {
+            select: {
+              campaign: { select: { id: true, title: true, status: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const reservations = rows.map(r => ({
+    ...mapTgItem(r.item),
+    campaignId: r.assignment.round.campaign.id,
+    campaignTitle: r.assignment.round.campaign.title,
+    campaignStatus: r.assignment.round.campaign.status,
+    giftStatus: r.assignment.giftStatus,
+    assignmentId: r.assignmentId,
+  }));
+
+  return res.json({ reservations });
+}));
+
 // POST /tg/wishlists/:id/share-token — get or create share token for a wishlist (owner only)
 tgRouter.post(
   '/wishlists/:id/share-token',

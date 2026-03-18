@@ -218,6 +218,14 @@ type ReservationItem = Item & {
   unreadComments: number;
 };
 
+type SantaReservationItem = Item & {
+  campaignId: string;
+  campaignTitle: string;
+  campaignStatus: string;
+  giftStatus: string;
+  assignmentId: string;
+};
+
 type HomeTab = 'wishlists' | 'wishes' | 'reservations';
 
 type AllItem = Item & {
@@ -1429,6 +1437,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [reservationsCount, setReservationsCount] = useState(0);
   const [reservationsLoading, setReservationsLoading] = useState(false);
   const [fromReservations, setFromReservations] = useState(false);
+  // Santa reservations (items reserved via Secret Santa assignment)
+  const [santaReservationItems, setSantaReservationItems] = useState<SantaReservationItem[]>([]);
+  const [santaReservationItemsLoading, setSantaReservationItemsLoading] = useState(false);
 
   // Home hub tab navigation
   const [homeTab, setHomeTab] = useState<HomeTab>('wishlists');
@@ -1932,16 +1943,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   const loadReservations = useCallback(async () => {
     setReservationsLoading(true);
+    setSantaReservationItemsLoading(true);
     try {
-      const res = await tgFetch('/tg/reservations');
-      if (!res.ok) return;
-      const json = await res.json() as { reservations: ReservationItem[] };
-      setReservations(json.reservations);
-      setReservationsCount(json.reservations.length);
+      const [res, santaRes] = await Promise.all([
+        tgFetch('/tg/reservations'),
+        tgFetch('/tg/santa/my-reservations'),
+      ]);
+      if (res.ok) {
+        const json = await res.json() as { reservations: ReservationItem[] };
+        setReservations(json.reservations);
+        const santaJson = santaRes.ok ? await santaRes.json() as { reservations: SantaReservationItem[] } : { reservations: [] };
+        setSantaReservationItems(santaJson.reservations);
+        setReservationsCount(json.reservations.length + santaJson.reservations.length);
+      }
     } catch {
       // silent
     } finally {
       setReservationsLoading(false);
+      setSantaReservationItemsLoading(false);
     }
   }, [tgFetch]);
 
@@ -4016,6 +4035,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   };
 
+  const handleUnreserveSantaItem = async (item: SantaReservationItem) => {
+    setLoading(true);
+    try {
+      const res = await tgFetch(`/tg/santa/campaigns/${item.campaignId}/inbound/reserve/${item.id}`, { method: 'DELETE' });
+      if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
+      setSantaReservationItems((prev) => prev.filter((r) => r.id !== item.id));
+      setReservationsCount((prev) => Math.max(0, prev - 1));
+      pushToast(t('unreserve_success', locale), 'success');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fmtDeadline = (d: string | null) => {
     if (!d) return null;
     return new Date(d).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' });
@@ -4939,14 +4971,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </p>
           </div>
 
-          {reservationsLoading && reservations.length === 0 && (
+          {reservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px 24px' }}>
               <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
               <div style={{ fontSize: 14, color: C.textMuted }}>{t('reservations_loading', locale)}</div>
             </div>
           )}
 
-          {!reservationsLoading && reservations.length === 0 && (
+          {!reservationsLoading && !santaReservationItemsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px 24px' }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('reservations_empty_title', locale)}</div>
@@ -4955,6 +4987,72 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             </div>
           )}
+
+          {/* ── Santa reservations section ── */}
+          {santaReservationItems.length > 0 && (() => {
+            // Group by campaignId
+            const campGroups: Record<string, { campaignTitle: string; campaignStatus: string; items: SantaReservationItem[] }> = {};
+            for (const r of santaReservationItems) {
+              const g = campGroups[r.campaignId] ?? (campGroups[r.campaignId] = { campaignTitle: r.campaignTitle, campaignStatus: r.campaignStatus, items: [] });
+              g.items.push(r);
+            }
+            let santaIdx = 0;
+            return (
+              <div style={{ marginBottom: 28 }}>
+                {/* Section header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    🎅 {t('santa_reservations_section_title', locale)}
+                  </div>
+                </div>
+                {Object.entries(campGroups).map(([campaignId, group]) => (
+                  <div key={campaignId} style={{ marginBottom: 20 }}>
+                    {/* Campaign label */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{group.campaignTitle}</div>
+                      {group.campaignStatus === 'COMPLETED' && (
+                        <div style={{ fontSize: 11, fontWeight: 600, color: C.textMuted, background: C.surface, borderRadius: 6, padding: '2px 6px' }}>
+                          {t('santa_reservations_completed', locale)}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {group.items.map((item) => {
+                        const delay = santaIdx * 0.06;
+                        santaIdx++;
+                        return (
+                          <ReservationCard
+                            key={item.id}
+                            item={item as unknown as ReservationItem}
+                            animDelay={delay}
+                            locale={locale}
+                            onTap={async () => {
+                              // Open receiver wishlist — most relevant Santa context
+                              setSantaReceiverWishlistLoading(true);
+                              try {
+                                const [detailRes, wlRes] = await Promise.all([
+                                  tgFetch(`/tg/santa/campaigns/${campaignId}`),
+                                  tgFetch(`/tg/santa/campaigns/${campaignId}/inbound/wishlist`),
+                                ]);
+                                if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                                if (wlRes.ok) setSantaReceiverWishlist(await wlRes.json() as typeof santaReceiverWishlist);
+                                setScreen('santa-receiver-wishlist');
+                              } catch {
+                                pushToast(t('toast_error_generic', locale), 'error');
+                              } finally {
+                                setSantaReceiverWishlistLoading(false);
+                              }
+                            }}
+                            onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveSantaItem(item))}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {reservations.length > 0 && (() => {
             const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: ReservationItem[] }> = {};
