@@ -1580,6 +1580,26 @@ async function getItemRole(
 
 tgRouter.use(requireTelegramAuth);
 
+// Error-tracking middleware — records 4xx/5xx responses to AnalyticsEvent.
+// Fires on res.on('finish') so it never blocks the request path.
+// Excludes 401 (normal unauthenticated noise). Event format:
+//   error:{METHOD}:{STATUS}:{route}   e.g. error:POST:402:/tg/items
+// Route uses req.route.path (Express pattern) so IDs are grouped (:id, :campaignId, …).
+tgRouter.use((req, res, next) => {
+  res.on('finish', () => {
+    const status = res.statusCode;
+    if (status >= 400 && status !== 401) {
+      const route = req.route?.path ? (req.baseUrl + req.route.path) : req.path;
+      const method = req.method;
+      const userId = req.tgUser?.id ?? null;
+      prisma.analyticsEvent.create({
+        data: { event: `error:${method}:${status}:${route}`, userId },
+      }).catch(() => {});
+    }
+  });
+  next();
+});
+
 // GET /tg/wishlists — my wishlists
 tgRouter.get(
   '/wishlists',
@@ -4340,6 +4360,9 @@ tgRouter.get(
       proLimitTotalRows,
       proLimitUsersRows,
       proLimitByTypeRows,
+      errors24hTotal,
+      errors24hUsersRows,
+      errors24hTopRows,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { createdAt: { gte: cut24 } } }),
@@ -4419,6 +4442,19 @@ tgRouter.get(
         SELECT event, COUNT(*)::int AS count FROM "AnalyticsEvent"
         WHERE event LIKE 'feature_gate_hit_%' AND "createdAt" >= ${cut24}
         GROUP BY event`,
+      // Errors last 24h: total 4xx/5xx (excludes 401)
+      prisma.analyticsEvent.count({
+        where: { event: { startsWith: 'error:' }, createdAt: { gte: cut24 } },
+      }),
+      // Errors last 24h: unique affected users
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT "userId")::int AS count FROM "AnalyticsEvent"
+        WHERE event LIKE 'error:%' AND "createdAt" >= ${cut24} AND "userId" IS NOT NULL`,
+      // Errors last 24h: top 3 by frequency
+      prisma.$queryRaw<{ event: string; count: bigint }[]>`
+        SELECT event, COUNT(*)::int AS count FROM "AnalyticsEvent"
+        WHERE event LIKE 'error:%' AND "createdAt" >= ${cut24}
+        GROUP BY event ORDER BY count DESC LIMIT 3`,
     ]);
 
     const withWishlist = n(withWishlistRows[0]);
@@ -4473,6 +4509,21 @@ tgRouter.get(
           urlImport:     proByType['feature_gate_hit_url_import'] ?? 0,
         },
       },
+      errors24h: {
+        total: errors24hTotal,
+        affectedUsers: n(errors24hUsersRows[0]),
+        // Parse event format: "error:{METHOD}:{STATUS}:{route}" — route is last (may contain colons for :params)
+        top: errors24hTopRows.map(row => {
+          const parts = row.event.split(':');
+          // parts[0]='error', parts[1]=METHOD, parts[2]=STATUS, parts[3..]=route segments
+          return {
+            method: parts[1] ?? '',
+            status: Number(parts[2] ?? 0),
+            route: parts.slice(3).join(':'),
+            count: Number(row.count),
+          };
+        }),
+      },
       meta: {
         activeUserDef: 'users who created/updated a regular wishlist or item in the period',
         usersWhoInitiatedShareDef: 'users who opened share screen (shareToken generated via POST /share-token)',
@@ -4481,6 +4532,7 @@ tgRouter.get(
         wishlistsWithLinkOpenDef: 'distinct wishlists with shareOpenCount > 0',
         reservationDef: 'users whose wishlist items received ≥1 RESERVED event',
         proLimits24hDef: 'feature gate hits in the last 24h — persisted on each hit via trackEvent',
+        errors24hDef: '4xx/5xx responses on /tg/* routes (excludes 401); grouped by method+status+route pattern',
       },
       generatedAt: now.toISOString(),
     });
