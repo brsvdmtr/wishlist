@@ -545,6 +545,18 @@ enum SantaGiftStatus {
   SENT                   // gift physically sent / handed over; receiver can now confirm
   RECEIVED               // receiver confirmed — terminal; unlocks personal reveal
   MISSED_DEADLINE        // auto-set by cron when drawAt passed and giver hasn't acted; recoverable
+  ORPHANED               // terminal: giver's exit request was approved while round was ACTIVE
+}
+
+enum SantaParticipantRole {
+  PARTICIPANT // default role
+  ADMIN       // elevated role — can perform organizer actions alongside the owner
+}
+
+enum SantaExitRequestStatus {
+  PENDING   // submitted, awaiting organizer decision
+  APPROVED  // organizer approved; participant removed + assignment orphaned if applicable
+  DENIED    // organizer denied; participant stays JOINED
 }
 
 enum SantaDrawStatus {
@@ -573,8 +585,11 @@ enum SantaNotificationType {
   REVEAL_UNLOCKED    // sent to receiver after they confirm RECEIVED (their reveal is ready)
   DEADLINE_WARNING   // sent to giver ~3 days before drawAt if still PENDING
   DEADLINE_MISSED    // sent to giver when their status is auto-updated to MISSED_DEADLINE
-  CHAT_MESSAGE       // new message in campaign chat (suppressed by mute)
-  POLL_CREATED       // new poll opened in campaign (suppressed by mute)
+  CHAT_MESSAGE             // new message in campaign chat (suppressed by mute)
+  POLL_CREATED             // new poll opened in campaign (suppressed by mute)
+  EXIT_REQUEST_SUBMITTED   // participant submitted an exit request (sent to organizers)
+  EXIT_REQUEST_APPROVED    // organizer approved participant's exit request (sent to participant)
+  EXIT_REQUEST_DENIED      // organizer denied participant's exit request (sent to participant)
 }
 
 enum SantaChatMessageType {
@@ -632,6 +647,7 @@ model SantaCampaign {
   auditLogs       SantaAdminAuditLog[]
   hintRequests    SantaHintRequest[]
   exclusionGroups SantaExclusionGroup[]
+  exitRequests    SantaExitRequest[]
 
   @@index([ownerId])
   @@index([inviteToken])
@@ -643,6 +659,7 @@ model SantaParticipant {
   campaignId       String
   userId           String
   status           SantaParticipantStatus @default(JOINED)
+  role             SantaParticipantRole   @default(PARTICIPANT)
   linkedWishlistId String?
   joinedAt         DateTime               @default(now())
   leftAt           DateTime?
@@ -660,6 +677,7 @@ model SantaParticipant {
   createdPolls     SantaPoll[]              @relation("PollCreator")
   giverHintRequests    SantaHintRequest[]   @relation("HintGiverRequests")
   receiverHintRequests SantaHintRequest[]   @relation("HintReceiverRequests")
+  exitRequests         SantaExitRequest[]
 
   @@unique([campaignId, userId])
   @@index([campaignId])
@@ -682,6 +700,7 @@ model SantaRound {
   assignments  SantaAssignment[]
   polls        SantaPoll[]
   hintRequests SantaHintRequest[]
+  exitRequests SantaExitRequest[]
 
   @@unique([campaignId, roundNumber])
   @@index([campaignId])
@@ -932,4 +951,25 @@ model SantaAdminAuditLog {
   campaign SantaCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
+}
+
+// Exit request: participant asks organizer to let them leave a LOCKED or ACTIVE campaign.
+// After approval the participant is set to REMOVED and any non-terminal ACTIVE-round
+// assignment from that participant is set to ORPHANED (terminal).
+model SantaExitRequest {
+  id            String                  @id @default(cuid())
+  campaignId    String
+  participantId String
+  roundId       String?                 // round active at request time (context only)
+  reason        String?
+  status        SantaExitRequestStatus  @default(PENDING)
+  resolvedAt    DateTime?
+  createdAt     DateTime                @default(now())
+
+  campaign    SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  round       SantaRound?      @relation(fields: [roundId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId])
+  @@index([participantId])
 }

@@ -251,6 +251,7 @@ type SantaCampaignSummary = {
 type SantaParticipant = {
   id: string;
   status: string;
+  role: 'PARTICIPANT' | 'ADMIN';
   joinedAt: string;
   userId: string;
   displayName: string | null;
@@ -262,7 +263,8 @@ type SantaParticipant = {
 type SantaCampaignDetail = {
   campaign: {
     id: string; title: string; description: string | null; type: string; status: SantaCampaignStatus;
-    isOwner: boolean; inviteToken?: string; minBudget: number | null; maxBudget: number | null;
+    isOwner: boolean; isOrganizer: boolean; inviteToken?: string;
+    minBudget: number | null; maxBudget: number | null;
     currency: string; drawAt: string | null; seasonYear: number; cancelledAt: string | null;
     cancelReason: string | null; createdAt: string;
   };
@@ -270,7 +272,10 @@ type SantaCampaignDetail = {
   rounds: { id: string; roundNumber: number; drawStatus: string; drawnAt: string | null }[];
   currentRoundNumber: number | null;
   totalRounds: number;
-  // role-aware assignment: giver sees receiver display info; owner sees aggregate progress
+  myRole: 'PARTICIPANT' | 'ADMIN' | null;
+  pendingExitRequestId: string | null;
+  pendingExitRequestCount?: number;           // organizer only
+  // role-aware assignment: giver sees receiver display info; organizer sees aggregate progress
   myAssignment: {
     role: 'giver';
     giftStatus: string;
@@ -282,7 +287,7 @@ type SantaCampaignDetail = {
     progress: {
       pending: number; buying: number;
       selectedFromWishlist: number; selectedOutside: number; declinedToSay: number;
-      missedDeadline: number; sent: number; received: number; withoutWishlist: number;
+      missedDeadline: number; sent: number; received: number; orphaned: number; withoutWishlist: number;
     };
   } | null;
   chatUnreadCount: number;
@@ -295,7 +300,7 @@ type SantaJoinPreview = {
   participantCount: number; ownerName: string | null; ownerAvatarUrl: string | null;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1658,6 +1663,29 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [santaPollCreateOptions, setSantaPollCreateOptions] = useState<string[]>(['', '']);
   const [santaPollCreateAnonymous, setSantaPollCreateAnonymous] = useState(false);
   const [santaPollCreateSubmitting, setSantaPollCreateSubmitting] = useState(false);
+  // Batch 5.3: Organizer panel state
+  type OrganizerSummary = {
+    campaign: { status: string; currentRoundId: string | null; drawAt: string | null };
+    participants: Array<{
+      id: string; userId: string; status: string; role: string;
+      joinedAt: string; leftAt: string | null; displayName: string; avatarUrl: string | null;
+    }>;
+    giftProgress: {
+      pending: number; buying: number; selectedFromWishlist: number; selectedOutside: number;
+      declinedToSay: number; sent: number; received: number; missedDeadline: number; orphaned: number;
+    } | null;
+    pendingExitRequests: Array<{
+      id: string; participantId: string; userId: string; displayName: string;
+      avatarUrl: string | null; reason: string | null; createdAt: string;
+    }>;
+  };
+  const [santaOrganizerSummary, setSantaOrganizerSummary] = useState<OrganizerSummary | null>(null);
+  const [santaOrganizerLoading, setSantaOrganizerLoading] = useState(false);
+  // Exit request state
+  const [santaExitRequestSheetOpen, setSantaExitRequestSheetOpen] = useState(false);
+  const [santaExitRequestReason, setSantaExitRequestReason] = useState('');
+  const [santaExitRequestSubmitting, setSantaExitRequestSubmitting] = useState(false);
+
   // Exclusions state (Batch 5.1)
   type ExclusionPair = { id: string; userId1: string; name1: string; userId2: string; name2: string };
   type ExclusionGroup = { id: string; label: string; activeCount: number; members: { userId: string; displayName: string; avatarUrl: string | null; isStale: boolean }[] };
@@ -2761,6 +2789,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setSantaChatHasMore(false);
       setSantaChatInput('');
       setSantaChatSending(false);
+      setScreen('santa-campaign');
+    } else if (screen === 'santa-organizer') {
+      // Back from organizer panel → return to campaign detail
+      setSantaOrganizerSummary(null);
       setScreen('santa-campaign');
     } else if (screen === 'santa-campaign') {
       setCurrentSantaCampaign(null);
@@ -8611,18 +8643,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const participants = currentSantaCampaign.participants;
         const myAssignment = currentSantaCampaign.myAssignment;
         const isOwner = camp.isOwner;
+        const isOrg = camp.isOrganizer;
+        const myRole = currentSantaCampaign.myRole;
+        const pendingExitRequestId = currentSantaCampaign.pendingExitRequestId;
+        const pendingExitRequestCount = currentSantaCampaign.pendingExitRequestCount ?? 0;
         const { currentRoundNumber, totalRounds } = currentSantaCampaign;
         const showRoundBadge = (currentRoundNumber ?? 0) > 1 || totalRounds > 1;
-        // canStartNextRound: all ownerProgress assignments are in terminal states
+        // canStartNextRound: all ownerProgress assignments are in terminal states (RECEIVED | MISSED_DEADLINE | ORPHANED)
         const ownerProgress = currentSantaCampaign.ownerProgress?.progress;
         const totalAssignments = ownerProgress
           ? ownerProgress.pending + ownerProgress.buying + ownerProgress.selectedFromWishlist +
             ownerProgress.selectedOutside + ownerProgress.declinedToSay +
-            ownerProgress.sent + ownerProgress.received + ownerProgress.missedDeadline
+            ownerProgress.sent + ownerProgress.received + ownerProgress.missedDeadline + (ownerProgress.orphaned ?? 0)
           : 0;
-        const terminalCount = ownerProgress ? ownerProgress.received + ownerProgress.missedDeadline : 0;
+        const terminalCount = ownerProgress
+          ? ownerProgress.received + ownerProgress.missedDeadline + (ownerProgress.orphaned ?? 0)
+          : 0;
         const isRoundComplete = totalAssignments > 0 && terminalCount === totalAssignments;
-        const canStartNextRound = isOwner && isRoundComplete && camp.status === 'ACTIVE';
+        const canStartNextRound = isOrg && isRoundComplete && camp.status === 'ACTIVE';
         const statusKey = `santa_campaign_status_${camp.status.toLowerCase().replace('_', '_')}` as string;
 
         const copyInviteLink = () => {
@@ -8642,7 +8680,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 }}>
                   {t(statusKey, locale) || camp.status}
                 </span>
-                {isOwner && <span style={{ fontSize: 12, color: C.textMuted }}>👑 {locale === 'ru' ? 'Организатор' : 'Organizer'}</span>}
+                {isOwner && <span style={{ fontSize: 12, color: C.textMuted }}>👑 {locale === 'ru' ? 'Владелец' : 'Owner'}</span>}
+                {!isOwner && myRole === 'ADMIN' && <span style={{ fontSize: 12, color: C.accent }}>{t('santa_organizer_badge', locale)}</span>}
                 {showRoundBadge && currentRoundNumber && (
                   <span style={{ fontSize: 12, fontWeight: 600, color: C.accent, background: `${C.accent}15`, padding: '3px 10px', borderRadius: 8 }}>
                     {totalRounds > 1
@@ -8665,8 +8704,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               )}
             </div>
 
-            {/* Owner controls */}
-            {isOwner && camp.status !== 'COMPLETED' && camp.status !== 'CANCELLED' && (
+            {/* Pending exit request banner (for participant who submitted a request) */}
+            {pendingExitRequestId && (
+              <div style={{ background: `${C.accent}15`, border: `1px solid ${C.accent}40`, borderRadius: 12, padding: '12px 16px', marginBottom: 12, fontSize: 13, color: C.accent, textAlign: 'center' }}>
+                ⏳ {t('santa_exit_request_pending_banner', locale)}
+              </div>
+            )}
+
+            {/* Organizer controls */}
+            {isOrg && camp.status !== 'COMPLETED' && camp.status !== 'CANCELLED' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
                 {camp.status === 'DRAFT' && (
                   <button
@@ -8828,16 +8874,49 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   >
                     <UserAvatar avatarUrl={p.avatarUrl} name={p.displayName || '?'} size={32} accent={C.accent} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.displayName || (locale === 'ru' ? 'Участник' : 'Participant')}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.displayName || (locale === 'ru' ? 'Участник' : 'Participant')}</span>
+                        {p.userId === camp.id.split('')[0] /* never true — just placeholder */ ? null : null}
+                        {p.role === 'ADMIN' && (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, background: `${C.accent}15`, padding: '1px 6px', borderRadius: 6 }}>
+                            {t('santa_role_admin', locale)}
+                          </span>
+                        )}
+                      </div>
                       {p.hasLinkedWishlist && <div style={{ fontSize: 12, color: C.green }}>🎁 {locale === 'ru' ? 'Вишлист привязан' : 'Wishlist linked'}</div>}
                     </div>
+                    {/* Role management (owner only) */}
+                    {isOwner && p.userId !== (tgUser?.id?.toString()) && (
+                      <button
+                        onClick={async () => {
+                          const newRole = p.role === 'ADMIN' ? 'PARTICIPANT' : 'ADMIN';
+                          const confirmMsg = newRole === 'ADMIN'
+                            ? t('santa_role_promote_confirm', locale, { name: p.displayName || p.userId })
+                            : t('santa_role_demote_confirm', locale, { name: p.displayName || p.userId });
+                          if (!confirm(confirmMsg)) return;
+                          const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/participants/${p.userId}/role`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ role: newRole }),
+                          });
+                          if (res.ok) {
+                            const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                            if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                            pushToast(t('done', locale), 'success');
+                          } else pushToast(t('error_generic', locale), 'error');
+                        }}
+                        style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 8px', fontSize: 11, color: C.textMuted, cursor: 'pointer', fontFamily: font, flexShrink: 0 }}
+                        title={p.role === 'ADMIN' ? t('santa_role_demote', locale) : t('santa_role_promote', locale)}
+                      >
+                        {p.role === 'ADMIN' ? '🛡✕' : '🛡+'}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Owner progress view (post-draw) — aggregate only, no individual pairs */}
-            {isOwner && currentSantaCampaign.ownerProgress && ['ACTIVE', 'COMPLETED'].includes(camp.status) && (
+            {/* Organizer progress view (post-draw) — aggregate only, no individual pairs */}
+            {isOrg && currentSantaCampaign.ownerProgress && ['ACTIVE', 'COMPLETED'].includes(camp.status) && (
               <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 12 }}>
                   {t('santa_gift_status_title', locale)}
@@ -8845,11 +8924,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 {(() => {
                   const p = currentSantaCampaign.ownerProgress!.progress;
                   const total = p.pending + p.buying + p.selectedFromWishlist + p.selectedOutside
-                    + p.declinedToSay + p.missedDeadline + p.sent + p.received;
-                  const allReceived = total > 0 && p.received === total;
+                    + p.declinedToSay + p.missedDeadline + p.sent + p.received + (p.orphaned ?? 0);
+                  const allTerminal = total > 0 && p.pending === 0 && p.buying === 0 && p.selectedFromWishlist === 0
+                    && p.selectedOutside === 0 && p.declinedToSay === 0 && p.sent === 0;
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {allReceived && (
+                      {allTerminal && (
                         <div style={{ fontSize: 14, fontWeight: 700, color: C.green, marginBottom: 4 }}>
                           {t('santa_gift_all_received', locale)}
                         </div>
@@ -8857,6 +8937,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       {[
                         { key: 'pending', count: p.pending, label: t('santa_gift_progress_pending', locale, { count: p.pending, total }), color: C.textSec },
                         { key: 'missed', count: p.missedDeadline, label: t('santa_gift_progress_missed_deadline', locale, { count: p.missedDeadline }), color: '#e05' },
+                        { key: 'orphaned', count: p.orphaned ?? 0, label: t('santa_gift_status_orphaned', locale), color: C.textMuted },
                         { key: 'buying', count: p.buying, label: t('santa_gift_progress_buying', locale, { count: p.buying }), color: C.textSec },
                         { key: 'wishlist', count: p.selectedFromWishlist, label: t('santa_gift_progress_selected_wishlist', locale, { count: p.selectedFromWishlist }), color: C.accent },
                         { key: 'outside', count: p.selectedOutside, label: t('santa_gift_progress_selected_outside', locale, { count: p.selectedOutside }), color: C.accent },
@@ -9377,8 +9458,71 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             )}
 
-            {/* Cancel campaign (owner only) */}
-            {isOwner && !['COMPLETED', 'CANCELLED'].includes(camp.status) && (
+            {/* Exit request for LOCKED/ACTIVE campaigns (non-owner, no pending request) */}
+            {!isOwner && ['LOCKED', 'ACTIVE'].includes(camp.status) && !pendingExitRequestId && (() => {
+              const myP = participants.find(p => p.userId === tgUser?.id?.toString());
+              if (!myP || myP.status !== 'JOINED') return null;
+              return (
+                <button
+                  onClick={() => setSantaExitRequestSheetOpen(true)}
+                  style={{ background: 'none', border: `1px solid ${C.red}40`, borderRadius: 12, color: C.red, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginTop: 8 }}
+                >
+                  {t('santa_exit_request_submit', locale)}
+                </button>
+              );
+            })()}
+
+            {/* Exit request bottom sheet */}
+            {santaExitRequestSheetOpen && (
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: C.surface, borderTop: `1px solid ${C.border}`, borderRadius: '20px 20px 0 0', padding: '20px 20px 40px', zIndex: 1000 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 12 }}>{t('santa_exit_request_title', locale)}</div>
+                <textarea
+                  value={santaExitRequestReason}
+                  onChange={e => setSantaExitRequestReason(e.target.value)}
+                  placeholder={t('santa_exit_request_reason_placeholder', locale)}
+                  rows={3}
+                  maxLength={300}
+                  style={{ width: '100%', borderRadius: 10, border: `1px solid ${C.border}`, padding: '10px 12px', fontSize: 14, fontFamily: font, color: C.text, background: C.card, resize: 'none', boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button
+                    onClick={() => { setSantaExitRequestSheetOpen(false); setSantaExitRequestReason(''); }}
+                    style={{ flex: 1, background: 'none', border: `1px solid ${C.border}`, borderRadius: 10, color: C.textSec, fontSize: 14, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font }}
+                  >
+                    {t('cancel', locale)}
+                  </button>
+                  <button
+                    disabled={santaExitRequestSubmitting}
+                    onClick={async () => {
+                      setSantaExitRequestSubmitting(true);
+                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/exit-request`, {
+                        method: 'POST',
+                        body: JSON.stringify({ reason: santaExitRequestReason.trim() || undefined }),
+                      });
+                      if (res.ok) {
+                        setSantaExitRequestSheetOpen(false);
+                        setSantaExitRequestReason('');
+                        // Re-fetch campaign to get pendingExitRequestId
+                        const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                        if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                        pushToast(t('santa_exit_request_submitted', locale), 'success');
+                      } else {
+                        const err = await res.json().catch(() => ({})) as { error?: string };
+                        if (err.error === 'exit_request_already_pending') pushToast(t('santa_exit_request_pending_banner', locale), 'info');
+                        else pushToast(t('error_generic', locale), 'error');
+                      }
+                      setSantaExitRequestSubmitting(false);
+                    }}
+                    style={{ flex: 2, background: C.red, border: 'none', borderRadius: 10, color: '#fff', fontSize: 14, fontWeight: 700, padding: '10px 0', cursor: santaExitRequestSubmitting ? 'wait' : 'pointer', fontFamily: font, opacity: santaExitRequestSubmitting ? 0.6 : 1 }}
+                  >
+                    {santaExitRequestSubmitting ? '…' : t('santa_exit_request_submit', locale)}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Cancel campaign (organizer only) */}
+            {isOrg && !['COMPLETED', 'CANCELLED'].includes(camp.status) && (
               <button
                 onClick={async () => {
                   if (!confirm(t('santa_campaign_cancel_confirm', locale))) return;
@@ -9395,8 +9539,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             )}
 
-            {/* Multi-round controls (Batch 5.2) */}
-            {isOwner && camp.status === 'ACTIVE' && (
+            {/* Multi-round controls (Batch 5.2, updated for organizer in 5.3) */}
+            {isOrg && camp.status === 'ACTIVE' && (
               <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {/* Start next round — only when current round is complete */}
                 {canStartNextRound && (
@@ -9515,8 +9659,36 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             )}
 
-            {/* Exclusions button (Batch 5.1) — owner only, pre-draw statuses */}
-            {isOwner && ['DRAFT', 'OPEN', 'LOCKED'].includes(camp.status) && (
+            {/* Organizer panel button (Batch 5.3) — organizer only */}
+            {isOrg && !['DRAFT'].includes(camp.status) && (
+              <button
+                onClick={async () => {
+                  setSantaOrganizerSummary(null);
+                  setSantaOrganizerLoading(true);
+                  setScreen('santa-organizer');
+                  try {
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/organizer/summary`);
+                    if (res.ok) setSantaOrganizerSummary(await res.json() as OrganizerSummary);
+                  } finally {
+                    setSantaOrganizerLoading(false);
+                  }
+                }}
+                style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '12px 16px', cursor: 'pointer', width: '100%', fontFamily: font, marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 18 }}>🛡</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('santa_organizer_open_btn', locale)}</span>
+                </div>
+                {pendingExitRequestCount > 0 && (
+                  <span style={{ minWidth: 20, height: 20, borderRadius: 10, background: C.orange, color: '#000', fontSize: 11, fontWeight: 700, padding: '0 6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {pendingExitRequestCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Exclusions button (Batch 5.1) — organizer only, pre-draw statuses */}
+            {isOrg && ['DRAFT', 'OPEN', 'LOCKED'].includes(camp.status) && (
               <button
                 onClick={async () => {
                   setSantaExclPairs([]);
@@ -10392,6 +10564,128 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 );
               })()}
             </BottomSheet>
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          SECRET SANTA — ORGANIZER PANEL (Batch 5.3)
+          ══════════════════════════════════════════════ */}
+      {screen === 'santa-organizer' && currentSantaCampaign && (() => {
+        const camp = currentSantaCampaign.campaign;
+        const campId = camp.id;
+        const summary = santaOrganizerSummary;
+
+        return (
+          <div style={{ padding: '16px 20px 120px' }}>
+            <h1 style={{ fontSize: 20, fontWeight: 800, fontFamily: font, color: C.text, margin: '8px 0 4px' }}>
+              🛡 {t('santa_organizer_title', locale)}
+            </h1>
+            <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 20 }}>{camp.title}</div>
+
+            {santaOrganizerLoading && (
+              <div style={{ fontSize: 14, color: C.textMuted, textAlign: 'center', marginTop: 40 }}>{t('loading', locale)}</div>
+            )}
+
+            {summary && !santaOrganizerLoading && (
+              <>
+                {/* Pending exit requests */}
+                {summary.pendingExitRequests.length > 0 && (
+                  <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 10 }}>
+                      {t('santa_organizer_exit_requests', locale, { n: String(summary.pendingExitRequests.length) })}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {summary.pendingExitRequests.map(req => (
+                        <div key={req.id} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                            <UserAvatar avatarUrl={req.avatarUrl} name={req.displayName} size={28} accent={C.accent} />
+                            <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{req.displayName}</span>
+                          </div>
+                          {req.reason && <div style={{ fontSize: 12, color: C.textSec, marginBottom: 8 }}>{req.reason}</div>}
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`${t('santa_exit_request_approve', locale)} ${req.displayName}?`)) return;
+                                const res = await tgFetch(`/tg/santa/campaigns/${campId}/exit-requests/${req.id}/approve`, { method: 'POST' });
+                                if (res.ok) {
+                                  // Reload summary
+                                  const refreshRes = await tgFetch(`/tg/santa/campaigns/${campId}/organizer/summary`);
+                                  if (refreshRes.ok) setSantaOrganizerSummary(await refreshRes.json() as OrganizerSummary);
+                                  pushToast(t('done', locale), 'success');
+                                } else pushToast(t('error_generic', locale), 'error');
+                              }}
+                              style={{ flex: 1, background: C.green, border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 700, padding: '7px 0', cursor: 'pointer', fontFamily: font }}
+                            >
+                              {t('santa_exit_request_approve', locale)}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const res = await tgFetch(`/tg/santa/campaigns/${campId}/exit-requests/${req.id}/deny`, { method: 'POST' });
+                                if (res.ok) {
+                                  const refreshRes = await tgFetch(`/tg/santa/campaigns/${campId}/organizer/summary`);
+                                  if (refreshRes.ok) setSantaOrganizerSummary(await refreshRes.json() as OrganizerSummary);
+                                  pushToast(t('done', locale), 'success');
+                                } else pushToast(t('error_generic', locale), 'error');
+                              }}
+                              style={{ flex: 1, background: 'none', border: `1px solid ${C.red}`, borderRadius: 8, color: C.red, fontSize: 12, fontWeight: 700, padding: '7px 0', cursor: 'pointer', fontFamily: font }}
+                            >
+                              {t('santa_exit_request_deny', locale)}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Gift progress */}
+                {summary.giftProgress && (
+                  <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 10 }}>
+                      {t('santa_organizer_progress', locale)}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {[
+                        { key: 'pending', v: summary.giftProgress.pending, label: t('santa_gift_progress_pending', locale, { count: summary.giftProgress.pending, total: 0 }), color: C.textSec },
+                        { key: 'buying', v: summary.giftProgress.buying, label: t('santa_gift_progress_buying', locale, { count: summary.giftProgress.buying }), color: C.textSec },
+                        { key: 'selectedFromWishlist', v: summary.giftProgress.selectedFromWishlist, label: t('santa_gift_progress_selected_wishlist', locale, { count: summary.giftProgress.selectedFromWishlist }), color: C.accent },
+                        { key: 'selectedOutside', v: summary.giftProgress.selectedOutside, label: t('santa_gift_progress_selected_outside', locale, { count: summary.giftProgress.selectedOutside }), color: C.accent },
+                        { key: 'declinedToSay', v: summary.giftProgress.declinedToSay, label: t('santa_gift_progress_declined', locale, { count: summary.giftProgress.declinedToSay }), color: C.textSec },
+                        { key: 'sent', v: summary.giftProgress.sent, label: t('santa_gift_progress_sent', locale, { count: summary.giftProgress.sent }), color: C.accent },
+                        { key: 'received', v: summary.giftProgress.received, label: t('santa_gift_progress_received', locale, { count: summary.giftProgress.received }), color: C.green },
+                        { key: 'missedDeadline', v: summary.giftProgress.missedDeadline, label: t('santa_gift_progress_missed_deadline', locale, { count: summary.giftProgress.missedDeadline }), color: '#e05' },
+                        { key: 'orphaned', v: summary.giftProgress.orphaned, label: t('santa_gift_status_orphaned', locale), color: C.textMuted },
+                      ].filter(r => r.v > 0).map(r => (
+                        <div key={r.key} style={{ fontSize: 13, color: r.color }}>{r.label}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Participants list with role badges */}
+                <div style={{ background: C.card, borderRadius: 14, overflow: 'hidden', marginBottom: 16 }}>
+                  <div style={{ padding: '12px 16px 8px', fontSize: 13, fontWeight: 600, color: C.textMuted }}>
+                    {t('santa_organizer_participants', locale, { n: String(summary.participants.filter(p => p.status === 'JOINED').length) })}
+                  </div>
+                  {summary.participants.filter(p => p.status === 'JOINED').map((p, idx, arr) => (
+                    <div key={p.id} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: idx < arr.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                      <UserAvatar avatarUrl={p.avatarUrl} name={p.displayName} size={30} accent={C.accent} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{p.displayName}</span>
+                          {p.role === 'ADMIN' && (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: C.accent, background: `${C.accent}15`, padding: '1px 5px', borderRadius: 5 }}>
+                              {t('santa_role_admin', locale)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         );
       })()}
