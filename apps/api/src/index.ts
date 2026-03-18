@@ -4939,6 +4939,7 @@ tgRouter.post('/santa/campaigns/:id/cancel', asyncHandler(async (req, res) => {
             userId: p.userId,
             type: 'CAMPAIGN_CANCELLED' as const,
             payload: {},
+            dedupeKey: `cancel:${campaignId}`,  // unique per (user, CAMPAIGN_CANCELLED, campaign)
           })),
           skipDuplicates: true,
         });
@@ -5431,7 +5432,7 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
     // System message: draw done (no pair info — just a generic event marker)
     void createSystemMessage(campaignId, 'draw_done', {}).catch(() => {});
 
-    // DRAW_DONE notifications — one per participant, batch insert with dedup
+    // DRAW_DONE notifications — one per participant per round, deduped by dedupeKey
     void (async () => {
       try {
         await prisma.santaNotification.createMany({
@@ -5440,11 +5441,12 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
             userId: p.userId,
             type: 'DRAW_DONE' as const,
             payload: {},
+            dedupeKey: `draw:${roundId}`,   // unique per (user, DRAW_DONE, round)
           })),
           skipDuplicates: true,
         });
       } catch {
-        // Non-fatal: partial unique index handles concurrent retries
+        // Non-fatal
       }
     })();
 
@@ -5825,15 +5827,15 @@ tgRouter.post('/santa/campaigns/:id/confirm-received', asyncHandler(async (req, 
   // Notifications (best-effort, non-blocking) — deduped by DB partial unique index
   if (fullAssignment) {
     const giverUserId = fullAssignment.giver.userId;
-    // GIFT_RECEIVED → giver: "your recipient received your gift!"
+    // GIFT_RECEIVED → giver: "your recipient received your gift!" (once per assignment)
     void prisma.santaNotification.create({
-      data: { campaignId, userId: giverUserId, type: 'GIFT_RECEIVED', payload: { assignmentId: assignment.id } },
-    }).catch(() => { /* duplicate suppressed by partial unique index */ });
+      data: { campaignId, userId: giverUserId, type: 'GIFT_RECEIVED', payload: { assignmentId: assignment.id }, dedupeKey: `gift:${assignment.id}` },
+    }).catch(() => { /* duplicate suppressed by dedupeKey unique index */ });
 
-    // REVEAL_UNLOCKED → receiver: "you can now see who your Secret Santa was!"
+    // REVEAL_UNLOCKED → receiver: "you can now see who your Secret Santa was!" (once per assignment)
     void prisma.santaNotification.create({
-      data: { campaignId, userId: user.id, type: 'REVEAL_UNLOCKED', payload: { assignmentId: assignment.id } },
-    }).catch(() => { /* duplicate suppressed by partial unique index */ });
+      data: { campaignId, userId: user.id, type: 'REVEAL_UNLOCKED', payload: { assignmentId: assignment.id }, dedupeKey: `reveal:${assignment.id}` },
+    }).catch(() => { /* duplicate suppressed by dedupeKey unique index */ });
   }
 
   return res.json({ ok: true, campaignCompleted: allReceived, canReveal: true });
@@ -6497,13 +6499,14 @@ setInterval(async () => {
       });
       totalMissed += overdueAssignments.length;
 
-      // Create DEADLINE_MISSED notifications — batch insert, deduped per (campaignId, userId, type)
+      // Create DEADLINE_MISSED notifications — batch insert, deduped per assignment
       await prisma.santaNotification.createMany({
         data: overdueAssignments.map(a => ({
           campaignId: round.campaignId,
           userId: a.giver.userId,
           type: 'DEADLINE_MISSED' as const,
           payload: { assignmentId: a.id },
+          dedupeKey: `missed:${a.id}`,   // unique per (user, DEADLINE_MISSED, assignment)
         })),
         skipDuplicates: true,
       }).catch(() => { /* non-fatal */ });
@@ -6547,28 +6550,18 @@ setInterval(async () => {
       });
       if (pendingAssignments.length === 0) continue;
 
-      // Batch insert DEADLINE_WARNING — deduped by application-level findFirst (per assignment)
-      // Note: DEADLINE_WARNING is not in the partial unique index (repeatable per campaign)
-      const unwarned = await Promise.all(pendingAssignments.map(async (a) => {
-        const existing = await prisma.santaNotification.findFirst({
-          where: { campaignId: round.campaignId, userId: a.giver.userId, type: 'DEADLINE_WARNING' },
-          select: { id: true },
-        });
-        return existing ? null : a;
-      }));
-      const toWarn = unwarned.filter((a): a is typeof pendingAssignments[0] => a !== null);
-      if (toWarn.length > 0) {
-        await prisma.santaNotification.createMany({
-          data: toWarn.map(a => ({
-            campaignId: round.campaignId,
-            userId: a.giver.userId,
-            type: 'DEADLINE_WARNING' as const,
-            payload: { assignmentId: a.id },
-          })),
-          skipDuplicates: true,
-        }).catch(() => { /* non-fatal */ });
-        totalWarned += toWarn.length;
-      }
+      // Batch insert DEADLINE_WARNING — deduped per assignment via dedupeKey; no findFirst needed
+      const warnResult = await prisma.santaNotification.createMany({
+        data: pendingAssignments.map(a => ({
+          campaignId: round.campaignId,
+          userId: a.giver.userId,
+          type: 'DEADLINE_WARNING' as const,
+          payload: { assignmentId: a.id },
+          dedupeKey: `warn:${a.id}`,    // unique per (user, DEADLINE_WARNING, assignment)
+        })),
+        skipDuplicates: true,
+      }).catch(() => ({ count: 0 }));
+      totalWarned += warnResult.count;
     }
 
     if (totalWarned > 0) {

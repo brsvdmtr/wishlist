@@ -864,6 +864,11 @@ model SantaNotification {
   userId     String
   type       SantaNotificationType
   payload    Json?
+  /// Explicit dedup key. When set, uniqueness is enforced per (userId, type, dedupeKey)
+  /// via a DB partial unique index (WHERE dedupeKey IS NOT NULL). Null = no dedup.
+  /// Conventions: draw:{roundId} | gift:{assignmentId} | reveal:{assignmentId}
+  ///              cancel:{campaignId} | missed:{assignmentId} | warn:{assignmentId}
+  dedupeKey  String?
   readAt     DateTime?
   createdAt  DateTime              @default(now())
 
@@ -872,6 +877,8 @@ model SantaNotification {
 
   @@index([userId, readAt])
   @@index([campaignId])
+  // Partial unique index on (userId, type, dedupeKey) WHERE dedupeKey IS NOT NULL
+  // is managed via raw SQL migration — not representable in Prisma schema syntax.
 }
 
 model SantaAdminAuditLog {
