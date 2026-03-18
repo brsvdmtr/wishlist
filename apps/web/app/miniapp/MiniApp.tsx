@@ -135,6 +135,7 @@ type Wishlist = {
   visibility: WishlistVisibility;
   allowSubscriptions: AllowSubscriptions;
   commentPolicy: CommentPolicy;
+  shareToken?: string | null;
 };
 
 type PlanInfo = {
@@ -320,7 +321,9 @@ type GodStats = {
   funnel: {
     totalUsers: number; activatedUsers: number;
     usersWithWishlist: number; usersWithItem: number;
-    usersWithShare: number; usersWithReservation: number;
+    usersWhoInitiatedShare: number; sharedLinkOpens: number;
+    wishlistsWithLinkOpen: number;
+    usersWithReservation: number;
   };
   engagement: {
     totalComments: number; totalHints: number; totalWishlistSubs: number;
@@ -5802,6 +5805,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           locale={locale}
           buildTgDeepLink={buildTgDeepLink}
           isPro={planInfo.code === 'PRO'}
+          tgFetch={tgFetch}
         />
       )}
 
@@ -6931,11 +6935,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     };
 
                     const funnelSteps = godStats ? [
-                      { label: 'Все юзеры',        value: godStats.funnel.totalUsers },
-                      { label: 'Вишлист',          value: godStats.funnel.usersWithWishlist },
-                      { label: 'Желание',          value: godStats.funnel.usersWithItem },
-                      { label: 'Поделились',       value: godStats.funnel.usersWithShare },
-                      { label: 'Получили бронь',   value: godStats.funnel.usersWithReservation },
+                      { label: 'Все юзеры',           value: godStats.funnel.totalUsers },
+                      { label: 'Вишлист',             value: godStats.funnel.usersWithWishlist },
+                      { label: 'Желание',             value: godStats.funnel.usersWithItem },
+                      { label: 'Открыли шаринг',      value: godStats.funnel.usersWhoInitiatedShare },
+                      { label: 'Получили бронь',      value: godStats.funnel.usersWithReservation },
                     ] : [];
 
                     return (
@@ -7060,6 +7064,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                 </button>
                                 {godStatsDetailsOpen && (
                                   <div style={{ marginTop: 6 }}>
+                                    {/* Engagement */}
                                     {([
                                       ['Комментариев', e.totalComments],
                                       ['Подсказок Santa', e.totalHints],
@@ -7070,8 +7075,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                         <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
                                       </div>
                                     ))}
+                                    {/* Share funnel detail */}
+                                    <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
+                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>Шаринг</div>
+                                      {([
+                                        ['Открыли шаринг', godStats.funnel.usersWhoInitiatedShare, 'юзеров открыли экран шаринга (токен сгенерирован)'],
+                                        ['Открытий ссылки', godStats.funnel.sharedLinkOpens, 'суммарно гости перешли по shared-link'],
+                                        ['Вишлистов с открытием', godStats.funnel.wishlistsWithLinkOpen, 'уникальных вишлистов с ≥1 переходом'],
+                                      ] as [string, number, string][]).map(([lbl, val, hint]) => (
+                                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }} title={hint}>
+                                          <span style={{ fontSize: 11, color: C.textMuted }}>{lbl}</span>
+                                          <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
+                                        </div>
+                                      ))}
+                                    </div>
                                     <div style={{ fontSize: 10, color: C.textMuted, marginTop: 5, lineHeight: 1.5 }}>
-                                      Акт = создали/обновили вишлист или желание · Поделились = ссылка явно сгенерирована · Бронь = получили чужую бронь
+                                      Акт = создали/обновили вишлист или желание · Открыли шаринг = ссылка явно сгенерирована · Бронь = получили чужую бронь
                                     </div>
                                   </div>
                                 )}
@@ -11591,7 +11610,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 // SHARE SCREEN (extracted to keep main component tidy)
 // ─────────────────────────────────────────────────
 
-function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, onCopied, buildTgDeepLink, isPro, locale }: {
+function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, onCopied, buildTgDeepLink, isPro, locale, tgFetch }: {
   wishlist: Wishlist;
   itemCount: number;
   tgUser: TgUser | null;
@@ -11601,13 +11620,37 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
   buildTgDeepLink: (payload?: string) => string | null;
   isPro?: boolean;
   locale: Locale;
+  tgFetch: (path: string, opts?: RequestInit) => Promise<Response>;
 }) {
   const [copied, setCopied] = useState(false);
+  // shareToken is fetched on mount via POST /tg/wishlists/:id/share-token.
+  // This records "intent to share" (usersWhoInitiatedShare metric) and produces
+  // a token-based link that is tracked when guests open it (sharedLinkOpens metric).
+  // Falls back to slug-based link if the API call fails so sharing never breaks.
+  const [shareToken, setShareToken] = useState<string | null>(wishlist.shareToken ?? null);
+  const [tokenLoading, setTokenLoading] = useState(!wishlist.shareToken);
 
-  // Build link directly from slug — no API call needed.
-  // Each wishlist always has a slug; the guest flow already supports slug-based lookup
-  // via GET /public/wishlists/:slug, so no share-token generation is required.
-  const shareLink = buildTgDeepLink(wishlist.slug);
+  useEffect(() => {
+    // If we already have a token (from wishlist object), skip the API call
+    if (wishlist.shareToken) { setShareToken(wishlist.shareToken); setTokenLoading(false); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await tgFetch(`/tg/wishlists/${wishlist.id}/share-token`, { method: 'POST' });
+        if (!cancelled && r.ok) {
+          const data = await r.json() as { shareToken: string };
+          setShareToken(data.shareToken);
+        }
+      } catch { /* ignore — fall back to slug */ }
+      finally { if (!cancelled) setTokenLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wishlist.id]);
+
+  // Use token-based link when available; fall back to slug for resilience
+  const shareLinkPayload = shareToken ?? wishlist.slug;
+  const shareLink = buildTgDeepLink(shareLinkPayload);
   const linkError = !shareLink; // only fails if botUsername env var is missing
 
   const fmtDeadline = (d: string | null) => {

@@ -116,7 +116,8 @@ model User {
 model Wishlist {
   id          String    @id @default(cuid())
   slug        String    @unique
-  shareToken  String?   @unique
+  shareToken     String?   @unique
+  shareOpenCount Int       @default(0)  // incremented on each GET /public/share/:token call
   ownerId     String
   title       String
   description String?
