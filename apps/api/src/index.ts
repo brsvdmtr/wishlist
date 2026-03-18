@@ -1600,9 +1600,20 @@ tgRouter.get(
     }
 
     // Count user's active reservations (for "My Reservations" section)
-    const reservationsCount = await prisma.item.count({
-      where: { reserverUserId: user.id, status: 'RESERVED' },
-    });
+    // Includes both regular item reservations and Santa-flow SantaItemReservation rows.
+    const [regularReservationsCount, santaReservationsCount] = await Promise.all([
+      prisma.item.count({ where: { reserverUserId: user.id, status: 'RESERVED' } }),
+      prisma.santaItemReservation.count({
+        where: {
+          assignment: {
+            giver: { userId: user.id },
+            giftStatus: { notIn: ['RECEIVED', 'ORPHANED'] },
+            round: { campaign: { status: { not: 'CANCELLED' } } },
+          },
+        },
+      }),
+    ]);
+    const reservationsCount = regularReservationsCount + santaReservationsCount;
 
     return res.json({
       wishlists: wishlists.map((wl, idx) => {
