@@ -597,7 +597,32 @@ enum SantaChatMessageType {
   SYSTEM  // system-generated event message (no sender)
 }
 
-// Admin-controlled season window. One row per year.
+/// Singleton global master switch for Secret Santa.
+/// Exactly one row exists (id = 'global'), auto-created at server startup.
+/// Set santaEnabled=false to retire the feature entirely (overrides all season/calendar logic).
+/// santaTestMode users (godMode) bypass this switch so product owners can always test.
+model SantaGlobalConfig {
+  id           String   @id @default("global")
+  santaEnabled Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
+}
+
+/// Tracks seasonal broadcast notifications to prevent duplicate sends each year.
+/// One row per (year, type). Insert races resolve to first-writer-wins via unique constraint.
+model SantaSeasonalBroadcastLog {
+  id        String   @id @default(cuid())
+  /// Season start year (the November year — e.g. 2026 for the Nov 2026 → Feb 2027 season).
+  year      Int
+  /// 'PROMO' (Nov 1) or 'CLOSING_SOON' (Feb 1).
+  type      String
+  sentAt    DateTime @default(now())
+  userCount Int      @default(0)
+
+  @@unique([year, type])
+}
+
+// Optional per-year admin override. When a row exists for seasonYear it takes full priority
+// over the recurring calendar rules. Allows changing dates or killing creates mid-season.
 // canCreateCampaign = effectiveInSeason && campaignCreateEnabled (computed, never mutated automatically).
 model SantaSeasonConfig {
   id                    String   @id @default(cuid())

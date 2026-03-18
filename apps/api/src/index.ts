@@ -4561,33 +4561,99 @@ internalRouter.post(
 // Secret Santa endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Compute whether the user can currently create a Santa campaign. Pure function — never mutates DB. */
-async function getSantaSeasonInfo(userId: string, santaTestMode: boolean) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const config = await prisma.santaSeasonConfig.findUnique({ where: { seasonYear: year } });
+/**
+ * Pure calendar helper — season window is Nov 15 (year Y) → Feb 15 (year Y+1).
+ * Requires zero DB access. Works correctly for any calendar year, forever.
+ *
+ * Examples:
+ *   2026-11-15 → in-season (start)    2027-02-15 → in-season (last day)
+ *   2027-02-16 → off-season           2027-11-14 → off-season (one day before next season)
+ *   2027-11-15 → in-season (new season starts)
+ */
+function getSeasonCalendar(now: Date): { inSeason: boolean; seasonStart: Date; seasonEnd: Date } {
+  const m = now.getMonth() + 1; // 1–12
+  const d = now.getDate();
+  const y = now.getFullYear();
 
-  // santaTestMode bypasses season window AND missing-config guard entirely.
-  // Must be checked BEFORE the early return so god-mode users can always access Santa.
+  let startYear: number;
+  if (m === 1 || (m === 2 && d <= 15)) {
+    // Jan 1 – Feb 15: closing tail of the season that started last November
+    startYear = y - 1;
+  } else if ((m === 11 && d >= 15) || m === 12) {
+    // Nov 15 – Dec 31: opening head of this year's season
+    startYear = y;
+  } else {
+    // Feb 16 – Nov 14: fully off-season; return the upcoming season window for display
+    return { inSeason: false, seasonStart: new Date(y, 10, 15), seasonEnd: new Date(y + 1, 1, 15) };
+  }
+
+  const seasonStart = new Date(startYear, 10, 15);    // Nov 15 of startYear
+  const seasonEnd   = new Date(startYear + 1, 1, 15); // Feb 15 of (startYear+1)
+  return { inSeason: now >= seasonStart && now <= seasonEnd, seasonStart, seasonEnd };
+}
+
+/**
+ * Compute season status and create-permission for the requesting user.
+ *
+ * Resolution priority (first match wins):
+ *   1. SantaGlobalConfig.santaEnabled = false  → always off (unless santaTestMode)
+ *   2. santaTestMode = true                    → always on (godMode bypass)
+ *   3. SantaSeasonConfig row for current year  → explicit admin override (per-year dates)
+ *   4. getSeasonCalendar()                     → automatic, recurring, zero annual setup
+ *
+ * Never mutates DB.
+ */
+async function getSantaSeasonInfo(userId: string, santaTestMode: boolean) {
+  const now  = new Date();
+  const year = now.getFullYear();
+
+  // 1. Global kill switch — allows retiring Santa entirely without touching per-year rows.
+  //    Bypassed by santaTestMode so godMode users can always test even after retirement.
+  if (!santaTestMode) {
+    const globalConfig = await prisma.santaGlobalConfig.findUnique({ where: { id: 'global' } });
+    if (globalConfig && !globalConfig.santaEnabled) {
+      return { inSeason: false, canCreate: false, seasonStart: null, seasonEnd: null, config: null };
+    }
+  }
+
+  // 2. santaTestMode: bypass season window and missing-config guard entirely.
+  //    Must be checked before DB row query so god-mode users always land in-season.
   if (santaTestMode) {
+    const config = await prisma.santaSeasonConfig.findUnique({ where: { seasonYear: year } });
+    const cal    = getSeasonCalendar(now);
     return {
-      inSeason: true,
-      canCreate: true,
-      seasonStart: config?.seasonStartAt.toISOString() ?? null,
-      seasonEnd: config?.seasonEndAt.toISOString() ?? null,
-      config: config ?? null,
+      inSeason:    true,
+      canCreate:   true,
+      seasonStart: (config?.seasonStartAt ?? cal.seasonStart).toISOString(),
+      seasonEnd:   (config?.seasonEndAt   ?? cal.seasonEnd).toISOString(),
+      config:      config ?? null,
     };
   }
 
-  if (!config) return { inSeason: false, canCreate: false, seasonStart: null, seasonEnd: null, config: null };
-  const inSeason = now >= config.seasonStartAt && now <= config.seasonEndAt;
-  const canCreate = inSeason && config.campaignCreateEnabled;
+  // 3. Explicit per-year admin override row takes priority over calendar.
+  //    Allows changing specific-year dates or disabling creates mid-season without code changes.
+  const config = await prisma.santaSeasonConfig.findUnique({ where: { seasonYear: year } });
+  if (config) {
+    const inSeason  = now >= config.seasonStartAt && now <= config.seasonEndAt;
+    const canCreate = inSeason && config.campaignCreateEnabled;
+    return {
+      inSeason,
+      canCreate,
+      seasonStart: config.seasonStartAt.toISOString(),
+      seasonEnd:   config.seasonEndAt.toISOString(),
+      config,
+    };
+  }
+
+  // 4. No DB override — apply recurring calendar rules (Nov 15 → Feb 15).
+  //    Works automatically for every year: 2026, 2027, 2028, … with zero annual setup.
+  const { inSeason, seasonStart, seasonEnd } = getSeasonCalendar(now);
   return {
     inSeason,
-    canCreate,
-    seasonStart: config.seasonStartAt.toISOString(),
-    seasonEnd: config.seasonEndAt.toISOString(),
-    config,
+    canCreate:   inSeason, // calendar default: all in-season users may create
+    seasonStart: seasonStart.toISOString(),
+    seasonEnd:   seasonEnd.toISOString(),
+    config:      null,
   };
 }
 
@@ -4614,6 +4680,72 @@ tgRouter.post('/santa/season/test-mode', asyncHandler(async (req, res) => {
     select: { santaTestMode: true },
   });
   return res.json({ santaTestMode: updated.santaTestMode });
+}));
+
+// GET /tg/santa/admin/global-config — read global master switch (godMode only)
+tgRouter.get('/santa/admin/global-config', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  if (!user.godMode) return res.status(403).json({ error: 'Forbidden' });
+  const config = await prisma.santaGlobalConfig.findUnique({ where: { id: 'global' } });
+  return res.json({ santaEnabled: config?.santaEnabled ?? true });
+}));
+
+// PATCH /tg/santa/admin/global-config — toggle global master switch (godMode only)
+// Set santaEnabled=false to retire Secret Santa entirely (affects all users except godMode/santaTestMode).
+// Set santaEnabled=true to re-enable; yearly calendar rules take over automatically.
+tgRouter.patch('/santa/admin/global-config', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  if (!user.godMode) return res.status(403).json({ error: 'Forbidden' });
+  const parsed = z.object({ santaEnabled: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  const updated = await prisma.santaGlobalConfig.upsert({
+    where:  { id: 'global' },
+    create: { id: 'global', santaEnabled: parsed.data.santaEnabled },
+    update: { santaEnabled: parsed.data.santaEnabled },
+  });
+  void sendAdminAlert(
+    `🎛 Santa global switch <b>${updated.santaEnabled ? 'ENABLED ✅' : 'DISABLED 🔴'}</b> by godMode user ${user.id}`,
+  );
+  return res.json({ santaEnabled: updated.santaEnabled });
+}));
+
+// GET /tg/santa/admin/season-broadcasts — view sent seasonal broadcast history (godMode only)
+tgRouter.get('/santa/admin/season-broadcasts', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  if (!user.godMode) return res.status(403).json({ error: 'Forbidden' });
+  const logs = await prisma.santaSeasonalBroadcastLog.findMany({
+    orderBy: [{ year: 'desc' }, { type: 'asc' }],
+    take: 20,
+  });
+  return res.json(logs);
+}));
+
+// POST /tg/santa/admin/season-broadcasts — manually trigger a seasonal broadcast (godMode only)
+// Used for testing or if the automated job missed the Nov 1 / Feb 1 window for any reason.
+// Body: { type: 'PROMO' | 'CLOSING_SOON', seasonYear: number, force?: boolean }
+// force=true skips the already-sent guard and re-sends even if log row exists.
+tgRouter.post('/santa/admin/season-broadcasts', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  if (!user.godMode) return res.status(403).json({ error: 'Forbidden' });
+  const parsed = z.object({
+    type:       z.enum(['PROMO', 'CLOSING_SOON']),
+    seasonYear: z.number().int().min(2020).max(2100),
+    force:      z.boolean().optional().default(false),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const { type, seasonYear, force } = parsed.data;
+
+  if (force) {
+    // Delete existing log row so sendSeasonalBroadcast can re-create it
+    await prisma.santaSeasonalBroadcastLog.deleteMany({
+      where: { year: seasonYear, type },
+    });
+  }
+
+  // Fire in background; response confirms the job was queued
+  void sendSeasonalBroadcast(type, seasonYear);
+  return res.json({ ok: true, queued: { type, seasonYear, force } });
 }));
 
 // POST /tg/santa/campaigns — create a new campaign
@@ -7067,6 +7199,136 @@ setInterval(async () => {
   }
 }, 60 * 60 * 1000);
 
+// ─── Santa seasonal broadcasts ───────────────────────────────────────────────
+
+/**
+ * Send a seasonal broadcast Telegram message to every user who has a telegramChatId.
+ * Deduplication is handled by SantaSeasonalBroadcastLog — inserting the log row acts as a
+ * distributed lock: if the row already exists (unique constraint), this function exits
+ * immediately.  Safe to call concurrently or in a crash-restart scenario.
+ *
+ * @param type        'PROMO' (sent Nov 1) or 'CLOSING_SOON' (sent Feb 1)
+ * @param seasonYear  The November-start year of the season (e.g. 2026 for Nov 2026 → Feb 2027)
+ */
+async function sendSeasonalBroadcast(type: 'PROMO' | 'CLOSING_SOON', seasonYear: number): Promise<void> {
+  // Insert log row FIRST — acts as an atomic write-once lock.
+  // Unique constraint on (year, type) means only the first caller proceeds; all others exit.
+  try {
+    await prisma.santaSeasonalBroadcastLog.create({
+      data: { year: seasonYear, type },
+    });
+  } catch {
+    // UniqueConstraintViolation = already sent (or concurrent runner beat us). Skip.
+    return;
+  }
+
+  const BATCH      = 25;   // users per DB page
+  const PAUSE_MS   = 1200; // ~20 req/s; Telegram allows 30 req/s per bot
+
+  // RU + EN in one message — we don't store per-user locale, so serve both languages.
+  const textRu = type === 'PROMO'
+    ? '🎅 Тайный Санта скоро открывается! Подготовьте вишлист — обмен подарками начнётся 15 ноября.'
+    : '⏰ Тайный Санта закроется 15 февраля. Успейте завершить обмен подарками!';
+  const textEn = type === 'PROMO'
+    ? '🎅 Secret Santa is opening soon! Prepare your wishlist — the gift exchange starts November 15.'
+    : '⏰ Secret Santa closes on February 15. Make sure to finish your gift exchange!';
+  const text = `${textRu}\n\n${textEn}`;
+
+  let cursor: string | undefined;
+  let totalSent = 0;
+
+  // eslint-disable-next-line no-constant-condition
+  for (;;) {
+    const users = await prisma.user.findMany({
+      where:   { telegramChatId: { not: null } },
+      select:  { id: true, telegramChatId: true },
+      take:    BATCH,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { id: 'asc' },
+    });
+
+    if (users.length === 0) break;
+
+    for (const u of users) {
+      if (!u.telegramChatId) continue;
+      await sendTgNotification(u.telegramChatId, text);
+      totalSent++;
+    }
+
+    cursor = users[users.length - 1]!.id;
+    if (users.length < BATCH) break;
+    await new Promise<void>(r => setTimeout(r, PAUSE_MS));
+  }
+
+  // Record final count for audit trail
+  await prisma.santaSeasonalBroadcastLog.update({
+    where: { year_type: { year: seasonYear, type } },
+    data:  { userCount: totalSent },
+  }).catch(() => { /* non-fatal */ });
+
+  // eslint-disable-next-line no-console
+  console.log(`[santa-season] broadcast ${type} for season ${seasonYear} sent to ${totalSent} users`);
+  void sendAdminAlert(`🎅 Santa broadcast <b>${type}</b> (season ${seasonYear}) sent to <b>${totalSent}</b> users`);
+}
+
+/**
+ * Idempotent seasonal event handler — runs hourly, triggers broadcasts on calendar milestones.
+ *
+ * Triggers:
+ *   Nov 1  → PROMO broadcast for this year's upcoming season
+ *   Feb 1  → CLOSING_SOON broadcast for the season that started last November
+ *
+ * Deduplication via SantaSeasonalBroadcastLog ensures each broadcast fires exactly once per year,
+ * regardless of restarts, multi-instance deployments, or the hourly tick firing multiple times
+ * on the same day.
+ */
+async function maybeRunSeasonalEvents(): Promise<void> {
+  try {
+    // Abort if the feature is globally disabled
+    const globalConfig = await prisma.santaGlobalConfig.findUnique({ where: { id: 'global' } });
+    if (!globalConfig?.santaEnabled) return;
+
+    const now   = new Date();
+    const year  = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const day   = now.getDate();
+
+    // ── November 1: promo notification ──────────────────────────────────────
+    // seasonYear = current year (season starts Nov 15 of this year)
+    if (month === 11 && day === 1) {
+      const alreadySent = await prisma.santaSeasonalBroadcastLog.findUnique({
+        where: { year_type: { year, type: 'PROMO' } },
+      });
+      if (!alreadySent) {
+        // eslint-disable-next-line no-console
+        console.log(`[santa-season] Nov 1 — triggering PROMO broadcast for season ${year}`);
+        void sendSeasonalBroadcast('PROMO', year);
+      }
+    }
+
+    // ── February 1: closing-soon notification ───────────────────────────────
+    // The season in progress started last November, so seasonYear = year - 1
+    if (month === 2 && day === 1) {
+      const seasonYear = year - 1; // e.g. if now is Feb 2027, season started Nov 2026
+      const alreadySent = await prisma.santaSeasonalBroadcastLog.findUnique({
+        where: { year_type: { year: seasonYear, type: 'CLOSING_SOON' } },
+      });
+      if (!alreadySent) {
+        // eslint-disable-next-line no-console
+        console.log(`[santa-season] Feb 1 — triggering CLOSING_SOON broadcast for season ${seasonYear}`);
+        void sendSeasonalBroadcast('CLOSING_SOON', seasonYear);
+      }
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[santa-season] seasonal event check failed:', err);
+  }
+}
+
+// Santa seasonal events: check every hour for calendar milestones (Nov 1, Feb 1).
+// Idempotent — safe to run hourly; each broadcast fires at most once per year via DB dedup.
+setInterval(() => { void maybeRunSeasonalEvents(); }, 60 * 60 * 1000);
+
 // ─── Batch 4.1: Santa Campaign Chat ──────────────────────────────────────────
 
 // Helper: createSystemMessage — creates a SYSTEM message in the campaign chat.
@@ -8033,6 +8295,18 @@ app.listen(PORT, () => {
   console.log(`[api] listening on http://localhost:${PORT}`);
   // Send startup alert to admins (best-effort)
   void sendAdminAlert(`🟢 <b>API started</b>\nPort: ${PORT}\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
+
+  // Ensure SantaGlobalConfig singleton exists.
+  // This is idempotent — upsert preserves the existing santaEnabled value if already set.
+  // If the row doesn't exist yet (fresh DB), it is created with santaEnabled=true (default on).
+  void prisma.santaGlobalConfig.upsert({
+    where:  { id: 'global' },
+    create: { id: 'global', santaEnabled: true },
+    update: {}, // never overwrite an existing setting on startup
+  }).catch(err => {
+    // eslint-disable-next-line no-console
+    console.error('[startup] SantaGlobalConfig upsert failed:', err);
+  });
 });
 
 // ─── Uncaught exception / rejection alerts ────────────────────────────────────
