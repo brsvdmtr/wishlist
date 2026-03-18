@@ -4297,6 +4297,7 @@ tgRouter.get(
     if (!canGodMode || !user.godMode) return res.status(403).json({ error: 'Forbidden' });
 
     const now = new Date();
+    const cut24 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const cut7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const cut30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
@@ -4305,6 +4306,7 @@ tgRouter.get(
 
     const [
       totalUsers,
+      newUsers24h,
       newUsers7d,
       active7dRows,
       active30dRows,
@@ -4316,8 +4318,12 @@ tgRouter.get(
       withItemRows,
       withShareRows,
       withReservationRows,
+      totalComments,
+      totalHints,
+      totalWishlistSubs,
     ] = await Promise.all([
       prisma.user.count(),
+      prisma.user.count({ where: { createdAt: { gte: cut24 } } }),
       prisma.user.count({ where: { createdAt: { gte: cut7 } } }),
       // Active users 7d: created/updated REGULAR wishlist OR created/updated non-deleted item
       prisma.$queryRaw<CountRow[]>`
@@ -4363,6 +4369,12 @@ tgRouter.get(
         JOIN "Item" i ON re."itemId" = i.id
         JOIN "Wishlist" w ON i."wishlistId" = w.id
         WHERE re.type = 'RESERVED'`,
+      // Engagement: total user-authored comments
+      prisma.comment.count({ where: { type: 'USER' } }),
+      // Engagement: total Santa hint requests
+      prisma.santaHintRequest.count(),
+      // Engagement: total wishlist subscriptions (social follows)
+      prisma.wishlistSubscription.count(),
     ]);
 
     const withWishlist = n(withWishlistRows[0]);
@@ -4370,6 +4382,7 @@ tgRouter.get(
     return res.json({
       overview: {
         totalUsers,
+        newUsers24h,
         newUsers7d,
         activeUsers7d: n(active7dRows[0]),
         activeUsers30d: n(active30dRows[0]),
@@ -4385,6 +4398,11 @@ tgRouter.get(
         usersWithItem: n(withItemRows[0]),
         usersWithShare: n(withShareRows[0]),
         usersWithReservation: n(withReservationRows[0]),
+      },
+      engagement: {
+        totalComments,
+        totalHints,
+        totalWishlistSubs,
       },
       meta: {
         activeUserDef: 'users who created/updated a regular wishlist or item in the period',

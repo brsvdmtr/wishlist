@@ -312,7 +312,7 @@ type SantaJoinPreview = {
 
 type GodStats = {
   overview: {
-    totalUsers: number; newUsers7d: number;
+    totalUsers: number; newUsers24h: number; newUsers7d: number;
     activeUsers7d: number; activeUsers30d: number;
     totalWishlists: number; totalItems: number;
     totalReservations: number; proUsers: number;
@@ -321,6 +321,9 @@ type GodStats = {
     totalUsers: number; activatedUsers: number;
     usersWithWishlist: number; usersWithItem: number;
     usersWithShare: number; usersWithReservation: number;
+  };
+  engagement: {
+    totalComments: number; totalHints: number; totalWishlistSubs: number;
   };
   generatedAt: string;
 };
@@ -1367,6 +1370,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [godStats, setGodStats] = useState<GodStats | null>(null);
   const [godStatsLoading, setGodStatsLoading] = useState(false);
   const [godStatsError, setGodStatsError] = useState(false);
+  const [godStatsRefreshedAt, setGodStatsRefreshedAt] = useState<Date | null>(null);
+  const [godStatsDetailsOpen, setGodStatsDetailsOpen] = useState(false);
+  const godStatsRefreshIdRef = useRef(0);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
 
@@ -1893,14 +1899,26 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   }, [tgFetch]);
 
   const loadGodStats = useCallback(async () => {
+    // Race condition guard: only apply state from the latest request
+    const myId = ++godStatsRefreshIdRef.current;
     setGodStatsLoading(true);
     setGodStatsError(false);
     try {
       const r = await tgFetch('/tg/me/god-stats');
-      if (r.ok) setGodStats(await r.json() as GodStats);
-      else setGodStatsError(true);
-    } catch { setGodStatsError(true); }
-    finally { setGodStatsLoading(false); }
+      if (myId !== godStatsRefreshIdRef.current) return; // stale response — discard
+      if (r.ok) {
+        setGodStats(await r.json() as GodStats);
+        setGodStatsRefreshedAt(new Date());
+      } else {
+        setGodStatsError(true);
+        // deliberately NOT clearing godStats — keep stale data visible
+      }
+    } catch {
+      if (myId !== godStatsRefreshIdRef.current) return;
+      setGodStatsError(true);
+    } finally {
+      if (myId === godStatsRefreshIdRef.current) setGodStatsLoading(false);
+    }
   }, [tgFetch]);
 
   // --- Owner API calls
@@ -6899,10 +6917,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     const pct = (n: number, total: number) =>
                       total > 0 ? Math.round((n / total) * 100) : 0;
 
+                    const fmt1 = (n: number) =>
+                      n === 0 ? '—' : Number.isFinite(n) ? n.toFixed(1) : '—';
+
+                    const relativeTime = (d: Date | null): string => {
+                      if (!d) return '';
+                      const sec = Math.round((Date.now() - d.getTime()) / 1000);
+                      if (sec < 10) return 'только что';
+                      if (sec < 60) return `${sec} сек назад`;
+                      const min = Math.round(sec / 60);
+                      if (min < 60) return `${min} мин назад`;
+                      return d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+                    };
+
                     const funnelSteps = godStats ? [
                       { label: 'Все юзеры',        value: godStats.funnel.totalUsers },
-                      { label: 'Создали вишлист',  value: godStats.funnel.usersWithWishlist },
-                      { label: 'Добавили желание', value: godStats.funnel.usersWithItem },
+                      { label: 'Вишлист',          value: godStats.funnel.usersWithWishlist },
+                      { label: 'Желание',          value: godStats.funnel.usersWithItem },
                       { label: 'Поделились',       value: godStats.funnel.usersWithShare },
                       { label: 'Получили бронь',   value: godStats.funnel.usersWithReservation },
                     ] : [];
@@ -6920,19 +6951,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             style={{
                               background: 'none', border: 'none', cursor: godStatsLoading ? 'wait' : 'pointer',
                               fontSize: 11, color: C.textMuted, padding: '2px 6px', borderRadius: 6,
-                              opacity: godStatsLoading ? 0.5 : 1, fontFamily: font,
+                              opacity: godStatsLoading ? 0.4 : 1, fontFamily: font,
+                              display: 'flex', alignItems: 'center', gap: 4,
                             }}
                           >
-                            {godStatsLoading ? '…' : '↻ Обновить'}
+                            <span style={{ display: 'inline-block', animation: godStatsLoading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+                            {godStatsLoading ? 'Загружаю…' : 'Обновить'}
                           </button>
                         </div>
 
+                        {/* Error — non-destructive: shown above existing data */}
                         {godStatsError && !godStatsLoading && (
-                          <div style={{ fontSize: 12, color: C.red, textAlign: 'center', padding: '8px 0' }}>
-                            Ошибка загрузки
+                          <div style={{ fontSize: 11, color: C.red, padding: '4px 0 6px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            ⚠ Ошибка обновления{godStats ? ' — показаны старые данные' : ''}
                           </div>
                         )}
 
+                        {/* First load spinner — only when no data yet */}
                         {godStatsLoading && !godStats && (
                           <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', padding: '8px 0' }}>
                             Загружаю…
@@ -6941,21 +6976,27 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
                         {godStats && (() => {
                           const o = godStats.overview;
-                          const overviewRows: [string, number, string, number][] = [
-                            ['Пользователей', o.totalUsers,    'Новых 7д',    o.newUsers7d],
-                            ['Акт. 7д',       o.activeUsers7d,  'Акт. 30д',   o.activeUsers30d],
-                            ['Вишлистов',     o.totalWishlists, 'Желаний',    o.totalItems],
-                            ['Броней',        o.totalReservations, 'PRO',     o.proUsers],
+                          const e = godStats.engagement;
+                          const overviewRows: [string, string | number, string, string | number][] = [
+                            ['Юзеров',    o.totalUsers,        'Новых 24ч',   o.newUsers24h],
+                            ['Новых 7д',  o.newUsers7d,        'Акт. 7д',     o.activeUsers7d],
+                            ['Акт. 30д',  o.activeUsers30d,    'PRO',         o.proUsers],
+                            ['Вишлистов', o.totalWishlists,    'Желаний',     o.totalItems],
+                            ['Броней',    o.totalReservations, 'PRO %',       `${pct(o.proUsers, o.totalUsers)}%`],
                           ];
+                          // Derived coefficients
+                          const avgItemsPerWl = fmt1(o.totalWishlists > 0 ? o.totalItems / o.totalWishlists : 0);
+                          const avgWlPerCreator = fmt1(godStats.funnel.usersWithWishlist > 0 ? o.totalWishlists / godStats.funnel.usersWithWishlist : 0);
+
                           return (
                             <>
                               {/* Overview grid */}
-                              <div style={{ marginBottom: 12 }}>
+                              <div style={{ marginBottom: 10 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
                                   Обзор
                                 </div>
                                 {overviewRows.map(([lA, vA, lB, vB], i) => (
-                                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 0', marginBottom: 4 }}>
+                                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', marginBottom: 4 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: 10 }}>
                                       <span style={{ fontSize: 12, color: C.textMuted }}>{lA}</span>
                                       <span style={{ fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{vA}</span>
@@ -6966,12 +7007,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                     </div>
                                   </div>
                                 ))}
+                                {/* Derived coefficients — small muted row */}
+                                <div style={{ fontSize: 10, color: C.textMuted, marginTop: 5, lineHeight: 1.6 }}>
+                                  жел/вишлист <span style={{ color: C.textSec, fontWeight: 600 }}>{avgItemsPerWl}</span>
+                                  {' · '}
+                                  вишлист/юзер <span style={{ color: C.textSec, fontWeight: 600 }}>{avgWlPerCreator}</span>
+                                </div>
                               </div>
 
                               {/* Funnel */}
-                              <div>
+                              <div style={{ marginBottom: 10 }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                  Воронка
+                                  Воронка · % от всех юзеров
                                 </div>
                                 {funnelSteps.map((step, i) => {
                                   const p = pct(step.value, godStats.funnel.totalUsers);
@@ -6996,13 +7043,46 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                     </div>
                                   );
                                 })}
-                                <div style={{ fontSize: 10, color: C.textMuted, marginTop: 6, lineHeight: 1.4 }}>
-                                  Поделились = вишлист с генерацией ссылки · Бронь = получили чужую бронь
-                                </div>
                               </div>
 
-                              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8, textAlign: 'right' }}>
-                                {new Date(godStats.generatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                              {/* Expandable engagement details */}
+                              <div style={{ marginBottom: 8 }}>
+                                <button
+                                  onClick={() => setGodStatsDetailsOpen(v => !v)}
+                                  style={{
+                                    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                                    fontSize: 10, fontWeight: 700, color: C.textMuted,
+                                    letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: font,
+                                    display: 'flex', alignItems: 'center', gap: 4,
+                                  }}
+                                >
+                                  {godStatsDetailsOpen ? '▾' : '▸'} Детали
+                                </button>
+                                {godStatsDetailsOpen && (
+                                  <div style={{ marginTop: 6 }}>
+                                    {([
+                                      ['Комментариев', e.totalComments],
+                                      ['Подсказок Santa', e.totalHints],
+                                      ['Подписок', e.totalWishlistSubs],
+                                    ] as [string, number][]).map(([lbl, val]) => (
+                                      <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                                        <span style={{ fontSize: 11, color: C.textMuted }}>{lbl}</span>
+                                        <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
+                                      </div>
+                                    ))}
+                                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 5, lineHeight: 1.5 }}>
+                                      Акт = создали/обновили вишлист или желание · Поделились = ссылка явно сгенерирована · Бронь = получили чужую бронь
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Timestamp */}
+                              <div style={{ fontSize: 10, color: C.textMuted, textAlign: 'right', lineHeight: 1.4 }}>
+                                {godStatsRefreshedAt
+                                  ? <>Обновлено {relativeTime(godStatsRefreshedAt)} · {godStatsRefreshedAt.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</>
+                                  : new Date(godStats.generatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
+                                }
                               </div>
                             </>
                           );
