@@ -10242,47 +10242,67 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const handleReserve = async (itemId: string) => {
           if (isReadOnly) return;
           setSantaWishlistReservingId(itemId);
-          const r = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/reserve`, {
-            method: 'POST', body: JSON.stringify({ itemId }),
-          });
-          if (r.ok) {
-            const data = await r.json() as { myReservations: { id: string; title: string }[] };
-            setSantaReceiverWishlist(prev => prev ? {
-              ...prev,
-              myReservations: data.myReservations,
-              items: prev.items.map(it => ({ ...it, reservedByMe: data.myReservations.some(rv => rv.id === it.id) })),
-            } : prev);
-            // Update parent campaign detail reservedItems
-            setCurrentSantaCampaign(prev => prev && prev.myAssignment ? {
-              ...prev,
-              myAssignment: { ...prev.myAssignment, reservedItems: data.myReservations, giftStatus: 'SELECTED_FROM_WISHLIST' },
-            } : prev);
+          try {
+            const r = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/reserve`, {
+              method: 'POST', body: JSON.stringify({ itemId }),
+            });
+            if (r.ok) {
+              const data = await r.json() as { myReservations: { id: string; title: string }[] };
+              setSantaReceiverWishlist(prev => prev ? {
+                ...prev,
+                myReservations: data.myReservations,
+                items: prev.items.map(it => ({ ...it, reservedByMe: data.myReservations.some(rv => rv.id === it.id) })),
+              } : prev);
+              // Update parent campaign detail reservedItems
+              setCurrentSantaCampaign(prev => prev && prev.myAssignment ? {
+                ...prev,
+                myAssignment: { ...prev.myAssignment, reservedItems: data.myReservations, giftStatus: 'SELECTED_FROM_WISHLIST' },
+              } : prev);
+            } else {
+              const errBody = await r.json().catch(() => ({})) as { error?: string; message?: string };
+              console.error('[reserve] failed', r.status, errBody);
+              pushToast(errBody.message || errBody.error || t('toast_error_generic', locale), 'error');
+            }
+          } catch (err) {
+            console.error('[reserve] fetch error', err);
+            pushToast(t('toast_error_generic', locale), 'error');
+          } finally {
+            setSantaWishlistReservingId(null);
           }
-          setSantaWishlistReservingId(null);
         };
 
         const handleUnreserve = async (itemId: string) => {
           if (isReadOnly) return;
           setSantaWishlistReservingId(itemId);
-          const r = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/reserve/${itemId}`, { method: 'DELETE' });
-          if (r.ok) {
-            const data = await r.json() as { myReservations: { id: string; title: string }[] };
-            setSantaReceiverWishlist(prev => prev ? {
-              ...prev,
-              myReservations: data.myReservations,
-              items: prev.items.map(it => ({ ...it, reservedByMe: data.myReservations.some(rv => rv.id === it.id) })),
-            } : prev);
-            // Update parent campaign detail
-            setCurrentSantaCampaign(prev => prev && prev.myAssignment ? {
-              ...prev,
-              myAssignment: {
-                ...prev.myAssignment,
-                reservedItems: data.myReservations,
-                giftStatus: data.myReservations.length === 0 ? 'PENDING' : prev.myAssignment.giftStatus,
-              },
-            } : prev);
+          try {
+            const r = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/reserve/${itemId}`, { method: 'DELETE' });
+            if (r.ok) {
+              const data = await r.json() as { myReservations: { id: string; title: string }[] };
+              setSantaReceiverWishlist(prev => prev ? {
+                ...prev,
+                myReservations: data.myReservations,
+                items: prev.items.map(it => ({ ...it, reservedByMe: data.myReservations.some(rv => rv.id === it.id) })),
+              } : prev);
+              // Update parent campaign detail
+              setCurrentSantaCampaign(prev => prev && prev.myAssignment ? {
+                ...prev,
+                myAssignment: {
+                  ...prev.myAssignment,
+                  reservedItems: data.myReservations,
+                  giftStatus: data.myReservations.length === 0 ? 'PENDING' : prev.myAssignment.giftStatus,
+                },
+              } : prev);
+            } else {
+              const errBody = await r.json().catch(() => ({})) as { error?: string; message?: string };
+              console.error('[unreserve] failed', r.status, errBody);
+              pushToast(errBody.message || errBody.error || t('toast_error_generic', locale), 'error');
+            }
+          } catch (err) {
+            console.error('[unreserve] fetch error', err);
+            pushToast(t('toast_error_generic', locale), 'error');
+          } finally {
+            setSantaWishlistReservingId(null);
           }
-          setSantaWishlistReservingId(null);
         };
 
         return (

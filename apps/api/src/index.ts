@@ -6592,18 +6592,30 @@ tgRouter.post('/santa/campaigns/:id/inbound/reserve', asyncHandler(async (req, r
   const { itemId } = parsed.data;
 
   const participant = await prisma.santaParticipant.findUnique({ where: { campaignId_userId: { campaignId, userId: user.id } } });
-  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+  if (!participant || participant.status !== 'JOINED') {
+    console.error('[reserve] 403 not participant', { campaignId, userId: user.id, status: participant?.status });
+    return res.status(403).json({ error: 'Not a participant' });
+  }
 
   const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, currentRoundId: true } });
-  if (!campaign || campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign not ACTIVE' });
-  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
+  if (!campaign || campaign.status !== 'ACTIVE') {
+    console.error('[reserve] 409 campaign not ACTIVE', { campaignId, status: campaign?.status });
+    return res.status(409).json({ error: 'Campaign not ACTIVE', message: `Campaign status is ${campaign?.status ?? 'not found'}` });
+  }
+  if (!campaign.currentRoundId) {
+    console.error('[reserve] 404 no active round', { campaignId });
+    return res.status(404).json({ error: 'No active round' });
+  }
 
   const roundId = campaign.currentRoundId;
   const assignment = await prisma.santaAssignment.findUnique({
     where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
     select: { id: true, giftStatus: true, receiver: { select: { linkedWishlistId: true } } },
   });
-  if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+  if (!assignment) {
+    console.error('[reserve] 404 assignment not found', { roundId, participantId: participant.id });
+    return res.status(404).json({ error: 'Assignment not found' });
+  }
 
   // Terminal states: cannot reserve after SENT/RECEIVED
   if (['SENT', 'RECEIVED'].includes(assignment.giftStatus)) {
@@ -6612,20 +6624,28 @@ tgRouter.post('/santa/campaigns/:id/inbound/reserve', asyncHandler(async (req, r
 
   // Validate item belongs to receiver's wishlist
   const receiverWishlistId = assignment.receiver.linkedWishlistId;
-  if (!receiverWishlistId) return res.status(409).json({ error: 'receiver_no_wishlist' });
+  if (!receiverWishlistId) {
+    console.error('[reserve] 409 receiver has no wishlist', { assignmentId: assignment.id });
+    return res.status(409).json({ error: 'receiver_no_wishlist', message: 'Receiver has no linked wishlist' });
+  }
 
   const item = await prisma.item.findFirst({
     where: { id: itemId, wishlistId: receiverWishlistId, status: { in: ['AVAILABLE', 'RESERVED', 'PURCHASED'] } },
     select: { id: true, title: true },
   });
-  if (!item) return res.status(404).json({ error: 'Item not found or not reservable' });
+  if (!item) {
+    console.error('[reserve] 404 item not found', { itemId, receiverWishlistId });
+    return res.status(404).json({ error: 'Item not found or not reservable' });
+  }
 
-  // Upsert reservation — unique constraint handles double-tap idempotency
-  await prisma.santaItemReservation.upsert({
-    where: { assignmentId_itemId: { assignmentId: assignment.id, itemId } },
-    create: { assignmentId: assignment.id, itemId },
-    update: {}, // already reserved — no-op
-  });
+  // Create reservation — explicit create+catch for idempotency (avoids upsert with empty update which can be unreliable)
+  try {
+    await prisma.santaItemReservation.create({ data: { assignmentId: assignment.id, itemId } });
+  } catch (e: unknown) {
+    // P2002 = unique constraint violation — item already reserved by this assignment (idempotent)
+    const prismaErr = e as { code?: string };
+    if (prismaErr.code !== 'P2002') throw e;
+  }
 
   // Auto-sync gift status to SELECTED_FROM_WISHLIST if not already in a committed state
   const syncableStatuses = ['PENDING', 'BUYING', 'MISSED_DEADLINE', 'SELECTED_OUTSIDE', 'DECLINED_TO_SAY'];
