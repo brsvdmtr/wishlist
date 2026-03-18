@@ -268,6 +268,8 @@ type SantaCampaignDetail = {
   };
   participants: SantaParticipant[];
   rounds: { id: string; roundNumber: number; drawStatus: string; drawnAt: string | null }[];
+  currentRoundNumber: number | null;
+  totalRounds: number;
   // role-aware assignment: giver sees receiver display info; owner sees aggregate progress
   myAssignment: {
     role: 'giver';
@@ -8609,6 +8611,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const participants = currentSantaCampaign.participants;
         const myAssignment = currentSantaCampaign.myAssignment;
         const isOwner = camp.isOwner;
+        const { currentRoundNumber, totalRounds } = currentSantaCampaign;
+        const showRoundBadge = (currentRoundNumber ?? 0) > 1 || totalRounds > 1;
+        // canStartNextRound: all ownerProgress assignments are in terminal states
+        const ownerProgress = currentSantaCampaign.ownerProgress?.progress;
+        const totalAssignments = ownerProgress
+          ? ownerProgress.pending + ownerProgress.buying + ownerProgress.selectedFromWishlist +
+            ownerProgress.selectedOutside + ownerProgress.declinedToSay +
+            ownerProgress.sent + ownerProgress.received + ownerProgress.missedDeadline
+          : 0;
+        const terminalCount = ownerProgress ? ownerProgress.received + ownerProgress.missedDeadline : 0;
+        const isRoundComplete = totalAssignments > 0 && terminalCount === totalAssignments;
+        const canStartNextRound = isOwner && isRoundComplete && camp.status === 'ACTIVE';
         const statusKey = `santa_campaign_status_${camp.status.toLowerCase().replace('_', '_')}` as string;
 
         const copyInviteLink = () => {
@@ -8629,6 +8643,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   {t(statusKey, locale) || camp.status}
                 </span>
                 {isOwner && <span style={{ fontSize: 12, color: C.textMuted }}>👑 {locale === 'ru' ? 'Организатор' : 'Organizer'}</span>}
+                {showRoundBadge && currentRoundNumber && (
+                  <span style={{ fontSize: 12, fontWeight: 600, color: C.accent, background: `${C.accent}15`, padding: '3px 10px', borderRadius: 8 }}>
+                    {totalRounds > 1
+                      ? t('santa_round_of', locale, { current: String(currentRoundNumber), total: String(totalRounds) })
+                      : t('santa_round_label', locale, { n: String(currentRoundNumber) })}
+                  </span>
+                )}
               </div>
               {camp.description && (
                 <p style={{ fontSize: 14, color: C.textSec, marginTop: 8, lineHeight: 1.5 }}>{camp.description}</p>
@@ -9372,6 +9393,50 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               >
                 {t('santa_campaign_cancel_btn', locale)}
               </button>
+            )}
+
+            {/* Multi-round controls (Batch 5.2) */}
+            {isOwner && camp.status === 'ACTIVE' && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Start next round — only when current round is complete */}
+                {canStartNextRound && (
+                  <button
+                    onClick={async () => {
+                      const nextN = (currentRoundNumber ?? 1) + 1;
+                      if (!confirm(t('santa_round_start_confirm', locale, { n: String(nextN) }))) return;
+                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/rounds`, { method: 'POST' });
+                      if (res.ok) {
+                        const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                        if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                        pushToast(t('done', locale), 'success');
+                      } else {
+                        const err = await res.json() as { error?: string };
+                        if (err.error === 'round_not_complete') pushToast(t('santa_round_not_terminal', locale), 'error');
+                        else pushToast(t('error_generic', locale), 'error');
+                      }
+                    }}
+                    style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 13, fontWeight: 700, padding: '12px 0', cursor: 'pointer', fontFamily: font, width: '100%' }}
+                  >
+                    {t('santa_round_start_next', locale, { n: String((currentRoundNumber ?? 1) + 1) })}
+                  </button>
+                )}
+
+                {/* Force-complete campaign — always visible to owner when ACTIVE */}
+                <button
+                  onClick={async () => {
+                    if (!confirm(t('santa_round_complete_confirm', locale))) return;
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/complete`, { method: 'POST' });
+                    if (res.ok) {
+                      const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                      if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                      pushToast(t('done', locale), 'success');
+                    } else pushToast(t('error_generic', locale), 'error');
+                  }}
+                  style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 12, color: C.textSec, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font, width: '100%' }}
+                >
+                  {t('santa_round_complete_btn', locale)}
+                </button>
+              </div>
             )}
 
             {/* Wishlist picker for linking */}

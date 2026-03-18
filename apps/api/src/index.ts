@@ -4709,7 +4709,11 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
 
   const campaign = await prisma.santaCampaign.findUnique({
     where: { id: campaignId },
-    include: {
+    select: {
+      id: true, title: true, description: true, type: true, status: true, ownerId: true,
+      inviteToken: true, minBudget: true, maxBudget: true, currency: true, drawAt: true,
+      seasonYear: true, cancelledAt: true, cancelReason: true, createdAt: true,
+      currentRoundId: true,
       participants: {
         where: { status: { in: ['JOINED', 'INVITED'] } },
         select: {
@@ -4719,7 +4723,7 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
         },
         orderBy: { joinedAt: 'asc' },
       },
-      rounds: { orderBy: { roundNumber: 'asc' }, select: { id: true, roundNumber: true, drawStatus: true, drawnAt: true } },
+      rounds: { select: { id: true, roundNumber: true }, orderBy: { roundNumber: 'asc' } },
     },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
@@ -4732,8 +4736,8 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
   let myAssignment: SantaAssignmentForGiver | null = null;
   let ownerProgress: SantaAssignmentForOwner | null = null;
   const myParticipant = campaign.participants.find(p => p.user.id === user.id);
-  if (campaign.rounds.length > 0 && ['ACTIVE', 'COMPLETED'].includes(campaign.status)) {
-    const roundId = campaign.rounds[0]!.id;
+  if (campaign.currentRoundId && ['ACTIVE', 'COMPLETED'].includes(campaign.status)) {
+    const roundId = campaign.currentRoundId;
     if (isOwner) {
       // Owner sees aggregate progress only — no individual pairs
       const allAssignments = await prisma.santaAssignment.findMany({
@@ -4837,6 +4841,8 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
       linkedWishlist: isOwner ? p.linkedWishlist : (p.user.id === user.id ? p.linkedWishlist : null),
     })),
     rounds: campaign.rounds,
+    currentRoundNumber: campaign.rounds.find(r => r.id === campaign.currentRoundId)?.roundNumber ?? null,
+    totalRounds: campaign.rounds.length,
     myAssignment,
     ownerProgress: isOwner ? ownerProgress : undefined,
     chatUnreadCount,
@@ -5463,10 +5469,19 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
     return res.status(409).json({ error: 'draw_already_running', message: 'Another draw job already acquired the lock.' });
   }
 
-  // 5. Create (or reuse) the round, set drawJobId
-  let round = await prisma.santaRound.findFirst({ where: { campaignId, roundNumber: 1 } });
+  // 5. Find the existing PENDING round (created by POST /rounds for multi-round),
+  //    or create the first round if none exists.
+  //    Invariant: at most one PENDING round per campaign (enforced by partial unique index).
+  let round = await prisma.santaRound.findFirst({ where: { campaignId, drawStatus: 'PENDING' } });
   if (!round) {
-    round = await prisma.santaRound.create({ data: { campaignId, roundNumber: 1, drawStatus: 'IN_PROGRESS', drawJobId } });
+    // First draw (or there's no pending round — create one)
+    const maxRound = await prisma.santaRound.findFirst({
+      where: { campaignId },
+      orderBy: { roundNumber: 'desc' },
+    });
+    round = await prisma.santaRound.create({
+      data: { campaignId, roundNumber: (maxRound?.roundNumber ?? 0) + 1, drawStatus: 'IN_PROGRESS', drawJobId },
+    });
   } else {
     await prisma.santaRound.update({ where: { id: round.id }, data: { drawStatus: 'IN_PROGRESS', drawJobId } });
   }
@@ -5490,7 +5505,7 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
         data: assignments.map(a => ({ roundId, ...a, giftStatus: 'PENDING' })),
       }),
       prisma.santaRound.update({ where: { id: roundId }, data: { drawStatus: 'DONE', drawnAt: new Date() } }),
-      prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'ACTIVE' } }),
+      prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'ACTIVE', currentRoundId: round.id } }),
     ]);
 
     // 8. Audit log
@@ -5982,6 +5997,92 @@ tgRouter.delete('/santa/campaigns/:id/exclusions/groups/:gid/members/:uid', asyn
   return res.json({ ok: true });
 }));
 
+// POST /tg/santa/campaigns/:id/rounds — start next round (owner + all current round terminal)
+tgRouter.post('/santa/campaigns/:id/rounds', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: {
+      ownerId: true,
+      status: true,
+      currentRoundId: true,
+      rounds: { select: { id: true, roundNumber: true }, orderBy: { roundNumber: 'desc' } },
+    },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+  if (campaign.status !== 'ACTIVE') {
+    return res.status(409).json({ error: 'campaign_not_active', message: 'Campaign must be ACTIVE to start next round' });
+  }
+
+  // Invariant: at most one PENDING round per campaign
+  const existingPending = await prisma.santaRound.findFirst({
+    where: { campaignId, drawStatus: 'PENDING' },
+  });
+  if (existingPending) {
+    return res.status(409).json({ error: 'pending_round_exists', message: 'A round is already pending draw. Run the draw first.' });
+  }
+
+  // All assignments in current round must be in terminal states
+  if (!campaign.currentRoundId) {
+    return res.status(409).json({ error: 'no_active_round' });
+  }
+  const TERMINAL: string[] = ['RECEIVED', 'MISSED_DEADLINE'];
+  const blockingAssignments = await prisma.santaAssignment.findMany({
+    where: { roundId: campaign.currentRoundId, giftStatus: { notIn: TERMINAL as never[] } },
+    select: { id: true, giftStatus: true },
+  });
+  if (blockingAssignments.length > 0) {
+    return res.status(409).json({
+      error: 'round_not_complete',
+      message: 'All gifts must reach RECEIVED or MISSED_DEADLINE before starting next round',
+      blocking: blockingAssignments.map(a => ({ id: a.id, giftStatus: a.giftStatus })),
+    });
+  }
+
+  // Create next round (PENDING)
+  const nextRoundNumber = (campaign.rounds[0]?.roundNumber ?? 0) + 1;
+  const nextRound = await prisma.santaRound.create({
+    data: { campaignId, roundNumber: nextRoundNumber, drawStatus: 'PENDING' },
+  });
+
+  // Campaign back to LOCKED (ready to draw); currentRoundId stays pointing to completed round
+  await prisma.santaCampaign.update({
+    where: { id: campaignId },
+    data: { status: 'LOCKED' },
+  });
+
+  return res.status(201).json({
+    nextRound: { id: nextRound.id, roundNumber: nextRound.roundNumber },
+    campaign: { status: 'LOCKED', currentRoundId: campaign.currentRoundId },
+  });
+}));
+
+// POST /tg/santa/campaigns/:id/complete — force-complete campaign (owner only, no assignment check)
+tgRouter.post('/santa/campaigns/:id/complete', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { ownerId: true, status: true },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+  if (campaign.status !== 'ACTIVE') {
+    return res.status(409).json({ error: 'campaign_not_active', message: 'Only ACTIVE campaigns can be force-completed' });
+  }
+
+  await prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'COMPLETED' } });
+
+  // campaign_completed system message in chat (guaranteed visible to all participants)
+  void createSystemMessage(campaignId, 'campaign_completed', {}).catch(() => {});
+
+  return res.json({ ok: true, status: 'COMPLETED' });
+}));
+
 // POST /tg/santa/campaigns/:id/gift-status — update gift status (giver only, post-draw)
 tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res) => {
   const user = await getOrCreateTgUser(req.tgUser!);
@@ -5999,11 +6100,11 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
   });
   if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' }); // L1
 
-  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' } } } });
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, currentRoundId: true } });
   if (!campaign || campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign is not ACTIVE' });
-  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
+  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
 
-  const roundId = campaign.rounds[0]!.id;
+  const roundId = campaign.currentRoundId;
   const assignment = await prisma.santaAssignment.findUnique({
     where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
   });
@@ -6058,12 +6159,12 @@ tgRouter.post('/santa/campaigns/:id/confirm-received', asyncHandler(async (req, 
   });
   if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' }); // L1
 
-  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' } } } });
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, currentRoundId: true } });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign is not ACTIVE' });
-  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
+  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
 
-  const roundId = campaign.rounds[0]!.id;
+  const roundId = campaign.currentRoundId;
   // Receiver addresses via campaign-centric path — NOT assignmentId
   // M1: resolve assignment FIRST — check RECEIVED idempotency before campaign-active gate
   // This ensures a retry after the campaign auto-completes still returns the idempotent success.
@@ -6098,10 +6199,14 @@ tgRouter.post('/santa/campaigns/:id/confirm-received', asyncHandler(async (req, 
   // Check if all gifts received → complete campaign
   const allAssignments = await prisma.santaAssignment.findMany({ where: { roundId }, select: { id: true, giftStatus: true } });
   // After our update above, re-check: our assignment is now RECEIVED
+  // Auto-complete: only for single-round campaigns where all assignments are RECEIVED.
+  // Multi-round campaigns (totalRounds > 1) require organizer to explicitly call POST /complete.
+  // MISSED_DEADLINE assignments do NOT trigger auto-complete; organizer uses POST /complete.
+  const totalRounds = await prisma.santaRound.count({ where: { campaignId } });
   const allReceived = allAssignments.every(a => a.id === assignment.id ? true : a.giftStatus === 'RECEIVED');
-  if (allReceived) {
+  if (allReceived && totalRounds === 1) {
     await prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'COMPLETED' } });
-    // System message: all gifts received — campaign complete
+    // campaign_completed system message in chat
     void createSystemMessage(campaignId, 'campaign_completed', {}).catch(() => {});
   }
 
@@ -6132,11 +6237,11 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
   const participant = await prisma.santaParticipant.findUnique({ where: { campaignId_userId: { campaignId, userId: user.id } } });
   if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
 
-  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' } } } });
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, currentRoundId: true } });
   if (!campaign || campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign not ACTIVE' });
-  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round' });
+  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
 
-  const roundId = campaign.rounds[0]!.id;
+  const roundId = campaign.currentRoundId;
   const assignment = await prisma.santaAssignment.findUnique({
     where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
     include: { receiver: { select: { linkedWishlistId: true, user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } } } },
@@ -6180,15 +6285,15 @@ tgRouter.get('/santa/campaigns/:id/inbound/status', asyncHandler(async (req, res
 
   const campaign = await prisma.santaCampaign.findUnique({
     where: { id: campaignId },
-    select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
+    select: { status: true, currentRoundId: true },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) {
     return res.json({ hasGiver: false, signal: 'waiting', canConfirmReceived: false, canReveal: false, campaignStatus: campaign.status });
   }
-  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
+  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
 
-  const roundId = campaign.rounds[0]!.id;
+  const roundId = campaign.currentRoundId;
   // Resolve via receiver side — campaign-centric, NOT assignment-id-centric
   const assignment = await prisma.santaAssignment.findUnique({
     where: { roundId_receiverParticipantId: { roundId, receiverParticipantId: participant.id } },
@@ -6220,7 +6325,7 @@ tgRouter.get('/santa/campaigns/:id/assignment', asyncHandler(async (req, res) =>
 
   const campaign = await prisma.santaCampaign.findUnique({
     where: { id: campaignId },
-    select: { ownerId: true, status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
+    select: { ownerId: true, status: true, currentRoundId: true },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
 
@@ -6229,8 +6334,8 @@ tgRouter.get('/santa/campaigns/:id/assignment', asyncHandler(async (req, res) =>
   if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) {
     return res.json({ status: campaign.status, ready: false });
   }
-  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
-  const roundId = campaign.rounds[0]!.id;
+  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
+  const roundId = campaign.currentRoundId;
 
   // Owner: return aggregate progress only
   if (isOwner) {
@@ -6288,14 +6393,14 @@ tgRouter.get('/santa/campaigns/:id/reveal', asyncHandler(async (req, res) => {
 
   const campaign = await prisma.santaCampaign.findUnique({
     where: { id: campaignId },
-    select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
+    select: { status: true, currentRoundId: true },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) {
     return res.status(409).json({ error: 'reveal_not_available', campaignStatus: campaign.status });
   }
-  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
-  const roundId = campaign.rounds[0]!.id;
+  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
+  const roundId = campaign.currentRoundId;
 
   // Receiver-side lookup — assignment is resolved from the receiver's participant record
   const receiverAssignment = await prisma.santaAssignment.findUnique({
@@ -6426,12 +6531,12 @@ tgRouter.post('/santa/campaigns/:id/hints', asyncHandler(async (req, res) => {
   // 2. Campaign must be ACTIVE
   const campaign = await prisma.santaCampaign.findUnique({
     where: { id: campaignId },
-    select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
+    select: { status: true, currentRoundId: true },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'campaign_not_active', message: 'Hint requests can only be sent in ACTIVE campaigns' });
-  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
-  const roundId = campaign.rounds[0]!.id;
+  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
+  const roundId = campaign.currentRoundId;
 
   // 3. PRO-gate: only giver's effective plan is checked — receiver's plan is irrelevant
   const ent = await getUserEntitlement(user.id, user.godMode);
@@ -6489,12 +6594,12 @@ tgRouter.get('/santa/campaigns/:id/hints', asyncHandler(async (req, res) => {
 
   const campaign = await prisma.santaCampaign.findUnique({
     where: { id: campaignId },
-    select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
+    select: { status: true, currentRoundId: true },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign not ACTIVE or COMPLETED' });
-  if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
-  const roundId = campaign.rounds[0]!.id;
+  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
+  const roundId = campaign.currentRoundId;
 
   // Giver-centric assignment lookup
   const assignment = await prisma.santaAssignment.findUnique({

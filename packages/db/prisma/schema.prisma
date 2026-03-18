@@ -612,10 +612,18 @@ model SantaCampaign {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
+  // currentRoundId: the single authoritative pointer to the live/most-recent round.
+  // null  = no completed draw yet (DRAFT / OPEN / LOCKED pre-first-draw).
+  // set   = atomically after drawStatus → DONE in the draw endpoint.
+  // never cleared when starting next round (old round stays visible as history).
+  // updated to new round.id when next draw completes.
+  currentRoundId  String?                @unique
+
   // onDelete: Restrict — prevents user account deletion while owning an active campaign.
   owner           User                   @relation("OwnedSantaCampaigns", fields: [ownerId], references: [id], onDelete: Restrict)
+  currentRound    SantaRound?            @relation("CampaignCurrentRound", fields: [currentRoundId], references: [id], onDelete: SetNull)
   participants    SantaParticipant[]
-  rounds          SantaRound[]
+  rounds          SantaRound[]           @relation("CampaignRounds")
   chatMessages    SantaChatMessage[]
   readCursors     SantaChatReadCursor[]
   chatMutes       SantaChatMute[]
@@ -668,7 +676,9 @@ model SantaRound {
   drawnAt     DateTime?
   createdAt   DateTime        @default(now())
 
-  campaign     SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign     SantaCampaign     @relation("CampaignRounds", fields: [campaignId], references: [id], onDelete: Cascade)
+  // currentOf: back-relation for SantaCampaign.currentRound (at most one campaign at a time)
+  currentOf    SantaCampaign?    @relation("CampaignCurrentRound")
   assignments  SantaAssignment[]
   polls        SantaPoll[]
   hintRequests SantaHintRequest[]
