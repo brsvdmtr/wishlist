@@ -280,7 +280,7 @@ type SantaCampaignDetail = {
     role: 'giver';
     giftStatus: string;
     giftNote: string | null;
-    receiver: { displayName: string; avatarUrl: string | null };
+    receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean };
   } | null;
   ownerProgress: {
     role: 'owner';
@@ -1669,6 +1669,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     participants: Array<{
       id: string; userId: string; status: string; role: string;
       joinedAt: string; leftAt: string | null; displayName: string; avatarUrl: string | null;
+      hasLinkedWishlist: boolean;
     }>;
     giftProgress: {
       pending: number; buying: number; selectedFromWishlist: number; selectedOutside: number;
@@ -3084,6 +3085,25 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingItem, screen, loadComments]);
+
+  // Auto-load receiver wishlist when giver card mounts with a linked wishlist
+  useEffect(() => {
+    if (
+      screen === 'santa-campaign' &&
+      currentSantaCampaign?.campaign.status === 'ACTIVE' &&
+      currentSantaCampaign.myAssignment?.receiver.hasLinkedWishlist &&
+      !santaReceiverWishlist &&
+      !santaReceiverWishlistLoading
+    ) {
+      const campId = currentSantaCampaign.campaign.id;
+      setSantaReceiverWishlistLoading(true);
+      tgFetch(`/tg/santa/campaigns/${campId}/inbound/wishlist`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data) setSantaReceiverWishlist(data as typeof santaReceiverWishlist); })
+        .finally(() => setSantaReceiverWishlistLoading(false));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, currentSantaCampaign?.campaign.id, currentSantaCampaign?.myAssignment?.receiver.hasLinkedWishlist]);
 
   // --- Owner actions
   const handleCreateWishlist = async () => {
@@ -8883,7 +8903,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           </span>
                         )}
                       </div>
-                      {p.hasLinkedWishlist && <div style={{ fontSize: 12, color: C.green }}>🎁 {locale === 'ru' ? 'Вишлист привязан' : 'Wishlist linked'}</div>}
+                      {p.hasLinkedWishlist && <div style={{ fontSize: 12, color: C.green }}>🎁 {t('santa_wishlist_linked_label', locale)}</div>}
                     </div>
                     {/* Role management (owner only) */}
                     {isOwner && p.userId !== (tgUser?.id?.toString()) && (
@@ -9060,18 +9080,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   );
                 })()}
 
-                {/* View receiver's wishlist */}
-                <button
-                  onClick={async () => {
-                    setSantaReceiverWishlistLoading(true);
-                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/wishlist`);
-                    if (res.ok) setSantaReceiverWishlist(await res.json() as typeof santaReceiverWishlist);
-                    setSantaReceiverWishlistLoading(false);
-                  }}
-                  style={{ background: 'none', border: `1px solid ${C.accent}`, borderRadius: 10, color: C.accent, fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer', width: '100%' }}
-                >
-                  {santaReceiverWishlistLoading ? t('loading', locale) : t('santa_campaign_receiver_wishlist', locale)}
-                </button>
+                {/* View receiver's wishlist — only shown if receiver has a linked wishlist */}
+                {currentSantaCampaign.myAssignment?.receiver.hasLinkedWishlist ? (
+                  <button
+                    onClick={async () => {
+                      setSantaReceiverWishlistLoading(true);
+                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/inbound/wishlist`);
+                      if (res.ok) setSantaReceiverWishlist(await res.json() as typeof santaReceiverWishlist);
+                      setSantaReceiverWishlistLoading(false);
+                    }}
+                    style={{ background: 'none', border: `1px solid ${C.accent}`, borderRadius: 10, color: C.accent, fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer', width: '100%' }}
+                  >
+                    {santaReceiverWishlistLoading ? t('loading', locale) : t('santa_campaign_receiver_wishlist', locale)}
+                  </button>
+                ) : (
+                  <div style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', padding: '8px 0' }}>
+                    {t('santa_campaign_receiver_no_wishlist_yet', locale)}
+                  </div>
+                )}
                 {santaReceiverWishlist && (
                   <div style={{ marginTop: 12 }}>
                     <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6 }}>
@@ -9177,7 +9203,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             }}
                             style={{ marginTop: 8, background: 'none', border: 'none', color: C.textMuted, fontSize: 12, padding: '4px 0', cursor: 'pointer', fontFamily: font }}
                           >
-                            {santaHintRequestLoading ? t('loading', locale) : '↻ ' + (locale === 'ru' ? 'Обновить' : 'Refresh')}
+                            {santaHintRequestLoading ? t('loading', locale) : t('santa_hint_refresh', locale)}
                           </button>
                         )}
                       </div>
@@ -9194,7 +9220,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               return (
                 <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>
-                    {locale === 'ru' ? 'Мой подарок' : 'My gift'}
+                    {t('santa_my_gift_label', locale)}
                   </div>
 
                   {/* Load inbound status on demand */}
@@ -9209,7 +9235,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       }}
                       style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 13, padding: '8px 16px', cursor: 'pointer', width: '100%' }}
                     >
-                      {santaInboundLoading ? t('loading', locale) : (locale === 'ru' ? 'Проверить статус' : 'Check status')}
+                      {santaInboundLoading ? t('loading', locale) : t('santa_check_status_btn', locale)}
                     </button>
                   )}
 
@@ -9583,39 +9609,55 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            {/* Wishlist picker for linking */}
-            {camp.status !== 'ACTIVE' && camp.status !== 'COMPLETED' && camp.status !== 'CANCELLED' && (
-              <div style={{ marginTop: 16 }}>
-                {(() => {
-                  const me = participants.find(p => p.userId === tgUser?.id?.toString());
-                  if (!me) return null;
-                  return me.linkedWishlist ? (
+            {/* Wishlist section — always visible for participants; read-only during/after campaign */}
+            {(() => {
+              const me = participants.find(p => p.userId === tgUser?.id?.toString());
+              if (!me || me.status !== 'JOINED') return null;
+              const isReadOnly = ['ACTIVE', 'COMPLETED', 'CANCELLED'].includes(camp.status);
+              return (
+                <div style={{ marginTop: 16 }}>
+                  {me.linkedWishlist ? (
                     <div style={{ background: C.card, borderRadius: 14, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ fontSize: 14, color: C.text }}>
                         {t('santa_campaign_linked_wishlist', locale, { title: me.linkedWishlist.title })}
                       </div>
-                      <button
-                        onClick={async () => {
-                          await tgFetch(`/tg/santa/campaigns/${camp.id}/wishlist`, { method: 'PATCH', body: JSON.stringify({ wishlistId: null }) });
-                          const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
-                          if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
-                        }}
-                        style={{ background: 'none', border: 'none', color: C.red, fontSize: 13, cursor: 'pointer', padding: 0 }}
-                      >
-                        {t('santa_campaign_unlink_wishlist', locale)}
-                      </button>
+                      {isReadOnly ? (
+                        <span style={{ fontSize: 12, color: C.green }}>🎁</span>
+                      ) : (
+                        <button
+                          onClick={async () => {
+                            await tgFetch(`/tg/santa/campaigns/${camp.id}/wishlist`, { method: 'PATCH', body: JSON.stringify({ wishlistId: null }) });
+                            const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                            if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                          }}
+                          style={{ background: 'none', border: 'none', color: C.red, fontSize: 13, cursor: 'pointer', padding: 0 }}
+                        >
+                          {t('santa_campaign_unlink_wishlist', locale)}
+                        </button>
+                      )}
+                    </div>
+                  ) : isReadOnly ? (
+                    <div style={{ background: C.card, borderRadius: 14, padding: '12px 16px', fontSize: 13, color: C.textMuted }}>
+                      {t('santa_campaign_wishlist_not_linked_active', locale)}
                     </div>
                   ) : (
-                    <button
-                      onClick={() => setShowSantaWishlistPicker(true)}
-                      style={{ background: C.card, border: `1px dashed ${C.border}`, borderRadius: 14, color: C.accent, fontSize: 14, fontWeight: 600, padding: '12px 16px', cursor: 'pointer', width: '100%', fontFamily: font }}
-                    >
-                      {t('santa_campaign_link_wishlist', locale)}
-                    </button>
-                  );
-                })()}
-              </div>
-            )}
+                    <div>
+                      {['OPEN', 'LOCKED'].includes(camp.status) && (
+                        <div style={{ background: `${C.accent}15`, borderRadius: 10, padding: '8px 12px', marginBottom: 8, fontSize: 12, color: C.accent, fontWeight: 500 }}>
+                          💡 {t('santa_wishlist_nudge_link', locale)}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setShowSantaWishlistPicker(true)}
+                        style={{ background: C.card, border: `1px dashed ${C.border}`, borderRadius: 14, color: C.accent, fontSize: 14, fontWeight: 600, padding: '12px 16px', cursor: 'pointer', width: '100%', fontFamily: font }}
+                      >
+                        {t('santa_campaign_link_wishlist', locale)}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Chat button + unread badge (Batch 4.1) */}
             {['OPEN', 'LOCKED', 'ACTIVE', 'COMPLETED', 'CANCELLED'].includes(camp.status) && (
@@ -9823,26 +9865,43 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {/* Wishlist picker sheet */}
             <BottomSheet isOpen={showSantaWishlistPicker} onClose={() => setShowSantaWishlistPicker(false)} title={t('santa_campaign_link_wishlist', locale)}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {wishlists.map(wl => (
-                  <button
-                    key={wl.id}
-                    onClick={async () => {
-                      setSantaWishlistPickerLoading(true);
-                      const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/wishlist`, { method: 'PATCH', body: JSON.stringify({ wishlistId: wl.id }) });
-                      if (res.ok) {
-                        const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
-                        if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                {wishlists.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                    <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 16 }}>
+                      {t('santa_wishlist_picker_empty', locale)}
+                    </div>
+                    <button
+                      onClick={() => {
                         setShowSantaWishlistPicker(false);
-                      } else pushToast(t('error_generic', locale), 'error');
-                      setSantaWishlistPickerLoading(false);
-                    }}
-                    disabled={santaWishlistPickerLoading}
-                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{wl.title}</span>
-                    <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>
-                  </button>
-                ))}
+                        setScreen('my-wishlists');
+                      }}
+                      style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 24px', cursor: 'pointer', fontFamily: font }}
+                    >
+                      {t('santa_wishlist_picker_create_new', locale)}
+                    </button>
+                  </div>
+                ) : (
+                  wishlists.map(wl => (
+                    <button
+                      key={wl.id}
+                      onClick={async () => {
+                        setSantaWishlistPickerLoading(true);
+                        const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/wishlist`, { method: 'PATCH', body: JSON.stringify({ wishlistId: wl.id }) });
+                        if (res.ok) {
+                          const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                          if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                          setShowSantaWishlistPicker(false);
+                        } else pushToast(t('error_generic', locale), 'error');
+                        setSantaWishlistPickerLoading(false);
+                      }}
+                      disabled={santaWishlistPickerLoading}
+                      style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    >
+                      <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{wl.title}</span>
+                      <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>
+                    </button>
+                  ))
+                )}
               </div>
             </BottomSheet>
           </div>
@@ -10684,6 +10743,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             </span>
                           )}
                         </div>
+                        {p.hasLinkedWishlist ? (
+                          <div style={{ fontSize: 11, color: C.green, marginTop: 2 }}>🎁 {t('santa_wishlist_linked_label', locale)}</div>
+                        ) : (
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>⚠️ {t('santa_campaign_wishlist_not_linked_active', locale)}</div>
+                        )}
                       </div>
                     </div>
                   ))}

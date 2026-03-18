@@ -4760,7 +4760,10 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
         select: {
           giftStatus: true, giftNote: true,
           receiver: {
-            select: { user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } },
+            select: {
+              linkedWishlistId: true,
+              user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+            },
           },
         },
       });
@@ -4771,7 +4774,11 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
         myAssignment = serializeAssignment('giver', {
           giftStatus: giverAssignment.giftStatus,
           giftNote: giverAssignment.giftNote,
-          receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl },
+          receiver: {
+            displayName: receiverDisplayName,
+            avatarUrl: receiverAvatarUrl,
+            hasLinkedWishlist: !!giverAssignment.receiver.linkedWishlistId,
+          },
         });
       }
     }
@@ -5302,7 +5309,7 @@ type SantaAssignmentForGiver = {
   role: 'giver';
   giftStatus: string;
   giftNote: string | null;
-  receiver: { displayName: string; avatarUrl: string | null };
+  receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean };
 };
 
 type SantaAssignmentForReceiver = {
@@ -5322,6 +5329,7 @@ type SantaAssignmentForOwner = {
     missedDeadline: number;
     sent: number;
     received: number;
+    orphaned: number;            // exits approved mid-round
     withoutWishlist: number;     // receivers without a linked wishlist
   };
 };
@@ -5375,7 +5383,7 @@ const GIVER_ALLOWED_TRANSITIONS: Record<string, string[]> = {
  */
 function serializeAssignment(
   role: 'giver',
-  data: { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null } }
+  data: { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean } }
 ): SantaAssignmentForGiver;
 function serializeAssignment(
   role: 'receiver',
@@ -5390,8 +5398,8 @@ function serializeAssignment(
   data: unknown,
 ): SantaAssignmentForGiver | SantaAssignmentForReceiver | SantaAssignmentForOwner {
   if (role === 'giver') {
-    const d = data as { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null } };
-    return { role: 'giver', giftStatus: d.giftStatus, giftNote: d.giftNote, receiver: { displayName: d.receiver.displayName, avatarUrl: d.receiver.avatarUrl } };
+    const d = data as { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean } };
+    return { role: 'giver', giftStatus: d.giftStatus, giftNote: d.giftNote, receiver: { displayName: d.receiver.displayName, avatarUrl: d.receiver.avatarUrl, hasLinkedWishlist: d.receiver.hasLinkedWishlist } };
   }
   if (role === 'receiver') {
     const d = data as { giftStatus: string };
@@ -5402,6 +5410,7 @@ function serializeAssignment(
   const progress = {
     pending: 0, buying: 0, selectedFromWishlist: 0, selectedOutside: 0,
     declinedToSay: 0, missedDeadline: 0, sent: 0, received: 0,
+    orphaned: 0,
     withoutWishlist: d.receiverWithoutWishlistCount ?? 0,
   };
   for (const a of d.assignments) {
@@ -5414,6 +5423,7 @@ function serializeAssignment(
       case 'MISSED_DEADLINE':         progress.missedDeadline++; break;
       case 'SENT':                    progress.sent++; break;
       case 'RECEIVED':                progress.received++; break;
+      case 'ORPHANED':                progress.orphaned++; break;
     }
   }
   return { role: 'owner', progress };
@@ -6206,7 +6216,10 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
     data: { giftStatus: parsed.data.status, giftNote: parsed.data.note ?? assignment.giftNote },
     include: {
       receiver: {
-        select: { user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } },
+        select: {
+          linkedWishlistId: true,
+          user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+        },
       },
     },
   });
@@ -6219,7 +6232,7 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
   return res.json(serializeAssignment('giver', {
     giftStatus: updated.giftStatus,
     giftNote: updated.giftNote,
-    receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl },
+    receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl, hasLinkedWishlist: !!updated.receiver.linkedWishlistId },
   }));
 }));
 
@@ -6330,7 +6343,7 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
   const giverView = serializeAssignment('giver', {
     giftStatus: assignment.giftStatus,
     giftNote: assignment.giftNote,
-    receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl },
+    receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl, hasLinkedWishlist: !!receiverWishlistId },
   });
 
   if (!receiverWishlistId) return res.json({ ...giverView, wishlist: null, items: [] });
@@ -6432,6 +6445,7 @@ tgRouter.get('/santa/campaigns/:id/assignment', asyncHandler(async (req, res) =>
       giftNote: true,
       receiver: {
         select: {
+          linkedWishlistId: true,
           user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
         },
       },
@@ -6448,7 +6462,11 @@ tgRouter.get('/santa/campaigns/:id/assignment', asyncHandler(async (req, res) =>
     ...serializeAssignment('giver', {
       giftStatus: giverAssignment.giftStatus,
       giftNote: giverAssignment.giftNote,
-      receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl },
+      receiver: {
+        displayName: receiverDisplayName,
+        avatarUrl: receiverAvatarUrl,
+        hasLinkedWishlist: !!giverAssignment.receiver.linkedWishlistId,
+      },
     }),
   });
 }));
@@ -7662,6 +7680,7 @@ tgRouter.get('/santa/campaigns/:id/organizer/summary', asyncHandler(async (req, 
       role: true,
       joinedAt: true,
       leftAt: true,
+      linkedWishlistId: true,
       user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
     },
     orderBy: { joinedAt: 'asc' },
@@ -7719,6 +7738,7 @@ tgRouter.get('/santa/campaigns/:id/organizer/summary', asyncHandler(async (req, 
     leftAt: p.leftAt?.toISOString() ?? null,
     displayName: p.user.profile?.displayName || p.user.firstName || p.userId,
     avatarUrl: p.user.profile?.avatarUrl ?? null,
+    hasLinkedWishlist: !!p.linkedWishlistId,
   });
 
   return res.json({

@@ -1095,6 +1095,21 @@ const ru: Dict = {
   santa_organizer_open_btn: 'Панель организатора',
   santa_pending_exit_requests_badge: 'Запросы на выход: {{n}}',
 
+  // ── Batch 5.5 — Completion pass ───────────────────────────────────────────
+  santa_inbound_section_title: 'Мой подарок',
+  santa_inbound_check_status: 'Статус подарка',
+  santa_participant_wishlist_linked: 'Вишлист привязан',
+  santa_hint_refresh: '↻ Обновить',
+  santa_wishlist_picker_empty: 'У вас пока нет вишлистов',
+  santa_wishlist_picker_create_new: 'Создать новый вишлист',
+  santa_campaign_wishlist_linked_readonly: 'Вишлист привязан (изменение недоступно во время кампании)',
+  santa_campaign_wishlist_not_linked_active: 'Вишлист не привязан. Привяжите до начала жеребьёвки.',
+  santa_campaign_receiver_no_wishlist_yet: 'Получатель ещё не добавил вишлист',
+  santa_wishlist_nudge_link: 'Не забудьте привязать вишлист до жеребьёвки!',
+  santa_my_gift_label: 'Мой подарок',
+  santa_check_status_btn: 'Проверить статус',
+  santa_wishlist_linked_label: 'Вишлист привязан',
+
   // ── Bot — Santa ───────────────────────────────────────────────────────────
   bot_santa_invite_msg: '🎅 {{owner}} приглашает тебя в «{{title}}»!\nНажми кнопку ниже, чтобы вступить.',
   bot_santa_join_btn: 'Вступить',
@@ -2179,6 +2194,21 @@ const en: Dict = {
   santa_leave_use_exit_request: 'Campaign is locked. Submit an exit request for the organizer to review.',
   santa_organizer_open_btn: 'Organizer panel',
   santa_pending_exit_requests_badge: 'Exit requests: {{n}}',
+
+  // ── Batch 5.5 — Completion pass ───────────────────────────────────────────
+  santa_inbound_section_title: 'My gift',
+  santa_inbound_check_status: 'Gift status',
+  santa_participant_wishlist_linked: 'Wishlist linked',
+  santa_hint_refresh: '↻ Refresh',
+  santa_wishlist_picker_empty: 'You have no wishlists yet',
+  santa_wishlist_picker_create_new: 'Create a new wishlist',
+  santa_campaign_wishlist_linked_readonly: 'Wishlist linked (cannot change while campaign is active)',
+  santa_campaign_wishlist_not_linked_active: 'No wishlist linked. Link one before the draw.',
+  santa_campaign_receiver_no_wishlist_yet: 'Receiver hasn\'t added a wishlist yet',
+  santa_wishlist_nudge_link: 'Don\'t forget to link a wishlist before the draw!',
+  santa_my_gift_label: 'My gift',
+  santa_check_status_btn: 'Check status',
+  santa_wishlist_linked_label: 'Wishlist linked',
 
   // ── Bot — Santa ───────────────────────────────────────────────────────────
   bot_santa_invite_msg: '🎅 {{owner}} invites you to join «{{title}}»!\nTap the button below to participate.',
