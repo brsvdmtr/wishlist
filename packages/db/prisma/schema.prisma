@@ -536,10 +536,14 @@ enum SantaParticipantStatus {
 }
 
 enum SantaGiftStatus {
-  PENDING
-  BUYING
-  SENT
-  RECEIVED
+  PENDING                // giver hasn't decided yet (initial state)
+  BUYING                 // legacy — treated as SELECTED_OUTSIDE in new flows; kept for backwards compat
+  SELECTED_FROM_WISHLIST // giver chose an item from receiver's wishlist
+  SELECTED_OUTSIDE       // giver chose something not from the wishlist
+  DECLINED_TO_SAY        // giver confirms participation but won't disclose selection
+  SENT                   // gift physically sent / handed over; receiver can now confirm
+  RECEIVED               // receiver confirmed — terminal; unlocks personal reveal
+  MISSED_DEADLINE        // auto-set by cron when drawAt passed and giver hasn't acted; recoverable
 }
 
 enum SantaDrawStatus {
@@ -564,6 +568,10 @@ enum SantaNotificationType {
   HINT_REQUEST
   HINT_RESPONDED
   CAMPAIGN_CANCELLED
+  GIFT_RECEIVED      // sent to giver when receiver marks their gift RECEIVED
+  REVEAL_UNLOCKED    // sent to receiver after they confirm RECEIVED (their reveal is ready)
+  DEADLINE_WARNING   // sent to giver ~3 days before drawAt if still PENDING
+  DEADLINE_MISSED    // sent to giver when their status is auto-updated to MISSED_DEADLINE
 }
 
 // Admin-controlled season window. One row per year.
@@ -663,6 +671,9 @@ model SantaAssignment {
   receiverParticipantId String
   giftStatus            SantaGiftStatus @default(PENDING)
   giftNote              String?
+  // Set the first time the receiver views their reveal — for analytics and completeness tracking.
+  // Never exposed to any party other than the receiver themselves.
+  revealedAt            DateTime?
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 

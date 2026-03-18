@@ -4727,7 +4727,11 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
         where: { roundId },
         select: { giftStatus: true },
       });
-      ownerProgress = serializeAssignment('owner', { assignments: allAssignments });
+      // Count receivers without a linked wishlist (so owner can nudge them)
+      const receiverWithoutWishlistCount = campaign.participants.filter(
+        p => p.status === 'JOINED' && !p.linkedWishlist,
+      ).length;
+      ownerProgress = serializeAssignment('owner', { assignments: allAssignments, receiverWithoutWishlistCount });
     }
     if (myParticipant) {
       // Giver view for all participants (including owner if they're also a participant)
@@ -5099,7 +5103,56 @@ type SantaAssignmentForReceiver = {
 
 type SantaAssignmentForOwner = {
   role: 'owner';
-  progress: { pending: number; buying: number; sent: number; received: number };
+  progress: {
+    pending: number;
+    buying: number;              // legacy BUYING count
+    selectedFromWishlist: number;
+    selectedOutside: number;
+    declinedToSay: number;
+    missedDeadline: number;
+    sent: number;
+    received: number;
+    withoutWishlist: number;     // receivers without a linked wishlist
+  };
+};
+
+// ─── Inbound signal helpers (Batch 3) ─────────────────────────────────────────
+
+/**
+ * Maps a raw SantaGiftStatus value to a clean receiver-facing inbound signal.
+ * Deliberately coarse to prevent side-channel deduction of giver behaviour timing.
+ *   waiting     = giver hasn't committed to anything yet
+ *   in_progress = giver has made a selection (type intentionally hidden)
+ *   ready       = giver says they sent it; receiver should confirm receipt
+ *   received    = receiver confirmed; reveal is now unlocked personally
+ */
+function giftStatusToInboundSignal(giftStatus: string): 'waiting' | 'in_progress' | 'ready' | 'received' {
+  switch (giftStatus) {
+    case 'SELECTED_FROM_WISHLIST':
+    case 'SELECTED_OUTSIDE':
+    case 'DECLINED_TO_SAY':
+    case 'BUYING':           // legacy
+      return 'in_progress';
+    case 'SENT':
+      return 'ready';
+    case 'RECEIVED':
+      return 'received';
+    case 'PENDING':
+    case 'MISSED_DEADLINE':  // don't expose giver's failure to receiver
+    default:
+      return 'waiting';
+  }
+}
+
+/** Allowed giver-initiated gift status transitions (Batch 3 state machine). */
+const GIVER_ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  PENDING:                ['SELECTED_FROM_WISHLIST', 'SELECTED_OUTSIDE', 'DECLINED_TO_SAY', 'SENT', 'BUYING'],
+  BUYING:                 ['SELECTED_FROM_WISHLIST', 'SELECTED_OUTSIDE', 'DECLINED_TO_SAY', 'SENT'],
+  SELECTED_FROM_WISHLIST: ['SELECTED_OUTSIDE', 'DECLINED_TO_SAY', 'SENT'],
+  SELECTED_OUTSIDE:       ['SELECTED_FROM_WISHLIST', 'DECLINED_TO_SAY', 'SENT'],
+  DECLINED_TO_SAY:        ['SELECTED_FROM_WISHLIST', 'SELECTED_OUTSIDE', 'SENT'],
+  MISSED_DEADLINE:        ['SELECTED_FROM_WISHLIST', 'SELECTED_OUTSIDE', 'DECLINED_TO_SAY', 'SENT', 'BUYING'],
+  // SENT and RECEIVED are terminal from the giver side
 };
 
 /**
@@ -5118,7 +5171,7 @@ function serializeAssignment(
 ): SantaAssignmentForReceiver;
 function serializeAssignment(
   role: 'owner',
-  data: { assignments: { giftStatus: string }[] }
+  data: { assignments: { giftStatus: string }[]; receiverWithoutWishlistCount?: number }
 ): SantaAssignmentForOwner;
 function serializeAssignment(
   role: 'giver' | 'receiver' | 'owner',
@@ -5132,14 +5185,24 @@ function serializeAssignment(
     const d = data as { giftStatus: string };
     return { role: 'receiver', giftStatus: d.giftStatus, hasGiver: true };
   }
-  // owner
-  const d = data as { assignments: { giftStatus: string }[] };
-  const progress = { pending: 0, buying: 0, sent: 0, received: 0 };
+  // owner — aggregate only, never per-assignment detail
+  const d = data as { assignments: { giftStatus: string }[]; receiverWithoutWishlistCount?: number };
+  const progress = {
+    pending: 0, buying: 0, selectedFromWishlist: 0, selectedOutside: 0,
+    declinedToSay: 0, missedDeadline: 0, sent: 0, received: 0,
+    withoutWishlist: d.receiverWithoutWishlistCount ?? 0,
+  };
   for (const a of d.assignments) {
-    if (a.giftStatus === 'PENDING') progress.pending++;
-    else if (a.giftStatus === 'BUYING') progress.buying++;
-    else if (a.giftStatus === 'SENT') progress.sent++;
-    else if (a.giftStatus === 'RECEIVED') progress.received++;
+    switch (a.giftStatus) {
+      case 'PENDING':                 progress.pending++; break;
+      case 'BUYING':                  progress.buying++; break;
+      case 'SELECTED_FROM_WISHLIST':  progress.selectedFromWishlist++; break;
+      case 'SELECTED_OUTSIDE':        progress.selectedOutside++; break;
+      case 'DECLINED_TO_SAY':         progress.declinedToSay++; break;
+      case 'MISSED_DEADLINE':         progress.missedDeadline++; break;
+      case 'SENT':                    progress.sent++; break;
+      case 'RECEIVED':                progress.received++; break;
+    }
   }
   return { role: 'owner', progress };
 }
@@ -5531,7 +5594,8 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
   const campaignId = req.params.id ?? '';
 
   const parsed = z.object({
-    status: z.enum(['BUYING', 'SENT']),
+    // Accept all Batch-3 selection statuses + legacy BUYING + SENT
+    status: z.enum(['BUYING', 'SELECTED_FROM_WISHLIST', 'SELECTED_OUTSIDE', 'DECLINED_TO_SAY', 'SENT']),
     note: z.string().max(300).optional(),
   }).safeParse(req.body);
   if (!parsed.success) return zodError(res, parsed.error);
@@ -5550,6 +5614,23 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
     where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
   });
   if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+  // Transition validation — SENT and RECEIVED are one-way doors
+  const allowedNext = GIVER_ALLOWED_TRANSITIONS[assignment.giftStatus];
+  if (!allowedNext) {
+    return res.status(409).json({
+      error: 'invalid_transition',
+      message: `Cannot change gift status from ${assignment.giftStatus}`,
+      currentStatus: assignment.giftStatus,
+    });
+  }
+  if (!allowedNext.includes(parsed.data.status)) {
+    return res.status(409).json({
+      error: 'invalid_transition',
+      message: `Transition from ${assignment.giftStatus} to ${parsed.data.status} is not allowed`,
+      currentStatus: assignment.giftStatus,
+    });
+  }
 
   const updated = await prisma.santaAssignment.update({
     where: { id: assignment.id },
@@ -5594,19 +5675,59 @@ tgRouter.post('/santa/campaigns/:id/confirm-received', asyncHandler(async (req, 
     select: { id: true, giftStatus: true }, // Only what we need — never select giverParticipantId here
   });
   if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
-  if (assignment.giftStatus === 'RECEIVED') return res.json({ ok: true, campaignCompleted: false, alreadyReceived: true });
+  if (assignment.giftStatus === 'RECEIVED') return res.json({ ok: true, campaignCompleted: false, alreadyReceived: true, canReveal: true });
+
+  // Gate: only allowed from SENT (giver must acknowledge they sent before receiver can confirm)
+  if (assignment.giftStatus !== 'SENT') {
+    return res.status(409).json({
+      error: 'gift_not_sent',
+      message: 'Receiver can only confirm receipt after the giver marks the gift as sent',
+      currentGiftStatus: assignment.giftStatus,
+    });
+  }
+
+  // Fetch the giver's participantId (needed for notification — never exposed to receiver)
+  const fullAssignment = await prisma.santaAssignment.findUnique({
+    where: { id: assignment.id },
+    select: { giverParticipantId: true, giver: { select: { userId: true } } },
+  });
 
   await prisma.santaAssignment.update({ where: { id: assignment.id }, data: { giftStatus: 'RECEIVED' } });
   await prisma.santaGiftProgress.create({ data: { assignmentId: assignment.id, status: 'RECEIVED' } });
 
   // Check if all gifts received → complete campaign
-  const allAssignments = await prisma.santaAssignment.findMany({ where: { roundId }, select: { giftStatus: true } });
-  const allReceived = allAssignments.every(a => a.giftStatus === 'RECEIVED');
+  const allAssignments = await prisma.santaAssignment.findMany({ where: { roundId }, select: { id: true, giftStatus: true } });
+  // After our update above, re-check: our assignment is now RECEIVED
+  const allReceived = allAssignments.every(a => a.id === assignment.id ? true : a.giftStatus === 'RECEIVED');
   if (allReceived) {
     await prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'COMPLETED' } });
   }
 
-  return res.json({ ok: true, campaignCompleted: allReceived });
+  // Notifications (best-effort, non-blocking) — deduped by checking existing notifications
+  if (fullAssignment) {
+    // GIFT_RECEIVED → giver: "your recipient received your gift!"
+    const giverUserId = fullAssignment.giver.userId;
+    const existingGiftReceivedNotif = await prisma.santaNotification.findFirst({
+      where: { campaignId, userId: giverUserId, type: 'GIFT_RECEIVED' },
+    });
+    if (!existingGiftReceivedNotif) {
+      await prisma.santaNotification.create({
+        data: { campaignId, userId: giverUserId, type: 'GIFT_RECEIVED', payload: { assignmentId: assignment.id } },
+      }).catch(() => { /* notification failure is non-fatal */ });
+    }
+
+    // REVEAL_UNLOCKED → receiver: "you can now see who your Secret Santa was!"
+    const existingRevealNotif = await prisma.santaNotification.findFirst({
+      where: { campaignId, userId: user.id, type: 'REVEAL_UNLOCKED' },
+    });
+    if (!existingRevealNotif) {
+      await prisma.santaNotification.create({
+        data: { campaignId, userId: user.id, type: 'REVEAL_UNLOCKED', payload: { assignmentId: assignment.id } },
+      }).catch(() => { /* notification failure is non-fatal */ });
+    }
+  }
+
+  return res.json({ ok: true, campaignCompleted: allReceived, canReveal: true });
 }));
 
 // ─── Santa — inbound (receiver-centric, post-draw) ────────────────────────────
@@ -5654,7 +5775,8 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
 }));
 
 // GET /tg/santa/campaigns/:id/inbound/status — receiver gets their inbound gift signal
-// Role: receiver only. Returns gift status WITHOUT giver identity. Campaign-centric addressing.
+// Role: receiver only. Returns COARSE signal WITHOUT giver identity. Campaign-centric addressing.
+// Batch 3: returns semantic signal + canConfirmReceived + canReveal flags. Raw giftStatus never exposed.
 tgRouter.get('/santa/campaigns/:id/inbound/status', asyncHandler(async (req, res) => {
   const user = await getOrCreateTgUser(req.tgUser!);
   const campaignId = req.params.id ?? '';
@@ -5670,7 +5792,7 @@ tgRouter.get('/santa/campaigns/:id/inbound/status', asyncHandler(async (req, res
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) {
-    return res.json({ hasGiver: false, giftStatus: null, campaignStatus: campaign.status });
+    return res.json({ hasGiver: false, signal: 'waiting', canConfirmReceived: false, canReveal: false, campaignStatus: campaign.status });
   }
   if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
 
@@ -5678,11 +5800,20 @@ tgRouter.get('/santa/campaigns/:id/inbound/status', asyncHandler(async (req, res
   // Resolve via receiver side — campaign-centric, NOT assignment-id-centric
   const assignment = await prisma.santaAssignment.findUnique({
     where: { roundId_receiverParticipantId: { roundId, receiverParticipantId: participant.id } },
-    select: { giftStatus: true }, // ONLY giftStatus — no giverParticipantId exposed
+    // ONLY giftStatus + revealedAt — no giverParticipantId EVER exposed to receiver
+    select: { giftStatus: true, revealedAt: true },
   });
-  if (!assignment) return res.json({ hasGiver: false, giftStatus: null, campaignStatus: campaign.status });
+  if (!assignment) return res.json({ hasGiver: false, signal: 'waiting', canConfirmReceived: false, canReveal: false });
 
-  return res.json(serializeAssignment('receiver', { giftStatus: assignment.giftStatus }));
+  const signal = giftStatusToInboundSignal(assignment.giftStatus);
+  return res.json({
+    hasGiver: true,
+    signal,
+    canConfirmReceived: assignment.giftStatus === 'SENT',
+    canReveal: assignment.giftStatus === 'RECEIVED',
+    // revealedAt tells the frontend whether reveal was already viewed (no re-animation)
+    revealedAt: assignment.revealedAt?.toISOString() ?? null,
+  });
 }));
 
 // GET /tg/santa/campaigns/:id/assignment — giver's own assignment summary (role-aware)
@@ -5715,7 +5846,11 @@ tgRouter.get('/santa/campaigns/:id/assignment', asyncHandler(async (req, res) =>
       where: { roundId },
       select: { giftStatus: true },
     });
-    return res.json({ ready: true, ...serializeAssignment('owner', { assignments: allAssignments }) });
+    // Count receivers (participants) without a linked wishlist for owner context
+    const participantsWithoutWishlist = await prisma.santaParticipant.count({
+      where: { campaignId, status: 'JOINED', linkedWishlistId: null },
+    });
+    return res.json({ ready: true, ...serializeAssignment('owner', { assignments: allAssignments, receiverWithoutWishlistCount: participantsWithoutWishlist }) });
   }
 
   // Giver view
@@ -5747,9 +5882,9 @@ tgRouter.get('/santa/campaigns/:id/assignment', asyncHandler(async (req, res) =>
   });
 }));
 
-// GET /tg/santa/campaigns/:id/reveal — reveal skeleton (Batch 2 stub)
-// This endpoint will return giver identity to receiver AFTER campaign is COMPLETED.
-// In Batch 2, returns a stub with the contract shape. Actual reveal logic ships in Batch 3.
+// GET /tg/santa/campaigns/:id/reveal — receiver reveals their Secret Santa identity
+// Batch 3: gate is per-receiver RECEIVED (NOT campaign COMPLETED). Tracks revealedAt on first view.
+// ANONYMITY: giver identity ONLY exposed after receiver's own giftStatus === RECEIVED.
 tgRouter.get('/santa/campaigns/:id/reveal', asyncHandler(async (req, res) => {
   const user = await getOrCreateTgUser(req.tgUser!);
   const campaignId = req.params.id ?? '';
@@ -5764,21 +5899,20 @@ tgRouter.get('/santa/campaigns/:id/reveal', asyncHandler(async (req, res) => {
     select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' }, select: { id: true } } },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-
-  if (campaign.status !== 'COMPLETED') {
-    return res.status(409).json({
-      error: 'reveal_not_available',
-      message: 'Reveal is only available when the campaign is completed.',
-      campaignStatus: campaign.status,
-    });
+  if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) {
+    return res.status(409).json({ error: 'reveal_not_available', campaignStatus: campaign.status });
   }
   if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
   const roundId = campaign.rounds[0]!.id;
 
-  // Reveal: find who gave to this user (receiver-side lookup)
+  // Receiver-side lookup — assignment is resolved from the receiver's participant record
   const receiverAssignment = await prisma.santaAssignment.findUnique({
     where: { roundId_receiverParticipantId: { roundId, receiverParticipantId: participant.id } },
     select: {
+      id: true,
+      giftStatus: true,
+      revealedAt: true,
+      giftNote: true,
       giver: {
         select: {
           user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
@@ -5788,20 +5922,42 @@ tgRouter.get('/santa/campaigns/:id/reveal', asyncHandler(async (req, res) => {
   });
 
   if (!receiverAssignment) {
-    // Stub: reveal not yet available (shouldn't happen for COMPLETED campaigns, but guard gracefully)
-    return res.json({ revealed: false, _stub: true, message: 'Reveal logic ships in Batch 3.' });
+    return res.status(409).json({ error: 'reveal_not_available', reason: 'no_assignment' });
   }
 
-  // Reveal: expose giver identity now that campaign is complete
+  // Gate: receiver must have confirmed RECEIVED — personal reveal, not campaign-level
+  if (receiverAssignment.giftStatus !== 'RECEIVED') {
+    return res.status(409).json({
+      error: 'reveal_not_available',
+      reason: 'gift_not_received',
+      signal: giftStatusToInboundSignal(receiverAssignment.giftStatus),
+    });
+  }
+
+  // Track first reveal view — best-effort, non-blocking
+  const isFirstReveal = !receiverAssignment.revealedAt;
+  if (isFirstReveal) {
+    await prisma.santaAssignment.update({
+      where: { id: receiverAssignment.id },
+      data: { revealedAt: new Date() },
+    }).catch(() => { /* non-fatal — revealedAt is cosmetic tracking */ });
+  }
+
   const giverName = receiverAssignment.giver.user.profile?.displayName
     || receiverAssignment.giver.user.firstName || 'Санта';
   const giverAvatarUrl = receiverAssignment.giver.user.profile?.avatarUrl || null;
 
   return res.json({
     revealed: true,
-    giver: { displayName: giverName, avatarUrl: giverAvatarUrl },
-    // Note: giverUserId deliberately omitted — only display layer exposed.
-    // Full profile linking (if ever) requires separate consent design.
+    isFirstReveal,
+    giver: {
+      displayName: giverName,
+      avatarUrl: giverAvatarUrl,
+      // giverUserId deliberately omitted — only display layer exposed
+    },
+    // Return giftNote if the giver left one (adds warmth to the reveal moment)
+    giftNote: receiverAssignment.giftNote ?? null,
+    revealedAt: receiverAssignment.revealedAt?.toISOString() ?? new Date().toISOString(),
   });
 }));
 
@@ -6198,6 +6354,123 @@ setInterval(async () => {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[santa-hints] expiry check failed:', err);
+  }
+}, 60 * 60 * 1000);
+
+// Santa deadline enforcement: mark overdue PENDING/BUYING assignments as MISSED_DEADLINE (hourly)
+// Recoverable: giver can still update their status after missing the deadline.
+setInterval(async () => {
+  try {
+    const now = new Date();
+    // Find rounds belonging to ACTIVE campaigns whose drawAt has passed
+    const overdueRounds = await prisma.santaRound.findMany({
+      where: {
+        campaign: { status: 'ACTIVE', drawAt: { lte: now, not: null } },
+        drawStatus: 'DONE',
+      },
+      select: { id: true, campaignId: true },
+    });
+    if (overdueRounds.length === 0) return;
+
+    let totalMissed = 0;
+    for (const round of overdueRounds) {
+      // Find assignments still in actionable but uncommitted states
+      const overdueAssignments = await prisma.santaAssignment.findMany({
+        where: { roundId: round.id, giftStatus: { in: ['PENDING', 'BUYING'] } },
+        select: { id: true, giver: { select: { userId: true } } },
+      });
+      if (overdueAssignments.length === 0) continue;
+
+      // Bulk update — MISSED_DEADLINE is recoverable (giver can still pick a status)
+      await prisma.santaAssignment.updateMany({
+        where: { id: { in: overdueAssignments.map(a => a.id) } },
+        data: { giftStatus: 'MISSED_DEADLINE' },
+      });
+      totalMissed += overdueAssignments.length;
+
+      // Create DEADLINE_MISSED notifications (best-effort, deduped per assignment)
+      for (const a of overdueAssignments) {
+        const giverUserId = a.giver.userId;
+        const existing = await prisma.santaNotification.findFirst({
+          where: { campaignId: round.campaignId, userId: giverUserId, type: 'DEADLINE_MISSED' },
+        });
+        if (!existing) {
+          await prisma.santaNotification.create({
+            data: {
+              campaignId: round.campaignId,
+              userId: giverUserId,
+              type: 'DEADLINE_MISSED',
+              payload: { assignmentId: a.id },
+            },
+          }).catch(() => { /* non-fatal */ });
+        }
+      }
+    }
+
+    if (totalMissed > 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[santa-deadlines] marked ${totalMissed} assignments as MISSED_DEADLINE`);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[santa-deadlines] missed-deadline job failed:', err);
+  }
+}, 60 * 60 * 1000);
+
+// Santa deadline warning: notify PENDING/BUYING givers ~3 days before drawAt (hourly check)
+// Warning window: between 72h and 96h before drawAt (fires once per ~day, not every hour).
+setInterval(async () => {
+  try {
+    const now = new Date();
+    const warningWindowStart = new Date(now.getTime() + 72 * 60 * 60 * 1000);  // 3 days from now
+    const warningWindowEnd   = new Date(now.getTime() + 96 * 60 * 60 * 1000);  // 4 days from now
+
+    const warningRounds = await prisma.santaRound.findMany({
+      where: {
+        campaign: {
+          status: 'ACTIVE',
+          drawAt: { gte: warningWindowStart, lte: warningWindowEnd },
+        },
+        drawStatus: 'DONE',
+      },
+      select: { id: true, campaignId: true },
+    });
+    if (warningRounds.length === 0) return;
+
+    let totalWarned = 0;
+    for (const round of warningRounds) {
+      const pendingAssignments = await prisma.santaAssignment.findMany({
+        where: { roundId: round.id, giftStatus: { in: ['PENDING', 'BUYING'] } },
+        select: { id: true, giver: { select: { userId: true } } },
+      });
+      if (pendingAssignments.length === 0) continue;
+
+      for (const a of pendingAssignments) {
+        const giverUserId = a.giver.userId;
+        const existing = await prisma.santaNotification.findFirst({
+          where: { campaignId: round.campaignId, userId: giverUserId, type: 'DEADLINE_WARNING' },
+        });
+        if (!existing) {
+          await prisma.santaNotification.create({
+            data: {
+              campaignId: round.campaignId,
+              userId: giverUserId,
+              type: 'DEADLINE_WARNING',
+              payload: { assignmentId: a.id },
+            },
+          }).catch(() => { /* non-fatal */ });
+          totalWarned++;
+        }
+      }
+    }
+
+    if (totalWarned > 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[santa-deadlines] sent DEADLINE_WARNING to ${totalWarned} givers`);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[santa-deadlines] deadline-warning job failed:', err);
   }
 }, 60 * 60 * 1000);
 

@@ -277,7 +277,11 @@ type SantaCampaignDetail = {
   } | null;
   ownerProgress: {
     role: 'owner';
-    progress: { pending: number; buying: number; sent: number; received: number };
+    progress: {
+      pending: number; buying: number;
+      selectedFromWishlist: number; selectedOutside: number; declinedToSay: number;
+      missedDeadline: number; sent: number; received: number; withoutWishlist: number;
+    };
   } | null;
 };
 
@@ -1579,8 +1583,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     items: { id: string; title: string; url: string | null; priceText: string | null; currency: string; priority: number; imageUrl: string | null; status: string }[];
   } | null>(null);
   const [santaReceiverWishlistLoading, setSantaReceiverWishlistLoading] = useState(false);
-  // Receiver inbound status (no giver identity)
-  const [santaInboundStatus, setSantaInboundStatus] = useState<{ role: 'receiver'; giftStatus: string; hasGiver: boolean } | null>(null);
+  // Receiver inbound status (no giver identity) — Batch 3: uses semantic signal, not raw giftStatus
+  const [santaInboundStatus, setSantaInboundStatus] = useState<{
+    hasGiver: boolean;
+    signal: 'waiting' | 'in_progress' | 'ready' | 'received';
+    canConfirmReceived: boolean;
+    canReveal: boolean;
+    revealedAt: string | null;
+  } | null>(null);
   const [santaInboundLoading, setSantaInboundLoading] = useState(false);
   // Draw state
   const [santaDrawLoading, setSantaDrawLoading] = useState(false);
@@ -1589,8 +1599,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     reason?: string; problematicExclusions?: { userId1: string; name1: string; userId2: string; name2: string }[];
   } | null>(null);
   const [santaDrawValidationLoading, setSantaDrawValidationLoading] = useState(false);
-  // Reveal state
-  const [santaReveal, setSantaReveal] = useState<{ revealed: boolean; giver?: { displayName: string; avatarUrl: string | null } } | null>(null);
+  // Reveal state — Batch 3: includes isFirstReveal, giftNote, revealedAt
+  const [santaReveal, setSantaReveal] = useState<{
+    revealed: boolean;
+    isFirstReveal?: boolean;
+    giver?: { displayName: string; avatarUrl: string | null };
+    giftNote?: string | null;
+    revealedAt?: string;
+  } | null>(null);
   const [santaRevealLoading, setSantaRevealLoading] = useState(false);
   // Hint state (Batch 2.5) — giver-side
   const [santaHintRequest, setSantaHintRequest] = useState<{
@@ -8672,21 +8688,28 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </div>
                 {(() => {
                   const p = currentSantaCampaign.ownerProgress!.progress;
-                  const total = p.pending + p.buying + p.sent + p.received;
+                  const total = p.pending + p.buying + p.selectedFromWishlist + p.selectedOutside
+                    + p.declinedToSay + p.missedDeadline + p.sent + p.received;
+                  const allReceived = total > 0 && p.received === total;
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {p.received === total && total > 0 && (
+                      {allReceived && (
                         <div style={{ fontSize: 14, fontWeight: 700, color: C.green, marginBottom: 4 }}>
                           {t('santa_gift_all_received', locale)}
                         </div>
                       )}
                       {[
-                        { key: 'pending', count: p.pending, label: t('santa_gift_progress_pending', locale, { count: p.pending, total }) },
-                        { key: 'buying', count: p.buying, label: t('santa_gift_progress_buying', locale, { count: p.buying }) },
-                        { key: 'sent', count: p.sent, label: t('santa_gift_progress_sent', locale, { count: p.sent }) },
-                        { key: 'received', count: p.received, label: t('santa_gift_progress_received', locale, { count: p.received }) },
+                        { key: 'pending', count: p.pending, label: t('santa_gift_progress_pending', locale, { count: p.pending, total }), color: C.textSec },
+                        { key: 'missed', count: p.missedDeadline, label: t('santa_gift_progress_missed_deadline', locale, { count: p.missedDeadline }), color: '#e05' },
+                        { key: 'buying', count: p.buying, label: t('santa_gift_progress_buying', locale, { count: p.buying }), color: C.textSec },
+                        { key: 'wishlist', count: p.selectedFromWishlist, label: t('santa_gift_progress_selected_wishlist', locale, { count: p.selectedFromWishlist }), color: C.accent },
+                        { key: 'outside', count: p.selectedOutside, label: t('santa_gift_progress_selected_outside', locale, { count: p.selectedOutside }), color: C.accent },
+                        { key: 'declined', count: p.declinedToSay, label: t('santa_gift_progress_declined', locale, { count: p.declinedToSay }), color: C.textSec },
+                        { key: 'sent', count: p.sent, label: t('santa_gift_progress_sent', locale, { count: p.sent }), color: C.accent },
+                        { key: 'received', count: p.received, label: t('santa_gift_progress_received', locale, { count: p.received }), color: C.green },
+                        { key: 'noWishlist', count: p.withoutWishlist, label: t('santa_gift_progress_without_wishlist', locale, { count: p.withoutWishlist }), color: C.textMuted },
                       ].filter(row => row.count > 0).map(row => (
-                        <div key={row.key} style={{ fontSize: 13, color: C.textSec }}>{row.label}</div>
+                        <div key={row.key} style={{ fontSize: 13, color: row.color }}>{row.label}</div>
                       ))}
                     </div>
                   );
@@ -8710,42 +8733,94 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </div>
                 </div>
 
-                {/* Gift status controls — only PENDING→BUYING→SENT */}
-                {myAssignment.giftStatus !== 'RECEIVED' && (
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                    {myAssignment.giftStatus === 'PENDING' && (
-                      <button
-                        onClick={async () => {
-                          const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/gift-status`, { method: 'PATCH', body: JSON.stringify({ status: 'BUYING' }) });
-                          if (res.ok) {
-                            const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
-                            if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
-                          }
-                        }}
-                        style={{ background: C.accent, border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer' }}
-                      >
-                        {t('santa_gift_mark_buying', locale)}
-                      </button>
-                    )}
-                    {myAssignment.giftStatus === 'BUYING' && (
-                      <button
-                        onClick={async () => {
-                          const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/gift-status`, { method: 'PATCH', body: JSON.stringify({ status: 'SENT' }) });
-                          if (res.ok) {
-                            const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
-                            if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
-                          }
-                        }}
-                        style={{ background: C.accent, border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, padding: '8px 16px', cursor: 'pointer' }}
-                      >
-                        {t('santa_gift_mark_sent', locale)}
-                      </button>
-                    )}
-                    {myAssignment.giftStatus === 'SENT' && (
-                      <div style={{ fontSize: 13, color: C.green }}>✓ {t('santa_campaign_gift_status_sent', locale)}</div>
-                    )}
-                  </div>
-                )}
+                {/* Gift status controls — Batch 3: 3-choice giver flow */}
+                {myAssignment.giftStatus !== 'RECEIVED' && (() => {
+                  const gs = myAssignment.giftStatus;
+                  const canChoose = ['PENDING', 'BUYING', 'MISSED_DEADLINE'].includes(gs);
+                  const hasChosen = ['SELECTED_FROM_WISHLIST', 'SELECTED_OUTSIDE', 'DECLINED_TO_SAY'].includes(gs);
+                  const isSent = gs === 'SENT';
+
+                  const updateStatus = async (status: string) => {
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/gift-status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+                    if (res.ok) {
+                      const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
+                      if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                    }
+                  };
+
+                  const btnStyle = (accent?: boolean) => ({
+                    background: accent ? C.accent : C.surface,
+                    border: accent ? 'none' : `1px solid ${C.border}`,
+                    borderRadius: 10,
+                    color: accent ? '#fff' : C.text,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    padding: '8px 14px',
+                    cursor: 'pointer',
+                    fontFamily: font,
+                  } as React.CSSProperties);
+
+                  return (
+                    <div style={{ marginBottom: 12 }}>
+                      {/* Current status label */}
+                      <div style={{ fontSize: 12, color: gs === 'MISSED_DEADLINE' ? '#e05' : C.textMuted, marginBottom: 8 }}>
+                        {t('santa_gift_status_title', locale)}: <b>{t(`santa_gift_status_${gs.toLowerCase()}` as never, locale) || gs}</b>
+                      </div>
+
+                      {/* 3-choice buttons when undecided or coming from legacy BUYING / missed deadline */}
+                      {(canChoose || hasChosen) && !isSent && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {(canChoose || hasChosen) && (
+                            <>
+                              <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 2 }}>
+                                {t('santa_gift_choose_title', locale)}
+                              </div>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                <button
+                                  onClick={() => updateStatus('SELECTED_FROM_WISHLIST')}
+                                  style={{ ...btnStyle(gs === 'SELECTED_FROM_WISHLIST'), fontSize: 12 }}
+                                >
+                                  📋 {t('santa_gift_mark_selected_from_wishlist', locale)}
+                                </button>
+                                <button
+                                  onClick={() => updateStatus('SELECTED_OUTSIDE')}
+                                  style={{ ...btnStyle(gs === 'SELECTED_OUTSIDE'), fontSize: 12 }}
+                                >
+                                  🛍 {t('santa_gift_mark_selected_outside', locale)}
+                                </button>
+                                <button
+                                  onClick={() => updateStatus('DECLINED_TO_SAY')}
+                                  style={{ ...btnStyle(gs === 'DECLINED_TO_SAY'), fontSize: 12 }}
+                                >
+                                  🎁 {t('santa_gift_mark_declined_to_say', locale)}
+                                </button>
+                              </div>
+                            </>
+                          )}
+                          {/* Mark sent — available from any non-terminal state except PENDING/MISSED_DEADLINE */}
+                          {(hasChosen || gs === 'BUYING') && (
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm(t('santa_gift_mark_sent_confirm', locale))) return;
+                                await updateStatus('SENT');
+                              }}
+                              style={{ ...btnStyle(true), marginTop: 4 }}
+                            >
+                              📦 {t('santa_gift_mark_sent', locale)}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Sent confirmation state */}
+                      {isSent && (
+                        <div style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>
+                          ✓ {t('santa_campaign_gift_status_sent', locale)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* View receiver's wishlist */}
                 <button
@@ -8902,22 +8977,34 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
                   {santaInboundStatus && (
                     <div>
-                      {santaInboundStatus.giftStatus === 'PENDING' || santaInboundStatus.giftStatus === 'BUYING' ? (
-                        <div style={{ fontSize: 13, color: C.textSec }}>{t('santa_inbound_waiting', locale)}</div>
-                      ) : santaInboundStatus.giftStatus === 'SENT' ? (
-                        <div style={{ fontSize: 13, color: C.accent, fontWeight: 600 }}>{t('santa_inbound_sent', locale)}</div>
-                      ) : santaInboundStatus.giftStatus === 'RECEIVED' ? (
-                        <div style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>{t('santa_inbound_received', locale)}</div>
-                      ) : null}
+                      {/* Batch 3: semantic signal display — never exposes raw giftStatus */}
+                      {santaInboundStatus.signal === 'waiting' && (
+                        <div style={{ fontSize: 13, color: C.textSec }}>{t('santa_inbound_signal_waiting', locale)}</div>
+                      )}
+                      {santaInboundStatus.signal === 'in_progress' && (
+                        <div style={{ fontSize: 13, color: C.accent, fontWeight: 600 }}>🎁 {t('santa_inbound_signal_in_progress', locale)}</div>
+                      )}
+                      {santaInboundStatus.signal === 'ready' && (
+                        <div style={{ fontSize: 13, color: C.accent, fontWeight: 700 }}>📦 {t('santa_inbound_signal_ready', locale)}</div>
+                      )}
+                      {santaInboundStatus.signal === 'received' && (
+                        <div style={{ fontSize: 13, color: C.green, fontWeight: 700 }}>✓ {t('santa_inbound_signal_received', locale)}</div>
+                      )}
 
-                      {/* Confirm received — only when gift was SENT and not yet confirmed */}
-                      {santaInboundStatus.giftStatus === 'SENT' && (
+                      {/* Confirm received — only when signal === 'ready' (giftStatus SENT on backend) */}
+                      {santaInboundStatus.canConfirmReceived && (
                         <button
                           onClick={async () => {
+                            if (!window.confirm(t('santa_inbound_confirm_received_confirm', locale))) return;
                             const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/confirm-received`, { method: 'POST' });
                             if (res.ok) {
-                              const json = await res.json() as { campaignCompleted: boolean };
-                              setSantaInboundStatus(prev => prev ? { ...prev, giftStatus: 'RECEIVED' } : prev);
+                              const json = await res.json() as { campaignCompleted: boolean; canReveal: boolean };
+                              setSantaInboundStatus(prev => prev ? {
+                                ...prev,
+                                signal: 'received',
+                                canConfirmReceived: false,
+                                canReveal: json.canReveal,
+                              } : prev);
                               pushToast(json.campaignCompleted ? t('santa_gift_all_received', locale) : t('done', locale), 'success');
                               const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
                               if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
@@ -8925,8 +9012,48 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           }}
                           style={{ marginTop: 12, background: C.green, border: 'none', borderRadius: 10, color: '#000', fontSize: 13, fontWeight: 700, padding: '10px 0', cursor: 'pointer', width: '100%', fontFamily: font }}
                         >
-                          {t('santa_campaign_confirm_received', locale)}
+                          {t('santa_inbound_confirm_received_btn', locale)}
                         </button>
+                      )}
+
+                      {/* Reveal button — visible immediately after RECEIVED (canReveal: true) */}
+                      {santaInboundStatus.canReveal && !santaReveal && (
+                        <button
+                          disabled={santaRevealLoading}
+                          onClick={async () => {
+                            setSantaRevealLoading(true);
+                            const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/reveal`);
+                            if (res.ok) setSantaReveal(await res.json() as typeof santaReveal);
+                            else pushToast(t('error_generic', locale), 'error');
+                            setSantaRevealLoading(false);
+                          }}
+                          style={{ marginTop: 8, background: C.accent, border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, padding: '10px 0', cursor: santaRevealLoading ? 'wait' : 'pointer', width: '100%', fontFamily: font }}
+                        >
+                          🎅 {santaRevealLoading ? t('loading', locale) : t('santa_inbound_reveal_btn', locale)}
+                        </button>
+                      )}
+
+                      {/* Reveal result — shown after receiver reveals */}
+                      {santaInboundStatus.canReveal && santaReveal?.revealed && santaReveal.giver && (
+                        <div style={{ marginTop: 12, background: `${C.accent}12`, borderRadius: 12, padding: 14, border: `1px solid ${C.accent}30` }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 10 }}>
+                            🎅 {santaReveal.isFirstReveal ? t('santa_reveal_first_time', locale) : t('santa_reveal_already_seen', locale)}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                            <UserAvatar avatarUrl={santaReveal.giver.avatarUrl} name={santaReveal.giver.displayName} size={44} accent={C.accent} />
+                            <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
+                              {t('santa_reveal_giver', locale, { name: santaReveal.giver.displayName })}
+                            </div>
+                          </div>
+                          {santaReveal.giftNote ? (
+                            <div style={{ fontSize: 13, color: C.textSec, marginTop: 6 }}>
+                              <span style={{ color: C.textMuted }}>{t('santa_reveal_note_label', locale)}</span>{' '}
+                              {santaReveal.giftNote}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{t('santa_reveal_no_note', locale)}</div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
@@ -9014,10 +9141,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               );
             })()}
 
-            {/* Reveal section — shown after campaign COMPLETED (skeleton: works for completed campaigns) */}
-            {camp.status === 'COMPLETED' && (() => {
+            {/* Reveal section — Batch 3: standalone reveal card for campaign-COMPLETED state
+                when inbound status wasn't already loaded (e.g. user navigates back).
+                Primary reveal UX lives inside the inbound status card above.         */}
+            {camp.status === 'COMPLETED' && !santaInboundStatus && (() => {
               const myParticipant = participants.find(p => p.userId === tgUser?.id?.toString());
-              if (!myParticipant) return null;
+              if (!myParticipant || isOwner) return null;
               return (
                 <div style={{ background: `${C.accent}10`, borderRadius: 14, padding: 16, marginBottom: 16, border: `1px solid ${C.accent}30` }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 8 }}>
@@ -9029,20 +9158,39 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       onClick={async () => {
                         setSantaRevealLoading(true);
                         const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/reveal`);
-                        if (res.ok) setSantaReveal(await res.json() as typeof santaReveal);
-                        else pushToast(t('error_generic', locale), 'error');
+                        if (res.ok) {
+                          const data = await res.json() as typeof santaReveal;
+                          setSantaReveal(data);
+                        } else {
+                          const err = await res.json().catch(() => ({})) as { error?: string };
+                          if (err.error === 'reveal_not_available') {
+                            pushToast(t('santa_reveal_not_received_yet', locale), 'error');
+                          } else {
+                            pushToast(t('error_generic', locale), 'error');
+                          }
+                        }
                         setSantaRevealLoading(false);
                       }}
                       style={{ background: C.accent, border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: santaRevealLoading ? 'wait' : 'pointer', width: '100%', fontFamily: font }}
                     >
                       {santaRevealLoading ? t('loading', locale) : t('santa_reveal_btn', locale)}
                     </button>
-                  ) : santaReveal.revealed && santaReveal.giver ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <UserAvatar avatarUrl={santaReveal.giver.avatarUrl} name={santaReveal.giver.displayName} size={40} accent={C.accent} />
-                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
-                        {t('santa_reveal_giver', locale, { name: santaReveal.giver.displayName })}
+                  ) : santaReveal?.revealed && santaReveal.giver ? (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                        <UserAvatar avatarUrl={santaReveal.giver.avatarUrl} name={santaReveal.giver.displayName} size={44} accent={C.accent} />
+                        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
+                          {t('santa_reveal_giver', locale, { name: santaReveal.giver.displayName })}
+                        </div>
                       </div>
+                      {santaReveal.giftNote ? (
+                        <div style={{ fontSize: 13, color: C.textSec }}>
+                          <span style={{ color: C.textMuted }}>{t('santa_reveal_note_label', locale)}</span>{' '}
+                          {santaReveal.giftNote}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: C.textMuted }}>{t('santa_reveal_no_note', locale)}</div>
+                      )}
                     </div>
                   ) : (
                     <div style={{ fontSize: 13, color: C.textMuted }}>{t('santa_reveal_not_ready', locale)}</div>
