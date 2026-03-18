@@ -3901,7 +3901,7 @@ tgRouter.get(
     const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
 
     // Stats
-    const [wishlists, totalWishes, reservedByMe, archived] = await Promise.all([
+    const [wishlists, totalWishes, regularReservedByMe, santaReservedByMe, archived] = await Promise.all([
       prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR', archivedAt: null } }),
       // Same formula as /tg/wishlists → itemCount:
       // only active (non-archived) REGULAR wishlists, only ACTIVE_STATUSES items.
@@ -3914,6 +3914,15 @@ tgRouter.get(
       }),
       prisma.item.count({
         where: { reserverUserId: user.id, status: 'RESERVED' },
+      }),
+      prisma.santaItemReservation.count({
+        where: {
+          assignment: {
+            giver: { userId: user.id },
+            giftStatus: { notIn: ['RECEIVED', 'ORPHANED'] },
+            round: { campaign: { status: { not: 'CANCELLED' } } },
+          },
+        },
       }),
       prisma.item.count({
         where: {
@@ -3943,7 +3952,7 @@ tgRouter.get(
         wishlistsLimit: ent.effectiveWishlistLimit,
         totalWishes,
         wishesLimit: ent.plan.items,
-        reservedByMe,
+        reservedByMe: regularReservedByMe + santaReservedByMe,
         archived,
       },
       plan: {
