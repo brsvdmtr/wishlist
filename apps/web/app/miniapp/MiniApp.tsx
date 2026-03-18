@@ -356,6 +356,9 @@ type GodStats = {
       wildberries: number; goldapple: number; ozon: number; yandex_market: number; completed: number;
     };
   };
+  engagement: {
+    totalComments: number; totalHints: number; totalWishlistSubs: number;
+  };
   generatedAt: string;
 };
 
