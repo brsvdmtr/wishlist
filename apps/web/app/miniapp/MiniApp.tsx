@@ -10963,7 +10963,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           imageUrl: item.imageUrl,
                           priority: (item.priority as 1 | 2 | 3) ?? 2,
                           position: 0,
-                          status: item.status.toLowerCase() as GuestItem['status'],
+                          // Santa reservations live in SantaItemReservation, not Item.status.
+                          // Force 'reserved' when reservedByMe so getSantaItemReservationState
+                          // correctly returns 'reserved-by-me' instead of 'available'.
+                          status: reservedByMe ? 'reserved' : item.status.toLowerCase() as GuestItem['status'],
                           currency: (item.currency as GuestItem['currency']) ?? 'RUB',
                           reservedByDisplayName: null,
                           reservedByActorHash: reservedByMe ? myActorHashRef.current : null,
