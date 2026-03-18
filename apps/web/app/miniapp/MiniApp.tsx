@@ -8660,7 +8660,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ? ownerProgress.received + ownerProgress.missedDeadline + (ownerProgress.orphaned ?? 0)
           : 0;
         const isRoundComplete = totalAssignments > 0 && terminalCount === totalAssignments;
-        const canStartNextRound = isOrg && isRoundComplete && camp.status === 'ACTIVE';
+        const canStartNextRound = isOwner && isRoundComplete && camp.status === 'ACTIVE';
         const statusKey = `santa_campaign_status_${camp.status.toLowerCase().replace('_', '_')}` as string;
 
         const copyInviteLink = () => {
@@ -8745,8 +8745,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </button>
                 )}
 
-                {/* Draw controls — only when LOCKED */}
-                {camp.status === 'LOCKED' && (
+                {/* Draw controls — owner-only when LOCKED */}
+                {isOwner && camp.status === 'LOCKED' && (
                   <div style={{ background: C.card, borderRadius: 14, padding: 16 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 10 }}>
                       {locale === 'ru' ? 'Жеребьёвка' : 'Draw'}
@@ -9521,8 +9521,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            {/* Cancel campaign (organizer only) */}
-            {isOrg && !['COMPLETED', 'CANCELLED'].includes(camp.status) && (
+            {/* Cancel campaign (owner only) */}
+            {isOwner && !['COMPLETED', 'CANCELLED'].includes(camp.status) && (
               <button
                 onClick={async () => {
                   if (!confirm(t('santa_campaign_cancel_confirm', locale))) return;
@@ -9539,8 +9539,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             )}
 
-            {/* Multi-round controls (Batch 5.2, updated for organizer in 5.3) */}
-            {isOrg && camp.status === 'ACTIVE' && (
+            {/* Multi-round controls — owner-only lifecycle actions */}
+            {isOwner && camp.status === 'ACTIVE' && (
               <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {/* Start next round — only when current round is complete */}
                 {canStartNextRound && (
@@ -10574,6 +10574,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'santa-organizer' && currentSantaCampaign && (() => {
         const camp = currentSantaCampaign.campaign;
         const campId = camp.id;
+        const campIsOwner = camp.isOwner;   // approve/deny are owner-only even in organizer screen
         const summary = santaOrganizerSummary;
 
         return (
@@ -10603,6 +10604,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{req.displayName}</span>
                           </div>
                           {req.reason && <div style={{ fontSize: 12, color: C.textSec, marginBottom: 8 }}>{req.reason}</div>}
+                          {/* Approve/deny are owner-only; admins can see the request but cannot act on it */}
+                          {campIsOwner && (
                           <div style={{ display: 'flex', gap: 8 }}>
                             <button
                               onClick={async () => {
@@ -10633,6 +10636,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                               {t('santa_exit_request_deny', locale)}
                             </button>
                           </div>
+                          )}
                         </div>
                       ))}
                     </div>

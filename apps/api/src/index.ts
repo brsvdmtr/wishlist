@@ -4949,7 +4949,8 @@ tgRouter.post('/santa/campaigns/:id/cancel', asyncHandler(async (req, res) => {
 
   const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, status: true } });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-  if (!await checkIsOrganizer(campaignId, campaign, user.id)) return res.status(403).json({ error: 'Forbidden' });
+  // Cancel is owner-only — admins cannot cancel campaigns
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Only the campaign owner can cancel the campaign' });
   if (['COMPLETED', 'CANCELLED'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign is already finished' });
 
   const now = new Date();
@@ -5483,7 +5484,8 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
     select: { ownerId: true, status: true, id: true },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-  if (!await checkIsOrganizer(campaignId, campaign, user.id)) return res.status(403).json({ error: 'Forbidden' });
+  // Draw is owner-only — admins cannot trigger draw
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Only the campaign owner can run the draw' });
 
   if (campaign.status === 'DRAW_IN_PROGRESS') {
     return res.status(409).json({ error: 'draw_already_running', message: 'A draw is already in progress for this campaign.' });
@@ -5706,14 +5708,15 @@ tgRouter.post('/santa/campaigns/:id/leave', asyncHandler(async (req, res) => {
     include: { campaign: { select: { status: true } } },
   });
   if (!participant || participant.status !== 'JOINED') return res.status(404).json({ error: 'Not a participant' });
-  if (['ACTIVE', 'COMPLETED'].includes(participant.campaign.status)) {
-    return res.status(409).json({ error: 'Cannot leave after draw is complete', hint: 'Use exit-request flow to request removal from an ACTIVE campaign' });
+  // COMPLETED/CANCELLED: cannot leave at all (terminal states)
+  if (['COMPLETED', 'CANCELLED'].includes(participant.campaign.status)) {
+    return res.status(409).json({ error: 'Campaign is already finished' });
   }
-  // LOCKED or DRAW_IN_PROGRESS: redirect to exit-request flow instead of immediate leave
-  if (['DRAW_IN_PROGRESS', 'LOCKED'].includes(participant.campaign.status)) {
+  // LOCKED, DRAW_IN_PROGRESS, or ACTIVE: must use exit-request flow
+  if (['LOCKED', 'DRAW_IN_PROGRESS', 'ACTIVE'].includes(participant.campaign.status)) {
     return res.status(409).json({
       error: 'use_exit_request',
-      message: 'Campaign is locked. Submit an exit request for the organizer to approve.',
+      message: 'Campaign is locked or active. Submit an exit request for the organizer to approve.',
       campaignStatus: participant.campaign.status,
     });
   }
@@ -6081,7 +6084,8 @@ tgRouter.post('/santa/campaigns/:id/rounds', asyncHandler(async (req, res) => {
     },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-  if (!await checkIsOrganizer(campaignId, campaign, user.id)) return res.status(403).json({ error: 'Forbidden' });
+  // Starting a new round is owner-only — admins cannot start rounds
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Only the campaign owner can start a new round' });
   if (campaign.status !== 'ACTIVE') {
     return res.status(409).json({ error: 'campaign_not_active', message: 'Campaign must be ACTIVE to start next round' });
   }
@@ -6139,7 +6143,8 @@ tgRouter.post('/santa/campaigns/:id/complete', asyncHandler(async (req, res) => 
     select: { ownerId: true, status: true },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-  if (!await checkIsOrganizer(campaignId, campaign, user.id)) return res.status(403).json({ error: 'Forbidden' });
+  // Force-complete is owner-only — admins cannot complete campaigns
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Only the campaign owner can complete the campaign' });
   if (campaign.status !== 'ACTIVE') {
     return res.status(409).json({ error: 'campaign_not_active', message: 'Only ACTIVE campaigns can be force-completed' });
   }
@@ -7621,7 +7626,7 @@ tgRouter.patch('/santa/campaigns/:id/participants/:userId/role', asyncHandler(as
     select: { id: true, status: true, role: true },
   });
   if (!participant) return res.status(404).json({ error: 'Participant not found' });
-  if (participant.status === 'REMOVED') return res.status(409).json({ error: 'Cannot change role of removed participant' });
+  if (participant.status === 'REMOVED' || participant.status === 'LEFT') return res.status(409).json({ error: 'Cannot change role of a participant who has left or been removed' });
 
   const updated = await prisma.santaParticipant.update({
     where: { id: participant.id },
@@ -7886,11 +7891,17 @@ tgRouter.post('/santa/campaigns/:id/exit-requests/:requestId/approve', asyncHand
   });
   if (!participant) return res.status(404).json({ error: 'Participant not found' });
 
+  // M1: one-to-one warning — if approving this exit would leave only 1 JOINED participant
+  const remainingJoinedCount = await prisma.santaParticipant.count({
+    where: { campaignId, status: 'JOINED', id: { not: participant.id } },
+  });
+  const warning = remainingJoinedCount === 1 ? 'only_one_participant_remaining' : undefined;
+
   const now = new Date();
 
   // Approval transaction:
   // 1. Mark exit request as APPROVED
-  // 2. Set participant status → REMOVED
+  // 2. Set participant status → LEFT (voluntary exit with organizer approval, not forced removal)
   // 3. If ACTIVE campaign + participant has non-terminal assignments in current round → ORPHANED
   await prisma.$transaction(async (tx) => {
     await tx.santaExitRequest.update({
@@ -7899,7 +7910,7 @@ tgRouter.post('/santa/campaigns/:id/exit-requests/:requestId/approve', asyncHand
     });
     await tx.santaParticipant.update({
       where: { id: participant.id },
-      data: { status: 'REMOVED', leftAt: now },
+      data: { status: 'LEFT', leftAt: now },
     });
     // If there's an active round, orphan any non-terminal assignments from this participant
     if (campaign.status === 'ACTIVE' && campaign.currentRoundId) {
@@ -7929,15 +7940,15 @@ tgRouter.post('/santa/campaigns/:id/exit-requests/:requestId/approve', asyncHand
     },
   }).catch(() => {});
 
-  // System message in chat
+  // System message in chat (participant_left — they chose to leave, organizer approved)
   const participantUser = await prisma.user.findUnique({
     where: { id: participant.userId },
     select: { firstName: true, profile: { select: { displayName: true } } },
   });
   const displayName = participantUser?.profile?.displayName || participantUser?.firstName || 'Someone';
-  void createSystemMessage(campaignId, 'participant_removed', { displayName }).catch(() => {});
+  void createSystemMessage(campaignId, 'participant_left', { displayName }).catch(() => {});
 
-  return res.json({ ok: true, exitRequest: { id: requestId, status: 'APPROVED' } });
+  return res.json({ ok: true, exitRequest: { id: requestId, status: 'APPROVED' }, ...(warning ? { warning } : {}) });
 }));
 
 // POST /tg/santa/campaigns/:id/exit-requests/:requestId/deny — deny exit (owner only)
