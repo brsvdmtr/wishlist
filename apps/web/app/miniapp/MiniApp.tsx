@@ -302,6 +302,21 @@ type SantaJoinPreview = {
   participantCount: number; ownerName: string | null; ownerAvatarUrl: string | null;
 };
 
+type GodStats = {
+  overview: {
+    totalUsers: number; newUsers7d: number;
+    activeUsers7d: number; activeUsers30d: number;
+    totalWishlists: number; totalItems: number;
+    totalReservations: number; proUsers: number;
+  };
+  funnel: {
+    totalUsers: number; activatedUsers: number;
+    usersWithWishlist: number; usersWithItem: number;
+    usersWithShare: number; usersWithReservation: number;
+  };
+  generatedAt: string;
+};
+
 type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
@@ -1341,6 +1356,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [canGodMode, setCanGodMode] = useState(false);
   const [godModeLoading, setGodModeLoading] = useState(false);
   const [santaTestModeLoading, setSantaTestModeLoading] = useState(false);
+  const [godStats, setGodStats] = useState<GodStats | null>(null);
+  const [godStatsLoading, setGodStatsLoading] = useState(false);
+  const [godStatsError, setGodStatsError] = useState(false);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
 
@@ -1861,6 +1879,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const r = await tgFetch('/tg/santa/season');
       if (r.ok) setSantaSeason(await r.json() as { inSeason: boolean; canCreate: boolean; seasonStart: string | null; seasonEnd: string | null; testMode: boolean });
     } catch {}
+  }, [tgFetch]);
+
+  const loadGodStats = useCallback(async () => {
+    setGodStatsLoading(true);
+    setGodStatsError(false);
+    try {
+      const r = await tgFetch('/tg/me/god-stats');
+      if (r.ok) setGodStats(await r.json() as GodStats);
+      else setGodStatsError(true);
+    } catch { setGodStatsError(true); }
+    finally { setGodStatsLoading(false); }
   }, [tgFetch]);
 
   // --- Owner API calls
@@ -3070,6 +3099,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     tryInit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load god stats when god mode is enabled; clear when disabled
+  useEffect(() => {
+    if (godMode) void loadGodStats();
+    else { setGodStats(null); setGodStatsError(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [godMode]);
 
   // --- Keyboard open detection via visualViewport (hides fixed bottom CTAs)
   useEffect(() => {
@@ -6701,6 +6737,123 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       </div>
                     </div>
                   )}
+
+                  {/* ─── Analytics block — only when godMode active ─── */}
+                  {godMode && (() => {
+                    const pct = (n: number, total: number) =>
+                      total > 0 ? Math.round((n / total) * 100) : 0;
+
+                    const funnelSteps = godStats ? [
+                      { label: 'Все юзеры',        value: godStats.funnel.totalUsers },
+                      { label: 'Создали вишлист',  value: godStats.funnel.usersWithWishlist },
+                      { label: 'Добавили желание', value: godStats.funnel.usersWithItem },
+                      { label: 'Поделились',       value: godStats.funnel.usersWithShare },
+                      { label: 'Получили бронь',   value: godStats.funnel.usersWithReservation },
+                    ] : [];
+
+                    return (
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                        {/* Header row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#ff9900', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                            📊 Аналитика
+                          </div>
+                          <button
+                            onClick={() => void loadGodStats()}
+                            disabled={godStatsLoading}
+                            style={{
+                              background: 'none', border: 'none', cursor: godStatsLoading ? 'wait' : 'pointer',
+                              fontSize: 11, color: C.textMuted, padding: '2px 6px', borderRadius: 6,
+                              opacity: godStatsLoading ? 0.5 : 1, fontFamily: font,
+                            }}
+                          >
+                            {godStatsLoading ? '…' : '↻ Обновить'}
+                          </button>
+                        </div>
+
+                        {godStatsError && !godStatsLoading && (
+                          <div style={{ fontSize: 12, color: C.red, textAlign: 'center', padding: '8px 0' }}>
+                            Ошибка загрузки
+                          </div>
+                        )}
+
+                        {godStatsLoading && !godStats && (
+                          <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', padding: '8px 0' }}>
+                            Загружаю…
+                          </div>
+                        )}
+
+                        {godStats && (() => {
+                          const o = godStats.overview;
+                          const overviewRows: [string, number, string, number][] = [
+                            ['Пользователей', o.totalUsers,    'Новых 7д',    o.newUsers7d],
+                            ['Акт. 7д',       o.activeUsers7d,  'Акт. 30д',   o.activeUsers30d],
+                            ['Вишлистов',     o.totalWishlists, 'Желаний',    o.totalItems],
+                            ['Броней',        o.totalReservations, 'PRO',     o.proUsers],
+                          ];
+                          return (
+                            <>
+                              {/* Overview grid */}
+                              <div style={{ marginBottom: 12 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+                                  Обзор
+                                </div>
+                                {overviewRows.map(([lA, vA, lB, vB], i) => (
+                                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 0', marginBottom: 4 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: 10 }}>
+                                      <span style={{ fontSize: 12, color: C.textMuted }}>{lA}</span>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{vA}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: 10, borderLeft: `1px solid ${C.border}` }}>
+                                      <span style={{ fontSize: 12, color: C.textMuted }}>{lB}</span>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{vB}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Funnel */}
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+                                  Воронка
+                                </div>
+                                {funnelSteps.map((step, i) => {
+                                  const p = pct(step.value, godStats.funnel.totalUsers);
+                                  const isFirst = i === 0;
+                                  return (
+                                    <div key={i} style={{ marginBottom: 5 }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                        <span style={{ fontSize: 11, color: C.textSec }}>{step.label}</span>
+                                        <span style={{ fontSize: 11, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+                                          {step.value}
+                                          {!isFirst && <span style={{ color: C.textMuted, marginLeft: 4 }}>{p}%</span>}
+                                        </span>
+                                      </div>
+                                      <div style={{ height: 4, borderRadius: 2, background: C.border, overflow: 'hidden' }}>
+                                        <div style={{
+                                          height: '100%', borderRadius: 2,
+                                          width: `${isFirst ? 100 : p}%`,
+                                          background: isFirst ? '#ff9900' : C.accent,
+                                          transition: 'width 0.4s ease',
+                                        }} />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                <div style={{ fontSize: 10, color: C.textMuted, marginTop: 6, lineHeight: 1.4 }}>
+                                  Поделились = вишлист с генерацией ссылки · Бронь = получили чужую бронь
+                                </div>
+                              </div>
+
+                              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8, textAlign: 'right' }}>
+                                {new Date(godStats.generatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </>

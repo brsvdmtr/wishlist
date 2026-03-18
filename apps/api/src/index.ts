@@ -4207,6 +4207,124 @@ tgRouter.post(
   }),
 );
 
+// GET /tg/me/god-stats — internal analytics dashboard (god mode users only)
+// Double-gated: user must be in GOD_MODE_TELEGRAM_IDS whitelist AND have godMode=true.
+// Active user definition (7d / 30d):
+//   A user is "active" if within the period they created or updated a REGULAR wishlist
+//   OR created or updated any non-deleted item — proxies real product usage from existing
+//   entity timestamps without requiring a dedicated event log.
+// Share proxy: users with ≥1 wishlist where shareToken was explicitly generated.
+// Reservation funnel step: users who *received* ≥1 reservation on their wishlist items
+//   (semantic: "your wishlist had real engagement from another person").
+tgRouter.get(
+  '/me/god-stats',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
+    if (!canGodMode || !user.godMode) return res.status(403).json({ error: 'Forbidden' });
+
+    const now = new Date();
+    const cut7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const cut30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    type CountRow = { count: bigint };
+    const n = (r: CountRow | undefined) => Number(r?.count ?? 0);
+
+    const [
+      totalUsers,
+      newUsers7d,
+      active7dRows,
+      active30dRows,
+      totalWishlists,
+      totalItems,
+      totalReservations,
+      proUsers,
+      withWishlistRows,
+      withItemRows,
+      withShareRows,
+      withReservationRows,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { createdAt: { gte: cut7 } } }),
+      // Active users 7d: created/updated REGULAR wishlist OR created/updated non-deleted item
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT owner_id)::int AS count FROM (
+          SELECT "ownerId" AS owner_id FROM "Wishlist"
+            WHERE "updatedAt" >= ${cut7} AND type = 'REGULAR'
+          UNION
+          SELECT w."ownerId" AS owner_id FROM "Item" i
+            JOIN "Wishlist" w ON i."wishlistId" = w.id
+            WHERE i."updatedAt" >= ${cut7} AND i.status != 'DELETED'
+        ) _a`,
+      // Active users 30d: same definition
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT owner_id)::int AS count FROM (
+          SELECT "ownerId" AS owner_id FROM "Wishlist"
+            WHERE "updatedAt" >= ${cut30} AND type = 'REGULAR'
+          UNION
+          SELECT w."ownerId" AS owner_id FROM "Item" i
+            JOIN "Wishlist" w ON i."wishlistId" = w.id
+            WHERE i."updatedAt" >= ${cut30} AND i.status != 'DELETED'
+        ) _a`,
+      prisma.wishlist.count({ where: { type: 'REGULAR' } }),
+      prisma.item.count({ where: { status: { not: 'DELETED' } } }),
+      prisma.reservationEvent.count({ where: { type: 'RESERVED' } }),
+      prisma.subscription.count({ where: { status: 'ACTIVE' } }),
+      // Funnel — users with ≥1 REGULAR wishlist (= "activated" proxy)
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist"
+        WHERE type = 'REGULAR'`,
+      // Users with ≥1 non-deleted item
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT w."ownerId")::int AS count
+        FROM "Item" i JOIN "Wishlist" w ON i."wishlistId" = w.id
+        WHERE i.status != 'DELETED'`,
+      // Share proxy: ≥1 wishlist with shareToken explicitly generated
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist"
+        WHERE "shareToken" IS NOT NULL AND type = 'REGULAR'`,
+      // Received ≥1 reservation on their wishlist items
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT w."ownerId")::int AS count
+        FROM "ReservationEvent" re
+        JOIN "Item" i ON re."itemId" = i.id
+        JOIN "Wishlist" w ON i."wishlistId" = w.id
+        WHERE re.type = 'RESERVED'`,
+    ]);
+
+    const withWishlist = n(withWishlistRows[0]);
+
+    return res.json({
+      overview: {
+        totalUsers,
+        newUsers7d,
+        activeUsers7d: n(active7dRows[0]),
+        activeUsers30d: n(active30dRows[0]),
+        totalWishlists,
+        totalItems,
+        totalReservations,
+        proUsers,
+      },
+      funnel: {
+        totalUsers,
+        activatedUsers: withWishlist,   // proxy: users with ≥1 regular wishlist
+        usersWithWishlist: withWishlist,
+        usersWithItem: n(withItemRows[0]),
+        usersWithShare: n(withShareRows[0]),
+        usersWithReservation: n(withReservationRows[0]),
+      },
+      meta: {
+        activeUserDef: 'users who created/updated a regular wishlist or item in the period',
+        shareProxy: 'users with ≥1 wishlist where shareToken was explicitly generated',
+        reservationDef: 'users whose wishlist items received ≥1 RESERVED event',
+      },
+      generatedAt: now.toISOString(),
+    });
+  }),
+);
+
 // POST /tg/billing/pro/checkout — create Stars invoice link
 tgRouter.post(
   '/billing/pro/checkout',
