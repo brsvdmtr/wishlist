@@ -165,12 +165,13 @@ model Item {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
-  wishlist          Wishlist           @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  itemTags          ItemTag[]
-  reservationEvents ReservationEvent[]
-  comments          Comment[]
-  commentReadCursors CommentReadCursor[]
-  hints              Hint[]
+  wishlist              Wishlist               @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  itemTags              ItemTag[]
+  reservationEvents     ReservationEvent[]
+  comments              Comment[]
+  commentReadCursors    CommentReadCursor[]
+  hints                 Hint[]
+  santaItemReservations SantaItemReservation[]
 
   @@index([wishlistId])
   @@index([purgeAfter])
@@ -747,8 +748,9 @@ model SantaAssignment {
   round        SantaRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
   giver        SantaParticipant @relation("GiverAssignments", fields: [giverParticipantId], references: [id], onDelete: Cascade)
   receiver     SantaParticipant @relation("ReceiverAssignments", fields: [receiverParticipantId], references: [id], onDelete: Cascade)
-  giftProgress SantaGiftProgress[]
-  hintRequests SantaHintRequest[]
+  giftProgress          SantaGiftProgress[]
+  hintRequests          SantaHintRequest[]
+  santaItemReservations SantaItemReservation[]
 
   // Both uniques enforced: one person gives once AND receives once per round.
   @@unique([roundId, giverParticipantId])
@@ -997,4 +999,22 @@ model SantaExitRequest {
 
   @@index([campaignId])
   @@index([participantId])
+}
+
+// Santa-flow item reservation: tracks which wishlist items the giver has "claimed"
+// for their Secret Santa assignment. Only Santa-flow reservations drive the
+// SELECTED_FROM_WISHLIST gift status and auto-sync back to PENDING on removal.
+// Distinct from general ReservationEvent — receiver identity is never exposed.
+model SantaItemReservation {
+  id           String          @id @default(cuid())
+  assignmentId String
+  itemId       String
+  createdAt    DateTime        @default(now())
+
+  assignment SantaAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  item       Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, itemId])
+  @@index([assignmentId])
+  @@index([itemId])
 }
