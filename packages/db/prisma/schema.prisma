@@ -618,6 +618,7 @@ model SantaCampaign {
   chatMessages  SantaChatMessage[]
   readCursors   SantaChatReadCursor[]
   chatMutes     SantaChatMute[]
+  polls         SantaPoll[]
   notifications SantaNotification[]
   auditLogs     SantaAdminAuditLog[]
   hintRequests  SantaHintRequest[]
@@ -646,6 +647,7 @@ model SantaParticipant {
   readCursors      SantaChatReadCursor[]
   chatMutes        SantaChatMute[]
   pollVotes        SantaPollVote[]
+  createdPolls     SantaPoll[]              @relation("PollCreator")
   giverHintRequests    SantaHintRequest[]   @relation("HintGiverRequests")
   receiverHintRequests SantaHintRequest[]   @relation("HintReceiverRequests")
 
@@ -824,17 +826,23 @@ model SantaChatMute {
 }
 
 model SantaPoll {
-  id        String    @id @default(cuid())
-  roundId   String
-  question  String
-  options   Json
-  closedAt  DateTime?
-  createdAt DateTime  @default(now())
+  id                     String            @id @default(cuid())
+  campaignId             String            // Primary scoping field — required
+  roundId                String?           // Optional; kept for round-specific context
+  question               String
+  options                Json              // String[] — immutable after create
+  isAnonymous            Boolean           @default(false)
+  createdByParticipantId String?
+  deadlineAt             DateTime?
+  closedAt               DateTime?
+  createdAt              DateTime          @default(now())
 
-  round  SantaRound    @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  votes  SantaPollVote[]
+  campaign   SantaCampaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  round      SantaRound?       @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  createdBy  SantaParticipant? @relation("PollCreator", fields: [createdByParticipantId], references: [id], onDelete: SetNull)
+  votes      SantaPollVote[]
 
-  @@index([roundId])
+  @@index([campaignId])
 }
 
 model SantaPollVote {

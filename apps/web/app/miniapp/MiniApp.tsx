@@ -293,7 +293,7 @@ type SantaJoinPreview = {
   participantCount: number; ownerName: string | null; ownerAvatarUrl: string | null;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1641,6 +1641,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [santaChatInput, setSantaChatInput] = useState('');
   const [santaChatSending, setSantaChatSending] = useState(false);
   const [santaChatIsMuted, setSantaChatIsMuted] = useState(false);
+  // Polls state (Batch 4.2)
+  type PollResult = { optionIndex: number; count: number; percentage: number; voters: { displayName: string }[] | null };
+  type Poll = {
+    id: string; question: string; options: string[]; isAnonymous: boolean;
+    createdAt: string; deadlineAt: string | null; closedAt: string | null;
+    isOpen: boolean; myVote: number | null; results: PollResult[];
+  };
+  const [santaPolls, setSantaPolls] = useState<Poll[]>([]);
+  const [santaPollsLoading, setSantaPollsLoading] = useState(false);
+  const [santaPollCreateOpen, setSantaPollCreateOpen] = useState(false);
+  const [santaPollCreateQuestion, setSantaPollCreateQuestion] = useState('');
+  const [santaPollCreateOptions, setSantaPollCreateOptions] = useState<string[]>(['', '']);
+  const [santaPollCreateAnonymous, setSantaPollCreateAnonymous] = useState(false);
+  const [santaPollCreateSubmitting, setSantaPollCreateSubmitting] = useState(false);
 
   // ── Wishes tab: filtered by priority ─────────────────────────────────────
   const filteredAllItems = useMemo(() => {
@@ -2694,6 +2708,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('my-wishlists');
     } else if (screen === 'santa-create') {
       setScreen('santa-hub');
+    } else if (screen === 'santa-polls') {
+      // Back from polls → return to campaign detail, reset polls state
+      setSantaPolls([]);
+      setSantaPollCreateOpen(false);
+      setSantaPollCreateQuestion('');
+      setSantaPollCreateOptions(['', '']);
+      setSantaPollCreateAnonymous(false);
+      setScreen('santa-campaign');
     } else if (screen === 'santa-chat') {
       // Back from chat → return to campaign detail, reset chat state
       setSantaChatMessages([]);
@@ -9341,6 +9363,32 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             )}
 
+            {/* Polls button (Batch 4.2) — visible for ACTIVE campaigns */}
+            {camp.status === 'ACTIVE' && (
+              <button
+                onClick={async () => {
+                  setSantaPolls([]);
+                  setSantaPollsLoading(true);
+                  setScreen('santa-polls');
+                  try {
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/polls`);
+                    if (res.ok) {
+                      const data = await res.json() as { polls: Poll[] };
+                      setSantaPolls(data.polls);
+                    }
+                  } finally {
+                    setSantaPollsLoading(false);
+                  }
+                }}
+                style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '12px 16px', cursor: 'pointer', width: '100%', fontFamily: font, marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 18 }}>📊</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('santa_polls_open_btn', locale)}</span>
+                </div>
+              </button>
+            )}
+
             {/* Hint item picker sheet (Batch 2.5) — receiver selects 1–3 items for their giver */}
             <BottomSheet
               isOpen={santaHintPickerOpen}
@@ -9442,6 +9490,204 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>
                   </button>
                 ))}
+              </div>
+            </BottomSheet>
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          SECRET SANTA — POLLS (Batch 4.2)
+          ══════════════════════════════════════════════ */}
+      {screen === 'santa-polls' && currentSantaCampaign && (() => {
+        const camp = currentSantaCampaign.campaign;
+        const campId = camp.id;
+        const isOwner = camp.isOwner;
+
+        const vote = async (pollId: string, optionIndex: number) => {
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/polls/${pollId}/vote`, { method: 'POST', body: JSON.stringify({ optionIndex }) });
+          if (res.ok) {
+            const data = await res.json() as { poll: Poll };
+            setSantaPolls(prev => prev.map(p => p.id === pollId ? data.poll : p));
+          } else {
+            const err = await res.json().catch(() => ({})) as { error?: string };
+            if (err.error === 'already_voted') pushToast(t('santa_polls_already_voted', locale), 'info');
+          }
+        };
+
+        const closePoll = async (pollId: string) => {
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/polls/${pollId}/close`, { method: 'POST' });
+          if (res.ok) {
+            const data = await res.json() as { poll: Poll };
+            setSantaPolls(prev => prev.map(p => p.id === pollId ? data.poll : p));
+          }
+        };
+
+        const createPoll = async () => {
+          const opts = santaPollCreateOptions.filter(o => o.trim());
+          if (opts.length < 2) { pushToast(t('santa_polls_min_options', locale), 'error'); return; }
+          if (!santaPollCreateQuestion.trim()) return;
+          setSantaPollCreateSubmitting(true);
+          try {
+            const res = await tgFetch(`/tg/santa/campaigns/${campId}/polls`, {
+              method: 'POST',
+              body: JSON.stringify({ question: santaPollCreateQuestion.trim(), options: opts, isAnonymous: santaPollCreateAnonymous }),
+            });
+            if (res.ok) {
+              const data = await res.json() as { poll: Poll };
+              setSantaPolls(prev => [data.poll, ...prev]);
+              setSantaPollCreateOpen(false);
+              setSantaPollCreateQuestion('');
+              setSantaPollCreateOptions(['', '']);
+              setSantaPollCreateAnonymous(false);
+              pushToast(t('done', locale), 'success');
+            }
+          } finally {
+            setSantaPollCreateSubmitting(false);
+          }
+        };
+
+        return (
+          <div style={{ padding: '16px 20px 120px' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <button onClick={navBack} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: C.accent, fontSize: 22 }}>←</button>
+              <h1 style={{ fontSize: 20, fontWeight: 800, fontFamily: font, color: C.text, margin: 0, flex: 1 }}>
+                📊 {t('santa_polls_title', locale)}
+              </h1>
+              {isOwner && (
+                <button
+                  onClick={() => setSantaPollCreateOpen(true)}
+                  style={{ background: C.accent, border: 'none', borderRadius: 12, padding: '8px 14px', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: font }}
+                >
+                  {t('santa_polls_new', locale)}
+                </button>
+              )}
+            </div>
+
+            {/* Empty */}
+            {!santaPollsLoading && santaPolls.length === 0 && (
+              <div style={{ textAlign: 'center', color: C.textSec, fontSize: 14, padding: '40px 0' }}>
+                {t('santa_polls_empty', locale)}
+              </div>
+            )}
+
+            {/* Loading */}
+            {santaPollsLoading && (
+              <div style={{ textAlign: 'center', color: C.textSec, padding: '40px 0' }}>{t('loading', locale)}</div>
+            )}
+
+            {/* Poll list */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {santaPolls.map(poll => {
+                const totalVotes = poll.results.reduce((s, r) => s + r.count, 0);
+                return (
+                  <div key={poll.id} style={{ background: C.card, borderRadius: 16, padding: '16px', border: `1px solid ${C.border}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, flex: 1 }}>{poll.question}</div>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8, background: poll.isOpen ? `${C.green}20` : `${C.textSec}15`, color: poll.isOpen ? C.green : C.textSec, whiteSpace: 'nowrap' }}>
+                        {poll.isOpen ? t('santa_polls_active', locale) : t('santa_polls_closed', locale)}
+                      </span>
+                    </div>
+
+                    {/* Options */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {poll.options.map((opt, idx) => {
+                        const result = poll.results[idx];
+                        const isMyVote = poll.myVote === idx;
+                        const pct = result?.percentage ?? 0;
+                        return (
+                          <div key={idx}>
+                            <div
+                              onClick={() => { if (poll.isOpen && poll.myVote === null) void vote(poll.id, idx); }}
+                              style={{ cursor: poll.isOpen && poll.myVote === null ? 'pointer' : 'default', borderRadius: 10, border: `1px solid ${isMyVote ? C.accent : C.border}`, padding: '8px 12px', position: 'relative', overflow: 'hidden', background: C.bg }}
+                            >
+                              {/* Progress bar */}
+                              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: isMyVote ? `${C.accent}20` : `${C.textSec}10`, borderRadius: 10 }} />
+                              <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  {isMyVote && <span style={{ color: C.accent, fontSize: 14 }}>✓</span>}
+                                  <span style={{ fontSize: 14, color: C.text }}>{opt}</span>
+                                </div>
+                                <span style={{ fontSize: 12, color: C.textSec, fontWeight: 600 }}>{pct}%</span>
+                              </div>
+                            </div>
+                            {/* Voters (public only) */}
+                            {!poll.isAnonymous && result?.voters && result.voters.length > 0 && (
+                              <div style={{ fontSize: 11, color: C.textSec, marginTop: 2, paddingLeft: 4 }}>
+                                {result.voters.map(v => v.displayName).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Footer */}
+                    <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: C.textSec }}>
+                        {t('santa_polls_votes_count', locale, { n: String(totalVotes) })}
+                        {poll.isAnonymous && <span style={{ marginLeft: 6 }}>· {t('santa_polls_voters_hidden', locale)}</span>}
+                      </span>
+                      {isOwner && poll.isOpen && (
+                        <button
+                          onClick={() => void closePoll(poll.id)}
+                          style={{ background: 'none', border: `1px solid ${C.red}40`, borderRadius: 8, padding: '4px 10px', color: C.red, fontSize: 12, cursor: 'pointer', fontFamily: font }}
+                        >
+                          {t('santa_polls_close', locale)}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Create poll sheet */}
+            <BottomSheet isOpen={santaPollCreateOpen} onClose={() => setSantaPollCreateOpen(false)} title={t('santa_polls_new', locale)}>
+              <div>
+                <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('santa_polls_question', locale)}</div>
+                <input
+                  value={santaPollCreateQuestion}
+                  onChange={e => setSantaPollCreateQuestion(e.target.value)}
+                  placeholder={t('santa_polls_question_placeholder', locale)}
+                  maxLength={300}
+                  style={{ width: '100%', background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box' }}
+                />
+
+                <div style={{ marginTop: 16, marginBottom: 6, fontSize: 13, color: C.textSec }}>Варианты ответов</div>
+                {santaPollCreateOptions.map((opt, idx) => (
+                  <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <input
+                      value={opt}
+                      onChange={e => { const arr = [...santaPollCreateOptions]; arr[idx] = e.target.value; setSantaPollCreateOptions(arr); }}
+                      placeholder={t('santa_polls_option_placeholder', locale, { n: String(idx + 1) })}
+                      maxLength={100}
+                      style={{ flex: 1, background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none' }}
+                    />
+                    {santaPollCreateOptions.length > 2 && (
+                      <button onClick={() => setSantaPollCreateOptions(prev => prev.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer', fontSize: 18, padding: '0 4px' }}>×</button>
+                    )}
+                  </div>
+                ))}
+                {santaPollCreateOptions.length < 10 && (
+                  <button onClick={() => setSantaPollCreateOptions(prev => [...prev, ''])} style={{ background: 'none', border: 'none', color: C.accent, fontSize: 13, cursor: 'pointer', padding: '4px 0', fontFamily: font }}>
+                    {t('santa_polls_add_option', locale)}
+                  </button>
+                )}
+
+                <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input type="checkbox" checked={santaPollCreateAnonymous} onChange={e => setSantaPollCreateAnonymous(e.target.checked)} id="anon-toggle" />
+                  <label htmlFor="anon-toggle" style={{ fontSize: 14, color: C.text, cursor: 'pointer' }}>{t('santa_polls_anonymous', locale)}</label>
+                </div>
+
+                <button
+                  onClick={() => void createPoll()}
+                  disabled={santaPollCreateSubmitting}
+                  style={{ marginTop: 20, background: C.accent, border: 'none', borderRadius: 12, padding: '13px 0', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', width: '100%', fontFamily: font, opacity: santaPollCreateSubmitting ? 0.6 : 1 }}
+                >
+                  {santaPollCreateSubmitting ? t('loading', locale) : t('santa_polls_create', locale)}
+                </button>
               </div>
             </BottomSheet>
           </div>

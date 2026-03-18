@@ -6889,6 +6889,234 @@ tgRouter.delete('/santa/campaigns/:id/mute', asyncHandler(async (req, res) => {
   return res.json({ ok: true, isMuted: false });
 }));
 
+// ─── Batch 4.2: Santa Campaign Polls ─────────────────────────────────────────
+
+// Serializer for a poll (role-aware, anonymous policy enforced)
+function serializePoll(
+  poll: {
+    id: string;
+    question: string;
+    options: unknown;
+    isAnonymous: boolean;
+    createdAt: Date;
+    deadlineAt: Date | null;
+    closedAt: Date | null;
+    votes: { optionIndex: number; participantId: string; participant: { userId: string; user: { firstName: string | null; profile: { displayName: string | null } | null } } }[];
+  },
+  myParticipantId: string,
+  isOwner: boolean,
+) {
+  const options = (poll.options as string[]);
+  const now = new Date();
+  const isOpen = !poll.closedAt && (!poll.deadlineAt || poll.deadlineAt > now);
+  const myVoteEntry = poll.votes.find(v => v.participantId === myParticipantId);
+  const myVote = myVoteEntry ? myVoteEntry.optionIndex : null;
+
+  // Tally results
+  const counts = new Array<number>(options.length).fill(0);
+  for (const v of poll.votes) counts[v.optionIndex] = (counts[v.optionIndex] ?? 0) + 1;
+  const total = poll.votes.length;
+
+  const results = options.map((_, idx) => {
+    const count = counts[idx] ?? 0;
+    const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+    // voters: always null for anonymous polls; show displayNames for public polls
+    const voters = poll.isAnonymous
+      ? null
+      : poll.votes
+          .filter(v => v.optionIndex === idx)
+          .map(v => ({ displayName: v.participant.user.profile?.displayName || v.participant.user.firstName || 'Unknown' }));
+    return { optionIndex: idx, count, percentage, voters };
+  });
+
+  return {
+    id: poll.id,
+    question: poll.question,
+    options,
+    isAnonymous: poll.isAnonymous,
+    createdAt: poll.createdAt.toISOString(),
+    deadlineAt: poll.deadlineAt ? poll.deadlineAt.toISOString() : null,
+    closedAt: poll.closedAt ? poll.closedAt.toISOString() : null,
+    isOpen,
+    myVote,
+    results,
+  };
+}
+
+const POLL_SELECT = {
+  id: true, question: true, options: true, isAnonymous: true, createdAt: true,
+  deadlineAt: true, closedAt: true,
+  votes: {
+    select: {
+      optionIndex: true, participantId: true,
+      participant: { select: { userId: true, user: { select: { firstName: true, profile: { select: { displayName: true } } } } } },
+    },
+  },
+} as const;
+
+// GET /tg/santa/campaigns/:id/polls — list all polls for this campaign
+tgRouter.get('/santa/campaigns/:id/polls', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const participant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: user.id },
+    select: { id: true, status: true, userId: true },
+  });
+  if (!participant || participant.status === 'REMOVED') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  const isOwner = campaign.ownerId === user.id;
+
+  const polls = await prisma.santaPoll.findMany({
+    where: { campaignId },
+    orderBy: { createdAt: 'desc' },
+    select: POLL_SELECT,
+  });
+
+  return res.json({ polls: polls.map(p => serializePoll(p, participant.id, isOwner)) });
+}));
+
+// POST /tg/santa/campaigns/:id/polls — create poll (owner only, campaign ACTIVE)
+tgRouter.post('/santa/campaigns/:id/polls', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const parsed = z.object({
+    question: z.string().min(1).max(300),
+    options: z.array(z.string().min(1).max(100)).min(2).max(10),
+    isAnonymous: z.boolean(),
+    deadlineAt: z.string().datetime().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { ownerId: true, status: true },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Only the campaign owner can create polls' });
+  if (campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Polls can only be created in ACTIVE campaigns' });
+
+  const myParticipant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: user.id, status: 'JOINED' },
+    select: { id: true },
+  });
+  if (!myParticipant) return res.status(403).json({ error: 'Owner must be a participant to create polls' });
+
+  const poll = await prisma.santaPoll.create({
+    data: {
+      campaignId,
+      question: parsed.data.question,
+      options: parsed.data.options,
+      isAnonymous: parsed.data.isAnonymous,
+      createdByParticipantId: myParticipant.id,
+      deadlineAt: parsed.data.deadlineAt ? new Date(parsed.data.deadlineAt) : null,
+    },
+    select: POLL_SELECT,
+  });
+
+  // System message: poll created (in chat)
+  void createSystemMessage(campaignId, 'poll_created', { question: parsed.data.question.slice(0, 80) }).catch(() => {});
+
+  // POLL_CREATED notifications — batch, mute-aware
+  void (async () => {
+    try {
+      const [joinedParticipants, mutedEntries] = await Promise.all([
+        prisma.santaParticipant.findMany({ where: { campaignId, status: 'JOINED' }, select: { id: true, userId: true } }),
+        prisma.santaChatMute.findMany({ where: { campaignId }, select: { participantId: true } }),
+      ]);
+      const mutedIds = new Set(mutedEntries.map(m => m.participantId));
+      const notifData = joinedParticipants
+        .filter(p => p.userId !== user.id && !mutedIds.has(p.id))
+        .map(p => ({ campaignId, userId: p.userId, type: 'POLL_CREATED' as const, payload: { pollId: poll.id } }));
+      if (notifData.length > 0) {
+        await prisma.santaNotification.createMany({ data: notifData, skipDuplicates: false });
+      }
+    } catch {}
+  })();
+
+  return res.status(201).json({ poll: serializePoll(poll, myParticipant.id, true) });
+}));
+
+// POST /tg/santa/campaigns/:id/polls/:pollId/vote — vote on a poll
+tgRouter.post('/santa/campaigns/:id/polls/:pollId/vote', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const pollId = req.params.pollId ?? '';
+  if (!campaignId || !pollId) return res.status(400).json({ error: 'Missing params' });
+
+  const parsed = z.object({ optionIndex: z.number().int().min(0) }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const participant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: user.id, status: 'JOINED' },
+    select: { id: true },
+  });
+  if (!participant) return res.status(403).json({ error: 'Only joined participants can vote' });
+
+  const poll = await prisma.santaPoll.findUnique({ where: { id: pollId, campaignId }, select: POLL_SELECT });
+  if (!poll) return res.status(404).json({ error: 'Poll not found' });
+
+  const options = poll.options as string[];
+  if (parsed.data.optionIndex < 0 || parsed.data.optionIndex >= options.length) {
+    return res.status(400).json({ error: 'invalid_option_index', message: `optionIndex must be 0–${options.length - 1}` });
+  }
+
+  const now = new Date();
+  if (poll.closedAt || (poll.deadlineAt && poll.deadlineAt <= now)) {
+    return res.status(409).json({ error: 'Poll is closed' });
+  }
+
+  // Already voted?
+  const existing = poll.votes.find(v => v.participantId === participant.id);
+  if (existing) return res.status(409).json({ error: 'already_voted', message: 'You have already voted on this poll' });
+
+  await prisma.santaPollVote.create({
+    data: { pollId, participantId: participant.id, optionIndex: parsed.data.optionIndex },
+  });
+
+  // Re-fetch poll with updated votes
+  const updatedPoll = await prisma.santaPoll.findUnique({ where: { id: pollId }, select: POLL_SELECT });
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  const isOwner = campaign?.ownerId === user.id;
+
+  return res.json({ poll: serializePoll(updatedPoll!, participant.id, isOwner) });
+}));
+
+// POST /tg/santa/campaigns/:id/polls/:pollId/close — close a poll (owner only)
+tgRouter.post('/santa/campaigns/:id/polls/:pollId/close', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const pollId = req.params.pollId ?? '';
+  if (!campaignId || !pollId) return res.status(400).json({ error: 'Missing params' });
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Only the campaign owner can close polls' });
+
+  const poll = await prisma.santaPoll.findUnique({ where: { id: pollId, campaignId }, select: { id: true, closedAt: true } });
+  if (!poll) return res.status(404).json({ error: 'Poll not found' });
+
+  // Idempotent: already closed → just return current state
+  if (!poll.closedAt) {
+    await prisma.santaPoll.update({ where: { id: pollId }, data: { closedAt: new Date() } });
+  }
+
+  const myParticipant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: user.id },
+    select: { id: true },
+  });
+
+  const updatedPoll = await prisma.santaPoll.findUnique({ where: { id: pollId }, select: POLL_SELECT });
+  return res.json({ poll: serializePoll(updatedPoll!, myParticipant?.id ?? '', true) });
+}));
+
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`[api] listening on http://localhost:${PORT}`);
