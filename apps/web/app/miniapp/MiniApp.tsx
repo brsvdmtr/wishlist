@@ -1331,6 +1331,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [godMode, setGodMode] = useState(false);
   const [canGodMode, setCanGodMode] = useState(false);
   const [godModeLoading, setGodModeLoading] = useState(false);
+  const [santaTestModeLoading, setSantaTestModeLoading] = useState(false);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
 
@@ -1799,6 +1800,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       throw wrapped;
     }
   }, [apiBase]);
+
+  // --- Santa season loader (used on init + after god/testMode toggles)
+  const loadSantaSeason = useCallback(async () => {
+    try {
+      const r = await tgFetch('/tg/santa/season');
+      if (r.ok) setSantaSeason(await r.json() as { inSeason: boolean; canCreate: boolean; seasonStart: string | null; seasonEnd: string | null; testMode: boolean });
+    } catch {}
+  }, [tgFetch]);
 
   // --- Owner API calls
   const loadWishlists = useCallback(async () => {
@@ -2936,9 +2945,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // Share screen without requiring the user to visit Profile first.
       loadProfile().catch(() => { /* non-critical — share screen has fallback */ });
       // Pre-load Santa season info
-      tgFetch('/tg/santa/season').then(async (r) => {
-        if (r.ok) setSantaSeason(await r.json() as typeof santaSeason);
-      }).catch(() => {});
+      loadSantaSeason().catch(() => {});
     };
     tryInit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -6480,6 +6487,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             setGodMode(data.godMode);
                             try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('medium'); } catch {}
                             loadWishlists().catch(() => {});
+                            loadSantaSeason().catch(() => {});
                           } else {
                             pushToast(t('toast_god_toggle_error', locale), 'error');
                           }
@@ -6506,6 +6514,54 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       }} />
                     </button>
                   </div>
+
+                  {/* Santa test mode — visible only when godMode is active */}
+                  {godMode && (
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#cc0000', fontFamily: font }}>🎅 Santa test mode</div>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                            {santaSeason?.testMode ? 'Secret Santa block visible' : 'Secret Santa block hidden'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (santaTestModeLoading) return;
+                            setSantaTestModeLoading(true);
+                            try {
+                              const res = await tgFetch('/tg/santa/season/test-mode', { method: 'POST' });
+                              if (res.ok) {
+                                try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch {}
+                                await loadSantaSeason();
+                              } else {
+                                pushToast('Failed to toggle santa test mode', 'error');
+                              }
+                            } catch {
+                              pushToast(t('error_network', locale), 'error');
+                            } finally {
+                              setSantaTestModeLoading(false);
+                            }
+                          }}
+                          disabled={santaTestModeLoading}
+                          style={{
+                            width: 50, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                            background: santaSeason?.testMode ? '#cc0000' : C.surface,
+                            position: 'relative', transition: 'background 0.2s',
+                            opacity: santaTestModeLoading ? 0.5 : 1,
+                          }}
+                        >
+                          <div style={{
+                            width: 22, height: 22, borderRadius: 11,
+                            background: '#fff', position: 'absolute', top: 3,
+                            left: santaSeason?.testMode ? 25 : 3,
+                            transition: 'left 0.2s',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          }} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>

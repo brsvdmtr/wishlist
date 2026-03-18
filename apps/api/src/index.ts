@@ -4566,11 +4566,24 @@ async function getSantaSeasonInfo(userId: string, santaTestMode: boolean) {
   const now = new Date();
   const year = now.getFullYear();
   const config = await prisma.santaSeasonConfig.findUnique({ where: { seasonYear: year } });
+
+  // santaTestMode bypasses season window AND missing-config guard entirely.
+  // Must be checked BEFORE the early return so god-mode users can always access Santa.
+  if (santaTestMode) {
+    return {
+      inSeason: true,
+      canCreate: true,
+      seasonStart: config?.seasonStartAt.toISOString() ?? null,
+      seasonEnd: config?.seasonEndAt.toISOString() ?? null,
+      config: config ?? null,
+    };
+  }
+
   if (!config) return { inSeason: false, canCreate: false, seasonStart: null, seasonEnd: null, config: null };
-  const effectiveInSeason = santaTestMode ? true : (now >= config.seasonStartAt && now <= config.seasonEndAt);
-  const canCreate = effectiveInSeason && config.campaignCreateEnabled;
+  const inSeason = now >= config.seasonStartAt && now <= config.seasonEndAt;
+  const canCreate = inSeason && config.campaignCreateEnabled;
   return {
-    inSeason: effectiveInSeason,
+    inSeason,
     canCreate,
     seasonStart: config.seasonStartAt.toISOString(),
     seasonEnd: config.seasonEndAt.toISOString(),
