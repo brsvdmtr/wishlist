@@ -293,7 +293,7 @@ type SantaJoinPreview = {
   participantCount: number; ownerName: string | null; ownerAvatarUrl: string | null;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1599,7 +1599,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [santaDrawLoading, setSantaDrawLoading] = useState(false);
   const [santaDrawValidation, setSantaDrawValidation] = useState<{
     feasible: boolean; participantCount?: number;
-    reason?: string; problematicExclusions?: { userId1: string; name1: string; userId2: string; name2: string }[];
+    reason?: string; problematicExclusions?: { userId1: string; name1: string; userId2: string; name2: string; groupLabel?: string | null }[];
   } | null>(null);
   const [santaDrawValidationLoading, setSantaDrawValidationLoading] = useState(false);
   // Reveal state — Batch 3: includes isFirstReveal, giftNote, revealedAt
@@ -1656,6 +1656,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [santaPollCreateOptions, setSantaPollCreateOptions] = useState<string[]>(['', '']);
   const [santaPollCreateAnonymous, setSantaPollCreateAnonymous] = useState(false);
   const [santaPollCreateSubmitting, setSantaPollCreateSubmitting] = useState(false);
+  // Exclusions state (Batch 5.1)
+  type ExclusionPair = { id: string; userId1: string; name1: string; userId2: string; name2: string };
+  type ExclusionGroup = { id: string; label: string; members: { userId: string; displayName: string; avatarUrl: string | null }[] };
+  const [santaExclPairs, setSantaExclPairs] = useState<ExclusionPair[]>([]);
+  const [santaExclGroups, setSantaExclGroups] = useState<ExclusionGroup[]>([]);
+  const [santaExclLoading, setSantaExclLoading] = useState(false);
+  const [santaExclAddPairOpen, setSantaExclAddPairOpen] = useState(false);
+  const [santaExclPairA, setSantaExclPairA] = useState('');
+  const [santaExclPairB, setSantaExclPairB] = useState('');
+  const [santaExclPairSaving, setSantaExclPairSaving] = useState(false);
+  const [santaExclGroupSheetOpen, setSantaExclGroupSheetOpen] = useState(false);
+  const [santaExclGroupLabel, setSantaExclGroupLabel] = useState('');
+  const [santaExclGroupSaving, setSantaExclGroupSaving] = useState(false);
+  const [santaExclAddMemberGroupId, setSantaExclAddMemberGroupId] = useState<string | null>(null);
+  const [santaExclAddMemberUserId, setSantaExclAddMemberUserId] = useState('');
+  const [santaExclAddMemberSaving, setSantaExclAddMemberSaving] = useState(false);
 
   // ── Wishes tab: filtered by priority ─────────────────────────────────────
   const filteredAllItems = useMemo(() => {
@@ -2717,6 +2733,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('my-wishlists');
     } else if (screen === 'santa-create') {
       setScreen('santa-hub');
+    } else if (screen === 'santa-exclusions') {
+      // Back from exclusions → return to campaign detail, reset exclusions state
+      setSantaExclPairs([]);
+      setSantaExclGroups([]);
+      setSantaExclAddPairOpen(false);
+      setSantaExclPairA('');
+      setSantaExclPairB('');
+      setSantaExclGroupSheetOpen(false);
+      setSantaExclGroupLabel('');
+      setSantaExclAddMemberGroupId(null);
+      setSantaExclAddMemberUserId('');
+      setScreen('santa-campaign');
     } else if (screen === 'santa-polls') {
       // Back from polls → return to campaign detail, reset polls state
       setSantaPolls([]);
@@ -8687,7 +8715,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             {santaDrawValidation.problematicExclusions && santaDrawValidation.problematicExclusions.length > 0 && (
                               <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
                                 {t('santa_draw_infeasible_hint', locale, {
-                                  names: santaDrawValidation.problematicExclusions.map(e => `${e.name1} & ${e.name2}`).join(', '),
+                                  names: santaDrawValidation.problematicExclusions.map(e => {
+                                    const base = `${e.name1} & ${e.name2}`;
+                                    return e.groupLabel ? `${base} (${t('santa_draw_infeasible_group', locale, { label: e.groupLabel })})` : base;
+                                  }).join(', '),
                                 })}
                               </div>
                             )}
@@ -9419,6 +9450,35 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             )}
 
+            {/* Exclusions button (Batch 5.1) — owner only, pre-draw statuses */}
+            {isOwner && ['DRAFT', 'OPEN', 'LOCKED'].includes(camp.status) && (
+              <button
+                onClick={async () => {
+                  setSantaExclPairs([]);
+                  setSantaExclGroups([]);
+                  setSantaExclLoading(true);
+                  setScreen('santa-exclusions');
+                  try {
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/exclusions`);
+                    if (res.ok) {
+                      const data = await res.json() as { exclusions: ExclusionPair[]; groups: ExclusionGroup[] };
+                      setSantaExclPairs(data.exclusions);
+                      setSantaExclGroups(data.groups);
+                    }
+                  } finally {
+                    setSantaExclLoading(false);
+                  }
+                }}
+                style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '12px 16px', cursor: 'pointer', width: '100%', fontFamily: font, marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                <span style={{ fontSize: 18 }}>🚫</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('santa_excl_open_btn', locale)}</span>
+                {(santaExclPairs.length + santaExclGroups.length) > 0 && (
+                  <span style={{ marginLeft: 'auto', fontSize: 12, color: C.textMuted }}>{santaExclPairs.length + santaExclGroups.length}</span>
+                )}
+              </button>
+            )}
+
             {/* Polls button (Batch 4.2) — visible for ACTIVE campaigns */}
             {camp.status === 'ACTIVE' && (
               <button
@@ -9926,6 +9986,335 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </button>
               </div>
             )}
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          SECRET SANTA — EXCLUSIONS (Batch 5.1)
+          ══════════════════════════════════════════════ */}
+      {screen === 'santa-exclusions' && currentSantaCampaign && (() => {
+        const camp = currentSantaCampaign.campaign;
+        const campId = camp.id;
+        const joinedParticipants = currentSantaCampaign.participants.filter(p => p.status === 'JOINED');
+        const isPro = planInfo.code === 'PRO';
+
+        const reloadExclusions = async () => {
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions`);
+          if (res.ok) {
+            const data = await res.json() as { exclusions: ExclusionPair[]; groups: ExclusionGroup[] };
+            setSantaExclPairs(data.exclusions);
+            setSantaExclGroups(data.groups);
+          }
+        };
+
+        const addPair = async () => {
+          if (!santaExclPairA || !santaExclPairB || santaExclPairA === santaExclPairB) return;
+          setSantaExclPairSaving(true);
+          try {
+            const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions`, {
+              method: 'POST',
+              body: JSON.stringify({ userId1: santaExclPairA, userId2: santaExclPairB }),
+            });
+            if (res.ok) {
+              setSantaExclAddPairOpen(false);
+              setSantaExclPairA('');
+              setSantaExclPairB('');
+              await reloadExclusions();
+              pushToast(t('done', locale), 'success');
+            } else {
+              const err = await res.json() as { error?: string };
+              pushToast(err.error ?? t('error_generic', locale), 'error');
+            }
+          } finally {
+            setSantaExclPairSaving(false);
+          }
+        };
+
+        const deletePair = async (id: string) => {
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            setSantaExclPairs(prev => prev.filter(p => p.id !== id));
+          } else pushToast(t('error_generic', locale), 'error');
+        };
+
+        const createGroup = async () => {
+          if (!santaExclGroupLabel.trim()) return;
+          setSantaExclGroupSaving(true);
+          try {
+            const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/groups`, {
+              method: 'POST',
+              body: JSON.stringify({ label: santaExclGroupLabel.trim() }),
+            });
+            if (res.ok) {
+              setSantaExclGroupSheetOpen(false);
+              setSantaExclGroupLabel('');
+              await reloadExclusions();
+              pushToast(t('done', locale), 'success');
+            } else pushToast(t('error_generic', locale), 'error');
+          } finally {
+            setSantaExclGroupSaving(false);
+          }
+        };
+
+        const deleteGroup = async (groupId: string, label: string) => {
+          if (!confirm(t('santa_excl_delete_group_confirm', locale, { label }))) return;
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/groups/${groupId}`, { method: 'DELETE' });
+          if (res.ok) {
+            setSantaExclGroups(prev => prev.filter(g => g.id !== groupId));
+          } else pushToast(t('error_generic', locale), 'error');
+        };
+
+        const addMember = async () => {
+          if (!santaExclAddMemberGroupId || !santaExclAddMemberUserId) return;
+          setSantaExclAddMemberSaving(true);
+          try {
+            const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/groups/${santaExclAddMemberGroupId}/members`, {
+              method: 'POST',
+              body: JSON.stringify({ userId: santaExclAddMemberUserId }),
+            });
+            if (res.ok) {
+              setSantaExclAddMemberGroupId(null);
+              setSantaExclAddMemberUserId('');
+              await reloadExclusions();
+              pushToast(t('done', locale), 'success');
+            } else {
+              const err = await res.json() as { error?: string };
+              pushToast(err.error ?? t('error_generic', locale), 'error');
+            }
+          } finally {
+            setSantaExclAddMemberSaving(false);
+          }
+        };
+
+        const removeMember = async (groupId: string, userId: string) => {
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/exclusions/groups/${groupId}/members/${userId}`, { method: 'DELETE' });
+          if (res.ok) {
+            setSantaExclGroups(prev => prev.map(g => g.id === groupId
+              ? { ...g, members: g.members.filter(m => m.userId !== userId) }
+              : g
+            ));
+          } else pushToast(t('error_generic', locale), 'error');
+        };
+
+        return (
+          <div style={{ padding: '16px 20px 120px' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '8px 0 20px' }}>
+              🚫 {t('santa_excl_title', locale)}
+            </h1>
+
+            {santaExclLoading && (
+              <div style={{ color: C.textMuted, fontSize: 14, textAlign: 'center', padding: 40 }}>{t('loading', locale)}</div>
+            )}
+
+            {!santaExclLoading && (
+              <>
+                {/* Individual pairs section */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                    {t('santa_excl_pairs_section', locale)}
+                  </div>
+
+                  {santaExclPairs.length === 0 && (
+                    <div style={{ fontSize: 13, color: C.textMuted, padding: '12px 0' }}>{t('santa_excl_empty', locale)}</div>
+                  )}
+
+                  {santaExclPairs.map(pair => (
+                    <div key={pair.id} style={{ background: C.card, borderRadius: 12, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 14, color: C.text }}>
+                        {pair.name1} — {pair.name2}
+                      </span>
+                      <button
+                        onClick={() => void deletePair(pair.id)}
+                        style={{ background: 'none', border: 'none', color: C.red, fontSize: 18, cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}
+                      >×</button>
+                    </div>
+                  ))}
+
+                  {isPro ? (
+                    <button
+                      onClick={() => setSantaExclAddPairOpen(true)}
+                      style={{ background: 'none', border: `1px dashed ${C.accent}`, borderRadius: 12, color: C.accent, fontSize: 13, fontWeight: 600, padding: '10px 14px', cursor: 'pointer', width: '100%', fontFamily: font, marginTop: 4 }}
+                    >
+                      {t('santa_excl_add_pair', locale)}
+                    </button>
+                  ) : (
+                    <div style={{ background: `${C.accent}10`, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 4 }}>
+                      🔒 {t('santa_excl_pro_hint', locale)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Groups section */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                    {t('santa_excl_groups_section', locale)}
+                  </div>
+
+                  {santaExclGroups.length === 0 && (
+                    <div style={{ fontSize: 13, color: C.textMuted, padding: '12px 0' }}>{t('santa_excl_groups_empty', locale)}</div>
+                  )}
+
+                  {santaExclGroups.map(group => (
+                    <div key={group.id} style={{ background: C.card, borderRadius: 12, padding: '12px 14px', marginBottom: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{group.label}</span>
+                        <button
+                          onClick={() => void deleteGroup(group.id, group.label)}
+                          style={{ background: 'none', border: 'none', color: C.red, fontSize: 13, cursor: 'pointer', padding: '0 4px' }}
+                        >
+                          {t('delete', locale)}
+                        </button>
+                      </div>
+
+                      {group.members.map(member => {
+                        const participant = joinedParticipants.find(p => p.userId === member.userId);
+                        const name = member.displayName || participant?.displayName || member.userId;
+                        return (
+                          <div key={member.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <UserAvatar avatarUrl={member.avatarUrl} name={name} size={24} accent={C.accent} />
+                              <span style={{ fontSize: 13, color: C.textSec }}>{name}</span>
+                            </div>
+                            <button
+                              onClick={() => void removeMember(group.id, member.userId)}
+                              style={{ background: 'none', border: 'none', color: C.red, fontSize: 16, cursor: 'pointer', padding: '0 4px' }}
+                            >×</button>
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        onClick={() => { setSantaExclAddMemberGroupId(group.id); setSantaExclAddMemberUserId(''); }}
+                        style={{ background: 'none', border: 'none', color: C.accent, fontSize: 13, cursor: 'pointer', padding: '6px 0 0', fontFamily: font }}
+                      >
+                        + {t('santa_excl_member_add', locale)}
+                      </button>
+                    </div>
+                  ))}
+
+                  {isPro ? (
+                    <button
+                      onClick={() => { setSantaExclGroupLabel(''); setSantaExclGroupSheetOpen(true); }}
+                      style={{ background: 'none', border: `1px dashed ${C.accent}`, borderRadius: 12, color: C.accent, fontSize: 13, fontWeight: 600, padding: '10px 14px', cursor: 'pointer', width: '100%', fontFamily: font, marginTop: 4 }}
+                    >
+                      {t('santa_excl_add_group', locale)}
+                    </button>
+                  ) : (
+                    santaExclGroups.length === 0 && (
+                      <div style={{ background: `${C.accent}10`, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 4 }}>
+                        🔒 {t('santa_excl_pro_hint', locale)}
+                      </div>
+                    )
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Add pair sheet */}
+            <BottomSheet isOpen={santaExclAddPairOpen} onClose={() => setSantaExclAddPairOpen(false)} title={t('santa_excl_add_pair', locale)}>
+              <div>
+                <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('santa_excl_select_a', locale)}</div>
+                <select
+                  value={santaExclPairA}
+                  onChange={e => setSantaExclPairA(e.target.value)}
+                  style={{ width: '100%', background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+                >
+                  <option value="">—</option>
+                  {joinedParticipants.map(p => (
+                    <option key={p.userId} value={p.userId}>{p.displayName || p.userId}</option>
+                  ))}
+                </select>
+
+                <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('santa_excl_select_b', locale)}</div>
+                <select
+                  value={santaExclPairB}
+                  onChange={e => setSantaExclPairB(e.target.value)}
+                  style={{ width: '100%', background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}
+                >
+                  <option value="">—</option>
+                  {joinedParticipants.filter(p => p.userId !== santaExclPairA).map(p => (
+                    <option key={p.userId} value={p.userId}>{p.displayName || p.userId}</option>
+                  ))}
+                </select>
+
+                {santaExclPairA && santaExclPairB && (
+                  <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12 }}>
+                    {t('santa_excl_pair_conflict', locale, {
+                      name1: joinedParticipants.find(p => p.userId === santaExclPairA)?.displayName ?? santaExclPairA,
+                      name2: joinedParticipants.find(p => p.userId === santaExclPairB)?.displayName ?? santaExclPairB,
+                    })}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => void addPair()}
+                  disabled={!santaExclPairA || !santaExclPairB || santaExclPairA === santaExclPairB || santaExclPairSaving}
+                  style={{ background: C.accent, border: 'none', borderRadius: 12, padding: '13px 0', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', width: '100%', fontFamily: font, opacity: (!santaExclPairA || !santaExclPairB || santaExclPairA === santaExclPairB || santaExclPairSaving) ? 0.5 : 1 }}
+                >
+                  {santaExclPairSaving ? t('loading', locale) : t('santa_excl_confirm_add', locale)}
+                </button>
+              </div>
+            </BottomSheet>
+
+            {/* Create group sheet */}
+            <BottomSheet isOpen={santaExclGroupSheetOpen} onClose={() => setSantaExclGroupSheetOpen(false)} title={t('santa_excl_add_group', locale)}>
+              <div>
+                <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('santa_excl_group_label', locale)}</div>
+                <input
+                  value={santaExclGroupLabel}
+                  onChange={e => setSantaExclGroupLabel(e.target.value)}
+                  placeholder={t('santa_excl_group_label_placeholder', locale)}
+                  maxLength={80}
+                  style={{ width: '100%', background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}
+                />
+                <button
+                  onClick={() => void createGroup()}
+                  disabled={!santaExclGroupLabel.trim() || santaExclGroupSaving}
+                  style={{ background: C.accent, border: 'none', borderRadius: 12, padding: '13px 0', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', width: '100%', fontFamily: font, opacity: (!santaExclGroupLabel.trim() || santaExclGroupSaving) ? 0.5 : 1 }}
+                >
+                  {santaExclGroupSaving ? t('loading', locale) : t('santa_excl_confirm_add', locale)}
+                </button>
+              </div>
+            </BottomSheet>
+
+            {/* Add member to group sheet */}
+            <BottomSheet isOpen={santaExclAddMemberGroupId !== null} onClose={() => { setSantaExclAddMemberGroupId(null); setSantaExclAddMemberUserId(''); }} title={t('santa_excl_add_members', locale)}>
+              {santaExclAddMemberGroupId && (() => {
+                const group = santaExclGroups.find(g => g.id === santaExclAddMemberGroupId);
+                const alreadyInGroup = new Set(group?.members.map(m => m.userId) ?? []);
+                const available = joinedParticipants.filter(p => !alreadyInGroup.has(p.userId));
+                return (
+                  <div>
+                    {available.length === 0 ? (
+                      <div style={{ fontSize: 14, color: C.textMuted, textAlign: 'center', padding: '20px 0' }}>
+                        {locale === 'ru' ? 'Все участники уже в группе' : 'All participants already in group'}
+                      </div>
+                    ) : (
+                      <>
+                        <select
+                          value={santaExclAddMemberUserId}
+                          onChange={e => setSantaExclAddMemberUserId(e.target.value)}
+                          style={{ width: '100%', background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}
+                        >
+                          <option value="">—</option>
+                          {available.map(p => (
+                            <option key={p.userId} value={p.userId}>{p.displayName || p.userId}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => void addMember()}
+                          disabled={!santaExclAddMemberUserId || santaExclAddMemberSaving}
+                          style={{ background: C.accent, border: 'none', borderRadius: 12, padding: '13px 0', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', width: '100%', fontFamily: font, opacity: (!santaExclAddMemberUserId || santaExclAddMemberSaving) ? 0.5 : 1 }}
+                        >
+                          {santaExclAddMemberSaving ? t('loading', locale) : t('santa_excl_member_add', locale)}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+            </BottomSheet>
           </div>
         );
       })()}

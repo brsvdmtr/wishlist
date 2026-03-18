@@ -107,9 +107,10 @@ model User {
   credits                UserCredits?
   purchases              Purchase[]
   santaTestMode          Boolean              @default(false)
-  ownedSantaCampaigns    SantaCampaign[]      @relation("OwnedSantaCampaigns")
-  santaParticipations    SantaParticipant[]   @relation("SantaParticipations")
-  santaNotifications     SantaNotification[]  @relation("SantaNotifications")
+  ownedSantaCampaigns            SantaCampaign[]              @relation("OwnedSantaCampaigns")
+  santaParticipations            SantaParticipant[]           @relation("SantaParticipations")
+  santaNotifications             SantaNotification[]          @relation("SantaNotifications")
+  santaExclusionGroupMemberships SantaExclusionGroupMember[]  @relation("ExclusionGroupMemberships")
 }
 
 model Wishlist {
@@ -612,16 +613,17 @@ model SantaCampaign {
   updatedAt   DateTime            @updatedAt
 
   // onDelete: Restrict — prevents user account deletion while owning an active campaign.
-  owner         User                @relation("OwnedSantaCampaigns", fields: [ownerId], references: [id], onDelete: Restrict)
-  participants  SantaParticipant[]
-  rounds        SantaRound[]
-  chatMessages  SantaChatMessage[]
-  readCursors   SantaChatReadCursor[]
-  chatMutes     SantaChatMute[]
-  polls         SantaPoll[]
-  notifications SantaNotification[]
-  auditLogs     SantaAdminAuditLog[]
-  hintRequests  SantaHintRequest[]
+  owner           User                   @relation("OwnedSantaCampaigns", fields: [ownerId], references: [id], onDelete: Restrict)
+  participants    SantaParticipant[]
+  rounds          SantaRound[]
+  chatMessages    SantaChatMessage[]
+  readCursors     SantaChatReadCursor[]
+  chatMutes       SantaChatMute[]
+  polls           SantaPoll[]
+  notifications   SantaNotification[]
+  auditLogs       SantaAdminAuditLog[]
+  hintRequests    SantaHintRequest[]
+  exclusionGroups SantaExclusionGroup[]
 
   @@index([ownerId])
   @@index([inviteToken])
@@ -721,6 +723,34 @@ model SantaExclusion {
 
   @@unique([campaignId, userId1, userId2])
   @@index([campaignId])
+}
+
+// Batch 5.1: Named exclusion group — "no pairs within this group"
+// Groups expand to all-pairs (C(n,2)) in-memory at draw/validate time.
+// Zero materialization risk: individual SantaExclusion rows are NOT created.
+model SantaExclusionGroup {
+  id         String   @id @default(cuid())
+  campaignId String
+  label      String   // organizer-defined name, e.g. "Family", "Same team"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  campaign SantaCampaign               @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  members  SantaExclusionGroupMember[]
+
+  @@index([campaignId])
+}
+
+model SantaExclusionGroupMember {
+  id      String @id @default(cuid())
+  groupId String
+  userId  String
+
+  group SantaExclusionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User                @relation("ExclusionGroupMemberships", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
 }
 
 // Santa Hint Request — Batch 2.5

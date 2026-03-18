@@ -4984,6 +4984,60 @@ function exclusionKey(userIdA: string, userIdB: string): string {
 }
 
 /**
+ * Load all exclusions for a campaign (individual + group-expanded) and return:
+ *  - exclusionSet: flat Set<string> ready for draw/feasibility (interface unchanged)
+ *  - groups: raw group data used to annotate infeasible-draw errors with group labels
+ *
+ * Groups expand to C(n,2) pairs in-memory — no SantaExclusion rows are created.
+ */
+async function loadExclusionSet(campaignId: string): Promise<{
+  exclusionSet: Set<string>;
+  groups: { id: string; label: string; members: { userId: string }[] }[];
+}> {
+  const [individual, groups] = await Promise.all([
+    prisma.santaExclusion.findMany({
+      where: { campaignId },
+      select: { userId1: true, userId2: true },
+    }),
+    prisma.santaExclusionGroup.findMany({
+      where: { campaignId },
+      select: { id: true, label: true, members: { select: { userId: true } } },
+    }),
+  ]);
+
+  // Start with individual pair exclusions
+  const allPairs: { userId1: string; userId2: string }[] = [...individual];
+
+  // Expand each group: every pair of members becomes an exclusion pair
+  for (const group of groups) {
+    const members = group.members.map(m => m.userId);
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        allPairs.push({ userId1: members[i]!, userId2: members[j]! });
+      }
+    }
+  }
+
+  return { exclusionSet: buildExclusionSet(allPairs), groups };
+}
+
+/**
+ * Given the loaded groups, find which group (if any) contributed a specific pair.
+ * Used to annotate infeasible-draw error with a human-readable group label.
+ */
+function findGroupForPair(
+  groups: { label: string; members: { userId: string }[] }[],
+  uid1: string,
+  uid2: string,
+): string | null {
+  for (const group of groups) {
+    const memberIds = new Set(group.members.map(m => m.userId));
+    if (memberIds.has(uid1) && memberIds.has(uid2)) return group.label;
+  }
+  return null;
+}
+
+/**
  * Hopcroft-Karp bipartite matching.
  * givers[i] can be assigned to receivers[j] if allowed[i][j] is true.
  * Returns maximum matching size. If size == N, a valid assignment exists.
@@ -5314,28 +5368,24 @@ tgRouter.get('/santa/campaigns/:id/draw/validate', asyncHandler(async (req, res)
     return res.status(409).json({ error: 'Draw can only be validated when campaign is LOCKED, OPEN or DRAFT' });
   }
 
-  const exclusions = await prisma.santaExclusion.findMany({
-    where: { campaignId },
-    select: { userId1: true, userId2: true },
-  });
-
   const participants = campaign.participants;
   if (participants.length < 2) {
     return res.json({ feasible: false, reason: 'not_enough_participants', minRequired: 2, actual: participants.length });
   }
 
-  const exclusionSet = buildExclusionSet(exclusions);
+  const { exclusionSet, groups } = await loadExclusionSet(campaignId);
   const { feasible, problematic } = checkDrawFeasibility(participants, exclusionSet);
 
   if (feasible) {
     return res.json({ feasible: true, participantCount: participants.length });
   }
 
-  // Build human-readable names for problematic pair
+  // Build human-readable names + optional group label for each problematic pair
   const userIdToName = new Map(participants.map(p => [p.userId, p.user.firstName || p.userId]));
   const problematicWithNames = problematic.map(p => ({
     userId1: p.userId1, name1: userIdToName.get(p.userId1) ?? p.userId1,
     userId2: p.userId2, name2: userIdToName.get(p.userId2) ?? p.userId2,
+    groupLabel: findGroupForPair(groups, p.userId1, p.userId2),
   }));
 
   return res.json({
@@ -5375,11 +5425,7 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
     return res.status(422).json({ error: 'not_enough_participants', minRequired: 2, actual: participants.length });
   }
 
-  const exclusions = await prisma.santaExclusion.findMany({
-    where: { campaignId },
-    select: { userId1: true, userId2: true },
-  });
-  const exclusionSet = buildExclusionSet(exclusions);
+  const { exclusionSet, groups: excGroups } = await loadExclusionSet(campaignId);
 
   // 3. Pre-check feasibility before acquiring lock
   const { feasible, problematic } = checkDrawFeasibility(participants, exclusionSet);
@@ -5388,6 +5434,7 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
     const problematicWithNames = problematic.map(p => ({
       userId1: p.userId1, name1: userIdToName.get(p.userId1) ?? p.userId1,
       userId2: p.userId2, name2: userIdToName.get(p.userId2) ?? p.userId2,
+      groupLabel: findGroupForPair(excGroups, p.userId1, p.userId2),
     }));
     return res.status(422).json({
       error: 'draw_infeasible',
@@ -5663,11 +5710,52 @@ tgRouter.get('/santa/campaigns/:id/exclusions', asyncHandler(async (req, res) =>
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
-  const exclusions = await prisma.santaExclusion.findMany({
-    where: { campaignId },
-    orderBy: { createdAt: 'asc' },
+  // Load individual exclusions + groups in parallel; enrich pairs with display names
+  const [rawExclusions, groups] = await Promise.all([
+    prisma.santaExclusion.findMany({ where: { campaignId }, orderBy: { createdAt: 'asc' } }),
+    prisma.santaExclusionGroup.findMany({
+      where: { campaignId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        members: {
+          include: {
+            user: { select: { id: true, firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  // Resolve display names for individual pair exclusions
+  const allUserIds = new Set([...rawExclusions.map(e => e.userId1), ...rawExclusions.map(e => e.userId2)]);
+  const userRecords = allUserIds.size > 0
+    ? await prisma.user.findMany({
+        where: { id: { in: [...allUserIds] } },
+        select: { id: true, firstName: true, profile: { select: { displayName: true, avatarUrl: true } } },
+      })
+    : [];
+  const userMap = new Map(userRecords.map(u => [u.id, u]));
+  const displayName = (uid: string) => {
+    const u = userMap.get(uid);
+    return u?.profile?.displayName || u?.firstName || uid;
+  };
+
+  return res.json({
+    exclusions: rawExclusions.map(e => ({
+      id: e.id,
+      userId1: e.userId1, name1: displayName(e.userId1),
+      userId2: e.userId2, name2: displayName(e.userId2),
+    })),
+    groups: groups.map(g => ({
+      id: g.id,
+      label: g.label,
+      members: g.members.map(m => ({
+        userId: m.userId,
+        displayName: m.user.profile?.displayName || m.user.firstName || m.userId,
+        avatarUrl: m.user.profile?.avatarUrl ?? null,
+      })),
+    })),
   });
-  return res.json({ exclusions });
 }));
 
 // POST /tg/santa/campaigns/:id/exclusions — add exclusion (owner + PRO only)
@@ -5711,6 +5799,163 @@ tgRouter.delete('/santa/campaigns/:id/exclusions/:exclusionId', asyncHandler(asy
   if (!exclusion || exclusion.campaignId !== campaignId) return res.status(404).json({ error: 'Exclusion not found' });
 
   await prisma.santaExclusion.delete({ where: { id: exclusionId } });
+  return res.json({ ok: true });
+}));
+
+// ─── Batch 5.1: Group exclusion endpoints ─────────────────────────────────────
+
+// POST /tg/santa/campaigns/:id/exclusions/groups — create named group (owner + PRO)
+tgRouter.post('/santa/campaigns/:id/exclusions/groups', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const parsed = z.object({
+    label: z.string().min(1).max(60).trim(),
+    memberUserIds: z.array(z.string().min(1)).min(2).max(50).optional().default([]),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+  const ent = await getUserEntitlement(user.id);
+  if (!ent.isPro) return res.status(402).json({ error: 'pro_required', feature: 'santa_exclusion_groups' });
+
+  const group = await prisma.santaExclusionGroup.create({
+    data: {
+      campaignId,
+      label: parsed.data.label,
+      members: parsed.data.memberUserIds.length > 0
+        ? { create: [...new Set(parsed.data.memberUserIds)].map(uid => ({ userId: uid })) }
+        : undefined,
+    },
+    include: {
+      members: {
+        include: {
+          user: { select: { id: true, firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+        },
+      },
+    },
+  });
+
+  return res.status(201).json({
+    group: {
+      id: group.id,
+      label: group.label,
+      members: group.members.map(m => ({
+        userId: m.userId,
+        displayName: m.user.profile?.displayName || m.user.firstName || m.userId,
+        avatarUrl: m.user.profile?.avatarUrl ?? null,
+      })),
+    },
+  });
+}));
+
+// PATCH /tg/santa/campaigns/:id/exclusions/groups/:gid — rename group (owner only)
+tgRouter.patch('/santa/campaigns/:id/exclusions/groups/:gid', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const gid = req.params.gid ?? '';
+
+  const parsed = z.object({ label: z.string().min(1).max(60).trim() }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+  const group = await prisma.santaExclusionGroup.findUnique({ where: { id: gid } });
+  if (!group || group.campaignId !== campaignId) return res.status(404).json({ error: 'Group not found' });
+
+  const updated = await prisma.santaExclusionGroup.update({
+    where: { id: gid },
+    data: { label: parsed.data.label },
+  });
+  return res.json({ group: { id: updated.id, label: updated.label } });
+}));
+
+// DELETE /tg/santa/campaigns/:id/exclusions/groups/:gid — delete group + all members (owner only)
+tgRouter.delete('/santa/campaigns/:id/exclusions/groups/:gid', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const gid = req.params.gid ?? '';
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+  const group = await prisma.santaExclusionGroup.findUnique({ where: { id: gid } });
+  if (!group || group.campaignId !== campaignId) return res.status(404).json({ error: 'Group not found' });
+
+  // Cascade deletes members via FK constraint
+  await prisma.santaExclusionGroup.delete({ where: { id: gid } });
+  return res.json({ ok: true });
+}));
+
+// POST /tg/santa/campaigns/:id/exclusions/groups/:gid/members — add participant to group (owner only)
+tgRouter.post('/santa/campaigns/:id/exclusions/groups/:gid/members', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const gid = req.params.gid ?? '';
+
+  const parsed = z.object({ userId: z.string().min(1) }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+  const group = await prisma.santaExclusionGroup.findUnique({ where: { id: gid } });
+  if (!group || group.campaignId !== campaignId) return res.status(404).json({ error: 'Group not found' });
+
+  // Verify userId belongs to a JOINED participant in this campaign
+  const participant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: parsed.data.userId, status: 'JOINED' },
+  });
+  if (!participant) return res.status(404).json({ error: 'Participant not found or not joined' });
+
+  try {
+    const member = await prisma.santaExclusionGroupMember.create({
+      data: { groupId: gid, userId: parsed.data.userId },
+      include: {
+        user: { select: { id: true, firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+      },
+    });
+    return res.status(201).json({
+      member: {
+        userId: member.userId,
+        displayName: member.user.profile?.displayName || member.user.firstName || member.userId,
+        avatarUrl: member.user.profile?.avatarUrl ?? null,
+      },
+    });
+  } catch {
+    return res.status(409).json({ error: 'already_in_group' });
+  }
+}));
+
+// DELETE /tg/santa/campaigns/:id/exclusions/groups/:gid/members/:uid — remove member (owner only)
+tgRouter.delete('/santa/campaigns/:id/exclusions/groups/:gid/members/:uid', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const gid = req.params.gid ?? '';
+  const targetUserId = req.params.uid ?? '';
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+  const group = await prisma.santaExclusionGroup.findUnique({ where: { id: gid } });
+  if (!group || group.campaignId !== campaignId) return res.status(404).json({ error: 'Group not found' });
+
+  const member = await prisma.santaExclusionGroupMember.findUnique({
+    where: { groupId_userId: { groupId: gid, userId: targetUserId } },
+  });
+  if (!member) return res.status(404).json({ error: 'Member not found in group' });
+
+  await prisma.santaExclusionGroupMember.delete({
+    where: { groupId_userId: { groupId: gid, userId: targetUserId } },
+  });
   return res.json({ ok: true });
 }));
 
