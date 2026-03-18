@@ -5151,7 +5151,9 @@ const GIVER_ALLOWED_TRANSITIONS: Record<string, string[]> = {
   SELECTED_FROM_WISHLIST: ['SELECTED_OUTSIDE', 'DECLINED_TO_SAY', 'SENT'],
   SELECTED_OUTSIDE:       ['SELECTED_FROM_WISHLIST', 'DECLINED_TO_SAY', 'SENT'],
   DECLINED_TO_SAY:        ['SELECTED_FROM_WISHLIST', 'SELECTED_OUTSIDE', 'SENT'],
-  MISSED_DEADLINE:        ['SELECTED_FROM_WISHLIST', 'SELECTED_OUTSIDE', 'DECLINED_TO_SAY', 'SENT', 'BUYING'],
+  // M3: BUYING removed from MISSED_DEADLINE — giver must commit to a real choice after missing deadline
+  // BUYING is too vague to escape the cron loop (cron re-marks BUYING as MISSED_DEADLINE every hour)
+  MISSED_DEADLINE:        ['SELECTED_FROM_WISHLIST', 'SELECTED_OUTSIDE', 'DECLINED_TO_SAY', 'SENT'],
   // SENT and RECEIVED are terminal from the giver side
 };
 
@@ -5603,7 +5605,7 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
   const participant = await prisma.santaParticipant.findUnique({
     where: { campaignId_userId: { campaignId, userId: user.id } },
   });
-  if (!participant) return res.status(404).json({ error: 'Not a participant' });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' }); // L1
 
   const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' } } } });
   if (!campaign || campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign is not ACTIVE' });
@@ -5662,20 +5664,26 @@ tgRouter.post('/santa/campaigns/:id/confirm-received', asyncHandler(async (req, 
   const participant = await prisma.santaParticipant.findUnique({
     where: { campaignId_userId: { campaignId, userId: user.id } },
   });
-  if (!participant) return res.status(404).json({ error: 'Not a participant' });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' }); // L1
 
   const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, rounds: { take: 1, orderBy: { roundNumber: 'asc' } } } });
-  if (!campaign || campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign is not ACTIVE' });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (!['ACTIVE', 'COMPLETED'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign is not ACTIVE' });
   if (campaign.rounds.length === 0) return res.status(404).json({ error: 'No round found' });
 
   const roundId = campaign.rounds[0]!.id;
   // Receiver addresses via campaign-centric path — NOT assignmentId
+  // M1: resolve assignment FIRST — check RECEIVED idempotency before campaign-active gate
+  // This ensures a retry after the campaign auto-completes still returns the idempotent success.
   const assignment = await prisma.santaAssignment.findUnique({
     where: { roundId_receiverParticipantId: { roundId, receiverParticipantId: participant.id } },
     select: { id: true, giftStatus: true }, // Only what we need — never select giverParticipantId here
   });
   if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
-  if (assignment.giftStatus === 'RECEIVED') return res.json({ ok: true, campaignCompleted: false, alreadyReceived: true, canReveal: true });
+  // Idempotency: already RECEIVED → return success regardless of campaign.status
+  if (assignment.giftStatus === 'RECEIVED') return res.json({ ok: true, campaignCompleted: campaign.status === 'COMPLETED', alreadyReceived: true, canReveal: true });
+  // Now enforce ACTIVE-only for actual state transition
+  if (campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign is not ACTIVE' });
 
   // Gate: only allowed from SENT (giver must acknowledge they sent before receiver can confirm)
   if (assignment.giftStatus !== 'SENT') {

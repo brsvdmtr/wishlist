@@ -2682,6 +2682,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setSantaInboundStatus(null);
       setSantaDrawValidation(null);
       setSantaReveal(null);
+      setSantaRevealLoading(false); // L5: reset reveal loading on back-nav to prevent stuck state
       setSantaHintRequest(null);
       setSantaHintInbound(null);
       setSantaHintPickerOpen(false);
@@ -8728,7 +8729,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{myAssignment.receiver.displayName}</div>
                     <div style={{ fontSize: 12, color: C.textMuted }}>
-                      {t(`santa_campaign_gift_status_${myAssignment.giftStatus.toLowerCase()}` as string, locale) || myAssignment.giftStatus}
+                      {t(`santa_gift_status_${myAssignment.giftStatus.toLowerCase()}` as never, locale) || myAssignment.giftStatus}
                     </div>
                   </div>
                 </div>
@@ -8741,6 +8742,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   const isSent = gs === 'SENT';
 
                   const updateStatus = async (status: string) => {
+                    if (status === gs) return; // M2: no-op on self-transition — avoids 409 on tapping active button
                     const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/gift-status`, { method: 'PATCH', body: JSON.stringify({ status }) });
                     if (res.ok) {
                       const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
