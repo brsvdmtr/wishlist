@@ -4562,33 +4562,72 @@ internalRouter.post(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Pure calendar helper — season window is Nov 15 (year Y) → Feb 15 (year Y+1).
- * Requires zero DB access. Works correctly for any calendar year, forever.
+ * Returns the canonical "season start year" — the November year that anchors the current
+ * or upcoming Santa season. This is the single source of truth for:
+ *   - SantaSeasonConfig.seasonYear  (DB override lookup key)
+ *   - SantaSeasonalBroadcastLog.year (broadcast dedup key)
+ *   - getSeasonCalendar()            (season window computation)
+ *
+ * The Santa season crosses the calendar year boundary: Nov 15 (year Y) → Feb 15 (year Y+1).
+ * Any date in Jan 1 – Feb 15 belongs to the season that STARTED last November (year Y-1).
+ * All other dates belong to the season starting this November (year Y, current or upcoming).
  *
  * Examples:
- *   2026-11-15 → in-season (start)    2027-02-15 → in-season (last day)
- *   2027-02-16 → off-season           2027-11-14 → off-season (one day before next season)
- *   2027-11-15 → in-season (new season starts)
+ *   2026-10-31 → 2026  (off-season; next season opens Nov 15, 2026)
+ *   2026-11-01 → 2026  (promo day; season key = 2026)
+ *   2026-11-15 → 2026  (season opens)
+ *   2026-12-25 → 2026  (mid-season)
+ *   2027-01-10 → 2026  ← Jan is still the 2026 season, NOT 2027
+ *   2027-02-10 → 2026  ← Feb 10 is still the 2026 season, closing Feb 15
+ *   2027-02-15 → 2026  ← last day of the 2026 season
+ *   2027-02-16 → 2027  (off-season; next season key = 2027)
+ *   2027-11-14 → 2027  (off-season, one day before next season)
+ *   2027-11-15 → 2027  (new 2027 season opens)
+ *   2027-11-20 → 2027  (2027 season, NOT 2026)
+ */
+/**
+ * Returns the canonical "season start year" — the November year that anchors the current
+ * or upcoming Santa season. This is the single source of truth for:
+ *   - SantaSeasonConfig.seasonYear  (DB override lookup key)
+ *   - SantaSeasonalBroadcastLog.year (broadcast dedup key)
+ *   - getSeasonCalendar()            (season window computation)
+ *
+ * The Santa season crosses the calendar year boundary: Nov 15 (year Y) → Feb 15 (year Y+1).
+ * Any date in Jan 1 – Feb 15 belongs to the season that STARTED last November (year Y-1).
+ * All other dates belong to the season starting this November (year Y, current or upcoming).
+ *
+ * All comparisons use UTC to be timezone-independent (server TZ never affects the result).
+ *
+ * Examples:
+ *   2026-10-31 UTC → 2026  (off-season; next season opens Nov 15, 2026)
+ *   2026-11-01 UTC → 2026  (promo day; season key = 2026)
+ *   2026-11-15 UTC → 2026  (season opens)
+ *   2026-12-25 UTC → 2026  (mid-season)
+ *   2027-01-10 UTC → 2026  ← Jan is still the 2026 season, NOT 2027
+ *   2027-02-10 UTC → 2026  ← Feb 10 is still the 2026 season, closing Feb 15
+ *   2027-02-15 UTC → 2026  ← last day of the 2026 season
+ *   2027-02-16 UTC → 2027  (off-season; next season key = 2027)
+ *   2027-11-15 UTC → 2027  (new 2027 season opens)
+ *   2027-11-20 UTC → 2027  (2027 season, NOT 2026)
+ */
+function getSeasonStartYear(now: Date): number {
+  const m = now.getUTCMonth() + 1; // 1–12, UTC
+  const d = now.getUTCDate();       // UTC day
+  const y = now.getUTCFullYear();   // UTC year
+  // Jan 1 – Feb 15 UTC: tail of the season that started Nov of year Y-1
+  return (m === 1 || (m === 2 && d <= 15)) ? y - 1 : y;
+}
+
+/**
+ * Pure calendar helper — season window is Nov 15 00:00 UTC (seasonStartYear) →
+ * Feb 15 23:59:59.999 UTC (seasonStartYear+1).
+ * Uses UTC timestamps throughout to be timezone-independent.
+ * Requires zero DB access. Works correctly for any calendar year, forever.
  */
 function getSeasonCalendar(now: Date): { inSeason: boolean; seasonStart: Date; seasonEnd: Date } {
-  const m = now.getMonth() + 1; // 1–12
-  const d = now.getDate();
-  const y = now.getFullYear();
-
-  let startYear: number;
-  if (m === 1 || (m === 2 && d <= 15)) {
-    // Jan 1 – Feb 15: closing tail of the season that started last November
-    startYear = y - 1;
-  } else if ((m === 11 && d >= 15) || m === 12) {
-    // Nov 15 – Dec 31: opening head of this year's season
-    startYear = y;
-  } else {
-    // Feb 16 – Nov 14: fully off-season; return the upcoming season window for display
-    return { inSeason: false, seasonStart: new Date(y, 10, 15), seasonEnd: new Date(y + 1, 1, 15) };
-  }
-
-  const seasonStart = new Date(startYear, 10, 15);    // Nov 15 of startYear
-  const seasonEnd   = new Date(startYear + 1, 1, 15); // Feb 15 of (startYear+1)
+  const startYear   = getSeasonStartYear(now);
+  const seasonStart = new Date(Date.UTC(startYear,     10, 15));               // Nov 15 00:00:00.000 UTC
+  const seasonEnd   = new Date(Date.UTC(startYear + 1,  1, 15, 23, 59, 59, 999)); // Feb 15 23:59:59.999 UTC
   return { inSeason: now >= seasonStart && now <= seasonEnd, seasonStart, seasonEnd };
 }
 
@@ -4604,8 +4643,12 @@ function getSeasonCalendar(now: Date): { inSeason: boolean; seasonStart: Date; s
  * Never mutates DB.
  */
 async function getSantaSeasonInfo(userId: string, santaTestMode: boolean) {
-  const now  = new Date();
-  const year = now.getFullYear();
+  const now        = new Date();
+  // seasonYear is the November-start year of the current season (e.g. 2026 for Jan/Feb 2027).
+  // This is the canonical DB key — must match SantaSeasonConfig.seasonYear.
+  // Using getSeasonStartYear() (not now.getFullYear()) is what makes Jan/Feb 2027 correctly
+  // resolve to the 2026 season row instead of a non-existent 2027 row.
+  const seasonYear = getSeasonStartYear(now);
 
   // 1. Global kill switch — allows retiring Santa entirely without touching per-year rows.
   //    Bypassed by santaTestMode so godMode users can always test even after retirement.
@@ -4619,7 +4662,7 @@ async function getSantaSeasonInfo(userId: string, santaTestMode: boolean) {
   // 2. santaTestMode: bypass season window and missing-config guard entirely.
   //    Must be checked before DB row query so god-mode users always land in-season.
   if (santaTestMode) {
-    const config = await prisma.santaSeasonConfig.findUnique({ where: { seasonYear: year } });
+    const config = await prisma.santaSeasonConfig.findUnique({ where: { seasonYear } });
     const cal    = getSeasonCalendar(now);
     return {
       inSeason:    true,
@@ -4631,8 +4674,8 @@ async function getSantaSeasonInfo(userId: string, santaTestMode: boolean) {
   }
 
   // 3. Explicit per-year admin override row takes priority over calendar.
-  //    Allows changing specific-year dates or disabling creates mid-season without code changes.
-  const config = await prisma.santaSeasonConfig.findUnique({ where: { seasonYear: year } });
+  //    seasonYear = getSeasonStartYear(now) ensures Jan/Feb 2027 finds the 2026 row, not 2027.
+  const config = await prisma.santaSeasonConfig.findUnique({ where: { seasonYear } });
   if (config) {
     const inSeason  = now >= config.seasonStartAt && now <= config.seasonEndAt;
     const canCreate = inSeason && config.campaignCreateEnabled;
@@ -7288,28 +7331,28 @@ async function maybeRunSeasonalEvents(): Promise<void> {
     const globalConfig = await prisma.santaGlobalConfig.findUnique({ where: { id: 'global' } });
     if (!globalConfig?.santaEnabled) return;
 
-    const now   = new Date();
-    const year  = now.getFullYear();
-    const month = now.getMonth() + 1;
-    const day   = now.getDate();
+    const now        = new Date();
+    const seasonYear = getSeasonStartYear(now); // canonical season key (Nov-year); handles cross-year boundary
+    const month      = now.getMonth() + 1;
+    const day        = now.getDate();
 
     // ── November 1: promo notification ──────────────────────────────────────
-    // seasonYear = current year (season starts Nov 15 of this year)
+    // Nov 1, 2026 → seasonYear = getSeasonStartYear = 2026 (season opens Nov 15, 2026) ✓
     if (month === 11 && day === 1) {
       const alreadySent = await prisma.santaSeasonalBroadcastLog.findUnique({
-        where: { year_type: { year, type: 'PROMO' } },
+        where: { year_type: { year: seasonYear, type: 'PROMO' } },
       });
       if (!alreadySent) {
         // eslint-disable-next-line no-console
-        console.log(`[santa-season] Nov 1 — triggering PROMO broadcast for season ${year}`);
-        void sendSeasonalBroadcast('PROMO', year);
+        console.log(`[santa-season] Nov 1 — triggering PROMO broadcast for season ${seasonYear}`);
+        void sendSeasonalBroadcast('PROMO', seasonYear);
       }
     }
 
     // ── February 1: closing-soon notification ───────────────────────────────
-    // The season in progress started last November, so seasonYear = year - 1
+    // Feb 1, 2027 → seasonYear = getSeasonStartYear = 2026 (season started Nov 2026) ✓
+    // getSeasonStartYear() handles the cross-year shift automatically — no manual "year - 1" needed.
     if (month === 2 && day === 1) {
-      const seasonYear = year - 1; // e.g. if now is Feb 2027, season started Nov 2026
       const alreadySent = await prisma.santaSeasonalBroadcastLog.findUnique({
         where: { year_type: { year: seasonYear, type: 'CLOSING_SOON' } },
       });
