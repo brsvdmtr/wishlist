@@ -8989,6 +8989,71 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
+            {/* ══ MY WISHLIST — Prominent block, visible to all JOINED participants ══ */}
+            {(() => {
+              const me = participants.find(p => p.userId === tgUser?.id?.toString());
+              if (!me || me.status !== 'JOINED') return null;
+              // isReadOnly only for terminal states; ACTIVE allows late linking (backend supports it)
+              const isReadOnly = ['COMPLETED', 'CANCELLED'].includes(camp.status);
+              return (
+                <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 10 }}>
+                    🎁 {t('santa_my_wishlist_section', locale)}
+                  </div>
+                  {me.linkedWishlist ? (
+                    // State B: wishlist linked
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 8 }}>
+                        {me.linkedWishlist.title}
+                      </div>
+                      {isReadOnly ? (
+                        <div style={{ fontSize: 12, color: C.green }}>✓ {t('santa_wishlist_linked_label', locale)}</div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <button
+                            onClick={() => { setSantaWishlistPickerReturnId(camp.id); setScreen('my-wishlists'); }}
+                            style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 13, fontWeight: 600, padding: '8px 14px', cursor: 'pointer', fontFamily: font }}
+                          >
+                            {t('santa_wishlist_open', locale)}
+                          </button>
+                          <button
+                            onClick={() => setShowSantaWishlistPicker(true)}
+                            style={{ background: 'none', border: 'none', color: C.accent, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '8px 0' }}
+                          >
+                            {t('santa_wishlist_change', locale)}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : isReadOnly ? (
+                    // Terminal state, no wishlist linked — informational only
+                    <div style={{ fontSize: 13, color: C.textMuted }}>
+                      {t('santa_campaign_wishlist_not_linked_active', locale)}
+                    </div>
+                  ) : (
+                    // State A: no wishlist linked, campaign is editable
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ fontSize: 13, color: C.textMuted }}>
+                        {t('santa_wishlist_not_linked', locale)}
+                      </div>
+                      <button
+                        onClick={() => setShowSantaWishlistPicker(true)}
+                        style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 16px', cursor: 'pointer', width: '100%', fontFamily: font }}
+                      >
+                        {t('santa_wishlist_select_from_mine', locale)}
+                      </button>
+                      <button
+                        onClick={() => { setSantaWishlistPickerReturnId(camp.id); setShowSantaWishlistPicker(false); setScreen('my-wishlists'); }}
+                        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 13, fontWeight: 600, padding: '10px 16px', cursor: 'pointer', width: '100%', fontFamily: font }}
+                      >
+                        {t('santa_wishlist_picker_create_new', locale)}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Giver view (post-draw) — role: giver, no receiverUserId/participantId exposed */}
             {myAssignment && myAssignment.role === 'giver' && ['ACTIVE', 'COMPLETED'].includes(camp.status) && (
               <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
@@ -9048,10 +9113,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                               <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 2 }}>
                                 {t('santa_gift_choose_title', locale)}
                               </div>
+                              {/* P0.3: show note if receiver has no wishlist */}
+                              {!myAssignment.receiver.hasLinkedWishlist && (
+                                <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>
+                                  ⚠️ {t('santa_campaign_receiver_no_wishlist_yet', locale)}
+                                </div>
+                              )}
                               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                 <button
-                                  onClick={() => updateStatus('SELECTED_FROM_WISHLIST')}
-                                  style={{ ...btnStyle(gs === 'SELECTED_FROM_WISHLIST'), fontSize: 12 }}
+                                  onClick={() => { if (myAssignment.receiver.hasLinkedWishlist) updateStatus('SELECTED_FROM_WISHLIST'); }}
+                                  disabled={!myAssignment.receiver.hasLinkedWishlist}
+                                  style={{ ...btnStyle(gs === 'SELECTED_FROM_WISHLIST'), fontSize: 12, opacity: myAssignment.receiver.hasLinkedWishlist ? 1 : 0.4, cursor: myAssignment.receiver.hasLinkedWishlist ? 'pointer' : 'not-allowed' }}
                                 >
                                   📋 {t('santa_gift_mark_selected_from_wishlist', locale)}
                                 </button>
@@ -9624,55 +9696,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
-            {/* Wishlist section — always visible for participants; read-only during/after campaign */}
-            {(() => {
-              const me = participants.find(p => p.userId === tgUser?.id?.toString());
-              if (!me || me.status !== 'JOINED') return null;
-              const isReadOnly = ['ACTIVE', 'COMPLETED', 'CANCELLED'].includes(camp.status);
-              return (
-                <div style={{ marginTop: 16 }}>
-                  {me.linkedWishlist ? (
-                    <div style={{ background: C.card, borderRadius: 14, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontSize: 14, color: C.text }}>
-                        {t('santa_campaign_linked_wishlist', locale, { title: me.linkedWishlist.title })}
-                      </div>
-                      {isReadOnly ? (
-                        <span style={{ fontSize: 12, color: C.green }}>🎁</span>
-                      ) : (
-                        <button
-                          onClick={async () => {
-                            await tgFetch(`/tg/santa/campaigns/${camp.id}/wishlist`, { method: 'PATCH', body: JSON.stringify({ wishlistId: null }) });
-                            const detailRes = await tgFetch(`/tg/santa/campaigns/${camp.id}`);
-                            if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
-                          }}
-                          style={{ background: 'none', border: 'none', color: C.red, fontSize: 13, cursor: 'pointer', padding: 0 }}
-                        >
-                          {t('santa_campaign_unlink_wishlist', locale)}
-                        </button>
-                      )}
-                    </div>
-                  ) : isReadOnly ? (
-                    <div style={{ background: C.card, borderRadius: 14, padding: '12px 16px', fontSize: 13, color: C.textMuted }}>
-                      {t('santa_campaign_wishlist_not_linked_active', locale)}
-                    </div>
-                  ) : (
-                    <div>
-                      {['OPEN', 'LOCKED'].includes(camp.status) && (
-                        <div style={{ background: `${C.accent}15`, borderRadius: 10, padding: '8px 12px', marginBottom: 8, fontSize: 12, color: C.accent, fontWeight: 500 }}>
-                          💡 {t('santa_wishlist_nudge_link', locale)}
-                        </div>
-                      )}
-                      <button
-                        onClick={() => setShowSantaWishlistPicker(true)}
-                        style={{ background: C.card, border: `1px dashed ${C.border}`, borderRadius: 14, color: C.accent, fontSize: 14, fontWeight: 600, padding: '12px 16px', cursor: 'pointer', width: '100%', fontFamily: font }}
-                      >
-                        {t('santa_campaign_link_wishlist', locale)}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+            {/* (wishlist section moved above — see below giver block) */}
 
             {/* Chat button + unread badge (Batch 4.1) */}
             {['OPEN', 'LOCKED', 'ACTIVE', 'COMPLETED', 'CANCELLED'].includes(camp.status) && (

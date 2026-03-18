@@ -5792,8 +5792,10 @@ tgRouter.patch('/santa/campaigns/:id/wishlist', asyncHandler(async (req, res) =>
     include: { campaign: { select: { status: true } } },
   });
   if (!participant || participant.status !== 'JOINED') return res.status(404).json({ error: 'Not a participant' });
-  if (['ACTIVE', 'COMPLETED', 'DRAW_IN_PROGRESS'].includes(participant.campaign.status)) {
-    return res.status(409).json({ error: 'Cannot change wishlist after draw' });
+  // Allow linking/changing during ACTIVE so participants who forgot to link pre-draw can still set a preference.
+  // Block only terminal states and mid-draw state.
+  if (['COMPLETED', 'CANCELLED', 'DRAW_IN_PROGRESS'].includes(participant.campaign.status)) {
+    return res.status(409).json({ error: 'Cannot change wishlist after campaign is complete' });
   }
 
   if (parsed.data.wishlistId) {
