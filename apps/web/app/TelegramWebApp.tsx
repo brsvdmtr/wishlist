@@ -3,7 +3,7 @@
 import Script from 'next/script';
 import { useEffect } from 'react';
 
-type TgWebAppUser = { id: number; first_name: string; last_name?: string; username?: string };
+type TgWebAppUser = { id: number; first_name: string; last_name?: string; username?: string; language_code?: string };
 
 declare global {
   interface Window {
@@ -26,6 +26,9 @@ declare global {
         openTelegramLink(url: string): void;
         openLink(url: string, options?: { try_instant_view?: boolean }): void;
         openInvoice?(url: string, callback?: (status: string) => void): void;
+        disableVerticalSwipes?(): void;
+        enableVerticalSwipes?(): void;
+        writeToClipboard?(text: string): void;
       };
     };
   }

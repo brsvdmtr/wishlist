@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export * from './i18n';
+
 export const WishlistItemSchema = z.object({
   title: z.string().min(1),
   url: z.string().url().optional(),

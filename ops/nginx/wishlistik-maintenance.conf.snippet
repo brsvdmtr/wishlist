@@ -1,0 +1,69 @@
+# ─── Nginx maintenance mode snippet for wishlistik.ru ────────────────────────
+#
+# HOW TO USE:
+#
+# 1. Copy maintenance.html to the server:
+#      scp ops/maintenance/maintenance.html root@wishlistik.ru:/opt/wishlist/ops/maintenance/
+#
+# 2. To activate manual maintenance mode, set:
+#      MAINTENANCE_MODE=true
+#    in /opt/wishlist/.env and restart the API + bot containers.
+#    nginx will serve the static page for all 502/503/504 from upstream.
+#
+# 3. Add the following blocks to your nginx server block (e.g. /etc/nginx/sites-available/wishlistik.ru):
+#
+# ─── Paste these lines inside your server { ... } block ──────────────────────
+
+# Static maintenance page (served when upstream returns 502/503/504)
+error_page 502 503 504 /maintenance.html;
+location = /maintenance.html {
+    root /opt/wishlist/ops/maintenance;
+    internal;
+}
+
+# ─── Paste this inside your existing location /api/ { ... } proxy block ──────
+# (these directives tell nginx to intercept upstream error codes)
+
+proxy_intercept_errors on;
+
+# ─── Full example server block reference ─────────────────────────────────────
+#
+# server {
+#     listen 443 ssl http2;
+#     server_name wishlistik.ru www.wishlistik.ru;
+#
+#     ssl_certificate     /etc/letsencrypt/live/wishlistik.ru/fullchain.pem;
+#     ssl_certificate_key /etc/letsencrypt/live/wishlistik.ru/privkey.pem;
+#
+#     # Maintenance page
+#     error_page 502 503 504 /maintenance.html;
+#     location = /maintenance.html {
+#         root /opt/wishlist/ops/maintenance;
+#         internal;
+#     }
+#
+#     # API proxy
+#     location /api/ {
+#         proxy_pass         http://127.0.0.1:3001/;
+#         proxy_http_version 1.1;
+#         proxy_set_header   Host              $host;
+#         proxy_set_header   X-Real-IP         $remote_addr;
+#         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+#         proxy_set_header   X-Forwarded-Proto $scheme;
+#         proxy_read_timeout 30s;
+#         proxy_intercept_errors on;   # <-- enables 502/503/504 → maintenance.html
+#     }
+#
+#     # Web app (Next.js)
+#     location / {
+#         proxy_pass         http://127.0.0.1:3000;
+#         proxy_http_version 1.1;
+#         proxy_set_header   Upgrade           $http_upgrade;
+#         proxy_set_header   Connection        "upgrade";
+#         proxy_set_header   Host              $host;
+#         proxy_set_header   X-Real-IP         $remote_addr;
+#         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+#         proxy_set_header   X-Forwarded-Proto $scheme;
+#         proxy_intercept_errors on;   # <-- enables 502/503/504 → maintenance.html
+#     }
+# }

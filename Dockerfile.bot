@@ -13,6 +13,7 @@ RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/bot/package.json ./apps/bot/
 COPY packages/db/package.json ./packages/db/
+COPY packages/shared/package.json ./packages/shared/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -20,9 +21,13 @@ RUN pnpm install --frozen-lockfile
 # Copy db package (schema + generated client)
 COPY packages/db ./packages/db
 
-# Generate Prisma client and build db package
+# Copy shared package
+COPY packages/shared ./packages/shared
+
+# Generate Prisma client and build db + shared packages
 RUN pnpm --filter @wishlist/db exec prisma generate
 RUN pnpm --filter @wishlist/db build
+RUN pnpm --filter @wishlist/shared build
 
 # Copy bot source
 COPY apps/bot ./apps/bot

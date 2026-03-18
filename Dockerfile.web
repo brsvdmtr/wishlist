@@ -21,6 +21,7 @@ COPY --from=deps /app/packages/shared/package.json ./packages/shared/
 COPY . .
 RUN cd packages/db && pnpm install && cd ../..
 RUN pnpm db:generate
+RUN pnpm --filter @wishlist/shared build
 RUN pnpm build:web
 
 # Runner
