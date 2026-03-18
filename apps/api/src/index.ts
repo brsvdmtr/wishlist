@@ -4940,6 +4940,10 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
               user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
             },
           },
+          santaItemReservations: {
+            select: { itemId: true, item: { select: { title: true } } },
+            orderBy: { createdAt: 'asc' },
+          },
         },
       });
       if (giverAssignment) {
@@ -4954,6 +4958,7 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
             avatarUrl: receiverAvatarUrl,
             hasLinkedWishlist: !!giverAssignment.receiver.linkedWishlistId,
           },
+          reservedItems: giverAssignment.santaItemReservations.map(r => ({ id: r.itemId, title: r.item.title })),
         });
       }
     }
@@ -5486,6 +5491,7 @@ type SantaAssignmentForGiver = {
   giftStatus: string;
   giftNote: string | null;
   receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean };
+  reservedItems: { id: string; title: string }[];
 };
 
 type SantaAssignmentForReceiver = {
@@ -5559,7 +5565,7 @@ const GIVER_ALLOWED_TRANSITIONS: Record<string, string[]> = {
  */
 function serializeAssignment(
   role: 'giver',
-  data: { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean } }
+  data: { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean }; reservedItems?: { id: string; title: string }[] }
 ): SantaAssignmentForGiver;
 function serializeAssignment(
   role: 'receiver',
@@ -5574,8 +5580,8 @@ function serializeAssignment(
   data: unknown,
 ): SantaAssignmentForGiver | SantaAssignmentForReceiver | SantaAssignmentForOwner {
   if (role === 'giver') {
-    const d = data as { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean } };
-    return { role: 'giver', giftStatus: d.giftStatus, giftNote: d.giftNote, receiver: { displayName: d.receiver.displayName, avatarUrl: d.receiver.avatarUrl, hasLinkedWishlist: d.receiver.hasLinkedWishlist } };
+    const d = data as { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean }; reservedItems?: { id: string; title: string }[] };
+    return { role: 'giver', giftStatus: d.giftStatus, giftNote: d.giftNote, receiver: { displayName: d.receiver.displayName, avatarUrl: d.receiver.avatarUrl, hasLinkedWishlist: d.receiver.hasLinkedWishlist }, reservedItems: d.reservedItems ?? [] };
   }
   if (role === 'receiver') {
     const d = data as { giftStatus: string };
@@ -6401,6 +6407,12 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
     });
   }
 
+  // When switching away from wishlist-based selection, clear all Santa-flow reservations
+  const clearReservationStatuses = ['SELECTED_OUTSIDE', 'DECLINED_TO_SAY', 'SENT'];
+  if (clearReservationStatuses.includes(parsed.data.status)) {
+    await prisma.santaItemReservation.deleteMany({ where: { assignmentId: assignment.id } });
+  }
+
   const updated = await prisma.santaAssignment.update({
     where: { id: assignment.id },
     data: { giftStatus: parsed.data.status, giftNote: parsed.data.note ?? assignment.giftNote },
@@ -6410,6 +6422,10 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
           linkedWishlistId: true,
           user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
         },
+      },
+      santaItemReservations: {
+        select: { itemId: true, item: { select: { title: true } } },
+        orderBy: { createdAt: 'asc' },
       },
     },
   });
@@ -6423,6 +6439,7 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
     giftStatus: updated.giftStatus,
     giftNote: updated.giftNote,
     receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl, hasLinkedWishlist: !!updated.receiver.linkedWishlistId },
+    reservedItems: updated.santaItemReservations.map(r => ({ id: r.itemId, title: r.item.title })),
   }));
 }));
 
@@ -6507,6 +6524,7 @@ tgRouter.post('/santa/campaigns/:id/confirm-received', asyncHandler(async (req, 
 // ─── Santa — inbound (receiver-centric, post-draw) ────────────────────────────
 
 // GET /tg/santa/campaigns/:id/inbound/wishlist — giver gets receiver's wishlist items
+// Returns items with reservedByMe flag + myReservations summary for the dedicated wishlist screen.
 tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, res) => {
   const user = await getOrCreateTgUser(req.tgUser!);
   const campaignId = req.params.id ?? '';
@@ -6521,7 +6539,10 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
   const roundId = campaign.currentRoundId;
   const assignment = await prisma.santaAssignment.findUnique({
     where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
-    include: { receiver: { select: { linkedWishlistId: true, user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } } } },
+    include: {
+      receiver: { select: { linkedWishlistId: true, user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } } },
+      santaItemReservations: { select: { itemId: true, item: { select: { title: true } } }, orderBy: { createdAt: 'asc' } },
+    },
   });
   if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
 
@@ -6530,13 +6551,17 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
   const receiverDisplayName = assignment.receiver.user.profile?.displayName || assignment.receiver.user.firstName || 'Получатель';
   const receiverAvatarUrl = assignment.receiver.user.profile?.avatarUrl || null;
 
+  const myReservedItemIds = new Set(assignment.santaItemReservations.map(r => r.itemId));
+  const myReservations = assignment.santaItemReservations.map(r => ({ id: r.itemId, title: r.item.title }));
+
   const giverView = serializeAssignment('giver', {
     giftStatus: assignment.giftStatus,
     giftNote: assignment.giftNote,
     receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl, hasLinkedWishlist: !!receiverWishlistId },
+    reservedItems: myReservations,
   });
 
-  if (!receiverWishlistId) return res.json({ ...giverView, wishlist: null, items: [] });
+  if (!receiverWishlistId) return res.json({ ...giverView, wishlist: null, items: [], myReservations });
 
   const items = await prisma.item.findMany({
     where: { wishlistId: receiverWishlistId, status: { in: ['AVAILABLE', 'RESERVED', 'PURCHASED'] } },
@@ -6545,7 +6570,138 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
   });
   const wishlist = await prisma.wishlist.findUnique({ where: { id: receiverWishlistId }, select: { title: true } });
 
-  return res.json({ ...giverView, wishlist: wishlist ? { title: wishlist.title } : null, items });
+  // Annotate items with reservedByMe flag — never expose reserver identity for items NOT reserved by this giver
+  const annotatedItems = items.map(item => ({
+    ...item,
+    reservedByMe: myReservedItemIds.has(item.id),
+    // For items reserved by others (status=RESERVED) but NOT by this giver, only expose the status flag
+    // No reserver identity is ever returned
+  }));
+
+  return res.json({ ...giverView, wishlist: wishlist ? { title: wishlist.title } : null, items: annotatedItems, myReservations });
+}));
+
+// POST /tg/santa/campaigns/:id/inbound/reserve — giver reserves a wishlist item (Santa-flow)
+// Creates SantaItemReservation and auto-syncs gift status to SELECTED_FROM_WISHLIST.
+tgRouter.post('/santa/campaigns/:id/inbound/reserve', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+
+  const parsed = z.object({ itemId: z.string().min(1) }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  const { itemId } = parsed.data;
+
+  const participant = await prisma.santaParticipant.findUnique({ where: { campaignId_userId: { campaignId, userId: user.id } } });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, currentRoundId: true } });
+  if (!campaign || campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign not ACTIVE' });
+  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
+
+  const roundId = campaign.currentRoundId;
+  const assignment = await prisma.santaAssignment.findUnique({
+    where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
+    select: { id: true, giftStatus: true, receiver: { select: { linkedWishlistId: true } } },
+  });
+  if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+  // Terminal states: cannot reserve after SENT/RECEIVED
+  if (['SENT', 'RECEIVED'].includes(assignment.giftStatus)) {
+    return res.status(409).json({ error: 'invalid_state', message: `Cannot reserve items when gift status is ${assignment.giftStatus}` });
+  }
+
+  // Validate item belongs to receiver's wishlist
+  const receiverWishlistId = assignment.receiver.linkedWishlistId;
+  if (!receiverWishlistId) return res.status(409).json({ error: 'receiver_no_wishlist' });
+
+  const item = await prisma.item.findFirst({
+    where: { id: itemId, wishlistId: receiverWishlistId, status: { in: ['AVAILABLE', 'RESERVED', 'PURCHASED'] } },
+    select: { id: true, title: true },
+  });
+  if (!item) return res.status(404).json({ error: 'Item not found or not reservable' });
+
+  // Upsert reservation — unique constraint handles double-tap idempotency
+  await prisma.santaItemReservation.upsert({
+    where: { assignmentId_itemId: { assignmentId: assignment.id, itemId } },
+    create: { assignmentId: assignment.id, itemId },
+    update: {}, // already reserved — no-op
+  });
+
+  // Auto-sync gift status to SELECTED_FROM_WISHLIST if not already in a committed state
+  const syncableStatuses = ['PENDING', 'BUYING', 'MISSED_DEADLINE', 'SELECTED_OUTSIDE', 'DECLINED_TO_SAY'];
+  if (syncableStatuses.includes(assignment.giftStatus)) {
+    await prisma.santaAssignment.update({
+      where: { id: assignment.id },
+      data: { giftStatus: 'SELECTED_FROM_WISHLIST' },
+    });
+    await prisma.santaGiftProgress.create({ data: { assignmentId: assignment.id, status: 'SELECTED_FROM_WISHLIST' } });
+  }
+
+  // Return updated reservation list
+  const reservations = await prisma.santaItemReservation.findMany({
+    where: { assignmentId: assignment.id },
+    select: { itemId: true, item: { select: { title: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return res.json({
+    ok: true,
+    reservedItemIds: reservations.map(r => r.itemId),
+    myReservations: reservations.map(r => ({ id: r.itemId, title: r.item.title })),
+  });
+}));
+
+// DELETE /tg/santa/campaigns/:id/inbound/reserve/:itemId — giver removes a wishlist reservation
+// Auto-syncs gift status back to PENDING if no reservations remain.
+tgRouter.delete('/santa/campaigns/:id/inbound/reserve/:itemId', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  const itemId = req.params.itemId ?? '';
+  if (!itemId) return res.status(400).json({ error: 'Missing itemId' });
+
+  const participant = await prisma.santaParticipant.findUnique({ where: { campaignId_userId: { campaignId, userId: user.id } } });
+  if (!participant || participant.status !== 'JOINED') return res.status(403).json({ error: 'Not a participant' });
+
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, currentRoundId: true } });
+  if (!campaign || campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Campaign not ACTIVE' });
+  if (!campaign.currentRoundId) return res.status(404).json({ error: 'No active round' });
+
+  const roundId = campaign.currentRoundId;
+  const assignment = await prisma.santaAssignment.findUnique({
+    where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
+    select: { id: true, giftStatus: true },
+  });
+  if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+  // Delete reservation (idempotent — no error if not found)
+  await prisma.santaItemReservation.deleteMany({
+    where: { assignmentId: assignment.id, itemId },
+  });
+
+  // Count remaining reservations
+  const remainingCount = await prisma.santaItemReservation.count({ where: { assignmentId: assignment.id } });
+
+  // Auto-sync: if no reservations remain AND status is SELECTED_FROM_WISHLIST → revert to PENDING
+  if (remainingCount === 0 && assignment.giftStatus === 'SELECTED_FROM_WISHLIST') {
+    await prisma.santaAssignment.update({
+      where: { id: assignment.id },
+      data: { giftStatus: 'PENDING' },
+    });
+    await prisma.santaGiftProgress.create({ data: { assignmentId: assignment.id, status: 'PENDING' } });
+  }
+
+  // Return updated reservation list
+  const reservations = await prisma.santaItemReservation.findMany({
+    where: { assignmentId: assignment.id },
+    select: { itemId: true, item: { select: { title: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return res.json({
+    ok: true,
+    reservedItemIds: reservations.map(r => r.itemId),
+    myReservations: reservations.map(r => ({ id: r.itemId, title: r.item.title })),
+  });
 }));
 
 // GET /tg/santa/campaigns/:id/inbound/status — receiver gets their inbound gift signal
