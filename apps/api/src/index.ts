@@ -1591,7 +1591,7 @@ tgRouter.use((req, res, next) => {
     if (status >= 400 && status !== 401) {
       const route = req.route?.path ? (req.baseUrl + req.route.path) : req.path;
       const method = req.method;
-      const userId = req.tgUser?.id ?? null;
+      const userId = req.tgUser?.id != null ? String(req.tgUser.id) : null;
       prisma.analyticsEvent.create({
         data: { event: `error:${method}:${status}:${route}`, userId },
       }).catch(() => {});
