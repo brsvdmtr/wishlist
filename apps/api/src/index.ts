@@ -4865,6 +4865,7 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
       role: p.role,
       joinedAt: p.joinedAt,
       userId: p.user.id,
+      isMe: p.user.id === user.id,   // P0-A: frontend uses this; p.user.id is WishBoard cuid, not Telegram ID
       displayName: p.user.profile?.displayName || p.user.firstName || null,
       avatarUrl: p.user.profile?.avatarUrl || null,
       hasLinkedWishlist: !!p.linkedWishlist,
@@ -5626,6 +5627,7 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
 
 // GET /tg/santa/invite/:token — resolve invite token → campaign preview
 tgRouter.get('/santa/invite/:token', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
   const token = req.params.token ?? '';
   if (!token) return res.status(400).json({ error: 'Missing token' });
 
@@ -5641,24 +5643,34 @@ tgRouter.get('/santa/invite/:token', asyncHandler(async (req, res) => {
 
   if (!campaign) return res.status(404).json({ error: 'Invite not found' });
   if (campaign.status === 'CANCELLED') return res.status(410).json({ error: 'Campaign cancelled' });
-  if (!['OPEN', 'DRAFT'].includes(campaign.status)) return res.status(409).json({ error: 'Campaign is not accepting new members' });
 
-  return res.json({
-    campaign: {
-      id: campaign.id,
-      title: campaign.title,
-      description: campaign.description,
-      status: campaign.status,
-      type: campaign.type,
-      seasonYear: campaign.seasonYear,
-      minBudget: campaign.minBudget,
-      maxBudget: campaign.maxBudget,
-      currency: campaign.currency,
-      participantCount: campaign._count.participants,
-      ownerName: campaign.owner.profile?.displayName || campaign.owner.firstName || null,
-      ownerAvatarUrl: campaign.owner.profile?.avatarUrl || null,
-    },
+  // P0-B: if user is already a JOINED participant, let them through regardless of campaign status
+  // (they clicked the invite link from a running campaign — redirect them to campaign detail)
+  const alreadyJoined = await prisma.santaParticipant.findFirst({
+    where: { campaignId: campaign.id, userId: user.id, status: 'JOINED' },
+    select: { id: true },
   });
+
+  if (!alreadyJoined && !['OPEN', 'DRAFT'].includes(campaign.status)) {
+    return res.status(409).json({ error: 'Campaign is not accepting new members', campaignId: campaign.id });
+  }
+
+  const campaignPreview = {
+    id: campaign.id,
+    title: campaign.title,
+    description: campaign.description,
+    status: campaign.status,
+    type: campaign.type,
+    seasonYear: campaign.seasonYear,
+    minBudget: campaign.minBudget,
+    maxBudget: campaign.maxBudget,
+    currency: campaign.currency,
+    participantCount: campaign._count.participants,
+    ownerName: campaign.owner.profile?.displayName || campaign.owner.firstName || null,
+    ownerAvatarUrl: campaign.owner.profile?.avatarUrl || null,
+  };
+
+  return res.json({ campaign: campaignPreview, alreadyJoined: !!alreadyJoined });
 }));
 
 // POST /tg/santa/campaigns/:id/join — join via invite token
