@@ -992,6 +992,28 @@ const ru: Dict = {
   santa_campaign_completed_title: 'Кампания завершена',
   santa_campaign_completed_msg: 'Все подарки получены! Спасибо за участие',
 
+  // ── Chat (Batch 4.1) ──────────────────────────────────────────────────────
+  santa_chat_title: 'Чат кампании',
+  santa_chat_empty: 'Пока нет сообщений. Напишите что-нибудь!',
+  santa_chat_input_placeholder: 'Сообщение...',
+  santa_chat_send: 'Отправить',
+  santa_chat_load_earlier: 'Загрузить ранние сообщения',
+  santa_chat_read_only_completed: 'Кампания завершена. Чат только для чтения.',
+  santa_chat_read_only_cancelled: 'Кампания отменена. Чат только для чтения.',
+  santa_chat_mute: 'Выключить уведомления',
+  santa_chat_unmute: 'Включить уведомления',
+  santa_chat_unread_badge: 'новых: {{n}}',
+  santa_chat_system_joined: '{{name}} вступил(а) в кампанию',
+  santa_chat_system_left: '{{name}} покинул(а) кампанию',
+  santa_chat_system_removed: '{{name}} был(а) удалён(а) из кампании',
+  santa_chat_system_draw_done: '🎲 Жеребьёвка завершена!',
+  santa_chat_system_cancelled: '❌ Кампания отменена',
+  santa_chat_system_completed: '🎁 Все подарки получены!',
+  santa_chat_sending: 'Отправка...',
+  santa_chat_send_error: 'Не удалось отправить сообщение',
+  santa_chat_message_too_long: 'Максимум 1000 символов',
+  santa_chat_open_btn: 'Открыть чат',
+
   // ── Bot — Santa ───────────────────────────────────────────────────────────
   bot_santa_invite_msg: '🎅 {{owner}} приглашает тебя в «{{title}}»!\nНажми кнопку ниже, чтобы вступить.',
   bot_santa_join_btn: 'Вступить',
@@ -1972,6 +1994,28 @@ const en: Dict = {
   // ── Campaign completion ───────────────────────────────────────────────────
   santa_campaign_completed_title: 'Campaign completed',
   santa_campaign_completed_msg: 'All gifts received! Thank you for participating',
+
+  // ── Chat (Batch 4.1) ──────────────────────────────────────────────────────
+  santa_chat_title: 'Campaign Chat',
+  santa_chat_empty: 'No messages yet. Say something!',
+  santa_chat_input_placeholder: 'Message...',
+  santa_chat_send: 'Send',
+  santa_chat_load_earlier: 'Load earlier messages',
+  santa_chat_read_only_completed: 'Campaign completed. Chat is read-only.',
+  santa_chat_read_only_cancelled: 'Campaign cancelled. Chat is read-only.',
+  santa_chat_mute: 'Mute notifications',
+  santa_chat_unmute: 'Unmute notifications',
+  santa_chat_unread_badge: '{{n}} new',
+  santa_chat_system_joined: '{{name}} joined the campaign',
+  santa_chat_system_left: '{{name}} left the campaign',
+  santa_chat_system_removed: '{{name}} was removed from the campaign',
+  santa_chat_system_draw_done: '🎲 Draw completed!',
+  santa_chat_system_cancelled: '❌ Campaign cancelled',
+  santa_chat_system_completed: '🎁 All gifts received!',
+  santa_chat_sending: 'Sending...',
+  santa_chat_send_error: 'Failed to send message',
+  santa_chat_message_too_long: 'Max 1000 characters',
+  santa_chat_open_btn: 'Open chat',
 
   // ── Bot — Santa ───────────────────────────────────────────────────────────
   bot_santa_invite_msg: '🎅 {{owner}} invites you to join «{{title}}»!\nTap the button below to participate.',

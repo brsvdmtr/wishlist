@@ -283,6 +283,8 @@ type SantaCampaignDetail = {
       missedDeadline: number; sent: number; received: number; withoutWishlist: number;
     };
   } | null;
+  chatUnreadCount: number;
+  isMuted: boolean;
 };
 
 type SantaJoinPreview = {
@@ -291,7 +293,7 @@ type SantaJoinPreview = {
   participantCount: number; ownerName: string | null; ownerAvatarUrl: string | null;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1623,6 +1625,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [santaHintPickerItems, setSantaHintPickerItems] = useState<{ id: string; title: string; priceText: string | null }[]>([]);
   const [santaHintPickerSelectedIds, setSantaHintPickerSelectedIds] = useState<string[]>([]);
   const [santaHintFulfillLoading, setSantaHintFulfillLoading] = useState(false);
+  // Chat state (Batch 4.1)
+  type ChatMessage = {
+    id: string;
+    messageType: 'USER' | 'SYSTEM';
+    body: string;
+    systemEvent: string | null;
+    payload: Record<string, string> | null;
+    sender: { displayName: string; avatarUrl: string | null; isMe: boolean } | null;
+    createdAt: string;
+  };
+  const [santaChatMessages, setSantaChatMessages] = useState<ChatMessage[]>([]);
+  const [santaChatHasMore, setSantaChatHasMore] = useState(false);
+  const [santaChatLoading, setSantaChatLoading] = useState(false);
+  const [santaChatInput, setSantaChatInput] = useState('');
+  const [santaChatSending, setSantaChatSending] = useState(false);
+  const [santaChatIsMuted, setSantaChatIsMuted] = useState(false);
 
   // ── Wishes tab: filtered by priority ─────────────────────────────────────
   const filteredAllItems = useMemo(() => {
@@ -2676,6 +2694,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('my-wishlists');
     } else if (screen === 'santa-create') {
       setScreen('santa-hub');
+    } else if (screen === 'santa-chat') {
+      // Back from chat → return to campaign detail, reset chat state
+      setSantaChatMessages([]);
+      setSantaChatHasMore(false);
+      setSantaChatInput('');
+      setSantaChatSending(false);
+      setScreen('santa-campaign');
     } else if (screen === 'santa-campaign') {
       setCurrentSantaCampaign(null);
       setSantaReceiverWishlist(null);
@@ -9274,6 +9299,48 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
+            {/* Chat button + unread badge (Batch 4.1) */}
+            {['OPEN', 'LOCKED', 'ACTIVE', 'COMPLETED', 'CANCELLED'].includes(camp.status) && (
+              <button
+                onClick={async () => {
+                  setSantaChatLoading(true);
+                  setSantaChatMessages([]);
+                  setSantaChatHasMore(false);
+                  setSantaChatInput('');
+                  setSantaChatIsMuted(currentSantaCampaign.isMuted);
+                  setScreen('santa-chat');
+                  try {
+                    const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/chat?limit=50`);
+                    if (res.ok) {
+                      const data = await res.json() as { messages: ChatMessage[]; hasMore: boolean; totalUnread: number; isMuted: boolean };
+                      // API returns DESC; reverse to show oldest-first
+                      setSantaChatMessages([...data.messages].reverse());
+                      setSantaChatHasMore(data.hasMore);
+                      setSantaChatIsMuted(data.isMuted);
+                      // Mark as read if we have messages
+                      if (data.messages.length > 0) {
+                        const newestId = data.messages[0]!.id;
+                        void tgFetch(`/tg/santa/campaigns/${camp.id}/chat/read`, { method: 'POST', body: JSON.stringify({ lastReadMessageId: newestId }) });
+                      }
+                    }
+                  } finally {
+                    setSantaChatLoading(false);
+                  }
+                }}
+                style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '12px 16px', cursor: 'pointer', width: '100%', fontFamily: font, marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 18 }}>💬</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('santa_chat_open_btn', locale)}</span>
+                </div>
+                {currentSantaCampaign.chatUnreadCount > 0 && (
+                  <span style={{ minWidth: 20, height: 20, borderRadius: 10, background: C.orange, color: '#000', fontSize: 11, fontWeight: 700, padding: '0 6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {currentSantaCampaign.chatUnreadCount}
+                  </span>
+                )}
+              </button>
+            )}
+
             {/* Hint item picker sheet (Batch 2.5) — receiver selects 1–3 items for their giver */}
             <BottomSheet
               isOpen={santaHintPickerOpen}
@@ -9377,6 +9444,186 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 ))}
               </div>
             </BottomSheet>
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          SECRET SANTA — CHAT (Batch 4.1)
+          ══════════════════════════════════════════════ */}
+      {screen === 'santa-chat' && currentSantaCampaign && (() => {
+        const camp = currentSantaCampaign.campaign;
+        const campId = camp.id;
+        const isReadOnly = ['COMPLETED', 'CANCELLED'].includes(camp.status);
+
+        // Render system message body from systemEvent + payload
+        const renderSystemMsg = (msg: { systemEvent: string | null; payload: Record<string, string> | null }): string => {
+          const name = msg.payload?.displayName ?? '';
+          switch (msg.systemEvent) {
+            case 'participant_joined': return t('santa_chat_system_joined', locale, { name });
+            case 'participant_left': return t('santa_chat_system_left', locale, { name });
+            case 'participant_removed': return t('santa_chat_system_removed', locale, { name });
+            case 'draw_done': return t('santa_chat_system_draw_done', locale);
+            case 'campaign_cancelled': return t('santa_chat_system_cancelled', locale);
+            case 'campaign_completed': return t('santa_chat_system_completed', locale);
+            default: return msg.systemEvent ?? '';
+          }
+        };
+
+        const loadEarlier = async () => {
+          if (!santaChatHasMore || santaChatLoading) return;
+          const oldest = santaChatMessages[0];
+          if (!oldest) return;
+          setSantaChatLoading(true);
+          try {
+            const res = await tgFetch(`/tg/santa/campaigns/${campId}/chat?limit=50&before=${oldest.id}`);
+            if (res.ok) {
+              const data = await res.json() as { messages: ChatMessage[]; hasMore: boolean };
+              const reversed = [...data.messages].reverse();
+              setSantaChatMessages(prev => [...reversed, ...prev]);
+              setSantaChatHasMore(data.hasMore);
+            }
+          } finally {
+            setSantaChatLoading(false);
+          }
+        };
+
+        const sendMessage = async () => {
+          if (!santaChatInput.trim() || santaChatSending || isReadOnly) return;
+          if (santaChatInput.length > 1000) { pushToast(t('santa_chat_message_too_long', locale), 'error'); return; }
+          const body = santaChatInput.trim();
+          setSantaChatInput('');
+          setSantaChatSending(true);
+          try {
+            const res = await tgFetch(`/tg/santa/campaigns/${campId}/chat`, { method: 'POST', body: JSON.stringify({ body }) });
+            if (res.ok) {
+              const data = await res.json() as { message: ChatMessage };
+              setSantaChatMessages(prev => [...prev, data.message]);
+              // Mark self as read
+              void tgFetch(`/tg/santa/campaigns/${campId}/chat/read`, { method: 'POST', body: JSON.stringify({ lastReadMessageId: data.message.id }) });
+            } else {
+              pushToast(t('santa_chat_send_error', locale), 'error');
+              setSantaChatInput(body); // restore input on failure
+            }
+          } catch {
+            pushToast(t('santa_chat_send_error', locale), 'error');
+            setSantaChatInput(body);
+          } finally {
+            setSantaChatSending(false);
+          }
+        };
+
+        const toggleMute = async () => {
+          const method = santaChatIsMuted ? 'DELETE' : 'POST';
+          const res = await tgFetch(`/tg/santa/campaigns/${campId}/mute`, { method });
+          if (res.ok) {
+            setSantaChatIsMuted(!santaChatIsMuted);
+            // update campaign detail isMuted
+            setCurrentSantaCampaign(prev => prev ? { ...prev, isMuted: !santaChatIsMuted } : prev);
+          }
+        };
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: C.bg }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.card, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+              <button onClick={navBack} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: C.accent, fontSize: 22 }}>←</button>
+              <div style={{ flex: 1, fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {camp.title}
+              </div>
+              <button
+                onClick={toggleMute}
+                title={santaChatIsMuted ? t('santa_chat_unmute', locale) : t('santa_chat_mute', locale)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, opacity: isReadOnly ? 0.4 : 1 }}
+              >
+                {santaChatIsMuted ? '🔕' : '🔔'}
+              </button>
+            </div>
+
+            {/* Messages area */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Load earlier */}
+              {santaChatHasMore && (
+                <button
+                  onClick={loadEarlier}
+                  disabled={santaChatLoading}
+                  style={{ background: 'none', border: 'none', color: C.accent, fontSize: 13, cursor: 'pointer', padding: '4px 0', alignSelf: 'center', fontFamily: font }}
+                >
+                  {santaChatLoading ? t('loading', locale) : t('santa_chat_load_earlier', locale)}
+                </button>
+              )}
+
+              {/* Empty state */}
+              {santaChatMessages.length === 0 && !santaChatLoading && (
+                <div style={{ textAlign: 'center', color: C.textSec, fontSize: 14, padding: '40px 0' }}>
+                  {t('santa_chat_empty', locale)}
+                </div>
+              )}
+
+              {/* Messages */}
+              {santaChatMessages.map(msg => {
+                if (msg.messageType === 'SYSTEM') {
+                  return (
+                    <div key={msg.id} style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+                      <div style={{ background: `${C.textSec}20`, borderRadius: 12, padding: '4px 12px', fontSize: 12, color: C.textSec, textAlign: 'center', maxWidth: '80%' }}>
+                        {renderSystemMsg(msg)}
+                      </div>
+                    </div>
+                  );
+                }
+                const isMe = msg.sender?.isMe ?? false;
+                return (
+                  <div key={msg.id} style={{ display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', gap: 8, alignItems: 'flex-end' }}>
+                    {/* Avatar (only for others) */}
+                    {!isMe && (
+                      <div style={{ width: 28, height: 28, borderRadius: 14, background: C.accent, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#fff', fontWeight: 700 }}>
+                        {msg.sender?.avatarUrl
+                          ? <img src={msg.sender.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : (msg.sender?.displayName?.[0] ?? '?').toUpperCase()}
+                      </div>
+                    )}
+                    <div style={{ maxWidth: '70%' }}>
+                      {!isMe && (
+                        <div style={{ fontSize: 11, color: C.textSec, marginBottom: 2, fontWeight: 600 }}>
+                          {msg.sender?.displayName}
+                        </div>
+                      )}
+                      <div style={{ background: isMe ? C.accent : C.card, color: isMe ? '#fff' : C.text, borderRadius: isMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px', padding: '8px 12px', fontSize: 14, lineHeight: 1.4, wordBreak: 'break-word' }}>
+                        {msg.body}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Read-only notice */}
+            {isReadOnly && (
+              <div style={{ background: `${C.textSec}15`, padding: '8px 16px', textAlign: 'center', fontSize: 12, color: C.textSec, flexShrink: 0 }}>
+                {camp.status === 'COMPLETED' ? t('santa_chat_read_only_completed', locale) : t('santa_chat_read_only_cancelled', locale)}
+              </div>
+            )}
+
+            {/* Input bar */}
+            {!isReadOnly && (
+              <div style={{ display: 'flex', gap: 8, padding: '10px 16px', background: C.card, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
+                <input
+                  value={santaChatInput}
+                  onChange={e => setSantaChatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }}
+                  placeholder={t('santa_chat_input_placeholder', locale)}
+                  maxLength={1000}
+                  style={{ flex: 1, background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 20, padding: '8px 14px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none' }}
+                />
+                <button
+                  onClick={() => void sendMessage()}
+                  disabled={!santaChatInput.trim() || santaChatSending}
+                  style={{ background: C.accent, border: 'none', borderRadius: 20, padding: '8px 16px', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: font, opacity: (!santaChatInput.trim() || santaChatSending) ? 0.5 : 1, flexShrink: 0 }}
+                >
+                  {santaChatSending ? '…' : t('santa_chat_send', locale)}
+                </button>
+              </div>
+            )}
           </div>
         );
       })()}

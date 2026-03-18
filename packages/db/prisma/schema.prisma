@@ -572,6 +572,13 @@ enum SantaNotificationType {
   REVEAL_UNLOCKED    // sent to receiver after they confirm RECEIVED (their reveal is ready)
   DEADLINE_WARNING   // sent to giver ~3 days before drawAt if still PENDING
   DEADLINE_MISSED    // sent to giver when their status is auto-updated to MISSED_DEADLINE
+  CHAT_MESSAGE       // new message in campaign chat (suppressed by mute)
+  POLL_CREATED       // new poll opened in campaign (suppressed by mute)
+}
+
+enum SantaChatMessageType {
+  USER    // regular participant message
+  SYSTEM  // system-generated event message (no sender)
 }
 
 // Admin-controlled season window. One row per year.
@@ -610,6 +617,7 @@ model SantaCampaign {
   rounds        SantaRound[]
   chatMessages  SantaChatMessage[]
   readCursors   SantaChatReadCursor[]
+  chatMutes     SantaChatMute[]
   notifications SantaNotification[]
   auditLogs     SantaAdminAuditLog[]
   hintRequests  SantaHintRequest[]
@@ -636,6 +644,7 @@ model SantaParticipant {
   receiverAssignments SantaAssignment[]   @relation("ReceiverAssignments")
   chatMessages     SantaChatMessage[]
   readCursors      SantaChatReadCursor[]
+  chatMutes        SantaChatMute[]
   pollVotes        SantaPollVote[]
   giverHintRequests    SantaHintRequest[]   @relation("HintGiverRequests")
   receiverHintRequests SantaHintRequest[]   @relation("HintReceiverRequests")
@@ -768,12 +777,16 @@ model SantaHintRequest {
 }
 
 // Campaign-level group chat. Messages ordered by (createdAt, id).
+// body = plain text for USER messages. SYSTEM messages set systemEvent + payload; body = "".
 model SantaChatMessage {
-  id            String           @id @default(cuid())
+  id            String               @id @default(cuid())
   campaignId    String
-  participantId String
+  participantId String               // null-ish for SYSTEM: participantId = owner's participant id, body = ""
   body          String
-  createdAt     DateTime         @default(now())
+  messageType   SantaChatMessageType @default(USER)
+  systemEvent   String?              // e.g. 'participant_joined', 'draw_done', 'campaign_cancelled'
+  payload       Json?                // structured data for system messages, e.g. {"displayName":"Ivan"}
+  createdAt     DateTime             @default(now())
 
   campaign    SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -789,6 +802,20 @@ model SantaChatReadCursor {
   lastReadMessageId String?
   lastReadAt        DateTime?
   updatedAt         DateTime         @updatedAt
+
+  campaign    SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, participantId])
+}
+
+// Per-participant mute for campaign chat. Suppresses CHAT_MESSAGE + POLL_CREATED notifications.
+// Does NOT suppress service notifications (draw, reveal, hints, deadlines, cancelled).
+model SantaChatMute {
+  id            String           @id @default(cuid())
+  campaignId    String
+  participantId String
+  mutedAt       DateTime         @default(now())
 
   campaign    SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)

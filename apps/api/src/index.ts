@@ -4757,6 +4757,44 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
     }
   }
 
+  // Chat unread count + mute state for participant
+  let chatUnreadCount = 0;
+  let isMuted = false;
+  if (myParticipant) {
+    const [chatCursor, mutedEntry] = await Promise.all([
+      prisma.santaChatReadCursor.findUnique({
+        where: { campaignId_participantId: { campaignId, participantId: myParticipant.id } },
+        select: { lastReadMessageId: true },
+      }),
+      prisma.santaChatMute.findUnique({
+        where: { campaignId_participantId: { campaignId, participantId: myParticipant.id } },
+        select: { id: true },
+      }),
+    ]);
+    isMuted = !!mutedEntry;
+    if (!chatCursor?.lastReadMessageId) {
+      chatUnreadCount = await prisma.santaChatMessage.count({ where: { campaignId } });
+    } else {
+      const lastRead = await prisma.santaChatMessage.findUnique({
+        where: { id: chatCursor.lastReadMessageId },
+        select: { createdAt: true, id: true },
+      });
+      if (lastRead) {
+        chatUnreadCount = await prisma.santaChatMessage.count({
+          where: {
+            campaignId,
+            OR: [
+              { createdAt: { gt: lastRead.createdAt } },
+              { createdAt: lastRead.createdAt, id: { gt: lastRead.id } },
+            ],
+          },
+        });
+      } else {
+        chatUnreadCount = await prisma.santaChatMessage.count({ where: { campaignId } });
+      }
+    }
+  }
+
   return res.json({
     campaign: {
       id: campaign.id,
@@ -4788,6 +4826,8 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
     rounds: campaign.rounds,
     myAssignment,
     ownerProgress: isOwner ? ownerProgress : undefined,
+    chatUnreadCount,
+    isMuted,
   });
 }));
 
@@ -4882,6 +4922,8 @@ tgRouter.post('/santa/campaigns/:id/cancel', asyncHandler(async (req, res) => {
       data: { campaignId, actorId: user.id, action: 'campaign_cancelled', payload: { reason: parsed.success ? parsed.data.reason : undefined } },
     }),
   ]);
+  // System message: campaign cancelled
+  void createSystemMessage(campaignId, 'campaign_cancelled', {}).catch(() => {});
   return res.json({ ok: true });
 }));
 
@@ -5362,6 +5404,9 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
       data: { campaignId, actorId: user.id, action: 'draw_completed', payload: { drawJobId, assignmentCount: assignments.length } },
     });
 
+    // System message: draw done (no pair info — just a generic event marker)
+    void createSystemMessage(campaignId, 'draw_done', {}).catch(() => {});
+
     return res.json({ ok: true, assignmentCount: assignments.length });
 
   } catch (err) {
@@ -5440,12 +5485,23 @@ tgRouter.post('/santa/campaigns/:id/join', asyncHandler(async (req, res) => {
       where: { id: existing.id },
       data: { status: 'JOINED', leftAt: null, joinedAt: new Date() },
     });
+    // System message: rejoined
+    const rejoinDisplayName = user.firstName || 'Someone';
+    void createSystemMessage(campaignId, 'participant_joined', { displayName: rejoinDisplayName }).catch(() => {});
     return res.json({ ok: true });
   }
 
-  await prisma.santaParticipant.create({
+  const newParticipant = await prisma.santaParticipant.create({
     data: { campaignId, userId: user.id, status: 'JOINED' },
+    select: { id: true },
   });
+  // System message: participant joined
+  const joinDisplayName = user.firstName || 'Someone';
+  void createSystemMessage(campaignId, 'participant_joined', { displayName: joinDisplayName }).catch(() => {});
+  // Notify owner
+  void prisma.santaNotification.create({
+    data: { campaignId, userId: campaign.ownerId, type: 'JOINED', payload: { participantId: newParticipant.id } },
+  }).catch(() => {});
 
   return res.status(201).json({ ok: true });
 }));
@@ -5472,6 +5528,10 @@ tgRouter.post('/santa/campaigns/:id/leave', asyncHandler(async (req, res) => {
     where: { id: participant.id },
     data: { status: 'LEFT', leftAt: new Date() },
   });
+  // System message: participant left
+  const leaveDisplayName = user.firstName || 'Someone';
+  void createSystemMessage(campaignId, 'participant_left', { displayName: leaveDisplayName }).catch(() => {});
+
   return res.json({ ok: true });
 }));
 
@@ -5493,10 +5553,18 @@ tgRouter.delete('/santa/campaigns/:id/participants/:userId', asyncHandler(async 
   });
   if (!participant) return res.status(404).json({ error: 'Participant not found' });
 
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: { firstName: true, profile: { select: { displayName: true } } },
+  });
   await prisma.santaParticipant.update({
     where: { id: participant.id },
     data: { status: 'REMOVED', leftAt: new Date() },
   });
+  // System message: participant was removed (no userId in payload — privacy)
+  const removedDisplayName = targetUser?.profile?.displayName || targetUser?.firstName || 'Someone';
+  void createSystemMessage(campaignId, 'participant_removed', { displayName: removedDisplayName }).catch(() => {});
+
   return res.json({ ok: true });
 }));
 
@@ -5709,6 +5777,8 @@ tgRouter.post('/santa/campaigns/:id/confirm-received', asyncHandler(async (req, 
   const allReceived = allAssignments.every(a => a.id === assignment.id ? true : a.giftStatus === 'RECEIVED');
   if (allReceived) {
     await prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'COMPLETED' } });
+    // System message: all gifts received — campaign complete
+    void createSystemMessage(campaignId, 'campaign_completed', {}).catch(() => {});
   }
 
   // Notifications (best-effort, non-blocking) — deduped by checking existing notifications
@@ -6481,6 +6551,343 @@ setInterval(async () => {
     console.error('[santa-deadlines] deadline-warning job failed:', err);
   }
 }, 60 * 60 * 1000);
+
+// ─── Batch 4.1: Santa Campaign Chat ──────────────────────────────────────────
+
+// Helper: createSystemMessage — creates a SYSTEM message in the campaign chat.
+// Called at lifecycle events (join, leave, remove, draw, cancel, complete).
+// NEVER includes userId, participantId, or Santa pair data in payload.
+async function createSystemMessage(
+  campaignId: string,
+  systemEvent: string,
+  payload: Record<string, unknown> = {},
+): Promise<void> {
+  // Find campaign owner's participant record to use as the pseudo-sender for system messages.
+  // If not found (owner left, edge case), skip silently.
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { ownerId: true },
+  });
+  if (!campaign) return;
+  const ownerParticipant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: campaign.ownerId },
+    select: { id: true },
+  });
+  if (!ownerParticipant) return;
+
+  await prisma.santaChatMessage.create({
+    data: {
+      campaignId,
+      participantId: ownerParticipant.id,
+      body: '',         // empty for SYSTEM; body is reserved for USER plaintext
+      messageType: 'SYSTEM',
+      systemEvent,
+      payload: payload as Parameters<typeof prisma.santaChatMessage.create>[0]['data']['payload'],
+    },
+  }).catch(() => {}); // non-blocking; system message failures never surface to caller
+}
+
+// Serializer for a single chat message (role-aware, never leaks participantId)
+function serializeChatMessage(
+  msg: {
+    id: string;
+    messageType: string;
+    body: string;
+    systemEvent: string | null;
+    payload: unknown;
+    createdAt: Date;
+    participantId: string;
+    participant: {
+      userId: string;
+      user: { firstName: string | null; profile: { displayName: string | null; avatarUrl: string | null } | null };
+    };
+  },
+  myUserId: string,
+) {
+  const isSystem = msg.messageType === 'SYSTEM';
+  return {
+    id: msg.id,
+    messageType: msg.messageType as 'USER' | 'SYSTEM',
+    body: isSystem ? '' : msg.body,
+    systemEvent: isSystem ? (msg.systemEvent ?? null) : null,
+    payload: isSystem ? (msg.payload ?? null) : null,
+    sender: isSystem
+      ? null
+      : {
+          displayName:
+            msg.participant.user.profile?.displayName || msg.participant.user.firstName || null || 'Unknown',
+          avatarUrl: msg.participant.user.profile?.avatarUrl ?? null,
+          isMe: msg.participant.userId === myUserId,
+        },
+    createdAt: msg.createdAt.toISOString(),
+  };
+}
+
+// GET /tg/santa/campaigns/:id/chat — list messages (keyset pagination)
+// Read access: JOINED or LEFT participants only (REMOVED cannot read; owner via participant record)
+tgRouter.get('/santa/campaigns/:id/chat', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const participant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: user.id },
+    select: { id: true, status: true },
+  });
+  // REMOVED participants cannot read chat history
+  if (!participant || participant.status === 'REMOVED') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const rawLimit = Math.min(parseInt(String(req.query.limit ?? '50'), 10) || 50, 100);
+  const before = typeof req.query.before === 'string' ? req.query.before : null;
+
+  // Keyset pagination: resolve cursor message's (createdAt, id) for stable compound comparison
+  let cursorCreatedAt: Date | null = null;
+  let cursorId: string | null = null;
+  if (before) {
+    const cursorMsg = await prisma.santaChatMessage.findUnique({
+      where: { id: before },
+      select: { createdAt: true, id: true },
+    });
+    if (cursorMsg) {
+      cursorCreatedAt = cursorMsg.createdAt;
+      cursorId = cursorMsg.id;
+    }
+  }
+
+  const messages = await prisma.santaChatMessage.findMany({
+    where: {
+      campaignId,
+      ...(cursorCreatedAt && cursorId
+        ? {
+            OR: [
+              { createdAt: { lt: cursorCreatedAt } },
+              { createdAt: cursorCreatedAt, id: { lt: cursorId } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: rawLimit + 1,
+    select: {
+      id: true, messageType: true, body: true, systemEvent: true, payload: true, createdAt: true,
+      participantId: true,
+      participant: {
+        select: {
+          userId: true,
+          user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+        },
+      },
+    },
+  });
+
+  const hasMore = messages.length > rawLimit;
+  if (hasMore) messages.pop();
+
+  // Unread count (keyset-consistent with read cursor)
+  const chatCursor = await prisma.santaChatReadCursor.findUnique({
+    where: { campaignId_participantId: { campaignId, participantId: participant.id } },
+    select: { lastReadMessageId: true },
+  });
+  let totalUnread = 0;
+  if (!chatCursor?.lastReadMessageId) {
+    totalUnread = await prisma.santaChatMessage.count({ where: { campaignId } });
+  } else {
+    const lastRead = await prisma.santaChatMessage.findUnique({
+      where: { id: chatCursor.lastReadMessageId },
+      select: { createdAt: true, id: true },
+    });
+    if (lastRead) {
+      totalUnread = await prisma.santaChatMessage.count({
+        where: {
+          campaignId,
+          OR: [
+            { createdAt: { gt: lastRead.createdAt } },
+            { createdAt: lastRead.createdAt, id: { gt: lastRead.id } },
+          ],
+        },
+      });
+    } else {
+      totalUnread = await prisma.santaChatMessage.count({ where: { campaignId } });
+    }
+  }
+
+  const isMuted = !!(await prisma.santaChatMute.findUnique({
+    where: { campaignId_participantId: { campaignId, participantId: participant.id } },
+    select: { id: true },
+  }));
+
+  return res.json({
+    messages: messages.map(m => serializeChatMessage(m, user.id)),
+    hasMore,
+    totalUnread,
+    isMuted,
+  });
+}));
+
+// POST /tg/santa/campaigns/:id/chat — send a user message
+// Write access: JOINED participants only + campaign in (OPEN, LOCKED, ACTIVE)
+tgRouter.post('/santa/campaigns/:id/chat', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const parsed = z.object({
+    body: z.string().min(1).max(1000),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const campaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { status: true },
+  });
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (!['OPEN', 'LOCKED', 'ACTIVE'].includes(campaign.status)) {
+    return res.status(409).json({ error: 'Chat is read-only for this campaign status' });
+  }
+
+  const participant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: user.id },
+    select: { id: true, status: true },
+  });
+  if (!participant || participant.status !== 'JOINED') {
+    return res.status(403).json({ error: 'Only joined participants can send messages' });
+  }
+
+  const msg = await prisma.santaChatMessage.create({
+    data: {
+      campaignId,
+      participantId: participant.id,
+      body: parsed.data.body,
+      messageType: 'USER',
+    },
+    select: {
+      id: true, messageType: true, body: true, systemEvent: true, payload: true, createdAt: true,
+      participantId: true,
+      participant: {
+        select: {
+          userId: true,
+          user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+        },
+      },
+    },
+  });
+
+  // CHAT_MESSAGE notification — batch, non-blocking, mute-aware
+  void (async () => {
+    try {
+      const [joinedParticipants, mutedEntries] = await Promise.all([
+        prisma.santaParticipant.findMany({
+          where: { campaignId, status: 'JOINED' },
+          select: { id: true, userId: true },
+        }),
+        prisma.santaChatMute.findMany({ where: { campaignId }, select: { participantId: true } }),
+      ]);
+      const mutedIds = new Set(mutedEntries.map(m => m.participantId));
+      const senderDisplayName =
+        msg.participant.user.profile?.displayName || msg.participant.user.firstName || 'Someone';
+
+      const notifData = joinedParticipants
+        .filter(p => p.userId !== user.id && !mutedIds.has(p.id))
+        .map(p => ({
+          campaignId,
+          userId: p.userId,
+          type: 'CHAT_MESSAGE' as const,
+          payload: { messageId: msg.id, senderName: senderDisplayName },
+        }));
+      if (notifData.length > 0) {
+        await prisma.santaNotification.createMany({ data: notifData, skipDuplicates: false });
+      }
+    } catch {}
+  })();
+
+  return res.json({ message: serializeChatMessage(msg, user.id) });
+}));
+
+// POST /tg/santa/campaigns/:id/chat/read — mark messages as read (upsert cursor)
+tgRouter.post('/santa/campaigns/:id/chat/read', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const parsed = z.object({
+    lastReadMessageId: z.string().min(1),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+
+  const participant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: user.id },
+    select: { id: true, status: true },
+  });
+  if (!participant || participant.status === 'REMOVED') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  // Verify the referenced message exists in this campaign
+  const msgExists = await prisma.santaChatMessage.findFirst({
+    where: { id: parsed.data.lastReadMessageId, campaignId },
+    select: { id: true },
+  });
+  if (!msgExists) return res.status(404).json({ error: 'Message not found' });
+
+  await prisma.santaChatReadCursor.upsert({
+    where: { campaignId_participantId: { campaignId, participantId: participant.id } },
+    update: { lastReadMessageId: parsed.data.lastReadMessageId, lastReadAt: new Date() },
+    create: {
+      campaignId,
+      participantId: participant.id,
+      lastReadMessageId: parsed.data.lastReadMessageId,
+      lastReadAt: new Date(),
+    },
+  });
+
+  return res.json({ ok: true });
+}));
+
+// POST /tg/santa/campaigns/:id/mute — mute chat notifications for this campaign
+tgRouter.post('/santa/campaigns/:id/mute', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const participant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: user.id },
+    select: { id: true, status: true },
+  });
+  if (!participant || participant.status !== 'JOINED') {
+    return res.status(403).json({ error: 'Only joined participants can mute' });
+  }
+
+  await prisma.santaChatMute.upsert({
+    where: { campaignId_participantId: { campaignId, participantId: participant.id } },
+    update: { mutedAt: new Date() },
+    create: { campaignId, participantId: participant.id },
+  });
+
+  return res.json({ ok: true, isMuted: true });
+}));
+
+// DELETE /tg/santa/campaigns/:id/mute — unmute chat notifications
+tgRouter.delete('/santa/campaigns/:id/mute', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const campaignId = req.params.id ?? '';
+  if (!campaignId) return res.status(400).json({ error: 'Missing campaign id' });
+
+  const participant = await prisma.santaParticipant.findFirst({
+    where: { campaignId, userId: user.id },
+    select: { id: true, status: true },
+  });
+  if (!participant || participant.status !== 'JOINED') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  await prisma.santaChatMute.deleteMany({
+    where: { campaignId, participantId: participant.id },
+  });
+
+  return res.json({ ok: true, isMuted: false });
+}));
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
