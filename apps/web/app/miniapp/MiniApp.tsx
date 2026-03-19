@@ -3319,6 +3319,57 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     return () => vv.removeEventListener('resize', handleResize);
   }, []);
 
+  // --- Scroll boundary guard: prevent gesture leakage into Telegram WebView dismiss ─────────────
+  // Problem: when the user is at the bottom of the scroll container and tries to scroll
+  // back UP, the initial gesture momentarily looks like an overscroll bounce at the
+  // bottom edge.  iOS/Telegram's WKWebView then hijacks the subsequent upward motion
+  // as a "swipe to dismiss the mini-app" gesture instead of letting the container
+  // scroll back up.
+  //
+  // Mechanism: we track the touch start position and, on each touchmove, if the
+  // container is sitting exactly at its top (scrollTop ≤ 0) and the finger is moving
+  // DOWN, OR at its bottom (scrollTop + clientHeight ≥ scrollHeight) and the finger
+  // is moving UP, we call preventDefault() to absorb the overscroll before it can
+  // propagate to the native dismiss handler.  This must be { passive: false } so
+  // preventDefault() is actually honoured.
+  //
+  // This is intentionally placed on the global scroll container so every list screen
+  // (wishlist-detail, archive, drafts, my-reservations, guest-view, Santa screens)
+  // benefits automatically — no per-screen wiring needed.
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    let startY = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      startY = e.touches[0]?.clientY ?? 0;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!e.touches[0]) return;
+      const dy = e.touches[0].clientY - startY; // > 0 = finger moved down
+
+      const atTop    = el.scrollTop <= 0;
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+
+      // At top + pulling down → would bounce up (and look like a dismiss swipe)
+      // At bottom + pushing up → would bounce down → Telegram then intercepts the
+      //   next downward motion as "close app" instead of "scroll back up"
+      if ((atTop && dy > 0) || (atBottom && dy < 0)) {
+        e.preventDefault();
+      }
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove',  onTouchMove,  { passive: false });
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove',  onTouchMove);
+    };
+  }, []); // runs once — el is stable (ref, never replaced)
+
   // --- Load subscription status when entering guest-view (for subscribe button)
   useEffect(() => {
     if (screen === 'guest-view' && guestWl && tgUser) {
@@ -4317,6 +4368,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     <div ref={scrollContainerRef} style={{
       position: 'fixed', inset: 0, overflowY: 'auto', overflowX: 'hidden',
       background: C.bg, fontFamily: font, color: C.text,
+      // Prevent scroll-chaining into Telegram WebView: when this container
+      // reaches its top/bottom edge the gesture must NOT propagate upward to
+      // the native dismiss-swipe handler.  CSS alone covers modern WKWebView;
+      // the JS touchmove guard below covers older / stricter configurations.
+      overscrollBehaviorY: 'contain',
+      // Retain native-speed momentum scrolling on iOS (still respected in
+      // WKWebView even though the property is deprecated in stock Safari).
+      WebkitOverflowScrolling: 'touch',
+      // Hint to the compositor: only vertical panning is expected here, so it
+      // should not speculatively start a horizontal/dismiss gesture.
+      touchAction: 'pan-y',
     }}>
       <style>{`
         @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
@@ -4325,6 +4387,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
         * { box-sizing:border-box; -webkit-tap-highlight-color:transparent }
         input, textarea, select { -webkit-appearance:none }
+        /* Prevent the Telegram WebView from swallowing scroll gestures when the
+           mini-app's scroll container is at a boundary.  Redundant with the JS
+           touchmove guard below, but belt-and-suspenders: CSS fires before any
+           JS and is cheaper.  "none" here applies to html/body — the scroll
+           container itself gets "contain" via inline style above. */
+        html, body { overscroll-behavior: none; }
       `}</style>
 
       {/* ── LOADING ── */}
