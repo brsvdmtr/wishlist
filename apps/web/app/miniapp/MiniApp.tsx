@@ -264,10 +264,21 @@ type SantaParticipant = {
   joinedAt: string;
   userId: string;
   isMe: boolean;  // P0-A: set by API (p.user.id === req.user.id); do NOT compare userId vs tgUser.id (different ID systems)
-  displayName: string | null;
-  avatarUrl: string | null;
+  displayName: string | null;  // populated with alias (not real name)
+  avatarUrl: null;             // always null in Santa context — use emoji avatar
+  emoji: string;               // animal emoji for anonymous avatar
+  adjectiveKey: string;        // locale-independent key for frontend re-rendering
+  animalKey: string;           // locale-independent key for frontend re-rendering
   hasLinkedWishlist: boolean;
-  linkedWishlist: { id: string; title: string; slug: string } | null;
+  linkedWishlist: { id: string; slug: string } | null;  // title omitted — deanon vector
+};
+
+// Alias record returned by API for self-identification and receiver/giver fields
+type SantaAliasInfo = {
+  alias: string;
+  emoji: string;
+  adjectiveKey: string;
+  animalKey: string;
 };
 
 type SantaCampaignDetail = {
@@ -283,14 +294,15 @@ type SantaCampaignDetail = {
   currentRoundNumber: number | null;
   totalRounds: number;
   myRole: 'PARTICIPANT' | 'ADMIN' | null;
+  myAlias: SantaAliasInfo | null;             // caller's own alias for this round
   pendingExitRequestId: string | null;
   pendingExitRequestCount?: number;           // organizer only
-  // role-aware assignment: giver sees receiver display info; organizer sees aggregate progress
+  // role-aware assignment: giver sees receiver alias info; organizer sees aggregate progress
   myAssignment: {
     role: 'giver';
     giftStatus: string;
     giftNote: string | null;
-    receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean };
+    receiver: { displayName: string; avatarUrl: null; emoji: string; adjectiveKey: string; animalKey: string; hasLinkedWishlist: boolean };
     reservedItems: { id: string; title: string }[];
   } | null;
   ownerProgress: {
@@ -488,6 +500,116 @@ function UserAvatar({
     ...extraStyle,
   };
   return <div style={baseStyle}>{!avatarUrl && initial}</div>;
+}
+
+/**
+ * SantaAvatar — anonymous emoji avatar for Secret Santa.
+ * Color is derived deterministically from the alias string (stable per round).
+ * Never shows real profile photos. Uses animal emoji + color circle.
+ */
+function santaAliasHue(alias: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < alias.length; i++) {
+    h ^= alias.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return (h % 36) * 10; // 36 hues × 10° step
+}
+
+function SantaAvatar({ alias, emoji, size, border }: {
+  alias: string;
+  emoji: string;
+  size: number;
+  border?: string;
+}) {
+  const hue = santaAliasHue(alias);
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: `hsl(${hue}, 55%, 82%)`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: Math.round(size * 0.55),
+      ...(border ? { border } : {}),
+    }}>
+      {emoji || '🎅'}
+    </div>
+  );
+}
+
+// Frontend corpus for locale-aware alias rendering
+// Keys must match the API corpus exactly
+const SANTA_ADJ: Record<string, { ru_m: string; ru_f: string; en: string }> = {
+  sleepy:     { ru_m: 'Сонный',      ru_f: 'Сонная',      en: 'Sleepy' },
+  nimble:     { ru_m: 'Ловкий',      ru_f: 'Ловкая',       en: 'Nimble' },
+  quiet:      { ru_m: 'Тихий',       ru_f: 'Тихая',        en: 'Quiet' },
+  northern:   { ru_m: 'Северный',    ru_f: 'Северная',     en: 'Northern' },
+  cheerful:   { ru_m: 'Весёлый',     ru_f: 'Весёлая',      en: 'Cheerful' },
+  cunning:    { ru_m: 'Хитрый',      ru_f: 'Хитрая',       en: 'Cunning' },
+  kind:       { ru_m: 'Добрый',      ru_f: 'Добрая',       en: 'Kind' },
+  swift:      { ru_m: 'Быстрый',     ru_f: 'Быстрая',      en: 'Swift' },
+  brave:      { ru_m: 'Смелый',      ru_f: 'Смелая',       en: 'Brave' },
+  smart:      { ru_m: 'Умный',       ru_f: 'Умная',        en: 'Smart' },
+  gentle:     { ru_m: 'Нежный',      ru_f: 'Нежная',       en: 'Gentle' },
+  fluffy:     { ru_m: 'Пушистый',    ru_f: 'Пушистая',     en: 'Fluffy' },
+  bright:     { ru_m: 'Яркий',       ru_f: 'Яркая',        en: 'Bright' },
+  curious:    { ru_m: 'Любопытный',  ru_f: 'Любопытная',   en: 'Curious' },
+  patient:    { ru_m: 'Терпеливый',  ru_f: 'Терпеливая',   en: 'Patient' },
+  playful:    { ru_m: 'Игривый',     ru_f: 'Игривая',      en: 'Playful' },
+  cozy:       { ru_m: 'Уютный',      ru_f: 'Уютная',       en: 'Cozy' },
+  peaceful:   { ru_m: 'Спокойный',   ru_f: 'Спокойная',    en: 'Peaceful' },
+  golden:     { ru_m: 'Золотой',     ru_f: 'Золотая',      en: 'Golden' },
+  mysterious: { ru_m: 'Загадочный',  ru_f: 'Загадочная',   en: 'Mysterious' },
+  lucky:      { ru_m: 'Удачливый',   ru_f: 'Удачливая',    en: 'Lucky' },
+  energetic:  { ru_m: 'Бодрый',      ru_f: 'Бодрая',       en: 'Energetic' },
+  wise:       { ru_m: 'Мудрый',      ru_f: 'Мудрая',       en: 'Wise' },
+  rare:       { ru_m: 'Редкий',      ru_f: 'Редкая',       en: 'Rare' },
+  honest:     { ru_m: 'Честный',     ru_f: 'Честная',      en: 'Honest' },
+  courageous: { ru_m: 'Отважный',    ru_f: 'Отважная',     en: 'Courageous' },
+  modest:     { ru_m: 'Скромный',    ru_f: 'Скромная',     en: 'Modest' },
+  wonderful:  { ru_m: 'Чудесный',    ru_f: 'Чудесная',     en: 'Wonderful' },
+  generous:   { ru_m: 'Щедрый',      ru_f: 'Щедрая',       en: 'Generous' },
+  light:      { ru_m: 'Лёгкий',      ru_f: 'Лёгкая',       en: 'Light' },
+};
+const SANTA_ANIMAL: Record<string, { ru: string; gender: 'm' | 'f'; en: string }> = {
+  giraffe:    { ru: 'жираф',      gender: 'm', en: 'Giraffe' },
+  quokka:     { ru: 'квокка',     gender: 'f', en: 'Quokka' },
+  manul:      { ru: 'манул',      gender: 'm', en: 'Pallas Cat' },
+  penguin:    { ru: 'пингвин',    gender: 'm', en: 'Penguin' },
+  fox:        { ru: 'лиса',       gender: 'f', en: 'Fox' },
+  raccoon:    { ru: 'енот',       gender: 'm', en: 'Raccoon' },
+  bear:       { ru: 'медведь',    gender: 'm', en: 'Bear' },
+  squirrel:   { ru: 'белка',      gender: 'f', en: 'Squirrel' },
+  hedgehog:   { ru: 'ёж',         gender: 'm', en: 'Hedgehog' },
+  otter:      { ru: 'выдра',      gender: 'f', en: 'Otter' },
+  panda:      { ru: 'панда',      gender: 'f', en: 'Panda' },
+  koala:      { ru: 'коала',      gender: 'm', en: 'Koala' },
+  capybara:   { ru: 'капибара',   gender: 'f', en: 'Capybara' },
+  sloth:      { ru: 'ленивец',    gender: 'm', en: 'Sloth' },
+  flamingo:   { ru: 'фламинго',   gender: 'm', en: 'Flamingo' },
+  lemur:      { ru: 'лемур',      gender: 'm', en: 'Lemur' },
+  alpaca:     { ru: 'альпака',    gender: 'f', en: 'Alpaca' },
+  axolotl:    { ru: 'аксолотль',  gender: 'm', en: 'Axolotl' },
+  narwhal:    { ru: 'нарвал',     gender: 'm', en: 'Narwhal' },
+  platypus:   { ru: 'утконос',    gender: 'm', en: 'Platypus' },
+  meerkat:    { ru: 'сурикат',    gender: 'm', en: 'Meerkat' },
+  chinchilla: { ru: 'шиншилла',   gender: 'f', en: 'Chinchilla' },
+  tapir:      { ru: 'тапир',      gender: 'm', en: 'Tapir' },
+  wombat:     { ru: 'вомбат',     gender: 'm', en: 'Wombat' },
+  marmot:     { ru: 'сурок',      gender: 'm', en: 'Marmot' },
+  toucan:     { ru: 'тукан',      gender: 'm', en: 'Toucan' },
+  armadillo:  { ru: 'броненосец', gender: 'm', en: 'Armadillo' },
+  cassowary:  { ru: 'казуар',     gender: 'm', en: 'Cassowary' },
+  lynx:       { ru: 'рысь',       gender: 'f', en: 'Lynx' },
+  okapi:      { ru: 'окапи',      gender: 'm', en: 'Okapi' },
+};
+
+/** Render alias in user's locale from adjectiveKey + animalKey */
+function renderSantaAlias(adjectiveKey: string, animalKey: string, locale: string): string {
+  const adj = SANTA_ADJ[adjectiveKey];
+  const animal = SANTA_ANIMAL[animalKey];
+  if (!adj || !animal) return locale === 'en' ? 'Participant' : 'Участник';
+  if (locale === 'en') return `${adj.en} ${animal.en}`;
+  return `${animal.gender === 'f' ? adj.ru_f : adj.ru_m} ${animal.ru}`;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1690,7 +1812,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [santaReveal, setSantaReveal] = useState<{
     revealed: boolean;
     isFirstReveal?: boolean;
-    giver?: { displayName: string; avatarUrl: string | null };
+    giver?: { displayName: string; avatarUrl: null; emoji: string; adjectiveKey: string; animalKey: string };
     giftNote?: string | null;
     revealedAt?: string;
   } | null>(null);
@@ -1717,7 +1839,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     body: string;
     systemEvent: string | null;
     payload: Record<string, string> | null;
-    sender: { displayName: string; avatarUrl: string | null; isMe: boolean } | null;
+    sender: { displayName: string; avatarUrl: null; emoji: string | null; adjectiveKey: string | null; animalKey: string | null; isMe: boolean } | null;
     createdAt: string;
   };
   const [santaChatMessages, setSantaChatMessages] = useState<ChatMessage[]>([]);
@@ -1727,7 +1849,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [santaChatSending, setSantaChatSending] = useState(false);
   const [santaChatIsMuted, setSantaChatIsMuted] = useState(false);
   // Polls state (Batch 4.2)
-  type PollResult = { optionIndex: number; count: number; percentage: number; voters: { displayName: string }[] | null };
+  type PollResult = { optionIndex: number; count: number; percentage: number; voters: { displayName: string; emoji: string | null }[] | null };
   type Poll = {
     id: string; question: string; options: string[]; isAnonymous: boolean;
     createdAt: string; deadlineAt: string | null; closedAt: string | null;
@@ -1745,8 +1867,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     campaign: { status: string; currentRoundId: string | null; drawAt: string | null };
     participants: Array<{
       id: string; userId: string; status: string; role: string;
-      joinedAt: string; leftAt: string | null; displayName: string; avatarUrl: string | null;
-      hasLinkedWishlist: boolean;
+      joinedAt: string; leftAt: string | null; displayName: string;
+      emoji: string | null; adjectiveKey: string | null; animalKey: string | null;
+      avatarUrl: null; hasLinkedWishlist: boolean;
     }>;
     giftProgress: {
       pending: number; buying: number; selectedFromWishlist: number; selectedOutside: number;
@@ -1754,7 +1877,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } | null;
     pendingExitRequests: Array<{
       id: string; participantId: string; userId: string; displayName: string;
-      avatarUrl: string | null; reason: string | null; createdAt: string;
+      emoji: string | null; adjectiveKey: string | null; animalKey: string | null;
+      avatarUrl: null; reason: string | null; createdAt: string;
     }>;
   };
   const [santaOrganizerSummary, setSantaOrganizerSummary] = useState<OrganizerSummary | null>(null);
@@ -1766,7 +1890,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // Exclusions state (Batch 5.1)
   type ExclusionPair = { id: string; userId1: string; name1: string; userId2: string; name2: string };
-  type ExclusionGroup = { id: string; label: string; activeCount: number; members: { userId: string; displayName: string; avatarUrl: string | null; isStale: boolean }[] };
+  type ExclusionGroup = { id: string; label: string; activeCount: number; members: { userId: string; displayName: string; emoji: string | null; adjectiveKey: string | null; animalKey: string | null; avatarUrl: null; isStale: boolean }[] };
   const [santaExclPairs, setSantaExclPairs] = useState<ExclusionPair[]>([]);
   const [santaExclGroups, setSantaExclGroups] = useState<ExclusionGroup[]>([]);
   const [santaExclLoading, setSantaExclLoading] = useState(false);
@@ -9419,6 +9543,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const camp = currentSantaCampaign.campaign;
         const participants = currentSantaCampaign.participants;
         const myAssignment = currentSantaCampaign.myAssignment;
+        const myAlias = currentSantaCampaign.myAlias;
         const isOwner = camp.isOwner;
         const isOrg = camp.isOrganizer;
         const myRole = currentSantaCampaign.myRole;
@@ -9635,6 +9760,28 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </div>
             )}
 
+            {/* My alias — shown after draw, to all participants including organizer */}
+            {myAlias && (
+              <div style={{ background: `${C.accent}12`, borderRadius: 14, padding: '12px 16px', marginBottom: 16, border: `1px solid ${C.accent}30` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <SantaAvatar alias={myAlias.alias} emoji={myAlias.emoji} size={40} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 2 }}>
+                      {locale === 'ru' ? 'Твоё имя в этой жеребьёвке' : 'Your name in this round'}
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
+                      {renderSantaAlias(myAlias.adjectiveKey, myAlias.animalKey, locale) || myAlias.alias}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                      {locale === 'ru'
+                        ? 'Имя меняется автоматически в каждом новом раунде'
+                        : 'Name changes automatically each new round'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Participants */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -9649,11 +9796,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       borderBottom: idx < participants.filter(px => px.status === 'JOINED').length - 1 ? `1px solid ${C.border}` : 'none',
                     }}
                   >
-                    <UserAvatar avatarUrl={p.avatarUrl} name={p.displayName || '?'} size={32} accent={C.accent} />
+                    <SantaAvatar alias={p.displayName || p.id} emoji={p.emoji || '🎅'} size={32} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.displayName || (locale === 'ru' ? 'Участник' : 'Participant')}</span>
-                        {p.userId === camp.id.split('')[0] /* never true — just placeholder */ ? null : null}
+                        <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                          {renderSantaAlias(p.adjectiveKey, p.animalKey, locale) || p.displayName || (locale === 'ru' ? 'Участник' : 'Participant')}
+                          {p.isMe && <span style={{ fontSize: 11, color: C.textMuted, marginLeft: 4 }}>({locale === 'ru' ? 'я' : 'me'})</span>}
+                        </span>
                         {p.role === 'ADMIN' && (
                           <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, background: `${C.accent}15`, padding: '1px 6px', borderRadius: 6 }}>
                             {t('santa_role_admin', locale)}
@@ -9667,9 +9816,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       <button
                         onClick={async () => {
                           const newRole = p.role === 'ADMIN' ? 'PARTICIPANT' : 'ADMIN';
+                          const aliasName = renderSantaAlias(p.adjectiveKey, p.animalKey, locale) || p.displayName || p.id;
                           const confirmMsg = newRole === 'ADMIN'
-                            ? t('santa_role_promote_confirm', locale, { name: p.displayName || p.userId })
-                            : t('santa_role_demote_confirm', locale, { name: p.displayName || p.userId });
+                            ? t('santa_role_promote_confirm', locale, { name: aliasName })
+                            : t('santa_role_demote_confirm', locale, { name: aliasName });
                           if (!confirm(confirmMsg)) return;
                           const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/participants/${p.userId}/role`, {
                             method: 'PATCH',
@@ -9743,10 +9893,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     🎁 {t('santa_my_wishlist_section', locale)}
                   </div>
                   {me.linkedWishlist ? (
-                    // State B: wishlist linked
+                    // State B: wishlist linked — only show status, never the title
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 8 }}>
-                        {me.linkedWishlist.title}
+                      <div style={{ fontSize: 13, color: C.green, marginBottom: 8 }}>
+                        ✓ {t('santa_wishlist_linked_label', locale)}
                       </div>
                       {isReadOnly ? (
                         <div style={{ fontSize: 12, color: C.green }}>✓ {t('santa_wishlist_linked_label', locale)}</div>
@@ -9803,9 +9953,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   {t('santa_gift_my_recipient', locale)}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <UserAvatar avatarUrl={myAssignment.receiver.avatarUrl} name={myAssignment.receiver.displayName} size={36} accent={C.accent} />
+                  <SantaAvatar alias={myAssignment.receiver.displayName} emoji={myAssignment.receiver.emoji || '🎅'} size={36} />
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{myAssignment.receiver.displayName}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                      {renderSantaAlias(myAssignment.receiver.adjectiveKey, myAssignment.receiver.animalKey, locale) || myAssignment.receiver.displayName}
+                    </div>
                     <div style={{ fontSize: 12, color: C.textMuted }}>
                       {t(`santa_gift_status_${myAssignment.giftStatus.toLowerCase()}` as never, locale) || myAssignment.giftStatus}
                     </div>
@@ -10167,16 +10319,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         </button>
                       )}
 
-                      {/* Reveal result — shown after receiver reveals */}
+                      {/* Reveal result — alias-only, forever */}
                       {santaInboundStatus.canReveal && santaReveal?.revealed && santaReveal.giver && (
                         <div style={{ marginTop: 12, background: `${C.accent}12`, borderRadius: 12, padding: 14, border: `1px solid ${C.accent}30` }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 10 }}>
-                            🎅 {santaReveal.isFirstReveal ? t('santa_reveal_first_time', locale) : t('santa_reveal_already_seen', locale)}
+                            🎅 {locale === 'ru' ? 'Твой Санта открыт!' : 'Your Santa revealed!'}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                            <UserAvatar avatarUrl={santaReveal.giver.avatarUrl} name={santaReveal.giver.displayName} size={44} accent={C.accent} />
-                            <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
-                              {t('santa_reveal_giver', locale, { name: santaReveal.giver.displayName })}
+                            <SantaAvatar alias={santaReveal.giver.displayName} emoji={santaReveal.giver.emoji || '🎅'} size={44} />
+                            <div>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
+                                {renderSantaAlias(santaReveal.giver.adjectiveKey ?? '', santaReveal.giver.animalKey ?? '', locale) || santaReveal.giver.displayName}
+                              </div>
+                              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                                {locale === 'ru' ? 'Это твой Тайный Санта в этом раунде' : 'Your Secret Santa this round'}
+                              </div>
                             </div>
                           </div>
                           {santaReveal.giftNote ? (
@@ -10312,9 +10469,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   ) : santaReveal?.revealed && santaReveal.giver ? (
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                        <UserAvatar avatarUrl={santaReveal.giver.avatarUrl} name={santaReveal.giver.displayName} size={44} accent={C.accent} />
-                        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
-                          {t('santa_reveal_giver', locale, { name: santaReveal.giver.displayName })}
+                        <SantaAvatar alias={santaReveal.giver.displayName} emoji={santaReveal.giver.emoji || '🎅'} size={44} />
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
+                            {renderSantaAlias(santaReveal.giver.adjectiveKey ?? '', santaReveal.giver.animalKey ?? '', locale) || santaReveal.giver.displayName}
+                          </div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>
+                            {locale === 'ru' ? 'Твой Тайный Санта' : 'Your Secret Santa'}
+                          </div>
                         </div>
                       </div>
                       {santaReveal.giftNote ? (
@@ -11274,16 +11436,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <div key={msg.id} style={{ display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', gap: 8, alignItems: 'flex-end' }}>
                     {/* Avatar (only for others) */}
                     {!isMe && (
-                      <div style={{ width: 28, height: 28, borderRadius: 14, background: C.accent, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#fff', fontWeight: 700 }}>
-                        {msg.sender?.avatarUrl
-                          ? <img src={msg.sender.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : (msg.sender?.displayName?.[0] ?? '?').toUpperCase()}
-                      </div>
+                      <SantaAvatar
+                        alias={msg.sender?.displayName ?? '?'}
+                        emoji={msg.sender?.emoji ?? '🎅'}
+                        size={28}
+                      />
                     )}
                     <div style={{ maxWidth: '70%' }}>
                       {!isMe && (
                         <div style={{ fontSize: 11, color: C.textSec, marginBottom: 2, fontWeight: 600 }}>
-                          {msg.sender?.displayName}
+                          {msg.sender?.adjectiveKey && msg.sender?.animalKey
+                            ? renderSantaAlias(msg.sender.adjectiveKey, msg.sender.animalKey, locale)
+                            : msg.sender?.displayName}
                         </div>
                       )}
                       <div style={{ background: isMe ? C.accent : C.card, color: isMe ? '#fff' : C.text, borderRadius: isMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px', padding: '8px 12px', fontSize: 14, lineHeight: 1.4, wordBreak: 'break-word' }}>
@@ -11513,11 +11677,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       )}
 
                       {group.members.map(member => {
-                        const name = member.displayName || member.userId;
+                        const name = member.adjectiveKey && member.animalKey
+                          ? renderSantaAlias(member.adjectiveKey, member.animalKey, locale)
+                          : member.displayName || member.userId;
                         return (
                           <div key={member.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', opacity: member.isStale ? 0.45 : 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <UserAvatar avatarUrl={member.avatarUrl} name={name} size={24} accent={C.accent} />
+                              <SantaAvatar alias={name} emoji={member.emoji ?? '🎅'} size={24} />
                               <span style={{ fontSize: 13, color: member.isStale ? C.textMuted : C.textSec }}>
                                 {name}{member.isStale ? (locale === 'ru' ? ' (вышел)' : ' (left)') : ''}
                               </span>
@@ -11696,11 +11862,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       {t('santa_organizer_exit_requests', locale, { n: String(summary.pendingExitRequests.length) })}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {summary.pendingExitRequests.map(req => (
+                      {summary.pendingExitRequests.map(req => {
+                        const reqAlias = req.adjectiveKey && req.animalKey
+                          ? renderSantaAlias(req.adjectiveKey, req.animalKey, locale)
+                          : req.displayName;
+                        return (
                         <div key={req.id} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                            <UserAvatar avatarUrl={req.avatarUrl} name={req.displayName} size={28} accent={C.accent} />
-                            <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{req.displayName}</span>
+                            <SantaAvatar alias={reqAlias} emoji={req.emoji ?? '🎅'} size={28} />
+                            <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{reqAlias}</span>
                           </div>
                           {req.reason && <div style={{ fontSize: 12, color: C.textSec, marginBottom: 8 }}>{req.reason}</div>}
                           {/* Approve/deny are owner-only; admins can see the request but cannot act on it */}
@@ -11708,7 +11878,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           <div style={{ display: 'flex', gap: 8 }}>
                             <button
                               onClick={async () => {
-                                if (!confirm(`${t('santa_exit_request_approve', locale)} ${req.displayName}?`)) return;
+                                if (!confirm(`${t('santa_exit_request_approve', locale)} ${reqAlias}?`)) return;
                                 const res = await tgFetch(`/tg/santa/campaigns/${campId}/exit-requests/${req.id}/approve`, { method: 'POST' });
                                 if (res.ok) {
                                   // Reload summary
@@ -11737,7 +11907,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           </div>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -11771,12 +11942,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <div style={{ padding: '12px 16px 8px', fontSize: 13, fontWeight: 600, color: C.textMuted }}>
                     {t('santa_organizer_participants', locale, { n: String(summary.participants.filter(p => p.status === 'JOINED').length) })}
                   </div>
-                  {summary.participants.filter(p => p.status === 'JOINED').map((p, idx, arr) => (
+                  {summary.participants.filter(p => p.status === 'JOINED').map((p, idx, arr) => {
+                    const pAlias = p.adjectiveKey && p.animalKey
+                      ? renderSantaAlias(p.adjectiveKey, p.animalKey, locale)
+                      : p.displayName;
+                    return (
                     <div key={p.id} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: idx < arr.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                      <UserAvatar avatarUrl={p.avatarUrl} name={p.displayName} size={30} accent={C.accent} />
+                      <SantaAvatar alias={pAlias} emoji={p.emoji ?? '🎅'} size={30} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{p.displayName}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{pAlias}</span>
                           {p.role === 'ADMIN' && (
                             <span style={{ fontSize: 10, fontWeight: 700, color: C.accent, background: `${C.accent}15`, padding: '1px 5px', borderRadius: 5 }}>
                               {t('santa_role_admin', locale)}
@@ -11790,7 +11965,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}

@@ -705,6 +705,7 @@ model SantaParticipant {
   giverHintRequests    SantaHintRequest[]   @relation("HintGiverRequests")
   receiverHintRequests SantaHintRequest[]   @relation("HintReceiverRequests")
   exitRequests         SantaExitRequest[]
+  aliases              SantaParticipantAlias[]
 
   @@unique([campaignId, userId])
   @@index([campaignId])
@@ -728,6 +729,7 @@ model SantaRound {
   polls        SantaPoll[]
   hintRequests SantaHintRequest[]
   exitRequests SantaExitRequest[]
+  aliases      SantaParticipantAlias[]
 
   @@unique([campaignId, roundNumber])
   @@index([campaignId])
@@ -1031,4 +1033,27 @@ model SantaItemReservation {
   @@unique([assignmentId, itemId])
   @@index([assignmentId])
   @@index([itemId])
+}
+
+// Round-scoped anonymous alias for a Secret Santa participant.
+// Generated atomically at draw time; regenerated for every new round.
+// adjectiveKey + animalKey are locale-independent — frontend re-renders in user's locale.
+// alias is pre-rendered RU string stored for system messages and debug.
+model SantaParticipantAlias {
+  id            String   @id @default(cuid())
+  roundId       String
+  participantId String
+  alias         String   // pre-rendered RU: "Сонный жираф"
+  emoji         String   // "🦒"
+  adjectiveKey  String   // "sleepy"
+  animalKey     String   // "giraffe"
+  createdAt     DateTime @default(now())
+
+  round       SantaRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, participantId])
+  @@unique([roundId, alias])
+  @@index([roundId])
+  @@index([participantId])
 }

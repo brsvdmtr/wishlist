@@ -5123,6 +5123,172 @@ tgRouter.post('/santa/admin/season-broadcasts', asyncHandler(async (req, res) =>
   return res.json({ ok: true, queued: { type, seasonYear, force } });
 }));
 
+// ─── Santa Anonymous Alias System ────────────────────────────────────────────
+// Corpus: 30 adjectives × 30 animals = 900 unique combinations per round.
+// adjectiveKey / animalKey are locale-independent; alias string is pre-rendered in RU.
+// Frontend re-renders in user's locale using the keys.
+
+const SANTA_ADJECTIVES: Record<string, { m: string; f: string; en: string }> = {
+  sleepy:     { m: 'Сонный',      f: 'Сонная',      en: 'Sleepy' },
+  nimble:     { m: 'Ловкий',      f: 'Ловкая',       en: 'Nimble' },
+  quiet:      { m: 'Тихий',       f: 'Тихая',        en: 'Quiet' },
+  northern:   { m: 'Северный',    f: 'Северная',     en: 'Northern' },
+  cheerful:   { m: 'Весёлый',     f: 'Весёлая',      en: 'Cheerful' },
+  cunning:    { m: 'Хитрый',      f: 'Хитрая',       en: 'Cunning' },
+  kind:       { m: 'Добрый',      f: 'Добрая',       en: 'Kind' },
+  swift:      { m: 'Быстрый',     f: 'Быстрая',      en: 'Swift' },
+  brave:      { m: 'Смелый',      f: 'Смелая',       en: 'Brave' },
+  smart:      { m: 'Умный',       f: 'Умная',        en: 'Smart' },
+  gentle:     { m: 'Нежный',      f: 'Нежная',       en: 'Gentle' },
+  fluffy:     { m: 'Пушистый',    f: 'Пушистая',     en: 'Fluffy' },
+  bright:     { m: 'Яркий',       f: 'Яркая',        en: 'Bright' },
+  curious:    { m: 'Любопытный',  f: 'Любопытная',   en: 'Curious' },
+  patient:    { m: 'Терпеливый',  f: 'Терпеливая',   en: 'Patient' },
+  playful:    { m: 'Игривый',     f: 'Игривая',      en: 'Playful' },
+  cozy:       { m: 'Уютный',      f: 'Уютная',       en: 'Cozy' },
+  peaceful:   { m: 'Спокойный',   f: 'Спокойная',    en: 'Peaceful' },
+  golden:     { m: 'Золотой',     f: 'Золотая',      en: 'Golden' },
+  mysterious: { m: 'Загадочный',  f: 'Загадочная',   en: 'Mysterious' },
+  lucky:      { m: 'Удачливый',   f: 'Удачливая',    en: 'Lucky' },
+  energetic:  { m: 'Бодрый',      f: 'Бодрая',       en: 'Energetic' },
+  wise:       { m: 'Мудрый',      f: 'Мудрая',       en: 'Wise' },
+  rare:       { m: 'Редкий',      f: 'Редкая',       en: 'Rare' },
+  honest:     { m: 'Честный',     f: 'Честная',      en: 'Honest' },
+  courageous: { m: 'Отважный',    f: 'Отважная',     en: 'Courageous' },
+  modest:     { m: 'Скромный',    f: 'Скромная',     en: 'Modest' },
+  wonderful:  { m: 'Чудесный',    f: 'Чудесная',     en: 'Wonderful' },
+  generous:   { m: 'Щедрый',      f: 'Щедрая',       en: 'Generous' },
+  light:      { m: 'Лёгкий',      f: 'Лёгкая',       en: 'Light' },
+};
+
+const SANTA_ANIMALS: Record<string, { ru: string; gender: 'm' | 'f'; emoji: string; en: string }> = {
+  giraffe:    { ru: 'жираф',      gender: 'm', emoji: '🦒', en: 'Giraffe' },
+  quokka:     { ru: 'квокка',     gender: 'f', emoji: '🦘', en: 'Quokka' },
+  manul:      { ru: 'манул',      gender: 'm', emoji: '🐱', en: 'Pallas Cat' },
+  penguin:    { ru: 'пингвин',    gender: 'm', emoji: '🐧', en: 'Penguin' },
+  fox:        { ru: 'лиса',       gender: 'f', emoji: '🦊', en: 'Fox' },
+  raccoon:    { ru: 'енот',       gender: 'm', emoji: '🦝', en: 'Raccoon' },
+  bear:       { ru: 'медведь',    gender: 'm', emoji: '🐻', en: 'Bear' },
+  squirrel:   { ru: 'белка',      gender: 'f', emoji: '🐿️', en: 'Squirrel' },
+  hedgehog:   { ru: 'ёж',         gender: 'm', emoji: '🦔', en: 'Hedgehog' },
+  otter:      { ru: 'выдра',      gender: 'f', emoji: '🦦', en: 'Otter' },
+  panda:      { ru: 'панда',      gender: 'f', emoji: '🐼', en: 'Panda' },
+  koala:      { ru: 'коала',      gender: 'm', emoji: '🐨', en: 'Koala' },
+  capybara:   { ru: 'капибара',   gender: 'f', emoji: '🦫', en: 'Capybara' },
+  sloth:      { ru: 'ленивец',    gender: 'm', emoji: '🦥', en: 'Sloth' },
+  flamingo:   { ru: 'фламинго',   gender: 'm', emoji: '🦩', en: 'Flamingo' },
+  lemur:      { ru: 'лемур',      gender: 'm', emoji: '🐒', en: 'Lemur' },
+  alpaca:     { ru: 'альпака',    gender: 'f', emoji: '🦙', en: 'Alpaca' },
+  axolotl:    { ru: 'аксолотль',  gender: 'm', emoji: '🫧', en: 'Axolotl' },
+  narwhal:    { ru: 'нарвал',     gender: 'm', emoji: '🌊', en: 'Narwhal' },
+  platypus:   { ru: 'утконос',    gender: 'm', emoji: '🦆', en: 'Platypus' },
+  meerkat:    { ru: 'сурикат',    gender: 'm', emoji: '🐾', en: 'Meerkat' },
+  chinchilla: { ru: 'шиншилла',   gender: 'f', emoji: '🐭', en: 'Chinchilla' },
+  tapir:      { ru: 'тапир',      gender: 'm', emoji: '🦏', en: 'Tapir' },
+  wombat:     { ru: 'вомбат',     gender: 'm', emoji: '🐨', en: 'Wombat' },
+  marmot:     { ru: 'сурок',      gender: 'm', emoji: '🐿️', en: 'Marmot' },
+  toucan:     { ru: 'тукан',      gender: 'm', emoji: '🦜', en: 'Toucan' },
+  armadillo:  { ru: 'броненосец', gender: 'm', emoji: '🛡️', en: 'Armadillo' },
+  cassowary:  { ru: 'казуар',     gender: 'm', emoji: '🐦', en: 'Cassowary' },
+  lynx:       { ru: 'рысь',       gender: 'f', emoji: '🐱', en: 'Lynx' },
+  okapi:      { ru: 'окапи',      gender: 'm', emoji: '🦌', en: 'Okapi' },
+};
+
+const SANTA_ADJ_KEYS = Object.keys(SANTA_ADJECTIVES);
+const SANTA_ANIMAL_KEYS = Object.keys(SANTA_ANIMALS);
+
+/** mulberry32 — fast seeded PRNG returning [0, 1) */
+function santaSeededRng(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** FNV-1a 32-bit hash of a string */
+function santaHashStr(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+
+/** Fisher-Yates shuffle with seeded RNG (returns new array) */
+function santaShuffle<T>(arr: T[], rng: () => number): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j]!, a[i]!];
+  }
+  return a;
+}
+
+/** Generate round-scoped aliases for a set of participantIds.
+ *  Deterministic: same roundId + same participantIds → same aliases.
+ *  Unique within round by construction (shuffled combos, assigned sequentially). */
+function generateSantaAliases(
+  roundId: string,
+  participantIds: string[],
+): Array<{ participantId: string; alias: string; emoji: string; adjectiveKey: string; animalKey: string }> {
+  const seed = santaHashStr(roundId);
+  const rng  = santaSeededRng(seed);
+
+  // Build full combo list
+  const combos: Array<{ adjKey: string; animalKey: string }> = [];
+  for (const adjKey of SANTA_ADJ_KEYS) {
+    for (const animalKey of SANTA_ANIMAL_KEYS) {
+      combos.push({ adjKey, animalKey });
+    }
+  }
+  // Shuffle with round seed → unique ordering per round
+  const shuffled = santaShuffle(combos, rng);
+
+  // Assign to participants in deterministic order (sort by participantId)
+  const sorted = [...participantIds].sort();
+
+  return sorted.map((pid, i) => {
+    const combo = shuffled[i % shuffled.length]!;
+    const adj   = SANTA_ADJECTIVES[combo.adjKey]!;
+    const animal = SANTA_ANIMALS[combo.animalKey]!;
+    const aliasStr = `${adj[animal.gender]} ${animal.ru}`;
+    return {
+      participantId: pid,
+      alias: aliasStr,
+      emoji: animal.emoji,
+      adjectiveKey: combo.adjKey,
+      animalKey: combo.animalKey,
+    };
+  });
+}
+
+type SantaAliasRecord = { alias: string; emoji: string; adjectiveKey: string; animalKey: string };
+type SantaAliasMap = Map<string, SantaAliasRecord>; // participantId → alias
+
+/** Load alias map for a round from DB. Returns empty map if no aliases yet. */
+async function loadSantaAliasMap(roundId: string): Promise<SantaAliasMap> {
+  const rows = await prisma.santaParticipantAlias.findMany({
+    where: { roundId },
+    select: { participantId: true, alias: true, emoji: true, adjectiveKey: true, animalKey: true },
+  });
+  return new Map(rows.map(r => [r.participantId, { alias: r.alias, emoji: r.emoji, adjectiveKey: r.adjectiveKey, animalKey: r.animalKey }]));
+}
+
+/** Resolve alias for a participant from map. Falls back to generic if not found. */
+function resolveSantaAlias(map: SantaAliasMap, participantId: string): SantaAliasRecord {
+  return map.get(participantId) ?? { alias: 'Участник', emoji: '🎅', adjectiveKey: '', animalKey: '' };
+}
+
+/** Pre-draw stable label for a participant: "Участник N" based on join order.
+ *  Used in organizer views (exclusions, participant list) before first draw. */
+function predrawLabel(joinOrder: number): string {
+  return `Участник ${joinOrder}`;
+}
+
 // POST /tg/santa/campaigns — create a new campaign
 tgRouter.post('/santa/campaigns', asyncHandler(async (req, res) => {
   const user = await getOrCreateTgUser(req.tgUser!);
@@ -5239,6 +5405,17 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
   const isParticipant = campaign.participants.some(p => p.user.id === user.id);
   if (!isOwner && !isParticipant) return res.status(403).json({ error: 'Forbidden' });
 
+  // Load alias map for current round (empty map if no round yet)
+  const aliasMap = campaign.currentRoundId
+    ? await loadSantaAliasMap(campaign.currentRoundId)
+    : new Map<string, SantaAliasRecord>();
+
+  // Pre-draw: build stable join-order map (participantId → 1-based position, sorted by joinedAt ASC, id ASC)
+  const joinOrderMap = new Map<string, number>();
+  [...campaign.participants]
+    .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime() || a.id.localeCompare(b.id))
+    .forEach((p, i) => joinOrderMap.set(p.id, i + 1));
+
   // Find caller's own assignment (post-draw) — role-aware, never leaks pairs
   let myAssignment: SantaAssignmentForGiver | null = null;
   let ownerProgress: SantaAssignmentForOwner | null = null;
@@ -5268,8 +5445,8 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
           giftStatus: true, giftNote: true,
           receiver: {
             select: {
+              id: true,      // needed for alias lookup
               linkedWishlistId: true,
-              user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
             },
           },
           santaItemReservations: {
@@ -5279,15 +5456,16 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
         },
       });
       if (giverAssignment) {
-        const receiverDisplayName = giverAssignment.receiver.user.profile?.displayName
-          || giverAssignment.receiver.user.firstName || 'Получатель';
-        const receiverAvatarUrl = giverAssignment.receiver.user.profile?.avatarUrl || null;
+        const receiverAlias = resolveSantaAlias(aliasMap, giverAssignment.receiver.id);
         myAssignment = serializeAssignment('giver', {
           giftStatus: giverAssignment.giftStatus,
           giftNote: giverAssignment.giftNote,
           receiver: {
-            displayName: receiverDisplayName,
-            avatarUrl: receiverAvatarUrl,
+            displayName: receiverAlias.alias,      // alias instead of real name
+            avatarUrl: null,                        // never expose real photo
+            emoji: receiverAlias.emoji,
+            adjectiveKey: receiverAlias.adjectiveKey,
+            animalKey: receiverAlias.animalKey,
             hasLinkedWishlist: !!giverAssignment.receiver.linkedWishlistId,
           },
           reservedItems: giverAssignment.santaItemReservations.map(r => ({ id: r.itemId, title: r.item.title })),
@@ -5371,24 +5549,41 @@ tgRouter.get('/santa/campaigns/:id', asyncHandler(async (req, res) => {
       cancelReason: campaign.cancelReason,
       createdAt: campaign.createdAt,
     },
-    participants: campaign.participants.map(p => ({
-      id: p.id,
-      status: p.status,
-      role: p.role,
-      joinedAt: p.joinedAt,
-      userId: p.user.id,
-      isMe: p.user.id === user.id,   // P0-A: frontend uses this; p.user.id is WishBoard cuid, not Telegram ID
-      displayName: p.user.profile?.displayName || p.user.firstName || null,
-      avatarUrl: p.user.profile?.avatarUrl || null,
-      hasLinkedWishlist: !!p.linkedWishlist,
-      linkedWishlist: isOwner ? p.linkedWishlist : (p.user.id === user.id ? p.linkedWishlist : null),
-    })),
+    participants: campaign.participants.map(p => {
+      // Post-draw: use round-scoped alias. Pre-draw: use stable join-order label.
+      const hasRoundAlias = aliasMap.size > 0;
+      const pAlias = hasRoundAlias
+        ? resolveSantaAlias(aliasMap, p.id)
+        : { alias: predrawLabel(joinOrderMap.get(p.id) ?? 0), emoji: '🎅', adjectiveKey: '', animalKey: '' };
+      return {
+        id: p.id,
+        status: p.status,
+        role: p.role,
+        joinedAt: p.joinedAt,
+        userId: p.user.id,
+        isMe: p.user.id === user.id,
+        // Alias instead of real name (displayName kept for API compat, populated with alias)
+        displayName: pAlias.alias,
+        avatarUrl: null,             // never expose real photo in Santa context
+        emoji: pAlias.emoji,
+        adjectiveKey: pAlias.adjectiveKey,
+        animalKey: pAlias.animalKey,
+        hasLinkedWishlist: !!p.linkedWishlist,
+        // Never expose wishlist title — only the linked flag (or own wishlist id for self)
+        linkedWishlist: p.user.id === user.id
+          ? (p.linkedWishlist ? { id: p.linkedWishlist.id, slug: p.linkedWishlist.slug } : null)
+          : null,
+      };
+    }),
     rounds: campaign.rounds,
     currentRoundNumber: campaign.rounds.find(r => r.id === campaign.currentRoundId)?.roundNumber ?? null,
     totalRounds: campaign.rounds.length,
-    myRole: myParticipant?.role ?? null,               // caller's role: 'PARTICIPANT' | 'ADMIN' | null
-    pendingExitRequestId,                               // caller's pending exit request id, if any
-    pendingExitRequestCount: amOrganizer ? pendingExitRequestCount : undefined, // organizer only
+    myRole: myParticipant?.role ?? null,
+    myAlias: myParticipant && aliasMap.size > 0
+      ? resolveSantaAlias(aliasMap, myParticipant.id)
+      : null,
+    pendingExitRequestId,
+    pendingExitRequestCount: amOrganizer ? pendingExitRequestCount : undefined,
     myAssignment,
     ownerProgress: amOrganizer ? ownerProgress : undefined,
     chatUnreadCount,
@@ -5822,7 +6017,7 @@ type SantaAssignmentForGiver = {
   role: 'giver';
   giftStatus: string;
   giftNote: string | null;
-  receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean };
+  receiver: { displayName: string; avatarUrl: null; emoji: string; adjectiveKey: string; animalKey: string; hasLinkedWishlist: boolean };
   reservedItems: { id: string; title: string }[];
 };
 
@@ -5897,7 +6092,7 @@ const GIVER_ALLOWED_TRANSITIONS: Record<string, string[]> = {
  */
 function serializeAssignment(
   role: 'giver',
-  data: { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean }; reservedItems?: { id: string; title: string }[] }
+  data: { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: null; emoji: string; adjectiveKey: string; animalKey: string; hasLinkedWishlist: boolean }; reservedItems?: { id: string; title: string }[] }
 ): SantaAssignmentForGiver;
 function serializeAssignment(
   role: 'receiver',
@@ -5912,8 +6107,8 @@ function serializeAssignment(
   data: unknown,
 ): SantaAssignmentForGiver | SantaAssignmentForReceiver | SantaAssignmentForOwner {
   if (role === 'giver') {
-    const d = data as { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: string | null; hasLinkedWishlist: boolean }; reservedItems?: { id: string; title: string }[] };
-    return { role: 'giver', giftStatus: d.giftStatus, giftNote: d.giftNote, receiver: { displayName: d.receiver.displayName, avatarUrl: d.receiver.avatarUrl, hasLinkedWishlist: d.receiver.hasLinkedWishlist }, reservedItems: d.reservedItems ?? [] };
+    const d = data as { giftStatus: string; giftNote: string | null; receiver: { displayName: string; avatarUrl: null; emoji: string; adjectiveKey: string; animalKey: string; hasLinkedWishlist: boolean }; reservedItems?: { id: string; title: string }[] };
+    return { role: 'giver', giftStatus: d.giftStatus, giftNote: d.giftNote, receiver: { displayName: d.receiver.displayName, avatarUrl: null, emoji: d.receiver.emoji, adjectiveKey: d.receiver.adjectiveKey, animalKey: d.receiver.animalKey, hasLinkedWishlist: d.receiver.hasLinkedWishlist }, reservedItems: d.reservedItems ?? [] };
   }
   if (role === 'receiver') {
     const d = data as { giftStatus: string };
@@ -6087,10 +6282,17 @@ tgRouter.post('/santa/campaigns/:id/draw', asyncHandler(async (req, res) => {
       return res.status(500).json({ error: 'draw_failed', message: 'Draw algorithm failed despite feasibility check. Please retry.' });
     }
 
-    // 7. Atomically persist assignments + mark ACTIVE
+    // 7. Generate anonymous aliases for all participants (deterministic, round-scoped)
+    const aliasData = generateSantaAliases(roundId, participants.map(p => p.id));
+
+    // 8. Atomically persist assignments + aliases + mark ACTIVE
     await prisma.$transaction([
       prisma.santaAssignment.createMany({
         data: assignments.map(a => ({ roundId, ...a, giftStatus: 'PENDING' })),
+      }),
+      prisma.santaParticipantAlias.createMany({
+        data: aliasData.map(a => ({ roundId, ...a })),
+        skipDuplicates: true,
       }),
       prisma.santaRound.update({ where: { id: roundId }, data: { drawStatus: 'DONE', drawnAt: new Date() } }),
       prisma.santaCampaign.update({ where: { id: campaignId }, data: { status: 'ACTIVE', currentRoundId: round.id } }),
@@ -6211,9 +6413,8 @@ tgRouter.post('/santa/campaigns/:id/join', asyncHandler(async (req, res) => {
       where: { id: existing.id },
       data: { status: 'JOINED', leftAt: null, joinedAt: new Date() },
     });
-    // System message: rejoined
-    const rejoinDisplayName = user.firstName || 'Someone';
-    void createSystemMessage(campaignId, 'participant_joined', { displayName: rejoinDisplayName }).catch(() => {});
+    // System message: rejoined — no real name in payload
+    void createSystemMessage(campaignId, 'participant_joined', {}).catch(() => {});
     return res.json({ ok: true });
   }
 
@@ -6221,9 +6422,8 @@ tgRouter.post('/santa/campaigns/:id/join', asyncHandler(async (req, res) => {
     data: { campaignId, userId: user.id, status: 'JOINED' },
     select: { id: true },
   });
-  // System message: participant joined
-  const joinDisplayName = user.firstName || 'Someone';
-  void createSystemMessage(campaignId, 'participant_joined', { displayName: joinDisplayName }).catch(() => {});
+  // System message: participant joined — no real name in payload
+  void createSystemMessage(campaignId, 'participant_joined', {}).catch(() => {});
   // Notify owner
   void prisma.santaNotification.create({
     data: { campaignId, userId: campaign.ownerId, type: 'JOINED', payload: { participantId: newParticipant.id } },
@@ -6260,9 +6460,8 @@ tgRouter.post('/santa/campaigns/:id/leave', asyncHandler(async (req, res) => {
     where: { id: participant.id },
     data: { status: 'LEFT', leftAt: new Date() },
   });
-  // System message: participant left
-  const leaveDisplayName = user.firstName || 'Someone';
-  void createSystemMessage(campaignId, 'participant_left', { displayName: leaveDisplayName }).catch(() => {});
+  // System message: participant left — no real name in payload
+  void createSystemMessage(campaignId, 'participant_left', {}).catch(() => {});
 
   return res.json({ ok: true });
 }));
@@ -6296,9 +6495,8 @@ tgRouter.delete('/santa/campaigns/:id/participants/:userId', asyncHandler(async 
     where: { id: participant.id },
     data: { status: 'REMOVED', leftAt: new Date() },
   });
-  // System message: participant was removed (no userId in payload — privacy)
-  const removedDisplayName = targetUser?.profile?.displayName || targetUser?.firstName || 'Someone';
-  void createSystemMessage(campaignId, 'participant_removed', { displayName: removedDisplayName }).catch(() => {});
+  // System message: participant was removed — no real name in payload
+  void createSystemMessage(campaignId, 'participant_removed', {}).catch(() => {});
 
   return res.json({ ok: true });
 }));
@@ -6340,64 +6538,78 @@ tgRouter.patch('/santa/campaigns/:id/wishlist', asyncHandler(async (req, res) =>
 tgRouter.get('/santa/campaigns/:id/exclusions', asyncHandler(async (req, res) => {
   const user = await getOrCreateTgUser(req.tgUser!);
   const campaignId = req.params.id ?? '';
-  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, currentRoundId: true } });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (!await checkIsOrganizer(campaignId, campaign, user.id)) return res.status(403).json({ error: 'Forbidden' });
 
-  // Load individual exclusions + groups + joined participants in parallel
-  const [rawExclusions, groups, joinedParticipants] = await Promise.all([
+  // Load alias map for current round; build participant join-order for pre-draw fallback
+  const exclAliasMap = campaign.currentRoundId
+    ? await loadSantaAliasMap(campaign.currentRoundId)
+    : new Map<string, SantaAliasRecord>();
+
+  // Load individual exclusions + groups + all participants in parallel
+  const [rawExclusions, groups, allCampParticipants] = await Promise.all([
     prisma.santaExclusion.findMany({ where: { campaignId }, orderBy: { createdAt: 'asc' } }),
     prisma.santaExclusionGroup.findMany({
       where: { campaignId },
       orderBy: { createdAt: 'asc' },
       include: {
         members: {
-          include: {
-            user: { select: { id: true, firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
-          },
+          select: { userId: true },
         },
       },
     }),
     prisma.santaParticipant.findMany({
-      where: { campaignId, status: 'JOINED' },
-      select: { userId: true },
+      where: { campaignId },
+      select: { id: true, userId: true, status: true, joinedAt: true },
+      orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
     }),
   ]);
 
-  const joinedUserIds = new Set(joinedParticipants.map(p => p.userId));
+  const joinedUserIds = new Set(allCampParticipants.filter(p => p.status === 'JOINED').map(p => p.userId));
+  // Map userId → participantId for alias lookup
+  const userIdToParticipantId = new Map(allCampParticipants.map(p => [p.userId, p.id]));
+  // Join order map: participantId → 1-based position
+  const exclJoinOrderMap = new Map(allCampParticipants.map((p, i) => [p.id, i + 1]));
 
-  // Resolve display names for individual pair exclusions
-  const allUserIds = new Set([...rawExclusions.map(e => e.userId1), ...rawExclusions.map(e => e.userId2)]);
-  const userRecords = allUserIds.size > 0
-    ? await prisma.user.findMany({
-        where: { id: { in: [...allUserIds] } },
-        select: { id: true, firstName: true, profile: { select: { displayName: true, avatarUrl: true } } },
-      })
-    : [];
-  const userMap = new Map(userRecords.map(u => [u.id, u]));
-  const displayName = (uid: string) => {
-    const u = userMap.get(uid);
-    return u?.profile?.displayName || u?.firstName || uid;
+  const hasRoundAlias = exclAliasMap.size > 0;
+  const resolveForUser = (userId: string) => {
+    const pid = userIdToParticipantId.get(userId);
+    if (!pid) return { alias: 'Участник', emoji: '🎅' };
+    return hasRoundAlias
+      ? resolveSantaAlias(exclAliasMap, pid)
+      : { alias: predrawLabel(exclJoinOrderMap.get(pid) ?? 0), emoji: '🎅' };
   };
+  const resolveForParticipant = (pid: string) => hasRoundAlias
+    ? resolveSantaAlias(exclAliasMap, pid)
+    : { alias: predrawLabel(exclJoinOrderMap.get(pid) ?? 0), emoji: '🎅' };
 
   return res.json({
-    exclusions: rawExclusions.map(e => ({
-      id: e.id,
-      userId1: e.userId1, name1: displayName(e.userId1),
-      userId2: e.userId2, name2: displayName(e.userId2),
-    })),
+    exclusions: rawExclusions.map(e => {
+      const a1 = resolveForUser(e.userId1);
+      const a2 = resolveForUser(e.userId2);
+      return {
+        id: e.id,
+        userId1: e.userId1, name1: a1.alias, emoji1: a1.emoji,
+        userId2: e.userId2, name2: a2.alias, emoji2: a2.emoji,
+      };
+    }),
     groups: groups.map(g => ({
       id: g.id,
       label: g.label,
-      members: g.members.map(m => ({
-        userId: m.userId,
-        displayName: m.user.profile?.displayName || m.user.firstName || m.userId,
-        avatarUrl: m.user.profile?.avatarUrl ?? null,
-        // isStale: true means this member left/was removed; still shown in UI but
-        // excluded from draw expansion by loadExclusionSet(activeUserIds) at draw time
-        isStale: !joinedUserIds.has(m.userId),
-      })),
-      // activeCount: how many members are still JOINED — UI can warn if < 2
+      members: g.members.map(m => {
+        const pid = userIdToParticipantId.get(m.userId) ?? '';
+        const a = resolveForParticipant(pid);
+        return {
+          userId: m.userId,
+          displayName: a.alias,
+          avatarUrl: null,
+          emoji: a.emoji,
+          adjectiveKey: (a as SantaAliasRecord).adjectiveKey ?? null,
+          animalKey: (a as SantaAliasRecord).animalKey ?? null,
+          isStale: !joinedUserIds.has(m.userId),
+        };
+      }),
       activeCount: g.members.filter(m => joinedUserIds.has(m.userId)).length,
     })),
   });
@@ -6751,8 +6963,8 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
     include: {
       receiver: {
         select: {
+          id: true,
           linkedWishlistId: true,
-          user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
         },
       },
       santaItemReservations: {
@@ -6764,13 +6976,13 @@ tgRouter.patch('/santa/campaigns/:id/gift-status', asyncHandler(async (req, res)
 
   await prisma.santaGiftProgress.create({ data: { assignmentId: assignment.id, status: parsed.data.status, note: parsed.data.note } });
 
-  // Return role-aware serialized response — never expose receiverUserId/receiverParticipantId
-  const receiverDisplayName = updated.receiver.user.profile?.displayName || updated.receiver.user.firstName || 'Получатель';
-  const receiverAvatarUrl = updated.receiver.user.profile?.avatarUrl || null;
+  // Return role-aware serialized response — never expose receiverUserId/receiverParticipantId; use alias
+  const giftStatusAliasMap = await loadSantaAliasMap(roundId);
+  const receiverAlias = resolveSantaAlias(giftStatusAliasMap, updated.receiver.id);
   return res.json(serializeAssignment('giver', {
     giftStatus: updated.giftStatus,
     giftNote: updated.giftNote,
-    receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl, hasLinkedWishlist: !!updated.receiver.linkedWishlistId },
+    receiver: { displayName: receiverAlias.alias, avatarUrl: null, emoji: receiverAlias.emoji, adjectiveKey: receiverAlias.adjectiveKey, animalKey: receiverAlias.animalKey, hasLinkedWishlist: !!updated.receiver.linkedWishlistId },
     reservedItems: updated.santaItemReservations.map(r => ({ id: r.itemId, title: r.item.title })),
   }));
 }));
@@ -6872,16 +7084,16 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
   const assignment = await prisma.santaAssignment.findUnique({
     where: { roundId_giverParticipantId: { roundId, giverParticipantId: participant.id } },
     include: {
-      receiver: { select: { linkedWishlistId: true, user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } } },
+      receiver: { select: { id: true, linkedWishlistId: true } },
       santaItemReservations: { select: { itemId: true, item: { select: { title: true } } }, orderBy: { createdAt: 'asc' } },
     },
   });
   if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
 
   const receiverWishlistId = assignment.receiver.linkedWishlistId;
-  // Receiver display name visible to giver: only display name or first name — no userId, no participantId
-  const receiverDisplayName = assignment.receiver.user.profile?.displayName || assignment.receiver.user.firstName || 'Получатель';
-  const receiverAvatarUrl = assignment.receiver.user.profile?.avatarUrl || null;
+  // Use alias — never expose real receiver identity to giver
+  const inboundAliasMap = await loadSantaAliasMap(roundId);
+  const receiverAlias = resolveSantaAlias(inboundAliasMap, assignment.receiver.id);
 
   const myReservedItemIds = new Set(assignment.santaItemReservations.map(r => r.itemId));
   const myReservations = assignment.santaItemReservations.map(r => ({ id: r.itemId, title: r.item.title }));
@@ -6889,7 +7101,7 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
   const giverView = serializeAssignment('giver', {
     giftStatus: assignment.giftStatus,
     giftNote: assignment.giftNote,
-    receiver: { displayName: receiverDisplayName, avatarUrl: receiverAvatarUrl, hasLinkedWishlist: !!receiverWishlistId },
+    receiver: { displayName: receiverAlias.alias, avatarUrl: null, emoji: receiverAlias.emoji, adjectiveKey: receiverAlias.adjectiveKey, animalKey: receiverAlias.animalKey, hasLinkedWishlist: !!receiverWishlistId },
     reservedItems: myReservations,
   });
 
@@ -7143,17 +7355,16 @@ tgRouter.get('/santa/campaigns/:id/assignment', asyncHandler(async (req, res) =>
       giftNote: true,
       receiver: {
         select: {
+          id: true,               // needed for alias lookup
           linkedWishlistId: true,
-          user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
         },
       },
     },
   });
   if (!giverAssignment) return res.json({ ready: false, role: 'giver' });
 
-  const receiverDisplayName = giverAssignment.receiver.user.profile?.displayName
-    || giverAssignment.receiver.user.firstName || 'Получатель';
-  const receiverAvatarUrl = giverAssignment.receiver.user.profile?.avatarUrl || null;
+  const assignmentAliasMap = await loadSantaAliasMap(roundId);
+  const receiverAlias = resolveSantaAlias(assignmentAliasMap, giverAssignment.receiver.id);
 
   return res.json({
     ready: true,
@@ -7161,8 +7372,11 @@ tgRouter.get('/santa/campaigns/:id/assignment', asyncHandler(async (req, res) =>
       giftStatus: giverAssignment.giftStatus,
       giftNote: giverAssignment.giftNote,
       receiver: {
-        displayName: receiverDisplayName,
-        avatarUrl: receiverAvatarUrl,
+        displayName: receiverAlias.alias,
+        avatarUrl: null,
+        emoji: receiverAlias.emoji,
+        adjectiveKey: receiverAlias.adjectiveKey,
+        animalKey: receiverAlias.animalKey,
         hasLinkedWishlist: !!giverAssignment.receiver.linkedWishlistId,
       },
     }),
@@ -7202,7 +7416,7 @@ tgRouter.get('/santa/campaigns/:id/reveal', asyncHandler(async (req, res) => {
       giftNote: true,
       giver: {
         select: {
-          user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+          id: true,   // needed for alias lookup
         },
       },
     },
@@ -7230,19 +7444,20 @@ tgRouter.get('/santa/campaigns/:id/reveal', asyncHandler(async (req, res) => {
     }).catch(() => { /* non-fatal — revealedAt is cosmetic tracking */ });
   }
 
-  const giverName = receiverAssignment.giver.user.profile?.displayName
-    || receiverAssignment.giver.user.firstName || 'Санта';
-  const giverAvatarUrl = receiverAssignment.giver.user.profile?.avatarUrl || null;
+  // Reveal stays alias-only forever — no real identity disclosed, not even post-reveal
+  const aliasMap = await loadSantaAliasMap(roundId);
+  const giverAlias = resolveSantaAlias(aliasMap, receiverAssignment.giver.id);
 
   return res.json({
     revealed: true,
     isFirstReveal,
     giver: {
-      displayName: giverName,
-      avatarUrl: giverAvatarUrl,
-      // giverUserId deliberately omitted — only display layer exposed
+      displayName: giverAlias.alias,   // alias — real name never exposed
+      avatarUrl: null,                  // never expose real photo
+      emoji: giverAlias.emoji,
+      adjectiveKey: giverAlias.adjectiveKey,
+      animalKey: giverAlias.animalKey,
     },
-    // Return giftNote if the giver left one (adds warmth to the reveal moment)
     giftNote: receiverAssignment.giftNote ?? null,
     revealedAt: receiverAssignment.revealedAt?.toISOString() ?? new Date().toISOString(),
   });
@@ -7931,20 +8146,32 @@ function serializeChatMessage(
     };
   },
   myUserId: string,
+  aliasMap: SantaAliasMap,
 ) {
   const isSystem = msg.messageType === 'SYSTEM';
+  // Strip any real-name fields from system message payload (legacy messages may contain displayName)
+  let safePayload: unknown = null;
+  if (isSystem && msg.payload && typeof msg.payload === 'object') {
+    const { displayName: _stripped, avatarUrl: _strippedUrl, ...rest } = msg.payload as Record<string, unknown>;
+    safePayload = rest;
+  } else if (isSystem) {
+    safePayload = msg.payload ?? null;
+  }
+  const senderAlias = resolveSantaAlias(aliasMap, msg.participantId);
   return {
     id: msg.id,
     messageType: msg.messageType as 'USER' | 'SYSTEM',
     body: isSystem ? '' : msg.body,
     systemEvent: isSystem ? (msg.systemEvent ?? null) : null,
-    payload: isSystem ? (msg.payload ?? null) : null,
+    payload: safePayload,
     sender: isSystem
       ? null
       : {
-          displayName:
-            msg.participant.user.profile?.displayName || msg.participant.user.firstName || null || 'Unknown',
-          avatarUrl: msg.participant.user.profile?.avatarUrl ?? null,
+          displayName: senderAlias.alias,
+          avatarUrl: null,
+          emoji: senderAlias.emoji,
+          adjectiveKey: senderAlias.adjectiveKey,
+          animalKey: senderAlias.animalKey,
           isMe: msg.participant.userId === myUserId,
         },
     createdAt: msg.createdAt.toISOString(),
@@ -7983,6 +8210,15 @@ tgRouter.get('/santa/campaigns/:id/chat', asyncHandler(async (req, res) => {
       cursorId = cursorMsg.id;
     }
   }
+
+  // Load alias map for current round (chat always uses aliases)
+  const chatCampaign = await prisma.santaCampaign.findUnique({
+    where: { id: campaignId },
+    select: { currentRoundId: true },
+  });
+  const chatAliasMap = chatCampaign?.currentRoundId
+    ? await loadSantaAliasMap(chatCampaign.currentRoundId)
+    : new Map<string, SantaAliasRecord>();
 
   const messages = await prisma.santaChatMessage.findMany({
     where: {
@@ -8047,7 +8283,7 @@ tgRouter.get('/santa/campaigns/:id/chat', asyncHandler(async (req, res) => {
   }));
 
   return res.json({
-    messages: messages.map(m => serializeChatMessage(m, user.id)),
+    messages: messages.map(m => serializeChatMessage(m, user.id, chatAliasMap)),
     hasMore,
     totalUnread,
     isMuted,
@@ -8068,7 +8304,7 @@ tgRouter.post('/santa/campaigns/:id/chat', asyncHandler(async (req, res) => {
 
   const campaign = await prisma.santaCampaign.findUnique({
     where: { id: campaignId },
-    select: { status: true },
+    select: { status: true, currentRoundId: true },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (!['OPEN', 'LOCKED', 'ACTIVE'].includes(campaign.status)) {
@@ -8102,6 +8338,12 @@ tgRouter.post('/santa/campaigns/:id/chat', asyncHandler(async (req, res) => {
     },
   });
 
+  // Load alias map for response serialization
+  const sendAliasMap = campaign.currentRoundId
+    ? await loadSantaAliasMap(campaign.currentRoundId)
+    : new Map<string, SantaAliasRecord>();
+  const senderAlias = resolveSantaAlias(sendAliasMap, participant.id);
+
   // CHAT_MESSAGE notification — batch, non-blocking, mute-aware
   void (async () => {
     try {
@@ -8113,8 +8355,6 @@ tgRouter.post('/santa/campaigns/:id/chat', asyncHandler(async (req, res) => {
         prisma.santaChatMute.findMany({ where: { campaignId }, select: { participantId: true } }),
       ]);
       const mutedIds = new Set(mutedEntries.map(m => m.participantId));
-      const senderDisplayName =
-        msg.participant.user.profile?.displayName || msg.participant.user.firstName || 'Someone';
 
       const notifData = joinedParticipants
         .filter(p => p.userId !== user.id && !mutedIds.has(p.id))
@@ -8122,7 +8362,7 @@ tgRouter.post('/santa/campaigns/:id/chat', asyncHandler(async (req, res) => {
           campaignId,
           userId: p.userId,
           type: 'CHAT_MESSAGE' as const,
-          payload: { messageId: msg.id, senderName: senderDisplayName },
+          payload: { messageId: msg.id, senderName: senderAlias.alias },
         }));
       if (notifData.length > 0) {
         await prisma.santaNotification.createMany({ data: notifData, skipDuplicates: false });
@@ -8130,7 +8370,7 @@ tgRouter.post('/santa/campaigns/:id/chat', asyncHandler(async (req, res) => {
     } catch {}
   })();
 
-  return res.json({ message: serializeChatMessage(msg, user.id) });
+  return res.json({ message: serializeChatMessage(msg, user.id, sendAliasMap) });
 }));
 
 // POST /tg/santa/campaigns/:id/chat/read — mark messages as read (upsert cursor)
@@ -8233,6 +8473,7 @@ function serializePoll(
   },
   myParticipantId: string,
   isOwner: boolean,
+  aliasMap: SantaAliasMap,
 ) {
   const options = (poll.options as string[]);
   const now = new Date();
@@ -8248,12 +8489,15 @@ function serializePoll(
   const results = options.map((_, idx) => {
     const count = counts[idx] ?? 0;
     const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-    // voters: always null for anonymous polls; show displayNames for public polls
+    // voters: always null for anonymous polls; show aliases (not real names) for public polls
     const voters = poll.isAnonymous
       ? null
       : poll.votes
           .filter(v => v.optionIndex === idx)
-          .map(v => ({ displayName: v.participant.user.profile?.displayName || v.participant.user.firstName || 'Unknown' }));
+          .map(v => {
+            const va = resolveSantaAlias(aliasMap, v.participantId);
+            return { displayName: va.alias, emoji: va.emoji };
+          });
     return { optionIndex: idx, count, percentage, voters };
   });
 
@@ -8296,9 +8540,13 @@ tgRouter.get('/santa/campaigns/:id/polls', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
-  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, currentRoundId: true } });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   const isOwner = campaign.ownerId === user.id;
+
+  const pollAliasMap = campaign.currentRoundId
+    ? await loadSantaAliasMap(campaign.currentRoundId)
+    : new Map<string, SantaAliasRecord>();
 
   const polls = await prisma.santaPoll.findMany({
     where: { campaignId },
@@ -8306,7 +8554,7 @@ tgRouter.get('/santa/campaigns/:id/polls', asyncHandler(async (req, res) => {
     select: POLL_SELECT,
   });
 
-  return res.json({ polls: polls.map(p => serializePoll(p, participant.id, isOwner)) });
+  return res.json({ polls: polls.map(p => serializePoll(p, participant.id, isOwner, pollAliasMap)) });
 }));
 
 // POST /tg/santa/campaigns/:id/polls — create poll (owner only, campaign ACTIVE)
@@ -8325,7 +8573,7 @@ tgRouter.post('/santa/campaigns/:id/polls', asyncHandler(async (req, res) => {
 
   const campaign = await prisma.santaCampaign.findUnique({
     where: { id: campaignId },
-    select: { ownerId: true, status: true },
+    select: { ownerId: true, status: true, currentRoundId: true },
   });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (campaign.status !== 'ACTIVE') return res.status(409).json({ error: 'Polls can only be created in ACTIVE campaigns' });
@@ -8369,7 +8617,10 @@ tgRouter.post('/santa/campaigns/:id/polls', asyncHandler(async (req, res) => {
     } catch {}
   })();
 
-  return res.status(201).json({ poll: serializePoll(poll, myParticipant.id, true) });
+  const createPollAliasMap = campaign.currentRoundId
+    ? await loadSantaAliasMap(campaign.currentRoundId)
+    : new Map<string, SantaAliasRecord>();
+  return res.status(201).json({ poll: serializePoll(poll, myParticipant.id, true, createPollAliasMap) });
 }));
 
 // POST /tg/santa/campaigns/:id/polls/:pollId/vote — vote on a poll
@@ -8411,10 +8662,13 @@ tgRouter.post('/santa/campaigns/:id/polls/:pollId/vote', asyncHandler(async (req
 
   // Re-fetch poll with updated votes
   const updatedPoll = await prisma.santaPoll.findUnique({ where: { id: pollId }, select: POLL_SELECT });
-  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, currentRoundId: true } });
   const isOwner = campaign?.ownerId === user.id;
+  const votePollAliasMap = campaign?.currentRoundId
+    ? await loadSantaAliasMap(campaign.currentRoundId)
+    : new Map<string, SantaAliasRecord>();
 
-  return res.json({ poll: serializePoll(updatedPoll!, participant.id, isOwner) });
+  return res.json({ poll: serializePoll(updatedPoll!, participant.id, isOwner, votePollAliasMap) });
 }));
 
 // POST /tg/santa/campaigns/:id/polls/:pollId/close — close a poll (owner only)
@@ -8424,7 +8678,7 @@ tgRouter.post('/santa/campaigns/:id/polls/:pollId/close', asyncHandler(async (re
   const pollId = req.params.pollId ?? '';
   if (!campaignId || !pollId) return res.status(400).json({ error: 'Missing params' });
 
-  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, currentRoundId: true } });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (!await checkIsOrganizer(campaignId, campaign, user.id)) return res.status(403).json({ error: 'Only organizers can close polls' });
 
@@ -8441,8 +8695,11 @@ tgRouter.post('/santa/campaigns/:id/polls/:pollId/close', asyncHandler(async (re
     select: { id: true },
   });
 
+  const closePollAliasMap = campaign.currentRoundId
+    ? await loadSantaAliasMap(campaign.currentRoundId)
+    : new Map<string, SantaAliasRecord>();
   const updatedPoll = await prisma.santaPoll.findUnique({ where: { id: pollId }, select: POLL_SELECT });
-  return res.json({ poll: serializePoll(updatedPoll!, myParticipant?.id ?? '', true) });
+  return res.json({ poll: serializePoll(updatedPoll!, myParticipant?.id ?? '', true, closePollAliasMap) });
 }));
 
 // ─── Batch 5.3: Roles + Organizer Controls + Exit Request Flow ────────────────
@@ -8509,10 +8766,16 @@ tgRouter.get('/santa/campaigns/:id/organizer/summary', asyncHandler(async (req, 
       joinedAt: true,
       leftAt: true,
       linkedWishlistId: true,
-      user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } },
     },
     orderBy: { joinedAt: 'asc' },
   });
+
+  // Load alias map; build join-order for pre-draw fallback
+  const summaryAliasMap = campaign.currentRoundId
+    ? await loadSantaAliasMap(campaign.currentRoundId)
+    : new Map<string, SantaAliasRecord>();
+  const summaryJoinOrderMap = new Map(participants.map((p, i) => [p.id, i + 1]));
+  const hasSummaryAlias = summaryAliasMap.size > 0;
 
   // Assignment progress for current round
   let giftProgress: {
@@ -8550,24 +8813,31 @@ tgRouter.get('/santa/campaigns/:id/organizer/summary', asyncHandler(async (req, 
       participantId: true,
       reason: true,
       createdAt: true,
-      participant: {
-        select: { userId: true, user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } },
-      },
     },
     orderBy: { createdAt: 'asc' },
   });
 
-  const formatParticipant = (p: typeof participants[number]) => ({
-    id: p.id,
-    userId: p.userId,
-    status: p.status,
-    role: p.role,
-    joinedAt: p.joinedAt.toISOString(),
-    leftAt: p.leftAt?.toISOString() ?? null,
-    displayName: p.user.profile?.displayName || p.user.firstName || p.userId,
-    avatarUrl: p.user.profile?.avatarUrl ?? null,
-    hasLinkedWishlist: !!p.linkedWishlistId,
-  });
+  const resolveParticipantAlias = (pid: string) => hasSummaryAlias
+    ? resolveSantaAlias(summaryAliasMap, pid)
+    : { alias: predrawLabel(summaryJoinOrderMap.get(pid) ?? 0), emoji: '🎅', adjectiveKey: '', animalKey: '' };
+
+  const formatParticipant = (p: typeof participants[number]) => {
+    const a = resolveParticipantAlias(p.id);
+    return {
+      id: p.id,
+      userId: p.userId,
+      status: p.status,
+      role: p.role,
+      joinedAt: p.joinedAt.toISOString(),
+      leftAt: p.leftAt?.toISOString() ?? null,
+      displayName: a.alias,
+      avatarUrl: null,
+      emoji: a.emoji,
+      adjectiveKey: a.adjectiveKey,
+      animalKey: a.animalKey,
+      hasLinkedWishlist: !!p.linkedWishlistId,
+    };
+  };
 
   return res.json({
     campaign: {
@@ -8577,15 +8847,18 @@ tgRouter.get('/santa/campaigns/:id/organizer/summary', asyncHandler(async (req, 
     },
     participants: participants.map(formatParticipant),
     giftProgress,
-    pendingExitRequests: pendingExitRequests.map(r => ({
-      id: r.id,
-      participantId: r.participantId,
-      userId: r.participant.userId,
-      displayName: r.participant.user.profile?.displayName || r.participant.user.firstName || r.participant.userId,
-      avatarUrl: r.participant.user.profile?.avatarUrl ?? null,
-      reason: r.reason ?? null,
-      createdAt: r.createdAt.toISOString(),
-    })),
+    pendingExitRequests: pendingExitRequests.map(r => {
+      const a = resolveParticipantAlias(r.participantId);
+      return {
+        id: r.id,
+        participantId: r.participantId,
+        displayName: a.alias,
+        avatarUrl: null,
+        emoji: a.emoji,
+        reason: r.reason ?? null,
+        createdAt: r.createdAt.toISOString(),
+      };
+    }),
   });
 }));
 
@@ -8673,9 +8946,14 @@ tgRouter.get('/santa/campaigns/:id/exit-requests', asyncHandler(async (req, res)
   const user = await getOrCreateTgUser(req.tgUser!);
   const campaignId = req.params.id ?? '';
 
-  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true } });
+  const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { ownerId: true, currentRoundId: true } });
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   if (!await checkIsOrganizer(campaignId, campaign, user.id)) return res.status(403).json({ error: 'Forbidden' });
+
+  // Load alias map and join-order for alias resolution
+  const exitAliasMap = campaign.currentRoundId
+    ? await loadSantaAliasMap(campaign.currentRoundId)
+    : new Map<string, SantaAliasRecord>();
 
   const requests = await prisma.santaExitRequest.findMany({
     where: { campaignId },
@@ -8688,26 +8966,40 @@ tgRouter.get('/santa/campaigns/:id/exit-requests', asyncHandler(async (req, res)
       resolvedAt: true,
       createdAt: true,
       participant: {
-        select: { userId: true, status: true, user: { select: { firstName: true, profile: { select: { displayName: true, avatarUrl: true } } } } },
+        select: { userId: true, status: true, joinedAt: true },
       },
     },
     orderBy: { createdAt: 'desc' },
   });
 
+  // Build join-order for pre-draw fallback
+  const allParticipants = await prisma.santaParticipant.findMany({
+    where: { campaignId },
+    select: { id: true, joinedAt: true },
+    orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
+  });
+  const exitJoinOrderMap = new Map(allParticipants.map((p, i) => [p.id, i + 1]));
+
   return res.json({
-    exitRequests: requests.map(r => ({
-      id: r.id,
-      participantId: r.participantId,
-      userId: r.participant.userId,
-      displayName: r.participant.user.profile?.displayName || r.participant.user.firstName || r.participant.userId,
-      avatarUrl: r.participant.user.profile?.avatarUrl ?? null,
-      participantStatus: r.participant.status,
-      roundId: r.roundId,
-      reason: r.reason ?? null,
-      status: r.status,
-      resolvedAt: r.resolvedAt?.toISOString() ?? null,
-      createdAt: r.createdAt.toISOString(),
-    })),
+    exitRequests: requests.map(r => {
+      const hasRoundAlias = exitAliasMap.size > 0;
+      const pAlias = hasRoundAlias
+        ? resolveSantaAlias(exitAliasMap, r.participantId)
+        : { alias: predrawLabel(exitJoinOrderMap.get(r.participantId) ?? 0), emoji: '🎅', adjectiveKey: '', animalKey: '' };
+      return {
+        id: r.id,
+        participantId: r.participantId,
+        displayName: pAlias.alias,      // alias instead of real name
+        avatarUrl: null,                  // never expose real photo
+        emoji: pAlias.emoji,
+        participantStatus: r.participant.status,
+        roundId: r.roundId,
+        reason: r.reason ?? null,
+        status: r.status,
+        resolvedAt: r.resolvedAt?.toISOString() ?? null,
+        createdAt: r.createdAt.toISOString(),
+      };
+    }),
   });
 }));
 
@@ -8858,6 +9150,48 @@ app.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.error('[startup] SantaGlobalConfig upsert failed:', err);
   });
+
+  // Backfill: generate aliases for all existing rounds that have none yet.
+  // Idempotent — skipDuplicates; non-blocking; never fails startup.
+  void (async () => {
+    try {
+      const rounds = await prisma.santaRound.findMany({
+        where: {
+          drawStatus: 'DONE',
+          aliases: { none: {} },
+        },
+        select: {
+          id: true,
+          assignments: {
+            select: { giverParticipantId: true, receiverParticipantId: true },
+          },
+        },
+      });
+      for (const round of rounds) {
+        const participantIds = [
+          ...new Set([
+            ...round.assignments.map(a => a.giverParticipantId),
+            ...round.assignments.map(a => a.receiverParticipantId),
+          ]),
+        ];
+        if (participantIds.length === 0) continue;
+        const aliasData = generateSantaAliases(round.id, participantIds);
+        await prisma.santaParticipantAlias.createMany({
+          data: aliasData.map(a => ({ roundId: round.id, ...a })),
+          skipDuplicates: true,
+        });
+        // eslint-disable-next-line no-console
+        console.log(`[startup] backfilled ${aliasData.length} aliases for round ${round.id}`);
+      }
+      if (rounds.length > 0) {
+        // eslint-disable-next-line no-console
+        console.log(`[startup] Santa alias backfill complete: ${rounds.length} round(s) processed`);
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[startup] Santa alias backfill failed (non-fatal):', err);
+    }
+  })();
 });
 
 // ─── Uncaught exception / rejection alerts ────────────────────────────────────
