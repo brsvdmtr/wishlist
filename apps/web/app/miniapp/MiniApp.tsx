@@ -1598,6 +1598,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [itemReorderSaving, setItemReorderSaving] = useState(false);
   const [itemReorderDragIdx, setItemReorderDragIdx] = useState<number | null>(null);
 
+  // Home tab swipe gesture tracking
+  const homeSwipeStartX = useRef<number | null>(null);
+  const homeSwipeStartY = useRef<number | null>(null);
+
   // Guest forms
   const [reservingItem, setReservingItem] = useState<GuestItem | null>(null);
   const [guestName, setGuestName] = useState('');
@@ -4263,7 +4267,37 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           OWNER — MY WISHLISTS
           ══════════════════════════════════════════════ */}
       {screen === 'my-wishlists' && (
-        <div style={{ padding: '16px 20px 120px' }}>
+        <div
+          style={{ padding: '16px 20px 120px' }}
+          onTouchStart={(e) => {
+            if (reorderMode || itemReorderMode) return;
+            const target = e.target as HTMLElement;
+            if (target.closest('button, a, input, textarea')) return;
+            const t = e.touches[0];
+            if (t) { homeSwipeStartX.current = t.clientX; homeSwipeStartY.current = t.clientY; }
+          }}
+          onTouchEnd={(e) => {
+            if (homeSwipeStartX.current === null) return;
+            if (reorderMode || itemReorderMode) { homeSwipeStartX.current = null; return; }
+            const t = e.changedTouches[0];
+            if (!t) { homeSwipeStartX.current = null; return; }
+            const dx = t.clientX - homeSwipeStartX.current;
+            const dy = t.clientY - (homeSwipeStartY.current ?? t.clientY);
+            homeSwipeStartX.current = null; homeSwipeStartY.current = null;
+            if (Math.abs(dx) < 60) return;
+            if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
+            const tabs: HomeTab[] = ['wishlists', 'wishes', 'reservations'];
+            const idx = tabs.indexOf(homeTab);
+            if (dx < 0 && idx < tabs.length - 1) {
+              const next = tabs[idx + 1]!;
+              setHomeTab(next);
+              if (next === 'wishes') void loadAllItems();
+              else if (next === 'reservations' && reservations.length === 0 && santaReservationItems.length === 0) void loadReservations();
+            } else if (dx > 0 && idx > 0) {
+              setHomeTab(tabs[idx - 1]!);
+            }
+          }}
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {/* Avatar → Profile */}
