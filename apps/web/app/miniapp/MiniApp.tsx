@@ -735,6 +735,7 @@ function renderSantaAlias(adjectiveKey: string, animalKey: string, locale: strin
  * SantaAvatar — anonymous emoji avatar for Secret Santa.
  * Color is derived deterministically from the alias string (stable per round).
  * Never shows real profile photos. Uses animal emoji + color circle.
+ * Pass hat={true} during season for the festive hat overlay.
  */
 function santaAliasHue(alias: string): number {
   let h = 2166136261;
@@ -745,22 +746,30 @@ function santaAliasHue(alias: string): number {
   return (h % 36) * 10; // 36 hues × 10° step
 }
 
-function SantaAvatar({ alias, emoji, size, border }: {
+function SantaAvatar({ alias, emoji, size, border, hat }: {
   alias: string;
   emoji: string;
   size: number;
   border?: string;
+  hat?: boolean;
 }) {
   const hue = santaAliasHue(alias);
-  return (
+  const circle = (
     <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      width: size, height: size, borderRadius: '50%',
       background: `hsl(${hue}, 55%, 82%)`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: Math.round(size * 0.55),
       ...(border ? { border } : {}),
     }}>
       {emoji || '🎅'}
+    </div>
+  );
+  if (!hat) return circle;
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      {circle}
+      <SantaHatOverlay size={size} />
     </div>
   );
 }
