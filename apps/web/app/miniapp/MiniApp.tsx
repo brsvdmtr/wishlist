@@ -731,6 +731,116 @@ function renderSantaAlias(adjectiveKey: string, animalKey: string, locale: strin
   return `${animal.gender === 'f' ? adj.ru_f : adj.ru_m} ${animal.ru}`;
 }
 
+/**
+ * SantaAvatar — anonymous emoji avatar for Secret Santa.
+ * Color is derived deterministically from the alias string (stable per round).
+ * Never shows real profile photos. Uses animal emoji + color circle.
+ */
+function santaAliasHue(alias: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < alias.length; i++) {
+    h ^= alias.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return (h % 36) * 10; // 36 hues × 10° step
+}
+
+function SantaAvatar({ alias, emoji, size, border }: {
+  alias: string;
+  emoji: string;
+  size: number;
+  border?: string;
+}) {
+  const hue = santaAliasHue(alias);
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: `hsl(${hue}, 55%, 82%)`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: Math.round(size * 0.55),
+      ...(border ? { border } : {}),
+    }}>
+      {emoji || '🎅'}
+    </div>
+  );
+}
+
+// Frontend corpus for locale-aware alias rendering
+// Keys must match the API corpus exactly
+const SANTA_ADJ: Record<string, { ru_m: string; ru_f: string; en: string }> = {
+  sleepy:     { ru_m: 'Сонный',      ru_f: 'Сонная',      en: 'Sleepy' },
+  nimble:     { ru_m: 'Ловкий',      ru_f: 'Ловкая',       en: 'Nimble' },
+  quiet:      { ru_m: 'Тихий',       ru_f: 'Тихая',        en: 'Quiet' },
+  northern:   { ru_m: 'Северный',    ru_f: 'Северная',     en: 'Northern' },
+  cheerful:   { ru_m: 'Весёлый',     ru_f: 'Весёлая',      en: 'Cheerful' },
+  cunning:    { ru_m: 'Хитрый',      ru_f: 'Хитрая',       en: 'Cunning' },
+  kind:       { ru_m: 'Добрый',      ru_f: 'Добрая',       en: 'Kind' },
+  swift:      { ru_m: 'Быстрый',     ru_f: 'Быстрая',      en: 'Swift' },
+  brave:      { ru_m: 'Смелый',      ru_f: 'Смелая',       en: 'Brave' },
+  smart:      { ru_m: 'Умный',       ru_f: 'Умная',        en: 'Smart' },
+  gentle:     { ru_m: 'Нежный',      ru_f: 'Нежная',       en: 'Gentle' },
+  fluffy:     { ru_m: 'Пушистый',    ru_f: 'Пушистая',     en: 'Fluffy' },
+  bright:     { ru_m: 'Яркий',       ru_f: 'Яркая',        en: 'Bright' },
+  curious:    { ru_m: 'Любопытный',  ru_f: 'Любопытная',   en: 'Curious' },
+  patient:    { ru_m: 'Терпеливый',  ru_f: 'Терпеливая',   en: 'Patient' },
+  playful:    { ru_m: 'Игривый',     ru_f: 'Игривая',      en: 'Playful' },
+  cozy:       { ru_m: 'Уютный',      ru_f: 'Уютная',       en: 'Cozy' },
+  peaceful:   { ru_m: 'Спокойный',   ru_f: 'Спокойная',    en: 'Peaceful' },
+  golden:     { ru_m: 'Золотой',     ru_f: 'Золотая',      en: 'Golden' },
+  mysterious: { ru_m: 'Загадочный',  ru_f: 'Загадочная',   en: 'Mysterious' },
+  lucky:      { ru_m: 'Удачливый',   ru_f: 'Удачливая',    en: 'Lucky' },
+  energetic:  { ru_m: 'Бодрый',      ru_f: 'Бодрая',       en: 'Energetic' },
+  wise:       { ru_m: 'Мудрый',      ru_f: 'Мудрая',       en: 'Wise' },
+  rare:       { ru_m: 'Редкий',      ru_f: 'Редкая',       en: 'Rare' },
+  honest:     { ru_m: 'Честный',     ru_f: 'Честная',      en: 'Honest' },
+  courageous: { ru_m: 'Отважный',    ru_f: 'Отважная',     en: 'Courageous' },
+  modest:     { ru_m: 'Скромный',    ru_f: 'Скромная',     en: 'Modest' },
+  wonderful:  { ru_m: 'Чудесный',    ru_f: 'Чудесная',     en: 'Wonderful' },
+  generous:   { ru_m: 'Щедрый',      ru_f: 'Щедрая',       en: 'Generous' },
+  light:      { ru_m: 'Лёгкий',      ru_f: 'Лёгкая',       en: 'Light' },
+};
+const SANTA_ANIMAL: Record<string, { ru: string; gender: 'm' | 'f'; en: string }> = {
+  giraffe:    { ru: 'жираф',      gender: 'm', en: 'Giraffe' },
+  quokka:     { ru: 'квокка',     gender: 'f', en: 'Quokka' },
+  manul:      { ru: 'манул',      gender: 'm', en: 'Pallas Cat' },
+  penguin:    { ru: 'пингвин',    gender: 'm', en: 'Penguin' },
+  fox:        { ru: 'лиса',       gender: 'f', en: 'Fox' },
+  raccoon:    { ru: 'енот',       gender: 'm', en: 'Raccoon' },
+  bear:       { ru: 'медведь',    gender: 'm', en: 'Bear' },
+  squirrel:   { ru: 'белка',      gender: 'f', en: 'Squirrel' },
+  hedgehog:   { ru: 'ёж',         gender: 'm', en: 'Hedgehog' },
+  otter:      { ru: 'выдра',      gender: 'f', en: 'Otter' },
+  panda:      { ru: 'панда',      gender: 'f', en: 'Panda' },
+  koala:      { ru: 'коала',      gender: 'm', en: 'Koala' },
+  capybara:   { ru: 'капибара',   gender: 'f', en: 'Capybara' },
+  sloth:      { ru: 'ленивец',    gender: 'm', en: 'Sloth' },
+  flamingo:   { ru: 'фламинго',   gender: 'm', en: 'Flamingo' },
+  lemur:      { ru: 'лемур',      gender: 'm', en: 'Lemur' },
+  alpaca:     { ru: 'альпака',    gender: 'f', en: 'Alpaca' },
+  axolotl:    { ru: 'аксолотль',  gender: 'm', en: 'Axolotl' },
+  narwhal:    { ru: 'нарвал',     gender: 'm', en: 'Narwhal' },
+  platypus:   { ru: 'утконос',    gender: 'm', en: 'Platypus' },
+  meerkat:    { ru: 'сурикат',    gender: 'm', en: 'Meerkat' },
+  chinchilla: { ru: 'шиншилла',   gender: 'f', en: 'Chinchilla' },
+  tapir:      { ru: 'тапир',      gender: 'm', en: 'Tapir' },
+  wombat:     { ru: 'вомбат',     gender: 'm', en: 'Wombat' },
+  marmot:     { ru: 'сурок',      gender: 'm', en: 'Marmot' },
+  toucan:     { ru: 'тукан',      gender: 'm', en: 'Toucan' },
+  armadillo:  { ru: 'броненосец', gender: 'm', en: 'Armadillo' },
+  cassowary:  { ru: 'казуар',     gender: 'm', en: 'Cassowary' },
+  lynx:       { ru: 'рысь',       gender: 'f', en: 'Lynx' },
+  okapi:      { ru: 'окапи',      gender: 'm', en: 'Okapi' },
+};
+
+/** Render alias in user's locale from adjectiveKey + animalKey */
+function renderSantaAlias(adjectiveKey: string, animalKey: string, locale: string): string {
+  const adj = SANTA_ADJ[adjectiveKey];
+  const animal = SANTA_ANIMAL[animalKey];
+  if (!adj || !animal) return locale === 'en' ? 'Participant' : 'Участник';
+  if (locale === 'en') return `${adj.en} ${animal.en}`;
+  return `${animal.gender === 'f' ? adj.ru_f : adj.ru_m} ${animal.ru}`;
+}
+
 // ═══════════════════════════════════════════════════════
 // PRO UPSELL SYSTEM
 // ═══════════════════════════════════════════════════════
