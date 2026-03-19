@@ -536,6 +536,40 @@ function SantaAvatar({ alias, emoji, size, border }: {
   );
 }
 
+// ── Seasonal snowflake overlay ──────────────────────────────────────────────
+// Hardcoded positions/timings (no Math.random) so re-renders don't reshuffle
+// the animation.  `pointer-events:none` everywhere — purely decorative.
+const SNOW_FLAKES = [
+  { left: '6%',  delay: '0s',    dur: '4.4s', op: 0.55, size: 11 },
+  { left: '19%', delay: '1.5s',  dur: '3.7s', op: 0.40, size: 9  },
+  { left: '34%', delay: '0.8s',  dur: '5.1s', op: 0.50, size: 12 },
+  { left: '50%', delay: '2.2s',  dur: '4.0s', op: 0.35, size: 10 },
+  { left: '65%', delay: '0.4s',  dur: '4.8s', op: 0.60, size: 11 },
+  { left: '79%', delay: '1.9s',  dur: '3.9s', op: 0.45, size: 9  },
+  { left: '92%', delay: '1.2s',  dur: '5.3s', op: 0.38, size: 10 },
+] as const;
+
+function SnowflakeOverlay({ height = 72 }: { height?: number }) {
+  return (
+    <div style={{
+      position: 'absolute', left: 0, right: 0, top: 0, height,
+      overflow: 'hidden', pointerEvents: 'none', userSelect: 'none', zIndex: 0,
+    }}>
+      {SNOW_FLAKES.map((f, i) => (
+        <span key={i} className="snowflake" style={{
+          position: 'absolute',
+          left: f.left, top: -12,
+          fontSize: f.size,
+          opacity: f.op,
+          color: 'rgba(180,220,245,.9)',
+          lineHeight: 1,
+          animation: `snowfall ${f.dur} ease-in ${f.delay} infinite`,
+        }}>❄</span>
+      ))}
+    </div>
+  );
+}
+
 // Frontend corpus for locale-aware alias rendering
 // Keys must match the API corpus exactly
 const SANTA_ADJ: Record<string, { ru_m: string; ru_f: string; en: string }> = {
@@ -4393,6 +4427,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
            JS and is cheaper.  "none" here applies to html/body — the scroll
            container itself gets "contain" via inline style above. */
         html, body { overscroll-behavior: none; }
+        /* ── Seasonal snowflake animation ─────────────────────────────────────
+           Only transform + opacity → compositor-thread only, no layout/paint. */
+        @keyframes snowfall {
+          0%   { transform: translateY(-10px) rotate(0deg);   opacity: 0;   }
+          12%  { opacity: 1; }
+          88%  { opacity: 1; }
+          100% { transform: translateY(80px)  rotate(200deg); opacity: 0;   }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .snowflake { animation: none !important; opacity: 0 !important; }
+        }
       `}</style>
 
       {/* ── LOADING ── */}
@@ -4490,21 +4535,36 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          {/* ── Seasonal snowflakes — header area only, purely decorative ── */}
+          <div style={{ position: 'relative' }}>
+            {santaSeason?.inSeason && <SnowflakeOverlay height={72} />}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, position: 'relative', zIndex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {/* Avatar → Profile */}
-              <button
-                onClick={() => { loadProfile(); setScreen('profile'); }}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
-                aria-label={t('profile_title', locale)}
-              >
-                <UserAvatar
-                  avatarUrl={profileData?.avatarUrl}
-                  name={resolveOwnerName(profileData, tgUser)}
-                  size={36}
-                  accent={C.accent}
-                />
-              </button>
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <button
+                  onClick={() => { loadProfile(); setScreen('profile'); }}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'block' }}
+                  aria-label={t('profile_title', locale)}
+                >
+                  <UserAvatar
+                    avatarUrl={profileData?.avatarUrl}
+                    name={resolveOwnerName(profileData, tgUser)}
+                    size={36}
+                    accent={C.accent}
+                  />
+                </button>
+                {/* Santa hat — static seasonal badge, non-interactive */}
+                {santaSeason?.inSeason && (
+                  <span style={{
+                    position: 'absolute', top: -8, right: -9,
+                    fontSize: 16, lineHeight: 1,
+                    pointerEvents: 'none', userSelect: 'none',
+                    transform: 'rotate(15deg)',
+                    filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.25))',
+                  }}>🎩</span>
+                )}
+              </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>WishBoard</h1>
@@ -4534,6 +4594,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
           </div>
+          </div>{/* end seasonal wrapper */}
 
           {/* ─── Primary home nav: Вишлисты | Желания | Мои брони ─── */}
           {(() => {
@@ -7607,7 +7668,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const SettingsSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>{title}</div>
-            <div style={{ background: C.card, borderRadius: 16, padding: '4px 16px' }}>{children}</div>
+            <div style={{
+              background: santaSeason?.inSeason
+                ? `linear-gradient(to bottom, rgba(160,210,240,.09) 0%, transparent 10px), ${C.card}`
+                : C.card,
+              borderRadius: 16, padding: '4px 16px',
+              ...(santaSeason?.inSeason ? { borderTop: '1px solid rgba(180,220,245,.18)' } : {}),
+            }}>{children}</div>
           </div>
         );
 
@@ -9390,102 +9457,138 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ══════════════════════════════════════════════
           SECRET SANTA — HUB
           ══════════════════════════════════════════════ */}
-      {screen === 'santa-hub' && (
-        <div style={{ padding: '16px 20px 120px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>🎅 {t('santa_hub_title', locale)}</h1>
-            {santaSeason?.canCreate && (
-              <button
-                onClick={() => {
-                  setSantaCreateTitle(''); setSantaCreateDesc('');
-                  setSantaCreateMinBudget(''); setSantaCreateMaxBudget('');
-                  setScreen('santa-create');
-                }}
-                style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 600, padding: '8px 16px', cursor: 'pointer' }}
-              >
-                {t('santa_home_create_btn', locale)}
-              </button>
+      {screen === 'santa-hub' && (() => {
+        // ── Campaign grouping: active vs finished ──────────────────────────
+        const FINISHED_STATUSES = new Set<string>(['COMPLETED', 'CANCELLED']);
+        type HubCampaign = (typeof santaCampaigns.owned)[number];
+        const withRole = (arr: HubCampaign[], role: 'organizer' | 'participant') =>
+          arr.map(c => ({ ...c, _role: role }));
+
+        const owned  = withRole(santaCampaigns.owned,  'organizer');
+        const joined = withRole(santaCampaigns.joined, 'participant');
+        const all    = [...owned, ...joined];
+
+        const activeCamps   = all.filter(c => !FINISHED_STATUSES.has(c.status));
+        const finishedCamps = all.filter(c =>  FINISHED_STATUSES.has(c.status));
+
+        const openCampaign = async (id: string) => {
+          const res = await tgFetch(`/tg/santa/campaigns/${id}`);
+          if (res.ok) {
+            const json = await res.json() as SantaCampaignDetail;
+            setCurrentSantaCampaign(json);
+            setScreen('santa-campaign');
+          }
+        };
+
+        const CampaignCard = ({ c, dimmed = false }: { c: HubCampaign & { _role: 'organizer' | 'participant' }; dimmed?: boolean }) => (
+          <button
+            key={c.id}
+            onClick={() => void openCampaign(c.id)}
+            style={{
+              background: C.card, border: 'none', borderRadius: 14,
+              padding: '14px 16px', cursor: 'pointer', textAlign: 'left',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              opacity: dimmed ? 0.65 : 1,
+              transition: 'opacity 0.15s',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 3 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{c.title}</span>
+                {/* Role pill */}
+                <span style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+                  padding: '2px 6px', borderRadius: 5,
+                  background: c._role === 'organizer' ? `${C.accent}18` : `${C.textMuted}14`,
+                  color: c._role === 'organizer' ? C.accent : C.textMuted,
+                  flexShrink: 0,
+                }}>
+                  {c._role === 'organizer'
+                    ? (locale === 'ru' ? 'Организатор' : 'Organizer')
+                    : (locale === 'ru' ? 'Участник'    : 'Member')}
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: C.textMuted }}>
+                {t('santa_campaign_participants', locale, { count: c.participantCount })}
+                {' · '}
+                <span style={dimmed ? { fontWeight: 600 } : {}}>
+                  {t(`santa_campaign_status_${c.status.toLowerCase()}` as never, locale) || c.status}
+                </span>
+              </div>
+            </div>
+            <div style={{ color: C.textMuted, fontSize: 18, flexShrink: 0, paddingLeft: 8 }}>›</div>
+          </button>
+        );
+
+        return (
+          <div style={{ padding: '16px 20px 120px' }}>
+            {/* ── Header with optional snowflakes ── */}
+            <div style={{ position: 'relative', marginBottom: 24 }}>
+              {santaSeason?.inSeason && <SnowflakeOverlay height={60} />}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
+                <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>🎅 {t('santa_hub_title', locale)}</h1>
+                {santaSeason?.canCreate && (
+                  <button
+                    onClick={() => {
+                      setSantaCreateTitle(''); setSantaCreateDesc('');
+                      setSantaCreateMinBudget(''); setSantaCreateMaxBudget('');
+                      setScreen('santa-create');
+                    }}
+                    style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 600, padding: '8px 16px', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    {t('santa_home_create_btn', locale)}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* ── Loading ── */}
+            {santaCampaignsLoading && (
+              <div style={{ color: C.textMuted, fontSize: 14, textAlign: 'center', padding: 40 }}>{t('loading', locale)}</div>
+            )}
+
+            {/* ── Empty state ── */}
+            {!santaCampaignsLoading && all.length === 0 && (
+              <div style={{ background: C.card, borderRadius: 16, padding: 24, textAlign: 'center' }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🎁</div>
+                <div style={{ color: C.textMuted, fontSize: 14 }}>{t('santa_home_empty', locale)}</div>
+                {santaSeason?.canCreate && (
+                  <button
+                    onClick={() => setScreen('santa-create')}
+                    style={{ marginTop: 16, background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 15, fontWeight: 600, padding: '12px 24px', cursor: 'pointer' }}
+                  >
+                    {t('santa_home_create_btn', locale)}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ── Active campaigns ── */}
+            {!santaCampaignsLoading && activeCamps.length > 0 && (
+              <div style={{ marginBottom: finishedCamps.length > 0 ? 28 : 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {locale === 'ru' ? 'Активные' : 'Active'}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {activeCamps.map(c => <CampaignCard key={c.id} c={c} />)}
+                </div>
+              </div>
+            )}
+
+            {/* ── Finished campaigns ── */}
+            {!santaCampaignsLoading && finishedCamps.length > 0 && (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {locale === 'ru' ? 'Завершённые' : 'Finished'}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {finishedCamps.map(c => <CampaignCard key={c.id} c={c} dimmed />)}
+                </div>
+              </div>
             )}
           </div>
-
-          {santaCampaignsLoading && (
-            <div style={{ color: C.textMuted, fontSize: 14, textAlign: 'center', padding: 40 }}>{t('loading', locale)}</div>
-          )}
-
-          {!santaCampaignsLoading && santaCampaigns.owned.length === 0 && santaCampaigns.joined.length === 0 && (
-            <div style={{ background: C.card, borderRadius: 16, padding: 24, textAlign: 'center' }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🎁</div>
-              <div style={{ color: C.textMuted, fontSize: 14 }}>{t('santa_home_empty', locale)}</div>
-              {santaSeason?.canCreate && (
-                <button
-                  onClick={() => setScreen('santa-create')}
-                  style={{ marginTop: 16, background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 15, fontWeight: 600, padding: '12px 24px', cursor: 'pointer' }}
-                >
-                  {t('santa_home_create_btn', locale)}
-                </button>
-              )}
-            </div>
-          )}
-
-          {santaCampaigns.owned.length > 0 && (
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('santa_hub_owned', locale)}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {santaCampaigns.owned.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={async () => {
-                      const res = await tgFetch(`/tg/santa/campaigns/${c.id}`);
-                      if (res.ok) {
-                        const json = await res.json() as SantaCampaignDetail;
-                        setCurrentSantaCampaign(json);
-                        setScreen('santa-campaign');
-                      }
-                    }}
-                    style={{ background: C.card, border: 'none', borderRadius: 14, padding: '14px 16px', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{c.title}</div>
-                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{t('santa_campaign_participants', locale, { count: c.participantCount })} · {t(`santa_campaign_status_${c.status.toLowerCase()}` as never, locale) || c.status}</div>
-                    </div>
-                    <div style={{ color: C.textMuted, fontSize: 18 }}>›</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {santaCampaigns.joined.length > 0 && (
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>{t('santa_hub_joined', locale)}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {santaCampaigns.joined.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={async () => {
-                      const res = await tgFetch(`/tg/santa/campaigns/${c.id}`);
-                      if (res.ok) {
-                        const json = await res.json() as SantaCampaignDetail;
-                        setCurrentSantaCampaign(json);
-                        setScreen('santa-campaign');
-                      }
-                    }}
-                    style={{ background: C.card, border: 'none', borderRadius: 14, padding: '14px 16px', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{c.title}</div>
-                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                        {c.ownerName ? `${c.ownerName} · ` : ''}{t('santa_campaign_participants', locale, { count: c.participantCount })}
-                      </div>
-                    </div>
-                    <div style={{ color: C.textMuted, fontSize: 18 }}>›</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* ══════════════════════════════════════════════
           SECRET SANTA — CREATE
