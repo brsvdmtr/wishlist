@@ -476,9 +476,10 @@ function resolveOwnerName(
  * UserAvatar — reusable avatar circle.
  * Shows profile photo if avatarUrl is provided; falls back to first letter of name.
  * Size, accent colour, and optional border can all be customised per call-site.
+ * Pass hat={true} during Secret Santa season to overlay the festive hat.
  */
 function UserAvatar({
-  avatarUrl, name, size, accent, border, style: extraStyle,
+  avatarUrl, name, size, accent, border, style: extraStyle, hat,
 }: {
   avatarUrl?: string | null;
   name?: string | null;
@@ -486,26 +487,80 @@ function UserAvatar({
   accent: string;
   border?: string;
   style?: React.CSSProperties;
+  hat?: boolean;
 }) {
   const initial = ((name ?? '?').trim() || '?')[0]!.toUpperCase();
-  const baseStyle: React.CSSProperties = {
-    width: size, height: size, borderRadius: '50%', flexShrink: 0,
-    background: `linear-gradient(135deg, ${accent}, ${accent}80)`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: Math.round(size * 0.42), fontWeight: 700, color: '#fff',
-    ...(border ? { border } : {}),
-    ...(avatarUrl
-      ? { backgroundImage: `url(${avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-      : {}),
-    ...extraStyle,
-  };
-  return <div style={baseStyle}>{!avatarUrl && initial}</div>;
+  const avatarDiv = (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: `linear-gradient(135deg, ${accent}, ${accent}80)`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: Math.round(size * 0.42), fontWeight: 700, color: '#fff',
+      ...(border ? { border } : {}),
+      ...(avatarUrl
+        ? { backgroundImage: `url(${avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+        : {}),
+      ...extraStyle,
+    }}>{!avatarUrl && initial}</div>
+  );
+  if (!hat) return avatarDiv;
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      {avatarDiv}
+      <SantaHatOverlay size={size} />
+    </div>
+  );
+}
+
+/**
+ * SantaHatOverlay — inline SVG festive hat for seasonal avatar decoration.
+ * Renders a red Santa hat (cone + white pom-pom + white fur brim) at a size
+ * proportional to the avatar it sits on.  Positioned top-right, slightly tilted.
+ * pointer-events:none — purely decorative, never blocks clicks.
+ */
+function SantaHatOverlay({ size }: { size: number }) {
+  const w = Math.round(size * 0.68);
+  const h = Math.round(size * 0.58);
+  return (
+    <svg
+      viewBox="0 0 44 40"
+      width={w}
+      height={h}
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        top: -Math.round(h * 0.52),
+        right: -Math.round(w * 0.16),
+        pointerEvents: 'none',
+        userSelect: 'none',
+        zIndex: 2,
+        overflow: 'visible',
+        filter: 'drop-shadow(0 1px 2.5px rgba(0,0,0,.28))',
+      }}
+    >
+      {/* Red cone — tip offset left of center gives a natural lean */}
+      <polygon points="18,1 2,34 42,34" fill="#C41E1E" />
+      {/* Slightly lighter inner sheen for depth */}
+      <polygon points="18,1 10,34 26,34" fill="#D42828" opacity="0.35" />
+      {/* White fur brim band */}
+      <rect x="0" y="30" width="44" height="10" rx="5" fill="#F5F5F5" />
+      {/* Subtle fur texture dots */}
+      <circle cx="8"  cy="35" r="2.8" fill="#E0E0E0" opacity="0.65" />
+      <circle cx="17" cy="35" r="2.8" fill="#E0E0E0" opacity="0.65" />
+      <circle cx="26" cy="35" r="2.8" fill="#E0E0E0" opacity="0.65" />
+      <circle cx="35" cy="35" r="2.8" fill="#E0E0E0" opacity="0.65" />
+      {/* White pom-pom at tip */}
+      <circle cx="18" cy="5"  r="6.5" fill="#F5F5F5" />
+      <circle cx="18" cy="5"  r="4.5" fill="white" />
+    </svg>
+  );
 }
 
 /**
  * SantaAvatar — anonymous emoji avatar for Secret Santa.
  * Color is derived deterministically from the alias string (stable per round).
  * Never shows real profile photos. Uses animal emoji + color circle.
+ * Pass hat={true} during season for the festive hat overlay.
  */
 function santaAliasHue(alias: string): number {
   let h = 2166136261;
@@ -516,22 +571,30 @@ function santaAliasHue(alias: string): number {
   return (h % 36) * 10; // 36 hues × 10° step
 }
 
-function SantaAvatar({ alias, emoji, size, border }: {
+function SantaAvatar({ alias, emoji, size, border, hat }: {
   alias: string;
   emoji: string;
   size: number;
   border?: string;
+  hat?: boolean;
 }) {
   const hue = santaAliasHue(alias);
-  return (
+  const circle = (
     <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      width: size, height: size, borderRadius: '50%',
       background: `hsl(${hue}, 55%, 82%)`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: Math.round(size * 0.55),
       ...(border ? { border } : {}),
     }}>
       {emoji || '🎅'}
+    </div>
+  );
+  if (!hat) return circle;
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      {circle}
+      <SantaHatOverlay size={size} />
     </div>
   );
 }
@@ -4540,31 +4603,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {santaSeason?.inSeason && <SnowflakeOverlay height={72} />}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, position: 'relative', zIndex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {/* Avatar → Profile */}
-              <div style={{ position: 'relative', flexShrink: 0 }}>
-                <button
-                  onClick={() => { loadProfile(); setScreen('profile'); }}
-                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'block' }}
-                  aria-label={t('profile_title', locale)}
-                >
-                  <UserAvatar
-                    avatarUrl={profileData?.avatarUrl}
-                    name={resolveOwnerName(profileData, tgUser)}
-                    size={36}
-                    accent={C.accent}
-                  />
-                </button>
-                {/* Santa hat — static seasonal badge, non-interactive */}
-                {santaSeason?.inSeason && (
-                  <span style={{
-                    position: 'absolute', top: -8, right: -9,
-                    fontSize: 16, lineHeight: 1,
-                    pointerEvents: 'none', userSelect: 'none',
-                    transform: 'rotate(15deg)',
-                    filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.25))',
-                  }}>🎩</span>
-                )}
-              </div>
+              {/* Avatar → Profile; hat prop adds the seasonal SVG overlay */}
+              <button
+                onClick={() => { loadProfile(); setScreen('profile'); }}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
+                aria-label={t('profile_title', locale)}
+              >
+                <UserAvatar
+                  avatarUrl={profileData?.avatarUrl}
+                  name={resolveOwnerName(profileData, tgUser)}
+                  size={36}
+                  accent={C.accent}
+                  hat={santaSeason?.inSeason ?? false}
+                />
+              </button>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>WishBoard</h1>
@@ -6849,6 +6901,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                       </div>
                     )}
+                    {/* Seasonal hat — sits top-right, pointer-events:none (handled by SantaHatOverlay) */}
+                    {santaSeason?.inSeason && <SantaHatOverlay size={76} />}
                   </div>
 
                   {/* Edit icon button — top-right of card */}
@@ -9935,7 +9989,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {myAlias && (
               <div style={{ background: `${C.accent}12`, borderRadius: 14, padding: '12px 16px', marginBottom: 16, border: `1px solid ${C.accent}30` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <SantaAvatar alias={myAlias.alias} emoji={myAlias.emoji} size={40} />
+                  <SantaAvatar alias={myAlias.alias} emoji={myAlias.emoji} size={40} hat={santaSeason?.inSeason} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 2 }}>
                       {locale === 'ru' ? 'Твоё имя в этой жеребьёвке' : 'Your name in this round'}
@@ -9967,7 +10021,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       borderBottom: idx < participants.filter(px => px.status === 'JOINED').length - 1 ? `1px solid ${C.border}` : 'none',
                     }}
                   >
-                    <SantaAvatar alias={p.displayName || p.id} emoji={p.emoji || '🎅'} size={32} />
+                    <SantaAvatar alias={p.displayName || p.id} emoji={p.emoji || '🎅'} size={32} hat={santaSeason?.inSeason} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
@@ -10124,7 +10178,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   {t('santa_gift_my_recipient', locale)}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <SantaAvatar alias={myAssignment.receiver.displayName} emoji={myAssignment.receiver.emoji || '🎅'} size={36} />
+                  <SantaAvatar alias={myAssignment.receiver.displayName} emoji={myAssignment.receiver.emoji || '🎅'} size={36} hat={santaSeason?.inSeason} />
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
                       {renderSantaAlias(myAssignment.receiver.adjectiveKey, myAssignment.receiver.animalKey, locale) || myAssignment.receiver.displayName}
@@ -10497,7 +10551,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             🎅 {locale === 'ru' ? 'Твой Санта открыт!' : 'Your Santa revealed!'}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                            <SantaAvatar alias={santaReveal.giver.displayName} emoji={santaReveal.giver.emoji || '🎅'} size={44} />
+                            <SantaAvatar alias={santaReveal.giver.displayName} emoji={santaReveal.giver.emoji || '🎅'} size={44} hat={santaSeason?.inSeason} />
                             <div>
                               <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
                                 {renderSantaAlias(santaReveal.giver.adjectiveKey ?? '', santaReveal.giver.animalKey ?? '', locale) || santaReveal.giver.displayName}
@@ -10640,7 +10694,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   ) : santaReveal?.revealed && santaReveal.giver ? (
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                        <SantaAvatar alias={santaReveal.giver.displayName} emoji={santaReveal.giver.emoji || '🎅'} size={44} />
+                        <SantaAvatar alias={santaReveal.giver.displayName} emoji={santaReveal.giver.emoji || '🎅'} size={44} hat={santaSeason?.inSeason} />
                         <div>
                           <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
                             {renderSantaAlias(santaReveal.giver.adjectiveKey ?? '', santaReveal.giver.animalKey ?? '', locale) || santaReveal.giver.displayName}
@@ -11611,6 +11665,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         alias={msg.sender?.displayName ?? '?'}
                         emoji={msg.sender?.emoji ?? '🎅'}
                         size={28}
+                        hat={santaSeason?.inSeason}
                       />
                     )}
                     <div style={{ maxWidth: '70%' }}>
@@ -11854,7 +11909,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         return (
                           <div key={member.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', opacity: member.isStale ? 0.45 : 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <SantaAvatar alias={name} emoji={member.emoji ?? '🎅'} size={24} />
+                              <SantaAvatar alias={name} emoji={member.emoji ?? '🎅'} size={24} hat={santaSeason?.inSeason} />
                               <span style={{ fontSize: 13, color: member.isStale ? C.textMuted : C.textSec }}>
                                 {name}{member.isStale ? (locale === 'ru' ? ' (вышел)' : ' (left)') : ''}
                               </span>
@@ -12040,7 +12095,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         return (
                         <div key={req.id} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                            <SantaAvatar alias={reqAlias} emoji={req.emoji ?? '🎅'} size={28} />
+                            <SantaAvatar alias={reqAlias} emoji={req.emoji ?? '🎅'} size={28} hat={santaSeason?.inSeason} />
                             <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{reqAlias}</span>
                           </div>
                           {req.reason && <div style={{ fontSize: 12, color: C.textSec, marginBottom: 8 }}>{req.reason}</div>}
@@ -12119,7 +12174,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       : p.displayName;
                     return (
                     <div key={p.id} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: idx < arr.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                      <SantaAvatar alias={pAlias} emoji={p.emoji ?? '🎅'} size={30} />
+                      <SantaAvatar alias={pAlias} emoji={p.emoji ?? '🎅'} size={30} hat={santaSeason?.inSeason} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{pAlias}</span>
