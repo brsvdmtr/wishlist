@@ -423,6 +423,20 @@ function handleTextareaFocus(textarea: HTMLElement) {
   textarea.addEventListener('blur', cleanup);
 }
 
+/** Blur whichever input/textarea currently has focus, dismissing the keyboard. */
+function blurActiveField(): void {
+  const el = document.activeElement;
+  if (el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+    el.blur();
+  }
+}
+
+/** True when a tap target is (or is inside) an editable field — used to decide
+ *  whether a tap on the sheet should suppress a blur. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && !!target.closest('input, textarea');
+}
+
 /** Decode HTML entities (e.g. &quot; → ") and strip stray whitespace.
  *  Runs client-side only (uses DOM textarea trick); returns original string on server. */
 function normalizeTitle(raw: string | null | undefined): string {
@@ -830,6 +844,8 @@ function BottomSheet({ isOpen, onClose, title, children }: {
     if (!sheet || !isOpen) return;
     let prevY: number | null = null;
     let dismissOffset = 0;
+    // Blur the keyboard at most once per gesture (prevents redundant calls)
+    let blurFired = false;
 
     const setTranslate = (y: number) => {
       sheet.style.transform = y === 0 ? '' : `translateY(${y}px)`;
@@ -839,6 +855,7 @@ function BottomSheet({ isOpen, onClose, title, children }: {
       if (!e.touches[0]) return;
       prevY = e.touches[0].clientY;
       dismissOffset = 0;
+      blurFired = false;
       // Freeze any in-progress spring-back transition
       sheet.style.transition = 'none';
     };
@@ -850,6 +867,13 @@ function BottomSheet({ isOpen, onClose, title, children }: {
       const currentY = e.touches[0].clientY;
       const dy = currentY - prevY; // positive = finger moved down
       prevY = currentY;
+
+      // Dismiss keyboard on first detected scroll motion — keeps the content
+      // readable while scrolling and prevents gesture leakage into WebView.
+      if (!blurFired && dy !== 0) {
+        blurActiveField();
+        blurFired = true;
+      }
 
       if (dy < 0) {
         // Finger up → scroll content down
@@ -911,11 +935,16 @@ function BottomSheet({ isOpen, onClose, title, children }: {
     <>
       <div
         ref={backdropRef}
-        onClick={onClose}
+        onClick={() => { blurActiveField(); onClose(); }}
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100 }}
       />
       <div
         ref={sheetRef}
+        onClick={(e) => {
+          // Tapping any non-editable area (labels, padding, dividers, buttons)
+          // dismisses the keyboard — keeps UX clean without disabling tap-to-focus.
+          if (!isEditableTarget(e.target)) blurActiveField();
+        }}
         style={{
           position: 'fixed', bottom: 0, left: 0, right: 0,
           background: C.surface, borderRadius: '20px 20px 0 0',
@@ -3960,6 +3989,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         await loadItems(currentWl!.id);
         pushToast(t('item_added', locale), 'success');
       }
+      blurActiveField();
       setShowItemForm(false);
       resetItemForm();
     } finally {
@@ -8914,11 +8944,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
         )}
       </BottomSheet>
-      <BottomSheet isOpen={showItemForm} onClose={() => { setShowItemForm(false); resetItemForm(); }} title={editingItem ? t('item_form_edit', locale) : t('item_form_new', locale)}>
+      <BottomSheet isOpen={showItemForm} onClose={() => { blurActiveField(); setShowItemForm(false); resetItemForm(); }} title={editingItem ? t('item_form_edit', locale) : t('item_form_new', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_name', locale)}</label>
-            <input style={inputStyle} placeholder={t('item_name_placeholder', locale)} value={itemTitle} onChange={(e) => setItemTitle(e.target.value)} autoFocus />
+            <input style={inputStyle} placeholder={t('item_name_placeholder', locale)} value={itemTitle} onChange={(e) => setItemTitle(e.target.value)} />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_description', locale)}</label>
@@ -8929,6 +8959,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               value={itemDescription}
               ref={itemDescTextareaRef}
               onChange={(e) => setItemDescription(e.target.value)}
+              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
             />
             <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 2 }}>{itemDescription.length}/500</div>
           </div>
