@@ -493,8 +493,11 @@ if (!token) {
         ]),
       );
     }
-    // Regular start — no inline button, user uses the menu button
-    return ctx.reply(t('bot_start', locale));
+    // Regular start — two separate messages:
+    // 1. welcome (link preview disabled so the Support link doesn't generate preview)
+    // 2. donation (link preview intentionally enabled for Tribute link)
+    await ctx.reply(t('bot_start', locale), { link_preview_options: { is_disabled: true } });
+    return ctx.reply(t('bot_donation', locale));
   });
 
   // /help — includes support button
@@ -1106,6 +1109,28 @@ if (!token) {
       // eslint-disable-next-line no-console
       console.error('[bot] failed to set ru commands', err);
     });
+
+  // Set bot description for all supported locales (shown in "What can this bot do?").
+  // Default (no language_code) = English as fallback for unsupported locales.
+  const descriptionLocales: Array<{ locale: Locale; tgCode: string | undefined }> = [
+    { locale: 'en', tgCode: undefined },
+    { locale: 'ru', tgCode: 'ru' },
+    { locale: 'zh', tgCode: 'zh' },
+    { locale: 'hi', tgCode: 'hi' },
+    { locale: 'es', tgCode: 'es' },
+    { locale: 'ar', tgCode: 'ar' },
+  ];
+  for (const { locale, tgCode } of descriptionLocales) {
+    bot.telegram
+      .callApi('setMyDescription', {
+        description: t('bot_description', locale),
+        ...(tgCode ? { language_code: tgCode } : {}),
+      } as Parameters<typeof bot.telegram.callApi>[1])
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error(`[bot] failed to set description for locale=${locale}`, err);
+      });
+  }
 
   bot
     .launch()
