@@ -1441,13 +1441,215 @@ async function isWishlistWritable(userId: string, wishlistId: string, planLimit:
 function trackEvent(event: string, userId?: string, props?: Record<string, unknown>) {
   // eslint-disable-next-line no-console
   console.log(`[analytics] ${event}`, userId ? `user=${userId}` : '', props ?? '');
-  // Persist feature gate hits to DB for god-mode analytics dashboard.
+  // Persist to DB for god-mode analytics: feature gate hits, onboarding, demo item, and error events.
   // Fire-and-forget — never blocks the request path.
-  if (event.startsWith('feature_gate_hit_') && userId) {
-    prisma.analyticsEvent.create({ data: { event, userId } }).catch(() => {});
+  const shouldPersist =
+    event.startsWith('feature_gate_hit_') ||
+    event.startsWith('onboarding_') ||
+    event.startsWith('demo_item_') ||
+    event.startsWith('error:');
+  if (shouldPersist && userId) {
+    prisma.analyticsEvent
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .create({ data: { event, userId, props: props ? (props as any) : undefined } })
+      .catch(() => {});
   }
 }
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─── Onboarding Engine ────────────────────────────────────────────────────────
+
+type VariantKey = 'wildberries' | 'goldapple' | 'ozon' | 'yandex_market';
+type EntryPoint =
+  | 'auto_after_first_wishlist'
+  | 'organic_returning_underactivated'
+  | 'forced_rollout_test'
+  | 'manual_cta';
+type CompletionReason =
+  | 'demo_converted'
+  | 'real_item_created'
+  | 'demo_deleted_then_real_created';
+
+const ONBOARDING_KEY = 'hello_activation';
+const ONBOARDING_VERSION = 1;
+const ONBOARDING_VARIANTS: VariantKey[] = ['wildberries', 'goldapple', 'ozon', 'yandex_market'];
+
+// Centralised forced-rollout gate. actorHashes in this set bypass real-item eligibility check.
+// entryPoint is always overridden to 'forced_rollout_test' for these users.
+const FORCED_ROLLOUT_USERS = new Set<string>(
+  (process.env.ONBOARDING_FORCED_USERS ?? '').split(',').filter(Boolean)
+);
+
+interface DemoItemTemplate {
+  title: string;
+  url: string;
+  price: number;
+  currency: 'RUB';
+  priority: 'MEDIUM';
+  imageUrl: string;
+  description: string;
+}
+
+// Demo item templates — verbatim agreed content. Do not abbreviate URLs or descriptions.
+const DEMO_ITEMS: Record<VariantKey, DemoItemTemplate> = {
+  wildberries: {
+    title: 'Подарочный сертификат Wildberries',
+    url: 'https://www.wildberries.ru/gift/certificates',
+    price: 5000,
+    currency: 'RUB',
+    priority: 'MEDIUM',
+    imageUrl: '/onboarding/wb-cert.jpg',
+    description:
+      'Это хороший подарок на любой повод: день рождения, да и просто так. Сертификат можно потратить на любые покупки на Wildberries, кроме нового сертификата. И каждый найдёт то, что ему по душе.',
+  },
+  goldapple: {
+    title: 'Подарочный сертификат Золотое Яблоко',
+    url: 'https://goldapple.ru/cards?srsltid=AfmBOoptUMZa5NGi5PprPHvbcFkRKveW0MDLqc62SrbWenwhpxr1y2H3',
+    price: 5000,
+    currency: 'RUB',
+    priority: 'MEDIUM',
+    imageUrl: '/onboarding/goldapple-cert.jpg',
+    description:
+      'Это хороший подарок на любой повод: день рождения, да и просто так. Сертификат можно потратить на любые покупки в Золотом Яблоке, кроме нового сертификата. И каждый найдёт то, что ему по душе.',
+  },
+  ozon: {
+    title: 'Подарочный сертификат Ozon',
+    url: 'https://www.ozon.ru/landing/giftcertificates/?__rr=1',
+    price: 5000,
+    currency: 'RUB',
+    priority: 'MEDIUM',
+    imageUrl: '/onboarding/ozon-cert.jpg',
+    description:
+      'Это хороший подарок на любой повод: день рождения, да и просто так. Сертификат можно потратить на любые покупки на Ozon, кроме нового сертификата. И каждый найдёт то, что ему по душе.',
+  },
+  yandex_market: {
+    title: 'Подарочный сертификат Яндекс Маркет',
+    url: 'https://market.yandex.ru/card/podarochnyy-sertifikat-yandeks-market-elektronnyy/103670724746?do-waremd5=n5Az0T5R47tdLDQ0qAMd5Q&ogV=-12',
+    price: 5000,
+    currency: 'RUB',
+    priority: 'MEDIUM',
+    imageUrl: '/onboarding/ym-cert.jpg',
+    description:
+      'Это хороший подарок на любой повод: день рождения, да и просто так. Сертификат можно потратить на любые покупки на Яндекс Маркете, кроме нового сертификата. И каждый найдёт то, что ему по душе.',
+  },
+};
+
+/** Returns true if the item counts as a real (non-demo) item for activation eligibility. */
+function isRealItemForActivation(item: { isDemo: boolean; originType: string; status: string }): boolean {
+  return (
+    !item.isDemo &&
+    item.originType !== 'DEMO' &&
+    item.status !== 'DELETED' &&
+    item.status !== 'ARCHIVED'
+  );
+}
+
+/** Count real items for the given user across all wishlists. */
+async function countRealItemsForActivation(userId: string): Promise<number> {
+  return prisma.item.count({
+    where: {
+      wishlist: { ownerId: userId },
+      isDemo: false,
+      originType: { not: 'DEMO' },
+      status: { notIn: ['DELETED', 'PURCHASED', 'COMPLETED'] },
+    },
+  });
+}
+
+/** True if SYSTEM_DRAFTS contains any real (non-demo) items for this user. */
+async function hasDraftsUserContent(userId: string): Promise<boolean> {
+  const count = await prisma.item.count({
+    where: {
+      wishlist: { ownerId: userId, type: 'SYSTEM_DRAFTS' },
+      isDemo: false,
+      originType: { not: 'DEMO' },
+      status: { notIn: ['DELETED', 'PURCHASED', 'COMPLETED'] },
+    },
+  });
+  return count > 0;
+}
+
+type EligibilityResult = {
+  eligible: boolean;
+  reason: string;
+  forcedRollout: boolean;
+  draftsHaveUserContent: boolean;
+};
+
+async function checkOnboardingEligibility(
+  userId: string,
+  actorHash: string,
+): Promise<EligibilityResult> {
+  const draftsHaveUserContent = await hasDraftsUserContent(userId);
+
+  // Centralised forced-rollout check — always wins, bypasses real-item count.
+  if (FORCED_ROLLOUT_USERS.has(actorHash)) {
+    return { eligible: true, reason: 'forced_rollout_test', forcedRollout: true, draftsHaveUserContent };
+  }
+
+  const state = await prisma.userOnboardingState.findUnique({
+    where: { userId_onboardingKey_version: { userId, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+  });
+  if (state?.status === 'COMPLETED') return { eligible: false, reason: 'already_completed', forcedRollout: false, draftsHaveUserContent };
+  if (state?.status === 'DISMISSED') return { eligible: false, reason: 'already_dismissed', forcedRollout: false, draftsHaveUserContent };
+
+  const realItemCount = await countRealItemsForActivation(userId);
+  if (realItemCount > 0) return { eligible: false, reason: 'has_real_items', forcedRollout: false, draftsHaveUserContent };
+
+  const wishlistCount = await prisma.wishlist.count({ where: { ownerId: userId, type: 'REGULAR' } });
+  if (wishlistCount === 0) return { eligible: false, reason: 'no_wishlists', forcedRollout: false, draftsHaveUserContent };
+
+  return { eligible: true, reason: 'no_onboarding_state', forcedRollout: false, draftsHaveUserContent };
+}
+
+/** True if a demo item has not been meaningfully edited (safe to delete on dismiss). */
+function isDemoItemUntouched(
+  item: { title: string | null; url: string | null; priceText: string | null; becameRealAt: Date | null },
+  template: DemoItemTemplate,
+): boolean {
+  if (item.becameRealAt !== null) return false;
+  if (item.title !== template.title) return false;
+  if (item.url !== template.url) return false;
+  const itemPrice = item.priceText ? Number(item.priceText) : null;
+  if (itemPrice !== template.price) return false;
+  return true;
+}
+
+/** True if any meaningful field differs from the original demo template. */
+function isMeaningfulEdit(
+  update: { title?: string; url?: string | null; price?: number | null; description?: string | null },
+  template: DemoItemTemplate,
+): boolean {
+  if (update.title !== undefined && update.title !== template.title) return true;
+  if (update.url !== undefined && update.url !== template.url) return true;
+  if (update.price !== undefined && update.price !== template.price) return true;
+  if (update.description !== undefined && update.description !== template.description) return true;
+  return false;
+}
+
+/** Complete the onboarding for a user. Sets becameRealAt only when reason === 'demo_converted'. */
+async function completeOnboarding(userId: string, reason: CompletionReason): Promise<void> {
+  const state = await prisma.userOnboardingState.findUnique({
+    where: { userId_onboardingKey_version: { userId, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+  });
+  if (!state || state.status === 'COMPLETED' || state.status === 'DISMISSED') return;
+
+  const now = new Date();
+  await prisma.userOnboardingState.update({
+    where: { id: state.id },
+    data: { status: 'COMPLETED', completedAt: now, completionReason: reason },
+  });
+
+  // Set becameRealAt only when the demo item itself was meaningfully converted.
+  if (reason === 'demo_converted' && state.demoItemId) {
+    await prisma.item.updateMany({
+      where: { id: state.demoItemId, isDemo: true },
+      data: { becameRealAt: now },
+    });
+  }
+}
+
+// ─── end Onboarding Engine helpers ───────────────────────────────────────────
 
 /** Extract numeric price from formatted string like "51 975 ₽" → "51975" */
 function extractNumericPrice(priceText: string | null): string | null {
@@ -2545,6 +2747,36 @@ tgRouter.post(
       },
     );
 
+    // Onboarding: real item created → may complete onboarding
+    void (async () => {
+      const onboardingState = await prisma.userOnboardingState.findUnique({
+        where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+      });
+      if (onboardingState?.status !== 'IN_PROGRESS') return;
+
+      // Determine completion reason: was the demo item already deleted?
+      let reason: CompletionReason;
+      if (onboardingState.demoItemId) {
+        const demoItem = await prisma.item.findUnique({
+          where: { id: onboardingState.demoItemId },
+          select: { status: true },
+        });
+        reason = demoItem?.status === 'DELETED' ? 'demo_deleted_then_real_created' : 'real_item_created';
+      } else {
+        reason = 'real_item_created';
+      }
+
+      trackEvent('real_item_created_after_onboarding', user.id, {
+        onboarding_key: ONBOARDING_KEY,
+        version: ONBOARDING_VERSION,
+        variant_key: onboardingState.variantKey ?? null,
+        entry_point: onboardingState.entryPoint ?? null,
+        forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
+        completion_reason: reason,
+      });
+      await completeOnboarding(user.id, reason);
+    })();
+
     return res.status(201).json({ item: mapTgItem(item) });
   }),
 );
@@ -2801,7 +3033,7 @@ tgRouter.patch(
     const user = await getOrCreateTgUser(req.tgUser!);
     const item = await prisma.item.findUnique({
       where: { id },
-      select: { id: true, status: true, reservationEpoch: true, reserverUserId: true, title: true, wishlistId: true, wishlist: { select: { ownerId: true, title: true } } },
+      select: { id: true, status: true, reservationEpoch: true, reserverUserId: true, title: true, wishlistId: true, isDemo: true, originType: true, originVariantKey: true, wishlist: { select: { ownerId: true, title: true } } },
     });
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -2830,6 +3062,40 @@ tgRouter.patch(
       },
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
+
+    // Onboarding: detect meaningful edit on a demo item → trigger completion
+    if (item.isDemo && item.originVariantKey && item.originType === 'DEMO') {
+      const template = DEMO_ITEMS[item.originVariantKey as VariantKey];
+      if (template && isMeaningfulEdit(parsed.data, template)) {
+        const onboardingState = await prisma.userOnboardingState.findUnique({
+          where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+        });
+        if (onboardingState?.status === 'IN_PROGRESS' && onboardingState.demoItemId === id) {
+          trackEvent('demo_item_edited', user.id, {
+            onboarding_key: ONBOARDING_KEY,
+            version: ONBOARDING_VERSION,
+            variant_key: item.originVariantKey,
+            entry_point: onboardingState.entryPoint ?? null,
+            forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
+          });
+          trackEvent('demo_item_converted_to_real', user.id, {
+            onboarding_key: ONBOARDING_KEY,
+            version: ONBOARDING_VERSION,
+            variant_key: item.originVariantKey,
+            entry_point: onboardingState.entryPoint ?? null,
+            forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
+          });
+          void completeOnboarding(user.id, 'demo_converted');
+        } else {
+          trackEvent('demo_item_edited', user.id, {
+            onboarding_key: ONBOARDING_KEY,
+            version: ONBOARDING_VERSION,
+            variant_key: item.originVariantKey,
+            forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
+          });
+        }
+      }
+    }
 
     // Notify wishlist subscribers of item change
     if (subChangedFields.length > 0) {
@@ -2879,7 +3145,7 @@ tgRouter.delete(
     const user = await getOrCreateTgUser(req.tgUser!);
     const item = await prisma.item.findUnique({
       where: { id },
-      select: { id: true, title: true, reserverUserId: true, wishlist: { select: { ownerId: true } } },
+      select: { id: true, title: true, reserverUserId: true, isDemo: true, originVariantKey: true, wishlist: { select: { ownerId: true } } },
     });
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -2896,6 +3162,22 @@ tgRouter.delete(
 
     // Cancel active hints when item is deleted
     void cancelItemHints(id);
+
+    // Onboarding: track demo item deletion for analytics
+    if (item.isDemo && item.originVariantKey) {
+      const onboardingState = await prisma.userOnboardingState.findUnique({
+        where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+      });
+      if (onboardingState?.status === 'IN_PROGRESS' && onboardingState.demoItemId === id) {
+        trackEvent('demo_item_deleted', user.id, {
+          onboarding_key: ONBOARDING_KEY,
+          version: ONBOARDING_VERSION,
+          variant_key: item.originVariantKey,
+          entry_point: onboardingState.entryPoint ?? null,
+          forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
+        });
+      }
+    }
 
     // Notify reserver that item was archived
     if (item.reserverUserId) {
@@ -4311,6 +4593,220 @@ tgRouter.post(
   }),
 );
 
+// ─── Onboarding Endpoints ─────────────────────────────────────────────────────
+
+// GET /tg/onboarding/status — check eligibility for the current user
+tgRouter.get(
+  '/onboarding/status',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const actorHash = user.id; // actorHash is the internal user id used for forced rollout matching
+    const result = await checkOnboardingEligibility(user.id, actorHash);
+    const state = await prisma.userOnboardingState.findUnique({
+      where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+      select: { id: true, status: true, variantKey: true, entryPoint: true, demoItemId: true, completionReason: true, startedAt: true, completedAt: true, dismissedAt: true },
+    });
+    return res.json({
+      eligible: result.eligible,
+      reason: result.reason,
+      forcedRollout: result.forcedRollout,
+      draftsHaveUserContent: result.draftsHaveUserContent,
+      state: state ?? null,
+    });
+  }),
+);
+
+// POST /tg/onboarding/start — begin onboarding: assign variant, create demo item in SYSTEM_DRAFTS
+tgRouter.post(
+  '/onboarding/start',
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({ onboardingKey: z.string(), entryPoint: z.string() })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+    if (parsed.data.onboardingKey !== ONBOARDING_KEY) return res.status(400).json({ error: 'Unknown onboarding key' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const actorHash = user.id;
+    const elig = await checkOnboardingEligibility(user.id, actorHash);
+    if (!elig.eligible) return res.status(409).json({ error: 'Not eligible', reason: elig.reason });
+
+    // Forced rollout overrides entryPoint to ensure correct analytics attribution
+    const effectiveEntryPoint: EntryPoint = elig.forcedRollout
+      ? 'forced_rollout_test'
+      : (parsed.data.entryPoint as EntryPoint);
+
+    // Idempotent: if already IN_PROGRESS with a demoItemId, return existing state + item
+    const existing = await prisma.userOnboardingState.findUnique({
+      where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+    });
+    if (existing?.status === 'IN_PROGRESS' && existing.demoItemId) {
+      const demoItem = await prisma.item.findUnique({
+        where: { id: existing.demoItemId },
+        select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      });
+      return res.json({ state: existing, demoItem: demoItem ? mapTgItem(demoItem) : null });
+    }
+
+    // Assign variant (random, equal distribution)
+    const variantKey: VariantKey = ONBOARDING_VARIANTS[Math.floor(Math.random() * ONBOARDING_VARIANTS.length)]!;
+    const template = DEMO_ITEMS[variantKey];
+
+    // Get or create SYSTEM_DRAFTS wishlist for this user
+    const draftsWl = await getOrCreateDraftsWishlist(user.id);
+
+    const now = new Date();
+    const demoItem = await prisma.item.create({
+      data: {
+        wishlistId: draftsWl.id,
+        title: template.title,
+        url: template.url,
+        priceText: String(template.price),
+        currency: template.currency,
+        priority: template.priority,
+        imageUrl: template.imageUrl,
+        description: template.description,
+        isDemo: true,
+        originType: 'DEMO',
+        originVariantKey: variantKey,
+      },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+    });
+
+    // Upsert onboarding state — handles the case where state exists but hasn't started yet
+    const state = await prisma.userOnboardingState.upsert({
+      where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+      create: {
+        userId: user.id,
+        onboardingKey: ONBOARDING_KEY,
+        version: ONBOARDING_VERSION,
+        status: 'IN_PROGRESS',
+        variantKey,
+        entryPoint: effectiveEntryPoint,
+        demoItemId: demoItem.id,
+        startedAt: now,
+      },
+      update: {
+        status: 'IN_PROGRESS',
+        variantKey,
+        entryPoint: effectiveEntryPoint,
+        demoItemId: demoItem.id,
+        startedAt: now,
+      },
+    });
+
+    trackEvent('onboarding_started', user.id, {
+      onboarding_key: ONBOARDING_KEY,
+      version: ONBOARDING_VERSION,
+      variant_key: variantKey,
+      entry_point: effectiveEntryPoint,
+      forced_rollout: elig.forcedRollout,
+    });
+    trackEvent('demo_item_created', user.id, {
+      onboarding_key: ONBOARDING_KEY,
+      version: ONBOARDING_VERSION,
+      variant_key: variantKey,
+      entry_point: effectiveEntryPoint,
+      forced_rollout: elig.forcedRollout,
+      item_id: demoItem.id,
+    });
+
+    return res.json({ state, demoItem: mapTgItem(demoItem) });
+  }),
+);
+
+// POST /tg/onboarding/dismiss — dismiss onboarding; deletes untouched demo item if present
+tgRouter.post(
+  '/onboarding/dismiss',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({ onboardingKey: z.string() }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+    if (parsed.data.onboardingKey !== ONBOARDING_KEY) return res.status(400).json({ error: 'Unknown onboarding key' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const now = new Date();
+
+    // Upsert to DISMISSED — handles case where POST /start was never called (demoItemId = null)
+    // This ensures even a soft-CTA "Нет" is recorded and the onboarding won't re-appear.
+    const state = await prisma.userOnboardingState.upsert({
+      where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+      create: {
+        userId: user.id,
+        onboardingKey: ONBOARDING_KEY,
+        version: ONBOARDING_VERSION,
+        status: 'DISMISSED',
+        dismissedAt: now,
+      },
+      update: { status: 'DISMISSED', dismissedAt: now },
+    });
+
+    // Clean up demo item only if it is untouched (no meaningful edits).
+    // If the user edited the item, it belongs to them — do NOT delete.
+    let demoItemDeleted = false;
+    if (state.demoItemId) {
+      const demoItem = await prisma.item.findUnique({
+        where: { id: state.demoItemId },
+        select: { id: true, title: true, url: true, priceText: true, becameRealAt: true, status: true },
+      });
+      if (
+        demoItem &&
+        demoItem.status !== 'DELETED' &&
+        state.variantKey &&
+        isDemoItemUntouched(demoItem, DEMO_ITEMS[state.variantKey as VariantKey])
+      ) {
+        await prisma.item.update({
+          where: { id: state.demoItemId },
+          data: { status: 'DELETED', archivedAt: now },
+        });
+        demoItemDeleted = true;
+      }
+    }
+
+    trackEvent('onboarding_dismissed', user.id, {
+      onboarding_key: ONBOARDING_KEY,
+      version: ONBOARDING_VERSION,
+      variant_key: state.variantKey ?? null,
+      entry_point: state.entryPoint ?? null,
+      forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
+      demo_item_deleted: demoItemDeleted,
+    });
+
+    return res.json({ ok: true, demoItemDeleted });
+  }),
+);
+
+// POST /tg/onboarding/complete — explicitly mark onboarding complete (called by frontend after auto-completion)
+tgRouter.post(
+  '/onboarding/complete',
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({ onboardingKey: z.string(), reason: z.enum(['demo_converted', 'real_item_created', 'demo_deleted_then_real_created']) })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+    if (parsed.data.onboardingKey !== ONBOARDING_KEY) return res.status(400).json({ error: 'Unknown onboarding key' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    await completeOnboarding(user.id, parsed.data.reason);
+
+    const state = await prisma.userOnboardingState.findUnique({
+      where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+    });
+
+    trackEvent('onboarding_completed', user.id, {
+      onboarding_key: ONBOARDING_KEY,
+      version: ONBOARDING_VERSION,
+      variant_key: state?.variantKey ?? null,
+      entry_point: state?.entryPoint ?? null,
+      completion_reason: parsed.data.reason,
+      forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
+    });
+
+    return res.json({ ok: true });
+  }),
+);
+
+// ─── end Onboarding Endpoints ─────────────────────────────────────────────────
+
 // GET /tg/me/god-stats — internal analytics dashboard (god mode users only)
 // Double-gated: user must be in GOD_MODE_TELEGRAM_IDS whitelist AND have godMode=true.
 // Active user definition (7d / 30d):
@@ -4363,6 +4859,8 @@ tgRouter.get(
       errors24hTotal,
       errors24hUsersRows,
       errors24hTopRows,
+      onboardingStartedByVariantRows,
+      onboardingCompletedRows,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { createdAt: { gte: cut24 } } }),
@@ -4455,9 +4953,28 @@ tgRouter.get(
         SELECT event, COUNT(*)::int AS count FROM "AnalyticsEvent"
         WHERE event LIKE 'error:%' AND "createdAt" >= ${cut24}
         GROUP BY event ORDER BY count DESC LIMIT 3`,
+      // Onboarding hello_activation: started by variant (30d — same window as overview/funnel)
+      prisma.$queryRaw<{ variant_key: string; count: bigint }[]>`
+        SELECT props->>'variant_key' AS variant_key, COUNT(*)::int AS count FROM "AnalyticsEvent"
+        WHERE event = 'onboarding_started'
+          AND props->>'onboarding_key' = 'hello_activation'
+          AND "createdAt" >= ${cut30}
+        GROUP BY props->>'variant_key'`,
+      // Onboarding hello_activation: completed (30d)
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(*)::int AS count FROM "AnalyticsEvent"
+        WHERE event = 'onboarding_completed'
+          AND props->>'onboarding_key' = 'hello_activation'
+          AND "createdAt" >= ${cut30}`,
     ]);
 
     const withWishlist = n(withWishlistRows[0]);
+
+    // Build onboarding variant breakdown map
+    const onboardingByVariant: Record<string, number> = {};
+    for (const row of onboardingStartedByVariantRows) {
+      if (row.variant_key) onboardingByVariant[row.variant_key] = Number(row.count);
+    }
 
     // Build PRO limits by-type map
     const proByType: Record<string, number> = {};
@@ -4524,6 +5041,16 @@ tgRouter.get(
           };
         }),
       },
+      // Onboarding metrics — 5 explicit rows; source: AnalyticsEvent; window: cut30 (same as overview/funnel)
+      onboarding: {
+        hello_activation: {
+          wildberries:   onboardingByVariant['wildberries']   ?? 0,
+          goldapple:     onboardingByVariant['goldapple']     ?? 0,
+          ozon:          onboardingByVariant['ozon']          ?? 0,
+          yandex_market: onboardingByVariant['yandex_market'] ?? 0,
+          completed:     n(onboardingCompletedRows[0]),
+        },
+      },
       meta: {
         activeUserDef: 'users who created/updated a regular wishlist or item in the period',
         usersWhoInitiatedShareDef: 'users who opened share screen (shareToken generated via POST /share-token)',
@@ -4533,6 +5060,7 @@ tgRouter.get(
         reservationDef: 'users whose wishlist items received ≥1 RESERVED event',
         proLimits24hDef: 'feature gate hits in the last 24h — persisted on each hit via trackEvent',
         errors24hDef: '4xx/5xx responses on /tg/* routes (excludes 401); grouped by method+status+route pattern',
+        onboardingDef: 'hello_activation started by variant + completed count; source: AnalyticsEvent; window: last 30d',
       },
       generatedAt: now.toISOString(),
     });
