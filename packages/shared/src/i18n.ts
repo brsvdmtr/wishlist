@@ -1,6 +1,6 @@
 // ─── Locale type ─────────────────────────────────────────────────────────────
 
-export type Locale = 'ru' | 'en';
+export type Locale = 'ru' | 'en' | 'zh' | 'hi' | 'es' | 'ar';
 
 // ─── Locale detection ────────────────────────────────────────────────────────
 
@@ -9,7 +9,13 @@ export type Locale = 'ru' | 'en';
  * Returns 'ru' only for Russian; everything else falls back to 'en'.
  */
 export function detectLocale(languageCode?: string): Locale {
-  if (languageCode === 'ru') return 'ru';
+  if (!languageCode) return 'en';
+  const base = languageCode.split('-')[0]?.toLowerCase() ?? '';
+  if (base === 'ru') return 'ru';
+  if (base === 'zh') return 'zh';
+  if (base === 'hi') return 'hi';
+  if (base === 'es') return 'es';
+  if (base === 'ar') return 'ar';
   return 'en';
 }
 
@@ -521,7 +527,7 @@ const ru: Dict = {
   // ── Bot strings ───────────────────────────────────────────────────────────
   bot_menu_btn: 'Вишлист',
   bot_start:
-    'Привет! WishBoard — твой персональный список желаний 🎁\nНажми кнопку «Вишлист» внизу, чтобы открыть приложение.',
+    'Привет! Я помогу собрать вишлист, чтобы близкие дарили именно то, что хочется 🎁\nЧтобы открыть приложение, нажми «Wishlist» слева внизу.\nПоддержать проект: https://t.me/tribute/app?startapp=dGzn_utm_reminder\nПоддержка: @Wish_Support',
   bot_help:
     'WishBoard помогает создавать вишлисты, делиться ими и отслеживать брони.\n\n/start — начать\n/support — написать в поддержку\n/paysupport — помощь с оплатой\n\nОтправь ссылку на товар — я создам карточку желания!',
   bot_paysupport:
@@ -1661,7 +1667,7 @@ const en: Dict = {
   // ── Bot strings ───────────────────────────────────────────────────────────
   bot_menu_btn: 'Wishlist',
   bot_start:
-    'Hi! WishBoard is your personal wishlist 🎁\nTap the "Wishlist" button below to open the app.',
+    'Hi! I\'ll help you create a wishlist so your loved ones can give you exactly what you want 🎁\nTo open the app, tap "Wishlist" in the bottom-left corner.\nSupport the project: https://t.me/tribute/app?startapp=dGzn_utm_reminder\nSupport: @Wish_Support',
   bot_help:
     "WishBoard helps you create wishlists, share them with friends, and track reservations.\n\n/start — get started\n/support — contact support\n/paysupport — payment help\n\nSend a product link — I'll create a wish card!",
   bot_paysupport:
@@ -2297,9 +2303,33 @@ const en: Dict = {
   onboarding_complete_done_btn: 'Done',
 };
 
+// ─── Additional locale dictionaries ──────────────────────────────────────────
+// These contain only strings that differ from English.
+// All other keys fall back to `en` → `ru` via the t() function.
+
+const zh: Dict = {
+  bot_start:
+    '你好！我会帮你创建心愿单，这样亲友就能送你真正想要的礼物 🎁\n要打开应用，请点击左下角的"Wishlist"。\n支持项目：https://t.me/tribute/app?startapp=dGzn_utm_reminder\n支持：@Wish_Support',
+};
+
+const hi: Dict = {
+  bot_start:
+    'नमस्ते! मैं तुम्हें विशलिस्ट बनाने में मदद करूँगा, ताकि तुम्हारे अपने तुम्हें वही उपहार दें जो तुम सच में चाहते हो 🎁\nऐप खोलने के लिए नीचे बाईं ओर "Wishlist" दबाओ।\nप्रोजेक्ट को सपोर्ट करें: https://t.me/tribute/app?startapp=dGzn_utm_reminder\nसहायता: @Wish_Support',
+};
+
+const es: Dict = {
+  bot_start:
+    '¡Hola! Te ayudaré a crear una wishlist para que tus seres queridos te regalen justo lo que quieres 🎁\nPara abrir la app, pulsa "Wishlist" abajo a la izquierda.\nApoyar el proyecto: https://t.me/tribute/app?startapp=dGzn_utm_reminder\nSoporte: @Wish_Support',
+};
+
+const ar: Dict = {
+  bot_start:
+    'مرحبًا! سأساعدك في إنشاء قائمة أمنيات حتى يهديك أحباؤك ما تريده فعلًا 🎁\nلفتح التطبيق، اضغط على "Wishlist" أسفل اليسار.\nدعم المشروع: https://t.me/tribute/app?startapp=dGzn_utm_reminder\nالدعم: @Wish_Support',
+};
+
 // ─── Dictionaries map ─────────────────────────────────────────────────────────
 
-const dicts: Record<Locale, Dict> = { ru, en };
+const dicts: Record<Locale, Dict> = { ru, en, zh, hi, es, ar };
 
 // ─── Interpolation ────────────────────────────────────────────────────────────
 
@@ -2327,7 +2357,7 @@ export function t(
   params?: Record<string, string | number>,
 ): string {
   const dict = dicts[locale];
-  const template = dict[key] ?? dicts['ru'][key] ?? key;
+  const template = dict[key] ?? dicts['en'][key] ?? dicts['ru'][key] ?? key;
   return interpolate(template, params);
 }
 
