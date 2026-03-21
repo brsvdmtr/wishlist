@@ -1469,7 +1469,8 @@ type EntryPoint =
 type CompletionReason =
   | 'demo_converted'
   | 'real_item_created'
-  | 'demo_deleted_then_real_created';
+  | 'demo_deleted_then_real_created'
+  | 'demo_moved_to_user_wishlist';
 
 const ONBOARDING_KEY = 'hello_activation';
 const ONBOARDING_VERSION = 1;
@@ -1625,7 +1626,8 @@ function isMeaningfulEdit(
   return false;
 }
 
-/** Complete the onboarding for a user. Sets becameRealAt only when reason === 'demo_converted'. */
+/** Complete the onboarding for a user. Idempotent — no-op if already COMPLETED/DISMISSED.
+ *  Always fires 'onboarding_completed' analytics event on the first (real) completion. */
 async function completeOnboarding(userId: string, reason: CompletionReason): Promise<void> {
   const state = await prisma.userOnboardingState.findUnique({
     where: { userId_onboardingKey_version: { userId, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
@@ -1645,6 +1647,16 @@ async function completeOnboarding(userId: string, reason: CompletionReason): Pro
       data: { becameRealAt: now },
     });
   }
+
+  // Analytics — fires exactly once per completion (guard above prevents re-entry).
+  trackEvent('onboarding_completed', userId, {
+    onboarding_key: ONBOARDING_KEY,
+    version: ONBOARDING_VERSION,
+    variant_key: state.variantKey ?? null,
+    entry_point: state.entryPoint ?? null,
+    completion_reason: reason,
+    forced_rollout: FORCED_ROLLOUT_USERS.has(userId),
+  });
 }
 
 // ─── end Onboarding Engine helpers ───────────────────────────────────────────
@@ -4106,7 +4118,7 @@ tgRouter.post(
     // Check item ownership
     const item = await prisma.item.findUnique({
       where: { id },
-      select: { id: true, wishlistId: true, wishlist: { select: { ownerId: true } } },
+      select: { id: true, wishlistId: true, isDemo: true, originType: true, wishlist: { select: { ownerId: true } } },
     });
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -4143,6 +4155,18 @@ tgRouter.post(
         sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
       },
     });
+
+    // Onboarding: demo item moved to a regular wishlist → complete onboarding
+    if (item.isDemo && item.originType === 'DEMO' && targetWl.type === 'REGULAR') {
+      void (async () => {
+        const onboardingState = await prisma.userOnboardingState.findUnique({
+          where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+        });
+        if (onboardingState?.status === 'IN_PROGRESS' && onboardingState.demoItemId === id) {
+          await completeOnboarding(user.id, 'demo_moved_to_user_wishlist');
+        }
+      })();
+    }
 
     return res.json({ item: mapTgItem(updated) });
   }),
@@ -4778,26 +4802,14 @@ tgRouter.post(
   '/onboarding/complete',
   asyncHandler(async (req, res) => {
     const parsed = z
-      .object({ onboardingKey: z.string(), reason: z.enum(['demo_converted', 'real_item_created', 'demo_deleted_then_real_created']) })
+      .object({ onboardingKey: z.string(), reason: z.enum(['demo_converted', 'real_item_created', 'demo_deleted_then_real_created', 'demo_moved_to_user_wishlist']) })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
     if (parsed.data.onboardingKey !== ONBOARDING_KEY) return res.status(400).json({ error: 'Unknown onboarding key' });
 
     const user = await getOrCreateTgUser(req.tgUser!);
+    // completeOnboarding() fires 'onboarding_completed' analytics event internally (idempotent).
     await completeOnboarding(user.id, parsed.data.reason);
-
-    const state = await prisma.userOnboardingState.findUnique({
-      where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
-    });
-
-    trackEvent('onboarding_completed', user.id, {
-      onboarding_key: ONBOARDING_KEY,
-      version: ONBOARDING_VERSION,
-      variant_key: state?.variantKey ?? null,
-      entry_point: state?.entryPoint ?? null,
-      completion_reason: parsed.data.reason,
-      forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
-    });
 
     return res.json({ ok: true });
   }),
