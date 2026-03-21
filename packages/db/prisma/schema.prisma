@@ -357,6 +357,9 @@ model UserProfile {
   commentsEnabled     Boolean @default(true)
   hintsEnabled        Boolean @default(true)
 
+  // Settings — Language (null = use Telegram language_code)
+  language            String?
+
   // Settings — App Behavior
   newWishlistPosition String  @default("bottom")
 
