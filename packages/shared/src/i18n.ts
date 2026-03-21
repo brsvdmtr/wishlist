@@ -1138,6 +1138,23 @@ const ru: Dict = {
   bot_santa_join_btn: 'Вступить',
   bot_santa_invite_expired: 'Эта кампания отменена.',
   bot_santa_invite_closed: 'Приём участников уже закрыт.',
+
+  // ── Onboarding ────────────────────────────────────────────────────────────
+  onboarding_entry_title: 'Добавь первый подарок',
+  onboarding_entry_subtitle: 'Мы добавили сертификат в качестве примера. Можно изменить название, цену и описание — так можно добавить любой желаемый подарок.',
+  onboarding_entry_cta: 'Показать как',
+  onboarding_entry_skip: 'Пропустить',
+  onboarding_soft_cta_title: 'Добавить пример подарка?',
+  onboarding_soft_cta_yes: 'Да, добавить',
+  onboarding_soft_cta_no: 'Не сейчас',
+  onboarding_demo_title: 'Твой первый подарок',
+  onboarding_demo_subtitle: 'Он уже в «Неразобранном». Нажми, чтобы изменить название, цену или описание.',
+  onboarding_demo_edit_btn: 'Изменить',
+  onboarding_demo_move_btn: 'Переместить в вишлист',
+  onboarding_complete_title: 'Отличное начало!',
+  onboarding_complete_subtitle: 'Вишлист готов к публикации. Все, у кого есть ссылка, увидят твои желания.',
+  onboarding_complete_share_btn: 'Поделиться вишлистом',
+  onboarding_complete_done_btn: 'Готово',
 };
 
 const en: Dict = {
@@ -2261,6 +2278,23 @@ const en: Dict = {
   bot_santa_join_btn: 'Join',
   bot_santa_invite_expired: 'This campaign has been cancelled.',
   bot_santa_invite_closed: 'Registration for this campaign is closed.',
+
+  // ── Onboarding ────────────────────────────────────────────────────────────
+  onboarding_entry_title: 'Add your first gift idea',
+  onboarding_entry_subtitle: 'We added a gift certificate as an example. You can change the title, price and description to match any gift you want.',
+  onboarding_entry_cta: 'Show me how',
+  onboarding_entry_skip: 'Skip',
+  onboarding_soft_cta_title: 'Want to add a gift idea as an example?',
+  onboarding_soft_cta_yes: 'Sure',
+  onboarding_soft_cta_no: 'Not now',
+  onboarding_demo_title: 'Your first gift idea',
+  onboarding_demo_subtitle: 'It\'s in your "Unsorted" section. Tap it to change the title, price or description.',
+  onboarding_demo_edit_btn: 'Edit',
+  onboarding_demo_move_btn: 'Move to wishlist',
+  onboarding_complete_title: 'Great start!',
+  onboarding_complete_subtitle: 'Your wishlist is ready to share. Anyone with the link can see what you want.',
+  onboarding_complete_share_btn: 'Share my wishlist',
+  onboarding_complete_done_btn: 'Done',
 };
 
 // ─── Dictionaries map ─────────────────────────────────────────────────────────

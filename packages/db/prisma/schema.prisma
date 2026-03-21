@@ -37,6 +37,19 @@ enum WishlistType {
   SYSTEM_DRAFTS
 }
 
+enum ItemOriginType {
+  MANUAL
+  IMPORTED
+  DEMO
+}
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  DISMISSED
+}
+
 enum SubscriptionStatus {
   ACTIVE
   CANCELLED
@@ -111,6 +124,7 @@ model User {
   santaParticipations            SantaParticipant[]           @relation("SantaParticipations")
   santaNotifications             SantaNotification[]          @relation("SantaNotifications")
   santaExclusionGroupMemberships SantaExclusionGroupMember[]  @relation("ExclusionGroupMemberships")
+  onboardingStates               UserOnboardingState[]
 }
 
 model Wishlist {
@@ -157,6 +171,10 @@ model Item {
   sourceUrl        String?
   sourceDomain     String?
   importMethod     String?
+  isDemo           Boolean        @default(false)
+  originType       ItemOriginType @default(MANUAL)
+  originVariantKey String?
+  becameRealAt     DateTime?
   status           ItemStatus @default(AVAILABLE)
   reservationEpoch Int        @default(0)
   position         Int        @default(0)
@@ -1011,6 +1029,7 @@ model AnalyticsEvent {
   id        String   @id @default(cuid())
   event     String
   userId    String?
+  props     Json?    // structured event properties for god-mode queries (variant_key, etc.)
   createdAt DateTime @default(now())
 
   @@index([event, createdAt])
@@ -1056,4 +1075,32 @@ model SantaParticipantAlias {
   @@unique([roundId, alias])
   @@index([roundId])
   @@index([participantId])
+}
+
+// ─── Onboarding Engine ────────────────────────────────────────────────────────
+// Tracks per-user, per-key, per-version onboarding state.
+// Supports multiple onboarding flows without schema changes (onboardingKey + version as discriminators).
+// demoItemId links to the specific Item created for this onboarding session —
+// used for precise dismiss cleanup and becameRealAt targeting.
+model UserOnboardingState {
+  id               String           @id @default(cuid())
+  userId           String
+  onboardingKey    String           // e.g. "hello_activation"
+  version          Int              // 1 — increment to re-show to all users
+  status           OnboardingStatus @default(NOT_STARTED)
+  variantKey       String?          // assigned once on POST /start; never re-assigned
+  entryPoint       String?          // 'auto_after_first_wishlist' | 'organic_returning_underactivated' | 'forced_rollout_test' | 'manual_cta'
+  demoItemId       String?          // FK to the specific demo item for this onboarding state
+  completionReason String?          // 'demo_converted' | 'real_item_created' | 'demo_deleted_then_real_created'
+  metaJson         Json?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  dismissedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, onboardingKey, version])
+  @@index([userId])
 }
