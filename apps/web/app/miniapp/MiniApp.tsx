@@ -2298,13 +2298,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [tgFetch]);
 
-  // Onboarding check — called once per session after wishlists are loaded
-  const checkOnboarding = useCallback(async () => {
-    if (onboardingCheckedRef.current) return;
+  // Onboarding check — called once per session. Returns true if redirected to onboarding screens.
+  const checkOnboarding = useCallback(async (): Promise<boolean> => {
+    if (onboardingCheckedRef.current) return false;
     onboardingCheckedRef.current = true;
     try {
       const res = await tgFetch('/tg/onboarding/status');
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const json = await res.json() as {
         eligible: boolean;
         reason: string;
@@ -2313,17 +2313,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         state: { id: string; status: string; variantKey: string | null; entryPoint: string | null; demoItemId: string | null; completionReason: string | null } | null;
       };
       if (json.state) setOnboardingState(json.state);
-      if (!json.eligible) return;
+      if (!json.eligible) return false;
       setOnboardingDraftsHaveUserContent(json.draftsHaveUserContent);
       if (json.draftsHaveUserContent) {
         // Soft CTA — user has existing items in drafts; ask before showing demo
         setShowOnboardingSoftCta(true);
+        return false;
       } else {
-        // Direct entry — show onboarding entry screen
+        // Direct entry — show onboarding entry screen immediately
         setScreen('onboarding-entry');
+        return true;
       }
     } catch {
       // silent — onboarding is non-critical
+      return false;
     }
   }, [tgFetch]);
 
@@ -3281,7 +3284,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setSantaJoinPreview(null);
       setSantaJoinDone(false);
       setScreen('my-wishlists');
-    } else if (screen === 'onboarding-entry' || screen === 'onboarding-demo' || screen === 'onboarding-complete') {
+    } else if (screen === 'onboarding-entry') {
+      if (wishlists.length === 0) {
+        // No wishlists yet — close Mini App (nothing to go back to)
+        (window as Window & { Telegram?: { WebApp?: { close?: () => void } } }).Telegram?.WebApp?.close?.();
+      } else {
+        setScreen('my-wishlists');
+      }
+    } else if (screen === 'onboarding-demo' || screen === 'onboarding-complete') {
       setScreen('my-wishlists');
     } else if (screen === 'share') {
       setScreen('wishlist-detail');
@@ -3494,11 +3504,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         loadWishlists().catch(() => { /* non-critical for guest flow */ });
       } else {
         loadWishlists()
-          .then(() => {
-            setScreen('my-wishlists');
+          .then(async () => {
             void loadReservations();
-            // Check onboarding eligibility after wishlists are loaded (fire-and-forget)
-            void checkOnboarding();
+            // Check onboarding first — if eligible, it sets screen to 'onboarding-entry'
+            const redirected = await checkOnboarding();
+            if (!redirected) setScreen('my-wishlists');
           })
           .catch(handleErr);
       }
@@ -12483,25 +12493,88 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
       {/* ── ONBOARDING ENTRY SCREEN ── */}
       {screen === 'onboarding-entry' && (
-        <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 100, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-          <div style={{ padding: '60px 24px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', flex: 1, gap: 16 }}>
-            <div style={{ fontSize: 40 }}>🎁</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: C.text }}>{t('onboarding_entry_title', locale)}</div>
-            <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.5 }}>{t('onboarding_entry_subtitle', locale)}</div>
-          </div>
-          <div style={{ padding: '0 24px 40px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button
-              onClick={() => void startOnboarding('auto_after_first_wishlist')}
-              disabled={onboardingLoading}
-              style={{ padding: '16px 0', borderRadius: 14, border: 'none', background: C.accent, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, opacity: onboardingLoading ? 0.6 : 1 }}
-            >
-              {t('onboarding_entry_cta', locale)}
-            </button>
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
+          display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
+        }}>
+          {/* Skip top-right */}
+          <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1 }}>
             <button
               onClick={() => void dismissOnboarding().then(() => setScreen('my-wishlists'))}
-              style={{ padding: '14px 0', borderRadius: 14, border: `1px solid ${C.borderLight}`, background: 'none', color: C.textSec, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font }}
+              style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 20, padding: '6px 14px', color: 'rgba(255,255,255,0.45)', fontSize: 13, cursor: 'pointer', fontFamily: font }}
             >
               {t('onboarding_entry_skip', locale)}
+            </button>
+          </div>
+
+          {/* Mock wish cards hero */}
+          <div style={{ paddingTop: 52, paddingBottom: 4, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 0 }}>
+            {([
+              { emoji: '🎸', title: 'Гитара Fender', price: '45 000 ₽', rotate: -8, ty: 12, accent: '#a78bfa' },
+              { emoji: '👟', title: 'Nike Air Max', price: '12 500 ₽', rotate: 0, ty: 0, accent: '#f472b6' },
+              { emoji: '📷', title: 'Fujifilm X100', price: '110 000 ₽', rotate: 8, ty: 12, accent: '#fb923c' },
+            ] as { emoji: string; title: string; price: string; rotate: number; ty: number; accent: string }[]).map((card, i) => (
+              <div key={i} style={{
+                background: 'rgba(255,255,255,0.07)',
+                border: '1px solid rgba(255,255,255,0.13)',
+                borderRadius: 16, padding: '14px 12px', width: 108,
+                marginLeft: i > 0 ? -14 : 0,
+                transform: `rotate(${card.rotate}deg) translateY(${card.ty}px)`,
+                boxShadow: i === 1 ? '0 16px 48px rgba(124,106,255,0.35)' : '0 4px 16px rgba(0,0,0,0.5)',
+                zIndex: i === 1 ? 2 : 1, position: 'relative',
+              }}>
+                <div style={{ fontSize: 26, marginBottom: 8 }}>{card.emoji}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#fff', lineHeight: 1.3, marginBottom: 5 }}>{card.title}</div>
+                <div style={{ fontSize: 11, color: card.accent, fontWeight: 700 }}>{card.price}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Headline */}
+          <div style={{ padding: '26px 28px 18px', textAlign: 'center' }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', lineHeight: 1.2, letterSpacing: '-0.02em', marginBottom: 10 }}>
+              {t('onboarding_entry_title', locale)}
+            </div>
+            <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.5)', lineHeight: 1.55 }}>
+              {t('onboarding_entry_subtitle', locale)}
+            </div>
+          </div>
+
+          {/* Feature highlights */}
+          <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {([
+              { icon: '✨', title: locale === 'ru' ? 'Любой товар из сети' : 'Any item from the web', desc: locale === 'ru' ? 'Вставь ссылку — карточка соберётся сама' : 'Paste a link and the card fills itself' },
+              { icon: '🔗', title: locale === 'ru' ? 'Делись без регистрации' : 'Share without sign-up', desc: locale === 'ru' ? 'Твои желания открываются по ссылке' : 'Your list opens via a simple link' },
+              { icon: '🎁', title: locale === 'ru' ? 'Сюрприз не раскроется' : 'No spoilers', desc: locale === 'ru' ? 'Кто что берёт — видно только дарящим' : 'Who picks what stays secret from you' },
+            ] as { icon: string; title: string; desc: string }[]).map((f, i) => (
+              <div key={i} style={{
+                display: 'flex', gap: 12, alignItems: 'center',
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 14, padding: '11px 14px',
+              }}>
+                <div style={{ fontSize: 20, width: 28, textAlign: 'center', flexShrink: 0 }}>{f.icon}</div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 2 }}>{f.title}</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.4 }}>{f.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA */}
+          <div style={{ padding: '20px 20px 44px', marginTop: 'auto' }}>
+            <button
+              onClick={() => void startOnboarding(wishlists.length === 0 ? 'first_open' : 'organic_returning_underactivated')}
+              disabled={onboardingLoading}
+              style={{
+                width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
+                background: 'linear-gradient(135deg, #7c6aff 0%, #a855f7 100%)',
+                color: '#fff', fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font,
+                boxShadow: '0 8px 24px rgba(124,106,255,0.4)', opacity: onboardingLoading ? 0.7 : 1,
+              }}
+            >
+              {onboardingLoading ? '…' : t('onboarding_entry_cta', locale)}
             </button>
           </div>
         </div>

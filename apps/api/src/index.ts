@@ -1461,6 +1461,7 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
 
 type VariantKey = 'wildberries' | 'goldapple' | 'ozon' | 'yandex_market';
 type EntryPoint =
+  | 'first_open'
   | 'auto_after_first_wishlist'
   | 'organic_returning_underactivated'
   | 'forced_rollout_test'
@@ -1595,9 +1596,6 @@ async function checkOnboardingEligibility(
 
   const realItemCount = await countRealItemsForActivation(userId);
   if (realItemCount > 0) return { eligible: false, reason: 'has_real_items', forcedRollout: false, draftsHaveUserContent };
-
-  const wishlistCount = await prisma.wishlist.count({ where: { ownerId: userId, type: 'REGULAR' } });
-  if (wishlistCount === 0) return { eligible: false, reason: 'no_wishlists', forcedRollout: false, draftsHaveUserContent };
 
   return { eligible: true, reason: 'no_onboarding_state', forcedRollout: false, draftsHaveUserContent };
 }
