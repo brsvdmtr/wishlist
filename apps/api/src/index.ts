@@ -1459,7 +1459,8 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
 
 // ─── Onboarding Engine ────────────────────────────────────────────────────────
 
-type VariantKey = 'wildberries' | 'goldapple' | 'ozon' | 'yandex_market';
+type VariantKey = 'wildberries' | 'goldapple' | 'ozon' | 'yandex_market' | 'amazon' | 'zalando' | 'sephora' | 'apple';
+type MarketSegment = 'ru' | 'global';
 type EntryPoint =
   | 'first_open'
   | 'auto_after_first_wishlist'
@@ -1474,7 +1475,18 @@ type CompletionReason =
 
 const ONBOARDING_KEY = 'hello_activation';
 const ONBOARDING_VERSION = 1;
-const ONBOARDING_VARIANTS: VariantKey[] = ['wildberries', 'goldapple', 'ozon', 'yandex_market'];
+const RU_VARIANTS: VariantKey[]     = ['wildberries', 'goldapple', 'ozon', 'yandex_market'];
+const GLOBAL_VARIANTS: VariantKey[] = ['amazon', 'zalando', 'sephora', 'apple'];
+
+/** Derive market segment from resolved locale. */
+function resolveMarketSegment(locale: Locale): MarketSegment {
+  return locale === 'ru' ? 'ru' : 'global';
+}
+
+/** Derive segment from a stored variantKey (for call-sites that only have the key). */
+function variantKeyToSegment(variantKey: string): MarketSegment {
+  return (GLOBAL_VARIANTS as string[]).includes(variantKey) ? 'global' : 'ru';
+}
 
 // Centralised forced-rollout gate. actorHashes in this set bypass real-item eligibility check.
 // entryPoint is always overridden to 'forced_rollout_test' for these users.
@@ -1486,14 +1498,15 @@ interface DemoItemTemplate {
   title: string;
   url: string;
   price: number;
-  currency: 'RUB';
+  currency: 'RUB' | 'GBP';
   priority: 'MEDIUM';
   imageUrl: string;
   description: string;
 }
 
 // Demo item templates — verbatim agreed content. Do not abbreviate URLs or descriptions.
-const DEMO_ITEMS: Record<VariantKey, DemoItemTemplate> = {
+type RuVariantKey = 'wildberries' | 'goldapple' | 'ozon' | 'yandex_market';
+const DEMO_ITEMS: Record<RuVariantKey, DemoItemTemplate> = {
   wildberries: {
     title: 'Подарочный сертификат Wildberries',
     url: 'https://www.wildberries.ru/gift/certificates',
@@ -1535,6 +1548,54 @@ const DEMO_ITEMS: Record<VariantKey, DemoItemTemplate> = {
       'Это хороший подарок на любой повод: день рождения, да и просто так. Сертификат можно потратить на любые покупки на Яндекс Маркете, кроме нового сертификата. И каждый найдёт то, что ему по душе.',
   },
 };
+
+const GLOBAL_DEMO_ITEMS: Record<string, DemoItemTemplate> = {
+  amazon: {
+    title: 'Amazon Gift Card',
+    url: 'https://www.amazon.co.uk/dp/B006AUF6X0',
+    price: 50,
+    currency: 'GBP',
+    priority: 'MEDIUM',
+    imageUrl: '/onboarding/global/amazon-gift-card.jpg',
+    description:
+      'A great gift for any occasion. The recipient can choose exactly what they want from millions of products on Amazon.',
+  },
+  zalando: {
+    title: 'Zalando Gift Voucher',
+    url: 'https://www.zalando.co.uk/giftvouchers/',
+    price: 50,
+    currency: 'GBP',
+    priority: 'MEDIUM',
+    imageUrl: '/onboarding/global/zalando-gift-card.jpg',
+    description:
+      'A stylish and flexible gift. Perfect for fashion, shoes, accessories and more on Zalando.',
+  },
+  sephora: {
+    title: 'Sephora Gift Card',
+    url: 'https://www.sephora.co.uk/p/SEPHORA-GIFT-CARD',
+    price: 50,
+    currency: 'GBP',
+    priority: 'MEDIUM',
+    imageUrl: '/onboarding/global/sephora-gift-card.jpg',
+    description:
+      'A beauty gift that works for almost any occasion. Great for skincare, makeup, fragrance and self-care essentials.',
+  },
+  apple: {
+    title: 'Apple Gift Card',
+    url: 'https://www.apple.com/uk/shop/buy-giftcard/giftcard/50-pounds',
+    price: 50,
+    currency: 'GBP',
+    priority: 'MEDIUM',
+    imageUrl: '/onboarding/global/apple-gift-card.jpg',
+    description:
+      'A premium digital gift for apps, devices, accessories, entertainment and more across the Apple ecosystem.',
+  },
+};
+
+/** Look up demo template from either pool by variantKey. */
+function getDemoTemplate(variantKey: string): DemoItemTemplate | undefined {
+  return (DEMO_ITEMS as Record<string, DemoItemTemplate>)[variantKey] ?? GLOBAL_DEMO_ITEMS[variantKey];
+}
 
 /** Returns true if the item counts as a real (non-demo) item for activation eligibility. */
 function isRealItemForActivation(item: { isDemo: boolean; originType: string; status: string }): boolean {
@@ -1656,6 +1717,7 @@ async function completeOnboarding(userId: string, reason: CompletionReason): Pro
     entry_point: state.entryPoint ?? null,
     completion_reason: reason,
     forced_rollout: FORCED_ROLLOUT_USERS.has(userId),
+    market_segment: state.variantKey ? variantKeyToSegment(state.variantKey) : 'ru',
   });
 }
 
@@ -2698,7 +2760,7 @@ tgRouter.post(
         price: z.number().int().nonnegative().nullable().optional(),
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         imageUrl: z.string().url().optional(),
-        currency: z.enum(['RUB', 'USD']).optional(),
+        currency: z.enum(['RUB', 'USD', 'EUR', 'GBP']).optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
@@ -2783,6 +2845,7 @@ tgRouter.post(
         entry_point: onboardingState.entryPoint ?? null,
         forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
         completion_reason: reason,
+        market_segment: onboardingState.variantKey ? variantKeyToSegment(onboardingState.variantKey) : 'ru',
       });
       await completeOnboarding(user.id, reason);
     })();
@@ -3035,7 +3098,7 @@ tgRouter.patch(
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         imageUrl: z.string().url().nullable().optional(),
         description: z.string().max(500).nullable().optional(),
-        currency: z.enum(['RUB', 'USD']).optional(),
+        currency: z.enum(['RUB', 'USD', 'EUR', 'GBP']).optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
@@ -3075,7 +3138,7 @@ tgRouter.patch(
 
     // Onboarding: detect meaningful edit on a demo item → trigger completion
     if (item.isDemo && item.originVariantKey && item.originType === 'DEMO') {
-      const template = DEMO_ITEMS[item.originVariantKey as VariantKey];
+      const template = getDemoTemplate(item.originVariantKey);
       if (template && isMeaningfulEdit(parsed.data, template)) {
         const onboardingState = await prisma.userOnboardingState.findUnique({
           where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
@@ -4470,7 +4533,7 @@ tgRouter.patch(
   '/me/settings',
   asyncHandler(async (req, res) => {
     const parsed = z.object({
-      defaultCurrency: z.enum(['RUB', 'USD']).optional(),
+      defaultCurrency: z.enum(['RUB', 'USD', 'EUR', 'GBP']).optional(),
       notifications: z.object({
         comments: z.boolean().optional(),
         reservations: z.boolean().optional(),
@@ -4670,9 +4733,12 @@ tgRouter.post(
       return res.json({ state: existing, demoItem: demoItem ? mapTgItem(demoItem) : null });
     }
 
-    // Assign variant (random, equal distribution)
-    const variantKey: VariantKey = ONBOARDING_VARIANTS[Math.floor(Math.random() * ONBOARDING_VARIANTS.length)]!;
-    const template = DEMO_ITEMS[variantKey];
+    // Assign variant based on market segment (random, equal distribution per segment)
+    const locale = getRequestLocale(req);
+    const marketSegment = resolveMarketSegment(locale);
+    const variantPool = marketSegment === 'ru' ? RU_VARIANTS : GLOBAL_VARIANTS;
+    const variantKey: VariantKey = variantPool[Math.floor(Math.random() * variantPool.length)]!;
+    const template = getDemoTemplate(variantKey)!;
 
     // Get or create SYSTEM_DRAFTS wishlist for this user
     const draftsWl = await getOrCreateDraftsWishlist(user.id);
@@ -4723,6 +4789,8 @@ tgRouter.post(
       variant_key: variantKey,
       entry_point: effectiveEntryPoint,
       forced_rollout: elig.forcedRollout,
+      market_segment: marketSegment,
+      locale_used: locale,
     });
     trackEvent('demo_item_created', user.id, {
       onboarding_key: ONBOARDING_KEY,
@@ -4730,6 +4798,8 @@ tgRouter.post(
       variant_key: variantKey,
       entry_point: effectiveEntryPoint,
       forced_rollout: elig.forcedRollout,
+      market_segment: marketSegment,
+      locale_used: locale,
       item_id: demoItem.id,
     });
 
@@ -4774,7 +4844,8 @@ tgRouter.post(
         demoItem &&
         demoItem.status !== 'DELETED' &&
         state.variantKey &&
-        isDemoItemUntouched(demoItem, DEMO_ITEMS[state.variantKey as VariantKey])
+        getDemoTemplate(state.variantKey) &&
+        isDemoItemUntouched(demoItem, getDemoTemplate(state.variantKey)!)
       ) {
         await prisma.item.update({
           where: { id: state.demoItemId },
@@ -4784,12 +4855,15 @@ tgRouter.post(
       }
     }
 
+    const dismissLocale = getRequestLocale(req);
     trackEvent('onboarding_dismissed', user.id, {
       onboarding_key: ONBOARDING_KEY,
       version: ONBOARDING_VERSION,
       variant_key: state.variantKey ?? null,
       entry_point: state.entryPoint ?? null,
       forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
+      market_segment: state.variantKey ? variantKeyToSegment(state.variantKey) : resolveMarketSegment(dismissLocale),
+      locale_used: dismissLocale,
       demo_item_deleted: demoItemDeleted,
     });
 
