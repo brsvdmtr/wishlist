@@ -4344,6 +4344,7 @@ tgRouter.get(
         birthday: profile.birthday?.toISOString() ?? null,
         hideYear: profile.hideYear,
         defaultCurrency: profile.defaultCurrency,
+        language: profile.language ?? null,
         // Owner-only — never exposed in public/share API responses
         supportId: profile.supportId,
       },
@@ -4508,7 +4509,7 @@ tgRouter.get(
       : { comments: true, reservations: true, subscriptions: true, marketing: true };
 
     return res.json({
-      language: locale,
+      language: profile.language ?? locale,
       defaultCurrency: profile.defaultCurrency,
       notifications,
       privacy: {
@@ -4533,6 +4534,7 @@ tgRouter.patch(
   '/me/settings',
   asyncHandler(async (req, res) => {
     const parsed = z.object({
+      language: z.enum(['ru', 'en', 'zh-CN', 'hi', 'es', 'ar']).optional(),
       defaultCurrency: z.enum(['RUB', 'USD', 'EUR', 'GBP']).optional(),
       notifications: z.object({
         comments: z.boolean().optional(),
@@ -4560,6 +4562,7 @@ tgRouter.patch(
     // Build update object
     const updateData: Record<string, unknown> = {};
 
+    if (data.language !== undefined) updateData.language = data.language;
     if (data.defaultCurrency !== undefined) updateData.defaultCurrency = data.defaultCurrency;
 
     if (data.notifications) {
@@ -4613,7 +4616,7 @@ tgRouter.patch(
       : { comments: true, reservations: true, subscriptions: true, marketing: true };
 
     return res.json({
-      language: locale,
+      language: profile.language ?? locale,
       defaultCurrency: profile.defaultCurrency,
       notifications: updatedNotifications,
       privacy: {

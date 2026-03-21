@@ -1115,7 +1115,7 @@ if (!token) {
   const descriptionLocales: Array<{ locale: Locale; tgCode: string | undefined }> = [
     { locale: 'en', tgCode: undefined },
     { locale: 'ru', tgCode: 'ru' },
-    { locale: 'zh', tgCode: 'zh' },
+    { locale: 'zh-CN', tgCode: 'zh' },
     { locale: 'hi', tgCode: 'hi' },
     { locale: 'es', tgCode: 'es' },
     { locale: 'ar', tgCode: 'ar' },

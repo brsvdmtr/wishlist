@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
-import { t, detectLocale, pluralize, type Locale } from '@wishlist/shared';
+import { t, detectLocale, normalizeLocale, isRTL, pluralize, type Locale } from '@wishlist/shared';
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES
@@ -1552,7 +1552,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
 
           {/* Benefits list for feature gates */}
           {content.benefits && (
-            <div style={{ marginTop: 18, textAlign: 'left', padding: '0 4px' }}>
+            <div style={{ marginTop: 18, textAlign: 'start', padding: '0 4px' }}>
               {content.benefits.map((b, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
@@ -1633,7 +1633,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
             return (
               <div style={{ marginTop: 24 }}>
                 {/* Section header */}
-                <div style={{ textAlign: 'left', marginBottom: 10 }}>
+                <div style={{ textAlign: 'start', marginBottom: 10 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.textSec, letterSpacing: 0.1 }}>
                     {t('addon_section_header', locale)}
                   </div>
@@ -1657,7 +1657,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
                           borderRadius: 14,
                           padding: '12px 14px',
                           border: `1px solid ${isCapped ? C.borderLight : C.border}`,
-                          textAlign: 'left',
+                          textAlign: 'start',
                           opacity: isCapped ? 0.7 : 1,
                         }}
                       >
@@ -1854,7 +1854,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [avatarUploading, setAvatarUploading] = useState(false);
 
   // Settings state
-  const [settingsData, setSettingsData] = useState<{
+  type SettingsData = {
     language: string;
     defaultCurrency: 'RUB' | 'USD';
     notifications: { comments: boolean; reservations: boolean; subscriptions: boolean; marketing: boolean };
@@ -1862,7 +1862,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     appBehavior: { newWishlistPosition: string };
     isPro: boolean;
     supportId?: string | null;
-  } | null>(null);
+  };
+  const [settingsData, setSettingsData] = useState<SettingsData | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   // Track which screen the user came from before opening settings (for correct back navigation)
@@ -2599,7 +2600,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const res = await tgFetch('/tg/me/profile');
       if (!res.ok) throw new Error();
       const data = await res.json() as {
-        profile: typeof profileData;
+        profile: typeof profileData & { language?: string | null };
         stats: typeof profileStats;
         plan: PlanInfo;
         subscription: SubscriptionInfo;
@@ -2609,6 +2610,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setProfileData(data.profile);
       setProfileStats(data.stats);
       if (data.profile?.defaultCurrency) setDefaultCurrency(data.profile.defaultCurrency);
+      // Saved language preference overrides Telegram language_code (higher priority)
+      if (data.profile?.language) setLocale(normalizeLocale(data.profile.language));
       setPlanInfo(data.plan);
       if (data.subscription) setSubscription(data.subscription);
       setGodMode(data.godMode);
@@ -2676,7 +2679,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     try {
       const res = await tgFetch('/tg/me/settings');
       if (!res.ok) throw new Error();
-      setSettingsData(await res.json());
+      const data = await res.json() as SettingsData;
+      setSettingsData(data);
+      // Apply saved language preference
+      if (data.language) setLocale(normalizeLocale(data.language));
     } catch {
       pushToast(t('toast_load_error', locale), 'error');
     } finally {
@@ -2691,8 +2697,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         body: JSON.stringify(patch),
       });
       if (!res.ok) throw new Error();
-      setSettingsData(await res.json());
+      const data = await res.json() as SettingsData;
+      setSettingsData(data);
       if (patch.defaultCurrency) setDefaultCurrency(patch.defaultCurrency as 'RUB' | 'USD');
+      if (patch.language) setLocale(normalizeLocale(patch.language as string));
     } catch {
       pushToast(t('toast_save_error', locale), 'error');
     }
@@ -4776,7 +4784,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const totalItems = wishlists.reduce((n, wl) => n + wl.itemCount, 0);
 
   return (
-    <div ref={scrollContainerRef} style={{
+    <div ref={scrollContainerRef} dir={isRTL(locale) ? 'rtl' : 'ltr'} style={{
       position: 'fixed', inset: 0, overflowY: 'auto', overflowX: 'hidden',
       background: C.bg, fontFamily: font, color: C.text,
       // Prevent scroll-chaining into Telegram WebView: when this container
@@ -7321,7 +7329,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     </div>
                     <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.border}` }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <span style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font }}>Free</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font }}>{t('plan_name_free', locale)}</span>
                         <span style={{ fontSize: 12, color: C.textMuted }}>{t('settings_free_subtitle', locale)}</span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -8145,7 +8153,28 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
               {/* General */}
               <SettingsSection title={t('settings_general', locale)}>
-                <SettingsRow label={t('settings_language', locale)} value={locale === 'ru' ? 'Русский' : 'English'} hint={t('settings_language_auto', locale)} />
+                <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 14, color: C.text, marginBottom: 10 }}>{t('settings_language', locale)}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {([
+                      { code: 'ru', label: 'Русский' },
+                      { code: 'en', label: 'English' },
+                      { code: 'zh-CN', label: '中文' },
+                      { code: 'hi', label: 'हिन्दी' },
+                      { code: 'es', label: 'Español' },
+                      { code: 'ar', label: 'العربية' },
+                    ] as const).map(({ code, label }) => (
+                      <button key={code} onClick={() => patchSettings({ language: code })} style={{
+                        padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 500,
+                        cursor: 'pointer', fontFamily: font, transition: 'background 0.15s, color 0.15s',
+                        background: locale === code ? C.accent : C.surface,
+                        color: locale === code ? '#fff' : C.text,
+                      }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
                   <span style={{ fontSize: 14, color: C.text }}>{t('settings_default_currency', locale)}</span>
                   <div style={{ display: 'flex', gap: 4, background: C.bg, borderRadius: 8, padding: 2 }}>
@@ -8442,7 +8471,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   key={wl.id}
                   style={{
                     ...btnGhost,
-                    width: '100%', textAlign: 'left', padding: '14px 16px',
+                    width: '100%', textAlign: 'start', padding: '14px 16px',
                     borderRadius: 12, background: C.surface,
                     border: `1px solid ${C.border}`,
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -8480,7 +8509,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   key={wl.id}
                   style={{
                     ...btnGhost,
-                    width: '100%', textAlign: 'left', padding: '14px 16px',
+                    width: '100%', textAlign: 'start', padding: '14px 16px',
                     borderRadius: 12, background: C.surface,
                     border: `1px solid ${C.border}`,
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -8629,7 +8658,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 style={{
                   background: isSelected ? C.accentSoft : C.surface,
                   border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
-                  borderRadius: 14, padding: '14px 18px', textAlign: 'left',
+                  borderRadius: 14, padding: '14px 18px', textAlign: 'start',
                   cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 }}
@@ -8666,7 +8695,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 style={{
                   background: isSelected ? C.accentSoft : C.surface,
                   border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
-                  borderRadius: 14, padding: '14px 18px', textAlign: 'left',
+                  borderRadius: 14, padding: '14px 18px', textAlign: 'start',
                   cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 }}
@@ -8703,7 +8732,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 style={{
                   background: isSelected ? C.accentSoft : C.surface,
                   border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
-                  borderRadius: 14, padding: '14px 18px', textAlign: 'left',
+                  borderRadius: 14, padding: '14px 18px', textAlign: 'start',
                   cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 }}
@@ -8729,7 +8758,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }}
             style={{
               background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
-              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
               fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
             }}
           >
@@ -8744,7 +8773,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }}
             style={{
               background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
-              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
               fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
             }}
           >
@@ -8764,7 +8793,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }}
             style={{
               background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
-              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
               fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
             }}
           >
@@ -8779,7 +8808,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }}
             style={{
               background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
-              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
               fontSize: 16, color: C.orange, display: 'flex', alignItems: 'center', gap: 12,
             }}
           >
@@ -8791,7 +8820,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             onClick={() => startDeleteWishlist()}
             style={{
               background: C.redSoft, border: 'none', borderRadius: 14, padding: '16px 18px',
-              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
               fontSize: 16, color: C.red, display: 'flex', alignItems: 'center', gap: 12,
             }}
           >
@@ -8842,7 +8871,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }}
             style={{
               background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
-              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
               fontSize: 15, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
             }}
           >
@@ -8856,7 +8885,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }}
             style={{
               background: C.redSoft, border: 'none', borderRadius: 14, padding: '16px 18px',
-              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
               fontSize: 15, color: C.red, display: 'flex', alignItems: 'center', gap: 12,
             }}
           >
@@ -8908,7 +8937,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }}
             style={{
               background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
-              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
               fontSize: 15, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
             }}
           >
@@ -8922,7 +8951,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }}
             style={{
               background: C.redSoft, border: 'none', borderRadius: 14, padding: '16px 18px',
-              textAlign: 'left', cursor: 'pointer', fontFamily: font,
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
               fontSize: 15, color: C.red, display: 'flex', alignItems: 'center', gap: 12,
             }}
           >
@@ -8958,7 +8987,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       background: isSelected ? C.accentSoft : C.surface,
                       border: isSelected ? `2px solid ${C.accent}` : '2px solid transparent',
                       borderRadius: 12, padding: '12px 16px',
-                      textAlign: 'left', cursor: isDisabled ? 'not-allowed' : 'pointer', fontFamily: font,
+                      textAlign: 'start', cursor: isDisabled ? 'not-allowed' : 'pointer', fontFamily: font,
                       opacity: isDisabled ? 0.5 : 1,
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     }}
@@ -9039,7 +9068,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           background: selected ? C.accentSoft : C.surface,
                           border: selected ? `2px solid ${C.accent}` : '2px solid transparent',
                           borderRadius: 12, padding: '12px 14px',
-                          textAlign: 'left', cursor: 'pointer', fontFamily: font,
+                          textAlign: 'start', cursor: 'pointer', fontFamily: font,
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
                         }}
                       >
@@ -9787,7 +9816,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 style={{
                   background: isWlCapped ? C.card : C.surface,
                   border: `1px solid ${isWlCapped ? C.borderLight : C.border}`,
-                  borderRadius: 12, padding: '12px 14px', textAlign: 'left',
+                  borderRadius: 12, padding: '12px 14px', textAlign: 'start',
                   cursor: isWlCapped ? 'default' : 'pointer', fontFamily: font,
                   display: 'flex', alignItems: 'center', gap: 10,
                   opacity: (addonCheckoutLoading || isWlCapped) ? 0.55 : 1,
@@ -9879,7 +9908,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             onClick={() => void openCampaign(c.id)}
             style={{
               background: C.card, border: 'none', borderRadius: 14,
-              padding: '14px 16px', cursor: 'pointer', textAlign: 'left',
+              padding: '14px 16px', cursor: 'pointer', textAlign: 'start',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               opacity: dimmed ? 0.65 : 1,
               transition: 'opacity 0.15s',
@@ -11362,7 +11391,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           background: selected ? `${C.accent}20` : C.surface,
                           border: `1.5px solid ${selected ? C.accent : C.border}`,
                           borderRadius: 12, padding: '10px 14px', cursor: maxReached ? 'not-allowed' : 'pointer',
-                          textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          textAlign: 'start', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           opacity: maxReached ? 0.4 : 1,
                         }}
                       >
@@ -11444,7 +11473,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         setSantaWishlistPickerLoading(false);
                       }}
                       disabled={santaWishlistPickerLoading}
-                      style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', cursor: 'pointer', textAlign: 'start', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                     >
                       <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{wl.title}</span>
                       <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>
