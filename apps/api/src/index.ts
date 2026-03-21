@@ -1498,7 +1498,7 @@ interface DemoItemTemplate {
   title: string;
   url: string;
   price: number;
-  currency: 'RUB' | 'GBP';
+  currency: 'RUB' | 'USD';
   priority: 'MEDIUM';
   imageUrl: string;
   description: string;
@@ -1552,9 +1552,9 @@ const DEMO_ITEMS: Record<RuVariantKey, DemoItemTemplate> = {
 const GLOBAL_DEMO_ITEMS: Record<string, DemoItemTemplate> = {
   amazon: {
     title: 'Amazon Gift Card',
-    url: 'https://www.amazon.co.uk/dp/B006AUF6X0',
+    url: 'https://www.amazon.com/dp/B004LLIKVU',
     price: 50,
-    currency: 'GBP',
+    currency: 'USD',
     priority: 'MEDIUM',
     imageUrl: '/onboarding/global/amazon-gift-card.jpg',
     description:
@@ -1564,7 +1564,7 @@ const GLOBAL_DEMO_ITEMS: Record<string, DemoItemTemplate> = {
     title: 'Zalando Gift Voucher',
     url: 'https://www.zalando.co.uk/giftvouchers/',
     price: 50,
-    currency: 'GBP',
+    currency: 'USD',
     priority: 'MEDIUM',
     imageUrl: '/onboarding/global/zalando-gift-card.jpg',
     description:
@@ -1572,9 +1572,9 @@ const GLOBAL_DEMO_ITEMS: Record<string, DemoItemTemplate> = {
   },
   sephora: {
     title: 'Sephora Gift Card',
-    url: 'https://www.sephora.co.uk/p/SEPHORA-GIFT-CARD',
+    url: 'https://www.sephora.com/gift-cards',
     price: 50,
-    currency: 'GBP',
+    currency: 'USD',
     priority: 'MEDIUM',
     imageUrl: '/onboarding/global/sephora-gift-card.jpg',
     description:
@@ -1582,9 +1582,9 @@ const GLOBAL_DEMO_ITEMS: Record<string, DemoItemTemplate> = {
   },
   apple: {
     title: 'Apple Gift Card',
-    url: 'https://www.apple.com/uk/shop/buy-giftcard/giftcard/50-pounds',
+    url: 'https://www.apple.com/shop/buy-giftcard/giftcard',
     price: 50,
-    currency: 'GBP',
+    currency: 'USD',
     priority: 'MEDIUM',
     imageUrl: '/onboarding/global/apple-gift-card.jpg',
     description:

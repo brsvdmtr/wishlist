@@ -3373,7 +3373,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         computeActorHash(user.id).then(h => { myActorHashRef.current = h; }).catch(() => {});
       }
       const lang = tg?.initDataUnsafe?.user?.language_code;
-      if (lang !== undefined) setLocale(detectLocale(lang));
+      if (lang !== undefined) {
+        const detectedLocale = detectLocale(lang);
+        setLocale(detectedLocale);
+        // Seed default currency from locale so the create-item form is correct
+        // before profile is lazily loaded. loadProfile() will override this if
+        // the user has explicitly set a different currency preference.
+        if (detectedLocale !== 'ru') setDefaultCurrency('USD');
+      }
 
       // If not inside real Telegram (initData is empty), show "Open in Telegram"
       // instead of attempting a doomed auth/API flow.
@@ -3707,6 +3714,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           });
           if (mRes.ok) {
             void loadDrafts();
+            // Update itemCount in the wishlists state so home counter reflects the moved item
+            setWishlists(prev => prev.map(wl => wl.id === json.wishlist.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
             pushToast(t('drafts_moved', locale, { name: json.wishlist.title }), 'success');
           } else {
             pushToast(t('wishlist_created', locale), 'success');
