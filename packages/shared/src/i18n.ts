@@ -531,7 +531,7 @@ const ru: Dict = {
   bot_description:
     'Создавай вишлисты, делись ими с близкими и получай именно то, что хочется.',
   bot_donation:
-    'Кофе для команды ☕\nНравится бот? Поддержите команду чашкой кофе.\nВаша поддержка помогает нам развивать проект и делать его лучше.\nhttps://t.me/tribute/app?startapp=dGzn',
+    'Кофе для команды ☕\n\nНравится бот? Поддержите команду чашкой кофе. Ваша поддержка помогает нам развивать проект и делать его лучше.\n\nhttps://t.me/tribute/app?startapp=dGzn',
   bot_help:
     'WishBoard помогает создавать вишлисты, делиться ими и отслеживать брони.\n\n/start — начать\n/support — написать в поддержку\n/paysupport — помощь с оплатой\n\nОтправь ссылку на товар — я создам карточку желания!',
   bot_paysupport:
@@ -1675,7 +1675,7 @@ const en: Dict = {
   bot_description:
     'Create wishlists, share them with loved ones, and get exactly what you want.',
   bot_donation:
-    'Coffee for the team ☕\nEnjoying the bot? Support the team with a cup of coffee.\nYour support helps us grow the project and make it better.\nhttps://t.me/tribute/app?startapp=dHwT',
+    'Coffee for the team ☕\n\nEnjoying the bot? Support the team with a cup of coffee. Your support helps us grow the project and make it better.\n\nhttps://t.me/tribute/app?startapp=dHwT',
   bot_help:
     "WishBoard helps you create wishlists, share them with friends, and track reservations.\n\n/start — get started\n/support — contact support\n/paysupport — payment help\n\nSend a product link — I'll create a wish card!",
   bot_paysupport:
@@ -2321,7 +2321,7 @@ const zh: Dict = {
   bot_description:
     '创建心愿单，分享给亲友，收到真正想要的礼物。',
   bot_donation:
-    '请团队喝杯咖啡 ☕\n喜欢这个机器人吗？请团队喝杯咖啡吧。\n你的支持能帮助我们持续完善这个项目，让它变得更好。\nhttps://t.me/tribute/app?startapp=dHwT',
+    '请团队喝杯咖啡 ☕\n\n喜欢这个机器人吗？请团队喝杯咖啡吧。你的支持能帮助我们持续完善这个项目，让它变得更好。\n\nhttps://t.me/tribute/app?startapp=dHwT',
 };
 
 const hi: Dict = {
@@ -2330,7 +2330,7 @@ const hi: Dict = {
   bot_description:
     'विशलिस्ट बनाइए, अपनों के साथ शेयर कीजिए और वही पाइए जो आप सच में चाहते हैं।',
   bot_donation:
-    'टीम के लिए कॉफी ☕\nअगर आपको यह बॉट पसंद है, तो टीम को एक कप कॉफी पिलाइए।\nआपका समर्थन हमें इस प्रोजेक्ट को आगे बढ़ाने और बेहतर बनाने में मदद करता है।\nhttps://t.me/tribute/app?startapp=dHwT',
+    'टीम के लिए कॉफी ☕\n\nअगर आपको यह बॉट पसंद है, तो टीम को एक कप कॉफी पिलाइए। आपका समर्थन हमें इस प्रोजेक्ट को आगे बढ़ाने और बेहतर बनाने में मदद करता है।\n\nhttps://t.me/tribute/app?startapp=dHwT',
 };
 
 const es: Dict = {
@@ -2339,7 +2339,7 @@ const es: Dict = {
   bot_description:
     'Crea wishlists, compártelas con tus seres queridos y recibe justo lo que quieres.',
   bot_donation:
-    'Café para el equipo ☕\n¿Te gusta el bot? Apoya al equipo invitándolo a una taza de café.\nTu apoyo nos ayuda a seguir desarrollando el proyecto y hacerlo mejor.\nhttps://t.me/tribute/app?startapp=dHwT',
+    'Café para el equipo ☕\n\n¿Te gusta el bot? Apoya al equipo invitándolo a una taza de café. Tu apoyo nos ayuda a seguir desarrollando el proyecto y hacerlo mejor.\n\nhttps://t.me/tribute/app?startapp=dHwT',
 };
 
 const ar: Dict = {
@@ -2348,7 +2348,7 @@ const ar: Dict = {
   bot_description:
     'أنشئ قائمة أمنياتك، وشاركها مع أحبّائك، واحصل على ما تريده فعلًا.',
   bot_donation:
-    'قهوة للفريق ☕\nهل أعجبك البوت؟ ادعم الفريق بفنجان من القهوة.\nدعمك يساعدنا على تطوير المشروع وجعله أفضل.\nhttps://t.me/tribute/app?startapp=dHwT',
+    'قهوة للفريق ☕\n\nهل أعجبك البوت؟ ادعم الفريق بفنجان من القهوة. دعمك يساعدنا على تطوير المشروع وجعله أفضل.\n\nhttps://t.me/tribute/app?startapp=dHwT',
 };
 
 // ─── Dictionaries map ─────────────────────────────────────────────────────────
