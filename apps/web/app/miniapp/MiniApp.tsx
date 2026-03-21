@@ -1892,6 +1892,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [draftsItems, setDraftsItems] = useState<Item[]>([]);
   const [showMovePicker, setShowMovePicker] = useState(false);
   const [movingItem, setMovingItem] = useState<Item | null>(null);
+  const [pendingMoveItemId, setPendingMoveItemId] = useState<string | null>(null);
   const [importUrl, setImportUrl] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [fromDrafts, setFromDrafts] = useState(false);
@@ -3694,10 +3695,32 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setWishlists((prev) => addToTop ? [json.wishlist, ...prev] : [...prev, json.wishlist]);
       setShowCreateWl(false);
       setWlTitle(''); setWlDeadline('');
-      pushToast(t('wishlist_created', locale), 'success');
-      // Navigate into new wishlist
+      // If there was a deferred move intent (user tapped "Move" but had no wishlist yet),
+      // auto-complete the move into the newly created wishlist.
+      if (pendingMoveItemId) {
+        const itemId = pendingMoveItemId;
+        setPendingMoveItemId(null);
+        try {
+          const mRes = await tgFetch(`/tg/items/${itemId}/move`, {
+            method: 'POST',
+            body: JSON.stringify({ targetWishlistId: json.wishlist.id }),
+          });
+          if (mRes.ok) {
+            void loadDrafts();
+            pushToast(t('drafts_moved', locale, { name: json.wishlist.title }), 'success');
+          } else {
+            pushToast(t('wishlist_created', locale), 'success');
+          }
+        } catch {
+          pushToast(t('wishlist_created', locale), 'success');
+        }
+      } else {
+        pushToast(t('wishlist_created', locale), 'success');
+      }
+      // Navigate into new wishlist and load its items (will include moved item if move succeeded)
       setCurrentWl(json.wishlist);
       setItems([]);
+      await loadItems(json.wishlist.id);
       setScreen('wishlist-detail');
     } finally {
       setLoading(false);
@@ -8244,7 +8267,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {moveTargets.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '24px 0' }}>
                   <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 12 }}>{t('drafts_create_first', locale)}</div>
-                  <button style={btnPrimary} onClick={() => { setShowMovePicker(false); setMovingItem(null); setScreen('my-wishlists'); setShowCreateWl(true); }}>
+                  <button style={btnPrimary} onClick={() => { if (movingItem) setPendingMoveItemId(movingItem.id); setShowMovePicker(false); setMovingItem(null); setScreen('my-wishlists'); setShowCreateWl(true); }}>
                     {t('create_wishlist_btn', locale)}
                   </button>
                 </div>
