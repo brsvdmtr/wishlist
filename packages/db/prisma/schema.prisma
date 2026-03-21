@@ -66,6 +66,8 @@ enum HintStatus {
 enum Currency {
   RUB
   USD
+  EUR
+  GBP
 }
 
 enum ProfileVisibility {
