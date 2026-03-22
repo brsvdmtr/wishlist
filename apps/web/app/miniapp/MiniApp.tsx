@@ -1658,6 +1658,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [canGodMode, setCanGodMode] = useState(false);
   const [godModeLoading, setGodModeLoading] = useState(false);
   const [santaTestModeLoading, setSantaTestModeLoading] = useState(false);
+  const [showLocaleDebug, setShowLocaleDebug] = useState(false);
   const [godStats, setGodStats] = useState<GodStats | null>(null);
   const [godStatsLoading, setGodStatsLoading] = useState(false);
   const [godStatsError, setGodStatsError] = useState(false);
@@ -7627,6 +7628,36 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     </div>
                   )}
 
+                  {/* Locale debug toggle — only when godMode active */}
+                  {godMode && (
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#7fdbca', fontFamily: font }}>🛠 Locale debug</div>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                            {showLocaleDebug ? 'Panel visible in settings' : 'Panel hidden'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setShowLocaleDebug(v => !v)}
+                          style={{
+                            width: 50, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                            background: showLocaleDebug ? '#7fdbca' : C.surface,
+                            position: 'relative', transition: 'background 0.2s',
+                          }}
+                        >
+                          <div style={{
+                            width: 22, height: 22, borderRadius: 11,
+                            background: '#fff', position: 'absolute', top: 3,
+                            left: showLocaleDebug ? 25 : 3,
+                            transition: 'left 0.2s',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          }} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* ─── Analytics block — only when godMode active ─── */}
                   {godMode && (() => {
                     const pct = (n: number, total: number) =>
@@ -8009,8 +8040,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ) : settingsData && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-              {/* ── DEBUG BLOCK — god mode only, never shown to regular users ── */}
-              {godMode && (() => {
+              {/* ── DEBUG BLOCK — god mode + toggle only ── */}
+              {godMode && showLocaleDebug && (() => {
                 const rawLang = tgLangCodeRef.current;
                 const normalized = normalizeLocale(rawLang);
                 const fallbackUsed = !rawLang || (normalized === 'en' && !rawLang?.startsWith('en'));
