@@ -7737,9 +7737,6 @@ tgRouter.get('/santa/campaigns/:id/inbound/wishlist', asyncHandler(async (req, r
   const myReservedItemIds = new Set(assignment.santaItemReservations.map(r => r.itemId));
   const myReservations = assignment.santaItemReservations.map(r => ({ id: r.itemId, title: r.item.title }));
 
-  const myReservedItemIds = new Set(assignment.santaItemReservations.map(r => r.itemId));
-  const myReservations = assignment.santaItemReservations.map(r => ({ id: r.itemId, title: r.item.title }));
-
   const giverView = serializeAssignment('giver', {
     giftStatus: assignment.giftStatus,
     giftNote: assignment.giftNote,
