@@ -1720,6 +1720,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showProfileVisibilitySheet, setShowProfileVisibilitySheet] = useState(false);
   const [showSubscribePolicySheet, setShowSubscribePolicySheet] = useState(false);
   const [showCommentsDefaultSheet, setShowCommentsDefaultSheet] = useState(false);
+  const [showLanguageSheet, setShowLanguageSheet] = useState(false);
 
   // Archive state
   const [archiveItems, setArchiveItems] = useState<Item[]>([]);
@@ -8008,11 +8009,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ) : settingsData && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-              {/* ── DEBUG BLOCK (temporary) ─────────────────────────────── */}
-              {(() => {
+              {/* ── DEBUG BLOCK — god mode only, never shown to regular users ── */}
+              {godMode && (() => {
                 const rawLang = tgLangCodeRef.current;
                 const normalized = normalizeLocale(rawLang);
-                const fallbackUsed = !rawLang || normalized === 'en' && !rawLang?.startsWith('en');
+                const fallbackUsed = !rawLang || (normalized === 'en' && !rawLang?.startsWith('en'));
                 const rows: [string, string][] = [
                   ['build', process.env.NEXT_PUBLIC_BUILD_TIME ?? 'unknown'],
                   ['tg.language_code', rawLang ?? '(undefined)'],
@@ -8043,44 +8044,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
               {/* General */}
               <SettingsSection title={t('settings_general', locale)}>
-                <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: 14, color: C.text, marginBottom: 10 }}>{t('settings_language', locale)}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {/* Auto chip — resets to Telegram language */}
-                    <button
-                      onClick={() => patchSettings({ languageMode: 'auto', manualLanguage: null })}
-                      style={{
-                        padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 500,
-                        cursor: 'pointer', fontFamily: font, transition: 'background 0.15s, color 0.15s',
-                        border: settingsData.languageMode === 'auto' ? `2px solid ${C.accent}` : '2px solid transparent',
-                        background: settingsData.languageMode === 'auto' ? C.surface : C.surface,
-                        color: settingsData.languageMode === 'auto' ? C.accent : C.textMuted,
-                      }}
-                    >
-                      {t('settings_language_auto', locale)}
-                    </button>
-                    {([
-                      { code: 'ru', label: 'Русский' },
-                      { code: 'en', label: 'English' },
-                      { code: 'zh-CN', label: '中文' },
-                      { code: 'hi', label: 'हिन्दी' },
-                      { code: 'es', label: 'Español' },
-                      { code: 'ar', label: 'العربية' },
-                    ] as const).map(({ code, label }) => {
-                      const isActive = settingsData.languageMode === 'manual' && settingsData.manualLanguage === code;
-                      return (
-                        <button key={code} onClick={() => patchSettings({ languageMode: 'manual', manualLanguage: code })} style={{
-                          padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 500,
-                          cursor: 'pointer', fontFamily: font, transition: 'background 0.15s, color 0.15s',
-                          background: isActive ? C.accent : C.surface,
-                          color: isActive ? '#fff' : C.text,
-                        }}>
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                {(() => {
+                  const LANG_NATIVE: Record<string, string> = {
+                    ru: 'Русский', en: 'English', 'zh-CN': '中文', hi: 'हिन्दी', es: 'Español', ar: 'العربية',
+                  };
+                  const isAuto = settingsData.languageMode === 'auto';
+                  const effectiveName = LANG_NATIVE[locale] ?? locale;
+                  const hint = isAuto ? t('settings_language_auto', locale) : undefined;
+                  return (
+                    <SettingsRow
+                      label={t('settings_language', locale)}
+                      value={effectiveName}
+                      hint={hint}
+                      onClick={() => setShowLanguageSheet(true)}
+                    />
+                  );
+                })()}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
                   <span style={{ fontSize: 14, color: C.text }}>{t('settings_default_currency', locale)}</span>
                   <div style={{ display: 'flex', gap: 4, background: C.bg, borderRadius: 8, padding: 2 }}>
@@ -8546,6 +8525,48 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             </>
           )}
+        </div>
+      </BottomSheet>
+
+      {/* ── Language picker sheet ── */}
+      <BottomSheet isOpen={showLanguageSheet} onClose={() => setShowLanguageSheet(false)} title={t('settings_language', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {([
+            { mode: 'auto' as const, code: null,    label: t('settings_language_auto', locale) },
+            { mode: 'manual' as const, code: 'ru',    label: 'Русский' },
+            { mode: 'manual' as const, code: 'en',    label: 'English' },
+            { mode: 'manual' as const, code: 'es',    label: 'Español' },
+            { mode: 'manual' as const, code: 'hi',    label: 'हिन्दी' },
+            { mode: 'manual' as const, code: 'zh-CN', label: '中文' },
+            { mode: 'manual' as const, code: 'ar',    label: 'العربية' },
+          ]).map(({ mode, code, label }) => {
+            const isSelected = mode === 'auto'
+              ? settingsData?.languageMode === 'auto'
+              : settingsData?.languageMode === 'manual' && settingsData.manualLanguage === code;
+            return (
+              <button
+                key={code ?? 'auto'}
+                onClick={() => {
+                  if (mode === 'auto') {
+                    void patchSettings({ languageMode: 'auto', manualLanguage: null });
+                  } else {
+                    void patchSettings({ languageMode: 'manual', manualLanguage: code });
+                  }
+                  setShowLanguageSheet(false);
+                }}
+                style={{
+                  background: isSelected ? C.accentSoft : C.surface,
+                  border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
+                  borderRadius: 14, padding: '14px 18px', textAlign: 'start',
+                  cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}
+              >
+                <span style={{ fontWeight: isSelected ? 600 : 400 }}>{label}</span>
+                {isSelected && <span style={{ color: C.accent, fontSize: 18, flexShrink: 0 }}>✓</span>}
+              </button>
+            );
+          })}
         </div>
       </BottomSheet>
 
