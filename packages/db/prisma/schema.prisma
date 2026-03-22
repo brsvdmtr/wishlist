@@ -357,8 +357,13 @@ model UserProfile {
   commentsEnabled     Boolean @default(true)
   hintsEnabled        Boolean @default(true)
 
-  // Settings — Language (null = use Telegram language_code)
+  // Settings — Language
+  // `language` is legacy — no longer used as effective locale source.
   language            String?
+  // 'auto' = follow Telegram language_code; 'manual' = use manualLanguage
+  languageMode        String   @default("auto")
+  // Locale chosen by user when languageMode='manual'. Null in auto mode.
+  manualLanguage      String?
 
   // Settings — App Behavior
   newWishlistPosition String  @default("bottom")

@@ -38,6 +38,35 @@ export function isRTL(locale: Locale): boolean {
   return locale === 'ar';
 }
 
+// ─── Language mode & effective locale resolver ────────────────────────────────
+
+export type LanguageMode = 'auto' | 'manual';
+
+export interface LanguageSettings {
+  languageMode: LanguageMode;
+  manualLanguage: Locale | null;
+}
+
+/**
+ * Single source of truth for resolving the effective locale.
+ *
+ * Resolution order:
+ *  1. If languageMode='manual' and manualLanguage is set → use manualLanguage
+ *  2. Otherwise (auto mode) → normalizeLocale(telegramLanguageCode), fallback 'en'
+ *
+ * This function must be used everywhere locale is determined — API, bot, Mini App.
+ * Never use stored language values directly to override Telegram locale.
+ */
+export function resolveEffectiveLocale(
+  settings: LanguageSettings | null | undefined,
+  telegramLanguageCode?: string,
+): Locale {
+  if (settings?.languageMode === 'manual' && settings.manualLanguage) {
+    return settings.manualLanguage;
+  }
+  return normalizeLocale(telegramLanguageCode);
+}
+
 // ─── Dictionaries ────────────────────────────────────────────────────────────
 
 type Dict = Record<string, string>;

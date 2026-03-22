@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
-import { t, detectLocale, normalizeLocale, isRTL, pluralize, type Locale } from '@wishlist/shared';
+import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale } from '@wishlist/shared';
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES
@@ -1596,6 +1596,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const initDataRef = useRef<string>('');
   const urlStartParamRef = useRef<string>(''); // captured for "Open in Telegram" fallback
   const myActorHashRef = useRef<string>(''); // SHA-256 hash of tg_actor:{telegramId}
+  // Telegram language_code captured at init — used by resolveEffectiveLocale
+  const tgLangCodeRef = useRef<string | undefined>(undefined);
 
   const [screen, setScreen] = useState<Screen>('loading');
   const [errorMsg, setErrorMsg] = useState('');
@@ -1699,7 +1701,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // Settings state
   type SettingsData = {
-    language: string;
+    // Language — resolveEffectiveLocale model
+    languageMode: 'auto' | 'manual';
+    manualLanguage: Locale | null;
+    effectiveLanguage: Locale;
     defaultCurrency: 'RUB' | 'USD';
     notifications: { comments: boolean; reservations: boolean; subscriptions: boolean; marketing: boolean };
     privacy: { profileVisibility: string; subscribePolicy: string; commentsEnabled: boolean; hintsEnabled: boolean };
@@ -2454,8 +2459,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setProfileData(data.profile);
       setProfileStats(data.stats);
       if (data.profile?.defaultCurrency) setDefaultCurrency(data.profile.defaultCurrency);
-      // Saved language preference overrides Telegram language_code (higher priority)
-      if (data.profile?.language) setLocale(normalizeLocale(data.profile.language));
+      // NOTE: locale is NOT updated here — loadSettings() owns locale resolution
+      // via resolveEffectiveLocale(). Profile never overrides Telegram language_code.
       setPlanInfo(data.plan);
       if (data.subscription) setSubscription(data.subscription);
       setGodMode(data.godMode);
@@ -2525,8 +2530,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (!res.ok) throw new Error();
       const data = await res.json() as SettingsData;
       setSettingsData(data);
-      // Apply saved language preference
-      if (data.language) setLocale(normalizeLocale(data.language));
+      // Apply effective locale via single resolver: auto=Telegram lang, manual=saved choice
+      setLocale(resolveEffectiveLocale(
+        { languageMode: data.languageMode, manualLanguage: data.manualLanguage },
+        tgLangCodeRef.current,
+      ));
     } catch {
       pushToast(t('toast_load_error', locale), 'error');
     } finally {
@@ -2544,7 +2552,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const data = await res.json() as SettingsData;
       setSettingsData(data);
       if (patch.defaultCurrency) setDefaultCurrency(patch.defaultCurrency as 'RUB' | 'USD');
-      if (patch.language) setLocale(normalizeLocale(patch.language as string));
+      // Re-resolve locale after any settings change (catches both language and mode changes)
+      setLocale(resolveEffectiveLocale(
+        { languageMode: data.languageMode, manualLanguage: data.manualLanguage },
+        tgLangCodeRef.current,
+      ));
     } catch {
       pushToast(t('toast_save_error', locale), 'error');
     }
@@ -3381,6 +3393,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         computeActorHash(user.id).then(h => { myActorHashRef.current = h; }).catch(() => {});
       }
       const lang = tg?.initDataUnsafe?.user?.language_code;
+      tgLangCodeRef.current = lang; // stored for resolveEffectiveLocale — single source of truth
       if (lang !== undefined) {
         const detectedLocale = detectLocale(lang);
         setLocale(detectedLocale);
@@ -8000,6 +8013,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
                   <div style={{ fontSize: 14, color: C.text, marginBottom: 10 }}>{t('settings_language', locale)}</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {/* Auto chip — resets to Telegram language */}
+                    <button
+                      onClick={() => patchSettings({ languageMode: 'auto', manualLanguage: null })}
+                      style={{
+                        padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 500,
+                        cursor: 'pointer', fontFamily: font, transition: 'background 0.15s, color 0.15s',
+                        border: settingsData.languageMode === 'auto' ? `2px solid ${C.accent}` : '2px solid transparent',
+                        background: settingsData.languageMode === 'auto' ? C.surface : C.surface,
+                        color: settingsData.languageMode === 'auto' ? C.accent : C.textMuted,
+                      }}
+                    >
+                      {t('settings_language_auto', locale)}
+                    </button>
                     {([
                       { code: 'ru', label: 'Русский' },
                       { code: 'en', label: 'English' },
@@ -8007,16 +8033,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       { code: 'hi', label: 'हिन्दी' },
                       { code: 'es', label: 'Español' },
                       { code: 'ar', label: 'العربية' },
-                    ] as const).map(({ code, label }) => (
-                      <button key={code} onClick={() => patchSettings({ language: code })} style={{
-                        padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 500,
-                        cursor: 'pointer', fontFamily: font, transition: 'background 0.15s, color 0.15s',
-                        background: locale === code ? C.accent : C.surface,
-                        color: locale === code ? '#fff' : C.text,
-                      }}>
-                        {label}
-                      </button>
-                    ))}
+                    ] as const).map(({ code, label }) => {
+                      const isActive = settingsData.languageMode === 'manual' && settingsData.manualLanguage === code;
+                      return (
+                        <button key={code} onClick={() => patchSettings({ languageMode: 'manual', manualLanguage: code })} style={{
+                          padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 500,
+                          cursor: 'pointer', fontFamily: font, transition: 'background 0.15s, color 0.15s',
+                          background: isActive ? C.accent : C.surface,
+                          color: isActive ? '#fff' : C.text,
+                        }}>
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
