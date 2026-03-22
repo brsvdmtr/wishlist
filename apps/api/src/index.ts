@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
 import { parseUrl, validateUrl } from './url-parser.js';
-import { t, detectLocale, pluralize, type Locale } from '@wishlist/shared';
+import { t, detectLocale, resolveEffectiveLocale, pluralize, type Locale } from '@wishlist/shared';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/api (pnpm -C apps/api dev).
@@ -4508,8 +4508,18 @@ tgRouter.get(
         }
       : { comments: true, reservations: true, subscriptions: true, marketing: true };
 
+    const langMode = (profile.languageMode ?? 'auto') as 'auto' | 'manual';
+    const manualLang = profile.manualLanguage as Locale | null ?? null;
+    const effectiveLanguage = resolveEffectiveLocale(
+      { languageMode: langMode, manualLanguage: manualLang },
+      req.tgUser?.language_code,
+    );
+
     return res.json({
-      language: profile.language ?? locale,
+      // New fields — single source of truth for language
+      languageMode: langMode,
+      manualLanguage: manualLang,
+      effectiveLanguage,
       defaultCurrency: profile.defaultCurrency,
       notifications,
       privacy: {
@@ -4534,7 +4544,9 @@ tgRouter.patch(
   '/me/settings',
   asyncHandler(async (req, res) => {
     const parsed = z.object({
-      language: z.enum(['ru', 'en', 'zh-CN', 'hi', 'es', 'ar']).optional(),
+      // Language mode — 'auto' follows Telegram language_code, 'manual' uses manualLanguage
+      languageMode: z.enum(['auto', 'manual']).optional(),
+      manualLanguage: z.enum(['ru', 'en', 'zh-CN', 'hi', 'es', 'ar']).nullable().optional(),
       defaultCurrency: z.enum(['RUB', 'USD', 'EUR', 'GBP']).optional(),
       notifications: z.object({
         comments: z.boolean().optional(),
@@ -4562,7 +4574,10 @@ tgRouter.patch(
     // Build update object
     const updateData: Record<string, unknown> = {};
 
-    if (data.language !== undefined) updateData.language = data.language;
+    if (data.languageMode !== undefined) updateData.languageMode = data.languageMode;
+    if (data.manualLanguage !== undefined) updateData.manualLanguage = data.manualLanguage;
+    // When switching to auto, clear manualLanguage
+    if (data.languageMode === 'auto') updateData.manualLanguage = null;
     if (data.defaultCurrency !== undefined) updateData.defaultCurrency = data.defaultCurrency;
 
     if (data.notifications) {
@@ -4615,8 +4630,17 @@ tgRouter.patch(
         }
       : { comments: true, reservations: true, subscriptions: true, marketing: true };
 
+    const updatedLangMode = (profile.languageMode ?? 'auto') as 'auto' | 'manual';
+    const updatedManualLang = profile.manualLanguage as Locale | null ?? null;
+    const updatedEffectiveLanguage = resolveEffectiveLocale(
+      { languageMode: updatedLangMode, manualLanguage: updatedManualLang },
+      req.tgUser?.language_code,
+    );
+
     return res.json({
-      language: profile.language ?? locale,
+      languageMode: updatedLangMode,
+      manualLanguage: updatedManualLang,
+      effectiveLanguage: updatedEffectiveLanguage,
       defaultCurrency: profile.defaultCurrency,
       notifications: updatedNotifications,
       privacy: {
