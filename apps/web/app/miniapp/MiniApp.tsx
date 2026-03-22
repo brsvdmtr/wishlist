@@ -7,7 +7,7 @@ import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, plural
 // TELEGRAM TYPES
 // ═══════════════════════════════════════════════════════
 
-type TgUser = { id: number; first_name: string; last_name?: string; username?: string };
+type TgUser = { id: number; first_name: string; last_name?: string; username?: string; language_code?: string };
 
 // ═══════════════════════════════════════════════════════
 // DESIGN SYSTEM (matches prototype exactly)
@@ -8163,6 +8163,39 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ textAlign: 'center', padding: 40, color: C.textMuted }}>{t('loading', locale)}</div>
           ) : settingsData && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* ── DEBUG BLOCK (temporary) ─────────────────────────────── */}
+              {(() => {
+                const rawLang = tgLangCodeRef.current;
+                const normalized = normalizeLocale(rawLang);
+                const fallbackUsed = !rawLang || normalized === 'en' && !rawLang?.startsWith('en');
+                const rows: [string, string][] = [
+                  ['build', process.env.NEXT_PUBLIC_BUILD_TIME ?? 'unknown'],
+                  ['tg.language_code', rawLang ?? '(undefined)'],
+                  ['normalized', normalized],
+                  ['languageMode', settingsData.languageMode],
+                  ['manualLanguage', settingsData.manualLanguage ?? 'null'],
+                  ['effectiveLanguage (server)', settingsData.effectiveLanguage],
+                  ['locale (client state)', locale],
+                  ['fallback used', fallbackUsed ? 'YES ⚠️' : 'no'],
+                ];
+                return (
+                  <div style={{
+                    background: '#1a1a2e', borderRadius: 10, padding: '10px 12px',
+                    fontFamily: 'monospace', fontSize: 11, color: '#7fdbca',
+                    border: '1px solid #334',
+                  }}>
+                    <div style={{ color: '#ff6b6b', fontWeight: 700, marginBottom: 6 }}>🛠 locale debug</div>
+                    {rows.map(([k, v]) => (
+                      <div key={k} style={{ display: 'flex', gap: 8, marginBottom: 2 }}>
+                        <span style={{ color: '#aaa', minWidth: 160 }}>{k}</span>
+                        <span style={{ color: '#fff' }}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* ── END DEBUG BLOCK ─────────────────────────────────────── */}
 
               {/* General */}
               <SettingsSection title={t('settings_general', locale)}>
