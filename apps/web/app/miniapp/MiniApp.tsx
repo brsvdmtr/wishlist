@@ -356,9 +356,6 @@ type GodStats = {
       wildberries: number; goldapple: number; ozon: number; yandex_market: number; completed: number;
     };
   };
-  engagement: {
-    totalComments: number; totalHints: number; totalWishlistSubs: number;
-  };
   generatedAt: string;
 };
 
@@ -12641,9 +12638,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               { emoji: '👟', title: 'Nike Air Max', price: '12 500 ₽', rotate: 0, ty: 0, accent: '#f472b6' },
               { emoji: '📷', title: 'Fujifilm X100', price: '110 000 ₽', rotate: 8, ty: 12, accent: '#fb923c' },
             ] : [
-              { emoji: '🎧', title: 'AirPods Pro', price: '$249', rotate: -8, ty: 12, accent: '#a78bfa' },
-              { emoji: '👟', title: 'Nike Air Max', price: '$120', rotate: 0, ty: 0, accent: '#f472b6' },
-              { emoji: '📚', title: 'Kindle Paperwhite', price: '$139', rotate: 8, ty: 12, accent: '#fb923c' },
+              { emoji: '🎧', title: 'AirPods Pro', price: '£249', rotate: -8, ty: 12, accent: '#a78bfa' },
+              { emoji: '👟', title: 'Nike Air Max', price: '£120', rotate: 0, ty: 0, accent: '#f472b6' },
+              { emoji: '📚', title: 'Kindle Paperwhite', price: '£139', rotate: 8, ty: 12, accent: '#fb923c' },
             ] as { emoji: string; title: string; price: string; rotate: number; ty: number; accent: string }[]).map((card, i) => (
               <div key={i} style={{
                 background: 'rgba(255,255,255,0.07)',
