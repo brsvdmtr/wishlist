@@ -359,7 +359,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-share';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1646,7 +1646,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Onboarding state
   const [onboardingState, setOnboardingState] = useState<{
     id: string; status: string; variantKey: string | null; entryPoint: string | null;
-    demoItemId: string | null; completionReason: string | null;
+    demoItemId: string | null; completionReason: string | null; metaJson?: unknown;
   } | null>(null);
   const [onboardingDemoItem, setOnboardingDemoItem] = useState<Item | null>(null);
   const [onboardingDraftsHaveUserContent, setOnboardingDraftsHaveUserContent] = useState(false);
@@ -1660,6 +1660,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [onboardingTryLoading, setOnboardingTryLoading] = useState(false);
   const [onboardingTryError, setOnboardingTryError] = useState<string | null>(null);
   const [onboardingTryUrl, setOnboardingTryUrl] = useState('');
+  const [onboardingWlTitle, setOnboardingWlTitle] = useState('');
+  const [onboardingCreatedWl, setOnboardingCreatedWl] = useState<{ id: string; slug: string; title: string } | null>(null);
 
   const [godMode, setGodMode] = useState(false);
   const [canGodMode, setCanGodMode] = useState(false);
@@ -2444,7 +2446,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       });
       if (res.ok) {
         trackEvent('onboarding_catalog_submitted', { count: onboardingCatalogSelected.length, keys: onboardingCatalogSelected });
-        setScreen('onboarding-share');
+        setScreen('onboarding-create-wishlist');
       }
     } catch { /* silent */ }
     finally { setOnboardingLoading(false); }
@@ -2464,6 +2466,33 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       });
     } catch { /* silent */ }
   }, [onboardingState, tgFetch]);
+
+  // ── Onboarding v2: create wishlist and auto-attach items ──
+  const createOnboardingWishlist = useCallback(async (title: string) => {
+    if (!onboardingState || !title.trim()) return;
+    setOnboardingLoading(true);
+    try {
+      const res = await tgFetch('/tg/onboarding/create-wishlist', {
+        method: 'POST',
+        body: JSON.stringify({ title: title.trim(), onboardingStateId: onboardingState.id }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        pushToast(err.error || t('error_generic', locale), 'error');
+        return;
+      }
+      const json = await res.json() as { wishlist: { id: string; slug: string; title: string; itemCount: number; reservedCount: number }; movedCount: number };
+      setOnboardingCreatedWl(json.wishlist);
+      // Refresh wishlists so home screen shows the new one immediately
+      await loadWishlists();
+      trackEvent('onboarding_create_wishlist_success', { wishlist_id: json.wishlist.id, items_moved: json.movedCount });
+      setScreen('onboarding-share');
+    } catch {
+      pushToast(t('error_generic', locale), 'error');
+    } finally {
+      setOnboardingLoading(false);
+    }
+  }, [onboardingState, tgFetch, locale, pushToast, loadWishlists, trackEvent]);
 
   const loadSubscriptions = useCallback(async () => {
     setSubscriptionsLoading(true);
@@ -3414,9 +3443,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('onboarding-try');
     } else if (screen === 'onboarding-catalog') {
       setScreen('onboarding-try');
-    } else if (screen === 'onboarding-share') {
-      // Context-aware: back to last meaningful step
+    } else if (screen === 'onboarding-create-wishlist') {
+      // Back to wherever items were added
       if (onboardingTryResult) {
+        setScreen('onboarding-success');
+      } else if (onboardingCatalogSelected.length > 0) {
+        setScreen('onboarding-catalog');
+      } else {
+        setScreen('onboarding-try');
+      }
+    } else if (screen === 'onboarding-share') {
+      if (onboardingCreatedWl) {
+        setScreen('onboarding-create-wishlist');
+      } else if (onboardingTryResult) {
         setScreen('onboarding-success');
       } else if (onboardingCatalogSelected.length > 0) {
         setScreen('onboarding-catalog');
@@ -4756,7 +4795,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
         display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
-        padding: '20px 24px 40px',
+        padding: '20px 24px calc(40px + env(safe-area-inset-bottom, 0px))',
       }}>
         {/* Skip */}
         <div style={{ alignSelf: 'flex-end' }}>
@@ -4768,10 +4807,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
         <div style={{ textAlign: 'center', fontSize: 44, margin: '16px 0 12px' }}>✨</div>
         <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.25 }}>
-          {t('onboarding_try_title', locale)}
+          {t('onboarding_try_title_v2', locale)}
         </div>
         <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 8, lineHeight: 1.45 }}>
-          {t('onboarding_try_subtitle', locale)}
+          {t('onboarding_try_subtitle_v2', locale)}
+        </div>
+        <div style={{
+          display: 'inline-block', margin: '12px auto 0', padding: '6px 14px',
+          background: 'rgba(124,106,255,0.1)', border: '1px solid rgba(124,106,255,0.2)',
+          borderRadius: 20, fontSize: 13, color: '#A78BFA', fontWeight: 500, textAlign: 'center',
+        }}>
+          {t('onboarding_try_trial_badge', locale)}
         </div>
 
         <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -4807,6 +4853,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {locale === 'ru' ? t('onboarding_try_url_hint', 'ru') : t('onboarding_try_url_hint', locale)}
           </div>
 
+          {onboardingTryResult && (
+            <div style={{ textAlign: 'center', fontSize: 13, color: '#34D399', fontWeight: 600, marginTop: 4 }}>
+              {t('onboarding_try_added_count', locale, { count: '1' })}
+            </div>
+          )}
+
           {/* Divider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
@@ -4837,7 +4889,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
         {/* Dots */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
-          {[0,1,2,3,4].map(i => (
+          {[0,1,2,3,4,5].map(i => (
             <div key={i} style={{ width: i === 1 ? 24 : 8, height: 8, borderRadius: i === 1 ? 4 : '50%', background: i === 1 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
           ))}
         </div>
@@ -4858,7 +4910,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
         display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
-        padding: '20px 24px 40px',
+        padding: '20px 24px calc(40px + env(safe-area-inset-bottom, 0px))',
       }}>
         <div style={{ textAlign: 'center', fontSize: 42, marginTop: 20 }}>🎉</div>
         <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.25, marginTop: 12, whiteSpace: 'pre-line' }}>
@@ -4899,12 +4951,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
-          {[0,1,2,3,4].map(i => (
+          {[0,1,2,3,4,5].map(i => (
             <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
           ))}
         </div>
 
-        <button onClick={() => { void updateOnboardingStep('onboarding-share'); setScreen('onboarding-share'); }}
+        <button onClick={() => { void updateOnboardingStep('onboarding-create-wishlist'); setScreen('onboarding-create-wishlist'); }}
           style={{
             width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
             background: 'linear-gradient(135deg, #7c6aff, #a855f7)', color: '#fff', fontSize: 17, fontWeight: 700,
@@ -4930,7 +4982,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        fontFamily: font, padding: '32px 24px',
+        fontFamily: font, padding: '32px 24px calc(32px + env(safe-area-inset-bottom, 0px))',
       }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
         <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', textAlign: 'center', marginBottom: 8 }}>
@@ -4976,7 +5028,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
         display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
-        padding: '20px 24px 40px',
+        padding: '20px 24px calc(40px + env(safe-area-inset-bottom, 0px))',
       }}>
         <div style={{ alignSelf: 'flex-end' }}>
           <button onClick={() => { trackEvent('onboarding_catalog_skipped'); void updateOnboardingStep('onboarding-share', 'fallback_demo'); setScreen('onboarding-share'); }}
@@ -5033,7 +5085,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         )}
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 16 }}>
-          {[0,1,2,3,4].map(i => (
+          {[0,1,2,3,4,5].map(i => (
             <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
           ))}
         </div>
@@ -5054,13 +5106,90 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     );
   }
 
+  function renderOnboardingCreateWishlist() {
+    const itemCount = (onboardingTryResult ? 1 : 0) + onboardingCatalogSelected.length;
+    // Count based on what's actually been created (metaJson tracked)
+    const meta = onboardingState?.metaJson ? getOnboardingMeta(onboardingState.metaJson) : {};
+    const totalItems = (meta.tryImportedItemIds?.length ?? 0) + (meta.catalogItemIds?.length ?? 0);
+    const displayCount = totalItems || itemCount || 0;
+
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
+        display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
+      }}>
+        <div style={{ flex: 1, padding: '20px 24px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ textAlign: 'center', fontSize: 44, marginTop: 32 }}>🎉</div>
+          <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.25, marginTop: 16 }}>
+            {t('onboarding_create_wl_title', locale)}
+          </div>
+          <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 8, lineHeight: 1.45 }}>
+            {t('onboarding_create_wl_subtitle', locale)}
+          </div>
+
+          {displayCount > 0 && (
+            <div style={{
+              textAlign: 'center', marginTop: 16,
+              background: 'rgba(124,106,255,0.1)', border: '1px solid rgba(124,106,255,0.2)',
+              borderRadius: 12, padding: '10px 16px', fontSize: 14, color: '#A78BFA', fontWeight: 600,
+            }}>
+              {t('onboarding_create_wl_items_ready', locale, { count: String(displayCount) })}
+            </div>
+          )}
+
+          {/* Wishlist name input */}
+          <div style={{ marginTop: 28 }}>
+            <input
+              value={onboardingWlTitle}
+              onChange={(e) => setOnboardingWlTitle(e.target.value)}
+              placeholder={t('onboarding_create_wl_name_placeholder', locale)}
+              style={{
+                width: '100%', background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(124,106,255,0.35)',
+                borderRadius: 14, padding: '16px 18px', color: '#fff', fontSize: 16, fontFamily: font, outline: 'none',
+              }}
+              maxLength={200}
+            />
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 8, textAlign: 'center' }}>
+              {t('onboarding_create_wl_name_hint', locale)}
+            </div>
+          </div>
+
+          {/* Dot progress */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
+            {[0,1,2,3,4,5].map(i => (
+              <div key={i} style={{ width: i === 3 ? 24 : 8, height: 8, borderRadius: i === 3 ? 4 : '50%', background: i === 3 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+            ))}
+          </div>
+        </div>
+
+        {/* Fixed bottom CTA with safe area */}
+        <div style={{ padding: '16px 24px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+          <button
+            onClick={() => void createOnboardingWishlist(onboardingWlTitle)}
+            disabled={!onboardingWlTitle.trim() || onboardingLoading}
+            style={{
+              width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
+              background: onboardingWlTitle.trim() ? 'linear-gradient(135deg, #7c6aff, #a855f7)' : 'rgba(255,255,255,0.1)',
+              color: onboardingWlTitle.trim() ? '#fff' : 'rgba(255,255,255,0.3)',
+              fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font,
+              boxShadow: onboardingWlTitle.trim() ? '0 8px 24px rgba(124,106,255,0.4)' : 'none',
+              opacity: onboardingLoading ? 0.7 : 1,
+            }}>
+            {onboardingLoading ? '…' : t('onboarding_create_wl_btn', locale)}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   function renderOnboardingShare() {
     return (
       <div style={{
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
         display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
-        padding: '20px 24px 40px',
+        padding: '20px 24px calc(40px + env(safe-area-inset-bottom, 0px))',
       }}>
         <div style={{ textAlign: 'center', fontSize: 40, marginTop: 12 }}>🎁</div>
         <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 800, color: '#fff', lineHeight: 1.25, marginTop: 12, whiteSpace: 'pre-line' }}>
@@ -5074,6 +5203,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(124,106,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📤</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{t('onboarding_share_share_title', locale)}</div>
             </div>
+            {onboardingCreatedWl && (
+              <div style={{ fontSize: 12, color: 'rgba(124,106,255,0.7)', marginTop: 4 }}>
+                {'\u00AB'}{onboardingCreatedWl.title}{'\u00BB'}
+              </div>
+            )}
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }}>
               {t('onboarding_share_share_desc', locale)}
             </div>
@@ -5092,8 +5226,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
-          {[0,1,2,3,4].map(i => (
-            <div key={i} style={{ width: i === 3 ? 24 : 8, height: 8, borderRadius: i === 3 ? 4 : '50%', background: i === 3 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+          {[0,1,2,3,4,5].map(i => (
+            <div key={i} style={{ width: i === 4 ? 24 : 8, height: 8, borderRadius: i === 4 ? 4 : '50%', background: i === 4 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
           ))}
         </div>
 
@@ -13322,7 +13456,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             )}
             <button
-              onClick={() => { setOnboardingState(null); setScreen('my-wishlists'); }}
+              onClick={async () => { setOnboardingState(null); await loadWishlists(); setScreen('my-wishlists'); }}
               style={{ padding: '14px 0', borderRadius: 14, border: `1px solid ${C.borderLight}`, background: 'none', color: C.textSec, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font, width: '100%' }}
             >
               {t('onboarding_complete_done_btn', locale)}
@@ -13336,6 +13470,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'onboarding-success' && onboardingVariant === 'v2_try' && renderOnboardingSuccess()}
       {screen === 'onboarding-recovery' && onboardingVariant === 'v2_try' && renderOnboardingRecovery()}
       {screen === 'onboarding-catalog' && onboardingVariant === 'v2_try' && renderOnboardingCatalog()}
+      {screen === 'onboarding-create-wishlist' && onboardingVariant === 'v2_try' && renderOnboardingCreateWishlist()}
       {screen === 'onboarding-share' && onboardingVariant === 'v2_try' && renderOnboardingShare()}
 
       {/* ── TOASTS ── */}
