@@ -5185,7 +5185,7 @@ tgRouter.post(
       ...meta,
       catalogItemIds: createdIds,
       acquisitionPath: meta.acquisitionPath ?? 'catalog',
-      lastStep: 'onboarding-share',
+      lastStep: 'onboarding-create-wishlist',
     };
     await prisma.userOnboardingState.update({
       where: { id: state.id },

@@ -2445,6 +2445,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         body: JSON.stringify({ catalogKeys: onboardingCatalogSelected, onboardingStateId: onboardingState.id }),
       });
       if (res.ok) {
+        const json = await res.json().catch(() => null) as { catalogItemIds?: string[] } | null;
+        // Update local onboardingState metaJson so create-wishlist screen shows correct count
+        if (json?.catalogItemIds) {
+          setOnboardingState(prev => prev ? {
+            ...prev,
+            metaJson: { ...(typeof prev.metaJson === 'object' && prev.metaJson ? prev.metaJson : {}), catalogItemIds: json.catalogItemIds, acquisitionPath: 'catalog' },
+          } : prev);
+        }
         trackEvent('onboarding_catalog_submitted', { count: onboardingCatalogSelected.length, keys: onboardingCatalogSelected });
         setScreen('onboarding-create-wishlist');
       }
@@ -5113,20 +5121,28 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   function renderOnboardingCreateWishlist() {
     const itemCount = (onboardingTryResult ? 1 : 0) + onboardingCatalogSelected.length;
-    // Count based on what's actually been created (metaJson tracked)
     const meta = onboardingState?.metaJson ? getOnboardingMeta(onboardingState.metaJson) : {};
     const totalItems = (meta.tryImportedItemIds?.length ?? 0) + (meta.catalogItemIds?.length ?? 0);
     const displayCount = totalItems || itemCount || 0;
 
     return (
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 100,
-        background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
-        display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
-      }}>
-        <div style={{ flex: 1, padding: '20px 24px', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ textAlign: 'center', fontSize: 44, marginTop: 32 }}>🎉</div>
-          <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.25, marginTop: 16 }}>
+      <div
+        onClick={(e) => {
+          // Tap outside input → dismiss keyboard
+          if ((e.target as HTMLElement).tagName !== 'INPUT') {
+            (document.activeElement as HTMLElement)?.blur?.();
+          }
+        }}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
+          display: 'flex', flexDirection: 'column', fontFamily: font,
+        }}
+      >
+        {/* Scrollable content — shrinks when keyboard opens */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 0', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ textAlign: 'center', fontSize: 44, marginTop: 24 }}>🎉</div>
+          <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.25, marginTop: 12 }}>
             {t('onboarding_create_wl_title', locale)}
           </div>
           <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 8, lineHeight: 1.45 }}>
@@ -5149,6 +5165,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               value={onboardingWlTitle}
               onChange={(e) => setOnboardingWlTitle(e.target.value)}
               placeholder={t('onboarding_create_wl_name_placeholder', locale)}
+              onFocus={(e) => {
+                // Scroll input into view when keyboard opens
+                setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+              }}
               style={{
                 width: '100%', background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(124,106,255,0.35)',
                 borderRadius: 14, padding: '16px 18px', color: '#fff', fontSize: 16, fontFamily: font, outline: 'none',
@@ -5161,15 +5181,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
 
           {/* Dot progress */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24, paddingBottom: 8 }}>
             {[0,1,2,3,4,5].map(i => (
               <div key={i} style={{ width: i === 3 ? 24 : 8, height: 8, borderRadius: i === 3 ? 4 : '50%', background: i === 3 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
             ))}
           </div>
         </div>
 
-        {/* Fixed bottom CTA with safe area */}
-        <div style={{ padding: '16px 24px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+        {/* Bottom CTA — stays above keyboard thanks to Telegram WebView viewport resize */}
+        <div style={{
+          flexShrink: 0, padding: '12px 24px',
+          paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
+          background: 'linear-gradient(0deg, rgba(15,10,30,1) 60%, rgba(15,10,30,0) 100%)',
+        }}>
           <button
             onClick={() => void createOnboardingWishlist(onboardingWlTitle)}
             disabled={!onboardingWlTitle.trim() || onboardingLoading}
