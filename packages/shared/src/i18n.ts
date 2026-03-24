@@ -67,6 +67,65 @@ export function resolveEffectiveLocale(
   return normalizeLocale(telegramLanguageCode);
 }
 
+// ─── Onboarding v2: A/B test types ──────────────────────────────────────────
+
+export type OnboardingVariant = 'v1_demo' | 'v2_try';
+export type AcquisitionPath = 'try_import' | 'manual' | 'catalog' | 'fallback_demo';
+
+export interface OnboardingMeta {
+  onboardingVariant?: OnboardingVariant;
+  tryImportedItemIds?: string[];
+  fallbackDemoItemId?: string | null;
+  catalogItemIds?: string[];
+  acquisitionPath?: AcquisitionPath | null;
+  lastStep?: string | null;
+  tryAttemptsUsed?: number;
+  trySuccessCount?: number;
+}
+
+export function getOnboardingMeta(metaJson: unknown): OnboardingMeta {
+  if (metaJson && typeof metaJson === 'object') return metaJson as OnboardingMeta;
+  return {};
+}
+
+// ─── Onboarding v2: catalog templates ───────────────────────────────────────
+
+export interface CatalogTemplate {
+  key: string;
+  titleKey: string;
+  emoji: string;
+  amount: number;
+  currency: 'RUB' | 'USD';
+}
+
+export type MarketSegment = 'ru' | 'global';
+
+export function resolveMarketSegment(locale: Locale): MarketSegment {
+  return locale === 'ru' ? 'ru' : 'global';
+}
+
+export const RU_CATALOG: CatalogTemplate[] = [
+  { key: 'airpods',   titleKey: 'catalog_airpods',   emoji: '🎧', amount: 24990, currency: 'RUB' },
+  { key: 'sneakers',  titleKey: 'catalog_sneakers',  emoji: '👟', amount: 12500, currency: 'RUB' },
+  { key: 'camera',    titleKey: 'catalog_camera',    emoji: '📸', amount: 35000, currency: 'RUB' },
+  { key: 'kindle',    titleKey: 'catalog_kindle',    emoji: '📚', amount: 15990, currency: 'RUB' },
+  { key: 'ps5_game',  titleKey: 'catalog_ps5_game',  emoji: '🎮', amount: 4990,  currency: 'RUB' },
+  { key: 'perfume',   titleKey: 'catalog_perfume',   emoji: '🧴', amount: 8500,  currency: 'RUB' },
+];
+
+export const GLOBAL_CATALOG: CatalogTemplate[] = [
+  { key: 'airpods',   titleKey: 'catalog_airpods',   emoji: '🎧', amount: 249, currency: 'USD' },
+  { key: 'sneakers',  titleKey: 'catalog_sneakers',  emoji: '👟', amount: 120, currency: 'USD' },
+  { key: 'camera',    titleKey: 'catalog_camera',    emoji: '📸', amount: 350, currency: 'USD' },
+  { key: 'kindle',    titleKey: 'catalog_kindle',    emoji: '📚', amount: 140, currency: 'USD' },
+  { key: 'ps5_game',  titleKey: 'catalog_ps5_game',  emoji: '🎮', amount: 70,  currency: 'USD' },
+  { key: 'perfume',   titleKey: 'catalog_perfume',   emoji: '🧴', amount: 85,  currency: 'USD' },
+];
+
+export function getCatalogForSegment(segment: MarketSegment): CatalogTemplate[] {
+  return segment === 'ru' ? RU_CATALOG : GLOBAL_CATALOG;
+}
+
 // ─── Dictionaries ────────────────────────────────────────────────────────────
 
 type Dict = Record<string, string>;
@@ -1216,6 +1275,54 @@ const ru: Dict = {
   onboarding_complete_subtitle: 'Вишлист готов к публикации. Все, у кого есть ссылка, увидят твои желания.',
   onboarding_complete_share_btn: 'Поделиться вишлистом',
   onboarding_complete_done_btn: 'Готово',
+  // ── Onboarding v2: Try screen ──
+  onboarding_try_title: 'Попробуй прямо сейчас',
+  onboarding_try_subtitle: 'Добавь первое желание — это займёт буквально 5 секунд',
+  onboarding_try_url_placeholder: 'Вставь ссылку на товар...',
+  onboarding_try_paste_btn: 'Вставить',
+  onboarding_try_url_hint: 'Ozon, WB, Яндекс Маркет, AliExpress или любой другой магазин',
+  onboarding_try_or: 'или',
+  onboarding_try_manual_title: 'Добавить вручную',
+  onboarding_try_manual_desc: 'Просто напиши название желания',
+  onboarding_try_skip: 'Пропустить этот шаг →',
+  // ── Onboarding v2: Success screen ──
+  onboarding_success_title: 'Первое желание\nдобавлено!',
+  onboarding_success_badge: 'Добавлено',
+  onboarding_success_msg: 'Желание уже в твоих Черновиках.\nОсталось создать вишлист и поделиться с друзьями!',
+  onboarding_success_partial_warning: '💡 Данные подтянулись не полностью — проверь карточку',
+  onboarding_success_continue: 'Продолжить →',
+  onboarding_success_add_more: 'Добавить ещё',
+  // ── Onboarding v2: Recovery screen ──
+  onboarding_recovery_title: 'Не удалось разобрать ссылку',
+  onboarding_recovery_subtitle: 'Попробуй другую или добавь желание вручную',
+  onboarding_recovery_retry: 'Попробовать другую ссылку',
+  onboarding_recovery_manual: 'Заполнить вручную',
+  onboarding_recovery_catalog: 'Выбрать из шаблонов',
+  // ── Onboarding v2: Catalog screen ──
+  onboarding_catalog_title: 'Что бы ты хотел получить в подарок?',
+  onboarding_catalog_subtitle: 'Выбери хотя бы одно — потом можно изменить или удалить',
+  onboarding_catalog_selected: 'Выбрано: {{count}}',
+  onboarding_catalog_add_btn: 'Добавить выбранные →',
+  onboarding_catalog_custom_cta: 'Не нашёл подходящее? Добавь своё желание',
+  onboarding_catalog_skip: 'Потом',
+  // ── Onboarding v2: Share screen ──
+  onboarding_share_title: 'Делись и дари\nбез спойлеров',
+  onboarding_share_share_title: 'Поделись вишлистом',
+  onboarding_share_share_desc: 'Отправь ссылку друзьям — они увидят желания, но не узнают, что уже забронировано',
+  onboarding_share_reserve_title: 'Бронируй подарки',
+  onboarding_share_reserve_desc: 'Открой вишлист друга и забронируй. Именинник не увидит бронь',
+  onboarding_share_next: 'Далее →',
+  // ── Onboarding v2: Updated complete ──
+  onboarding_complete_your_wish: 'Твоё желание',
+  onboarding_complete_create_btn: 'Создать вишлист 🎉',
+  onboarding_complete_home_btn: 'На главную',
+  // ── Onboarding v2: Catalog item names ──
+  catalog_airpods: 'AirPods Pro',
+  catalog_sneakers: 'Кроссовки Nike',
+  catalog_camera: 'Фотоаппарат',
+  catalog_kindle: 'Kindle',
+  catalog_ps5_game: 'Игра для PS5',
+  catalog_perfume: 'Парфюм',
 };
 
 const en: Dict = {
@@ -2363,6 +2470,54 @@ const en: Dict = {
   onboarding_complete_subtitle: 'Your wishlist is ready to share. Anyone with the link can see what you want.',
   onboarding_complete_share_btn: 'Share my wishlist',
   onboarding_complete_done_btn: 'Done',
+  // ── Onboarding v2: Try screen ──
+  onboarding_try_title: 'Try it right now',
+  onboarding_try_subtitle: 'Add your first wish — it takes just 5 seconds',
+  onboarding_try_url_placeholder: 'Paste a product link...',
+  onboarding_try_paste_btn: 'Paste',
+  onboarding_try_url_hint: 'Amazon, Zalando, AliExpress, eBay or any other store',
+  onboarding_try_or: 'or',
+  onboarding_try_manual_title: 'Add manually',
+  onboarding_try_manual_desc: 'Just type the name of your wish',
+  onboarding_try_skip: 'Skip this step →',
+  // ── Onboarding v2: Success screen ──
+  onboarding_success_title: 'First wish\nadded!',
+  onboarding_success_badge: 'Added',
+  onboarding_success_msg: 'Your wish is in Drafts.\nCreate a wishlist and share it with friends!',
+  onboarding_success_partial_warning: '💡 Some data could not be parsed — check the card',
+  onboarding_success_continue: 'Continue →',
+  onboarding_success_add_more: 'Add more',
+  // ── Onboarding v2: Recovery screen ──
+  onboarding_recovery_title: 'Could not parse this link',
+  onboarding_recovery_subtitle: 'Try another one or add your wish manually',
+  onboarding_recovery_retry: 'Try another link',
+  onboarding_recovery_manual: 'Fill in manually',
+  onboarding_recovery_catalog: 'Choose from templates',
+  // ── Onboarding v2: Catalog screen ──
+  onboarding_catalog_title: 'What would you like to get as a gift?',
+  onboarding_catalog_subtitle: 'Pick at least one — you can change or delete later',
+  onboarding_catalog_selected: 'Selected: {{count}}',
+  onboarding_catalog_add_btn: 'Add selected →',
+  onboarding_catalog_custom_cta: 'Can\'t find what you want? Add your own wish',
+  onboarding_catalog_skip: 'Later',
+  // ── Onboarding v2: Share screen ──
+  onboarding_share_title: 'Share and gift\nwithout spoilers',
+  onboarding_share_share_title: 'Share your wishlist',
+  onboarding_share_share_desc: 'Send a link to friends — they\'ll see your wishes but won\'t know what\'s reserved',
+  onboarding_share_reserve_title: 'Reserve gifts',
+  onboarding_share_reserve_desc: 'Open a friend\'s wishlist and reserve. They won\'t see the reservation',
+  onboarding_share_next: 'Next →',
+  // ── Onboarding v2: Updated complete ──
+  onboarding_complete_your_wish: 'Your wish',
+  onboarding_complete_create_btn: 'Create wishlist 🎉',
+  onboarding_complete_home_btn: 'Go to home',
+  // ── Onboarding v2: Catalog item names ──
+  catalog_airpods: 'AirPods Pro',
+  catalog_sneakers: 'Nike Sneakers',
+  catalog_camera: 'Camera',
+  catalog_kindle: 'Kindle',
+  catalog_ps5_game: 'PS5 Game',
+  catalog_perfume: 'Perfume',
 };
 
 // ─── Additional locale dictionaries ──────────────────────────────────────────
@@ -3096,6 +3251,48 @@ const zhCN: Dict = {
   onboarding_complete_subtitle: '你的心愿单已准备好分享。所有有链接的人都能看到你的心愿。',
   onboarding_complete_share_btn: '分享我的心愿单',
   onboarding_complete_done_btn: '完成',
+  // ── Onboarding v2 ──
+  onboarding_try_title: '现在试试吧',
+  onboarding_try_subtitle: '添加你的第一个心愿——只需5秒',
+  onboarding_try_url_placeholder: '粘贴商品链接...',
+  onboarding_try_paste_btn: '粘贴',
+  onboarding_try_url_hint: 'Amazon、淘宝、京东、AliExpress或其他商店',
+  onboarding_try_or: '或',
+  onboarding_try_manual_title: '手动添加',
+  onboarding_try_manual_desc: '直接输入心愿名称',
+  onboarding_try_skip: '跳过此步 →',
+  onboarding_success_title: '第一个心愿\n已添加！',
+  onboarding_success_badge: '已添加',
+  onboarding_success_msg: '心愿已在收件箱中。\n创建心愿单并分享给朋友吧！',
+  onboarding_success_partial_warning: '💡 部分数据未能解析——请检查卡片',
+  onboarding_success_continue: '继续 →',
+  onboarding_success_add_more: '再添加一个',
+  onboarding_recovery_title: '无法解析此链接',
+  onboarding_recovery_subtitle: '试试其他链接或手动添加心愿',
+  onboarding_recovery_retry: '尝试其他链接',
+  onboarding_recovery_manual: '手动填写',
+  onboarding_recovery_catalog: '从模板选择',
+  onboarding_catalog_title: '你想收到什么礼物？',
+  onboarding_catalog_subtitle: '选择至少一个——之后可以修改或删除',
+  onboarding_catalog_selected: '已选：{{count}}',
+  onboarding_catalog_add_btn: '添加所选 →',
+  onboarding_catalog_custom_cta: '没找到合适的？添加自己的心愿',
+  onboarding_catalog_skip: '以后再说',
+  onboarding_share_title: '分享并送礼\n不剧透',
+  onboarding_share_share_title: '分享你的心愿单',
+  onboarding_share_share_desc: '发送链接给朋友——他们可以看到心愿，但看不到谁已预订',
+  onboarding_share_reserve_title: '预订礼物',
+  onboarding_share_reserve_desc: '打开朋友的心愿单并预订。对方不会看到预订信息',
+  onboarding_share_next: '下一步 →',
+  onboarding_complete_your_wish: '你的心愿',
+  onboarding_complete_create_btn: '创建心愿单 🎉',
+  onboarding_complete_home_btn: '回到首页',
+  catalog_airpods: 'AirPods Pro',
+  catalog_sneakers: 'Nike运动鞋',
+  catalog_camera: '相机',
+  catalog_kindle: 'Kindle',
+  catalog_ps5_game: 'PS5游戏',
+  catalog_perfume: '香水',
   santa_home_title: '秘密圣诞老人',
   santa_home_subtitle: '组织礼物交换活动',
   santa_home_create_btn: '创建活动',
@@ -4111,6 +4308,48 @@ const hi: Dict = {
   onboarding_complete_subtitle: 'आपकी विशलिस्ट शेयर के लिए तैयार है। लिंक वाले सभी आपकी इच्छाएं देख सकते हैं।',
   onboarding_complete_share_btn: 'अपनी विशलिस्ट शेयर करें',
   onboarding_complete_done_btn: 'हो गया',
+  // ── Onboarding v2 ──
+  onboarding_try_title: 'अभी आज़माएँ',
+  onboarding_try_subtitle: 'अपनी पहली इच्छा जोड़ें — बस 5 सेकंड लगेंगे',
+  onboarding_try_url_placeholder: 'प्रोडक्ट लिंक पेस्ट करें...',
+  onboarding_try_paste_btn: 'पेस्ट',
+  onboarding_try_url_hint: 'Amazon, Flipkart, AliExpress या कोई भी स्टोर',
+  onboarding_try_or: 'या',
+  onboarding_try_manual_title: 'मैन्युअल जोड़ें',
+  onboarding_try_manual_desc: 'बस अपनी इच्छा का नाम लिखें',
+  onboarding_try_skip: 'यह चरण छोड़ें →',
+  onboarding_success_title: 'पहली इच्छा\nजोड़ी गई!',
+  onboarding_success_badge: 'जोड़ा गया',
+  onboarding_success_msg: 'इच्छा आपके इनबॉक्स में है।\nविशलिस्ट बनाएँ और दोस्तों को शेयर करें!',
+  onboarding_success_partial_warning: '💡 कुछ डेटा पार्स नहीं हो सका — कार्ड जाँचें',
+  onboarding_success_continue: 'जारी रखें →',
+  onboarding_success_add_more: 'और जोड़ें',
+  onboarding_recovery_title: 'इस लिंक को पार्स नहीं कर सके',
+  onboarding_recovery_subtitle: 'दूसरा लिंक आज़माएँ या मैन्युअल जोड़ें',
+  onboarding_recovery_retry: 'दूसरा लिंक आज़माएँ',
+  onboarding_recovery_manual: 'मैन्युअल भरें',
+  onboarding_recovery_catalog: 'टेम्प्लेट से चुनें',
+  onboarding_catalog_title: 'आप उपहार में क्या पाना चाहेंगे?',
+  onboarding_catalog_subtitle: 'कम से कम एक चुनें — बाद में बदल या हटा सकते हैं',
+  onboarding_catalog_selected: 'चयनित: {{count}}',
+  onboarding_catalog_add_btn: 'चयनित जोड़ें →',
+  onboarding_catalog_custom_cta: 'मनचाहा नहीं मिला? अपनी इच्छा जोड़ें',
+  onboarding_catalog_skip: 'बाद में',
+  onboarding_share_title: 'शेयर करें और\nबिना स्पॉइलर दें',
+  onboarding_share_share_title: 'अपनी विशलिस्ट शेयर करें',
+  onboarding_share_share_desc: 'दोस्तों को लिंक भेजें — वे इच्छाएँ देखेंगे, लेकिन बुकिंग नहीं',
+  onboarding_share_reserve_title: 'उपहार बुक करें',
+  onboarding_share_reserve_desc: 'दोस्त की विशलिस्ट खोलें और बुक करें। उन्हें पता नहीं चलेगा',
+  onboarding_share_next: 'आगे →',
+  onboarding_complete_your_wish: 'आपकी इच्छा',
+  onboarding_complete_create_btn: 'विशलिस्ट बनाएँ 🎉',
+  onboarding_complete_home_btn: 'होम पर जाएँ',
+  catalog_airpods: 'AirPods Pro',
+  catalog_sneakers: 'Nike स्नीकर्स',
+  catalog_camera: 'कैमरा',
+  catalog_kindle: 'Kindle',
+  catalog_ps5_game: 'PS5 गेम',
+  catalog_perfume: 'परफ्यूम',
   santa_home_title: 'सीक्रेट सांता',
   santa_home_subtitle: 'उपहार विनिमय कार्यक्रम',
   santa_home_create_btn: 'कार्यक्रम बनाएं',
@@ -5126,6 +5365,48 @@ const es: Dict = {
   onboarding_complete_subtitle: 'Tu wishlist está lista para compartir. Cualquiera con el enlace puede ver lo que quieres.',
   onboarding_complete_share_btn: 'Compartir mi wishlist',
   onboarding_complete_done_btn: 'Listo',
+  // ── Onboarding v2 ──
+  onboarding_try_title: 'Pruébalo ahora',
+  onboarding_try_subtitle: 'Añade tu primer deseo — solo toma 5 segundos',
+  onboarding_try_url_placeholder: 'Pega un enlace de producto...',
+  onboarding_try_paste_btn: 'Pegar',
+  onboarding_try_url_hint: 'Amazon, Zalando, AliExpress, eBay o cualquier tienda',
+  onboarding_try_or: 'o',
+  onboarding_try_manual_title: 'Añadir manualmente',
+  onboarding_try_manual_desc: 'Solo escribe el nombre de tu deseo',
+  onboarding_try_skip: 'Omitir este paso →',
+  onboarding_success_title: '¡Primer deseo\nañadido!',
+  onboarding_success_badge: 'Añadido',
+  onboarding_success_msg: 'Tu deseo está en Borradores.\n¡Crea una wishlist y compártela con amigos!',
+  onboarding_success_partial_warning: '💡 Algunos datos no se pudieron extraer — revisa la tarjeta',
+  onboarding_success_continue: 'Continuar →',
+  onboarding_success_add_more: 'Añadir más',
+  onboarding_recovery_title: 'No se pudo analizar este enlace',
+  onboarding_recovery_subtitle: 'Prueba otro o añade tu deseo manualmente',
+  onboarding_recovery_retry: 'Probar otro enlace',
+  onboarding_recovery_manual: 'Rellenar manualmente',
+  onboarding_recovery_catalog: 'Elegir de plantillas',
+  onboarding_catalog_title: '¿Qué te gustaría recibir de regalo?',
+  onboarding_catalog_subtitle: 'Elige al menos uno — después puedes cambiar o eliminar',
+  onboarding_catalog_selected: 'Seleccionados: {{count}}',
+  onboarding_catalog_add_btn: 'Añadir seleccionados →',
+  onboarding_catalog_custom_cta: '¿No encuentras lo que buscas? Añade tu propio deseo',
+  onboarding_catalog_skip: 'Después',
+  onboarding_share_title: 'Comparte y regala\nsin spoilers',
+  onboarding_share_share_title: 'Comparte tu wishlist',
+  onboarding_share_share_desc: 'Envía un enlace a tus amigos — verán tus deseos pero no sabrán qué está reservado',
+  onboarding_share_reserve_title: 'Reserva regalos',
+  onboarding_share_reserve_desc: 'Abre la wishlist de un amigo y reserva. No verá la reserva',
+  onboarding_share_next: 'Siguiente →',
+  onboarding_complete_your_wish: 'Tu deseo',
+  onboarding_complete_create_btn: 'Crear wishlist 🎉',
+  onboarding_complete_home_btn: 'Ir al inicio',
+  catalog_airpods: 'AirPods Pro',
+  catalog_sneakers: 'Zapatillas Nike',
+  catalog_camera: 'Cámara',
+  catalog_kindle: 'Kindle',
+  catalog_ps5_game: 'Juego PS5',
+  catalog_perfume: 'Perfume',
   santa_home_title: 'Santa Secreto',
   santa_home_subtitle: 'Organiza intercambios de regalos',
   santa_home_create_btn: 'Crear campaña',
@@ -6141,6 +6422,48 @@ const ar: Dict = {
   onboarding_complete_subtitle: 'قائمتك جاهزة للمشاركة. كل من لديه الرابط يمكنه رؤية أمنياتك.',
   onboarding_complete_share_btn: 'مشاركة قائمتي',
   onboarding_complete_done_btn: 'تم',
+  // ── Onboarding v2 ──
+  onboarding_try_title: 'جرّب الآن',
+  onboarding_try_subtitle: 'أضف أمنيتك الأولى — يستغرق 5 ثوانٍ فقط',
+  onboarding_try_url_placeholder: 'الصق رابط المنتج...',
+  onboarding_try_paste_btn: 'لصق',
+  onboarding_try_url_hint: 'Amazon أو Noon أو AliExpress أو أي متجر آخر',
+  onboarding_try_or: 'أو',
+  onboarding_try_manual_title: 'أضف يدوياً',
+  onboarding_try_manual_desc: 'اكتب اسم أمنيتك فقط',
+  onboarding_try_skip: 'تخطّ هذه الخطوة ←',
+  onboarding_success_title: 'أُضيفت الأمنية\nالأولى!',
+  onboarding_success_badge: 'تمت الإضافة',
+  onboarding_success_msg: 'أمنيتك في المسودات.\nأنشئ قائمة وشاركها مع الأصدقاء!',
+  onboarding_success_partial_warning: '💡 لم يتم استخراج كل البيانات — تحقق من البطاقة',
+  onboarding_success_continue: 'متابعة ←',
+  onboarding_success_add_more: 'أضف المزيد',
+  onboarding_recovery_title: 'تعذّر تحليل هذا الرابط',
+  onboarding_recovery_subtitle: 'جرّب رابطاً آخر أو أضف أمنيتك يدوياً',
+  onboarding_recovery_retry: 'جرّب رابطاً آخر',
+  onboarding_recovery_manual: 'املأ يدوياً',
+  onboarding_recovery_catalog: 'اختر من القوالب',
+  onboarding_catalog_title: 'ماذا تريد أن تتلقى كهدية؟',
+  onboarding_catalog_subtitle: 'اختر واحداً على الأقل — يمكنك التغيير أو الحذف لاحقاً',
+  onboarding_catalog_selected: 'المحدد: {{count}}',
+  onboarding_catalog_add_btn: 'أضف المحددة ←',
+  onboarding_catalog_custom_cta: 'لم تجد ما يناسبك؟ أضف أمنيتك الخاصة',
+  onboarding_catalog_skip: 'لاحقاً',
+  onboarding_share_title: 'شارك وأهدِ\nبدون حرق',
+  onboarding_share_share_title: 'شارك قائمتك',
+  onboarding_share_share_desc: 'أرسل الرابط للأصدقاء — سيرون الأمنيات لكن لن يعرفوا ما تم حجزه',
+  onboarding_share_reserve_title: 'احجز هدايا',
+  onboarding_share_reserve_desc: 'افتح قائمة صديق واحجز. لن يرى صاحب المناسبة الحجز',
+  onboarding_share_next: 'التالي ←',
+  onboarding_complete_your_wish: 'أمنيتك',
+  onboarding_complete_create_btn: 'أنشئ قائمة أمنيات 🎉',
+  onboarding_complete_home_btn: 'إلى الرئيسية',
+  catalog_airpods: 'AirPods Pro',
+  catalog_sneakers: 'حذاء Nike رياضي',
+  catalog_camera: 'كاميرا',
+  catalog_kindle: 'Kindle',
+  catalog_ps5_game: 'لعبة PS5',
+  catalog_perfume: 'عطر',
   santa_home_title: 'سانتا السري',
   santa_home_subtitle: 'نظّم تبادل الهدايا',
   santa_home_create_btn: 'إنشاء حملة',
