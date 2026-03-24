@@ -484,6 +484,19 @@ if (!token) {
         return ctx.reply(t('bot_error', locale));
       }
     }
+    if (payload?.startsWith('profile_')) {
+      // Public profile deep link
+      const username = payload.slice('profile_'.length);
+      console.log('[bot][start] bot_start_with_payload', { telegramId, type: 'profile', username });
+      if (username) {
+        return ctx.reply(
+          t('bot_view_profile', locale),
+          Markup.inlineKeyboard([
+            Markup.button.webApp(t('bot_view_profile_btn', locale), `${MINI_APP_URL}?startapp=profile_${username}`),
+          ]),
+        );
+      }
+    }
     if (payload) {
       // Guest deep link — open specific wishlist in mini app
       return ctx.reply(
