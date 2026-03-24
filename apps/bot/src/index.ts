@@ -398,26 +398,31 @@ if (!token) {
 
   bot.start(async (ctx) => {
     const locale = getLocale(ctx);
+    const telegramId = String(ctx.from.id);
+    const chatId = String(ctx.chat.id);
+    const payload = ctx.startPayload;
+
+    console.log('[bot][start] bot_start_received', { telegramId, chatId, hasPayload: Boolean(payload) });
 
     // Override any stale per-chat menu button left by previous bot versions
     await ctx.setChatMenuButton(menuButton).catch(() => {});
 
-    // Store chat ID for notifications
-    const telegramId = String(ctx.from.id);
-    const chatId = String(ctx.chat.id);
+    // Store chat ID for notifications (best-effort — API will upsert properly on first Mini App open)
     await prisma.user.upsert({
       where: { telegramId },
       update: { telegramChatId: chatId },
       create: { telegramId, telegramChatId: chatId },
-    }).catch(() => { /* user may not exist yet — will be created by API later */ });
+    }).catch((err: unknown) => {
+      console.warn('[bot][start] db upsert skipped:', String(err));
+    });
 
-    const payload = ctx.startPayload; // slug passed via ?start=SLUG deep link
-    if (payload?.startsWith('santa_')) {
-      // Secret Santa invite deep link
-      const token = payload.slice('santa_'.length);
-      try {
+    try {
+      if (payload?.startsWith('santa_')) {
+        // Secret Santa invite deep link
+        console.log('[bot][start] bot_start_with_payload', { telegramId, type: 'santa' });
+        const santaToken = payload.slice('santa_'.length);
         const campaign = await prisma.santaCampaign.findUnique({
-          where: { inviteToken: token },
+          where: { inviteToken: santaToken },
           select: { id: true, title: true, status: true, owner: { select: { firstName: true, profile: { select: { displayName: true } } } } },
         });
         if (!campaign || campaign.status === 'CANCELLED') {
@@ -430,19 +435,15 @@ if (!token) {
         return ctx.reply(
           t('bot_santa_invite_msg', locale, { owner: ownerName, title: campaign.title }),
           Markup.inlineKeyboard([
-            Markup.button.webApp(t('bot_santa_join_btn', locale), `${MINI_APP_URL}?startapp=santa_join_${token}`),
+            Markup.button.webApp(t('bot_santa_join_btn', locale), `${MINI_APP_URL}?startapp=santa_join_${santaToken}`),
           ]),
         );
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[bot] santa deep link error:', err);
-        return ctx.reply(t('bot_error', locale));
       }
-    }
-    if (payload?.startsWith('hint_')) {
-      // Hint deep link — friend clicks a gift hint link
-      const itemId = payload.slice(5);
-      try {
+
+      if (payload?.startsWith('hint_')) {
+        // Hint deep link — friend clicks a gift hint link
+        console.log('[bot][start] bot_start_with_payload', { telegramId, type: 'hint' });
+        const itemId = payload.slice(5);
         const item = await prisma.item.findUnique({
           where: { id: itemId },
           select: { id: true, title: true, status: true, wishlist: { select: { slug: true, ownerId: true, owner: { select: { telegramId: true, firstName: true, telegramChatId: true } } } } },
@@ -462,42 +463,45 @@ if (!token) {
         let ownerName = item.wishlist.owner.firstName || t('api_user_fallback', locale);
         if (!item.wishlist.owner.firstName && item.wishlist.owner.telegramChatId) {
           try {
-            const BOT_TOKEN = process.env.BOT_TOKEN!;
-            const resp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getChat?chat_id=${item.wishlist.owner.telegramChatId}`);
+            const resp = await fetch(`https://api.telegram.org/bot${token}/getChat?chat_id=${item.wishlist.owner.telegramChatId}`);
             const data = await resp.json() as { ok: boolean; result?: { first_name?: string } };
             if (data.ok && data.result?.first_name) {
               ownerName = data.result.first_name;
-              // Cache for future
               await prisma.user.update({ where: { id: item.wishlist.ownerId }, data: { firstName: data.result.first_name } }).catch(() => {});
             }
           } catch { /* use fallback */ }
         }
         const shortName = ownerName.split(' ')[0] ?? ownerName;
-        // Hint message uses the RECIPIENT's locale (the person opening the deep link)
         const msg = t('bot_hint_msg', locale, { owner: ownerName, title: item.title, shortName: shortName.toLowerCase() });
         return ctx.reply(msg, Markup.inlineKeyboard([
           Markup.button.webApp(t('bot_hint_view_btn', locale), `${MINI_APP_URL}?startapp=${item.wishlist.slug}__item_${item.id}`),
         ]));
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[bot] hint deep link error:', err);
-        return ctx.reply(t('bot_error', locale));
       }
+
+      if (payload) {
+        // Unknown / guest deep link — open specific wishlist in mini app
+        console.log('[bot][start] bot_start_with_payload', { telegramId, type: 'guest', payload });
+        return ctx.reply(
+          t('bot_view_wishlist', locale),
+          Markup.inlineKeyboard([
+            Markup.button.webApp(t('bot_view_wishlist_btn', locale), `${MINI_APP_URL}?startapp=${payload}`),
+          ]),
+        );
+      }
+
+      // Regular start — two separate messages:
+      // 1. welcome (link preview disabled so the Support link doesn't generate preview)
+      // 2. donation (link preview intentionally enabled for Tribute link)
+      console.log('[bot][start] bot_start_success', { telegramId });
+      await ctx.reply(t('bot_start', locale), { link_preview_options: { is_disabled: true } });
+      return ctx.reply(t('bot_donation', locale));
+
+    } catch (err) {
+      console.error('[bot][start] bot_start_error', { telegramId, payload, err: String(err) });
+      try {
+        await ctx.reply(t('bot_error', locale));
+      } catch { /* best-effort */ }
     }
-    if (payload) {
-      // Guest deep link — open specific wishlist in mini app
-      return ctx.reply(
-        t('bot_view_wishlist', locale),
-        Markup.inlineKeyboard([
-          Markup.button.webApp(t('bot_view_wishlist_btn', locale), `${MINI_APP_URL}?startapp=${payload}`),
-        ]),
-      );
-    }
-    // Regular start — two separate messages:
-    // 1. welcome (link preview disabled so the Support link doesn't generate preview)
-    // 2. donation (link preview intentionally enabled for Tribute link)
-    await ctx.reply(t('bot_start', locale), { link_preview_options: { is_disabled: true } });
-    return ctx.reply(t('bot_donation', locale));
   });
 
   // /help — includes support button
@@ -991,26 +995,63 @@ if (!token) {
     return next();
   });
 
-  // ─── URL import: text message handler ────────────────────────────────────
+  // ─── URL import: helpers ─────────────────────────────────────────────────
   const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
-  const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/gi;
+
+  // Regex does NOT exclude ')' — many shop URLs contain parentheses
+  const URL_REGEX = /https?:\/\/[^\s<>"'\]]+/gi;
 
   function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  /**
+   * Extract all http(s) URLs from a Telegram message.
+   * Priority: message entities (most reliable) → regex fallback on raw text.
+   * Handles: plain URL text, text_link entities, and URLs embedded in longer text.
+   */
+  function extractUrlsFromMessage(msg: any): string[] {
+    const text: string = msg.text || '';
+    const entities: Array<{ type: string; offset: number; length: number; url?: string }> = msg.entities || [];
+    const urls: string[] = [];
+
+    // 1. Entity-based extraction (Telegram guarantees offset/length accuracy)
+    for (const e of entities) {
+      if (e.type === 'url') {
+        const url = text.slice(e.offset, e.offset + e.length);
+        if (url.startsWith('http')) urls.push(url);
+      } else if (e.type === 'text_link' && e.url?.startsWith('http')) {
+        urls.push(e.url);
+      }
+    }
+
+    // 2. Regex fallback if entities didn't yield results
+    if (urls.length === 0) {
+      const matched = text.match(URL_REGEX) ?? [];
+      urls.push(...matched.filter((u) => u.startsWith('http')));
+    }
+
+    // Deduplicate while preserving order
+    return [...new Set(urls)];
+  }
+
+  // ─── URL import: text message handler ────────────────────────────────────
   bot.on('text', async (ctx) => {
     const text = ctx.message.text;
     if (text.startsWith('/')) return; // skip commands
 
     const locale = getLocale(ctx);
+    const telegramId = String(ctx.from.id);
+    const chatId = String(ctx.chat.id);
 
-    const urls = text.match(URL_REGEX);
-    if (!urls || urls.length === 0) return; // no URL — stay silent
+    const urls = extractUrlsFromMessage(ctx.message);
+    if (urls.length === 0) return; // no URL — stay silent
 
-    const firstUrl = urls[0];
+    console.log('[bot][import] bot_url_detected', { telegramId, msgId: ctx.message.message_id, urlCount: urls.length, firstUrl: urls[0] });
 
-    // Multiple URLs — warn
+    const firstUrl = urls[0]!;
+
+    // Multiple URLs — warn but still process first
     if (urls.length > 1) {
       await ctx.reply(t('bot_multiple_urls', locale));
     }
@@ -1018,17 +1059,25 @@ if (!token) {
     // Text without URL = user note
     const note = text.replace(URL_REGEX, '').trim() || undefined;
 
-    // Show typing indicator while parsing
+    // Immediate feedback — user should see something right away
+    await ctx.reply(t('bot_import_processing', locale));
     await ctx.sendChatAction('typing');
 
     // Upsert user
-    const telegramId = String(ctx.from.id);
-    const chatId = String(ctx.chat.id);
-    const user = await prisma.user.upsert({
-      where: { telegramId },
-      update: { telegramChatId: chatId },
-      create: { telegramId, telegramChatId: chatId },
-    });
+    let user: { id: string };
+    try {
+      user = await prisma.user.upsert({
+        where: { telegramId },
+        update: { telegramChatId: chatId },
+        create: { telegramId, telegramChatId: chatId },
+      });
+    } catch (dbErr) {
+      console.error('[bot][import] bot_import_error db_upsert', { telegramId, err: String(dbErr) });
+      await ctx.reply(t('bot_import_error_retry', locale));
+      return;
+    }
+
+    console.log('[bot][import] bot_import_started', { telegramId, userId: user.id, url: firstUrl });
 
     try {
       const res = await fetch(`${API_BASE_URL}/internal/import-url`, {
@@ -1041,15 +1090,30 @@ if (!token) {
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
+        const body = await res.json().catch(() => ({})) as { error?: string; feature?: string };
+
         if (res.status === 402) {
-          await ctx.reply(t('bot_import_drafts_full', locale));
+          if (body.feature === 'url_import') {
+            // PRO feature gate — user needs to upgrade
+            console.log('[bot][import] bot_import_rejected_plan', { telegramId, userId: user.id, url: firstUrl });
+            await ctx.reply(t('bot_import_pro_required', locale), Markup.inlineKeyboard([
+              [Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)],
+            ]));
+          } else {
+            // Drafts limit reached
+            console.log('[bot][import] bot_import_rejected_limit', { telegramId, userId: user.id, url: firstUrl });
+            await ctx.reply(t('bot_import_drafts_full', locale));
+          }
           return;
         }
+
         if (res.status === 400) {
+          console.log('[bot][import] bot_import_error bad_url', { telegramId, userId: user.id, url: firstUrl, error: body.error });
           await ctx.reply(body.error || t('bot_import_error', locale));
           return;
         }
+
+        console.error('[bot][import] bot_import_error api_status', { telegramId, userId: user.id, url: firstUrl, status: res.status, error: body.error });
         await ctx.reply(t('bot_import_error_retry', locale));
         return;
       }
@@ -1059,6 +1123,8 @@ if (!token) {
         parseStatus: string;
       };
 
+      console.log('[bot][import] bot_import_success', { telegramId, userId: user.id, url: firstUrl, itemId: item.id, parseStatus });
+
       const priceFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
       let msg = `${t('bot_import_success', locale)}\n\n`;
       msg += `<b>${escapeHtml(item.title)}</b>`;
@@ -1066,21 +1132,22 @@ if (!token) {
       if (item.price) msg += `\n💰 ${Number(item.price).toLocaleString(priceFmtLocale)} ₽`;
 
       if (parseStatus === 'failed') {
+        console.log('[bot][import] bot_import_partial parse_failed', { telegramId, itemId: item.id });
         msg += `\n\n${t('bot_import_parse_failed', locale)}`;
       } else if (parseStatus === 'partial') {
+        console.log('[bot][import] bot_import_partial', { telegramId, itemId: item.id });
         msg += `\n\n${t('bot_import_parse_partial', locale)}`;
       }
 
       await ctx.reply(msg, {
         parse_mode: 'HTML',
         ...Markup.inlineKeyboard([
-          Markup.button.webApp(t('bot_import_open', locale), `${MINI_APP_URL}?startapp=draft_${item.id}`),
+          [Markup.button.webApp(t('bot_import_open', locale), `${MINI_APP_URL}?startapp=draft_${item.id}`)],
         ]),
       });
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[bot] import-url error:', err);
-      await ctx.reply(t('bot_error', locale));
+      console.error('[bot][import] bot_import_error exception', { telegramId, userId: user.id, url: firstUrl, err: String(err) });
+      await ctx.reply(t('bot_import_error_retry', locale));
     }
   });
 
