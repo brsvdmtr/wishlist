@@ -1500,13 +1500,26 @@ const FORCED_ROLLOUT_USERS = new Set<string>(
 // Onboarding v2 rollout mode: 'off' | 'ab50' | 'force_v1' | 'force_v2'
 const ONBOARDING_V2_ROLLOUT = (process.env.ONBOARDING_V2_ROLLOUT ?? 'off') as 'off' | 'ab50' | 'force_v1' | 'force_v2';
 
-function assignOnboardingVariant(): OnboardingVariant {
-  switch (ONBOARDING_V2_ROLLOUT) {
-    case 'force_v2': return 'v2_try';
-    case 'force_v1': return 'v1_demo';
-    case 'ab50': return Math.random() < 0.5 ? 'v1_demo' : 'v2_try';
-    default: return 'v1_demo'; // 'off' = v1 only
+// Test override: specific telegramIds that always get v2_try on first assignment.
+// Does NOT override already-saved variant — only affects first assignment.
+const ONBOARDING_V2_TEST_TELEGRAM_IDS = new Set(
+  (process.env.ONBOARDING_V2_TEST_IDS ?? '8747175307').split(',').filter(Boolean)
+);
+
+function assignOnboardingVariant(telegramId?: string): { variant: OnboardingVariant; source: 'test_override' | 'rollout_config' } {
+  // 1. Test override by telegramId
+  if (telegramId && ONBOARDING_V2_TEST_TELEGRAM_IDS.has(telegramId)) {
+    return { variant: 'v2_try', source: 'test_override' };
   }
+  // 2. Rollout config
+  let variant: OnboardingVariant;
+  switch (ONBOARDING_V2_ROLLOUT) {
+    case 'force_v2': variant = 'v2_try'; break;
+    case 'force_v1': variant = 'v1_demo'; break;
+    case 'ab50': variant = Math.random() < 0.5 ? 'v1_demo' : 'v2_try'; break;
+    default: variant = 'v1_demo';
+  }
+  return { variant, source: 'rollout_config' };
 }
 
 interface DemoItemTemplate {
@@ -4788,9 +4801,14 @@ tgRouter.post(
     }
 
     // ── A/B variant assignment ──
-    const onboardingVariant: OnboardingVariant = existing
-      ? (getOnboardingMeta(existing.metaJson).onboardingVariant ?? assignOnboardingVariant())
-      : assignOnboardingVariant();
+    // Priority: 1) already-saved variant  2) test override by telegramId  3) rollout config
+    const telegramId = String(req.tgUser!.id);
+    const existingVariant = existing ? getOnboardingMeta(existing.metaJson).onboardingVariant : undefined;
+    const assignment = existingVariant
+      ? { variant: existingVariant, source: 'rollout_config' as const }
+      : assignOnboardingVariant(telegramId);
+    const onboardingVariant = assignment.variant;
+    const assignmentSource = assignment.source;
 
     // Override entryPoint for forced rollout
     const effectiveEntryPoint: EntryPoint = elig.forcedRollout
@@ -4833,6 +4851,7 @@ tgRouter.post(
         onboarding_key: ONBOARDING_KEY,
         version: ONBOARDING_VERSION,
         onboarding_variant: 'v2_try',
+        assignment_source: assignmentSource,
         entry_point: effectiveEntryPoint,
         forced_rollout: elig.forcedRollout,
         market_segment: marketSegment,
@@ -4907,6 +4926,7 @@ tgRouter.post(
       onboarding_key: ONBOARDING_KEY,
       version: ONBOARDING_VERSION,
       onboarding_variant: 'v1_demo',
+      assignment_source: assignmentSource,
       variant_key: variantKey,
       entry_point: effectiveEntryPoint,
       forced_rollout: elig.forcedRollout,
