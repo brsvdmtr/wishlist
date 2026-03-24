@@ -5090,11 +5090,11 @@ tgRouter.post(
     if (meta.onboardingVariant !== 'v2_try') {
       return res.status(400).json({ error: 'Wrong variant for try-import' });
     }
-    if ((meta.tryAttemptsUsed ?? 0) >= 3) {
+    if ((meta.tryAttemptsUsed ?? 0) >= 30) {
       return res.status(429).json({ error: 'Max attempts reached' });
     }
-    if ((meta.trySuccessCount ?? 0) >= 2) {
-      return res.status(409).json({ error: 'Max successful imports reached' });
+    if ((meta.trySuccessCount ?? 0) >= 20) {
+      return res.status(409).json({ error: 'Onboarding trial limit reached', limit: 20 });
     }
 
     // NO PRO gate — onboarding free pass
@@ -5232,6 +5232,101 @@ tgRouter.post(
     });
 
     return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/onboarding/create-wishlist — create first wishlist and auto-attach onboarding items
+tgRouter.post(
+  '/onboarding/create-wishlist',
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({
+        title: z.string().min(1).max(200),
+        onboardingStateId: z.string(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const state = await prisma.userOnboardingState.findUnique({ where: { id: parsed.data.onboardingStateId } });
+    if (!state || state.userId !== user.id || state.status !== 'IN_PROGRESS') {
+      return res.status(409).json({ error: 'Invalid onboarding state' });
+    }
+
+    const meta = getOnboardingMeta(state.metaJson);
+    if (meta.onboardingVariant !== 'v2_try') {
+      return res.status(400).json({ error: 'Wrong variant' });
+    }
+
+    // Create the wishlist
+    const position = 0; // top position for first wishlist
+    const profile = await prisma.userProfile.findUnique({ where: { userId: user.id }, select: { commentsEnabled: true } });
+    const inheritedCommentPolicy = profile?.commentsEnabled === false ? 'SUBSCRIBERS' : 'ALL';
+    const wishlist = await prisma.wishlist.create({
+      data: {
+        slug: `wl-${crypto.randomUUID().slice(0, 12)}`,
+        ownerId: user.id,
+        title: parsed.data.title.trim(),
+        type: 'REGULAR',
+        position,
+        commentPolicy: inheritedCommentPolicy,
+      },
+      select: { id: true, slug: true, title: true, description: true, deadline: true },
+    });
+
+    // Collect all onboarding item IDs to move
+    const itemIdsToMove: string[] = [
+      ...(meta.tryImportedItemIds ?? []),
+      ...(meta.catalogItemIds ?? []),
+    ];
+
+    // Move items from SYSTEM_DRAFTS to the new wishlist
+    let movedCount = 0;
+    if (itemIdsToMove.length > 0) {
+      const result = await prisma.item.updateMany({
+        where: {
+          id: { in: itemIdsToMove },
+          wishlist: { ownerId: user.id, type: 'SYSTEM_DRAFTS' },
+          status: { in: ['AVAILABLE', 'RESERVED'] },
+        },
+        data: { wishlistId: wishlist.id },
+      });
+      movedCount = result.count;
+    }
+
+    // Update onboarding state
+    const newMeta: OnboardingMeta = {
+      ...meta,
+      lastStep: 'onboarding-share',
+    };
+    await prisma.userOnboardingState.update({
+      where: { id: state.id },
+      data: { metaJson: newMeta as any },
+    });
+
+    const locale = getRequestLocale(req);
+    trackEvent('onboarding_create_wishlist_success', user.id, {
+      onboarding_key: ONBOARDING_KEY,
+      version: ONBOARDING_VERSION,
+      onboarding_variant: 'v2_try',
+      acquisition_path: meta.acquisitionPath ?? null,
+      wishlist_id: wishlist.id,
+      items_moved: movedCount,
+      market_segment: resolveMarketSegment(locale),
+    });
+
+    trackEvent('onboarding_items_attached_to_wishlist', user.id, {
+      onboarding_key: ONBOARDING_KEY,
+      onboarding_variant: 'v2_try',
+      wishlist_id: wishlist.id,
+      item_ids: itemIdsToMove,
+      moved_count: movedCount,
+    });
+
+    return res.status(201).json({
+      wishlist: { ...wishlist, itemCount: movedCount, reservedCount: 0 },
+      movedCount,
+    });
   }),
 );
 
@@ -5483,34 +5578,51 @@ tgRouter.get(
       },
       // Onboarding v2 A/B metrics (additive, separate from v1 structure)
       onboardingAB: await (async () => {
-        const [abStartedRows, abCompletedRows, abPathRows] = await Promise.all([
-          prisma.$queryRaw<{ onboarding_variant: string; count: number }[]>`
-            SELECT props->>'onboarding_variant' AS onboarding_variant, COUNT(*)::int AS count FROM "AnalyticsEvent"
-            WHERE event = 'onboarding_started'
-              AND props->>'onboarding_key' = 'hello_activation'
-              AND "createdAt" >= ${cut30}
-            GROUP BY props->>'onboarding_variant'`,
-          prisma.$queryRaw<{ onboarding_variant: string; count: number }[]>`
-            SELECT props->>'onboarding_variant' AS onboarding_variant, COUNT(*)::int AS count FROM "AnalyticsEvent"
-            WHERE event = 'onboarding_completed'
-              AND props->>'onboarding_key' = 'hello_activation'
-              AND "createdAt" >= ${cut30}
-            GROUP BY props->>'onboarding_variant'`,
-          prisma.$queryRaw<{ acquisition_path: string; count: number }[]>`
-            SELECT props->>'acquisition_path' AS acquisition_path, COUNT(*)::int AS count FROM "AnalyticsEvent"
-            WHERE event = 'onboarding_completed'
-              AND props->>'onboarding_key' = 'hello_activation'
-              AND props->>'onboarding_variant' = 'v2_try'
-              AND "createdAt" >= ${cut30}
-            GROUP BY props->>'acquisition_path'`,
-        ]);
-        const started: Record<string, number> = {};
-        for (const r of abStartedRows) if (r.onboarding_variant) started[r.onboarding_variant] = Number(r.count);
-        const completed: Record<string, number> = {};
-        for (const r of abCompletedRows) if (r.onboarding_variant) completed[r.onboarding_variant] = Number(r.count);
-        const paths: Record<string, number> = {};
-        for (const r of abPathRows) if (r.acquisition_path) paths[r.acquisition_path] = Number(r.count);
-        return { started, completed, v2AcquisitionPaths: paths };
+        try {
+          const [abStartedRows, abCompletedRows, abPathRows, abFirstWlRows, abFirstItemRows] = await Promise.all([
+            prisma.$queryRaw<{ onboarding_variant: string; count: number }[]>`
+              SELECT props->>'onboarding_variant' AS onboarding_variant, COUNT(*)::int AS count FROM "AnalyticsEvent"
+              WHERE event = 'onboarding_started' AND props->>'onboarding_key' = 'hello_activation' AND "createdAt" >= ${cut30}
+              GROUP BY props->>'onboarding_variant'`,
+            prisma.$queryRaw<{ onboarding_variant: string; count: number }[]>`
+              SELECT props->>'onboarding_variant' AS onboarding_variant, COUNT(*)::int AS count FROM "AnalyticsEvent"
+              WHERE event = 'onboarding_completed' AND props->>'onboarding_key' = 'hello_activation' AND "createdAt" >= ${cut30}
+              GROUP BY props->>'onboarding_variant'`,
+            prisma.$queryRaw<{ acquisition_path: string; count: number }[]>`
+              SELECT props->>'acquisition_path' AS acquisition_path, COUNT(*)::int AS count FROM "AnalyticsEvent"
+              WHERE event = 'onboarding_completed' AND props->>'onboarding_key' = 'hello_activation' AND props->>'onboarding_variant' = 'v2_try' AND "createdAt" >= ${cut30}
+              GROUP BY props->>'acquisition_path'`,
+            prisma.$queryRaw<{ onboarding_variant: string; count: number }[]>`
+              SELECT props->>'onboarding_variant' AS onboarding_variant, COUNT(*)::int AS count FROM "AnalyticsEvent"
+              WHERE event = 'onboarding_create_wishlist_success' AND props->>'onboarding_key' = 'hello_activation' AND "createdAt" >= ${cut30}
+              GROUP BY props->>'onboarding_variant'`,
+            prisma.$queryRaw<{ onboarding_variant: string; count: number }[]>`
+              SELECT props->>'onboarding_variant' AS onboarding_variant, COUNT(*)::int AS count FROM "AnalyticsEvent"
+              WHERE event IN ('onboarding_try_import_success', 'onboarding_catalog_submitted') AND props->>'onboarding_key' = 'hello_activation' AND "createdAt" >= ${cut30}
+              GROUP BY props->>'onboarding_variant'`,
+          ]);
+          const started: Record<string, number> = {};
+          for (const r of abStartedRows) started[r.onboarding_variant] = Number(r.count);
+          const completed: Record<string, number> = {};
+          for (const r of abCompletedRows) completed[r.onboarding_variant] = Number(r.count);
+          const paths: Record<string, number> = {};
+          for (const r of abPathRows) paths[r.acquisition_path] = Number(r.count);
+          const firstWl: Record<string, number> = {};
+          for (const r of abFirstWlRows) firstWl[r.onboarding_variant] = Number(r.count);
+          const firstItem: Record<string, number> = {};
+          for (const r of abFirstItemRows) firstItem[r.onboarding_variant] = Number(r.count);
+          return {
+            started,
+            completed,
+            firstWishlist: firstWl,
+            firstItem: firstItem,
+            v2AcquisitionPaths: paths,
+            conversionRates: {
+              v1_demo: { startToComplete: started['v1_demo'] ? ((completed['v1_demo'] ?? 0) / started['v1_demo'] * 100).toFixed(1) + '%' : 'N/A' },
+              v2_try: { startToComplete: started['v2_try'] ? ((completed['v2_try'] ?? 0) / started['v2_try'] * 100).toFixed(1) + '%' : 'N/A' },
+            },
+          };
+        } catch { return null; }
       })(),
       meta: {
         activeUserDef: 'users who created/updated a regular wishlist or item in the period',
