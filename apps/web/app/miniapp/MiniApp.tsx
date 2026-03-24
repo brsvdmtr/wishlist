@@ -356,6 +356,14 @@ type GodStats = {
       wildberries: number; goldapple: number; ozon: number; yandex_market: number; completed: number;
     };
   };
+  onboardingAB?: {
+    started: Record<string, number>;
+    completed: Record<string, number>;
+    firstWishlist: Record<string, number>;
+    firstItem: Record<string, number>;
+    v2AcquisitionPaths: Record<string, number>;
+    conversionRates: Record<string, { startToComplete: string }>;
+  } | null;
   generatedAt: string;
 };
 
@@ -8548,6 +8556,62 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                               <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
                                             </div>
                                           ))}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* ── Onboarding A/B test (30д) ── */}
+                                    {godStats.onboardingAB && (() => {
+                                      const ab = godStats.onboardingAB!;
+                                      const v1s = ab.started['v1_demo'] ?? 0;
+                                      const v2s = ab.started['v2_try'] ?? 0;
+                                      const v1c = ab.completed['v1_demo'] ?? 0;
+                                      const v2c = ab.completed['v2_try'] ?? 0;
+                                      const v1wl = ab.firstWishlist['v1_demo'] ?? 0;
+                                      const v2wl = ab.firstWishlist['v2_try'] ?? 0;
+                                      const v1item = ab.firstItem['v1_demo'] ?? 0;
+                                      const v2item = ab.firstItem['v2_try'] ?? 0;
+                                      return (
+                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
+                                          <div style={{ fontSize: 10, fontWeight: 700, color: '#7C6AFF', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+                                            🧪 Onboarding A/B (30д)
+                                          </div>
+                                          {/* Header */}
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                            <span style={{ fontSize: 10, color: C.textMuted, flex: 1 }}></span>
+                                            <span style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, width: 52, textAlign: 'right' }}>v1</span>
+                                            <span style={{ fontSize: 10, fontWeight: 700, color: '#7C6AFF', width: 52, textAlign: 'right' }}>v2</span>
+                                          </div>
+                                          {([
+                                            ['Начали', v1s, v2s],
+                                            ['Завершили', v1c, v2c],
+                                            ['1й вишлист', v1wl, v2wl],
+                                            ['1й item', v1item, v2item],
+                                          ] as [string, number, number][]).map(([lbl, v1, v2]) => (
+                                            <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                              <span style={{ fontSize: 11, color: C.textMuted, flex: 1 }}>{lbl}</span>
+                                              <span style={{ fontSize: 11, fontWeight: 700, color: C.text, width: 52, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{v1}</span>
+                                              <span style={{ fontSize: 11, fontWeight: 700, color: '#7C6AFF', width: 52, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{v2}</span>
+                                            </div>
+                                          ))}
+                                          {/* Conversion rates */}
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
+                                            <span style={{ fontSize: 10, color: C.textMuted }}>Конверсия start→complete</span>
+                                            <span style={{ fontSize: 10, fontWeight: 700, color: C.text }}>{ab.conversionRates?.['v1_demo']?.startToComplete ?? '—'}</span>
+                                            <span style={{ fontSize: 10, fontWeight: 700, color: '#7C6AFF' }}>{ab.conversionRates?.['v2_try']?.startToComplete ?? '—'}</span>
+                                          </div>
+                                          {/* v2 acquisition paths */}
+                                          {Object.keys(ab.v2AcquisitionPaths).length > 0 && (
+                                            <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
+                                              <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 2 }}>v2 paths:</div>
+                                              {Object.entries(ab.v2AcquisitionPaths).map(([path, count]) => (
+                                                <div key={path} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                  <span style={{ fontSize: 10, color: C.textMuted }}>{path}</span>
+                                                  <span style={{ fontSize: 10, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
                                         </div>
                                       );
                                     })()}
