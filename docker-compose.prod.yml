@@ -34,6 +34,7 @@ services:
       SYSTEM_USER_EMAIL: ${SYSTEM_USER_EMAIL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       UPLOAD_DIR: /data/uploads
+      ONBOARDING_V2_ROLLOUT: ${ONBOARDING_V2_ROLLOUT:-ab50}
     volumes:
       - wishlist_uploads:/data/uploads
     depends_on:
