@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
 import { parseUrl, validateUrl } from './url-parser.js';
-import { t, detectLocale, resolveEffectiveLocale, pluralize, type Locale } from '@wishlist/shared';
+import { t, detectLocale, resolveEffectiveLocale, pluralize, type Locale, getOnboardingMeta, type OnboardingMeta, type OnboardingVariant, type AcquisitionPath, type CatalogTemplate, getCatalogForSegment } from '@wishlist/shared';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/api (pnpm -C apps/api dev).
@@ -1471,7 +1471,10 @@ type CompletionReason =
   | 'demo_converted'
   | 'real_item_created'
   | 'demo_deleted_then_real_created'
-  | 'demo_moved_to_user_wishlist';
+  | 'demo_moved_to_user_wishlist'
+  | 'try_import_completed'
+  | 'catalog_selected'
+  | 'manual_created';
 
 const ONBOARDING_KEY = 'hello_activation';
 const ONBOARDING_VERSION = 1;
@@ -1493,6 +1496,18 @@ function variantKeyToSegment(variantKey: string): MarketSegment {
 const FORCED_ROLLOUT_USERS = new Set<string>(
   (process.env.ONBOARDING_FORCED_USERS ?? '').split(',').filter(Boolean)
 );
+
+// Onboarding v2 rollout mode: 'off' | 'ab50' | 'force_v1' | 'force_v2'
+const ONBOARDING_V2_ROLLOUT = (process.env.ONBOARDING_V2_ROLLOUT ?? 'off') as 'off' | 'ab50' | 'force_v1' | 'force_v2';
+
+function assignOnboardingVariant(): OnboardingVariant {
+  switch (ONBOARDING_V2_ROLLOUT) {
+    case 'force_v2': return 'v2_try';
+    case 'force_v1': return 'v1_demo';
+    case 'ab50': return Math.random() < 0.5 ? 'v1_demo' : 'v2_try';
+    default: return 'v1_demo'; // 'off' = v1 only
+  }
+}
 
 interface DemoItemTemplate {
   title: string;
@@ -1695,6 +1710,7 @@ async function completeOnboarding(userId: string, reason: CompletionReason): Pro
   });
   if (!state || state.status === 'COMPLETED' || state.status === 'DISMISSED') return;
 
+  const meta = getOnboardingMeta(state.metaJson);
   const now = new Date();
   await prisma.userOnboardingState.update({
     where: { id: state.id },
@@ -1718,6 +1734,8 @@ async function completeOnboarding(userId: string, reason: CompletionReason): Pro
     completion_reason: reason,
     forced_rollout: FORCED_ROLLOUT_USERS.has(userId),
     market_segment: state.variantKey ? variantKeyToSegment(state.variantKey) : 'ru',
+    onboarding_variant: meta.onboardingVariant ?? 'v1_demo',
+    acquisition_path: meta.acquisitionPath ?? null,
   });
 }
 
@@ -2838,6 +2856,7 @@ tgRouter.post(
         reason = 'real_item_created';
       }
 
+      const itemMeta = getOnboardingMeta(onboardingState.metaJson);
       trackEvent('real_item_created_after_onboarding', user.id, {
         onboarding_key: ONBOARDING_KEY,
         version: ONBOARDING_VERSION,
@@ -2846,6 +2865,8 @@ tgRouter.post(
         forced_rollout: FORCED_ROLLOUT_USERS.has(user.id),
         completion_reason: reason,
         market_segment: onboardingState.variantKey ? variantKeyToSegment(onboardingState.variantKey) : 'ru',
+        onboarding_variant: itemMeta.onboardingVariant ?? 'v1_demo',
+        acquisition_path: itemMeta.acquisitionPath ?? null,
       });
       await completeOnboarding(user.id, reason);
     })();
@@ -4716,14 +4737,17 @@ tgRouter.get(
     const result = await checkOnboardingEligibility(user.id, actorHash);
     const state = await prisma.userOnboardingState.findUnique({
       where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
-      select: { id: true, status: true, variantKey: true, entryPoint: true, demoItemId: true, completionReason: true, startedAt: true, completedAt: true, dismissedAt: true },
+      select: { id: true, status: true, variantKey: true, entryPoint: true, demoItemId: true, completionReason: true, metaJson: true, startedAt: true, completedAt: true, dismissedAt: true },
     });
+    const locale = getRequestLocale(req);
+    const marketSegment = resolveMarketSegment(locale);
     return res.json({
       eligible: result.eligible,
       reason: result.reason,
       forcedRollout: result.forcedRollout,
       draftsHaveUserContent: result.draftsHaveUserContent,
       state: state ?? null,
+      marketSegment,
     });
   }),
 );
@@ -4743,26 +4767,93 @@ tgRouter.post(
     const elig = await checkOnboardingEligibility(user.id, actorHash);
     if (!elig.eligible) return res.status(409).json({ error: 'Not eligible', reason: elig.reason });
 
-    // Forced rollout overrides entryPoint to ensure correct analytics attribution
+    // Idempotent: if already IN_PROGRESS, resume
+    const existing = await prisma.userOnboardingState.findUnique({
+      where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+    });
+    if (existing?.status === 'IN_PROGRESS') {
+      const meta = getOnboardingMeta(existing.metaJson);
+      if (meta.onboardingVariant === 'v2_try') {
+        // v2 resume: no demo item expected
+        return res.json({ state: existing, demoItem: null, onboardingVariant: 'v2_try' as OnboardingVariant });
+      }
+      if (existing.demoItemId) {
+        // v1 resume: return existing demo item
+        const demoItem = await prisma.item.findUnique({
+          where: { id: existing.demoItemId },
+          select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+        });
+        return res.json({ state: existing, demoItem: demoItem ? mapTgItem(demoItem) : null, onboardingVariant: 'v1_demo' as OnboardingVariant });
+      }
+    }
+
+    // ── A/B variant assignment ──
+    const onboardingVariant: OnboardingVariant = existing
+      ? (getOnboardingMeta(existing.metaJson).onboardingVariant ?? assignOnboardingVariant())
+      : assignOnboardingVariant();
+
+    // Override entryPoint for forced rollout
     const effectiveEntryPoint: EntryPoint = elig.forcedRollout
       ? 'forced_rollout_test'
       : (parsed.data.entryPoint as EntryPoint);
 
-    // Idempotent: if already IN_PROGRESS with a demoItemId, return existing state + item
-    const existing = await prisma.userOnboardingState.findUnique({
-      where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
-    });
-    if (existing?.status === 'IN_PROGRESS' && existing.demoItemId) {
-      const demoItem = await prisma.item.findUnique({
-        where: { id: existing.demoItemId },
-        select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
-      });
-      return res.json({ state: existing, demoItem: demoItem ? mapTgItem(demoItem) : null });
-    }
-
-    // Assign variant based on market segment (random, equal distribution per segment)
     const locale = getRequestLocale(req);
     const marketSegment = resolveMarketSegment(locale);
+    const now = new Date();
+
+    if (onboardingVariant === 'v2_try') {
+      // ── v2: initialize state only, NO demo item ──
+      const meta: OnboardingMeta = {
+        onboardingVariant: 'v2_try',
+        lastStep: 'onboarding-entry',
+        tryAttemptsUsed: 0,
+        trySuccessCount: 0,
+      };
+
+      const state = await prisma.userOnboardingState.upsert({
+        where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
+        create: {
+          userId: user.id,
+          onboardingKey: ONBOARDING_KEY,
+          version: ONBOARDING_VERSION,
+          status: 'IN_PROGRESS',
+          entryPoint: effectiveEntryPoint,
+          startedAt: now,
+          metaJson: meta as any,
+        },
+        update: {
+          status: 'IN_PROGRESS',
+          entryPoint: effectiveEntryPoint,
+          startedAt: now,
+          metaJson: meta as any,
+        },
+      });
+
+      trackEvent('onboarding_variant_assigned', user.id, {
+        onboarding_key: ONBOARDING_KEY,
+        version: ONBOARDING_VERSION,
+        onboarding_variant: 'v2_try',
+        entry_point: effectiveEntryPoint,
+        forced_rollout: elig.forcedRollout,
+        market_segment: marketSegment,
+        locale_used: locale,
+      });
+
+      trackEvent('onboarding_started', user.id, {
+        onboarding_key: ONBOARDING_KEY,
+        version: ONBOARDING_VERSION,
+        variant_key: null,
+        entry_point: effectiveEntryPoint,
+        forced_rollout: elig.forcedRollout,
+        market_segment: marketSegment,
+        locale_used: locale,
+        onboarding_variant: 'v2_try',
+      });
+
+      return res.json({ state, demoItem: null, onboardingVariant: 'v2_try' as OnboardingVariant });
+    }
+
+    // ── v1: original demo-based flow ──
     const variantPool = marketSegment === 'ru' ? RU_VARIANTS : GLOBAL_VARIANTS;
     const variantKey: VariantKey = variantPool[Math.floor(Math.random() * variantPool.length)]!;
     const template = getDemoTemplate(variantKey)!;
@@ -4770,7 +4861,6 @@ tgRouter.post(
     // Get or create SYSTEM_DRAFTS wishlist for this user
     const draftsWl = await getOrCreateDraftsWishlist(user.id);
 
-    const now = new Date();
     const demoItem = await prisma.item.create({
       data: {
         wishlistId: draftsWl.id,
@@ -4788,7 +4878,8 @@ tgRouter.post(
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
-    // Upsert onboarding state — handles the case where state exists but hasn't started yet
+    // Upsert onboarding state
+    const v1Meta: OnboardingMeta = { onboardingVariant: 'v1_demo' };
     const state = await prisma.userOnboardingState.upsert({
       where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: ONBOARDING_KEY, version: ONBOARDING_VERSION } },
       create: {
@@ -4800,6 +4891,7 @@ tgRouter.post(
         entryPoint: effectiveEntryPoint,
         demoItemId: demoItem.id,
         startedAt: now,
+        metaJson: v1Meta as any,
       },
       update: {
         status: 'IN_PROGRESS',
@@ -4807,7 +4899,19 @@ tgRouter.post(
         entryPoint: effectiveEntryPoint,
         demoItemId: demoItem.id,
         startedAt: now,
+        metaJson: v1Meta as any,
       },
+    });
+
+    trackEvent('onboarding_variant_assigned', user.id, {
+      onboarding_key: ONBOARDING_KEY,
+      version: ONBOARDING_VERSION,
+      onboarding_variant: 'v1_demo',
+      variant_key: variantKey,
+      entry_point: effectiveEntryPoint,
+      forced_rollout: elig.forcedRollout,
+      market_segment: marketSegment,
+      locale_used: locale,
     });
 
     trackEvent('onboarding_started', user.id, {
@@ -4818,6 +4922,7 @@ tgRouter.post(
       forced_rollout: elig.forcedRollout,
       market_segment: marketSegment,
       locale_used: locale,
+      onboarding_variant: 'v1_demo',
     });
     trackEvent('demo_item_created', user.id, {
       onboarding_key: ONBOARDING_KEY,
@@ -4830,7 +4935,7 @@ tgRouter.post(
       item_id: demoItem.id,
     });
 
-    return res.json({ state, demoItem: mapTgItem(demoItem) });
+    return res.json({ state, demoItem: mapTgItem(demoItem), onboardingVariant: 'v1_demo' as OnboardingVariant });
   }),
 );
 
@@ -4882,6 +4987,22 @@ tgRouter.post(
       }
     }
 
+    // v2 cleanup: only delete fallback demo item, never touch imported/catalog items
+    const meta = getOnboardingMeta(state.metaJson);
+    if (meta.onboardingVariant === 'v2_try' && meta.fallbackDemoItemId) {
+      const fallbackItem = await prisma.item.findUnique({
+        where: { id: meta.fallbackDemoItemId },
+        select: { id: true, status: true, isDemo: true },
+      });
+      if (fallbackItem && fallbackItem.isDemo && fallbackItem.status !== 'DELETED') {
+        await prisma.item.update({
+          where: { id: meta.fallbackDemoItemId },
+          data: { status: 'DELETED', archivedAt: now },
+        });
+        demoItemDeleted = true;
+      }
+    }
+
     const dismissLocale = getRequestLocale(req);
     trackEvent('onboarding_dismissed', user.id, {
       onboarding_key: ONBOARDING_KEY,
@@ -4892,6 +5013,7 @@ tgRouter.post(
       market_segment: state.variantKey ? variantKeyToSegment(state.variantKey) : resolveMarketSegment(dismissLocale),
       locale_used: dismissLocale,
       demo_item_deleted: demoItemDeleted,
+      onboarding_variant: meta.onboardingVariant ?? 'v1_demo',
     });
 
     return res.json({ ok: true, demoItemDeleted });
@@ -4903,7 +5025,7 @@ tgRouter.post(
   '/onboarding/complete',
   asyncHandler(async (req, res) => {
     const parsed = z
-      .object({ onboardingKey: z.string(), reason: z.enum(['demo_converted', 'real_item_created', 'demo_deleted_then_real_created', 'demo_moved_to_user_wishlist']) })
+      .object({ onboardingKey: z.string(), reason: z.enum(['demo_converted', 'real_item_created', 'demo_deleted_then_real_created', 'demo_moved_to_user_wishlist', 'try_import_completed', 'catalog_selected', 'manual_created']) })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
     if (parsed.data.onboardingKey !== ONBOARDING_KEY) return res.status(400).json({ error: 'Unknown onboarding key' });
@@ -4911,6 +5033,183 @@ tgRouter.post(
     const user = await getOrCreateTgUser(req.tgUser!);
     // completeOnboarding() fires 'onboarding_completed' analytics event internally (idempotent).
     await completeOnboarding(user.id, parsed.data.reason);
+
+    return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/onboarding/try-import — import URL from onboarding v2 (NO PRO gate)
+const onboardingImportLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 3,
+  keyGenerator: (req) => req.tgUser ? String(req.tgUser.id) : 'anon',
+  validate: false,
+});
+
+tgRouter.post(
+  '/onboarding/try-import',
+  onboardingImportLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({ url: z.string().min(1).max(2048), onboardingStateId: z.string() })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    try { validateUrl(parsed.data.url); } catch (err: any) {
+      return res.status(400).json({ error: err.message || 'Invalid URL' });
+    }
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const state = await prisma.userOnboardingState.findUnique({ where: { id: parsed.data.onboardingStateId } });
+
+    if (!state || state.userId !== user.id || state.status !== 'IN_PROGRESS') {
+      return res.status(409).json({ error: 'Invalid onboarding state' });
+    }
+
+    const meta = getOnboardingMeta(state.metaJson);
+    if (meta.onboardingVariant !== 'v2_try') {
+      return res.status(400).json({ error: 'Wrong variant for try-import' });
+    }
+    if ((meta.tryAttemptsUsed ?? 0) >= 3) {
+      return res.status(429).json({ error: 'Max attempts reached' });
+    }
+    if ((meta.trySuccessCount ?? 0) >= 2) {
+      return res.status(409).json({ error: 'Max successful imports reached' });
+    }
+
+    // NO PRO gate — onboarding free pass
+    const result = await importUrlForUser(user.id, parsed.data.url, undefined, 'onboarding_try');
+
+    const newMeta: OnboardingMeta = {
+      ...meta,
+      tryAttemptsUsed: (meta.tryAttemptsUsed ?? 0) + 1,
+    };
+
+    if (result.parseStatus !== 'failed') {
+      newMeta.trySuccessCount = (meta.trySuccessCount ?? 0) + 1;
+      newMeta.tryImportedItemIds = [...(meta.tryImportedItemIds ?? []), result.item.id];
+      newMeta.acquisitionPath = 'try_import';
+      newMeta.lastStep = 'onboarding-success';
+    } else {
+      newMeta.lastStep = 'onboarding-recovery';
+    }
+
+    await prisma.userOnboardingState.update({
+      where: { id: state.id },
+      data: { metaJson: newMeta as any },
+    });
+
+    const eventName = result.parseStatus !== 'failed' ? 'onboarding_try_import_success' : 'onboarding_try_import_failed';
+    trackEvent(eventName, user.id, {
+      onboarding_key: ONBOARDING_KEY,
+      version: ONBOARDING_VERSION,
+      onboarding_variant: 'v2_try',
+      parse_status: result.parseStatus,
+      attempt_number: newMeta.tryAttemptsUsed,
+      url_domain: result.item.sourceDomain ?? null,
+      item_id: result.item.id,
+    });
+
+    return res.status(201).json({ item: result.item, parseStatus: result.parseStatus, wishlistId: result.wishlistId });
+  }),
+);
+
+// POST /tg/onboarding/catalog-select — create items from catalog templates (v2)
+tgRouter.post(
+  '/onboarding/catalog-select',
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({ catalogKeys: z.array(z.string()).min(1).max(6), onboardingStateId: z.string() })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const state = await prisma.userOnboardingState.findUnique({ where: { id: parsed.data.onboardingStateId } });
+
+    if (!state || state.userId !== user.id || state.status !== 'IN_PROGRESS') {
+      return res.status(409).json({ error: 'Invalid onboarding state' });
+    }
+    const meta = getOnboardingMeta(state.metaJson);
+    if (meta.onboardingVariant !== 'v2_try') {
+      return res.status(400).json({ error: 'Wrong variant' });
+    }
+
+    const locale = getRequestLocale(req);
+    const segment = resolveMarketSegment(locale);
+    const catalog = getCatalogForSegment(segment);
+    const selected = parsed.data.catalogKeys
+      .map((k: string) => catalog.find((c: CatalogTemplate) => c.key === k))
+      .filter((c: CatalogTemplate | undefined): c is CatalogTemplate => !!c);
+
+    if (selected.length === 0) return res.status(400).json({ error: 'No valid catalog items' });
+
+    const draftsWl = await getOrCreateDraftsWishlist(user.id);
+    const createdIds: string[] = [];
+    for (const tmpl of selected) {
+      const item = await prisma.item.create({
+        data: {
+          wishlistId: draftsWl.id,
+          title: t(tmpl.titleKey, locale),
+          url: '',
+          priceText: String(tmpl.amount),
+          currency: tmpl.currency,
+          originVariantKey: `catalog_${tmpl.key}`,
+          importMethod: 'onboarding_catalog',
+          // NOT isDemo — catalog selections are real user intent
+        },
+      });
+      createdIds.push(item.id);
+    }
+
+    const newMeta: OnboardingMeta = {
+      ...meta,
+      catalogItemIds: createdIds,
+      acquisitionPath: meta.acquisitionPath ?? 'catalog',
+      lastStep: 'onboarding-share',
+    };
+    await prisma.userOnboardingState.update({
+      where: { id: state.id },
+      data: { metaJson: newMeta as any },
+    });
+
+    trackEvent('onboarding_catalog_submitted', user.id, {
+      onboarding_key: ONBOARDING_KEY,
+      version: ONBOARDING_VERSION,
+      onboarding_variant: 'v2_try',
+      catalog_keys: parsed.data.catalogKeys,
+      count: selected.length,
+      market_segment: segment,
+    });
+
+    return res.status(201).json({ ok: true, catalogItemIds: createdIds });
+  }),
+);
+
+// POST /tg/onboarding/update-step — persist lastStep + optional acquisitionPath for resume
+tgRouter.post(
+  '/onboarding/update-step',
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({
+        onboardingStateId: z.string(),
+        step: z.string().max(50),
+        acquisitionPath: z.enum(['try_import', 'manual', 'catalog', 'fallback_demo']).optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const state = await prisma.userOnboardingState.findUnique({ where: { id: parsed.data.onboardingStateId } });
+    if (!state || state.userId !== user.id) return res.status(404).json({ error: 'Not found' });
+
+    const meta = getOnboardingMeta(state.metaJson);
+    const updated: OnboardingMeta = { ...meta, lastStep: parsed.data.step };
+    if (parsed.data.acquisitionPath) updated.acquisitionPath = parsed.data.acquisitionPath;
+
+    await prisma.userOnboardingState.update({
+      where: { id: state.id },
+      data: { metaJson: updated as any },
+    });
 
     return res.json({ ok: true });
   }),
@@ -5162,6 +5461,37 @@ tgRouter.get(
           completed:     n(onboardingCompletedRows[0]),
         },
       },
+      // Onboarding v2 A/B metrics (additive, separate from v1 structure)
+      onboardingAB: await (async () => {
+        const [abStartedRows, abCompletedRows, abPathRows] = await Promise.all([
+          prisma.$queryRaw<{ onboarding_variant: string; count: number }[]>`
+            SELECT props->>'onboarding_variant' AS onboarding_variant, COUNT(*)::int AS count FROM "AnalyticsEvent"
+            WHERE event = 'onboarding_started'
+              AND props->>'onboarding_key' = 'hello_activation'
+              AND "createdAt" >= ${cut30}
+            GROUP BY props->>'onboarding_variant'`,
+          prisma.$queryRaw<{ onboarding_variant: string; count: number }[]>`
+            SELECT props->>'onboarding_variant' AS onboarding_variant, COUNT(*)::int AS count FROM "AnalyticsEvent"
+            WHERE event = 'onboarding_completed'
+              AND props->>'onboarding_key' = 'hello_activation'
+              AND "createdAt" >= ${cut30}
+            GROUP BY props->>'onboarding_variant'`,
+          prisma.$queryRaw<{ acquisition_path: string; count: number }[]>`
+            SELECT props->>'acquisition_path' AS acquisition_path, COUNT(*)::int AS count FROM "AnalyticsEvent"
+            WHERE event = 'onboarding_completed'
+              AND props->>'onboarding_key' = 'hello_activation'
+              AND props->>'onboarding_variant' = 'v2_try'
+              AND "createdAt" >= ${cut30}
+            GROUP BY props->>'acquisition_path'`,
+        ]);
+        const started: Record<string, number> = {};
+        for (const r of abStartedRows) if (r.onboarding_variant) started[r.onboarding_variant] = Number(r.count);
+        const completed: Record<string, number> = {};
+        for (const r of abCompletedRows) if (r.onboarding_variant) completed[r.onboarding_variant] = Number(r.count);
+        const paths: Record<string, number> = {};
+        for (const r of abPathRows) if (r.acquisition_path) paths[r.acquisition_path] = Number(r.count);
+        return { started, completed, v2AcquisitionPaths: paths };
+      })(),
       meta: {
         activeUserDef: 'users who created/updated a regular wishlist or item in the period',
         usersWhoInitiatedShareDef: 'users who opened share screen (shareToken generated via POST /share-token)',
@@ -5172,6 +5502,7 @@ tgRouter.get(
         proLimits24hDef: 'feature gate hits in the last 24h — persisted on each hit via trackEvent',
         errors24hDef: '4xx/5xx responses on /tg/* routes (excludes 401); grouped by method+status+route pattern',
         onboardingDef: 'hello_activation started by variant + completed count; source: AnalyticsEvent; window: last 30d',
+        onboardingABDef: 'v2 A/B: started/completed by onboarding_variant + v2 acquisition_path breakdown; window: last 30d',
       },
       generatedAt: now.toISOString(),
     });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
-import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale } from '@wishlist/shared';
+import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES
@@ -359,7 +359,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-share';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1653,11 +1653,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showOnboardingSoftCta, setShowOnboardingSoftCta] = useState(false);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
   const onboardingCheckedRef = useRef(false); // prevent double-check per session
+  const [onboardingVariant, setOnboardingVariant] = useState<OnboardingVariant | null>(null);
+  const [onboardingTryResult, setOnboardingTryResult] = useState<{ item: Item; parseStatus: string } | null>(null);
+  const [onboardingCatalogSelected, setOnboardingCatalogSelected] = useState<string[]>([]);
+  const [onboardingMarketSegment, setOnboardingMarketSegment] = useState<'ru' | 'global'>('global');
+  const [onboardingTryLoading, setOnboardingTryLoading] = useState(false);
+  const [onboardingTryError, setOnboardingTryError] = useState<string | null>(null);
+  const [onboardingTryUrl, setOnboardingTryUrl] = useState('');
 
   const [godMode, setGodMode] = useState(false);
   const [canGodMode, setCanGodMode] = useState(false);
   const [godModeLoading, setGodModeLoading] = useState(false);
   const [santaTestModeLoading, setSantaTestModeLoading] = useState(false);
+  const [showLocaleDebug, setShowLocaleDebug] = useState(false);
   const [godStats, setGodStats] = useState<GodStats | null>(null);
   const [godStatsLoading, setGodStatsLoading] = useState(false);
   const [godStatsError, setGodStatsError] = useState(false);
@@ -1720,6 +1728,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showProfileVisibilitySheet, setShowProfileVisibilitySheet] = useState(false);
   const [showSubscribePolicySheet, setShowSubscribePolicySheet] = useState(false);
   const [showCommentsDefaultSheet, setShowCommentsDefaultSheet] = useState(false);
+  const [showLanguageSheet, setShowLanguageSheet] = useState(false);
 
   // Archive state
   const [archiveItems, setArchiveItems] = useState<Item[]>([]);
@@ -2317,22 +2326,34 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         reason: string;
         forcedRollout: boolean;
         draftsHaveUserContent: boolean;
-        state: { id: string; status: string; variantKey: string | null; entryPoint: string | null; demoItemId: string | null; completionReason: string | null } | null;
+        marketSegment?: 'ru' | 'global';
+        state: { id: string; status: string; variantKey: string | null; entryPoint: string | null; demoItemId: string | null; completionReason: string | null; metaJson?: unknown } | null;
       };
-      if (json.state) setOnboardingState(json.state);
+      if (json.marketSegment) setOnboardingMarketSegment(json.marketSegment);
+      if (json.state) {
+        setOnboardingState(json.state);
+        const meta = getOnboardingMeta(json.state.metaJson);
+        if (meta.onboardingVariant) setOnboardingVariant(meta.onboardingVariant);
+        // Resume: if IN_PROGRESS with lastStep, route there
+        if (json.state.status === 'IN_PROGRESS' && meta.lastStep) {
+          const validScreens = ['onboarding-entry', 'onboarding-try', 'onboarding-success', 'onboarding-recovery', 'onboarding-catalog', 'onboarding-share'] as const;
+          const targetScreen = validScreens.find(s => s === meta.lastStep);
+          if (targetScreen) {
+            setScreen(targetScreen);
+            return true;
+          }
+        }
+      }
       if (!json.eligible) return false;
       setOnboardingDraftsHaveUserContent(json.draftsHaveUserContent);
       if (json.draftsHaveUserContent) {
-        // Soft CTA — user has existing items in drafts; ask before showing demo
         setShowOnboardingSoftCta(true);
         return false;
       } else {
-        // Direct entry — show onboarding entry screen immediately
         setScreen('onboarding-entry');
         return true;
       }
     } catch {
-      // silent — onboarding is non-critical
       return false;
     }
   }, [tgFetch]);
@@ -2346,13 +2367,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       });
       if (!res.ok) return;
       const json = await res.json() as {
-        state: { id: string; status: string; variantKey: string | null; entryPoint: string | null; demoItemId: string | null; completionReason: string | null };
+        state: { id: string; status: string; variantKey: string | null; entryPoint: string | null; demoItemId: string | null; completionReason: string | null; metaJson?: unknown };
         demoItem: Item | null;
+        onboardingVariant?: OnboardingVariant;
       };
       setOnboardingState(json.state);
-      if (json.demoItem) setOnboardingDemoItem(json.demoItem);
+      const variant = json.onboardingVariant ?? (getOnboardingMeta(json.state.metaJson).onboardingVariant) ?? 'v1_demo';
+      setOnboardingVariant(variant);
       setShowOnboardingSoftCta(false);
-      setScreen('onboarding-demo');
+      if (variant === 'v2_try') {
+        setScreen('onboarding-try');
+      } else {
+        if (json.demoItem) setOnboardingDemoItem(json.demoItem);
+        setScreen('onboarding-demo');
+      }
     } catch {
       // silent
     } finally {
@@ -2372,6 +2400,70 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // silent
     }
   }, [tgFetch]);
+
+  // ── Onboarding v2: import URL from try screen ──
+  const tryImportUrl = useCallback(async (url: string) => {
+    if (!onboardingState) return;
+    setOnboardingTryLoading(true);
+    setOnboardingTryError(null);
+    try {
+      const res = await tgFetch('/tg/onboarding/try-import', {
+        method: 'POST',
+        body: JSON.stringify({ url: url.trim(), onboardingStateId: onboardingState.id }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        setOnboardingTryError(err.error || t('onboarding_recovery_title', locale));
+        if (res.status === 400) return; // invalid URL — inline error, stay on try
+        if (res.status === 429) { setOnboardingTryError(t('api_import_rate_limit', locale)); return; }
+        return;
+      }
+      const json = await res.json() as { item: Item; parseStatus: string; wishlistId: string };
+      setOnboardingTryResult({ item: json.item, parseStatus: json.parseStatus });
+      if (json.parseStatus === 'failed') {
+        setScreen('onboarding-recovery');
+      } else {
+        setScreen('onboarding-success');
+      }
+      trackEvent('onboarding_try_paste', { url_domain: json.item.sourceDomain, parse_status: json.parseStatus });
+    } catch {
+      setOnboardingTryError(t('error_network', locale));
+    } finally {
+      setOnboardingTryLoading(false);
+    }
+  }, [onboardingState, tgFetch, locale, trackEvent]);
+
+  // ── Onboarding v2: submit catalog selection ──
+  const submitCatalogSelection = useCallback(async () => {
+    if (!onboardingState || onboardingCatalogSelected.length === 0) return;
+    setOnboardingLoading(true);
+    try {
+      const res = await tgFetch('/tg/onboarding/catalog-select', {
+        method: 'POST',
+        body: JSON.stringify({ catalogKeys: onboardingCatalogSelected, onboardingStateId: onboardingState.id }),
+      });
+      if (res.ok) {
+        trackEvent('onboarding_catalog_submitted', { count: onboardingCatalogSelected.length, keys: onboardingCatalogSelected });
+        setScreen('onboarding-share');
+      }
+    } catch { /* silent */ }
+    finally { setOnboardingLoading(false); }
+  }, [onboardingState, onboardingCatalogSelected, tgFetch, trackEvent]);
+
+  // ── Onboarding v2: update step for resume ──
+  const updateOnboardingStep = useCallback(async (step: string, acquisitionPath?: string) => {
+    if (!onboardingState) return;
+    try {
+      await tgFetch('/tg/onboarding/update-step', {
+        method: 'POST',
+        body: JSON.stringify({
+          onboardingStateId: onboardingState.id,
+          step,
+          ...(acquisitionPath ? { acquisitionPath } : {}),
+        }),
+      });
+    } catch { /* silent */ }
+  }, [onboardingState, tgFetch]);
 
   const loadSubscriptions = useCallback(async () => {
     setSubscriptionsLoading(true);
@@ -3314,6 +3406,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       }
     } else if (screen === 'onboarding-demo' || screen === 'onboarding-complete') {
       setScreen('my-wishlists');
+    } else if (screen === 'onboarding-try') {
+      setScreen('onboarding-entry');
+    } else if (screen === 'onboarding-success') {
+      setScreen('onboarding-try');
+    } else if (screen === 'onboarding-recovery') {
+      setScreen('onboarding-try');
+    } else if (screen === 'onboarding-catalog') {
+      setScreen('onboarding-try');
+    } else if (screen === 'onboarding-share') {
+      // Context-aware: back to last meaningful step
+      if (onboardingTryResult) {
+        setScreen('onboarding-success');
+      } else if (onboardingCatalogSelected.length > 0) {
+        setScreen('onboarding-catalog');
+      } else {
+        setScreen('onboarding-try');
+      }
     } else if (screen === 'share') {
       setScreen('wishlist-detail');
     } else if (screen === 'archive') {
@@ -3326,7 +3435,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setScreen('wishlist-detail');
       }
     }
-  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker]);
+  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -4637,6 +4746,368 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // ─────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────
+
+  // ── Onboarding v2: render helpers ──
+
+  function renderOnboardingTry() {
+    const catalog = getCatalogForSegment(onboardingMarketSegment);
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
+        display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
+        padding: '20px 24px 40px',
+      }}>
+        {/* Skip */}
+        <div style={{ alignSelf: 'flex-end' }}>
+          <button onClick={() => { trackEvent('onboarding_try_skipped'); void updateOnboardingStep('onboarding-catalog'); setScreen('onboarding-catalog'); }}
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 14px', color: 'rgba(255,255,255,0.45)', fontSize: 13, cursor: 'pointer', fontFamily: font }}>
+            {t('onboarding_catalog_skip', locale)}
+          </button>
+        </div>
+
+        <div style={{ textAlign: 'center', fontSize: 44, margin: '16px 0 12px' }}>✨</div>
+        <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.25 }}>
+          {t('onboarding_try_title', locale)}
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 8, lineHeight: 1.45 }}>
+          {t('onboarding_try_subtitle', locale)}
+        </div>
+
+        <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* URL input */}
+          <div style={{
+            background: 'rgba(255,255,255,0.06)', border: `1.5px solid ${onboardingTryError ? 'rgba(248,113,113,0.5)' : 'rgba(124,106,255,0.35)'}`,
+            borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(124,106,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🔗</div>
+            <input
+              value={onboardingTryUrl}
+              onChange={(e) => { setOnboardingTryUrl(e.target.value); setOnboardingTryError(null); }}
+              placeholder={t('onboarding_try_url_placeholder', locale)}
+              style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 14, fontFamily: font }}
+            />
+            <button
+              onClick={() => { if (onboardingTryUrl.trim()) void tryImportUrl(onboardingTryUrl); }}
+              disabled={onboardingTryLoading || !onboardingTryUrl.trim()}
+              style={{
+                background: 'rgba(124,106,255,0.2)', border: '1px solid rgba(124,106,255,0.4)', color: '#A78BFA',
+                fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: font,
+                opacity: (onboardingTryLoading || !onboardingTryUrl.trim()) ? 0.5 : 1, whiteSpace: 'nowrap',
+              }}>
+              {onboardingTryLoading ? '…' : t('onboarding_try_paste_btn', locale)}
+            </button>
+          </div>
+
+          {onboardingTryError && (
+            <div style={{ fontSize: 13, color: C.red, textAlign: 'center' }}>{onboardingTryError}</div>
+          )}
+
+          <div style={{ textAlign: 'center', fontSize: 13, color: 'rgba(255,255,255,0.3)', lineHeight: 1.5 }}>
+            {locale === 'ru' ? t('onboarding_try_url_hint', 'ru') : t('onboarding_try_url_hint', locale)}
+          </div>
+
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: 1 }}>{t('onboarding_try_or', locale)}</span>
+            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+          </div>
+
+          {/* Manual */}
+          <button onClick={() => {
+            trackEvent('onboarding_try_manual');
+            // TODO: open create-wish with fromOnboarding flag
+            // For now, skip to catalog as placeholder
+            void updateOnboardingStep('onboarding-catalog');
+            setScreen('onboarding-catalog');
+          }}
+            style={{
+              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14,
+              padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left', fontFamily: font, width: '100%',
+            }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(52,211,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>✏️</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{t('onboarding_try_manual_title', locale)}</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{t('onboarding_try_manual_desc', locale)}</div>
+            </div>
+            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 16 }}>›</span>
+          </button>
+        </div>
+
+        {/* Dots */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
+          {[0,1,2,3,4].map(i => (
+            <div key={i} style={{ width: i === 1 ? 24 : 8, height: 8, borderRadius: i === 1 ? 4 : '50%', background: i === 1 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+          ))}
+        </div>
+
+        <button onClick={() => { trackEvent('onboarding_try_skipped'); void updateOnboardingStep('onboarding-catalog'); setScreen('onboarding-catalog'); }}
+          style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.35)', fontSize: 14, fontWeight: 500, padding: '12px 0', cursor: 'pointer', fontFamily: font, marginTop: 8, textAlign: 'center' }}>
+          {t('onboarding_try_skip', locale)}
+        </button>
+      </div>
+    );
+  }
+
+  function renderOnboardingSuccess() {
+    const item = onboardingTryResult?.item;
+    const isPartial = onboardingTryResult?.parseStatus === 'partial';
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
+        display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
+        padding: '20px 24px 40px',
+      }}>
+        <div style={{ textAlign: 'center', fontSize: 42, marginTop: 20 }}>🎉</div>
+        <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.25, marginTop: 12, whiteSpace: 'pre-line' }}>
+          {t('onboarding_success_title', locale)}
+        </div>
+
+        {item && (
+          <div style={{
+            marginTop: 24, background: 'rgba(52,211,153,0.06)', border: '1.5px solid rgba(52,211,153,0.25)',
+            borderRadius: 16, padding: 18, display: 'flex', gap: 14, alignItems: 'flex-start',
+          }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: 14,
+              background: item.imageUrl ? undefined : 'linear-gradient(135deg, rgba(124,106,255,0.2), rgba(168,85,247,0.2))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0, overflow: 'hidden',
+            }}>
+              {item.imageUrl ? <img src={item.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'inline-block', background: 'rgba(52,211,153,0.15)', color: '#34D399', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 8, marginBottom: 6 }}>
+                ✓ {t('onboarding_success_badge', locale)}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>{item.title}</div>
+              {item.price != null && <div style={{ fontSize: 15, fontWeight: 700, color: '#7C6AFF', marginTop: 3 }}>{item.price} {item.currency ?? ''}</div>}
+              {item.sourceDomain && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>🔗 {item.sourceDomain}</div>}
+            </div>
+          </div>
+        )}
+
+        {isPartial && (
+          <div style={{ textAlign: 'center', fontSize: 13, color: C.orange, marginTop: 12 }}>
+            {t('onboarding_success_partial_warning', locale)}
+          </div>
+        )}
+
+        <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5, marginTop: 16, whiteSpace: 'pre-line' }}>
+          {t('onboarding_success_msg', locale)}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
+          {[0,1,2,3,4].map(i => (
+            <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+          ))}
+        </div>
+
+        <button onClick={() => { void updateOnboardingStep('onboarding-share'); setScreen('onboarding-share'); }}
+          style={{
+            width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
+            background: 'linear-gradient(135deg, #7c6aff, #a855f7)', color: '#fff', fontSize: 17, fontWeight: 700,
+            cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgba(124,106,255,0.4)', marginTop: 16,
+          }}>
+          {t('onboarding_success_continue', locale)}
+        </button>
+        <button onClick={() => { setOnboardingTryUrl(''); setOnboardingTryError(null); setScreen('onboarding-try'); }}
+          style={{
+            width: '100%', padding: '14px 0', borderRadius: 16, background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', fontSize: 15, fontWeight: 600,
+            cursor: 'pointer', fontFamily: font, marginTop: 10,
+          }}>
+          ＋ {t('onboarding_success_add_more', locale)}
+        </button>
+      </div>
+    );
+  }
+
+  function renderOnboardingRecovery() {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        fontFamily: font, padding: '32px 24px',
+      }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', textAlign: 'center', marginBottom: 8 }}>
+          {t('onboarding_recovery_title', locale)}
+        </div>
+        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', textAlign: 'center', lineHeight: 1.5, marginBottom: 32 }}>
+          {t('onboarding_recovery_subtitle', locale)}
+        </div>
+
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button onClick={() => { setOnboardingTryUrl(''); setOnboardingTryError(null); setScreen('onboarding-try'); }}
+            style={{
+              width: '100%', padding: '16px 0', borderRadius: 16, border: 'none',
+              background: 'linear-gradient(135deg, #7c6aff, #a855f7)', color: '#fff', fontSize: 16, fontWeight: 700,
+              cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgba(124,106,255,0.4)',
+            }}>
+            {t('onboarding_recovery_retry', locale)}
+          </button>
+          <button onClick={() => { trackEvent('onboarding_recovery_manual'); void updateOnboardingStep('onboarding-catalog'); setScreen('onboarding-catalog'); }}
+            style={{
+              width: '100%', padding: '14px 0', borderRadius: 16, background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: 600,
+              cursor: 'pointer', fontFamily: font,
+            }}>
+            {t('onboarding_recovery_manual', locale)}
+          </button>
+          <button onClick={() => { trackEvent('onboarding_recovery_catalog'); void updateOnboardingStep('onboarding-catalog'); setScreen('onboarding-catalog'); }}
+            style={{
+              width: '100%', padding: '12px 0', background: 'transparent', border: 'none',
+              color: 'rgba(255,255,255,0.35)', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: font,
+            }}>
+            {t('onboarding_recovery_catalog', locale)}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderOnboardingCatalog() {
+    const catalog = getCatalogForSegment(onboardingMarketSegment);
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
+        display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
+        padding: '20px 24px 40px',
+      }}>
+        <div style={{ alignSelf: 'flex-end' }}>
+          <button onClick={() => { trackEvent('onboarding_catalog_skipped'); void updateOnboardingStep('onboarding-share', 'fallback_demo'); setScreen('onboarding-share'); }}
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 14px', color: 'rgba(255,255,255,0.45)', fontSize: 13, cursor: 'pointer', fontFamily: font }}>
+            {t('onboarding_catalog_skip', locale)}
+          </button>
+        </div>
+
+        <div style={{ textAlign: 'center', fontSize: 38, margin: '8px 0 8px' }}>🎁</div>
+        <div style={{ textAlign: 'center', fontSize: 21, fontWeight: 800, color: '#fff', lineHeight: 1.25 }}>
+          {t('onboarding_catalog_title', locale)}
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 8, lineHeight: 1.45 }}>
+          {t('onboarding_catalog_subtitle', locale)}
+        </div>
+
+        {/* 2-column grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 20 }}>
+          {catalog.map((item) => {
+            const selected = onboardingCatalogSelected.includes(item.key);
+            return (
+              <button key={item.key} onClick={() => {
+                setOnboardingCatalogSelected(prev => selected ? prev.filter(k => k !== item.key) : [...prev, item.key]);
+              }}
+                style={{
+                  background: selected ? 'rgba(124,106,255,0.08)' : 'rgba(255,255,255,0.05)',
+                  border: `1.5px solid ${selected ? 'rgba(124,106,255,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                  borderRadius: 16, padding: '18px 12px', textAlign: 'center', cursor: 'pointer', fontFamily: font,
+                  position: 'relative', transition: 'all 0.2s',
+                }}>
+                {selected && (
+                  <div style={{ position: 'absolute', top: -4, right: -4, width: 22, height: 22, background: '#7C6AFF', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</div>
+                )}
+                <div style={{ fontSize: 32, marginBottom: 8 }}>{item.emoji}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{t(item.titleKey, locale)}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#7C6AFF', marginTop: 4 }}>
+                  {item.currency === 'RUB' ? `${item.amount.toLocaleString('ru-RU')} ₽` : `$${item.amount}`}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Custom CTA below grid */}
+        <button onClick={() => { trackEvent('onboarding_catalog_custom'); void updateOnboardingStep('onboarding-catalog'); /* TODO: open create-wish */ setScreen('onboarding-catalog'); }}
+          style={{ background: 'transparent', border: 'none', color: 'rgba(124,106,255,0.7)', fontSize: 13, fontWeight: 500, padding: '16px 0', cursor: 'pointer', fontFamily: font, textAlign: 'center' }}>
+          {t('onboarding_catalog_custom_cta', locale)}
+        </button>
+
+        {onboardingCatalogSelected.length > 0 && (
+          <div style={{ textAlign: 'center', fontSize: 13, color: '#7C6AFF', fontWeight: 600, marginBottom: 8 }}>
+            {t('onboarding_catalog_selected', locale, { count: String(onboardingCatalogSelected.length) })}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 16 }}>
+          {[0,1,2,3,4].map(i => (
+            <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+          ))}
+        </div>
+
+        <button onClick={() => void submitCatalogSelection()}
+          disabled={onboardingCatalogSelected.length === 0 || onboardingLoading}
+          style={{
+            width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
+            background: onboardingCatalogSelected.length > 0 ? 'linear-gradient(135deg, #7c6aff, #a855f7)' : 'rgba(255,255,255,0.1)',
+            color: onboardingCatalogSelected.length > 0 ? '#fff' : 'rgba(255,255,255,0.3)',
+            fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: 12,
+            boxShadow: onboardingCatalogSelected.length > 0 ? '0 8px 24px rgba(124,106,255,0.4)' : 'none',
+            opacity: onboardingLoading ? 0.7 : 1,
+          }}>
+          {onboardingLoading ? '…' : t('onboarding_catalog_add_btn', locale)}
+        </button>
+      </div>
+    );
+  }
+
+  function renderOnboardingShare() {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
+        display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
+        padding: '20px 24px 40px',
+      }}>
+        <div style={{ textAlign: 'center', fontSize: 40, marginTop: 12 }}>🎁</div>
+        <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 800, color: '#fff', lineHeight: 1.25, marginTop: 12, whiteSpace: 'pre-line' }}>
+          {t('onboarding_share_title', locale)}
+        </div>
+
+        <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Share block */}
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(124,106,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📤</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{t('onboarding_share_share_title', locale)}</div>
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }}>
+              {t('onboarding_share_share_desc', locale)}
+            </div>
+          </div>
+
+          {/* Reserve block */}
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(52,211,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎁</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{t('onboarding_share_reserve_title', locale)}</div>
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }}>
+              {t('onboarding_share_reserve_desc', locale)}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
+          {[0,1,2,3,4].map(i => (
+            <div key={i} style={{ width: i === 3 ? 24 : 8, height: 8, borderRadius: i === 3 ? 4 : '50%', background: i === 3 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+          ))}
+        </div>
+
+        <button onClick={() => { void updateOnboardingStep('onboarding-complete'); setScreen('onboarding-complete'); }}
+          style={{
+            width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
+            background: 'linear-gradient(135deg, #7c6aff, #a855f7)', color: '#fff', fontSize: 17, fontWeight: 700,
+            cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgba(124,106,255,0.4)', marginTop: 16,
+          }}>
+          {t('onboarding_share_next', locale)}
+        </button>
+      </div>
+    );
+  }
 
   const totalItems = wishlists.reduce((n, wl) => n + wl.itemCount, 0);
 
@@ -7626,6 +8097,36 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     </div>
                   )}
 
+                  {/* Locale debug toggle — only when godMode active */}
+                  {godMode && (
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#7fdbca', fontFamily: font }}>🛠 Locale debug</div>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                            {showLocaleDebug ? 'Panel visible in settings' : 'Panel hidden'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setShowLocaleDebug(v => !v)}
+                          style={{
+                            width: 50, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                            background: showLocaleDebug ? '#7fdbca' : C.surface,
+                            position: 'relative', transition: 'background 0.2s',
+                          }}
+                        >
+                          <div style={{
+                            width: 22, height: 22, borderRadius: 11,
+                            background: '#fff', position: 'absolute', top: 3,
+                            left: showLocaleDebug ? 25 : 3,
+                            transition: 'left 0.2s',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          }} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* ─── Analytics block — only when godMode active ─── */}
                   {godMode && (() => {
                     const pct = (n: number, total: number) =>
@@ -8008,11 +8509,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ) : settingsData && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-              {/* ── DEBUG BLOCK (temporary) ─────────────────────────────── */}
-              {(() => {
+              {/* ── DEBUG BLOCK — god mode + toggle only ── */}
+              {godMode && showLocaleDebug && (() => {
                 const rawLang = tgLangCodeRef.current;
                 const normalized = normalizeLocale(rawLang);
-                const fallbackUsed = !rawLang || normalized === 'en' && !rawLang?.startsWith('en');
+                const fallbackUsed = !rawLang || (normalized === 'en' && !rawLang?.startsWith('en'));
                 const rows: [string, string][] = [
                   ['build', process.env.NEXT_PUBLIC_BUILD_TIME ?? 'unknown'],
                   ['tg.language_code', rawLang ?? '(undefined)'],
@@ -8043,44 +8544,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
               {/* General */}
               <SettingsSection title={t('settings_general', locale)}>
-                <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: 14, color: C.text, marginBottom: 10 }}>{t('settings_language', locale)}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {/* Auto chip — resets to Telegram language */}
-                    <button
-                      onClick={() => patchSettings({ languageMode: 'auto', manualLanguage: null })}
-                      style={{
-                        padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 500,
-                        cursor: 'pointer', fontFamily: font, transition: 'background 0.15s, color 0.15s',
-                        border: settingsData.languageMode === 'auto' ? `2px solid ${C.accent}` : '2px solid transparent',
-                        background: settingsData.languageMode === 'auto' ? C.surface : C.surface,
-                        color: settingsData.languageMode === 'auto' ? C.accent : C.textMuted,
-                      }}
-                    >
-                      {t('settings_language_auto', locale)}
-                    </button>
-                    {([
-                      { code: 'ru', label: 'Русский' },
-                      { code: 'en', label: 'English' },
-                      { code: 'zh-CN', label: '中文' },
-                      { code: 'hi', label: 'हिन्दी' },
-                      { code: 'es', label: 'Español' },
-                      { code: 'ar', label: 'العربية' },
-                    ] as const).map(({ code, label }) => {
-                      const isActive = settingsData.languageMode === 'manual' && settingsData.manualLanguage === code;
-                      return (
-                        <button key={code} onClick={() => patchSettings({ languageMode: 'manual', manualLanguage: code })} style={{
-                          padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 500,
-                          cursor: 'pointer', fontFamily: font, transition: 'background 0.15s, color 0.15s',
-                          background: isActive ? C.accent : C.surface,
-                          color: isActive ? '#fff' : C.text,
-                        }}>
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                {(() => {
+                  const LANG_NATIVE: Record<string, string> = {
+                    ru: 'Русский', en: 'English', 'zh-CN': '中文', hi: 'हिन्दी', es: 'Español', ar: 'العربية',
+                  };
+                  const isAuto = settingsData.languageMode === 'auto';
+                  const effectiveName = LANG_NATIVE[locale] ?? locale;
+                  const hint = isAuto ? t('settings_language_auto', locale) : undefined;
+                  return (
+                    <SettingsRow
+                      label={t('settings_language', locale)}
+                      value={effectiveName}
+                      hint={hint}
+                      onClick={() => setShowLanguageSheet(true)}
+                    />
+                  );
+                })()}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
                   <span style={{ fontSize: 14, color: C.text }}>{t('settings_default_currency', locale)}</span>
                   <div style={{ display: 'flex', gap: 4, background: C.bg, borderRadius: 8, padding: 2 }}>
@@ -8546,6 +9025,48 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             </>
           )}
+        </div>
+      </BottomSheet>
+
+      {/* ── Language picker sheet ── */}
+      <BottomSheet isOpen={showLanguageSheet} onClose={() => setShowLanguageSheet(false)} title={t('settings_language', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {([
+            { mode: 'auto' as const, code: null,    label: t('settings_language_auto', locale) },
+            { mode: 'manual' as const, code: 'ru',    label: 'Русский' },
+            { mode: 'manual' as const, code: 'en',    label: 'English' },
+            { mode: 'manual' as const, code: 'es',    label: 'Español' },
+            { mode: 'manual' as const, code: 'hi',    label: 'हिन्दी' },
+            { mode: 'manual' as const, code: 'zh-CN', label: '中文' },
+            { mode: 'manual' as const, code: 'ar',    label: 'العربية' },
+          ]).map(({ mode, code, label }) => {
+            const isSelected = mode === 'auto'
+              ? settingsData?.languageMode === 'auto'
+              : settingsData?.languageMode === 'manual' && settingsData.manualLanguage === code;
+            return (
+              <button
+                key={code ?? 'auto'}
+                onClick={() => {
+                  if (mode === 'auto') {
+                    void patchSettings({ languageMode: 'auto', manualLanguage: null });
+                  } else {
+                    void patchSettings({ languageMode: 'manual', manualLanguage: code });
+                  }
+                  setShowLanguageSheet(false);
+                }}
+                style={{
+                  background: isSelected ? C.accentSoft : C.surface,
+                  border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
+                  borderRadius: 14, padding: '14px 18px', textAlign: 'start',
+                  cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}
+              >
+                <span style={{ fontWeight: isSelected ? 600 : 400 }}>{label}</span>
+                {isSelected && <span style={{ color: C.accent, fontSize: 18, flexShrink: 0 }}>✓</span>}
+              </button>
+            );
+          })}
         </div>
       </BottomSheet>
 
@@ -12761,9 +13282,30 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ── ONBOARDING COMPLETE SCREEN ── */}
       {screen === 'onboarding-complete' && (
         <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
-          <div style={{ fontSize: 56, marginBottom: 20 }}>🎉</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: C.text, textAlign: 'center', marginBottom: 10 }}>{t('onboarding_complete_title', locale)}</div>
-          <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5, marginBottom: 32 }}>{t('onboarding_complete_subtitle', locale)}</div>
+          {onboardingVariant === 'v2_try' && onboardingTryResult?.item ? (
+            <>
+              <div style={{ fontSize: 52, marginBottom: 12, textAlign: 'center' }}>🚀</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.text, textAlign: 'center', marginBottom: 8 }}>{t('onboarding_complete_title', locale)}</div>
+              <div style={{ fontSize: 14, color: C.textSec, textAlign: 'center', lineHeight: 1.5, marginBottom: 20 }}>{t('onboarding_complete_subtitle', locale)}</div>
+              {/* Real wish card */}
+              <div style={{ width: '100%', background: 'rgba(124,106,255,0.06)', border: '1.5px solid rgba(124,106,255,0.2)', borderRadius: 18, overflow: 'hidden', marginBottom: 24 }}>
+                <div style={{ height: 100, background: 'linear-gradient(135deg, #1f1840, #162040)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, position: 'relative' }}>
+                  {onboardingTryResult.item.imageUrl ? <img src={onboardingTryResult.item.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
+                  <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(124,106,255,0.8)', color: '#fff', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 8 }}>✨ {t('onboarding_complete_your_wish', locale)}</div>
+                </div>
+                <div style={{ padding: '14px 16px' }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{onboardingTryResult.item.title}</div>
+                  {onboardingTryResult.item.price != null && <div style={{ fontSize: 14, fontWeight: 700, color: C.accent, marginTop: 4 }}>{onboardingTryResult.item.price} {onboardingTryResult.item.currency ?? ''}</div>}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 56, marginBottom: 20 }}>🎉</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.text, textAlign: 'center', marginBottom: 10 }}>{t('onboarding_complete_title', locale)}</div>
+              <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5, marginBottom: 32 }}>{t('onboarding_complete_subtitle', locale)}</div>
+            </>
+          )}
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {wishlists.length > 0 && (
               <button
@@ -12788,6 +13330,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
         </div>
       )}
+
+      {/* ── ONBOARDING V2 SCREENS ── */}
+      {screen === 'onboarding-try' && onboardingVariant === 'v2_try' && renderOnboardingTry()}
+      {screen === 'onboarding-success' && onboardingVariant === 'v2_try' && renderOnboardingSuccess()}
+      {screen === 'onboarding-recovery' && onboardingVariant === 'v2_try' && renderOnboardingRecovery()}
+      {screen === 'onboarding-catalog' && onboardingVariant === 'v2_try' && renderOnboardingCatalog()}
+      {screen === 'onboarding-share' && onboardingVariant === 'v2_try' && renderOnboardingShare()}
 
       {/* ── TOASTS ── */}
       <div style={{ position: 'fixed', bottom: 24, left: 16, right: 16, zIndex: 200, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
