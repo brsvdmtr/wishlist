@@ -367,7 +367,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1704,6 +1704,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     reservedByMe: number; archived: number;
   } | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  // Public profile view state
+  const [publicProfileUsername, setPublicProfileUsername] = useState<string | null>(null);
+  const [publicProfileData, setPublicProfileData] = useState<{
+    profile: { displayName: string | null; username: string | null; bio: string | null; avatarUrl: string | null; avatarThumbUrl: string | null; isPublic: boolean };
+    wishlists: { id: string; slug: string; title: string; deadline: string | null; itemCount: number; reservedCount: number }[];
+  } | null>(null);
+  const [publicProfileLoading, setPublicProfileLoading] = useState(false);
+  const [publicProfileError, setPublicProfileError] = useState<string | null>(null);
   const [titlePressed, setTitlePressed] = useState(false); // pressed-state for tappable item title
   const [editingProfile, setEditingProfile] = useState(false);
   const [editProfileName, setEditProfileName] = useState('');
@@ -2628,6 +2636,30 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [tgFetch, locale, pushToast]);
 
+  /** Load a public profile by username (uses unauthenticated /public endpoint) */
+  const loadPublicProfile = useCallback(async (username: string) => {
+    setPublicProfileLoading(true);
+    setPublicProfileError(null);
+    setPublicProfileData(null);
+    try {
+      const res = await fetch(`${apiBase}/public/profiles/${encodeURIComponent(username)}`);
+      if (res.status === 404) {
+        setPublicProfileError('not_found');
+        return;
+      }
+      if (!res.ok) {
+        setPublicProfileError('error');
+        return;
+      }
+      const data = await res.json();
+      setPublicProfileData(data);
+    } catch {
+      setPublicProfileError('error');
+    } finally {
+      setPublicProfileLoading(false);
+    }
+  }, [apiBase]);
+
   const handleAvatarFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -3378,6 +3410,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (screen === 'guest-view') {
         loadWishlists().catch(() => { /* silent — screen already set */ });
       }
+    } else if (screen === 'public-profile') {
+      setPublicProfileData(null);
+      setPublicProfileUsername(null);
+      setPublicProfileError(null);
+      setScreen('my-wishlists');
     } else if (screen === 'profile') {
       setScreen('my-wishlists');
     } else if (screen === 'settings') {
@@ -3706,6 +3743,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           })
           .catch(handleErr);
         loadWishlists().catch(() => { /* non-critical for guest flow */ });
+      } else if (startParam && startParam.startsWith('profile_')) {
+        // Public profile deep link: profile_{username}
+        const username = startParam.slice('profile_'.length);
+        if (username) {
+          setPublicProfileUsername(username);
+          void loadPublicProfile(username);
+          setScreen('public-profile');
+          loadWishlists().catch(() => {});
+        } else {
+          // Empty username — fallback to home
+          loadWishlists().then(() => setScreen('my-wishlists')).catch(handleErr);
+        }
       } else if (startParam) {
         // Load guest wishlist AND owner wishlists in parallel.
         // Owner wishlists are needed so that "back" from guest-view shows
@@ -7797,6 +7846,55 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <div style={{ fontSize: 13, color: C.textSec, marginTop: 10, lineHeight: 1.55 }}>
                     {profileData.bio}
                   </div>
+                )}
+              </div>
+
+              {/* Share profile button */}
+              <div style={{ marginBottom: 16 }}>
+                <button
+                  onClick={() => {
+                    if (!profileData?.username) {
+                      // No username — prompt to create one
+                      pushToast(t('share_profile_need_username', locale), 'info');
+                      setEditProfileName(profileData?.displayName || '');
+                      setEditProfileUsername('');
+                      setEditProfileBio(profileData?.bio?.replace(/\n+$/, '') || '');
+                      setEditProfileBirthday(profileData?.birthday ? profileData.birthday.slice(0, 10) : '');
+                      setEditingProfile(true);
+                      return;
+                    }
+                    const link = buildTgDeepLink(`profile_${profileData.username}`);
+                    if (!link) return;
+                    // Copy to clipboard
+                    navigator.clipboard?.writeText(link).then(() => {
+                      pushToast(t('share_profile_copied', locale), 'success');
+                    }).catch(() => {});
+                  }}
+                  style={{
+                    width: '100%', padding: '12px 0', borderRadius: 12, border: `1px solid ${C.borderLight}`,
+                    background: C.surface, color: C.text, fontSize: 14, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}
+                >
+                  <span>📤</span> {t('share_profile_btn', locale)}
+                </button>
+                {profileData?.username && (
+                  <button
+                    onClick={() => {
+                      const link = buildTgDeepLink(`profile_${profileData.username}`);
+                      if (!link) return;
+                      const shareText = `${profileData.displayName || profileData.username}\n${t('share_profile_cta', locale)}`;
+                      const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(shareText)}`;
+                      (window as any).Telegram?.WebApp?.openTelegramLink?.(tgShareUrl);
+                    }}
+                    style={{
+                      width: '100%', padding: '10px 0', borderRadius: 12, border: 'none',
+                      background: 'transparent', color: C.accent, fontSize: 13, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: font, marginTop: 6,
+                    }}
+                  >
+                    {t('share_profile_telegram', locale)}
+                  </button>
                 )}
               </div>
 
@@ -13594,6 +13692,104 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'onboarding-catalog' && onboardingVariant === 'v2_try' && renderOnboardingCatalog()}
       {screen === 'onboarding-create-wishlist' && onboardingVariant === 'v2_try' && renderOnboardingCreateWishlist()}
       {screen === 'onboarding-share' && onboardingVariant === 'v2_try' && renderOnboardingShare()}
+
+      {/* ── PUBLIC PROFILE SCREEN ── */}
+      {screen === 'public-profile' && (() => {
+        const pp = publicProfileData;
+        const isOwn = pp?.profile?.username && profileData?.username && pp.profile.username.toLowerCase() === profileData.username.toLowerCase();
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 90, overflowY: 'auto', fontFamily: font, color: C.text }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', gap: 12 }}>
+              <button onClick={navBack} style={{ background: 'none', border: 'none', color: C.text, fontSize: 16, cursor: 'pointer', fontFamily: font, padding: '4px 0' }}>
+                ‹ {t('back', locale)}
+              </button>
+            </div>
+
+            {publicProfileLoading && (
+              <div style={{ padding: '80px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+                <div style={{ color: C.textMuted, fontSize: 14 }}>{t('loading', locale)}</div>
+              </div>
+            )}
+
+            {publicProfileError === 'not_found' && (
+              <div style={{ padding: '80px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>{t('public_profile_not_found', locale)}</div>
+                <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('public_profile_not_found_hint', locale)}</div>
+              </div>
+            )}
+
+            {publicProfileError === 'error' && (
+              <div style={{ padding: '80px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>😔</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: C.textMuted }}>{t('error_generic', locale)}</div>
+              </div>
+            )}
+
+            {pp && !publicProfileLoading && !publicProfileError && (
+              <div style={{ padding: '0 20px 40px' }}>
+                {/* Avatar + Name */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
+                  <div style={{
+                    width: 80, height: 80, borderRadius: '50%', overflow: 'hidden', marginBottom: 12,
+                    background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: `2px solid ${C.borderLight}`,
+                  }}>
+                    {pp.profile.avatarUrl
+                      ? <img src={pp.profile.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <span style={{ fontSize: 36 }}>👤</span>}
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 700, textAlign: 'center' }}>{pp.profile.displayName || pp.profile.username || publicProfileUsername}</div>
+                  {pp.profile.username && <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{pp.profile.username}</div>}
+                  {pp.profile.bio && <div style={{ fontSize: 14, color: C.textSec, marginTop: 8, textAlign: 'center', lineHeight: 1.5 }}>{pp.profile.bio}</div>}
+                  {isOwn && <div style={{ fontSize: 12, color: C.accent, marginTop: 8, background: C.accentSoft, padding: '4px 12px', borderRadius: 8 }}>{t('public_profile_this_is_you', locale)}</div>}
+                </div>
+
+                {/* Public wishlists */}
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                  {t('public_profile_wishlists_title', locale)}
+                </div>
+
+                {pp.wishlists.length === 0 ? (
+                  <div style={{ padding: '32px 16px', textAlign: 'center', background: C.surface, borderRadius: 14 }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                    <div style={{ fontSize: 14, color: C.textMuted }}>{t('public_profile_no_wishlists', locale)}</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {pp.wishlists.map(wl => (
+                      <div key={wl.id}
+                        onClick={() => {
+                          // Open as guest wishlist
+                          void loadGuestWishlist(wl.slug).then(() => setScreen('guest-view')).catch(() => {});
+                        }}
+                        style={{
+                          background: C.card, borderRadius: 14, padding: 16, cursor: 'pointer',
+                          border: `1px solid ${C.border}`,
+                        }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ fontSize: 16, fontWeight: 700 }}>{wl.title}</div>
+                          <span style={{ fontSize: 18, color: C.textMuted }}>›</span>
+                        </div>
+                        <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
+                          {wl.itemCount} {t('wishes_count_short', locale)} · {wl.reservedCount} {t('reserved_count_short', locale)}
+                        </div>
+                        {wl.itemCount > 0 && (
+                          <div style={{ height: 4, borderRadius: 100, background: C.surface, marginTop: 8 }}>
+                            <div style={{ height: '100%', borderRadius: 100, background: `linear-gradient(90deg, ${C.accent}, ${C.green})`, width: `${Math.min(100, (wl.reservedCount / wl.itemCount) * 100)}%`, transition: 'width 0.5s' }} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── TOASTS ── */}
       <div style={{ position: 'fixed', bottom: 24, left: 16, right: 16, zIndex: 200, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
