@@ -5027,81 +5027,86 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       <div style={{
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
-        display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
-        padding: '20px 24px calc(40px + env(safe-area-inset-bottom, 0px))',
+        display: 'flex', flexDirection: 'column', fontFamily: font,
       }}>
-        <div style={{ alignSelf: 'flex-end' }}>
-          <button onClick={() => { trackEvent('onboarding_catalog_skipped'); void updateOnboardingStep('onboarding-share', 'fallback_demo'); setScreen('onboarding-share'); }}
-            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 14px', color: 'rgba(255,255,255,0.45)', fontSize: 13, cursor: 'pointer', fontFamily: font }}>
-            {t('onboarding_catalog_skip', locale)}
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={() => { trackEvent('onboarding_catalog_skipped'); void updateOnboardingStep('onboarding-share', 'fallback_demo'); setScreen('onboarding-share'); }}
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 14px', color: 'rgba(255,255,255,0.45)', fontSize: 13, cursor: 'pointer', fontFamily: font }}>
+              {t('onboarding_catalog_skip', locale)}
+            </button>
+          </div>
+
+          <div style={{ textAlign: 'center', fontSize: 38, margin: '8px 0 8px' }}>🎁</div>
+          <div style={{ textAlign: 'center', fontSize: 21, fontWeight: 800, color: '#fff', lineHeight: 1.25 }}>
+            {t('onboarding_catalog_title', locale)}
+          </div>
+          <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 8, lineHeight: 1.45 }}>
+            {t('onboarding_catalog_subtitle', locale)}
+          </div>
+
+          {/* 2-column grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 20 }}>
+            {catalog.map((item) => {
+              const selected = onboardingCatalogSelected.includes(item.key);
+              return (
+                <button key={item.key} onClick={() => {
+                  setOnboardingCatalogSelected(prev => selected ? prev.filter(k => k !== item.key) : [...prev, item.key]);
+                }}
+                  style={{
+                    background: selected ? 'rgba(124,106,255,0.08)' : 'rgba(255,255,255,0.05)',
+                    border: `1.5px solid ${selected ? 'rgba(124,106,255,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                    borderRadius: 16, padding: '18px 12px', textAlign: 'center', cursor: 'pointer', fontFamily: font,
+                    position: 'relative', transition: 'all 0.2s',
+                  }}>
+                  {selected && (
+                    <div style={{ position: 'absolute', top: -4, right: -4, width: 22, height: 22, background: '#7C6AFF', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</div>
+                  )}
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>{item.emoji}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{t(item.titleKey, locale)}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#7C6AFF', marginTop: 4 }}>
+                    {item.currency === 'RUB' ? `${item.amount.toLocaleString('ru-RU')} ₽` : `$${item.amount}`}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom CTA below grid */}
+          <button onClick={() => { trackEvent('onboarding_catalog_custom'); void updateOnboardingStep('onboarding-catalog'); setScreen('onboarding-catalog'); }}
+            style={{ background: 'transparent', border: 'none', color: 'rgba(124,106,255,0.7)', fontSize: 13, fontWeight: 500, padding: '16px 0', cursor: 'pointer', fontFamily: font, textAlign: 'center', width: '100%' }}>
+            {t('onboarding_catalog_custom_cta', locale)}
           </button>
         </div>
 
-        <div style={{ textAlign: 'center', fontSize: 38, margin: '8px 0 8px' }}>🎁</div>
-        <div style={{ textAlign: 'center', fontSize: 21, fontWeight: 800, color: '#fff', lineHeight: 1.25 }}>
-          {t('onboarding_catalog_title', locale)}
-        </div>
-        <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 8, lineHeight: 1.45 }}>
-          {t('onboarding_catalog_subtitle', locale)}
-        </div>
+        {/* Fixed bottom: counter + dots + CTA */}
+        <div style={{ flexShrink: 0, padding: '12px 24px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))', background: 'linear-gradient(0deg, rgba(15,10,30,1) 60%, rgba(15,10,30,0) 100%)' }}>
+          {onboardingCatalogSelected.length > 0 && (
+            <div style={{ textAlign: 'center', fontSize: 13, color: '#7C6AFF', fontWeight: 600, marginBottom: 8 }}>
+              {t('onboarding_catalog_selected', locale, { count: String(onboardingCatalogSelected.length) })}
+            </div>
+          )}
 
-        {/* 2-column grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 20 }}>
-          {catalog.map((item) => {
-            const selected = onboardingCatalogSelected.includes(item.key);
-            return (
-              <button key={item.key} onClick={() => {
-                setOnboardingCatalogSelected(prev => selected ? prev.filter(k => k !== item.key) : [...prev, item.key]);
-              }}
-                style={{
-                  background: selected ? 'rgba(124,106,255,0.08)' : 'rgba(255,255,255,0.05)',
-                  border: `1.5px solid ${selected ? 'rgba(124,106,255,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                  borderRadius: 16, padding: '18px 12px', textAlign: 'center', cursor: 'pointer', fontFamily: font,
-                  position: 'relative', transition: 'all 0.2s',
-                }}>
-                {selected && (
-                  <div style={{ position: 'absolute', top: -4, right: -4, width: 22, height: 22, background: '#7C6AFF', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</div>
-                )}
-                <div style={{ fontSize: 32, marginBottom: 8 }}>{item.emoji}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{t(item.titleKey, locale)}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#7C6AFF', marginTop: 4 }}>
-                  {item.currency === 'RUB' ? `${item.amount.toLocaleString('ru-RU')} ₽` : `$${item.amount}`}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Custom CTA below grid */}
-        <button onClick={() => { trackEvent('onboarding_catalog_custom'); void updateOnboardingStep('onboarding-catalog'); /* TODO: open create-wish */ setScreen('onboarding-catalog'); }}
-          style={{ background: 'transparent', border: 'none', color: 'rgba(124,106,255,0.7)', fontSize: 13, fontWeight: 500, padding: '16px 0', cursor: 'pointer', fontFamily: font, textAlign: 'center' }}>
-          {t('onboarding_catalog_custom_cta', locale)}
-        </button>
-
-        {onboardingCatalogSelected.length > 0 && (
-          <div style={{ textAlign: 'center', fontSize: 13, color: '#7C6AFF', fontWeight: 600, marginBottom: 8 }}>
-            {t('onboarding_catalog_selected', locale, { count: String(onboardingCatalogSelected.length) })}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
+            {[0,1,2,3,4,5].map(i => (
+              <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+            ))}
           </div>
-        )}
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 16 }}>
-          {[0,1,2,3,4,5].map(i => (
-            <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
-          ))}
+          <button onClick={() => void submitCatalogSelection()}
+            disabled={onboardingCatalogSelected.length === 0 || onboardingLoading}
+            style={{
+              width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
+              background: onboardingCatalogSelected.length > 0 ? 'linear-gradient(135deg, #7c6aff, #a855f7)' : 'rgba(255,255,255,0.1)',
+              color: onboardingCatalogSelected.length > 0 ? '#fff' : 'rgba(255,255,255,0.3)',
+              fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font,
+              boxShadow: onboardingCatalogSelected.length > 0 ? '0 8px 24px rgba(124,106,255,0.4)' : 'none',
+              opacity: onboardingLoading ? 0.7 : 1,
+            }}>
+            {onboardingLoading ? '…' : t('onboarding_catalog_add_btn', locale)}
+          </button>
         </div>
-
-        <button onClick={() => void submitCatalogSelection()}
-          disabled={onboardingCatalogSelected.length === 0 || onboardingLoading}
-          style={{
-            width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
-            background: onboardingCatalogSelected.length > 0 ? 'linear-gradient(135deg, #7c6aff, #a855f7)' : 'rgba(255,255,255,0.1)',
-            color: onboardingCatalogSelected.length > 0 ? '#fff' : 'rgba(255,255,255,0.3)',
-            fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: 12,
-            boxShadow: onboardingCatalogSelected.length > 0 ? '0 8px 24px rgba(124,106,255,0.4)' : 'none',
-            opacity: onboardingLoading ? 0.7 : 1,
-          }}>
-          {onboardingLoading ? '…' : t('onboarding_catalog_add_btn', locale)}
-        </button>
       </div>
     );
   }
