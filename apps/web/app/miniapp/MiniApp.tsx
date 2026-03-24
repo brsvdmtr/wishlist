@@ -2411,6 +2411,25 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [tgFetch]);
 
+  /** Mark onboarding as COMPLETED on backend + update local state + refresh home data */
+  const finishOnboarding = useCallback(async (reason: string = 'try_import_completed') => {
+    try {
+      await tgFetch('/tg/onboarding/complete', {
+        method: 'POST',
+        body: JSON.stringify({ onboardingKey: 'hello_activation', reason }),
+      });
+    } catch {
+      // best-effort — don't block user
+    }
+    setOnboardingState(prev => prev ? { ...prev, status: 'COMPLETED' } : prev);
+    trackEvent('onboarding_completed', {
+      onboarding_variant: onboardingVariant,
+      acquisition_path: (onboardingState?.metaJson as any)?.acquisitionPath ?? null,
+    });
+    // Refresh home data so wishlists + counters appear immediately
+    await loadWishlists();
+  }, [tgFetch, trackEvent, onboardingVariant, onboardingState, loadWishlists]);
+
   // ── Onboarding v2: import URL from try screen ──
   const tryImportUrl = useCallback(async (url: string) => {
     if (!onboardingState) return;
@@ -13536,7 +13555,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {wishlists.length > 0 && (
               <button
-                onClick={() => {
+                onClick={async () => {
+                  const reason = onboardingVariant === 'v2_try'
+                    ? ((onboardingState?.metaJson as any)?.acquisitionPath === 'catalog' ? 'catalog_selected' : 'try_import_completed')
+                    : 'demo_moved_to_user_wishlist';
+                  await finishOnboarding(reason);
                   const wl = wishlists[0];
                   if (wl) {
                     setCurrentWl(wl);
@@ -13549,7 +13572,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             )}
             <button
-              onClick={async () => { setOnboardingState(null); await loadWishlists(); setScreen('my-wishlists'); }}
+              onClick={async () => {
+                const reason = onboardingVariant === 'v2_try'
+                  ? ((onboardingState?.metaJson as any)?.acquisitionPath === 'catalog' ? 'catalog_selected' : 'try_import_completed')
+                  : 'demo_moved_to_user_wishlist';
+                await finishOnboarding(reason);
+                setScreen('my-wishlists');
+              }}
               style={{ padding: '14px 0', borderRadius: 14, border: `1px solid ${C.borderLight}`, background: 'none', color: C.textSec, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font, width: '100%' }}
             >
               {t('onboarding_complete_done_btn', locale)}
