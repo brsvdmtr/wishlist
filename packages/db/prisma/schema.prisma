@@ -56,6 +56,21 @@ enum SubscriptionStatus {
   EXPIRED
 }
 
+enum PromoRedemptionStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  ACCEPTED_FOR_PAID
+  FAILED
+}
+
+enum DegradationPhase {
+  NONE
+  GRACE_PERIOD
+  ARCHIVED
+  PURGED
+}
+
 enum HintStatus {
   SENT
   DELIVERED
@@ -127,6 +142,9 @@ model User {
   santaNotifications             SantaNotification[]          @relation("SantaNotifications")
   santaExclusionGroupMemberships SantaExclusionGroupMember[]  @relation("ExclusionGroupMemberships")
   onboardingStates               UserOnboardingState[]
+  promoRedemptions               PromoRedemption[]
+  degradationState               DegradationState?
+  lifecycleTouches               LifecycleTouch[]
 }
 
 model Wishlist {
@@ -538,6 +556,95 @@ model Purchase {
   @@index([userId])
   @@index([telegramChargeId])
   @@index([userId, skuCode])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Promo campaigns & redemptions
+// ─────────────────────────────────────────────────────────────
+
+model PromoCampaign {
+  id            String   @id @default(cuid())
+  code          String   @unique           // canonical: WISHPRO
+  rewardType    String   @default("promo_pro") // promo_pro | future types
+  durationDays  Int      @default(30)
+  isActive      Boolean  @default(true)
+  maxRedemptions Int?                       // null = unlimited
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  redemptions PromoRedemption[]
+}
+
+model PromoRedemption {
+  id              String                @id @default(cuid())
+  userId          String
+  campaignId      String
+  status          PromoRedemptionStatus @default(PENDING)
+  attemptedAt     DateTime              @default(now())
+  activatedAt     DateTime?
+  expiresAt       DateTime?
+  failureReason   String?
+  source          String?               @default("miniapp") // miniapp | bot | winback
+  offeredAt       DateTime?             // when lifecycle system offered promo to this user
+  offeredVia      String?               // lifecycle touch ID or manual
+  reminder3dSent  Boolean               @default(false)
+  reminderExpSent Boolean               @default(false)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign PromoCampaign @relation(fields: [campaignId], references: [id])
+
+  @@unique([userId, campaignId])
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+// Degradation state after PRO/promo-PRO expiration
+model DegradationState {
+  id              String           @id @default(cuid())
+  userId          String           @unique
+  phase           DegradationPhase @default(NONE)
+  graceEndsAt     DateTime?        // 14 days after downgrade
+  archivedAt      DateTime?        // when items were archived
+  purgeScheduledAt DateTime?       // 90 days after archive
+  archivedWishlistIds String?      // JSON array of archived wishlist IDs
+  archivedItemIds     String?      // JSON array of archived item IDs
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Lifecycle / Win-back messaging
+// ─────────────────────────────────────────────────────────────
+
+model LifecycleTouch {
+  id              String    @id @default(cuid())
+  userId          String
+  segment         String    // S1, S2, S3, S4
+  episodeKey      String    // unique per churn episode (e.g. "S3_userId_2026-03")
+  touchNumber     Int       // 1, 2, 3
+  scheduledFor    DateTime
+  sentAt          DateTime?
+  delivered       Boolean   @default(false)
+  targetAction    String?   // create_wishlist, add_item, return_visit, share
+  offerCode       String?   // WISHPRO or null — only on eligible touches
+  messageKind     String    // activation, winback, promo_offer
+  deepLinkPayload String?   // startapp payload for CTA button
+  stoppedAt       DateTime?
+  stopReason      String?   // returned, target_completed, unsubscribed, delivery_failed, bought_pro
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, episodeKey, touchNumber])
+  @@index([userId, segment])
+  @@index([scheduledFor, sentAt])
+  @@index([userId, offerCode])
 }
 
 // ─────────────────────────────────────────────────────────────
