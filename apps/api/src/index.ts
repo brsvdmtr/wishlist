@@ -1348,11 +1348,16 @@ const ADDON_CAPS = {
   extraItems15PerWishlist:   1,                   // +15×1 = +15 items per wishlist
 } as const;
 
+type PromoProInfo = { id: string; expiresAt: string; campaignCode: string } | null;
+
 async function getUserEntitlement(userId: string, godMode = false): Promise<{
   plan: PlanInfo;
   isPro: boolean;
+  proSource: 'subscription' | 'promo' | 'god_mode' | null;
   subscription: { id: string; status: string; periodEnd: string; cancelledAt: string | null; cancelAtPeriodEnd: boolean } | null;
+  promoPro: PromoProInfo;
 }> {
+  // 1. Check paid subscription first (highest priority)
   const sub = await prisma.subscription.findFirst({
     where: {
       userId,
@@ -1363,10 +1368,20 @@ async function getUserEntitlement(userId: string, godMode = false): Promise<{
     orderBy: { currentPeriodEnd: 'desc' },
   });
 
+  // Also check active promo-PRO
+  const promoRedemption = await prisma.promoRedemption.findFirst({
+    where: { userId, status: 'ACTIVE', expiresAt: { gt: new Date() } },
+    include: { campaign: { select: { code: true } } },
+  });
+  const promoPro: PromoProInfo = promoRedemption
+    ? { id: promoRedemption.id, expiresAt: promoRedemption.expiresAt!.toISOString(), campaignCode: promoRedemption.campaign.code }
+    : null;
+
   if (sub) {
     return {
       plan: PLANS.PRO,
       isPro: true,
+      proSource: 'subscription',
       subscription: {
         id: sub.id,
         status: sub.status,
@@ -1374,15 +1389,27 @@ async function getUserEntitlement(userId: string, godMode = false): Promise<{
         cancelledAt: sub.cancelledAt?.toISOString() ?? null,
         cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
       },
+      promoPro,
     };
   }
 
-  // God Mode: virtual PRO without real subscription
-  if (godMode) {
-    return { plan: PLANS.PRO, isPro: true, subscription: null };
+  // 2. Check active promo-PRO
+  if (promoPro) {
+    return {
+      plan: PLANS.PRO,
+      isPro: true,
+      proSource: 'promo',
+      subscription: null,
+      promoPro,
+    };
   }
 
-  return { plan: PLANS.FREE, isPro: false, subscription: null };
+  // 3. God Mode: virtual PRO without real subscription
+  if (godMode) {
+    return { plan: PLANS.PRO, isPro: true, proSource: 'god_mode', subscription: null, promoPro: null };
+  }
+
+  return { plan: PLANS.FREE, isPro: false, proSource: null, subscription: null, promoPro: null };
 }
 
 /** Unified effective entitlement resolver — single source of truth for all limit checks */
@@ -1979,6 +2006,8 @@ tgRouter.get(
         features: [...ent.plan.features],
       },
       subscription: ent.subscription,
+      proSource: ent.proSource,
+      promoPro: ent.promoPro,
       godMode: user.godMode,
       canGodMode: user.telegramId
         ? (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean).includes(user.telegramId)
@@ -4297,6 +4326,8 @@ tgRouter.get(
         features: [...ent.plan.features],
       },
       subscription: ent.subscription,
+      proSource: ent.proSource,
+      promoPro: ent.promoPro,
       usage: { wishlists: wishlistCount },
       proPriceStars: PRO_PRICE_XTR,
       godMode: user.godMode,
@@ -4318,6 +4349,128 @@ tgRouter.get(
         targetRequired: s.targetRequired,
       })),
     });
+  }),
+);
+
+// ─── Promo code helpers ──────────────────────────────────────────────────────
+
+/** Normalize promo code input: trim, uppercase, remove spaces and dashes */
+function normalizePromoCode(raw: string): string {
+  return raw.trim().toUpperCase().replace(/[\s\-]/g, '');
+}
+
+// POST /tg/promo/apply — apply a promotional code
+const promoLimiter = rateLimit({ windowMs: 60_000, limit: 5, keyGenerator: (req: any) => req.tgUser?.id ?? 'anon', standardHeaders: 'draft-7', legacyHeaders: false });
+tgRouter.post(
+  '/promo/apply',
+  promoLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({ code: z.string().min(1).max(50) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'invalid_code' });
+
+    const code = normalizePromoCode(parsed.data.code);
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    // 1. Find campaign
+    const campaign = await prisma.promoCampaign.findUnique({ where: { code } });
+    if (!campaign || !campaign.isActive) {
+      return res.status(400).json({ error: 'invalid_code' });
+    }
+
+    // 2. Check if user already redeemed this campaign
+    const existing = await prisma.promoRedemption.findUnique({
+      where: { userId_campaignId: { userId: user.id, campaignId: campaign.id } },
+    });
+
+    if (existing) {
+      if (existing.status === 'ACTIVE' && existing.expiresAt && existing.expiresAt > new Date()) {
+        // Idempotent: already active
+        return res.json({
+          status: 'already_active',
+          expiresAt: existing.expiresAt.toISOString(),
+        });
+      }
+      if (existing.status === 'ACTIVE' || existing.status === 'EXPIRED' || existing.status === 'ACCEPTED_FOR_PAID') {
+        // Already used lifetime
+        return res.status(409).json({ error: 'already_used' });
+      }
+      // PENDING or FAILED — allow retry
+    }
+
+    // 3. Check max redemptions for campaign
+    if (campaign.maxRedemptions != null) {
+      const count = await prisma.promoRedemption.count({
+        where: { campaignId: campaign.id, status: { in: ['ACTIVE', 'EXPIRED', 'ACCEPTED_FOR_PAID'] } },
+      });
+      if (count >= campaign.maxRedemptions) {
+        return res.status(409).json({ error: 'campaign_exhausted' });
+      }
+    }
+
+    // 4. Branch: paid PRO vs FREE user
+    const ent = await getUserEntitlement(user.id, user.godMode);
+
+    if (ent.proSource === 'subscription' && ent.subscription) {
+      // Scenario B: paid PRO user — accept but don't activate promo period
+      const redemption = await prisma.promoRedemption.upsert({
+        where: { userId_campaignId: { userId: user.id, campaignId: campaign.id } },
+        update: { status: 'ACCEPTED_FOR_PAID', attemptedAt: new Date() },
+        create: {
+          userId: user.id,
+          campaignId: campaign.id,
+          status: 'ACCEPTED_FOR_PAID',
+          attemptedAt: new Date(),
+          source: 'miniapp',
+        },
+      });
+
+      trackEvent('promo_accepted_paid_user', user.id, { campaignCode: code });
+      return res.json({
+        status: 'accepted_for_paid',
+        message: 'promo_accepted_paid',
+        redemptionId: redemption.id,
+      });
+    }
+
+    // FREE or promo user — activate 30-day promo PRO
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + campaign.durationDays * 24 * 60 * 60 * 1000);
+
+    try {
+      const redemption = await prisma.promoRedemption.upsert({
+        where: { userId_campaignId: { userId: user.id, campaignId: campaign.id } },
+        update: {
+          status: 'ACTIVE',
+          activatedAt: now,
+          expiresAt,
+          failureReason: null,
+        },
+        create: {
+          userId: user.id,
+          campaignId: campaign.id,
+          status: 'ACTIVE',
+          attemptedAt: now,
+          activatedAt: now,
+          expiresAt,
+          source: 'miniapp',
+        },
+      });
+
+      // Clear degradation state if any
+      await prisma.degradationState.deleteMany({ where: { userId: user.id } }).catch(() => {});
+
+      trackEvent('promo_activated', user.id, { campaignCode: code, expiresAt: expiresAt.toISOString() });
+
+      return res.status(201).json({
+        status: 'activated',
+        expiresAt: expiresAt.toISOString(),
+        redemptionId: redemption.id,
+      });
+    } catch (err) {
+      // Technical failure — don't burn the user's right
+      console.error('[promo] activation error:', err);
+      return res.status(500).json({ error: 'activation_failed' });
+    }
   }),
 );
 
@@ -8941,6 +9094,137 @@ setInterval(async () => {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[billing] expiry check failed:', err);
+  }
+}, 60 * 60 * 1000);
+
+// Promo expiry: mark ACTIVE promo redemptions past their expiresAt as EXPIRED (hourly)
+setInterval(async () => {
+  try {
+    const expired = await prisma.promoRedemption.updateMany({
+      where: { status: 'ACTIVE', expiresAt: { lte: new Date() } },
+      data: { status: 'EXPIRED' },
+    });
+    if (expired.count > 0) {
+      console.log(`[promo] expired ${expired.count} promo redemptions`);
+      // Start grace period for users who lost PRO (no paid sub either)
+      const expiredRedemptions = await prisma.promoRedemption.findMany({
+        where: { status: 'EXPIRED', expiresAt: { lte: new Date(), gte: new Date(Date.now() - 2 * 60 * 60 * 1000) } },
+        select: { userId: true },
+      });
+      for (const r of expiredRedemptions) {
+        // Only start degradation if user has no active paid sub
+        const sub = await prisma.subscription.findFirst({
+          where: { userId: r.userId, status: { in: ['ACTIVE', 'CANCELLED'] }, currentPeriodEnd: { gt: new Date() } },
+        });
+        if (!sub) {
+          await prisma.degradationState.upsert({
+            where: { userId: r.userId },
+            update: {},  // don't overwrite existing degradation
+            create: {
+              userId: r.userId,
+              phase: 'GRACE_PERIOD',
+              graceEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            },
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[promo] expiry check failed:', err);
+  }
+}, 60 * 60 * 1000);
+
+// Degradation: archive over-limit data after grace period ends (hourly)
+setInterval(async () => {
+  try {
+    const graceExpired = await prisma.degradationState.findMany({
+      where: { phase: 'GRACE_PERIOD', graceEndsAt: { lte: new Date() } },
+      include: { user: { select: { id: true } } },
+    });
+    for (const ds of graceExpired) {
+      const userId = ds.userId;
+      // Check if user regained PRO
+      const ent = await getUserEntitlement(userId);
+      if (ent.isPro) {
+        await prisma.degradationState.update({ where: { id: ds.id }, data: { phase: 'NONE' } });
+        continue;
+      }
+      // Archive newest wishlists beyond FREE limit
+      const wishlists = await prisma.wishlist.findMany({
+        where: { ownerId: userId, type: 'REGULAR', archivedAt: null },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      const overLimitWls = wishlists.slice(PLANS.FREE.wishlists);
+      const archivedWlIds: string[] = [];
+      const archivedItemIds: string[] = [];
+      if (overLimitWls.length > 0) {
+        for (const wl of overLimitWls) {
+          await prisma.wishlist.update({ where: { id: wl.id }, data: { archivedAt: new Date() } });
+          archivedWlIds.push(wl.id);
+        }
+      }
+      // Archive newest items beyond FREE limit in remaining wishlists
+      const remainingWls = wishlists.slice(0, PLANS.FREE.wishlists);
+      for (const wl of remainingWls) {
+        const items = await prisma.item.findMany({
+          where: { wishlistId: wl.id, status: { in: ['AVAILABLE', 'RESERVED'] }, archivedAt: null },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        });
+        const overLimitItems = items.slice(PLANS.FREE.items);
+        for (const it of overLimitItems) {
+          await prisma.item.update({ where: { id: it.id }, data: { archivedAt: new Date() } });
+          archivedItemIds.push(it.id);
+        }
+      }
+      await prisma.degradationState.update({
+        where: { id: ds.id },
+        data: {
+          phase: (archivedWlIds.length > 0 || archivedItemIds.length > 0) ? 'ARCHIVED' : 'NONE',
+          archivedAt: new Date(),
+          purgeScheduledAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+          archivedWishlistIds: JSON.stringify(archivedWlIds),
+          archivedItemIds: JSON.stringify(archivedItemIds),
+        },
+      });
+      if (archivedWlIds.length > 0 || archivedItemIds.length > 0) {
+        console.log(`[degradation] archived ${archivedWlIds.length} wishlists, ${archivedItemIds.length} items for user ${userId}`);
+      }
+    }
+  } catch (err) {
+    console.error('[degradation] archive job failed:', err);
+  }
+}, 60 * 60 * 1000);
+
+// Degradation: purge archived data after 90 days (hourly)
+setInterval(async () => {
+  try {
+    const toPurge = await prisma.degradationState.findMany({
+      where: { phase: 'ARCHIVED', purgeScheduledAt: { lte: new Date() } },
+    });
+    for (const ds of toPurge) {
+      // Check if user regained PRO
+      const ent = await getUserEntitlement(ds.userId);
+      if (ent.isPro) {
+        // Restore archived data
+        const wlIds: string[] = JSON.parse(ds.archivedWishlistIds || '[]');
+        const itemIds: string[] = JSON.parse(ds.archivedItemIds || '[]');
+        if (wlIds.length) await prisma.wishlist.updateMany({ where: { id: { in: wlIds } }, data: { archivedAt: null } });
+        if (itemIds.length) await prisma.item.updateMany({ where: { id: { in: itemIds } }, data: { archivedAt: null } });
+        await prisma.degradationState.update({ where: { id: ds.id }, data: { phase: 'NONE' } });
+        continue;
+      }
+      // Purge: delete archived wishlists and items permanently
+      const wlIds: string[] = JSON.parse(ds.archivedWishlistIds || '[]');
+      const itemIds: string[] = JSON.parse(ds.archivedItemIds || '[]');
+      if (itemIds.length) await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
+      if (wlIds.length) await prisma.wishlist.deleteMany({ where: { id: { in: wlIds } } });
+      await prisma.degradationState.update({ where: { id: ds.id }, data: { phase: 'PURGED' } });
+      console.log(`[degradation] purged ${wlIds.length} wishlists, ${itemIds.length} items for user ${ds.userId}`);
+    }
+  } catch (err) {
+    console.error('[degradation] purge job failed:', err);
   }
 }, 60 * 60 * 1000);
 

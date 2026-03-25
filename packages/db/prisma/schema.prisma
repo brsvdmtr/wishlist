@@ -56,6 +56,21 @@ enum SubscriptionStatus {
   EXPIRED
 }
 
+enum PromoRedemptionStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  ACCEPTED_FOR_PAID
+  FAILED
+}
+
+enum DegradationPhase {
+  NONE
+  GRACE_PERIOD
+  ARCHIVED
+  PURGED
+}
+
 enum HintStatus {
   SENT
   DELIVERED
@@ -127,6 +142,8 @@ model User {
   santaNotifications             SantaNotification[]          @relation("SantaNotifications")
   santaExclusionGroupMemberships SantaExclusionGroupMember[]  @relation("ExclusionGroupMemberships")
   onboardingStates               UserOnboardingState[]
+  promoRedemptions               PromoRedemption[]
+  degradationState               DegradationState?
 }
 
 model Wishlist {
@@ -538,6 +555,63 @@ model Purchase {
   @@index([userId])
   @@index([telegramChargeId])
   @@index([userId, skuCode])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Promo campaigns & redemptions
+// ─────────────────────────────────────────────────────────────
+
+model PromoCampaign {
+  id            String   @id @default(cuid())
+  code          String   @unique           // canonical: WISHPRO
+  rewardType    String   @default("promo_pro") // promo_pro | future types
+  durationDays  Int      @default(30)
+  isActive      Boolean  @default(true)
+  maxRedemptions Int?                       // null = unlimited
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  redemptions PromoRedemption[]
+}
+
+model PromoRedemption {
+  id              String                @id @default(cuid())
+  userId          String
+  campaignId      String
+  status          PromoRedemptionStatus @default(PENDING)
+  attemptedAt     DateTime              @default(now())
+  activatedAt     DateTime?
+  expiresAt       DateTime?
+  failureReason   String?
+  source          String?               @default("miniapp") // miniapp | bot
+  reminder3dSent  Boolean               @default(false)
+  reminderExpSent Boolean               @default(false)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign PromoCampaign @relation(fields: [campaignId], references: [id])
+
+  @@unique([userId, campaignId])
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+// Degradation state after PRO/promo-PRO expiration
+model DegradationState {
+  id              String           @id @default(cuid())
+  userId          String           @unique
+  phase           DegradationPhase @default(NONE)
+  graceEndsAt     DateTime?        // 14 days after downgrade
+  archivedAt      DateTime?        // when items were archived
+  purgeScheduledAt DateTime?       // 90 days after archive
+  archivedWishlistIds String?      // JSON array of archived wishlist IDs
+  archivedItemIds     String?      // JSON array of archived item IDs
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // ─────────────────────────────────────────────────────────────
