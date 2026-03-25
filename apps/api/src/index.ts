@@ -1985,7 +1985,10 @@ tgRouter.get(
     const user = await getOrCreateTgUser(req.tgUser!);
     // Fire-and-forget: attribute lifecycle return if applicable
     void attributeLifecycleReturn(user.id);
-    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    const [ent, userProfile] = await Promise.all([
+      getEffectiveEntitlements(user.id, user.godMode),
+      prisma.userProfile.findUnique({ where: { userId: user.id }, select: { cardDisplayMode: true } }),
+    ]);
 
     const wishlists = await prisma.wishlist.findMany({
       where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
@@ -2056,6 +2059,7 @@ tgRouter.get(
       subscription: ent.subscription,
       proSource: ent.proSource,
       promoPro: ent.promoPro,
+      cardDisplayMode: ent.isPro ? (userProfile?.cardDisplayMode ?? 'auto') : 'auto',
       godMode: user.godMode,
       canGodMode: user.telegramId
         ? (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean).includes(user.telegramId)

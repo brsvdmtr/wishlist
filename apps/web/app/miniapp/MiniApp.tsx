@@ -1969,6 +1969,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [planInfo, setPlanInfo] = useState<PlanInfo>({
     code: 'FREE', wishlists: 2, items: 20, subscriptions: 2, participants: 5, features: [],
   });
+  const [cardDisplayMode, setCardDisplayMode] = useState<string>('auto');
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
   const [proSource, setProSource] = useState<string | null>(null);
   const [promoPro, setPromoPro] = useState<{ id: string; expiresAt: string; campaignCode: string } | null>(null);
@@ -2636,6 +2637,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setWishlists(json.wishlists);
     setPlanInfo(json.plan);
     setSubscription(json.subscription);
+    if ((json as any).cardDisplayMode) setCardDisplayMode((json as any).cardDisplayMode);
     if ((json as any).proSource !== undefined) setProSource((json as any).proSource);
     if ((json as any).promoPro !== undefined) setPromoPro((json as any).promoPro);
     if (json.godMode !== undefined) setGodMode(json.godMode);
@@ -3099,6 +3101,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const data = await res.json() as SettingsData;
       setSettingsData(data);
       if (patch.defaultCurrency) setDefaultCurrency(patch.defaultCurrency as 'RUB' | 'USD');
+      if (data.appBehavior?.cardDisplayMode) setCardDisplayMode(data.appBehavior.cardDisplayMode);
       // Re-resolve locale after any settings change (catches both language and mode changes)
       setLocale(resolveEffectiveLocale(
         { languageMode: data.languageMode, manualLanguage: data.manualLanguage },
@@ -7031,7 +7034,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {!itemReorderMode && items.map((item, i) => {
               const useNewCards = CARD_REDESIGN_ENABLED;
               if (useNewCards) {
-                const cardMode = resolveCardMode(items.length, settingsData?.appBehavior?.cardDisplayMode, planInfo.code === 'PRO');
+                const cardMode = resolveCardMode(items.length, cardDisplayMode, planInfo.code === 'PRO');
                 const stagger = cardMode === 'compact' ? 0.04 : 0.08;
                 const gap = cardMode === 'compact' ? 8 : 14;
                 const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
@@ -9787,7 +9790,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('settings_card_layout', locale)}</div>
                     <div style={{ display: 'flex', gap: 4 }}>
                       {(['auto', 'showcase', 'compact'] as const).map(mode => {
-                        const isActive = (settingsData?.appBehavior?.cardDisplayMode ?? 'auto') === mode;
+                        const isActive = cardDisplayMode === mode;
                         const needsPro = mode !== 'auto' && planInfo.code !== 'PRO';
                         const label = mode === 'auto' ? t('settings_card_auto', locale)
                           : mode === 'showcase' ? t('settings_card_showcase', locale)
@@ -9797,6 +9800,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             key={mode}
                             onClick={() => {
                               if (needsPro) { showUpsell('wishlist_limit'); return; }
+                              // Optimistic update — instant UI feedback
+                              setCardDisplayMode(mode);
                               patchSettings({ appBehavior: { ...settingsData?.appBehavior, cardDisplayMode: mode } });
                             }}
                             style={{
