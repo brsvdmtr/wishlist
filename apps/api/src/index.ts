@@ -1932,11 +1932,59 @@ tgRouter.use((req, res, next) => {
   next();
 });
 
+/**
+ * Attribution: when a user visits, mark their most recent lifecycle touch as "returned".
+ * Fire-and-forget, best-effort. Also checks if target action completed.
+ */
+async function attributeLifecycleReturn(userId: string): Promise<void> {
+  try {
+    // Find latest sent touch without returnedAt, within 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const touch = await prisma.lifecycleTouch.findFirst({
+      where: { userId, sentAt: { gte: sevenDaysAgo }, delivered: true, returnedAt: null, stoppedAt: null },
+      orderBy: { sentAt: 'desc' },
+    });
+    if (!touch || !touch.sentAt) return;
+    const now = new Date();
+    // Mark return
+    await prisma.lifecycleTouch.update({
+      where: { id: touch.id },
+      data: { returnedAt: now },
+    });
+    // Check target completion
+    if (!touch.targetCompletedAt) {
+      let completed = false;
+      let completedType: string | null = null;
+      if (touch.segment === 'S1') {
+        const wl = await prisma.wishlist.count({ where: { ownerId: userId, type: 'REGULAR' } });
+        if (wl > 0) { completed = true; completedType = 'created_wishlist'; }
+      } else if (touch.segment === 'S2') {
+        const items = await prisma.item.count({ where: { wishlist: { ownerId: userId, type: 'REGULAR' }, status: { in: ['AVAILABLE', 'RESERVED'] } } });
+        if (items > 0) { completed = true; completedType = 'added_item'; }
+      } else if (touch.segment === 'S3' || touch.segment === 'S4') {
+        // Check if user has been active (updated anything since touch was sent)
+        const activity = await prisma.item.count({
+          where: { wishlist: { ownerId: userId, type: 'REGULAR' }, updatedAt: { gte: touch.sentAt } },
+        });
+        if (activity > 0) { completed = true; completedType = 'updated_content'; }
+      }
+      if (completed) {
+        await prisma.lifecycleTouch.update({
+          where: { id: touch.id },
+          data: { targetCompletedAt: now, targetCompletedType: completedType },
+        });
+      }
+    }
+  } catch { /* best-effort */ }
+}
+
 // GET /tg/wishlists — my wishlists
 tgRouter.get(
   '/wishlists',
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
+    // Fire-and-forget: attribute lifecycle return if applicable
+    void attributeLifecycleReturn(user.id);
     const ent = await getEffectiveEntitlements(user.id, user.godMode);
 
     const wishlists = await prisma.wishlist.findMany({
@@ -5802,6 +5850,129 @@ tgRouter.get(
       },
       generatedAt: now.toISOString(),
     });
+  }),
+);
+
+// ─── Retention Analytics (god mode only) ─────────────────────────────────────
+
+// GET /tg/me/retention-stats — lifecycle/winback analytics dashboard
+tgRouter.get(
+  '/me/retention-stats',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
+    if (!canGodMode || !user.godMode) return res.status(403).json({ error: 'Forbidden' });
+
+    const periodDays = parseInt(String(req.query.period ?? '30'), 10) || 30;
+    const since = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+
+    // Aggregate touches
+    const touches = await prisma.lifecycleTouch.findMany({
+      where: { sentAt: { gte: since, not: null } },
+      select: {
+        id: true, userId: true, segment: true, touchNumber: true,
+        sentAt: true, delivered: true, offerCode: true,
+        returnedAt: true, targetCompletedAt: true, promoRedeemedAt: true,
+      },
+    });
+
+    // Overview aggregates
+    const sent = touches.length;
+    const delivered = touches.filter(t => t.delivered).length;
+    const uniqueUsers = new Set(touches.map(t => t.userId)).size;
+    const returned24h = touches.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 24 * 3600 * 1000).length;
+    const returned72h = touches.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 72 * 3600 * 1000).length;
+    const returned7d = touches.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 7 * 24 * 3600 * 1000).length;
+    const targetCompleted7d = touches.filter(t => t.targetCompletedAt && t.sentAt && (t.targetCompletedAt.getTime() - t.sentAt.getTime()) <= 7 * 24 * 3600 * 1000).length;
+    const promoOffered = touches.filter(t => t.offerCode).length;
+    const promoRedeemed = touches.filter(t => t.promoRedeemedAt).length;
+
+    // Promo grant counts
+    const [activeGrants, expiredGrants] = await Promise.all([
+      prisma.promoRedemption.count({ where: { status: 'ACTIVE', expiresAt: { gt: new Date() } } }),
+      prisma.promoRedemption.count({ where: { status: 'EXPIRED' } }),
+    ]);
+
+    // By segment
+    const segments = ['S1', 'S2', 'S3', 'S4'];
+    const bySegment = segments.map(seg => {
+      const st = touches.filter(t => t.segment === seg);
+      const del = st.filter(t => t.delivered);
+      return {
+        segment: seg,
+        sent: st.length,
+        delivered: del.length,
+        returned24h: st.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 24 * 3600 * 1000).length,
+        returned72h: st.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 72 * 3600 * 1000).length,
+        returned7d: st.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 7 * 24 * 3600 * 1000).length,
+        targetCompleted7d: st.filter(t => t.targetCompletedAt && t.sentAt && (t.targetCompletedAt.getTime() - t.sentAt.getTime()) <= 7 * 24 * 3600 * 1000).length,
+        returnRate72h: del.length > 0 ? `${Math.round(st.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 72 * 3600 * 1000).length / del.length * 100)}%` : '—',
+        promoSent: st.filter(t => t.offerCode).length,
+        promoRedeemed: st.filter(t => t.promoRedeemedAt).length,
+      };
+    });
+
+    // By touch (segment × touchNumber)
+    const byTouch = segments.flatMap(seg =>
+      [1, 2, 3].map(tn => {
+        const st = touches.filter(t => t.segment === seg && t.touchNumber === tn);
+        const del = st.filter(t => t.delivered);
+        return {
+          segment: seg, touchNumber: tn,
+          sent: st.length, delivered: del.length,
+          returned72h: st.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 72 * 3600 * 1000).length,
+          targetCompleted7d: st.filter(t => t.targetCompletedAt && t.sentAt && (t.targetCompletedAt.getTime() - t.sentAt.getTime()) <= 7 * 24 * 3600 * 1000).length,
+          promoRedeemed: st.filter(t => t.promoRedeemedAt).length,
+        };
+      }).filter(r => r.sent > 0),
+    );
+
+    return res.json({
+      period: { days: periodDays, from: since.toISOString(), to: new Date().toISOString() },
+      overview: {
+        sent, delivered, uniqueUsers,
+        returned24h, returned72h, returned7d, targetCompleted7d,
+        returnRate72h: delivered > 0 ? `${Math.round(returned72h / delivered * 100)}%` : '—',
+        promoOffered, promoRedeemed, activeGrants, expiredGrants,
+      },
+      bySegment,
+      byTouch,
+      generatedAt: new Date().toISOString(),
+    });
+  }),
+);
+
+// GET /tg/me/retention-recent — last 20 touches + returns for debugging
+tgRouter.get(
+  '/me/retention-recent',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
+    if (!canGodMode || !user.godMode) return res.status(403).json({ error: 'Forbidden' });
+
+    const [recentTouches, recentRedeems] = await Promise.all([
+      prisma.lifecycleTouch.findMany({
+        where: { sentAt: { not: null } },
+        orderBy: { sentAt: 'desc' },
+        take: 30,
+        select: {
+          id: true, userId: true, segment: true, touchNumber: true,
+          sentAt: true, delivered: true, offerCode: true, messageKind: true,
+          returnedAt: true, targetCompletedAt: true, targetCompletedType: true,
+          promoRedeemedAt: true, stoppedAt: true, stopReason: true,
+        },
+      }),
+      prisma.promoRedemption.findMany({
+        where: { source: 'winback', status: { in: ['ACTIVE', 'EXPIRED'] } },
+        orderBy: { activatedAt: 'desc' },
+        take: 10,
+        select: { id: true, userId: true, status: true, activatedAt: true, expiresAt: true, offeredVia: true },
+      }),
+    ]);
+
+    return res.json({ touches: recentTouches, redeems: recentRedeems });
   }),
 );
 

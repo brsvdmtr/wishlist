@@ -636,6 +636,11 @@ model LifecycleTouch {
   deepLinkPayload String?   // startapp payload for CTA button
   stoppedAt       DateTime?
   stopReason      String?   // returned, target_completed, unsubscribed, delivery_failed, bought_pro
+  // Attribution tracking
+  returnedAt          DateTime? // when user came back after this touch
+  targetCompletedAt   DateTime? // when user completed segment target action
+  targetCompletedType String?   // e.g. created_wishlist, added_item, updated_wishlist
+  promoRedeemedAt     DateTime? // when WISHPRO was activated after this touch
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -645,6 +650,7 @@ model LifecycleTouch {
   @@index([userId, segment])
   @@index([scheduledFor, sentAt])
   @@index([userId, offerCode])
+  @@index([sentAt])
 }
 
 // ─────────────────────────────────────────────────────────────
