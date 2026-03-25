@@ -86,8 +86,8 @@ const PRIO_GLOW: Record<number, string> = {
   3: 'rgba(240,78,110,0.35)',
 };
 
-// Card redesign canary — only these users see new cards
-const CARD_REDESIGN_IDS = new Set(['8747175307']);
+// Card redesign — rolled out to all users
+const CARD_REDESIGN_ENABLED = true;
 
 const getPriorities = (locale: Locale) => [
   { value: 1, emoji: PRIO_EMOJI[1], label: t('priority_low', locale),    sub: t('priority_low_sub', locale) },
@@ -6315,7 +6315,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </div>
               )}
               {filteredAllItems.map((item) => {
-                const useNewCards = CARD_REDESIGN_IDS.has(String(tgUser?.id ?? ''));
+                const useNewCards = CARD_REDESIGN_ENABLED;
                 if (useNewCards) {
                   return (
                     <WishCardCompact
@@ -7029,7 +7029,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             {/* ── Normal mode items ── */}
             {!itemReorderMode && items.map((item, i) => {
-              const useNewCards = CARD_REDESIGN_IDS.has(String(tgUser?.id ?? ''));
+              const useNewCards = CARD_REDESIGN_ENABLED;
               if (useNewCards) {
                 const cardMode = resolveCardMode(items.length, settingsData?.appBehavior?.cardDisplayMode, planInfo.code === 'PRO');
                 const stagger = cardMode === 'compact' ? 0.04 : 0.08;
@@ -7756,7 +7756,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {guestMainList.map((item, i) => {
                 const hasUnread = guestUnreadEntityIds.includes(item.id);
-                const useNewCards = CARD_REDESIGN_IDS.has(String(tgUser?.id ?? ''));
+                const useNewCards = CARD_REDESIGN_ENABLED;
                 if (useNewCards) {
                   const allGuestItems = [...guestMainList, ...guestNoPriceBlock];
                   const cardMode = resolveCardMode(allGuestItems.length, undefined, false);
@@ -7818,7 +7818,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {guestNoPriceBlock.map((item, i) => {
-                      const useNewCards = CARD_REDESIGN_IDS.has(String(tgUser?.id ?? ''));
+                      const useNewCards = CARD_REDESIGN_ENABLED;
                       if (useNewCards) {
                         const Card = WishCardCompact;
                         return (
@@ -9782,7 +9782,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </div>
                 </div>
                 {/* Card display mode — only for canary + PRO users */}
-                {CARD_REDESIGN_IDS.has(String(tgUser?.id ?? '')) && (
+                {CARD_REDESIGN_ENABLED && (
                   <div style={{ marginTop: 12 }}>
                     <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('settings_card_layout', locale)}</div>
                     <div style={{ display: 'flex', gap: 4 }}>
@@ -10868,7 +10868,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       </BottomSheet>
       <BottomSheet isOpen={showItemForm} onClose={() => { blurActiveField(); setShowItemForm(false); resetItemForm(); }} title={editingItem ? t('item_form_edit', locale) : t('item_form_new', locale)}>
         {/* ── Redesigned form for canary users ── */}
-        {CARD_REDESIGN_IDS.has(String(tgUser?.id ?? '')) ? (
+        {CARD_REDESIGN_ENABLED ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {/* Title */}
           <div>
