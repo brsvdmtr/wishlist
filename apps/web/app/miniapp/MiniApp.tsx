@@ -2739,13 +2739,58 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [tgFetch]);
 
+  const onboardingStartInFlightRef = useRef(false);
   const startOnboarding = useCallback(async (entryPoint: string) => {
+    // Guard against duplicate in-flight calls
+    if (onboardingStartInFlightRef.current) {
+      console.log('[onboarding] start skipped — already in-flight');
+      return;
+    }
+    // Guard against calling start when onboarding is already done
+    if (onboardingState && ['COMPLETED', 'DISMISSED'].includes(onboardingState.status)) {
+      console.log('[onboarding] start skipped — already', onboardingState.status);
+      return;
+    }
+    onboardingStartInFlightRef.current = true;
     setOnboardingLoading(true);
     try {
+      // Pre-check eligibility from backend
+      const statusRes = await tgFetch('/tg/onboarding/status');
+      if (statusRes.ok) {
+        const statusJson = await statusRes.json() as { eligible: boolean; reason: string; state: any };
+        if (!statusJson.eligible) {
+          console.log('[onboarding] start skipped — not eligible:', statusJson.reason);
+          // If there's an existing IN_PROGRESS state, resume instead of starting fresh
+          if (statusJson.state?.status === 'IN_PROGRESS') {
+            setOnboardingState(statusJson.state);
+            const meta = getOnboardingMeta(statusJson.state.metaJson);
+            if (meta.onboardingVariant) setOnboardingVariant(meta.onboardingVariant);
+          }
+          setShowOnboardingSoftCta(false);
+          return;
+        }
+      }
+
       const res = await tgFetch('/tg/onboarding/start', {
         method: 'POST',
         body: JSON.stringify({ onboardingKey: 'hello_activation', entryPoint }),
       });
+
+      if (res.status === 409) {
+        // Not eligible anymore — NOT an error, just stale UI
+        console.log('[onboarding] start got 409 — onboarding no longer available');
+        setShowOnboardingSoftCta(false);
+        // Sync state from status endpoint
+        try {
+          const syncRes = await tgFetch('/tg/onboarding/status');
+          if (syncRes.ok) {
+            const syncJson = await syncRes.json() as { state: any };
+            if (syncJson.state) setOnboardingState(syncJson.state);
+          }
+        } catch { /* best-effort */ }
+        return;
+      }
+
       if (!res.ok) return;
       const json = await res.json() as {
         state: { id: string; status: string; variantKey: string | null; entryPoint: string | null; demoItemId: string | null; completionReason: string | null; metaJson?: unknown };
@@ -2766,8 +2811,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // silent
     } finally {
       setOnboardingLoading(false);
+      onboardingStartInFlightRef.current = false;
     }
-  }, [tgFetch]);
+  }, [tgFetch, onboardingState]);
 
   const dismissOnboarding = useCallback(async () => {
     setShowOnboardingSoftCta(false);
