@@ -385,6 +385,7 @@ model UserProfile {
 
   // Settings — App Behavior
   newWishlistPosition String  @default("bottom")
+  cardDisplayMode     String  @default("auto")  // auto | showcase | compact
 
   // Support
   supportId String? @unique

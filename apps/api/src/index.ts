@@ -4777,6 +4777,7 @@ tgRouter.get(
       appBehavior: {
         // "top" is PRO-only — normalize to "bottom" for FREE users (handles PRO→FREE downgrade)
         newWishlistPosition: isPro ? profile.newWishlistPosition : 'bottom',
+        cardDisplayMode: isPro ? (profile.cardDisplayMode ?? 'auto') : 'auto',
       },
       isPro,
       // Owner-only — never exposed in public/share API responses
@@ -4808,6 +4809,7 @@ tgRouter.patch(
       }).optional(),
       appBehavior: z.object({
         newWishlistPosition: z.enum(['top', 'bottom']).optional(),
+        cardDisplayMode: z.enum(['auto', 'showcase', 'compact']).optional(),
       }).optional(),
     }).safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
@@ -4852,6 +4854,12 @@ tgRouter.patch(
       if (data.appBehavior.newWishlistPosition !== undefined) {
         if (isPro || data.appBehavior.newWishlistPosition === 'bottom') {
           updateData.newWishlistPosition = data.appBehavior.newWishlistPosition;
+        }
+      }
+      // Pro-gated: cardDisplayMode non-auto requires Pro
+      if (data.appBehavior.cardDisplayMode !== undefined) {
+        if (isPro || data.appBehavior.cardDisplayMode === 'auto') {
+          updateData.cardDisplayMode = data.appBehavior.cardDisplayMode;
         }
       }
     }

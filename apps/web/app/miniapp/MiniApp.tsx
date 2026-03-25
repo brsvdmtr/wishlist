@@ -75,6 +75,19 @@ const PRIO_EMOJI: Record<number, string> = { 1: '🙂', 2: '😊', 3: '😍' };
 // accent color per priority level: LOW=blue-violet, MEDIUM=amber, HIGH=coral-rose
 const PRIO_COLOR: Record<number, string> = { 1: '#6B7FD4', 2: '#E8930A', 3: '#F04E6E' };
 const PRIO_BG:    Record<number, string> = { 1: 'rgba(107,127,212,0.13)', 2: 'rgba(232,147,10,0.13)', 3: 'rgba(240,78,110,0.13)' };
+const PRIO_GRADIENT: Record<number, string> = {
+  1: 'linear-gradient(90deg, #6B7FD4, #818cf8)',
+  2: 'linear-gradient(90deg, #E8930A, #fbbf24)',
+  3: 'linear-gradient(90deg, #F04E6E, #ff6b9d)',
+};
+const PRIO_GLOW: Record<number, string> = {
+  1: 'rgba(107,127,212,0.25)',
+  2: 'rgba(232,147,10,0.3)',
+  3: 'rgba(240,78,110,0.35)',
+};
+
+// Card redesign canary — only these users see new cards
+const CARD_REDESIGN_IDS = new Set(['8747175307']);
 
 const getPriorities = (locale: Locale) => [
   { value: 1, emoji: PRIO_EMOJI[1], label: t('priority_low', locale),    sub: t('priority_low_sub', locale) },
@@ -1115,6 +1128,344 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
 }
 
 // ═══════════════════════════════════════════════════════
+// CARD REDESIGN — canary-only components
+// ═══════════════════════════════════════════════════════
+
+function resolveCardMode(itemCount: number, cardDisplayMode: string | undefined, isPro: boolean): 'compact' | 'showcase' {
+  if (isPro && cardDisplayMode === 'showcase') return 'showcase';
+  if (isPro && cardDisplayMode === 'compact') return 'compact';
+  return itemCount <= 5 ? 'showcase' : 'compact';
+}
+
+function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve, onUnreserve, myActorHash }: {
+  item: Item | GuestItem;
+  onTap: (item: any) => void;
+  locale: Locale;
+  sourceLabel?: string;
+  isGuest?: boolean;
+  onReserve?: (item: any) => void;
+  onUnreserve?: (item: any) => void;
+  myActorHash?: string;
+}) {
+  const [imgErr, setImgErr] = useState(false);
+  const isPurchased = item.status === 'purchased';
+  const isReserved = item.status === 'reserved';
+  const isReservedByMe = isGuest && isReserved && !!(myActorHash) && (item as GuestItem).reservedByActorHash === myActorHash;
+  const hasImg = !!item.imageUrl && !imgErr;
+  const prioGrad = PRIO_GRADIENT[item.priority] ?? PRIO_GRADIENT[1];
+
+  return (
+    <div
+      onClick={() => onTap(item)}
+      style={{
+        borderRadius: 16, overflow: 'hidden',
+        border: '1px solid rgba(255,255,255,0.06)',
+        background: '#1c1c22',
+        display: 'flex', position: 'relative',
+        minHeight: 88, opacity: isPurchased ? 0.45 : 1,
+        cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      {/* Top gradient strip */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: prioGrad, opacity: 0.5 }} />
+
+      {/* Left panel — image or emoji */}
+      {hasImg ? (
+        <div style={{ width: 88, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+          <img
+            src={item.imageUrl!}
+            alt=""
+            onError={() => setImgErr(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 88 }}
+          />
+          <div style={{
+            position: 'absolute', bottom: 6, left: 6,
+            width: 22, height: 22, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, border: '1px solid rgba(255,255,255,0.1)',
+          }}>
+            {PRIO_EMOJI[item.priority] ?? '🙂'}
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          width: 88, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 36, background: `linear-gradient(160deg, #1c1c22, ${C.accentSoft})`,
+          minHeight: 88,
+        }}>
+          {getEmoji(item.title)}
+        </div>
+      )}
+
+      {/* Info panel */}
+      <div style={{ flex: 1, padding: '10px 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 }}>
+        <div style={{
+          fontSize: 14, fontWeight: 650, color: isPurchased ? '#555' : '#fff', lineHeight: 1.25,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden',
+          textDecoration: isPurchased ? 'line-through' : 'none', fontFamily: font,
+        }}>
+          {item.title}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 5 }}>
+          {item.price != null ? (
+            <span style={{ fontSize: 17, fontWeight: 800, color: isPurchased ? '#444' : '#fff', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: font, textDecoration: isPurchased ? 'line-through' : 'none' }}>
+              {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
+            </span>
+          ) : !hasImg && (
+            <span style={{ fontSize: 12, color: '#444' }}>{t('price_not_set', locale)}</span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
+          {item.sourceDomain && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, color: C.accent, background: 'rgba(124,106,255,0.08)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              {item.sourceDomain}
+            </span>
+          )}
+          {!hasImg && !isPurchased && !isReserved && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, background: PRIO_BG[item.priority], color: PRIO_COLOR[item.priority] }}>
+              {PRIO_EMOJI[item.priority]} {item.priority === 3 ? t('prio_high_short', locale) : item.priority === 2 ? t('prio_med_short', locale) : t('prio_low_short', locale)}
+            </span>
+          )}
+          {/* Status chips */}
+          {isGuest && item.status === 'available' && onReserve && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onReserve(item); }}
+              style={{
+                background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)',
+                color: '#fff', border: 'none', padding: '5px 12px', borderRadius: 8,
+                fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap',
+              }}
+            >
+              🎁 {t('reserve_btn', locale)}
+            </button>
+          )}
+          {isGuest && isReservedByMe && (
+            <>
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(52,211,153,0.1)' }}>
+                ✅ {t('reserved_by_me', locale)}
+              </span>
+              {onUnreserve && <span onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ fontSize: 10, color: '#555', cursor: 'pointer' }}>{t('cancel', locale)}</span>}
+            </>
+          )}
+          {isGuest && isReserved && !isReservedByMe && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#fbbf24', background: 'rgba(251,191,36,0.1)' }}>
+              ⏳ {t('already_reserved', locale)}
+            </span>
+          )}
+          {!isGuest && isReserved && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#a599ff', background: 'rgba(124,106,255,0.1)' }}>
+              🔒 {t('status_someone_reserved', locale)}
+            </span>
+          )}
+          {isPurchased && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(52,211,153,0.1)' }}>
+              🎉 {t('status_gifted', locale)}
+            </span>
+          )}
+        </div>
+
+        {sourceLabel && (
+          <span style={{ display: 'inline-block', fontSize: 9, fontWeight: 500, color: C.textMuted, background: C.surface, border: `1px solid ${C.borderLight}`, padding: '1px 6px', borderRadius: 20, marginTop: 4 }}>
+            {sourceLabel}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve, onUnreserve, myActorHash }: {
+  item: Item | GuestItem;
+  onTap: (item: any) => void;
+  locale: Locale;
+  sourceLabel?: string;
+  isGuest?: boolean;
+  onReserve?: (item: any) => void;
+  onUnreserve?: (item: any) => void;
+  myActorHash?: string;
+}) {
+  const [imgErr, setImgErr] = useState(false);
+  const isPurchased = item.status === 'purchased';
+  const isReserved = item.status === 'reserved';
+  const isReservedByMe = isGuest && isReserved && !!(myActorHash) && (item as GuestItem).reservedByActorHash === myActorHash;
+  const hasImg = !!item.imageUrl && !imgErr;
+  const prioGrad = PRIO_GRADIENT[item.priority] ?? PRIO_GRADIENT[1];
+  const glowColor = PRIO_GLOW[item.priority] ?? PRIO_GLOW[1];
+
+  return (
+    <div
+      onClick={() => onTap(item)}
+      style={{
+        borderRadius: 20, overflow: 'hidden', position: 'relative',
+        background: '#1c1c22', border: '1px solid rgba(255,255,255,0.05)',
+        opacity: isPurchased ? 0.5 : 1,
+        cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      {/* Hero image or emoji */}
+      {hasImg ? (
+        <>
+          <img
+            src={item.imageUrl!}
+            alt=""
+            onError={() => setImgErr(true)}
+            style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }}
+          />
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: 200,
+            background: 'linear-gradient(180deg, rgba(28,28,34,0) 40%, rgba(28,28,34,1) 100%)',
+            pointerEvents: 'none',
+          }} />
+          {/* Float chips on image */}
+          <div style={{ position: 'absolute', top: 12, left: 14, right: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{
+              background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '5px 12px',
+              fontSize: 12, fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <span>{PRIO_EMOJI[item.priority] ?? '🙂'}</span>
+              {item.priority === 3 && <span style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 500, fontSize: 11 }}>{t('prio_high_short', locale)}</span>}
+            </div>
+            {item.sourceDomain && (
+              <div style={{
+                background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '5px 12px',
+                fontSize: 12, fontWeight: 600, color: '#fff',
+              }}>
+                {item.sourceDomain}
+              </div>
+            )}
+          </div>
+          {/* Gifted overlay chip */}
+          {isPurchased && (
+            <div style={{
+              position: 'absolute', top: 12, right: 14,
+              background: 'rgba(52,211,153,0.85)', borderRadius: 20, padding: '5px 12px',
+              fontSize: 12, fontWeight: 600, color: '#fff',
+            }}>
+              🎉 {t('status_gifted', locale)}
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{
+          height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 56, background: `linear-gradient(160deg, #1c1c22, ${C.accentSoft})`,
+        }}>
+          {getEmoji(item.title)}
+        </div>
+      )}
+
+      {/* Body */}
+      <div style={{ padding: '14px 18px 18px', position: 'relative' }}>
+        {/* Priority glow */}
+        <div style={{
+          position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+          width: '60%', height: 1, boxShadow: `0 0 20px 8px ${glowColor}`, opacity: 0.6,
+        }} />
+
+        <div style={{ fontSize: 17, fontWeight: 700, color: isPurchased ? '#666' : '#fff', lineHeight: 1.3, letterSpacing: '-0.01em', fontFamily: font, textDecoration: isPurchased ? 'line-through' : 'none' }}>
+          {item.title}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
+          {item.price != null ? (
+            <span style={{ fontSize: 26, fontWeight: 900, color: isPurchased ? '#444' : '#fff', letterSpacing: '-0.04em', lineHeight: 1, fontFamily: font, textDecoration: isPurchased ? 'line-through' : 'none' }}>
+              {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
+            </span>
+          ) : (
+            <span style={{ fontSize: 14, color: '#444', fontWeight: 500 }}>{t('price_not_set', locale)}</span>
+          )}
+          {!hasImg && !isPurchased && (
+            <span style={{
+              padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+              background: PRIO_BG[item.priority], color: PRIO_COLOR[item.priority],
+              border: `1px solid ${PRIO_COLOR[item.priority]}20`,
+            }}>
+              {PRIO_EMOJI[item.priority]} {item.priority === 3 ? t('prio_high_short', locale) : item.priority === 2 ? t('prio_med_short', locale) : t('prio_low_short', locale)}
+            </span>
+          )}
+        </div>
+
+        {/* Domain link if no image */}
+        {!hasImg && item.sourceDomain && (
+          <div style={{ marginTop: 8, fontSize: 12, color: C.accent, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
+            🔗 <span>{item.sourceDomain}</span>
+          </div>
+        )}
+
+        {/* Status / action row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+          {isGuest && item.status === 'available' && onReserve && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onReserve(item); }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '10px 20px', borderRadius: 12, border: 'none',
+                background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)',
+                color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: font,
+                boxShadow: '0 4px 16px rgba(124,106,255,0.35)',
+              }}
+            >
+              🎁 {t('reserve_btn', locale)}
+            </button>
+          )}
+          {isGuest && isReservedByMe && (
+            <>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+                background: 'linear-gradient(135deg, rgba(52,211,153,0.15), rgba(52,211,153,0.08))',
+                color: '#6ee7b7', border: '1px solid rgba(52,211,153,0.2)',
+              }}>
+                ✅ {t('reserved_by_me', locale)}
+              </span>
+              {onUnreserve && <span onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ fontSize: 12, color: '#555', cursor: 'pointer' }}>{t('cancel', locale)}</span>}
+            </>
+          )}
+          {isGuest && isReserved && !isReservedByMe && (
+            <span style={{
+              padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+              background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.15)',
+            }}>
+              ⏳ {t('already_reserved', locale)}
+            </span>
+          )}
+          {!isGuest && isReserved && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+              background: 'linear-gradient(135deg, rgba(124,106,255,0.15), rgba(124,106,255,0.08))',
+              color: '#a599ff', border: '1px solid rgba(124,106,255,0.2)',
+            }}>
+              🔒 {t('status_someone_reserved', locale)}
+            </span>
+          )}
+          {isPurchased && !hasImg && (
+            <span style={{
+              padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+              background: 'linear-gradient(135deg, rgba(52,211,153,0.15), rgba(52,211,153,0.08))',
+              color: '#6ee7b7', border: '1px solid rgba(52,211,153,0.2)',
+            }}>
+              🎉 {t('status_gifted', locale)}
+            </span>
+          )}
+        </div>
+
+        {sourceLabel && (
+          <span style={{ display: 'inline-block', fontSize: 9, fontWeight: 500, color: C.textMuted, background: C.surface, border: `1px solid ${C.borderLight}`, padding: '1px 6px', borderRadius: 20, marginTop: 8 }}>
+            {sourceLabel}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
 // RESERVATION CARD (for "My Reservations" section)
 // ═══════════════════════════════════════════════════════
 
@@ -1740,7 +2091,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     defaultCurrency: 'RUB' | 'USD';
     notifications: { comments: boolean; reservations: boolean; subscriptions: boolean; marketing: boolean };
     privacy: { profileVisibility: string; subscribePolicy: string; commentsEnabled: boolean; hintsEnabled: boolean };
-    appBehavior: { newWishlistPosition: string };
+    appBehavior: { newWishlistPosition: string; cardDisplayMode?: string };
     isPro: boolean;
     supportId?: string | null;
   };
@@ -5963,23 +6314,44 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </button>
                 </div>
               )}
-              {filteredAllItems.map((item) => (
-                <WishCardOwner
-                  key={item.id}
-                  item={item}
-                  locale={locale}
-                  sourceLabel={item.wishlistTitle}
-                  onTap={(it) => {
-                    const wl = wishlists.find(w => w.id === it.wishlistId) ?? null;
-                    setCurrentWl(wl);
-                    if (wl) void loadItems(wl.id);
-                    setViewingItem(it);
-                    setHomeReturnTab('wishes');
-                    setScreen('item-detail');
-                  }}
-                  onDelete={() => {}}
-                />
-              ))}
+              {filteredAllItems.map((item) => {
+                const useNewCards = CARD_REDESIGN_IDS.has(String(tgUser?.id ?? ''));
+                if (useNewCards) {
+                  return (
+                    <WishCardCompact
+                      key={item.id}
+                      item={item}
+                      locale={locale}
+                      sourceLabel={item.wishlistTitle}
+                      onTap={(it: Item) => {
+                        const wl = wishlists.find(w => w.id === it.wishlistId) ?? null;
+                        setCurrentWl(wl);
+                        if (wl) void loadItems(wl.id);
+                        setViewingItem(it);
+                        setHomeReturnTab('wishes');
+                        setScreen('item-detail');
+                      }}
+                    />
+                  );
+                }
+                return (
+                  <WishCardOwner
+                    key={item.id}
+                    item={item}
+                    locale={locale}
+                    sourceLabel={item.wishlistTitle}
+                    onTap={(it) => {
+                      const wl = wishlists.find(w => w.id === it.wishlistId) ?? null;
+                      setCurrentWl(wl);
+                      if (wl) void loadItems(wl.id);
+                      setViewingItem(it);
+                      setHomeReturnTab('wishes');
+                      setScreen('item-detail');
+                    }}
+                    onDelete={() => {}}
+                  />
+                );
+              })}
             </div>
           )}
 
@@ -6656,11 +7028,26 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             )}
 
             {/* ── Normal mode items ── */}
-            {!itemReorderMode && items.map((item, i) => (
-              <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                <WishCardOwner item={item} onTap={(it) => { setViewingItem(it); setScreen('item-detail'); }} onDelete={setDeletingItem} onComplete={handleCompleteItem} locale={locale} />
-              </div>
-            ))}
+            {!itemReorderMode && items.map((item, i) => {
+              const useNewCards = CARD_REDESIGN_IDS.has(String(tgUser?.id ?? ''));
+              if (useNewCards) {
+                const cardMode = resolveCardMode(items.length, settingsData?.appBehavior?.cardDisplayMode, planInfo.code === 'PRO');
+                const stagger = cardMode === 'compact' ? 0.04 : 0.08;
+                const gap = cardMode === 'compact' ? 8 : 14;
+                const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
+                return (
+                  <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap }}>
+                    <Card item={item} onTap={(it: Item) => { setViewingItem(it); setScreen('item-detail'); }} locale={locale} />
+                  </div>
+                );
+              }
+              // Original card
+              return (
+                <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
+                  <WishCardOwner item={item} onTap={(it) => { setViewingItem(it); setScreen('item-detail'); }} onDelete={setDeletingItem} onComplete={handleCompleteItem} locale={locale} />
+                </div>
+              );
+            })}
 
             {!itemReorderMode && !loading && items.length === 0 && (
               <div style={{ textAlign: 'center', padding: '48px 24px' }}>
@@ -7369,6 +7756,34 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {guestMainList.map((item, i) => {
                 const hasUnread = guestUnreadEntityIds.includes(item.id);
+                const useNewCards = CARD_REDESIGN_IDS.has(String(tgUser?.id ?? ''));
+                if (useNewCards) {
+                  const allGuestItems = [...guestMainList, ...guestNoPriceBlock];
+                  const cardMode = resolveCardMode(allGuestItems.length, undefined, false);
+                  const stagger = cardMode === 'compact' ? 0.04 : 0.08;
+                  const gap = cardMode === 'compact' ? 8 : 14;
+                  const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
+                  return (
+                    <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap, position: 'relative' }}>
+                      {hasUnread && (
+                        <span style={{
+                          position: 'absolute', top: 10, right: 10, zIndex: 2,
+                          width: 8, height: 8, borderRadius: '50%', background: C.orange,
+                          boxShadow: `0 0 6px ${C.orange}`,
+                        }} />
+                      )}
+                      <Card
+                        item={item}
+                        isGuest
+                        onTap={(it: GuestItem) => { setViewingItem(it); setScreen('guest-item-detail'); }}
+                        onReserve={(w: GuestItem) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                        onUnreserve={handleUnreserve}
+                        myActorHash={myActorHashRef.current}
+                        locale={locale}
+                      />
+                    </div>
+                  );
+                }
                 return (
                   <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative' }}>
                     {hasUnread && (
@@ -7402,18 +7817,37 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     {t('guest_no_price_title', locale)}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {guestNoPriceBlock.map((item, i) => (
-                      <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                        <WishCardGuest
-                          item={item}
-                          onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                          onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
-                          onUnreserve={handleUnreserve}
-                          myActorHash={myActorHashRef.current}
-                          locale={locale}
-                        />
-                      </div>
-                    ))}
+                    {guestNoPriceBlock.map((item, i) => {
+                      const useNewCards = CARD_REDESIGN_IDS.has(String(tgUser?.id ?? ''));
+                      if (useNewCards) {
+                        const Card = WishCardCompact;
+                        return (
+                          <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both`, marginBottom: 8 }}>
+                            <Card
+                              item={item}
+                              isGuest
+                              onTap={(it: GuestItem) => { setViewingItem(it); setScreen('guest-item-detail'); }}
+                              onReserve={(w: GuestItem) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                              onUnreserve={handleUnreserve}
+                              myActorHash={myActorHashRef.current}
+                              locale={locale}
+                            />
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
+                          <WishCardGuest
+                            item={item}
+                            onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
+                            onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                            onUnreserve={handleUnreserve}
+                            myActorHash={myActorHashRef.current}
+                            locale={locale}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -9347,6 +9781,41 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <span style={{ fontSize: 12, color: C.textMuted }}>{t('settings_coming_soon', locale)}</span>
                   </div>
                 </div>
+                {/* Card display mode — only for canary + PRO users */}
+                {CARD_REDESIGN_IDS.has(String(tgUser?.id ?? '')) && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('settings_card_layout', locale)}</div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {(['auto', 'showcase', 'compact'] as const).map(mode => {
+                        const isActive = (settingsData?.appBehavior?.cardDisplayMode ?? 'auto') === mode;
+                        const needsPro = mode !== 'auto' && planInfo.code !== 'PRO';
+                        const label = mode === 'auto' ? t('settings_card_auto', locale)
+                          : mode === 'showcase' ? t('settings_card_showcase', locale)
+                          : t('settings_card_compact', locale);
+                        return (
+                          <button
+                            key={mode}
+                            onClick={() => {
+                              if (needsPro) { showUpsell('wishlist_limit'); return; }
+                              patchSettings({ appBehavior: { ...settingsData?.appBehavior, cardDisplayMode: mode } });
+                            }}
+                            style={{
+                              flex: 1, padding: '8px 6px', borderRadius: 10, cursor: 'pointer',
+                              fontSize: 13, fontWeight: 600, fontFamily: font,
+                              background: isActive ? C.accentSoft : C.surface,
+                              color: isActive ? C.accent : needsPro ? C.textMuted : C.text,
+                              border: `1.5px solid ${isActive ? C.accent + '40' : C.borderLight}`,
+                              opacity: needsPro ? 0.5 : 1,
+                            }}
+                          >
+                            {label}{needsPro ? ' 👑' : ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>{t('settings_card_auto_hint', locale)}</div>
+                  </div>
+                )}
               </SettingsSection>
 
               {/* Support */}
