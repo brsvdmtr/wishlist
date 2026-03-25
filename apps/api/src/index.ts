@@ -755,7 +755,7 @@ publicRouter.get(
     // For non-ALL visibility, return profile info only (no wishlist list)
     const isPublic = profile.profileVisibility === 'ALL';
 
-    let publicWishlists: Array<{ id: string; slug: string; title: string; deadline: string | null; itemCount: number }> = [];
+    let publicWishlists: Array<{ id: string; slug: string; title: string; deadline: string | null; itemCount: number; reservedCount: number }> = [];
     if (isPublic) {
       const wls = await prisma.wishlist.findMany({
         where: {
@@ -767,7 +767,7 @@ publicRouter.get(
         orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
         select: {
           id: true, slug: true, title: true, deadline: true,
-          items: { where: { status: { in: [...ACTIVE_STATUSES] } }, select: { id: true } },
+          items: { where: { status: { in: [...ACTIVE_STATUSES] } }, select: { id: true, status: true } },
         },
       });
       publicWishlists = wls.map((wl) => ({
@@ -776,6 +776,7 @@ publicRouter.get(
         title: wl.title,
         deadline: wl.deadline?.toISOString() ?? null,
         itemCount: wl.items.length,
+        reservedCount: wl.items.filter((i) => i.status !== 'AVAILABLE').length,
       }));
     }
 

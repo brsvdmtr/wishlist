@@ -4567,6 +4567,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   };
 
   const openWishlist = async (wl: Wishlist) => {
+    setItems([]); // Clear stale items immediately to prevent flash of previous wishlist
     setCurrentWl(wl);
     setScreen('wishlist-detail');
     setLoading(true);
@@ -5837,8 +5838,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             const dx = t.clientX - homeSwipeStartX.current;
             const dy = t.clientY - (homeSwipeStartY.current ?? t.clientY);
             homeSwipeStartX.current = null; homeSwipeStartY.current = null;
-            if (Math.abs(dx) < 60) return;
-            if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
+            if (Math.abs(dx) < 50) return;
+            if (Math.abs(dx) < Math.abs(dy) * 1.2) return;
             const tabs: HomeTab[] = ['wishlists', 'wishes', 'reservations'];
             const idx = tabs.indexOf(homeTab);
             if (dx < 0 && idx < tabs.length - 1) {
