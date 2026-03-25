@@ -347,7 +347,8 @@ type GodStats = {
   };
   funnel: {
     totalUsers: number; activatedUsers: number;
-    usersWithWishlist: number; usersWithItem: number;
+    usersWithWishlist: number; usersWithAnyWishlist: number;
+    usersWithItem: number; usersWithItemInAny: number;
     usersWhoInitiatedShare: number; sharedLinkOpens: number;
     wishlistsWithLinkOpen: number; usersWithLinkOpen: number;
     usersWithReservation: number;
@@ -9103,8 +9104,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     // Funnel = уникальные пользователи
                     const funnelSteps = godStats ? [
                       { label: 'Все пользователи',                    value: godStats.funnel.totalUsers },
-                      { label: 'Создали хотя бы один вишлист',        value: godStats.funnel.usersWithWishlist },
-                      { label: 'Создали хотя бы одно желание',        value: godStats.funnel.usersWithItem },
+                      { label: 'Есть любой вишлист (вкл. черновики)', value: godStats.funnel.usersWithAnyWishlist ?? godStats.funnel.usersWithWishlist },
+                      { label: 'Создали обычный вишлист',             value: godStats.funnel.usersWithWishlist },
+                      { label: 'Добавили желание (обычн. вишлист)',   value: godStats.funnel.usersWithItem },
+                      { label: 'Добавили желание (вкл. черновики)',   value: godStats.funnel.usersWithItemInAny ?? godStats.funnel.usersWithItem },
                       { label: 'Перешли хотя бы по одной ссылке',    value: godStats.funnel.usersWithLinkOpen ?? godStats.funnel.usersWhoInitiatedShare },
                       { label: 'Забронировали хотя бы один подарок', value: godStats.funnel.usersWithReservation },
                     ] : [];

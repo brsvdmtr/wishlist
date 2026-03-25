@@ -2345,6 +2345,17 @@ tgRouter.post(
       select: { id: true, slug: true, title: true, description: true, deadline: true },
     });
 
+    // Canonical analytics: wishlist_created
+    const existingRegular = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } });
+    const existingAny = await prisma.wishlist.count({ where: { ownerId: user.id } });
+    trackEvent('wishlist_created', user.id, {
+      wishlistId: wishlist.id, wishlistType: 'REGULAR', source: 'manual',
+      platform: 'miniapp',
+      isFirstRegularWishlist: existingRegular === 1,
+      isFirstAnyWishlist: existingAny === 1,
+    });
+    if (existingRegular === 1) trackEvent('first_regular_wishlist_created', user.id, { wishlistId: wishlist.id, source: 'manual', platform: 'miniapp' });
+
     return res.status(201).json({
       wishlist: { ...wishlist, deadline: wishlist.deadline?.toISOString() ?? null, itemCount: 0, reservedCount: 0 },
     });
@@ -2918,6 +2929,14 @@ tgRouter.post(
       },
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
+
+    // Canonical analytics: item_created
+    const totalUserItems = await prisma.item.count({ where: { wishlist: { ownerId: user.id }, status: { not: 'DELETED' } } });
+    trackEvent('item_created', user.id, {
+      itemId: item.id, wishlistId, wishlistType: wishlist.type, source: 'manual',
+      platform: 'miniapp', isFirstItem: totalUserItems === 1,
+    });
+    if (totalUserItems === 1) trackEvent('first_item_created', user.id, { itemId: item.id, wishlistType: wishlist.type, source: 'manual', platform: 'miniapp' });
 
     // Notify wishlist subscribers
     void notifySubscribersOfChange(
@@ -4141,7 +4160,7 @@ async function getOrCreateDraftsWishlist(userId: string) {
     select: { id: true },
   });
   if (existing) return existing;
-  return prisma.wishlist.create({
+  const drafts = await prisma.wishlist.create({
     data: {
       slug: `drafts-${crypto.randomUUID().slice(0, 12)}`,
       ownerId: userId,
@@ -4150,6 +4169,15 @@ async function getOrCreateDraftsWishlist(userId: string) {
     },
     select: { id: true },
   });
+  // Canonical analytics: auto-created SYSTEM_DRAFTS
+  const existingAny = await prisma.wishlist.count({ where: { ownerId: userId } });
+  trackEvent('wishlist_created', userId, {
+    wishlistId: drafts.id, wishlistType: 'SYSTEM_DRAFTS', source: 'auto_drafts',
+    platform: 'system',
+    isFirstRegularWishlist: false,
+    isFirstAnyWishlist: existingAny === 1,
+  });
+  return drafts;
 }
 
 async function importUrlForUser(
@@ -4222,6 +4250,17 @@ async function importUrlForUser(
       sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
     },
   });
+
+  // Canonical analytics: item created via import in SYSTEM_DRAFTS
+  const totalUserItems = await prisma.item.count({ where: { wishlist: { ownerId: userId }, status: { not: 'DELETED' } } });
+  trackEvent('item_created', userId, {
+    itemId: item.id, wishlistId: draftsWl.id, wishlistType: 'SYSTEM_DRAFTS',
+    source: source === 'bot' ? 'bot' : 'import_url',
+    platform: source === 'bot' ? 'bot' : 'miniapp',
+    isFirstItem: totalUserItems === 1,
+    triggeredFromDrafts: true,
+  });
+  if (totalUserItems === 1) trackEvent('first_item_created', userId, { itemId: item.id, wishlistType: 'SYSTEM_DRAFTS', source: source === 'bot' ? 'bot' : 'import_url', platform: source === 'bot' ? 'bot' : 'miniapp' });
 
   return { item: mapTgItem(item), wishlistId: draftsWl.id, parseStatus };
 }
@@ -5595,7 +5634,9 @@ tgRouter.get(
       totalReservations,
       proUsers,
       withWishlistRows,
-      withItemRows,
+      withItemInRegularRows,
+      withItemInAnyRows,
+      withAnyWishlistRows,
       withShareRows,
       sharedLinkOpensRows,
       wishlistsWithLinkOpenRows,
@@ -5644,11 +5685,19 @@ tgRouter.get(
       prisma.$queryRaw<CountRow[]>`
         SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist"
         WHERE type = 'REGULAR'`,
-      // Users with ≥1 non-deleted item
+      // Users with ≥1 non-deleted item IN REGULAR WISHLIST (canonical funnel metric)
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT w."ownerId")::int AS count
+        FROM "Item" i JOIN "Wishlist" w ON i."wishlistId" = w.id
+        WHERE i.status != 'DELETED' AND w.type = 'REGULAR'`,
+      // Users with ≥1 non-deleted item in ANY wishlist (including SYSTEM_DRAFTS)
       prisma.$queryRaw<CountRow[]>`
         SELECT COUNT(DISTINCT w."ownerId")::int AS count
         FROM "Item" i JOIN "Wishlist" w ON i."wishlistId" = w.id
         WHERE i.status != 'DELETED'`,
+      // Users with ≥1 ANY wishlist (including SYSTEM_DRAFTS)
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist"`,
       // Funnel share step 1: users who opened share screen (shareToken generated via POST /share-token)
       prisma.$queryRaw<CountRow[]>`
         SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist"
@@ -5749,7 +5798,9 @@ tgRouter.get(
         totalUsers,
         activatedUsers: withWishlist,
         usersWithWishlist: withWishlist,
-        usersWithItem: n(withItemRows[0]),
+        usersWithAnyWishlist: n(withAnyWishlistRows[0]),
+        usersWithItem: n(withItemInRegularRows[0]),
+        usersWithItemInAny: n(withItemInAnyRows[0]),
         // Share funnel:
         // 1. Intent — user generated share token (opened share screen)
         usersWhoInitiatedShare: n(withShareRows[0]),
