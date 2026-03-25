@@ -8279,6 +8279,33 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         </div>
                       </div>
                     )}
+
+                    {/* Promo-PRO status — persistent, survives refresh */}
+                    {proSource === 'promo' && promoPro && (
+                      <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+                          background: `${C.green}12`, borderRadius: 10, border: `1px solid ${C.green}25`,
+                        }}>
+                          <span style={{ fontSize: 15 }}>🎁</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
+                            {t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }) })}
+                          </span>
+                        </div>
+                        <button
+                          style={{ ...btnPrimary, width: '100%', marginTop: 10, background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, fontSize: 14, padding: '12px 0' }}
+                          onClick={() => showUpsell('wishlist_limit')}
+                        >
+                          {t('promo_keep_pro', locale)}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Paid PRO + accepted promo fallback B */}
+                    {proSource === 'subscription' && promoPro === null && (() => {
+                      // Check if user has an accepted_for_paid redemption (we don't have this in state yet, so skip for now)
+                      return null;
+                    })()}
                   </div>
 
                   {/* Plan action buttons */}
@@ -8300,6 +8327,71 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         {cancelSubLoading ? t('settings_resuming', locale) : t('settings_resume_sub', locale)}
                       </button>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Promo code input — shown for PRO users too (promo-PRO or paid, for future codes) */}
+              {planInfo.code === 'PRO' && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
+                    {t('promo_title', locale)}
+                  </div>
+                  <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.border}` }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <input
+                        id="promo-input-pro"
+                        type="text"
+                        placeholder={t('promo_placeholder', locale)}
+                        style={{
+                          width: '100%', padding: '12px 14px', fontSize: 14, fontWeight: 500,
+                          background: C.surface, color: C.text, border: `1px solid ${C.borderLight}`,
+                          borderRadius: 12, outline: 'none', fontFamily: font, boxSizing: 'border-box',
+                        }}
+                        autoCapitalize="characters"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).blur();
+                            document.getElementById('promo-activate-btn-pro')?.click();
+                          }
+                        }}
+                      />
+                      <button
+                        id="promo-activate-btn-pro"
+                        style={{ ...btnPrimary, width: '100%', padding: '12px 0', fontSize: 15, fontWeight: 600, borderRadius: 12 }}
+                        onClick={async () => {
+                          const input = document.getElementById('promo-input-pro') as HTMLInputElement | null;
+                          if (!input?.value?.trim()) return;
+                          const code = input.value.trim();
+                          const btn = document.getElementById('promo-activate-btn-pro') as HTMLButtonElement | null;
+                          if (input) input.disabled = true;
+                          if (btn) { btn.disabled = true; btn.textContent = t('promo_activating', locale); }
+                          try {
+                            const r = await tgFetch('/tg/promo/apply', { method: 'POST', body: JSON.stringify({ code }) });
+                            const data = await r.json() as any;
+                            if (r.ok) {
+                              if (data.status === 'activated' || data.status === 'already_active') {
+                                pushToast(t(data.status === 'already_active' ? 'promo_already_active' : 'promo_success', locale, { date: data.expiresAt ? new Date(data.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US') : '' }), 'success');
+                                if (input) input.value = '';
+                                loadWishlists().catch(() => {});
+                              } else if (data.status === 'accepted_for_paid') {
+                                pushToast(t('promo_accepted_paid', locale), 'success');
+                                if (input) input.value = '';
+                              }
+                            } else {
+                              const errKey = data.error === 'already_used' ? 'promo_already_used' : data.error === 'invalid_code' ? 'promo_invalid' : data.error === 'campaign_exhausted' ? 'promo_campaign_exhausted' : 'promo_error';
+                              pushToast(t(errKey, locale), 'error');
+                            }
+                          } catch { pushToast(t('promo_error', locale), 'error'); }
+                          finally {
+                            if (input) input.disabled = false;
+                            if (btn) { btn.disabled = false; btn.textContent = t('promo_activate', locale); }
+                          }
+                        }}
+                      >
+                        {t('promo_activate', locale)}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
