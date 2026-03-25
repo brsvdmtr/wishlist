@@ -88,6 +88,8 @@ const PRIO_GLOW: Record<number, string> = {
 
 // Card redesign — rolled out to all users
 const CARD_REDESIGN_ENABLED = true;
+// Profile redesign canary — test before full rollout
+const PROFILE_REDESIGN_IDS = new Set(['8747175307']);
 
 const getPriorities = (locale: Locale) => [
   { value: 1, emoji: PRIO_EMOJI[1], label: t('priority_low', locale),    sub: t('priority_low_sub', locale) },
