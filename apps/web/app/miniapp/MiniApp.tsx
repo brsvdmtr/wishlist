@@ -10867,6 +10867,197 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         )}
       </BottomSheet>
       <BottomSheet isOpen={showItemForm} onClose={() => { blurActiveField(); setShowItemForm(false); resetItemForm(); }} title={editingItem ? t('item_form_edit', locale) : t('item_form_new', locale)}>
+        {/* ── Redesigned form for canary users ── */}
+        {CARD_REDESIGN_IDS.has(String(tgUser?.id ?? '')) ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Title */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_name', locale)}</div>
+            <input
+              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', fontSize: 16, fontWeight: 500 }}
+              placeholder={t('item_name_placeholder', locale)}
+              value={itemTitle}
+              onChange={(e) => setItemTitle(e.target.value)}
+            />
+          </div>
+          {/* URL with hint + preview */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_url', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+            <input
+              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22' }}
+              placeholder={t('item_url_placeholder', locale) || 'https://…'}
+              value={itemUrl}
+              onChange={(e) => setItemUrl(e.target.value)}
+            />
+            {itemUrl.startsWith('http') && (() => {
+              try {
+                const domain = new URL(itemUrl).hostname.replace(/^www\./, '');
+                return (
+                  <div style={{ marginTop: 8, padding: '10px 14px', borderRadius: 12, background: 'rgba(124,106,255,0.05)', border: '1px solid rgba(124,106,255,0.1)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(124,106,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>🔗</div>
+                    <span style={{ fontSize: 13, color: C.accent, fontWeight: 600 }}>{domain}</span>
+                    <span style={{ marginLeft: 'auto', color: C.green, fontSize: 16 }}>✓</span>
+                  </div>
+                );
+              } catch { return null; }
+            })()}
+            <div style={{ fontSize: 10, color: '#3a3a44', marginTop: 4 }}>
+              {locale === 'ru' ? t('item_url_hint_ru', locale) : t('item_url_hint_global', locale)}
+            </div>
+          </div>
+          {/* Photo picker — refreshed */}
+          {(() => {
+            const photoPreviewSrc = itemPhotoDeleted ? null : (itemPhotoLocalUrl ?? (itemImageUrl || null));
+            const hasPhoto = !!(itemPhotoLocalUrl || (!itemPhotoDeleted && itemImageUrl));
+            return (
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 8 }}>{t('item_photo', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div
+                onClick={() => { setPhotoError(null); setPhotoPickerImgErr(false); photoInputRef.current?.click(); }}
+                style={{
+                  width: 80, height: 80, borderRadius: 16, overflow: 'hidden', flexShrink: 0,
+                  background: '#1c1c22',
+                  border: hasPhoto ? 'none' : '2px dashed rgba(255,255,255,0.08)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', transition: 'border-color 0.2s',
+                }}
+              >
+                {photoPreviewSrc && !photoPickerImgErr ? (
+                  <img src={photoPreviewSrc} onError={() => setPhotoPickerImgErr(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                ) : (
+                  <span style={{ fontSize: 28, color: '#333' }}>+</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <button type="button" onClick={() => { setPhotoError(null); setPhotoPickerImgErr(false); photoInputRef.current?.click(); }}
+                  style={{ background: 'none', border: 'none', padding: 0, fontSize: 14, fontWeight: 500, color: C.accent, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  📎 {hasPhoto ? t('item_photo_replace', locale) : t('item_photo_select', locale)}
+                </button>
+                {hasPhoto && (
+                  <button type="button" onClick={handlePhotoDelete}
+                    style={{ background: 'none', border: 'none', padding: 0, fontSize: 14, fontWeight: 500, color: C.red, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    🗑 {t('item_photo_delete', locale)}
+                  </button>
+                )}
+                {!hasPhoto && <span style={{ fontSize: 11, color: '#333' }}>JPG, PNG, WebP · 5 MB</span>}
+                {photoError && <span style={{ fontSize: 12, color: C.red, lineHeight: 1.4 }}>{photoError}</span>}
+                {photoUploading && <span style={{ fontSize: 12, color: C.textMuted }}>{t('item_photo_uploading', locale)}</span>}
+              </div>
+            </div>
+            <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }} onChange={handlePhotoSelect} />
+          </div>
+            );
+          })()}
+          {/* Price — refreshed */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_price', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 0, borderRadius: 12, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+                {(['RUB', 'USD'] as const).map(c => (
+                  <button key={c} type="button" onClick={() => setItemCurrency(c)}
+                    style={{
+                      padding: '12px 16px', border: 'none', fontSize: 15, fontWeight: 700,
+                      cursor: 'pointer', fontFamily: font, minWidth: 48, transition: 'all 0.15s',
+                      background: itemCurrency === c ? 'rgba(124,106,255,0.15)' : '#1c1c22',
+                      color: itemCurrency === c ? C.accent : '#444',
+                    }}>
+                    {c === 'RUB' ? '₽' : '$'}
+                  </button>
+                ))}
+              </div>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1.5px solid rgba(255,255,255,0.07)', borderRadius: 14, background: '#1c1c22', overflow: 'hidden' }}
+                onClick={() => priceInputRef.current?.focus()}>
+                <input
+                  ref={priceInputRef}
+                  style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#fff', fontSize: 18, fontWeight: 700, fontFamily: font, padding: '12px 6px 12px 16px', minWidth: 0, letterSpacing: '-0.02em' }}
+                  placeholder="0" type="text" inputMode="numeric"
+                  value={formatPriceForDisplay(itemPrice)}
+                  onChange={(e) => {
+                    const cursorPos = e.target.selectionStart ?? e.target.value.length;
+                    const displayedValue = e.target.value;
+                    const raw = parsePriceFromDisplay(displayedValue);
+                    const digitsBeforeCursor = parsePriceFromDisplay(displayedValue.slice(0, cursorPos)).length;
+                    setItemPrice(raw);
+                    requestAnimationFrame(() => {
+                      const input = priceInputRef.current;
+                      if (!input) return;
+                      const newFormatted = formatPriceForDisplay(raw);
+                      let digitsSeen = 0;
+                      let newPos = newFormatted.length;
+                      if (digitsBeforeCursor === 0) { newPos = 0; } else {
+                        for (let i = 0; i < newFormatted.length; i++) {
+                          if (/\d/.test(newFormatted[i]!)) { digitsSeen++; if (digitsSeen === digitsBeforeCursor) { newPos = i + 1; break; } }
+                        }
+                      }
+                      input.selectionStart = newPos; input.selectionEnd = newPos;
+                    });
+                  }}
+                />
+                <span style={{ paddingRight: 14, fontSize: 16, color: '#444', flexShrink: 0, userSelect: 'none', pointerEvents: 'none' }}>
+                  {itemCurrency === 'RUB' ? '₽' : '$'}
+                </span>
+              </div>
+            </div>
+          </div>
+          {/* Priority — refreshed with glow */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_priority_question', locale)}</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {getPriorities(locale).map((p) => {
+                const isSelected = itemPriority === p.value;
+                const pc = PRIO_COLOR[p.value];
+                const pb = PRIO_BG[p.value];
+                const pg = PRIO_GRADIENT[p.value];
+                return (
+                  <div key={p.value} onClick={() => setItemPriority(p.value as 1 | 2 | 3)} style={{
+                    flex: 1, padding: '14px 6px', borderRadius: 14, textAlign: 'center',
+                    cursor: 'pointer', transition: 'all 0.2s', position: 'relative', overflow: 'hidden',
+                    background: isSelected ? pb : '#1c1c22',
+                    border: `1.5px solid ${isSelected ? pc : 'rgba(255,255,255,0.06)'}`,
+                  }}>
+                    {isSelected && <div style={{ position: 'absolute', top: -1, left: 0, right: 0, height: 2, background: pg }} />}
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>{p.emoji}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: isSelected ? pc : C.text, letterSpacing: '0.02em' }}>{p.label}</div>
+                    <div style={{ fontSize: 9, color: '#444', marginTop: 2 }}>{p.sub}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {/* Description — moved to bottom */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_description', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+            <textarea
+              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: 1.4 }}
+              maxLength={500}
+              placeholder={t('item_description_placeholder', locale)}
+              value={itemDescription}
+              ref={itemDescTextareaRef}
+              onChange={(e) => setItemDescription(e.target.value)}
+              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
+            />
+            <div style={{ fontSize: 10, color: '#3a3a44', textAlign: 'right', marginTop: 3 }}>{itemDescription.length}/500</div>
+          </div>
+          {/* Submit — with priority emoji */}
+          <button
+            style={{
+              width: '100%', padding: '16px 0', borderRadius: 16, border: 'none',
+              fontSize: 17, fontWeight: 800, cursor: 'pointer', fontFamily: font,
+              letterSpacing: '-0.01em', transition: 'all 0.15s',
+              ...(itemTitle.trim()
+                ? { background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)', color: '#fff', boxShadow: '0 6px 24px rgba(124,106,255,0.35)' }
+                : { background: '#1c1c22', color: '#333', boxShadow: 'none' }),
+              opacity: (loading || !itemTitle.trim()) ? 0.5 : 1,
+            }}
+            onClick={() => void handleSaveItem()}
+            disabled={!itemTitle.trim() || loading}
+          >
+            {loading ? '…' : editingItem ? `💾 ${t('save', locale)}` : `${PRIO_EMOJI[itemPriority] ?? '✨'} ${t('item_add_btn', locale)}`}
+          </button>
+        </div>
+        ) : (
+        /* ── Original form for non-canary users ── */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_name', locale)}</label>
@@ -11083,6 +11274,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {loading ? '…' : editingItem ? `💾 ${t('save', locale)}` : t('item_add_btn', locale)}
           </button>
         </div>
+        )}
       </BottomSheet>
 
       {/* Delete confirmation */}
