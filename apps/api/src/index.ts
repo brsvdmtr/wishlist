@@ -6327,6 +6327,102 @@ internalRouter.post(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─── Support ticket lookup (internal, for incident investigation) ────────────
+
+internalRouter.get(
+  '/support/tickets/:ticketCode',
+  asyncHandler(async (req, res) => {
+    const { ticketCode } = req.params;
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { ticketCode: ticketCode!.toUpperCase() },
+      include: {
+        messages: { orderBy: { createdAt: 'asc' }, select: {
+          id: true, authorRole: true, kind: true, text: true, caption: true,
+          telegramUserMsgId: true, telegramSupportMsgId: true, createdAt: true,
+        }},
+        user: { select: {
+          id: true, telegramId: true, telegramChatId: true, firstName: true,
+          godMode: true, createdAt: true, updatedAt: true,
+          profile: { select: {
+            displayName: true, username: true, defaultCurrency: true,
+            profileVisibility: true, birthday: true,
+          }},
+        }},
+      },
+    });
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+    // Recent context for incident investigation
+    const userId = ticket.user.id;
+    const [wishlistsCount, activeReservations, subscription, lastItem] = await Promise.all([
+      prisma.wishlist.count({ where: { ownerId: userId, type: 'REGULAR' } }),
+      prisma.item.count({ where: { reserverUserId: userId, status: 'RESERVED' } }),
+      prisma.subscription.findFirst({ where: { userId, status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' }, select: { status: true, planCode: true, currentPeriodEnd: true } }),
+      prisma.item.findFirst({ where: { wishlist: { ownerId: userId } }, orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }),
+    ]);
+
+    return res.json({
+      ticket: {
+        id: ticket.id, ticketCode: ticket.ticketCode, status: ticket.status,
+        openedVia: ticket.openedVia, supportChatId: ticket.supportChatId,
+        createdAt: ticket.createdAt, updatedAt: ticket.updatedAt, closedAt: ticket.closedAt,
+      },
+      user: { ...ticket.user, profile: ticket.user.profile ?? null },
+      messages: ticket.messages,
+      recentContext: {
+        wishlistsCount,
+        activeReservationsCount: activeReservations,
+        subscriptionStatus: subscription?.status ?? 'NONE',
+        currentPlan: subscription?.planCode ?? 'FREE',
+        subscriptionEnd: subscription?.currentPeriodEnd ?? null,
+        lastActivityAt: lastItem?.updatedAt ?? null,
+      },
+    });
+  }),
+);
+
+// Also support god-mode lookup via TG auth (for Mini App investigation UI)
+tgRouter.get(
+  '/support/lookup/:ticketCode',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    if (!user.telegramId || !godModeAllowedIds.includes(user.telegramId) || !user.godMode) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const { ticketCode } = req.params;
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { ticketCode: ticketCode!.toUpperCase() },
+      include: {
+        messages: { orderBy: { createdAt: 'asc' }, take: 50, select: {
+          id: true, authorRole: true, kind: true, text: true, caption: true, createdAt: true,
+        }},
+        user: { select: {
+          id: true, telegramId: true, firstName: true,
+          profile: { select: { displayName: true, username: true } },
+        }},
+      },
+    });
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+    const userId = ticket.user.id;
+    const [wishlistsCount, subscription] = await Promise.all([
+      prisma.wishlist.count({ where: { ownerId: userId, type: 'REGULAR' } }),
+      prisma.subscription.findFirst({ where: { userId, status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' }, select: { planCode: true } }),
+    ]);
+
+    return res.json({
+      ticketCode: ticket.ticketCode, status: ticket.status,
+      createdAt: ticket.createdAt, closedAt: ticket.closedAt,
+      user: { telegramId: ticket.user.telegramId, name: ticket.user.profile?.displayName || ticket.user.firstName || 'Unknown', username: ticket.user.profile?.username },
+      plan: subscription?.planCode ?? 'FREE',
+      wishlists: wishlistsCount,
+      messagesCount: ticket.messages.length,
+      lastMessages: ticket.messages.slice(-5),
+    });
+  }),
+);
+
 // Secret Santa endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 
