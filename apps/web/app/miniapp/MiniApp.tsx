@@ -8305,8 +8305,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </div>
                 )}
 
-                {/* Action buttons */}
-                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                {/* Action buttons — settings first, share second */}
+                <div style={{ display: 'flex', gap: 8, marginTop: 16, marginBottom: 8 }}>
+                  <button
+                    onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '12px 0', borderRadius: 14, fontSize: 14, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: font,
+                      background: 'rgba(255,255,255,0.05)', color: C.textSec,
+                      border: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    ⚙️ {t('settings_title', locale)}
+                  </button>
                   <button
                     onClick={() => {
                       if (!profileData?.username) {
@@ -8332,22 +8344,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       color: '#fff', boxShadow: `0 4px 16px ${C.accent}4D`,
                     }}
                   >
-                    📤 {t('share_profile_btn_full', locale)}
-                  </button>
-                  <button
-                    onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
-                    style={{
-                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      padding: '12px 0', borderRadius: 14, fontSize: 14, fontWeight: 600,
-                      cursor: 'pointer', fontFamily: font,
-                      background: 'rgba(255,255,255,0.05)', color: C.textSec,
-                      border: '1px solid rgba(255,255,255,0.08)',
-                    }}
-                  >
-                    ⚙️ {t('settings_title', locale)}
+                    {t('share_profile_btn_full', locale)}
                   </button>
                 </div>
               </div>
+
+              {/* Spacer between header and plan */}
+              <div style={{ height: 12 }} />
 
               {/* My Plan card — FREE: two semantic blocks; PRO: feature table */}
               {planInfo.code === 'FREE' ? (
