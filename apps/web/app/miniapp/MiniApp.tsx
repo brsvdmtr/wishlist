@@ -8956,24 +8956,37 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   })()}
 
                   {/* ─── Retention / Win-back metrics ─── */}
-                  {godMode && (
+                  {godMode && (() => {
+                    const segNames: Record<string, string> = {
+                      S1: 'S1 — не завершили старт',
+                      S2: 'S2 — нет первого желания',
+                      S3: 'S3 — начали и пропали',
+                      S4: 'S4 — были активны',
+                    };
+                    const segTarget: Record<string, string> = {
+                      S1: 'Создан первый вишлист',
+                      S2: 'Добавлено первое желание',
+                      S3: 'Добавлено ещё / список ≥3',
+                      S4: 'Вернулся и обновил контент',
+                    };
+                    const loadRetention = async (period: number) => {
+                      setRetentionLoading(true);
+                      try { const r = await tgFetch(`/tg/me/retention-stats?period=${period}`); if (r.ok) setRetentionStats(await r.json()); } catch {}
+                      setRetentionLoading(false);
+                    };
+                    return (
                     <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
                       <button
                         onClick={async () => {
                           if (retentionOpen) { setRetentionOpen(false); return; }
                           setRetentionOpen(true);
-                          setRetentionLoading(true);
-                          try {
-                            const r = await tgFetch(`/tg/me/retention-stats?period=${retentionPeriod}`);
-                            if (r.ok) setRetentionStats(await r.json());
-                          } catch { /* silent */ }
-                          setRetentionLoading(false);
+                          await loadRetention(retentionPeriod);
                         }}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', padding: 0, textAlign: 'left' }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 12, fontWeight: 700, color: '#34D399', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                            📊 Retention / Win-back
+                            📊 Возврат пользователей
                           </span>
                           <span style={{ fontSize: 14, color: C.textMuted }}>{retentionOpen ? '▾' : '▸'}</span>
                         </div>
@@ -8984,103 +8997,110 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       )}
 
                       {retentionOpen && retentionStats && (() => {
-                        const s = retentionStats;
-                        const o = s.overview;
+                        const o = retentionStats.overview;
+                        const kpiRow = (label: string, value: number | string, color: string) => (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                            <span style={{ fontSize: 11, color: C.textMuted }}>{label}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+                          </div>
+                        );
                         return (
                           <div style={{ marginTop: 8 }}>
                             {/* Period tabs */}
-                            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                              {[7, 30, 90].map(d => (
+                            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                              {[{ d: 7, l: '7 дней' }, { d: 30, l: '30 дней' }, { d: 90, l: '90 дней' }].map(({ d, l }) => (
                                 <button key={d}
                                   style={{
-                                    fontSize: 10, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                                    fontSize: 11, padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
                                     background: retentionPeriod === d ? '#34D399' : C.surface,
                                     color: retentionPeriod === d ? '#000' : C.textMuted, fontWeight: 600,
                                   }}
-                                  onClick={async () => {
-                                    setRetentionPeriod(d); setRetentionLoading(true);
-                                    try { const r = await tgFetch(`/tg/me/retention-stats?period=${d}`); if (r.ok) setRetentionStats(await r.json()); } catch {}
-                                    setRetentionLoading(false);
-                                  }}
-                                >{d}d</button>
+                                  onClick={() => { setRetentionPeriod(d); void loadRetention(d); }}
+                                >{l}</button>
                               ))}
                             </div>
 
-                            {/* KPI cards */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
-                              {[
-                                { label: 'Sent', value: o.sent, color: C.text },
-                                { label: 'Delivered', value: o.delivered, color: C.text },
-                                { label: 'Users', value: o.uniqueUsers, color: C.text },
-                                { label: 'Ret 24h', value: o.returned24h, color: '#FBBF24' },
-                                { label: 'Ret 72h', value: o.returned72h, color: '#34D399' },
-                                { label: 'Ret 7d', value: o.returned7d, color: '#34D399' },
-                                { label: 'Target 7d', value: o.targetCompleted7d, color: '#7C6AFF' },
-                                { label: 'Promo sent', value: o.promoOffered, color: C.text },
-                                { label: 'Promo used', value: o.promoRedeemed, color: '#34D399' },
-                              ].map(kpi => (
-                                <div key={kpi.label} style={{ background: C.surface, borderRadius: 8, padding: '8px 6px', textAlign: 'center' }}>
-                                  <div style={{ fontSize: 16, fontWeight: 700, color: kpi.color, fontVariantNumeric: 'tabular-nums' }}>{kpi.value}</div>
-                                  <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>{kpi.label}</div>
-                                </div>
-                              ))}
+                            {/* ── Блок 1: Коммуникации ── */}
+                            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                              ✉️ Коммуникации
+                            </div>
+                            <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+                              {kpiRow('Отправлено', o.sent, C.text)}
+                              {kpiRow('Доставлено', o.delivered, C.text)}
+                              {kpiRow('Охвачено пользователей', o.uniqueUsers, C.text)}
                             </div>
 
-                            {/* Return rate */}
-                            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 8 }}>
-                              Return rate 72h: <strong style={{ color: '#34D399' }}>{o.returnRate72h}</strong>
-                              {' · '}Promo grants: <strong>{o.activeGrants}</strong> active / <strong>{o.expiredGrants}</strong> expired
+                            {/* ── Блок 2: Возврат ── */}
+                            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                              🔄 Возврат
                             </div>
-
-                            {/* Segment breakdown */}
-                            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', marginBottom: 4, letterSpacing: '0.05em' }}>
-                              By segment
-                            </div>
-                            <div style={{ fontSize: 10 }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 1fr', gap: 2, marginBottom: 2 }}>
-                                <span style={{ color: C.textMuted }}></span>
-                                <span style={{ color: C.textMuted, textAlign: 'right' }}>Sent</span>
-                                <span style={{ color: C.textMuted, textAlign: 'right' }}>Del</span>
-                                <span style={{ color: C.textMuted, textAlign: 'right' }}>Ret72</span>
-                                <span style={{ color: C.textMuted, textAlign: 'right' }}>Tgt7d</span>
-                                <span style={{ color: C.textMuted, textAlign: 'right' }}>Rate</span>
+                            <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+                              {kpiRow('Вернулись за 24ч', o.returned24h, '#FBBF24')}
+                              {kpiRow('Вернулись за 72ч', o.returned72h, '#34D399')}
+                              {kpiRow('Вернулись за 7 дней', o.returned7d, '#34D399')}
+                              {kpiRow('Целевое действие за 7д', o.targetCompleted7d, '#7C6AFF')}
+                              <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
+                                {kpiRow('Конверсия в возврат 72ч', o.returnRate72h, '#34D399')}
                               </div>
-                              {(s.bySegment as any[]).filter((r: any) => r.sent > 0).map((r: any) => (
-                                <div key={r.segment} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 1fr 1fr 1fr 1fr', gap: 2, marginBottom: 1 }}>
-                                  <span style={{ color: '#34D399', fontWeight: 700 }}>{r.segment}</span>
-                                  <span style={{ color: C.text, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.sent}</span>
-                                  <span style={{ color: C.text, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.delivered}</span>
-                                  <span style={{ color: '#FBBF24', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.returned72h}</span>
-                                  <span style={{ color: '#7C6AFF', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.targetCompleted7d}</span>
-                                  <span style={{ color: '#34D399', textAlign: 'right', fontWeight: 600 }}>{r.returnRate72h}</span>
-                                </div>
-                              ))}
                             </div>
 
-                            {/* Touch-level breakdown */}
-                            {(s.byTouch as any[]).length > 0 && (
-                              <div style={{ marginTop: 6 }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', marginBottom: 3, letterSpacing: '0.05em' }}>
-                                  By touch
+                            {/* ── Блок 3: Промо ── */}
+                            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                              🎟 Промо
+                            </div>
+                            <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
+                              {kpiRow('Промо отправлено', o.promoOffered, C.text)}
+                              {kpiRow('Промо активировано', o.promoRedeemed, '#34D399')}
+                              {kpiRow('Промо-доступы активны', o.activeGrants, '#34D399')}
+                              {kpiRow('Промо-доступы истекли', o.expiredGrants, C.textMuted)}
+                            </div>
+
+                            {/* ── По сегментам ── */}
+                            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                              📋 По сегментам
+                            </div>
+                            {(retentionStats.bySegment as any[]).filter((r: any) => r.sent > 0).map((r: any) => (
+                              <div key={r.segment} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#34D399', marginBottom: 6 }}>
+                                  {segNames[r.segment] || r.segment}
                                 </div>
-                                {(s.byTouch as any[]).map((r: any) => (
-                                  <div key={`${r.segment}-${r.touchNumber}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 1 }}>
-                                    <span style={{ color: C.textMuted }}>{r.segment} t{r.touchNumber}</span>
-                                    <span>
-                                      <span style={{ color: C.text }}>{r.sent}→</span>
-                                      <span style={{ color: '#FBBF24' }}>{r.returned72h}ret</span>
-                                      <span style={{ color: '#7C6AFF', marginLeft: 4 }}>{r.targetCompleted7d}tgt</span>
-                                      {r.promoRedeemed > 0 && <span style={{ color: '#34D399', marginLeft: 4 }}>{r.promoRedeemed}promo</span>}
-                                    </span>
+                                {kpiRow('Отправлено', r.sent, C.text)}
+                                {kpiRow('Доставлено', r.delivered, C.text)}
+                                {kpiRow('Вернулись за 72ч', r.returned72h, '#FBBF24')}
+                                {kpiRow('Целевое действие', r.targetCompleted7d, '#7C6AFF')}
+                                {kpiRow('Конверсия в возврат', r.returnRate72h, '#34D399')}
+                                {r.promoRedeemed > 0 && kpiRow('Промо активировано', r.promoRedeemed, '#34D399')}
+                                <div style={{ fontSize: 9, color: C.textMuted, marginTop: 4, fontStyle: 'italic' }}>
+                                  Целевое: {segTarget[r.segment] || '—'}
+                                </div>
+                              </div>
+                            ))}
+
+                            {/* ── По сообщениям (touch) ── */}
+                            {(retentionStats.byTouch as any[]).length > 0 && (
+                              <>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 4, marginBottom: 6 }}>
+                                  💬 По сообщениям
+                                </div>
+                                {(retentionStats.byTouch as any[]).map((r: any) => (
+                                  <div key={`${r.segment}-${r.touchNumber}`} style={{ background: C.surface, borderRadius: 8, padding: '8px 12px', marginBottom: 4 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 3 }}>
+                                      {segNames[r.segment]?.split(' — ')[0] || r.segment} / {r.touchNumber}-е сообщение
+                                    </div>
+                                    <div style={{ fontSize: 10, color: C.textMuted }}>
+                                      {r.sent} отправлено · <span style={{ color: '#FBBF24' }}>{r.returned72h} вернулись</span> · <span style={{ color: '#7C6AFF' }}>{r.targetCompleted7d} сделали действие</span>
+                                      {r.promoRedeemed > 0 && <> · <span style={{ color: '#34D399' }}>{r.promoRedeemed} активировали промо</span></>}
+                                    </div>
                                   </div>
                                 ))}
-                              </div>
+                              </>
                             )}
                           </div>
                         );
                       })()}
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
             </>
