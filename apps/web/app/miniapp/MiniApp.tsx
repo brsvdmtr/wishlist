@@ -5830,16 +5830,29 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             const t = e.touches[0];
             if (t) { homeSwipeStartX.current = t.clientX; homeSwipeStartY.current = t.clientY; }
           }}
+          onTouchMove={(e) => {
+            // Track latest position — onTouchEnd may not fire if browser scrolls
+            if (homeSwipeStartX.current === null) return;
+            const t = e.touches[0];
+            if (t) {
+              (homeSwipeStartX as any).__lastMoveX = t.clientX;
+              (homeSwipeStartX as any).__lastMoveY = t.clientY;
+            }
+          }}
           onTouchEnd={(e) => {
             if (homeSwipeStartX.current === null) return;
             if (reorderMode || itemReorderMode) { homeSwipeStartX.current = null; return; }
+            // Use changedTouches first, fallback to last tracked move position
             const t = e.changedTouches[0];
-            if (!t) { homeSwipeStartX.current = null; return; }
-            const dx = t.clientX - homeSwipeStartX.current;
-            const dy = t.clientY - (homeSwipeStartY.current ?? t.clientY);
+            const endX = t?.clientX ?? (homeSwipeStartX as any).__lastMoveX ?? homeSwipeStartX.current;
+            const endY = t?.clientY ?? (homeSwipeStartX as any).__lastMoveY ?? (homeSwipeStartY.current ?? 0);
+            const dx = endX - homeSwipeStartX.current;
+            const dy = endY - (homeSwipeStartY.current ?? endY);
             homeSwipeStartX.current = null; homeSwipeStartY.current = null;
-            if (Math.abs(dx) < 50) return;
-            if (Math.abs(dx) < Math.abs(dy) * 1.2) return;
+            (homeSwipeStartX as any).__lastMoveX = undefined;
+            (homeSwipeStartX as any).__lastMoveY = undefined;
+            if (Math.abs(dx) < 40) return;
+            if (Math.abs(dx) < Math.abs(dy) * 1.0) return; // must be at least as horizontal as vertical
             const tabs: HomeTab[] = ['wishlists', 'wishes', 'reservations'];
             const idx = tabs.indexOf(homeTab);
             if (dx < 0 && idx < tabs.length - 1) {
