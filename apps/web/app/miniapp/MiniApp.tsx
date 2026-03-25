@@ -1171,12 +1171,12 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
 
       {/* Left panel — image or emoji */}
       {hasImg ? (
-        <div style={{ width: 88, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ width: 88, flexShrink: 0, position: 'relative', overflow: 'hidden', maxHeight: 110 }}>
           <img
             src={item.imageUrl!}
             alt=""
             onError={() => setImgErr(true)}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 88 }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 88, maxHeight: 110 }}
           />
           <div style={{
             position: 'absolute', bottom: 6, left: 6,
@@ -10882,10 +10882,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
           {/* URL with hint + preview */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_url', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_url', locale)}</div>
             <input
               style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22' }}
-              placeholder={t('item_url_placeholder', locale) || 'https://…'}
+              placeholder={t('item_url_placeholder', locale)}
               value={itemUrl}
               onChange={(e) => setItemUrl(e.target.value)}
             />
