@@ -4394,7 +4394,18 @@ tgRouter.post(
         // Already used lifetime
         return res.status(409).json({ error: 'already_used' });
       }
-      // PENDING or FAILED — allow retry
+      // PENDING or FAILED — allow retry (PENDING = offered by lifecycle, now redeeming)
+    } else {
+      // No existing redemption — check eligibility gate
+      // WISHPRO is not a public code; only users offered by lifecycle or god mode can redeem
+      const isGodMode = user.godMode || false;
+      if (!isGodMode) {
+        // Check if user was offered this promo via onboarding (v2 flow) — allow onboarding promo
+        const isOnboardingPromo = (req.body as any)?.source === 'onboarding';
+        if (!isOnboardingPromo) {
+          return res.status(403).json({ error: 'not_eligible', message: 'This code can only be used when offered by the system.' });
+        }
+      }
     }
 
     // 3. Check max redemptions for campaign
@@ -9227,6 +9238,297 @@ setInterval(async () => {
     console.error('[degradation] purge job failed:', err);
   }
 }, 60 * 60 * 1000);
+
+// ─── Lifecycle / Win-back scheduler (hourly) ─────────────────────────────────
+// Scans users, classifies into segments S1–S4, creates LifecycleTouch records,
+// and sends Telegram DM messages via bot API. WISHPRO offered only on eligible touches.
+
+const BOT_TOKEN_FOR_DM = process.env.BOT_TOKEN ?? '';
+const MINI_APP_URL_FOR_DM = process.env.MINI_APP_URL ?? 'https://example.com/miniapp';
+const LIFECYCLE_PROMO_CODE = 'WISHPRO';
+const LIFECYCLE_PROMO_COOLDOWN_DAYS = 60; // max 1 promo offer per 60 days
+const LIFECYCLE_MSG_COOLDOWN_HOURS = 72; // min 72h between messages
+const LIFECYCLE_MAX_MARKETING_45D = 5; // max 5 marketing touches in 45 days
+
+/** Send a Telegram DM via bot API. Returns true if delivered. */
+async function sendLifecycleDM(chatId: string, text: string, webAppUrl?: string): Promise<boolean> {
+  if (!BOT_TOKEN_FOR_DM || !chatId) return false;
+  try {
+    const body: any = { chat_id: chatId, text, parse_mode: 'HTML' };
+    if (webAppUrl) {
+      body.reply_markup = { inline_keyboard: [[{ text: 'Открыть WishBoard ✨', web_app: { url: webAppUrl } }]] };
+    }
+    const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN_FOR_DM}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await r.json() as { ok: boolean };
+    return data.ok;
+  } catch { return false; }
+}
+
+/** Classify user into lifecycle segment. Returns null if user is not in any churn segment. */
+async function classifyLifecycleSegment(userId: string): Promise<{
+  segment: 'S1' | 'S2' | 'S3' | 'S4'; targetAction: string;
+} | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true, updatedAt: true, createdAt: true,
+      wishlists: { where: { type: 'REGULAR', archivedAt: null }, select: { id: true, items: { where: { status: { in: ['AVAILABLE', 'RESERVED'] } }, select: { id: true } }, shareOpenCount: true } },
+    },
+  });
+  if (!user) return null;
+
+  const wlCount = user.wishlists.length;
+  const totalItems = user.wishlists.reduce((s, w) => s + w.items.length, 0);
+  const hasShare = user.wishlists.some(w => (w.shareOpenCount ?? 0) > 0);
+  const daysSinceUpdate = (Date.now() - user.updatedAt.getTime()) / (1000 * 60 * 60 * 24);
+
+  // S1: started but no wishlist, gone
+  if (wlCount === 0 && daysSinceUpdate >= 0.25) { // 6h = 0.25 days
+    return { segment: 'S1', targetAction: 'create_wishlist' };
+  }
+  // S2: has wishlist, no items, gone 1+ day
+  if (wlCount > 0 && totalItems === 0 && daysSinceUpdate >= 1) {
+    return { segment: 'S2', targetAction: 'add_item' };
+  }
+  // S4: fully active user who churned (7+ days, 3+ items OR 2+ wishlists OR had share)
+  if (daysSinceUpdate >= 7 && (totalItems >= 3 || wlCount >= 2 || hasShare)) {
+    return { segment: 'S4', targetAction: 'return_visit' };
+  }
+  // S3: has items, gone 5+ days
+  if (totalItems > 0 && daysSinceUpdate >= 5) {
+    return { segment: 'S3', targetAction: 'return_visit' };
+  }
+
+  return null; // not in churn
+}
+
+/** Check lifecycle frequency caps for a user. */
+async function checkLifecycleCaps(userId: string, segment: string): Promise<{
+  canSend: boolean; canOfferPromo: boolean; currentEpisodeTouches: number;
+}> {
+  const now = new Date();
+  const h72ago = new Date(now.getTime() - LIFECYCLE_MSG_COOLDOWN_HOURS * 60 * 60 * 1000);
+  const d45ago = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
+  const d60ago = new Date(now.getTime() - LIFECYCLE_PROMO_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+
+  const [recentMsg, marketing45d, promoRecent, episodeTouches] = await Promise.all([
+    // Any message sent in last 72h?
+    prisma.lifecycleTouch.findFirst({ where: { userId, sentAt: { gte: h72ago } } }),
+    // Total marketing touches in 45 days
+    prisma.lifecycleTouch.count({ where: { userId, sentAt: { gte: d45ago } } }),
+    // Any promo offer in 60 days?
+    prisma.lifecycleTouch.findFirst({ where: { userId, offerCode: { not: null }, sentAt: { gte: d60ago } } }),
+    // Current episode touches (same segment, sent)
+    prisma.lifecycleTouch.count({ where: { userId, segment, sentAt: { not: null }, stoppedAt: null } }),
+  ]);
+
+  return {
+    canSend: !recentMsg && marketing45d < LIFECYCLE_MAX_MARKETING_45D && episodeTouches < 3,
+    canOfferPromo: !promoRecent,
+    currentEpisodeTouches: episodeTouches,
+  };
+}
+
+/** Check stop conditions for lifecycle messaging. */
+async function shouldStopLifecycle(userId: string, segment: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, updatedAt: true, profile: { select: { notifyMarketing: true } } },
+  });
+  if (!user) return 'user_not_found';
+
+  // User opted out of marketing
+  if (user.profile?.notifyMarketing === false) return 'unsubscribed';
+
+  // User has active PRO (bought it)
+  const ent = await getUserEntitlement(userId);
+  if (ent.proSource === 'subscription') return 'bought_pro';
+
+  // User returned (updated within 24h)
+  const daysSinceUpdate = (Date.now() - user.updatedAt.getTime()) / (1000 * 60 * 60 * 24);
+  if (daysSinceUpdate < 1) return 'returned';
+
+  return null; // no stop reason
+}
+
+// Lifecycle message templates per segment+touch
+const LIFECYCLE_MESSAGES: Record<string, Record<number, { ru: string; en: string; hasPromo: boolean }>> = {
+  S1: {
+    1: { ru: '👋 Привет! Ты заходил, но так и не создал вишлист. Это займёт меньше минуты — просто дай название и начни добавлять желания!', en: '👋 Hi! You visited but haven\'t created a wishlist yet. It takes less than a minute — just name it and start adding wishes!', hasPromo: false },
+    2: { ru: '✨ Напоминаем: твой вишлист ещё пуст. Создай первый список — близкие будут знать, что тебе подарить!', en: '✨ Reminder: your wishlist is still empty. Create your first list — your friends will know exactly what to get you!', hasPromo: false },
+    3: { ru: '🎁 Последнее напоминание: создай вишлист и поделись с друзьями. Больше никаких ненужных подарков!', en: '🎁 Last reminder: create a wishlist and share it with friends. No more unwanted gifts!', hasPromo: false },
+  },
+  S2: {
+    1: { ru: '📝 Ты создал вишлист, но ещё не добавил ни одного желания. Добавь первое — можно просто вставить ссылку из магазина!', en: '📝 You created a wishlist but haven\'t added any wishes yet. Add your first one — just paste a link from any store!', hasPromo: false },
+    2: { ru: '🎯 В твоём вишлисте пока пусто. Добавь хотя бы одно желание — это займёт 10 секунд!', en: '🎯 Your wishlist is still empty. Add at least one wish — it takes just 10 seconds!', hasPromo: false },
+    3: { ru: '💡 Совет: добавь 3–5 желаний разной стоимости, чтобы друзьям было удобнее выбирать подарок.', en: '💡 Tip: add 3-5 wishes at different price points so friends can pick what suits their budget.', hasPromo: false },
+  },
+  S3: {
+    1: { ru: '👀 Давно не заходил! Может, пора обновить вишлист? Добавь новые идеи или проверь, что уже забронировали.', en: '👀 Long time no see! Time to update your wishlist? Add new ideas or check what\'s been reserved.', hasPromo: false },
+    2: { ru: '🔄 Твои друзья могут заглядывать в твой вишлист. Убедись, что там актуальные желания!', en: '🔄 Your friends may be checking your wishlist. Make sure it\'s up to date!', hasPromo: false },
+    3: { ru: '🚀 Специально для тебя: попробуй WishBoard Pro бесплатно на 30 дней! Код: <b>WISHPRO</b>\n\nС Pro — до 10 вишлистов, импорт по ссылке, комментарии и подсказки.', en: '🚀 Just for you: try WishBoard Pro free for 30 days! Code: <b>WISHPRO</b>\n\nWith Pro — up to 10 wishlists, link import, comments and hints.', hasPromo: true },
+  },
+  S4: {
+    1: { ru: '👋 Скучаем по тебе! Загляни в WishBoard — может, пора обновить списки к новому сезону?', en: '👋 We miss you! Check in on WishBoard — maybe time to refresh your lists for the new season?', hasPromo: false },
+    2: { ru: '🎁 Вернись и попробуй Pro бесплатно на 30 дней! Код: <b>WISHPRO</b>\n\n10 вишлистов, импорт по ссылке, комментарии — всё включено.', en: '🎁 Come back and try Pro free for 30 days! Code: <b>WISHPRO</b>\n\n10 wishlists, link import, comments — all included.', hasPromo: true },
+    3: { ru: '⏰ Последний шанс: <b>WISHPRO</b> — Pro бесплатно на 30 дней. Не упусти!', en: '⏰ Last chance: <b>WISHPRO</b> — Pro free for 30 days. Don\'t miss it!', hasPromo: true },
+  },
+};
+
+// Segment cadence: touch number → days since churn
+const SEGMENT_CADENCE: Record<string, number[]> = {
+  S1: [0.25, 2, 7],   // 6h, 2d, 7d
+  S2: [1, 4, 10],
+  S3: [5, 14, 30],
+  S4: [7, 21, 45],
+};
+
+setInterval(async () => {
+  if (!BOT_TOKEN_FOR_DM) return;
+  try {
+    // Find users who haven't been updated recently (potential churn candidates)
+    const candidateThreshold = new Date(Date.now() - 6 * 60 * 60 * 1000); // at least 6h inactive
+    const candidates = await prisma.user.findMany({
+      where: {
+        telegramChatId: { not: null },
+        updatedAt: { lte: candidateThreshold },
+        // Exclude users created less than 6h ago
+        createdAt: { lte: candidateThreshold },
+      },
+      select: { id: true, telegramChatId: true, telegramId: true, updatedAt: true, createdAt: true, profile: { select: { notifyMarketing: true } } },
+      take: 200, // process in batches to avoid overload
+      orderBy: { updatedAt: 'asc' }, // oldest first
+    });
+
+    for (const candidate of candidates) {
+      if (!candidate.telegramChatId) continue;
+      if (candidate.profile?.notifyMarketing === false) continue;
+
+      // Classify
+      const classification = await classifyLifecycleSegment(candidate.id);
+      if (!classification) continue;
+
+      const { segment, targetAction } = classification;
+
+      // Check stop conditions
+      const stopReason = await shouldStopLifecycle(candidate.id, segment);
+      if (stopReason) {
+        // Mark any pending touches as stopped
+        await prisma.lifecycleTouch.updateMany({
+          where: { userId: candidate.id, stoppedAt: null, sentAt: null },
+          data: { stoppedAt: new Date(), stopReason },
+        });
+        continue;
+      }
+
+      // Check caps
+      const caps = await checkLifecycleCaps(candidate.id, segment);
+      if (!caps.canSend) continue;
+
+      const nextTouchNumber = caps.currentEpisodeTouches + 1;
+      if (nextTouchNumber > 3) continue; // max 3 touches per episode
+
+      // Check cadence timing
+      const daysSinceUpdate = (Date.now() - candidate.updatedAt.getTime()) / (1000 * 60 * 60 * 24);
+      const cadence = SEGMENT_CADENCE[segment];
+      if (!cadence || !cadence[nextTouchNumber - 1]) continue;
+      if (daysSinceUpdate < cadence[nextTouchNumber - 1]!) continue;
+
+      // Get message template
+      const template = LIFECYCLE_MESSAGES[segment]?.[nextTouchNumber];
+      if (!template) continue;
+
+      // Check if this touch should offer promo
+      const shouldOfferPromo = template.hasPromo && caps.canOfferPromo;
+
+      // Skip promo if user already has active promo or has used it
+      let actuallyOfferPromo = shouldOfferPromo;
+      if (shouldOfferPromo) {
+        const ent = await getUserEntitlement(candidate.id);
+        if (ent.isPro) actuallyOfferPromo = false; // already PRO, no need
+
+        const existingPromo = await prisma.promoRedemption.findFirst({
+          where: { userId: candidate.id, status: { in: ['ACTIVE', 'EXPIRED', 'ACCEPTED_FOR_PAID'] } },
+        });
+        if (existingPromo) actuallyOfferPromo = false; // already used promo
+      }
+
+      // Determine locale
+      const locale = 'ru'; // TODO: detect from user profile/settings
+
+      // Build episode key
+      const monthKey = new Date().toISOString().slice(0, 7); // 2026-03
+      const episodeKey = `${segment}_${candidate.id}_${monthKey}`;
+
+      // Create eligibility: PENDING PromoRedemption if offering promo
+      if (actuallyOfferPromo) {
+        const campaign = await prisma.promoCampaign.findUnique({ where: { code: LIFECYCLE_PROMO_CODE } });
+        if (campaign) {
+          await prisma.promoRedemption.upsert({
+            where: { userId_campaignId: { userId: candidate.id, campaignId: campaign.id } },
+            create: {
+              userId: candidate.id,
+              campaignId: campaign.id,
+              status: 'PENDING',
+              offeredAt: new Date(),
+              offeredVia: episodeKey,
+              source: 'winback',
+            },
+            update: {
+              // Don't overwrite if already active/expired
+            },
+          }).catch(() => {}); // ignore if already exists with terminal status
+        }
+      }
+
+      // Create touch record
+      const touch = await prisma.lifecycleTouch.create({
+        data: {
+          userId: candidate.id,
+          segment,
+          episodeKey,
+          touchNumber: nextTouchNumber,
+          scheduledFor: new Date(),
+          targetAction,
+          offerCode: actuallyOfferPromo ? LIFECYCLE_PROMO_CODE : null,
+          messageKind: actuallyOfferPromo ? 'promo_offer' : (segment === 'S1' || segment === 'S2' ? 'activation' : 'winback'),
+          deepLinkPayload: segment === 'S1' ? 'create_wishlist' : undefined,
+        },
+      }).catch(() => null); // skip on unique constraint (already created this touch)
+
+      if (!touch) continue;
+
+      // Send DM
+      const msgText = locale === 'ru' ? template.ru : template.en;
+      const webAppUrl = touch.deepLinkPayload
+        ? `${MINI_APP_URL_FOR_DM}?startapp=${touch.deepLinkPayload}`
+        : MINI_APP_URL_FOR_DM;
+      const delivered = await sendLifecycleDM(candidate.telegramChatId, msgText, webAppUrl);
+
+      // Update touch
+      await prisma.lifecycleTouch.update({
+        where: { id: touch.id },
+        data: {
+          sentAt: new Date(),
+          delivered,
+          ...(delivered ? {} : { stoppedAt: new Date(), stopReason: 'delivery_failed' }),
+        },
+      });
+
+      if (delivered) {
+        trackEvent(`lifecycle_${segment.toLowerCase()}_touch${nextTouchNumber}`, candidate.id, {
+          segment, touchNumber: nextTouchNumber, offerCode: actuallyOfferPromo ? LIFECYCLE_PROMO_CODE : null,
+        });
+      }
+
+      console.log(`[lifecycle] ${delivered ? '✓' : '✗'} ${segment} touch${nextTouchNumber} → user ${candidate.id.slice(0, 8)}... ${actuallyOfferPromo ? '(+PROMO)' : ''}`);
+    }
+  } catch (err) {
+    console.error('[lifecycle] scheduler error:', err);
+  }
+}, 60 * 60 * 1000); // every hour
 
 // Santa hint expiry: mark PENDING santa hint requests past their TTL as EXPIRED (hourly)
 setInterval(async () => {
