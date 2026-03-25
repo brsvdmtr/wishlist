@@ -8189,39 +8189,49 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'profile' && (
         <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
-          {/* Header with gear icon for settings */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>
-              {t('profile_title', locale)}
-            </h1>
-            <button onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }} style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', color: C.textMuted }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            </button>
-          </div>
-
           {profileLoading && !profileData ? (
             <div style={{ textAlign: 'center', padding: 40, color: C.textMuted }}>{t('loading', locale)}</div>
           ) : profileData && (
             <>
-              {/* ── Hero card — asymmetric left-anchored layout ── */}
-              <div style={{
-                background: C.card,
-                borderRadius: 20,
-                padding: '18px 18px 20px',
-                marginBottom: 16,
-                border: `1px solid ${C.borderLight}`,
-              }}>
-                {/* Top row: avatar (left anchor) + edit button (top-right) */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                  {/* Avatar with camera badge */}
+              {/* ── Centered Hero Profile Header ── */}
+              <div style={{ position: 'relative', textAlign: 'center', paddingBottom: 4 }}>
+                {/* Background glow */}
+                <div style={{ position: 'absolute', top: -20, left: '50%', transform: 'translateX(-50%)', width: 200, height: 200, borderRadius: '50%', background: `radial-gradient(circle, ${C.accent}18 0%, transparent 70%)`, pointerEvents: 'none' }} />
+
+                {/* Edit button — top right */}
+                <button
+                  onClick={() => {
+                    setEditProfileName(profileData.displayName || '');
+                    setEditProfileUsername(profileData.username || '');
+                    setEditProfileBio(profileData.bio?.replace(/\n+$/, '') || '');
+                    setEditProfileBirthday(profileData.birthday ? profileData.birthday.slice(0, 10) : '');
+                    setEditingProfile(true);
+                  }}
+                  style={{
+                    position: 'absolute', top: 0, right: 0,
+                    background: C.surface, border: `1px solid ${C.borderLight}`,
+                    width: 36, height: 36, borderRadius: 12,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted,
+                  }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+
+                {/* Avatar */}
+                <div style={{ display: 'inline-block', position: 'relative', marginBottom: 14 }}>
                   <div
                     onClick={() => setShowAvatarSheet(true)}
                     style={{
-                      width: 76, height: 76, borderRadius: '50%',
+                      width: 96, height: 96, borderRadius: '50%',
                       background: `linear-gradient(135deg, ${C.accent}, ${C.accent}80)`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 30, fontWeight: 700, color: '#fff',
-                      cursor: 'pointer', flexShrink: 0, position: 'relative',
+                      fontSize: 38, fontWeight: 700, color: '#fff',
+                      cursor: 'pointer', position: 'relative',
+                      border: `3px solid ${C.accent}50`,
+                      boxShadow: `0 4px 24px ${C.accent}20`,
                       ...(profileData.avatarUrl
                         ? { backgroundImage: `url(${profileData.avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
                         : {}),
@@ -8230,102 +8240,82 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     {avatarUploading && (
                       <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#fff' }}>…</div>
                     )}
-                    {!avatarUploading && (
-                      <div style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${C.card}` }}>
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                      </div>
-                    )}
-                    {/* Seasonal hat — sits top-right, pointer-events:none (handled by SantaHatOverlay) */}
-                    {santaSeason?.inSeason && <SantaHatOverlay size={76} />}
+                    {santaSeason?.inSeason && <SantaHatOverlay size={96} />}
                   </div>
-
-                  {/* Edit icon button — top-right of card */}
-                  <button
-                    onClick={() => {
-                      setEditProfileName(profileData.displayName || '');
-                      setEditProfileUsername(profileData.username || '');
-                      setEditProfileBio(profileData.bio?.replace(/\n+$/, '') || '');
-                      setEditProfileBirthday(profileData.birthday ? profileData.birthday.slice(0, 10) : '');
-                      setEditingProfile(true);
-                    }}
-                    style={{
-                      background: C.surface, border: 'none',
-                      width: 34, height: 34, borderRadius: 10,
-                      cursor: 'pointer', flexShrink: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: C.textMuted,
-                    }}
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
-                  </button>
+                  {!avatarUploading && (
+                    <div onClick={() => setShowAvatarSheet(true)} style={{ position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #141418', cursor: 'pointer' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </div>
+                  )}
                 </div>
 
-                {/* Identity — left-aligned column */}
-                <div style={{ fontSize: 21, fontWeight: 800, color: C.text, fontFamily: font, lineHeight: 1.15, letterSpacing: -0.3 }}>
+                {/* PRO pill */}
+                {planInfo.code === 'PRO' && (
+                  <div style={{ marginBottom: 10 }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      background: `linear-gradient(135deg, ${C.accent}28, ${C.accent}10)`,
+                      border: `1px solid ${C.accent}35`, padding: '4px 14px', borderRadius: 20,
+                      fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: '0.05em',
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent, boxShadow: `0 0 6px ${C.accent}` }} />
+                      PRO
+                    </span>
+                  </div>
+                )}
+
+                {/* Name */}
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.2, fontFamily: font }}>
                   {profileData.displayName || tgUser?.first_name || t('profile_display_name', locale)}
                 </div>
 
-                {/* Username + plan badge on one row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
-                  {profileData.username && (
-                    <span style={{ fontSize: 13, color: C.textMuted, fontWeight: 500 }}>@{profileData.username}</span>
-                  )}
-                  <span style={{
-                    fontSize: 10, fontWeight: 800, letterSpacing: 0.7, padding: '3px 8px',
-                    borderRadius: 6, lineHeight: 1.4,
-                    background: planInfo.code === 'PRO'
-                      ? `linear-gradient(135deg, ${C.accent}28, ${C.accent}14)`
-                      : C.surface,
-                    border: `1px solid ${planInfo.code === 'PRO' ? C.accent + '45' : C.borderLight}`,
-                    color: planInfo.code === 'PRO' ? C.accent : C.textSec,
-                  }}>
-                    {planInfo.code}
-                  </span>
+                {/* Username */}
+                <div style={{ fontSize: 14, color: C.textMuted, marginTop: 4, fontWeight: 500 }}>
+                  {profileData.username ? `@${profileData.username}` : t('profile_no_username', locale)}
                 </div>
 
-                {/* Bio — only if present, no top margin if absent */}
+                {/* Bio */}
                 {profileData.bio && (
-                  <div style={{ fontSize: 13, color: C.textSec, marginTop: 10, lineHeight: 1.55 }}>
+                  <div style={{ fontSize: 13, color: C.textSec, marginTop: 8, lineHeight: 1.4, padding: '0 20px' }}>
                     {profileData.bio}
                   </div>
                 )}
-              </div>
 
-              {/* Share profile button */}
-              <div style={{ marginBottom: 16 }}>
-                <button
-                  onClick={() => {
-                    if (!profileData?.username) {
-                      // No username — prompt to create one
-                      pushToast(t('share_profile_need_username', locale), 'info');
-                      setEditProfileName(profileData?.displayName || '');
-                      setEditProfileUsername('');
-                      setEditProfileBio(profileData?.bio?.replace(/\n+$/, '') || '');
-                      setEditProfileBirthday(profileData?.birthday ? profileData.birthday.slice(0, 10) : '');
-                      setEditingProfile(true);
-                      return;
-                    }
-                    const link = buildTgDeepLink(`profile_${profileData.username}`);
-                    if (!link) return;
-                    // Copy to clipboard
-                    navigator.clipboard?.writeText(link).then(() => {
-                      pushToast(t('share_profile_copied', locale), 'success');
-                    }).catch(() => {});
-                  }}
-                  style={{
-                    width: '100%', padding: '12px 0', borderRadius: 12, border: `1px solid ${C.borderLight}`,
-                    background: C.surface, color: C.text, fontSize: 14, fontWeight: 600,
-                    cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  }}
-                >
-                  <span>📤</span> {t('share_profile_btn', locale)}
-                </button>
-                {profileData?.username && (
+                {/* Stats row */}
+                {profileStats && (
+                  <div style={{ display: 'flex', gap: 0, marginTop: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.04)', overflow: 'hidden' }}>
+                    <div onClick={() => setScreen('my-wishlists')} style={{ flex: 1, textAlign: 'center', padding: '14px 8px', borderRight: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{profileStats.wishlists}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{t('profile_stat_wishlists', locale)}</div>
+                    </div>
+                    <div onClick={() => { setHomeTab('wishes'); void loadAllItems(); setScreen('my-wishlists'); }} style={{ flex: 1, textAlign: 'center', padding: '14px 8px', borderRight: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{profileStats.totalWishes}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{t('profile_stat_wishes', locale)}</div>
+                    </div>
+                    <div onClick={() => setScreen('my-reservations')} style={{ flex: 1, textAlign: 'center', padding: '14px 8px', borderRight: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{profileStats.reservedByMe}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{t('profile_stat_reserved', locale)}</div>
+                    </div>
+                    <div onClick={() => { void loadGlobalArchive(); }} style={{ flex: 1, textAlign: 'center', padding: '14px 8px', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{profileStats.archived}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{t('profile_stat_archived', locale)}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
                   <button
                     onClick={() => {
+                      if (!profileData?.username) {
+                        pushToast(t('share_profile_need_username', locale), 'info');
+                        setEditProfileName(profileData?.displayName || '');
+                        setEditProfileUsername('');
+                        setEditProfileBio(profileData?.bio?.replace(/\n+$/, '') || '');
+                        setEditProfileBirthday(profileData?.birthday ? profileData.birthday.slice(0, 10) : '');
+                        setEditingProfile(true);
+                        return;
+                      }
                       const link = buildTgDeepLink(`profile_${profileData.username}`);
                       if (!link) return;
                       const shareText = `${profileData.displayName || profileData.username}\n${t('share_profile_cta', locale)}`;
@@ -8333,52 +8323,29 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       (window as any).Telegram?.WebApp?.openTelegramLink?.(tgShareUrl);
                     }}
                     style={{
-                      width: '100%', padding: '10px 0', borderRadius: 12, border: 'none',
-                      background: 'transparent', color: C.accent, fontSize: 13, fontWeight: 600,
-                      cursor: 'pointer', fontFamily: font, marginTop: 6,
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '12px 0', borderRadius: 14, fontSize: 14, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: font, border: 'none',
+                      background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+                      color: '#fff', boxShadow: `0 4px 16px ${C.accent}4D`,
                     }}
                   >
-                    {t('share_profile_telegram', locale)}
+                    📤 {t('share_profile_btn_full', locale)}
                   </button>
-                )}
-              </div>
-
-              {/* Stats card */}
-              {profileStats && (
-                <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 12 }}>
-                    {t('profile_stats_title', locale)}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div onClick={() => setScreen('my-wishlists')} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: C.accent, fontFamily: font }}>
-                        {profileStats.wishlists}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.textMuted }}>
-                        {t('profile_wishlists_of', locale, { count: profileStats.wishlists, max: profileStats.wishlistsLimit })}
-                      </div>
-                    </div>
-                    <div onClick={() => { setHomeTab('wishes'); void loadAllItems(); setScreen('my-wishlists'); }} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: C.accent, fontFamily: font }}>
-                        {profileStats.totalWishes}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_wishes_total', locale)}</div>
-                    </div>
-                    <div onClick={() => setScreen('my-reservations')} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: C.green, fontFamily: font }}>
-                        {profileStats.reservedByMe}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_reserved_by_me', locale)}</div>
-                    </div>
-                    <div onClick={() => { void loadGlobalArchive(); }} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: C.orange, fontFamily: font }}>
-                        {profileStats.archived}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_archived', locale)}</div>
-                    </div>
-                  </div>
+                  <button
+                    onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '12px 0', borderRadius: 14, fontSize: 14, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: font,
+                      background: 'rgba(255,255,255,0.05)', color: C.textSec,
+                      border: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    ⚙️ {t('settings_title', locale)}
+                  </button>
                 </div>
-              )}
+              </div>
 
               {/* My Plan card — FREE: two semantic blocks; PRO: feature table */}
               {planInfo.code === 'FREE' ? (
