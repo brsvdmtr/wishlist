@@ -7963,87 +7963,103 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     </div>
                   </div>
 
-                  {/* FREE — Promo code block */}
-                  {(() => {
-                    // Show promo block for FREE users or promo-PRO users (not paid PRO)
-                    if (proSource === 'subscription') return null;
-                    return (
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
-                          {t('promo_title', locale)}
-                        </div>
-                        <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.border}` }}>
-                          {promoPro ? (
-                            <>
-                              <div style={{ fontSize: 14, color: C.green, fontWeight: 600, marginBottom: 8 }}>
+                  {/* FREE — Promo code block (always visible, never hidden after success) */}
+                  {proSource !== 'subscription' && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
+                        {t('promo_title', locale)}
+                      </div>
+                      <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.border}` }}>
+                        {/* Active promo status — shown above input, not instead of it */}
+                        {promoPro && (
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+                              background: `${C.green}12`, borderRadius: 12, border: `1px solid ${C.green}25`,
+                            }}>
+                              <span style={{ fontSize: 16 }}>✅</span>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
                                 {t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }) })}
-                              </div>
-                              <button
-                                style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, fontSize: 14, padding: '12px 0' }}
-                                onClick={() => showUpsell('wishlist_limit')}
-                              >
-                                {t('promo_keep_pro', locale)}
-                              </button>
-                            </>
-                          ) : (
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <input
-                                id="promo-input"
-                                type="text"
-                                placeholder={t('promo_placeholder', locale)}
-                                style={{
-                                  flex: 1, padding: '10px 14px', fontSize: 14, fontWeight: 500,
-                                  background: C.surface, color: C.text, border: `1px solid ${C.borderLight}`,
-                                  borderRadius: 12, outline: 'none', fontFamily: font,
-                                }}
-                                autoCapitalize="characters"
-                                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                              />
-                              <button
-                                style={{
-                                  ...btnPrimary, padding: '10px 18px', fontSize: 14, fontWeight: 600,
-                                  borderRadius: 12, whiteSpace: 'nowrap', flexShrink: 0,
-                                }}
-                                onClick={async () => {
-                                  const input = document.getElementById('promo-input') as HTMLInputElement | null;
-                                  if (!input?.value?.trim()) return;
-                                  const code = input.value.trim();
-                                  input.disabled = true;
-                                  try {
-                                    const r = await tgFetch('/tg/promo/apply', {
-                                      method: 'POST',
-                                      body: JSON.stringify({ code }),
-                                    });
-                                    const data = await r.json() as any;
-                                    if (r.ok) {
-                                      if (data.status === 'activated' || data.status === 'already_active') {
-                                        pushToast(data.status === 'already_active' ? t('promo_already_active', locale) : t('promo_success', locale, { date: new Date(data.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US') }), 'success');
-                                        loadWishlists().catch(() => {});
-                                      } else if (data.status === 'accepted_for_paid') {
-                                        pushToast(t('promo_accepted_paid', locale), 'success');
-                                      }
-                                    } else {
-                                      const errKey = data.error === 'already_used' ? 'promo_already_used'
-                                        : data.error === 'invalid_code' ? 'promo_invalid'
-                                        : data.error === 'campaign_exhausted' ? 'promo_campaign_exhausted'
-                                        : 'promo_error';
-                                      pushToast(t(errKey, locale), 'error');
-                                    }
-                                  } catch {
-                                    pushToast(t('promo_error', locale), 'error');
-                                  } finally {
-                                    input.disabled = false;
-                                  }
-                                }}
-                              >
-                                {t('promo_activate', locale)}
-                              </button>
+                              </span>
                             </div>
-                          )}
+                            <button
+                              style={{ ...btnPrimary, width: '100%', marginTop: 8, background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, fontSize: 14, padding: '12px 0' }}
+                              onClick={() => showUpsell('wishlist_limit')}
+                            >
+                              {t('promo_keep_pro', locale)}
+                            </button>
+                          </div>
+                        )}
+                        {/* Input + button — always visible, vertical layout for mobile */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <input
+                            id="promo-input"
+                            type="text"
+                            placeholder={t('promo_placeholder', locale)}
+                            style={{
+                              width: '100%', padding: '12px 14px', fontSize: 14, fontWeight: 500,
+                              background: C.surface, color: C.text, border: `1px solid ${C.borderLight}`,
+                              borderRadius: 12, outline: 'none', fontFamily: font,
+                              boxSizing: 'border-box',
+                            }}
+                            autoCapitalize="characters"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                                // Trigger activate on Enter
+                                document.getElementById('promo-activate-btn')?.click();
+                              }
+                            }}
+                          />
+                          <button
+                            id="promo-activate-btn"
+                            style={{
+                              ...btnPrimary, width: '100%', padding: '12px 0', fontSize: 15, fontWeight: 600,
+                              borderRadius: 12,
+                            }}
+                            onClick={async () => {
+                              const input = document.getElementById('promo-input') as HTMLInputElement | null;
+                              if (!input?.value?.trim()) return;
+                              const code = input.value.trim();
+                              const btn = document.getElementById('promo-activate-btn') as HTMLButtonElement | null;
+                              if (input) input.disabled = true;
+                              if (btn) { btn.disabled = true; btn.textContent = t('promo_activating', locale); }
+                              try {
+                                const r = await tgFetch('/tg/promo/apply', {
+                                  method: 'POST',
+                                  body: JSON.stringify({ code }),
+                                });
+                                const data = await r.json() as any;
+                                if (r.ok) {
+                                  if (data.status === 'activated' || data.status === 'already_active') {
+                                    pushToast(data.status === 'already_active' ? t('promo_already_active', locale) : t('promo_success', locale, { date: new Date(data.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US') }), 'success');
+                                    if (input) input.value = '';
+                                    loadWishlists().catch(() => {});
+                                  } else if (data.status === 'accepted_for_paid') {
+                                    pushToast(t('promo_accepted_paid', locale), 'success');
+                                    if (input) input.value = '';
+                                  }
+                                } else {
+                                  const errKey = data.error === 'already_used' ? 'promo_already_used'
+                                    : data.error === 'invalid_code' ? 'promo_invalid'
+                                    : data.error === 'campaign_exhausted' ? 'promo_campaign_exhausted'
+                                    : 'promo_error';
+                                  pushToast(t(errKey, locale), 'error');
+                                }
+                              } catch {
+                                pushToast(t('promo_error', locale), 'error');
+                              } finally {
+                                if (input) input.disabled = false;
+                                if (btn) { btn.disabled = false; btn.textContent = t('promo_activate', locale); }
+                              }
+                            }}
+                          >
+                            {t('promo_activate', locale)}
+                          </button>
                         </div>
                       </div>
-                    );
-                  })()}
+                    </div>
+                  )}
 
                   {/* FREE — Pro unlock block */}
                   <div style={{ marginBottom: 16 }}>
