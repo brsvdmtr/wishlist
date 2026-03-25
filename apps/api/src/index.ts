@@ -4906,6 +4906,7 @@ tgRouter.patch(
       appBehavior: {
         // "top" is PRO-only — normalize to "bottom" for FREE users
         newWishlistPosition: isPro ? profile.newWishlistPosition : 'bottom',
+        cardDisplayMode: isPro ? (profile.cardDisplayMode ?? 'auto') : 'auto',
       },
       isPro,
       // Owner-only — never exposed in public/share API responses
