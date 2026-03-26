@@ -11409,7 +11409,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <input
               style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 14, padding: '12px 14px' }}
               placeholder={t('item_url_placeholder', locale)}
-              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
               value={itemUrl}
               onChange={(e) => setItemUrl(e.target.value)}
             />
@@ -11497,7 +11496,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   ref={priceInputRef}
                   style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: font, padding: '12px 14px', minWidth: 0, letterSpacing: '-0.02em' }}
                   placeholder="0" type="text" inputMode="numeric"
-                  onFocus={(e) => handleTextareaFocus(e.currentTarget)}
                   value={formatPriceForDisplay(itemPrice)}
                   onChange={(e) => {
                     const cursorPos = e.target.selectionStart ?? e.target.value.length;
