@@ -7384,9 +7384,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   )}
                   <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
                     {isDraftItem ? (
-                      // Draft: Edit in secondary slot (no Received).
-                      // Navigate to 'drafts' (not 'wishlist-detail') so pendingEditItem
-                      // effect fires with currentWl intact for the drafts flow.
+                      // Draft: Edit in secondary slot
                       <button onClick={() => {
                         setPendingEditItem(viewingItem as Item);
                         setViewingItem(null);
@@ -7399,20 +7397,30 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         {t('edit_btn', locale)}
                       </button>
                     ) : (
-                      // Regular: Received
-                      <button onClick={() => {
-                        setShowItemForm(false);
-                        resetItemForm();
-                        handleCompleteItem(viewingItem as Item);
-                        setViewingItem(null);
-                        setScreen('wishlist-detail');
-                      }} style={{
-                        ...btnBase, flex: 1, background: C.surface, color: C.green,
-                        border: `1px solid ${C.borderLight}`, borderRadius: 14,
-                        padding: '12px 16px', fontSize: 14, fontWeight: 500,
-                      }}>
-                        {t('received_btn', locale)}
-                      </button>
+                      <>
+                        {/* Regular: Move to another wishlist */}
+                        <button onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{
+                          ...btnBase, flex: 1, background: C.surface, color: C.accent,
+                          border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                          padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                        }}>
+                          {t('item_move_short', locale)}
+                        </button>
+                        {/* Regular: Received */}
+                        <button onClick={() => {
+                          setShowItemForm(false);
+                          resetItemForm();
+                          handleCompleteItem(viewingItem as Item);
+                          setViewingItem(null);
+                          setScreen('wishlist-detail');
+                        }} style={{
+                          ...btnBase, flex: 1, background: C.surface, color: C.green,
+                          border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                          padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                        }}>
+                          {t('received_btn', locale)}
+                        </button>
+                      </>
                     )}
                     <button onClick={() => {
                       const item = viewingItem as Item;
@@ -10037,7 +10045,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ── Move item to wishlist picker — triggered from Drafts screen or item-detail ── */}
       <BottomSheet isOpen={showMovePicker} onClose={() => { setShowMovePicker(false); setMovingItem(null); }} title={t('drafts_move_title', locale)}>
         {(() => {
-          const moveTargets = wishlists.filter(wl => wl.id !== draftsWishlistId);
+          // Exclude: drafts wishlist + current item's wishlist (can't move to same place)
+          const currentItemWishlistId = movingItem?.wishlistId;
+          const moveTargets = wishlists.filter(wl =>
+            wl.id !== draftsWishlistId && wl.id !== currentItemWishlistId
+          );
           const calledFromItemDetail = screen === 'item-detail';
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
