@@ -5,10 +5,10 @@
 | Property | Value |
 |----------|-------|
 | Product | WishBoard - Telegram Wishlist Mini App |
-| Domain | wish.board-hub.com `NEEDS_VERIFICATION` |
+| Domain | wishlistik.ru |
 | Repository | https://github.com/brsvdmtr/wishlist.git |
 | Branch | main |
-| Server | Timeweb VPS, SSH: `root@wish.board-hub.com` `NEEDS_VERIFICATION` |
+| Server | Timeweb VPS, SSH: `root@wishlistik.ru` |
 | SSH Key | `~/.ssh/timeweb_wishlist` |
 | Stack | Node 20, TypeScript, Express, Next.js 14, React 18, Telegraf, PostgreSQL 16, Prisma 5.18, Docker |
 | Package Manager | pnpm 10.15.0 |
@@ -60,7 +60,7 @@ WishBoard lets Telegram users create wishlists and share them with friends. Frie
 - `VERIFIED_FROM_CODE` — Confirmed by reading source code
 - `VERIFIED_FROM_CONFIG` — Confirmed from config files
 - `INFERRED_FROM_USAGE` — Deduced from usage patterns
-- `NEEDS_VERIFICATION` — Requires manual check on server
+- — Requires manual check on server
 
 ### Implementation Status (March 2026)
 

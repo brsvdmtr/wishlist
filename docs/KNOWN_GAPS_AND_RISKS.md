@@ -194,7 +194,7 @@
 | .env file | `/opt/wishlist/.env` | `scp` to local machine |
 | Database dump | PostgreSQL container | `pg_dump` to file |
 | Upload files | Docker volume `wishlist_uploads` | `docker cp` to host |
-| Nginx config | `/etc/nginx/sites-enabled/wishlistik.ru` (may change to wish.board-hub.com `NEEDS_VERIFICATION`) | Already in docs |
+| Nginx config | `/etc/nginx/sites-enabled/wishlistik.ru` (may change to wishlistik.ru) | Already in docs |
 | SSH key | `~/.ssh/timeweb_wishlist` | Should already be local |
 | Bot Token | In .env and @BotFather | Save to password manager |
 | Admin Key | In .env | Save to password manager |
@@ -251,4 +251,4 @@ This documentation uses the following markers to indicate data source reliabilit
 | `VERIFIED_FROM_CODE` | Confirmed by reading source code directly |
 | `VERIFIED_FROM_CONFIG` | Confirmed from config files (docker-compose, Dockerfiles, package.json) |
 | `INFERRED_FROM_USAGE` | Deduced from how the system is used, not directly confirmed |
-| `NEEDS_VERIFICATION` | Requires manual check on production server or external service |
+| | Requires manual check on production server or external service |

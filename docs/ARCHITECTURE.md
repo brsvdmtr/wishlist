@@ -1,7 +1,7 @@
 # Architecture
 
 **Date:** 2026-03-26
-**Project:** Wishlist Telegram Mini App (wish.board-hub.com) `NEEDS_VERIFICATION`
+**Project:** Wishlist Telegram Mini App (wishlistik.ru)
 
 ---
 
@@ -62,7 +62,7 @@ Internet
     │
     ▼ HTTPS :443
 ┌──────────────────────────────────────┐
-│  Nginx (wish.board-hub.com)          │
+│  Nginx (wishlistik.ru)          │
 │                                      │
 │  location /api/  → api:3001          │
 │  location /      → web:3000          │

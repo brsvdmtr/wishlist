@@ -35,7 +35,7 @@
 ### Menu Button
 - Type: `web_app`
 - Text: "Вишлист"
-- URL: `MINI_APP_URL` (e.g., https://wish.board-hub.com/miniapp) `NEEDS_VERIFICATION`
+- URL: `MINI_APP_URL` (e.g., https://wishlistik.ru/miniapp)
 - Set globally via `setChatMenuButton()`
 
 ---

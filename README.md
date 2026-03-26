@@ -4,7 +4,7 @@
 
 Telegram Mini App для управления вишлистами. Пользователи создают вишлисты и делятся ими; друзья бронируют подарки без спойлеров (режим сюрприза). Монетизация — Telegram Stars (PRO, 100 Stars/месяц).
 
-**Продакшн:** https://wish.board-hub.com/miniapp
+**Продакшн:** https://wishlistik.ru/miniapp
 **Бот:** @WishHub_bot
 **Документация:** [docs/INDEX.md](./docs/INDEX.md)
 
