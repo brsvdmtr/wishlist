@@ -1,0 +1,2 @@
+-- Add ARCHIVED to ItemStatus enum
+ALTER TYPE "ItemStatus" ADD VALUE IF NOT EXISTS 'ARCHIVED';

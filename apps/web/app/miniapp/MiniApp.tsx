@@ -2251,6 +2251,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [reorderDragIdx, setReorderDragIdx] = useState<number | null>(null);
   const [reorderDragOverIdx, setReorderDragOverIdx] = useState<number | null>(null);
 
+  // Bulk selection state
+  const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [showBulkTargetPicker, setShowBulkTargetPicker] = useState<'move' | 'copy' | null>(null);
+  const bulkLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Item reorder state
   const [itemReorderMode, setItemReorderMode] = useState(false);
   const [itemReorderList, setItemReorderList] = useState<Item[]>([]);
@@ -3771,6 +3778,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(async () => {
     // Cancel active reorder modes before navigating away
+    if (bulkSelectionMode) { setBulkSelectionMode(false); setBulkSelectedIds(new Set()); return; }
     if (itemReorderMode) { cancelItemReorderMode(); return; }
     if (reorderMode) { cancelReorderMode(); return; }
     if (screen === 'item-detail') {
@@ -7093,24 +7101,86 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </>
             )}
 
-            {/* ── Normal mode items ── */}
+            {/* ── Bulk selection header bar ── */}
+            {bulkSelectionMode && (
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 0', marginBottom: 8,
+              }}>
+                <button onClick={() => { setBulkSelectionMode(false); setBulkSelectedIds(new Set()); }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
+                  {t('bulk_cancel', locale)}
+                </button>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                  {t('bulk_selected', locale, { count: bulkSelectedIds.size })}
+                </span>
+                <button onClick={() => {
+                  if (bulkSelectedIds.size === items.length) setBulkSelectedIds(new Set());
+                  else setBulkSelectedIds(new Set(items.map(i => i.id)));
+                }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
+                  {bulkSelectedIds.size === items.length ? t('bulk_cancel', locale) : t('bulk_select_all', locale)}
+                </button>
+              </div>
+            )}
+
+            {/* ── Normal mode items (with selection overlay) ── */}
             {!itemReorderMode && items.map((item, i) => {
+              const isSelected = bulkSelectedIds.has(item.id);
+              const onItemTap = bulkSelectionMode
+                ? () => {
+                    setBulkSelectedIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(item.id)) next.delete(item.id);
+                      else next.add(item.id);
+                      return next;
+                    });
+                  }
+                : (it: Item) => { setViewingItem(it); setScreen('item-detail'); };
+
+              const selectionWrapper = (child: React.ReactNode) => (
+                <div
+                  key={item.id}
+                  style={{ position: 'relative' }}
+                  onTouchStart={() => {
+                    if (!bulkSelectionMode) {
+                      bulkLongPressTimer.current = setTimeout(() => {
+                        setBulkSelectionMode(true);
+                        setBulkSelectedIds(new Set([item.id]));
+                      }, 500);
+                    }
+                  }}
+                  onTouchEnd={() => { if (bulkLongPressTimer.current) { clearTimeout(bulkLongPressTimer.current); bulkLongPressTimer.current = null; } }}
+                  onTouchMove={() => { if (bulkLongPressTimer.current) { clearTimeout(bulkLongPressTimer.current); bulkLongPressTimer.current = null; } }}
+                >
+                  {bulkSelectionMode && (
+                    <div style={{
+                      position: 'absolute', top: 8, left: 8, zIndex: 2,
+                      width: 24, height: 24, borderRadius: 12,
+                      background: isSelected ? C.accent : 'transparent',
+                      border: `2px solid ${isSelected ? C.accent : C.textMuted}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {isSelected && <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>✓</span>}
+                    </div>
+                  )}
+                  {child}
+                </div>
+              );
+
               const useNewCards = CARD_REDESIGN_ENABLED;
               if (useNewCards) {
                 const cardMode = resolveCardMode(items.length, cardDisplayMode, planInfo.code === 'PRO');
                 const stagger = cardMode === 'compact' ? 0.04 : 0.08;
                 const gap = cardMode === 'compact' ? 8 : 14;
                 const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
-                return (
-                  <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap }}>
-                    <Card item={item} onTap={(it: Item) => { setViewingItem(it); setScreen('item-detail'); }} locale={locale} />
+                return selectionWrapper(
+                  <div style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap }}>
+                    <Card item={item} onTap={() => onItemTap(item)} locale={locale} />
                   </div>
                 );
               }
-              // Original card
-              return (
-                <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                  <WishCardOwner item={item} onTap={(it) => { setViewingItem(it); setScreen('item-detail'); }} onDelete={setDeletingItem} onComplete={handleCompleteItem} locale={locale} />
+              return selectionWrapper(
+                <div style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
+                  <WishCardOwner item={item} onTap={() => onItemTap(item)} onDelete={setDeletingItem} onComplete={handleCompleteItem} locale={locale} />
                 </div>
               );
             })}
@@ -10042,6 +10112,120 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         </div>
       )}
 
+      {/* ── Bulk action bottom bar ── */}
+      {bulkSelectionMode && bulkSelectedIds.size > 0 && screen === 'wishlist-detail' && (
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 60,
+          background: C.surface, borderTop: `1px solid ${C.border}`,
+          padding: '12px 16px', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+            <button
+              disabled={bulkActionLoading}
+              onClick={async () => {
+                const ids = [...bulkSelectedIds];
+                const hasReserved = items.filter(i => ids.includes(i.id) && i.status === 'reserved').length > 0;
+                if (hasReserved && !confirm(t('bulk_confirm_delete_reserved', locale))) return;
+                setBulkActionLoading(true);
+                try {
+                  const r = await tgFetch('/tg/items/bulk-delete', { method: 'POST', body: JSON.stringify({ itemIds: ids }) });
+                  const data = await r.json() as any;
+                  pushToast(t('bulk_success_delete', locale, { count: data.deleted ?? ids.length }), 'success');
+                  setItems(prev => prev.filter(i => !ids.includes(i.id)));
+                } catch { pushToast(t('toast_save_error', locale), 'error'); }
+                setBulkSelectionMode(false); setBulkSelectedIds(new Set()); setBulkActionLoading(false);
+              }}
+              style={{ ...btnBase, background: C.redSoft, color: C.red, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+            >
+              {t('bulk_delete', locale)}
+            </button>
+            <button
+              disabled={bulkActionLoading}
+              onClick={async () => {
+                const ids = [...bulkSelectedIds];
+                setBulkActionLoading(true);
+                try {
+                  const r = await tgFetch('/tg/items/bulk-archive', { method: 'POST', body: JSON.stringify({ itemIds: ids }) });
+                  const data = await r.json() as any;
+                  if (data.failureCount > 0) pushToast(t('bulk_partial', locale, { success: data.successCount, total: ids.length }), 'info');
+                  else pushToast(t('bulk_success_archive', locale, { count: data.successCount }), 'success');
+                  setItems(prev => prev.filter(i => !ids.includes(i.id) || data.results?.find((r: any) => r.itemId === i.id && !r.ok)));
+                } catch { pushToast(t('toast_save_error', locale), 'error'); }
+                setBulkSelectionMode(false); setBulkSelectedIds(new Set()); setBulkActionLoading(false);
+              }}
+              style={{ ...btnBase, background: C.orangeSoft, color: C.orange, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+            >
+              {t('bulk_archive', locale)}
+            </button>
+            <button
+              disabled={bulkActionLoading}
+              onClick={() => setShowBulkTargetPicker('move')}
+              style={{ ...btnBase, background: C.accentSoft, color: C.accent, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+            >
+              {t('bulk_move', locale)}
+            </button>
+            <button
+              disabled={bulkActionLoading}
+              onClick={() => setShowBulkTargetPicker('copy')}
+              style={{ ...btnBase, background: C.greenSoft, color: C.green, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+            >
+              {t('bulk_copy', locale)}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bulk move/copy target picker ── */}
+      <BottomSheet isOpen={showBulkTargetPicker !== null} onClose={() => setShowBulkTargetPicker(null)} title={showBulkTargetPicker === 'move' ? t('bulk_move', locale) : t('bulk_copy', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {wishlists.filter(wl => wl.id !== currentWl?.id && wl.id !== draftsWishlistId).map(wl => (
+            <button
+              key={wl.id}
+              disabled={bulkActionLoading}
+              onClick={async () => {
+                const ids = [...bulkSelectedIds];
+                const action = showBulkTargetPicker;
+                setBulkActionLoading(true);
+                try {
+                  const endpoint = action === 'move' ? '/tg/items/bulk-move' : '/tg/items/bulk-copy';
+                  const r = await tgFetch(endpoint, { method: 'POST', body: JSON.stringify({ itemIds: ids, targetWishlistId: wl.id }) });
+                  const data = await r.json() as any;
+                  const successCount = action === 'move' ? (data.moved?.length ?? data.successCount ?? 0) : (data.successCount ?? 0);
+                  const total = ids.length;
+                  if (successCount < total) {
+                    pushToast(t('bulk_partial', locale, { success: successCount, total }), 'info');
+                  } else {
+                    pushToast(t(action === 'move' ? 'bulk_success_move' : 'bulk_success_copy', locale, { count: successCount }), 'success');
+                  }
+                  if (action === 'move') {
+                    const movedIds = data.moved ?? data.results?.filter((r: any) => r.ok).map((r: any) => r.itemId) ?? [];
+                    setItems(prev => prev.filter(i => !movedIds.includes(i.id)));
+                  }
+                } catch { pushToast(t('toast_save_error', locale), 'error'); }
+                setShowBulkTargetPicker(null);
+                setBulkSelectionMode(false); setBulkSelectedIds(new Set()); setBulkActionLoading(false);
+              }}
+              style={{
+                ...btnGhost, width: '100%', textAlign: 'start', padding: '14px 16px',
+                borderRadius: 12, background: C.surface, border: `1px solid ${C.border}`,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>{t('wishes_count', locale, { count: wl.itemCount })}</div>
+              </div>
+              <span style={{ color: C.textMuted }}>›</span>
+            </button>
+          ))}
+          {wishlists.filter(wl => wl.id !== currentWl?.id && wl.id !== draftsWishlistId).length === 0 && (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: C.textMuted, fontSize: 14 }}>
+              {t('drafts_create_first', locale)}
+            </div>
+          )}
+        </div>
+      </BottomSheet>
+
       {/* ── Move item to wishlist picker — triggered from Drafts screen or item-detail ── */}
       <BottomSheet isOpen={showMovePicker} onClose={() => { setShowMovePicker(false); setMovingItem(null); }} title={t('drafts_move_title', locale)}>
         {(() => {
@@ -10417,6 +10601,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <span style={{ fontSize: 20 }}>↕️</span>
             <span>{t('wl_reorder', locale)}</span>
           </button>
+          {/* Select multiple (bulk actions) */}
+          {items.length > 0 && (
+            <button
+              onClick={() => {
+                setShowWlManage(false);
+                setBulkSelectionMode(true);
+                setBulkSelectedIds(new Set());
+              }}
+              style={{
+                background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+                textAlign: 'start', cursor: 'pointer', fontFamily: font,
+                fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              }}
+            >
+              <span style={{ fontSize: 20 }}>☑️</span>
+              {t('bulk_select', locale)}
+            </button>
+          )}
           {/* Privacy settings */}
           <button
             onClick={() => {

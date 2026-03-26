@@ -182,8 +182,9 @@ const publicActionLimiter = rateLimit({
 });
 
 // --- Shared helpers
-const ItemStatusSchema = z.enum(['AVAILABLE', 'RESERVED', 'PURCHASED', 'COMPLETED', 'DELETED']);
+const ItemStatusSchema = z.enum(['AVAILABLE', 'RESERVED', 'PURCHASED', 'COMPLETED', 'DELETED', 'ARCHIVED']);
 const ACTIVE_STATUSES = ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const;
+const ARCHIVE_VIEW_STATUSES = ['DELETED', 'COMPLETED', 'ARCHIVED'] as const;
 const PrioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH']);
 
 // Sort logic lives in sort.ts (no external deps → easy to unit-test)
@@ -3128,7 +3129,7 @@ tgRouter.post(
         failed.push({ itemId: req_id, reason: 'not_found_or_forbidden' });
         continue;
       }
-      if (item.status !== 'DELETED' && item.status !== 'COMPLETED') {
+      if (item.status !== 'DELETED' && item.status !== 'COMPLETED' && item.status !== 'ARCHIVED') {
         failed.push({ itemId: req_id, reason: 'not_archived' });
         continue;
       }
@@ -3148,6 +3149,149 @@ tgRouter.post(
     }
 
     return res.json({ ok: true, restored, failed });
+  }),
+);
+
+// POST /tg/items/bulk-archive — archive items (separate from delete/complete)
+tgRouter.post(
+  '/items/bulk-archive',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      itemIds: z.array(z.string().min(1)).min(1).max(100),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const { itemIds } = parsed.data;
+
+    const items = await prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, status: true, wishlist: { select: { ownerId: true } } },
+    });
+
+    const results: Array<{ itemId: string; ok: boolean; code?: string }> = [];
+    const toArchive: string[] = [];
+
+    for (const reqId of itemIds) {
+      const item = items.find(i => i.id === reqId);
+      if (!item || item.wishlist.ownerId !== user.id) {
+        results.push({ itemId: reqId, ok: false, code: 'FORBIDDEN' });
+        continue;
+      }
+      if (item.status === 'RESERVED') {
+        results.push({ itemId: reqId, ok: false, code: 'ITEM_RESERVED' });
+        continue;
+      }
+      if (item.status !== 'AVAILABLE') {
+        results.push({ itemId: reqId, ok: false, code: 'INVALID_STATUS' });
+        continue;
+      }
+      toArchive.push(reqId);
+    }
+
+    if (toArchive.length > 0) {
+      await prisma.item.updateMany({
+        where: { id: { in: toArchive } },
+        data: { status: 'ARCHIVED', archivedAt: new Date() },
+        // No purgeAfter — archived items are recoverable indefinitely
+      });
+    }
+
+    for (const id of toArchive) results.push({ itemId: id, ok: true });
+    const successCount = toArchive.length;
+    const failureCount = results.filter(r => !r.ok).length;
+
+    return res.json({ successCount, failureCount, results });
+  }),
+);
+
+// POST /tg/items/bulk-copy — copy items to another wishlist (new records, clean state)
+tgRouter.post(
+  '/items/bulk-copy',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      itemIds: z.array(z.string().min(1)).min(1).max(100),
+      targetWishlistId: z.string().min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+    const { itemIds, targetWishlistId } = parsed.data;
+
+    // Validate target
+    const targetWl = await prisma.wishlist.findUnique({
+      where: { id: targetWishlistId },
+      select: { id: true, ownerId: true, type: true, archivedAt: true },
+    });
+    if (!targetWl || targetWl.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (targetWl.type === 'SYSTEM_DRAFTS') return res.status(400).json({ error: 'Cannot copy to system wishlist' });
+    if (targetWl.archivedAt) return res.status(400).json({ error: 'Cannot copy to archived wishlist' });
+
+    // Load source items (owned only)
+    const items = await prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: {
+        id: true, title: true, description: true, url: true, priceText: true,
+        currency: true, priority: true, imageUrl: true, sourceUrl: true,
+        sourceDomain: true, importMethod: true, status: true,
+        wishlist: { select: { ownerId: true, id: true } },
+      },
+    });
+
+    const results: Array<{ itemId: string; ok: boolean; code?: string; newItemId?: string }> = [];
+
+    // Capacity check
+    const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[targetWishlistId] ?? 0);
+    const currentTargetCount = await prisma.item.count({
+      where: { wishlistId: targetWishlistId, status: { in: [...ACTIVE_STATUSES] } },
+    });
+    let available = Math.max(0, effectiveItemLimit - currentTargetCount);
+
+    for (const reqId of itemIds) {
+      const item = items.find(i => i.id === reqId);
+      if (!item || item.wishlist.ownerId !== user.id) {
+        results.push({ itemId: reqId, ok: false, code: 'FORBIDDEN' });
+        continue;
+      }
+      if (item.status === 'RESERVED') {
+        results.push({ itemId: reqId, ok: false, code: 'ITEM_RESERVED' });
+        continue;
+      }
+      if (item.wishlist.id === targetWishlistId) {
+        results.push({ itemId: reqId, ok: false, code: 'SAME_WISHLIST' });
+        continue;
+      }
+      if (available <= 0) {
+        results.push({ itemId: reqId, ok: false, code: 'TARGET_LIMIT_REACHED' });
+        continue;
+      }
+      // Create clean copy
+      const copy = await prisma.item.create({
+        data: {
+          wishlistId: targetWishlistId,
+          title: item.title,
+          description: item.description,
+          url: item.url,
+          priceText: item.priceText,
+          currency: item.currency,
+          priority: item.priority,
+          imageUrl: item.imageUrl,
+          sourceUrl: item.sourceUrl,
+          sourceDomain: item.sourceDomain,
+          importMethod: item.importMethod,
+          status: 'AVAILABLE',
+        },
+        select: { id: true },
+      });
+      available--;
+      results.push({ itemId: reqId, ok: true, newItemId: copy.id });
+    }
+
+    const successCount = results.filter(r => r.ok).length;
+    const failureCount = results.filter(r => !r.ok).length;
+
+    return res.json({ successCount, failureCount, results });
   }),
 );
 
@@ -3180,7 +3324,7 @@ tgRouter.post(
       .filter(
         (i) =>
           i.wishlist.ownerId === user.id &&
-          (i.status === 'DELETED' || i.status === 'COMPLETED'),
+          (i.status === 'DELETED' || i.status === 'COMPLETED' || i.status === 'ARCHIVED'),
       )
       .map((i) => i.id);
 

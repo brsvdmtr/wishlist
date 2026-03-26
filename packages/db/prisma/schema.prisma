@@ -19,6 +19,7 @@ enum ItemStatus {
   PURCHASED
   COMPLETED
   DELETED
+  ARCHIVED
 }
 
 enum ReservationType {
