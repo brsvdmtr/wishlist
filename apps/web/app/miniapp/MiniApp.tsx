@@ -90,8 +90,8 @@ const PRIO_GLOW: Record<number, string> = {
 const CARD_REDESIGN_ENABLED = true;
 // Profile redesign canary — test before full rollout
 const PROFILE_REDESIGN_IDS = new Set(['8747175307']);
-// Item detail redesign canary — test before full rollout
-const ITEM_DETAIL_REDESIGN_IDS = new Set(['8747175307']);
+// Item detail redesign — rolled out to all users
+const ITEM_DETAIL_REDESIGN_ALL = true;
 
 const getPriorities = (locale: Locale) => [
   { value: 1, emoji: PRIO_EMOJI[1], label: t('priority_low', locale),    sub: t('priority_low_sub', locale) },
@@ -7248,7 +7248,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ══════════════════════════════════════════════
           OWNER — ITEM DETAIL (REDESIGN — canary)
           ══════════════════════════════════════════════ */}
-      {screen === 'item-detail' && viewingItem && ITEM_DETAIL_REDESIGN_IDS.has(String(tgUser?.id ?? '')) && (() => {
+      {screen === 'item-detail' && viewingItem && ITEM_DETAIL_REDESIGN_ALL && (() => {
         const displayTitle = normalizeTitle(viewingItem.title);
         const isDraftItem = fromDrafts || draftsItems.some(d => d.id === (viewingItem as Item).id);
         const copyTitleV2 = async () => {
@@ -7458,7 +7458,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ══════════════════════════════════════════════
           OWNER — ITEM DETAIL (view + actions) — ORIGINAL
           ══════════════════════════════════════════════ */}
-      {screen === 'item-detail' && viewingItem && !ITEM_DETAIL_REDESIGN_IDS.has(String(tgUser?.id ?? '')) && (() => {
+      {screen === 'item-detail' && viewingItem && !ITEM_DETAIL_REDESIGN_ALL && (() => {
         const displayTitle = normalizeTitle(viewingItem.title);
         const copyTitle = async () => {
           if (!displayTitle) return;
