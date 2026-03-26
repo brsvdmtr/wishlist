@@ -1,7 +1,7 @@
 # Architecture
 
-**Date:** 2026-03-17
-**Project:** Wishlist Telegram Mini App (wishlistik.ru)
+**Date:** 2026-03-26
+**Project:** Wishlist Telegram Mini App (wish.board-hub.com) `NEEDS_VERIFICATION`
 
 ---
 
@@ -62,7 +62,7 @@ Internet
     │
     ▼ HTTPS :443
 ┌──────────────────────────────────────┐
-│  Nginx (wishlistik.ru)               │
+│  Nginx (wish.board-hub.com)          │
 │                                      │
 │  location /api/  → api:3001          │
 │  location /      → web:3000          │
@@ -94,7 +94,7 @@ Uploaded files are stored in a named Docker volume `wishlist_uploads`, mounted a
 | `bot` | `apps/bot/src/index.ts` | Telegraf bot. Commands, payment handlers, URL import relay, hints delivery, support ticket bridge, heartbeat. |
 | `web` | `apps/web/` | Next.js 14 app. Single-page Mini App (`MiniApp.tsx`), server-side admin routes (Basic Auth middleware). |
 | `db` | `packages/db/` | Prisma schema for PostgreSQL 16. Shared client exported as `@wishlist/db`. Both `api` and `bot` import this package directly. |
-| `shared` | `packages/shared/` | i18n strings (Russian and English), `t()` translation function, `detectLocale()`, TypeScript types shared across packages. |
+| `shared` | `packages/shared/` | i18n strings (6 locales: RU, EN, UK, KK, DE, FR), `t()` translation function, `detectLocale()`, TypeScript types shared across packages. |
 
 ---
 
@@ -227,10 +227,10 @@ The bot maintains a ForceReply-based support flow. When a user starts a support 
 
 ## 10. Key Design Decisions
 
-**Single-file API (`index.ts`, ~4 000 lines)**
+**Single-file API (`index.ts`, ~9 000+ lines)**
 All route handlers, middleware, helpers, and background jobs live in one file. This avoids module boundary complexity at this project scale and keeps cross-cutting concerns (e.g., `sendTgNotification`, `getUserEntitlement`, `processImage`) directly accessible from any handler without import chains.
 
-**Single-file frontend (`MiniApp.tsx`, ~6 500 lines)**
+**Single-file frontend (`MiniApp.tsx`, ~10 000+ lines)**
 The Mini App is a single React component tree with screen state managed as a `screen` discriminated union. This avoids client-side routing inside the Telegram WebApp frame, where standard Next.js navigation would trigger full page reloads and lose Telegram WebApp state.
 
 **Prisma used by both `api` and `bot`**

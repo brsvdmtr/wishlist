@@ -1,6 +1,6 @@
 # Backend Map
 
-**Date:** 2026-03-17
+**Date:** 2026-03-26
 **Project:** Wishlist Telegram Mini App — `apps/api`
 
 ---
@@ -10,7 +10,7 @@
 ```
 apps/api/
 ├── src/
-│   ├── index.ts                    # Express server, all routes, helpers, background jobs (~4 100 lines)
+│   ├── index.ts                    # Express server, all routes, helpers, background jobs (~9 000+ lines)
 │   ├── url-parser.ts               # URL product card extraction pipeline
 │   ├── browser-network-extractor.ts # Puppeteer XHR/fetch interception for SPAs
 │   ├── sort.ts                     # Item sort order logic (unit-testable, no side effects)
@@ -297,7 +297,7 @@ const PLANS = {
   FREE: {
     code: 'FREE',
     wishlists: 2,
-    items: 30,
+    items: 20,
     participants: 5,
     subscriptions: 2,
     features: [],
@@ -305,9 +305,9 @@ const PLANS = {
   PRO: {
     code: 'PRO',
     wishlists: 10,
-    items: 100,
+    items: 70,
     participants: 20,
-    subscriptions: 7,
+    subscriptions: 5,
     features: ['comments', 'url_import', 'hints'],
   },
 }
@@ -568,3 +568,14 @@ Error responses:
 - `400` — invalid URL (with message from validator)
 - `402` — PRO feature not available, or Drafts limit reached
 - Other errors propagate as 500.
+
+---
+
+## 12. New Endpoints (added since March 17)
+
+Additional route groups have been added for:
+- **Promo system**: `POST /tg/promo/redeem` — redeem a promo code (e.g. WISHPRO), `GET /tg/promo/check` — check promo eligibility
+- **Public profiles**: `GET /public/profiles/:username` expanded with profile sharing flow
+- **Lifecycle**: Internal endpoints for winback and engagement messaging
+- **Onboarding v2**: `POST /tg/onboarding/complete` — mark onboarding as completed, `GET /tg/onboarding/status`
+- **Card display modes**: Settings endpoints for configuring card appearance

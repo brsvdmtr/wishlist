@@ -1,5 +1,5 @@
 > Source of truth for the URL-based wish import system (PRO feature).
-> Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
+> Last updated: 2026-03-26 · Branch: main
 
 # Link Import (URL-based Wish Import)
 

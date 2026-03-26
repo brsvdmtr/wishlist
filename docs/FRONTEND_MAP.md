@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-03-17. Verified from source code.
+> Date: 2026-03-26. Verified from source code.
 
 ---
 
@@ -18,7 +18,7 @@ apps/web/
     miniapp/
       layout.tsx                 - Mini App layout (viewport meta, Telegram script)
       page.tsx                   - Mini App page entry (renders <MiniApp />)
-      MiniApp.tsx                - THE ENTIRE MINI APP (~6475 lines, single component)
+      MiniApp.tsx                - THE ENTIRE MINI APP (~10000+ lines, single component)
       TelegramWebApp.tsx         - Telegram WebApp type declarations / helper
     admin/
       page.tsx                   - Admin: wishlist list
@@ -79,6 +79,18 @@ Navigation is done by calling `setScreen(...)` together with supporting state (`
 | 12 | `settings` | Plan card (FREE: upgrade block; PRO: subscription info + cancel/resume). Notifications. Privacy (profileVisibility, subscribePolicy, commentsEnabled, hintsEnabled). App behavior (currency, wishlist position). Subscriptions (wishlists user follows with unread counts) |
 | 13 | `my-reservations` | Items reserved by current user across all wishlists. Unread comment count badge per item |
 | 14 | `profile` | User profile: avatar, displayName, username, bio, birthday. Stats (wishlists count, total wishes, reservations, archived). Plan card. Edit profile |
+
+### Screens added since March 17
+
+The screen count has grown from 14 to 35+. New screen types include:
+
+- **Onboarding v2 screens** — multi-step welcome flow (welcome, import, share, reserve, complete)
+- **Promo redemption screen** — enter promo code, see result
+- **Public profile screen** — view another user's public profile via `profile_` deep link
+- **Profile sharing screen** — share own profile link
+- **Card display mode settings** — configure wishlist card appearance
+- **Lifecycle messaging screens** — winback and engagement prompts
+- **God mode dashboard** — A/B onboarding metrics, feature toggles
 
 ---
 
@@ -180,7 +192,7 @@ Returns an array of 8 PRO feature items (icon + title + subtitle from i18n):
 | # | Icon | Feature |
 |---|------|---------|
 | 1 | 📋 | More wishlists (10 vs 2) |
-| 2 | 🎁 | More items per wishlist (100 vs 30) |
+| 2 | 🎁 | More items per wishlist (70 vs 20) |
 | 3 | 👥 | More participants (20 vs 5) |
 | 4 | 💬 | Comments between owner and reserver |
 | 5 | 🔗 | URL import / auto-fill from product pages |
@@ -257,7 +269,7 @@ Computed client-side. Higher score = shown first:
 
 ### Subscribe Button
 
-Guests can follow a wishlist to receive Telegram notifications. Calls `POST /tg/wishlists/:id/subscribe`. Plan-limited: FREE=2 subscriptions, PRO=7 subscriptions. Respects `allowSubscriptions` wishlist setting and owner's `subscribePolicy` profile setting.
+Guests can follow a wishlist to receive Telegram notifications. Calls `POST /tg/wishlists/:id/subscribe`. Plan-limited: FREE=2 subscriptions, PRO=5 subscriptions. Respects `allowSubscriptions` wishlist setting and owner's `subscribePolicy` profile setting.
 
 ---
 

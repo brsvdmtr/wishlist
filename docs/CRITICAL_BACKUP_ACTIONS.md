@@ -119,7 +119,7 @@ git log --oneline -5
 
 # Если есть незакоммиченные изменения (кроме .env):
 # git add -A && git commit -m "backup uncommitted changes"
-# git push origin claude/wizardly-satoshi
+# git push origin main
 ```
 
 ---

@@ -1,7 +1,7 @@
 # Documentation Index — WishBoard
 
 > Start here. All documentation for the WishBoard Telegram Mini App project.
-> Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
+> Last updated: 2026-03-26 · Branch: main
 
 ---
 
@@ -9,7 +9,7 @@
 
 WishBoard is a **Telegram Mini App** for managing wishlists. Users create and share wishlists; friends reserve gifts without spoiling the surprise. Monetized via Telegram Stars (PRO plan, 100 Stars/month).
 
-- **Production URL:** https://wishlistik.ru/miniapp
+- **Production URL:** https://wish.board-hub.com/miniapp `NEEDS_VERIFICATION`
 - **Bot:** [@WishHub_bot](https://t.me/WishHub_bot) (configured via `NEXT_PUBLIC_BOT_USERNAME`)
 - **Stack:** Express API + Telegraf bot + Next.js 14 + PostgreSQL + Docker Compose
 
@@ -37,7 +37,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 | Doc | Status | What it covers |
 |-----|--------|---------------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | primary | Product overview, system diagram, module responsibilities, auth layers, design decisions |
-| [DATA_MODEL.md](./DATA_MODEL.md) | primary | All 20 Prisma models, 14 enums, relationships, key behaviors |
+| [DATA_MODEL.md](./DATA_MODEL.md) | primary | All 25+ Prisma models, 14 enums, relationships, key behaviors |
 | [ACCESS_MATRIX.md](./ACCESS_MATRIX.md) | primary | Auth tiers, role definitions, PRO vs FREE limits, data visibility rules |
 
 ### Backend
@@ -52,7 +52,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 | Doc | Status | What it covers |
 |-----|--------|---------------|
-| [FRONTEND_MAP.md](./FRONTEND_MAP.md) | primary | All 14+ screens, state management, design system, PRO upsell system, patterns |
+| [FRONTEND_MAP.md](./FRONTEND_MAP.md) | primary | All 35+ screens, state management, design system, PRO upsell system, patterns |
 | [FRONTEND_API_MAP.md](./FRONTEND_API_MAP.md) | secondary | Per-screen API call map (38 calls). Detailed companion to FRONTEND_MAP + API_REFERENCE |
 
 ### Telegram Integration
@@ -94,9 +94,9 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 | | FREE | PRO |
 |--|------|-----|
 | Wishlists | 2 | 10 |
-| Items per list | 30 | 100 |
+| Items per list | 20 | 70 |
 | Participants | 5 | 20 |
-| Subscriptions | 2 | 7 |
+| Subscriptions | 2 | 5 |
 | Price | — | 100 Stars/month |
 | Features | — | comments, url_import, hints |
 
@@ -104,22 +104,22 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 | File | Purpose |
 |------|---------|
-| `apps/api/src/index.ts` | Entire Express API (~4100 lines) |
-| `apps/web/app/miniapp/MiniApp.tsx` | Entire Mini App frontend (~6500 lines) |
+| `apps/api/src/index.ts` | Entire Express API (~9000+ lines) |
+| `apps/web/app/miniapp/MiniApp.tsx` | Entire Mini App frontend (~10000+ lines) |
 | `apps/bot/src/index.ts` | Telegram bot (~1000 lines) |
 | `apps/api/src/url-parser.ts` | URL import pipeline (~800 lines) |
 | `packages/db/prisma/schema.prisma` | Database schema |
-| `packages/shared/src/i18n.ts` | All UI strings (RU + EN) |
+| `packages/shared/src/i18n.ts` | All UI strings (6 locales: RU, EN, UK, KK, DE, FR) |
 
 ### Deployment
 
 ```bash
 # SSH to server
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
+ssh -i ~/.ssh/timeweb_wishlist root@wish.board-hub.com  # NEEDS_VERIFICATION
 
-# Deploy (production branch: claude/wizardly-satoshi)
+# Deploy (production branch: main)
 cd /opt/wishlist
-git pull origin claude/wizardly-satoshi
+git pull origin main
 docker compose -f docker-compose.prod.yml up -d --build api web bot
 ```
 
@@ -166,15 +166,22 @@ The table below defines the canonical terms used across all documentation. Where
 - Manual language selection (auto-detected from Telegram locale only)
 - Currency conversion / exchange rates (items support RUB/USD, but no conversion between them)
 - Custom archive/inbox display
-- Onboarding / tips system
 - Full "reserved by me" visibility for other users
 
 These are known planned features, shown as disabled "Coming soon" placeholders in the UI.
+
+### Features added since March 17
+
+- **Onboarding v2** — multi-step onboarding flow with A/B testing
+- **Promo system** — promo code redemption (e.g. WISHPRO) with entitlement grants
+- **Lifecycle messaging** — winback and engagement messages via bot DM
+- **Public profiles** — deep link `profile_` payload for sharing user profiles
+- **Card display modes** — configurable card appearance in wishlists
 
 ---
 
 ## Documentation Status
 
-All docs last synchronized with code on **2026-03-17**.
-Branch: `claude/wizardly-satoshi`
-Production: `wishlistik.ru`
+All docs last synchronized with code on **2026-03-26**.
+Branch: `main`
+Production: `wish.board-hub.com` `NEEDS_VERIFICATION`

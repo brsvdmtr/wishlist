@@ -1,7 +1,7 @@
 # MONETIZATION
 
 > Source of truth for plans, limits, entitlements, billing flow, and paywall content.
-> Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
+> Last updated: 2026-03-26 · Branch: main
 
 ---
 
@@ -20,7 +20,7 @@ const PLANS = {
   FREE: {
     code: 'FREE',
     wishlists: 2,
-    items: 30,
+    items: 20,
     participants: 5,
     subscriptions: 2,
     features: [],
@@ -28,9 +28,9 @@ const PLANS = {
   PRO: {
     code: 'PRO',
     wishlists: 10,
-    items: 100,
+    items: 70,
     participants: 20,
-    subscriptions: 7,
+    subscriptions: 5,
     features: ['comments', 'url_import', 'hints'],
   },
 };
@@ -50,12 +50,12 @@ Text is sourced from `packages/shared/src/i18n.ts` keys `plan_pro_f1`–`plan_pr
 | # | Key | Title (RU) | Subtitle (RU) | Gate |
 |---|-----|-----------|---------------|------|
 | 1 | `plan_pro_f1` | До 10 вишлистов | Разделяй желания по событиям, людям и поводам. | server (count >= plan.wishlists → 402) |
-| 2 | `plan_pro_f2` | До 100 желаний в каждом | Больше места для хотелок без лишних ограничений. | server (count >= plan.items → 402) |
+| 2 | `plan_pro_f2` | До 70 желаний в каждом | Больше места для хотелок без лишних ограничений. | server (count >= plan.items → 402) |
 | 3 | `plan_pro_f3` | До 20 участников | Собирай друзей и близких в одном вишлисте. | server (distinct reservers → 402) |
 | 4 | `plan_pro_f4` | Комментарии к желаниям | Обсуждайте подарок прямо в карточке. | server (`features.includes('comments')` → 402) |
 | 5 | `plan_pro_f5` | Добавление по ссылке | Ozon, Wildberries, Яндекс Маркет, Lamoda, Goldapple и другие. | server (`features.includes('url_import')` → 402) |
 | 6 | `plan_pro_f6` | Намекнуть на подарок | Подскажи друзьям конкретную идею деликатно и быстро. | server (`features.includes('hints')` → 402) |
-| 7 | `plan_pro_f7` | До 7 подписок на вишлисты друзей | Следи за изменениями у друзей и получай обновления. | server (count >= plan.subscriptions → 402) |
+| 7 | `plan_pro_f7` | До 5 подписок на вишлисты друзей | Следи за изменениями у друзей и получай обновления. | server (count >= plan.subscriptions → 402) |
 | 8 | `plan_pro_f8` | Расширенная приватность | Управляй видимостью, подписками и комментариями в своих вишлистах. | server (isPro check → 403) |
 
 ---
@@ -188,7 +188,7 @@ type UpsellContext =
   | 'wishlist_limit'    // triggered on wishlist creation 402
   | 'item_limit'        // triggered on item add 402
   | 'participant_limit' // triggered on reserve 402
-  | 'subscription_limit'// triggered on follow 402 (показывает до 7 подписок)
+  | 'subscription_limit'// triggered on follow 402 (показывает до 5 подписок)
   | 'sort_recommended'; // triggered on recommended sort click (client-only)
 ```
 
@@ -253,3 +253,41 @@ These are server-side enforced but not shown on the main paywall (intentionally)
 | `commentPolicy=SUBSCRIBERS` | server 403 | Covered by benefit #8 |
 | Notification settings (comments/subs) | silent ignore | Advanced feature, not paywall-worthy standalone |
 | New wishlist position `bottom` | silent ignore | Minor UX preference |
+
+---
+
+## 11. Promo System
+
+Promo codes (e.g. `WISHPRO`) allow granting entitlements without a Telegram Stars payment.
+
+### PromoCampaign model
+
+Each promo code is a `PromoCampaign` record with: code, grant type, grant duration, max redemptions, active date range.
+
+### PromoRedemption model
+
+Tracks which users redeemed which promo codes and when.
+
+### EntitlementGrant model
+
+Records promo-granted entitlements (add-ons to base plan).
+
+### Effective Entitlements
+
+`getUserEntitlement()` now resolves entitlements from multiple sources in priority order:
+1. Active `Subscription` (Telegram Stars payment)
+2. `EntitlementGrant` from promo redemption
+3. `godMode` flag (dev/testing)
+4. Otherwise: FREE plan
+
+### Degradation Flow
+
+When a user's PRO access expires (subscription lapses, promo grant expires), a `DegradationState` record tracks the transition. This is used by the lifecycle messaging system to send winback messages.
+
+---
+
+## 12. Lifecycle Messaging
+
+The system sends targeted messages via bot DM based on user lifecycle state:
+- **Winback**: Users who had PRO and lost it receive re-engagement messages
+- **LifecycleTouch** model logs all lifecycle messages to prevent spam
