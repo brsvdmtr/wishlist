@@ -1,13 +1,15 @@
 # INFRA_AND_ENV — Infrastructure, Environment & Deployment
-> Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
+> Last updated: 2026-03-26 · Branch: main
+>
+> **Note:** Domain is transitioning from `wishlistik.ru` to `wish.board-hub.com` `NEEDS_VERIFICATION`. Many code blocks below still reference the old domain. Update commands accordingly once the domain migration is confirmed.
 
 ## Server
 
 | Property | Value |
 |----------|-------|
 | Provider | Timeweb (VPS) |
-| Hostname | wishlistik.ru |
-| SSH | `ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru` |
+| Hostname | wish.board-hub.com `NEEDS_VERIFICATION` |
+| SSH | `ssh -i ~/.ssh/timeweb_wishlist root@wish.board-hub.com` `NEEDS_VERIFICATION` |
 | Project path | `/opt/wishlist` |
 | OS | Debian 12 (bookworm) |
 | Node.js | 20 (via Docker images) |
@@ -18,8 +20,8 @@
 
 | Property | Value |
 |----------|-------|
-| Domain | wishlistik.ru |
-| Alt domain | www.wishlistik.ru (redirected to non-www) |
+| Domain | wish.board-hub.com `NEEDS_VERIFICATION` |
+| Alt domain | www.wish.board-hub.com (redirected to non-www) `NEEDS_VERIFICATION` |
 | SSL | Let's Encrypt |
 | Certificate | `/etc/letsencrypt/live/wishlistik.ru/fullchain.pem` |
 | Private key | `/etc/letsencrypt/live/wishlistik.ru/privkey.pem` |
@@ -134,6 +136,8 @@ server {
 | NEXT_PUBLIC_MINIAPP_SHORT_NAME | web | (empty) | Not used in current code |
 | INTERNAL_API_BASE_URL | web | http://api:3001 | SSR API URL |
 | MAINTENANCE_MODE | api, bot | false | Set to `true` to block all /tg/* and /public/* with 503+MAINTENANCE code |
+| ONBOARDING_V2_ROLLOUT | api | 0 | Percentage (0-100) of new users who see onboarding v2 flow |
+| GOD_MODE_TELEGRAM_IDS | api | (empty) | Comma-separated Telegram user IDs allowed to toggle god mode |
 | ADMIN_ALERT_CHAT_IDS | api, bot | (empty) | Comma-separated Telegram chat IDs for startup/crash alerts |
 | WATCHDOG_BASE_URL | watchdog | (required) | Base URL to check, e.g. `https://wishlistik.ru` |
 | WATCHDOG_STATE_FILE | watchdog | /tmp/watchdog-state.json | State file for deduplicating alerts |
@@ -178,7 +182,7 @@ pnpm dev:web    # Web on port 3000
 ```bash
 # On server:
 cd /opt/wishlist
-git pull origin claude/wizardly-satoshi  # Production runs claude/wizardly-satoshi branch as of 2026-03-17; verify with `git branch` on server
+git pull origin main  # Production runs main branch
 
 # Rebuild and restart specific service:
 docker compose -f docker-compose.prod.yml up -d --build api
@@ -262,7 +266,7 @@ docker compose -f docker-compose.prod.yml exec postgres psql -U wishlist -d wish
 
 **Current state**: NO CI/CD pipeline. Manual deployment via SSH + git pull + docker compose.
 
-**Git branch**: Production runs `claude/wizardly-satoshi` branch as of 2026-03-17; verify with `git branch` on server.
+**Git branch**: Production runs `main` branch.
 
 **GAP**: No automated tests in CI, no automated deployment, no staging environment.
 

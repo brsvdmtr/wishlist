@@ -3,7 +3,7 @@
 > **Status: SECONDARY REFERENCE.** Primary sources: [FRONTEND_MAP.md](./FRONTEND_MAP.md) (screens/state) and [API_REFERENCE.md](./API_REFERENCE.md) (endpoints).
 > This document maps which UI action calls which API endpoint per screen. Useful for call-level debugging.
 > All data `VERIFIED_FROM_CODE` (source: MiniApp.tsx, WishlistClient.tsx, admin-api-client.ts, api-proxy.ts).
-> Last verified: 2026-03-17 · Branch: `claude/wizardly-satoshi`.
+> Last verified: 2026-03-26 · Branch: `main`.
 
 ---
 
@@ -11,12 +11,12 @@
 
 | Источник | Файл | Кол-во API-вызовов |
 |----------|------|-------------------|
-| Mini App (Telegram) | `apps/web/app/miniapp/MiniApp.tsx` | 24 |
+| Mini App (Telegram) | `apps/web/app/miniapp/MiniApp.tsx` | 35+ |
 | Public Wishlist | `apps/web/app/w/[slug]/` | 3 |
 | Admin Panel | `apps/web/app/admin/` + `lib/admin-api-client.ts` | 11 |
 | Middleware | `apps/web/middleware.ts` | 0 (только auth) |
 
-**Итого: ~38 уникальных API-взаимодействий**
+**Итого: ~50+ уникальных API-взаимодействий** (grew from ~38 since March 17 due to promo, onboarding v2, lifecycle, profile sharing endpoints)
 
 ---
 
@@ -62,7 +62,7 @@
 | 11 | `/tg/wishlists/{id}/archive` | GET | Нажатие «Архив» | — | `archiveItems`, `screen` |
 
 **Ошибки:**
-- `402` на POST items — Превышен лимит предметов (FREE: 30, PRO: 100)
+- `402` на POST items — Превышен лимит предметов (FREE: 20, PRO: 70)
 - Фото > 30MB — nginx отклоняет (413)
 
 ---

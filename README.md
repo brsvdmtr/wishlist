@@ -1,8 +1,11 @@
 # WishBoard
 
+> Last updated: 2026-03-26 · Verified from code · Branch: main
+
 Telegram Mini App для управления вишлистами. Пользователи создают вишлисты и делятся ими; друзья бронируют подарки без спойлеров (режим сюрприза). Монетизация — Telegram Stars (PRO, 100 Stars/месяц).
 
-**Продакшн:** https://wishlistik.ru/miniapp
+**Продакшн:** https://wish.board-hub.com/miniapp
+**Бот:** @WishHub_bot
 **Документация:** [docs/INDEX.md](./docs/INDEX.md)
 
 ---
@@ -15,7 +18,7 @@ Telegram Mini App для управления вишлистами. Пользо
 | `apps/web` | Next.js 14 (App Router) · TypeScript · React 18 |
 | `apps/bot` | Node.js 20 · Telegraf 4 |
 | `packages/db` | Prisma 5 · PostgreSQL 16 |
-| `packages/shared` | i18n (RU + EN) · shared types |
+| `packages/shared` | i18n (6 локалей: ru, en, zh-CN, hi, es, ar) · shared types |
 
 ---
 
@@ -80,18 +83,17 @@ pnpm db:generate    # сгенерировать Prisma Client
 
 ## Деплой в продакшн
 
+> **Ветка продакшна: `main`**
+> Разработка ведётся в worktree-ветках, затем коммиты cherry-pick'аются в `main`.
+
 ```bash
-# SSH на сервер
-ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
-
+# На сервере:
 cd /opt/wishlist
-git pull origin claude/wizardly-satoshi
-
-# Пересобрать и перезапустить сервисы
-docker compose -f docker-compose.prod.yml up -d --build api web bot
+git pull origin main
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Миграции применяются автоматически при старте контейнера `api`.
+Миграции применяются автоматически при старте контейнера `api` (`prisma migrate deploy`).
 
 Подробнее: [docs/INFRA_AND_ENV.md](./docs/INFRA_AND_ENV.md)
 
@@ -106,7 +108,7 @@ apps/
   bot/        Telegraf bot — команды, уведомления, биллинг-хуки
 packages/
   db/         Prisma schema + миграции
-  shared/     i18n строки (RU+EN), shared типы
+  shared/     i18n строки (6 локалей), shared типы
 ops/
   watchdog/   Health-check скрипт (Node.js)
   nginx/      Конфиги nginx
@@ -118,16 +120,21 @@ docs/         Документация (INDEX.md — точка входа)
 
 ## Основные возможности
 
-- 🎁 Вишлисты с элементами (фото, цена, ссылка, приоритет)
+- 🎁 Вишлисты с элементами (фото, цена, ссылка, приоритет, адаптивные карточки)
 - 🔗 Импорт по ссылке (Ozon, Wildberries, Яндекс Маркет, Lamoda, Goldapple и др.) — PRO
 - 🤝 Бронирование подарков в режиме сюрприза (гость не видит, кто уже забронировал)
-- 💬 Комментарии к желаниям — PRO
+- 💬 Комментарии к желаниям — PRO (достаточно PRO у одной из сторон)
 - 💡 Намёки на подарки — PRO
-- 👁 Подписки на вишлисты друзей — PRO (до 7)
+- 👁 Подписки на вишлисты друзей — PRO (до 5)
 - 🔐 Расширенная приватность (видимость, политики подписок и комментариев) — PRO
 - 💳 Оплата через Telegram Stars (подписка PRO, 100 Stars/мес)
-- 🌐 Публичные веб-страницы вишлистов (`/w/[slug]`)
+- 🎟 Промокоды (WISHPRO — 30 дней PRO)
+- 🎄 Secret Santa — анонимный обмен подарками
+- 🌐 Публичные профили (`profile_` deep link) и публичные веб-страницы вишлистов
 - 🛡 Панель администратора (`/admin`, Basic Auth)
+- 📊 God Mode аналитика (воронка, A/B тест онбординга, retention метрики)
+- 🌍 6 языков: русский, английский, китайский, хинди, испанский, арабский (RTL)
+- 📱 Onboarding v2 с A/B тестом (try-import, каталог, создание вишлиста)
 
 ---
 
@@ -136,9 +143,13 @@ docs/         Документация (INDEX.md — точка входа)
 | | FREE | PRO |
 |--|------|-----|
 | Вишлисты | 2 | 10 |
-| Желаний в каждом | 30 | 100 |
+| Желаний в каждом | 20 | 70 |
 | Участников | 5 | 20 |
-| Подписок | 2 | 7 |
+| Подписок | 2 | 5 |
+| Комментарии | — | ✓ |
+| Импорт по ссылке | — | ✓ |
+| Намёки | — | ✓ |
+| Кастомизация карточек | — | ✓ |
 | Цена | — | 100 Stars/мес |
 
 ---
@@ -155,7 +166,7 @@ docs/         Документация (INDEX.md — точка входа)
 | [DATA_MODEL.md](./docs/DATA_MODEL.md) | Схема БД: все модели и enum'ы |
 | [FRONTEND_MAP.md](./docs/FRONTEND_MAP.md) | Экраны Mini App, состояние, дизайн-система |
 | [MONETIZATION.md](./docs/MONETIZATION.md) | Планы, лимиты, пейволл, биллинг |
-| [USER_FLOWS.md](./docs/USER_FLOWS.md) | Пользовательские сценарии (19 флоу) |
+| [USER_FLOWS.md](./docs/USER_FLOWS.md) | Пользовательские сценарии |
 | [TELEGRAM_FLOW.md](./docs/TELEGRAM_FLOW.md) | Бот, WebApp SDK, auth, уведомления |
 | [SETTINGS_AND_PRIVACY.md](./docs/SETTINGS_AND_PRIVACY.md) | Настройки, приватность, PRO-гейты |
 | [LINK_IMPORT.md](./docs/LINK_IMPORT.md) | Импорт по ссылке: пайплайн, адаптеры |

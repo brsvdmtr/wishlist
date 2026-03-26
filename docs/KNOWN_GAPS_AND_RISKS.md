@@ -1,5 +1,5 @@
 # KNOWN_GAPS_AND_RISKS — Risks, Weak Points & Missing Items
-> Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
+> Last updated: 2026-03-26 · Branch: main
 
 ---
 
@@ -33,12 +33,12 @@
 ## ARCHITECTURE RISKS
 
 ### 5. Monolithic API (Single File)
-- **Risk**: `apps/api/src/index.ts` is ~4100 lines (verified 2026-03-17)
-- **Impact**: Hard to maintain, test, and reason about
-- **Note**: Post-monetization + URL import expansion; works for current scale but becomes fragile as features grow
+- **Risk**: `apps/api/src/index.ts` is ~9000+ lines (verified 2026-03-26) — grew significantly since March 17 (~4100 lines then) due to promo system, lifecycle messaging, public profiles, and other features
+- **Impact**: Hard to maintain, test, and reason about. File size has more than doubled.
+- **Note**: Post-monetization + URL import + promo + lifecycle expansion; works for current scale but becomes fragile as features grow
 
 ### 6. Monolithic Frontend (Single File)
-- **Risk**: `MiniApp.tsx` is ~6500 lines with 30+ useState hooks (verified 2026-03-17)
+- **Risk**: `MiniApp.tsx` is ~10000+ lines with 50+ useState hooks (verified 2026-03-26) — grew significantly since March 17 (~6500 lines then)
 - **Impact**: State management complexity, no code splitting
 - **Note**: Acceptable for Telegram Mini App constraints
 
@@ -120,7 +120,7 @@
 ### 19. Plan Limits Hardcoded
 - **Risk**: `PLANS = { FREE: {...}, PRO: {...} }` hardcoded in index.ts
 - **Impact**: Cannot change per-user limits without code deploy
-- **Current values**: FREE: wishlists=2, items=30, participants=5, subscriptions=2; PRO: wishlists=10, items=100, participants=20, subscriptions=7
+- **Current values**: FREE: wishlists=2, items=20, participants=5, subscriptions=2; PRO: wishlists=10, items=70, participants=20, subscriptions=5
 - **Priority**: LOW (by design for current implementation)
 
 ---
@@ -164,10 +164,9 @@
 - **Impact**: Site goes down if cert expires
 
 ### 29. Git Branch Strategy
-- **Status**: Production runs `claude/wizardly-satoshi` (confirmed from INFRA_AND_ENV.md). Branch has NOT been merged to `main` as of 2026-03-17.
-- **Risk**: `git pull origin main` would miss all feature work; production deploys must use `git pull origin claude/wizardly-satoshi`
-- **Impact**: Any new contributor may accidentally target `main` instead of the active branch
-- **Action needed**: Decide if/when to merge to `main` or update repo default branch
+- **Status**: Production now runs `main` branch. Work from `claude/wizardly-satoshi` has been merged.
+- **Risk**: RESOLVED — production is on `main` as expected
+- **Impact**: Standard workflow now applies; contributors target `main`
 
 ### 30. Client-Only PRO Gate for Recommended Sort
 - **Risk**: Guest sort "Recommended" is shown as PRO on client, but no server-side enforcement
@@ -195,7 +194,7 @@
 | .env file | `/opt/wishlist/.env` | `scp` to local machine |
 | Database dump | PostgreSQL container | `pg_dump` to file |
 | Upload files | Docker volume `wishlist_uploads` | `docker cp` to host |
-| Nginx config | `/etc/nginx/sites-enabled/wishlistik.ru` | Already in docs |
+| Nginx config | `/etc/nginx/sites-enabled/wishlistik.ru` (may change to wish.board-hub.com `NEEDS_VERIFICATION`) | Already in docs |
 | SSH key | `~/.ssh/timeweb_wishlist` | Should already be local |
 | Bot Token | In .env and @BotFather | Save to password manager |
 | Admin Key | In .env | Save to password manager |
@@ -216,8 +215,8 @@
 
 | File | Lines | Why Critical |
 |------|-------|-------------|
-| `apps/api/src/index.ts` | ~4100 | ENTIRE backend logic |
-| `apps/web/app/miniapp/MiniApp.tsx` | ~6500 | ENTIRE Mini App frontend |
+| `apps/api/src/index.ts` | ~9000+ | ENTIRE backend logic |
+| `apps/web/app/miniapp/MiniApp.tsx` | ~10000+ | ENTIRE Mini App frontend |
 | `packages/db/prisma/schema.prisma` | ~440 | Database schema |
 | `packages/db/prisma/migrations/*` | varies | Migration history |
 | `docker-compose.prod.yml` | 91 | Production deployment config |

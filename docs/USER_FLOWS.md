@@ -1,6 +1,6 @@
 # 📋 WishBoard — User Flows
 
-> Source of truth for all user journeys. Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
+> Source of truth for all user journeys. Last updated: 2026-03-26 · Branch: main
 >
 > This document reflects the product as implemented, not aspirational features.
 
@@ -35,9 +35,9 @@
 | Feature | FREE | PRO |
 |---|---|---|
 | Wishlists | 2 | 10 |
-| Items per wishlist | 30 | 100 |
+| Items per wishlist | 20 | 70 |
 | Participants (reservers) | 5 | 20 |
-| Subscriptions | 2 | 7 |
+| Subscriptions | 2 | 5 |
 | Comments | — | ✓ |
 | URL Import | — | ✓ |
 | Hints | — | ✓ |
@@ -111,8 +111,8 @@
 6. App sends `POST /tg/wishlists/:id/items` with the item payload.
 7. **On success (201):** The new item appears at the top of the wishlist.
 8. **On 402 (limit reached):** The app shows an **upsell sheet** with reason `item_limit`.
-   - FREE users: limit is **30 items** per wishlist.
-   - PRO users: limit is **100 items** per wishlist.
+   - FREE users: limit is **20 items** per wishlist.
+   - PRO users: limit is **70 items** per wishlist.
 
 **Edge cases:**
 - Title is required; the form blocks submission without it.
@@ -282,7 +282,7 @@
 5. **If owner's subscribePolicy = NOBODY:** Subscription is blocked; an explanatory message is shown.
 6. **If PRO guest and subscriptions are allowed:** App sends `POST /tg/wishlists/:id/subscribe`.
 7. **On success:** Guest is now subscribed. A confirmation is shown.
-8. **On 402 (subscription limit):** Guest has reached their subscription cap (2 for FREE, 7 for PRO). Upsell sheet with reason `subscription_limit` is shown.
+8. **On 402 (subscription limit):** Guest has reached their subscription cap (2 for FREE, 5 for PRO). Upsell sheet with reason `subscription_limit` is shown.
 
 **What happens after subscribing:**
 
@@ -528,3 +528,14 @@
 - This switch is seamless; the user does not see a "you are the owner" message.
 - If the IDs do not match, the guest view is preserved as normal.
 - This flow prevents an owner from accidentally reserving their own items or being confused by the limited guest interface when viewing their own wishlist.
+
+---
+
+## New Flows Added Since March 17
+
+The following user flows have been added but are not yet fully documented here:
+
+- **Onboarding v2** — Multi-step guided onboarding (welcome, import, share, reserve, complete) with A/B testing against v1
+- **Promo code redemption** — User enters a promo code (e.g. WISHPRO) to receive entitlement grants
+- **Public profile sharing** — User shares their profile via `profile_` deep link; recipients see public wishlists
+- **Lifecycle messaging** — Automated winback messages via bot DM when PRO expires; engagement nudges for inactive users

@@ -1,5 +1,5 @@
 > Source of truth for user settings, privacy controls, and notification preferences.
-> Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
+> Last updated: 2026-03-26 · Branch: main
 
 # Settings and Privacy
 
@@ -108,14 +108,16 @@ Each wishlist has three privacy fields, set via `PATCH /tg/wishlists/:id`. All t
 | `ALL` (default) | Any user with comment access can comment | No |
 | `SUBSCRIBERS` | Only users who have reserved at least one item can comment | Yes — **403** for FREE |
 
-### Comment access — dual gate
+### Comment access — either-party gate (OR logic)
 
-Comments have a PRO gate on **both sides** of the interaction:
+Comments use OR logic for PRO gating: the code checks if **both** parties lack the `comments` feature. If **either** party (owner or commenter) has PRO, access is granted.
 
-- `POST /tg/items/:id/comments` (authenticated): checks whether the **wishlist owner's** plan includes the `comments` feature.
-- `POST /public/items/:id/comments` (public): checks whether the **commenter's** plan includes `comments` AND that the wishlist `commentPolicy` allows it.
+- `POST /tg/items/:id/comments` (authenticated): checks whether **either** the wishlist owner or the commenter has `comments` in their plan features.
+- `POST /public/items/:id/comments` (public): same OR logic applies, plus the wishlist `commentPolicy` is checked.
 
-A comment succeeds only when the applicable gate passes. A FREE user cannot comment on a PRO owner's wishlist, and a PRO user cannot comment on a FREE owner's wishlist (through the public endpoint).
+A comment succeeds when at least one side has PRO. A PRO user can comment on a FREE owner's wishlist, and a FREE user can comment on a PRO owner's wishlist.
+
+Additionally, a new **card display mode** setting is available for configuring wishlist card appearance.
 
 ---
 

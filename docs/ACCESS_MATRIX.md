@@ -1,6 +1,6 @@
 # ACCESS_MATRIX.md — Access Control Matrix
 
-> Date: 2026-03-17. Verified from source code (`apps/api/src/index.ts`, `apps/web/middleware.ts`).
+> Date: 2026-03-26. Verified from source code (`apps/api/src/index.ts`, `apps/web/middleware.ts`).
 
 ---
 
@@ -156,9 +156,9 @@ All gates are **server-side enforced**. The client UI shows upsell prompts but c
 | Resource | FREE limit | PRO limit | HTTP error on exceed |
 |----------|:----------:|:---------:|:-------------------:|
 | Wishlists (REGULAR, non-archived) | 2 | 10 | 402 |
-| Items per wishlist (active) | 30 | 100 | 402 |
+| Items per wishlist (active) | 20 | 70 | 402 |
 | Distinct reservers per wishlist | 5 | 20 | 402 |
-| Subscriptions (wishlists followed) | 2 | 7 | 402 |
+| Subscriptions (wishlists followed) | 2 | 5 | 402 |
 | Items in SYSTEM_DRAFTS | 50 | 50 | 402 (same for both) |
 
 When the wishlist count exceeds plan.wishlists, excess wishlists become `readOnly: true` — they are still visible but items cannot be added to them (402).
@@ -167,7 +167,7 @@ When the wishlist count exceeds plan.wishlists, excess wishlists become `readOnl
 
 | Feature | FREE | PRO | Gate behavior |
 |---------|:----:|:---:|--------------|
-| Comments (read + write) | No | Yes | 402 `{ error: 'Pro feature', feature: 'comments' }` — exception: allowed if **either** party (owner or commenter) is PRO |
+| Comments (read + write) | No | Yes | 402 `{ error: 'Pro feature', feature: 'comments' }` — the code checks if **both** parties lack the feature; if **either** party (owner or commenter) has PRO, access is granted (OR logic) |
 | URL import (`/tg/import-url`) | No | Yes | 402 `{ error: 'Pro feature', feature: 'url_import' }` |
 | Hint waves (`/tg/items/:id/hint`) | No | Yes | 402 `{ error: 'Pro feature', feature: 'hints' }` |
 | Wishlist visibility `PUBLIC_PROFILE` | No | Yes | 403 `{ error: 'pro_required' }` |

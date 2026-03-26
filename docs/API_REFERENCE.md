@@ -1,6 +1,6 @@
 # API_REFERENCE.md — Complete Endpoint Reference
 
-> Date: 2026-03-17. Verified from `apps/api/src/index.ts`.
+> Date: 2026-03-26. Verified from `apps/api/src/index.ts`.
 
 ---
 
@@ -289,7 +289,7 @@ HTTP status 503. Routes `/health`, `/health/deep`, `/uploads/*`, `/internal/*` r
 {
   code: 'FREE' | 'PRO';
   wishlists: 2 | 10;
-  items: 30 | 100;
+  items: 20 | 70;
   participants: 5 | 20;
   features: [] | ['comments', 'url_import', 'hints'];
 }

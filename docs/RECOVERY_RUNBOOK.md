@@ -1,5 +1,8 @@
 # RECOVERY_RUNBOOK.md - Step-by-Step Disaster Recovery
 
+> **Note:** Domain is transitioning from `wishlistik.ru` to `wish.board-hub.com` `NEEDS_VERIFICATION`. Many commands below still reference the old domain. Update accordingly once the domain migration is confirmed.
+> Last updated: 2026-03-26 · Branch: main
+
 ## Prerequisites
 
 Before starting recovery, ensure you have:
@@ -47,7 +50,7 @@ mkdir -p /opt
 cd /opt
 git clone https://github.com/brsvdmtr/wishlist.git
 cd /opt/wishlist
-git checkout claude/wizardly-satoshi  # Production branch as of 2026-03-17 (not merged to main)
+git checkout main  # Production branch
 ```
 
 ### 2.2 Create .env File

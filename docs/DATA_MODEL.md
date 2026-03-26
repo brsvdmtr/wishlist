@@ -1,6 +1,6 @@
 # Data Model — Wishlist Telegram Mini App
 
-_Last updated: 2026-03-17_
+_Last updated: 2026-03-26_
 
 ---
 
@@ -539,6 +539,11 @@ User ─────────────────────────
                                                                 │
 SupportSession (standalone, TTL-based routing)                  │
 ServiceHeartbeat (standalone, liveness ping)                    │
+                                                                │
+PromoCampaign ──► PromoRedemption ◄── User                     │
+DegradationState (tracks PRO→FREE transitions)                 │
+LifecycleTouch (winback / engagement messaging log)            │
+EntitlementGrant (promo-granted entitlements)                   │
 ```
 
 **Key relationships at a glance:**
@@ -556,6 +561,11 @@ ServiceHeartbeat (standalone, liveness ping)                    │
 | User × Wishlist → WishlistSubscription | many : many   | Unique per pair                                |
 | WishlistSubscription → SubscriptionUnread | 1 : many  |                                                |
 | SupportTicket → SupportMessage      | 1 : many         |                                                |
+| PromoCampaign → PromoRedemption     | 1 : many         | Promo codes and their redemptions              |
+| User → PromoRedemption              | 1 : many         | User promo code usage history                  |
+| User → DegradationState             | 1 : 0..1         | Tracks PRO→FREE transitions                    |
+| User → LifecycleTouch               | 1 : many         | Winback / engagement messaging log             |
+| User → EntitlementGrant             | 1 : many         | Promo-granted entitlements                     |
 
 ---
 

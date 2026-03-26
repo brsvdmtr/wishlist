@@ -5,10 +5,10 @@
 | Property | Value |
 |----------|-------|
 | Product | WishBoard - Telegram Wishlist Mini App |
-| Domain | wishlistik.ru |
+| Domain | wish.board-hub.com `NEEDS_VERIFICATION` |
 | Repository | https://github.com/brsvdmtr/wishlist.git |
-| Branch | claude/wizardly-satoshi (production branch as of 2026-03-17; not merged to main) |
-| Server | Timeweb VPS, SSH: `root@wishlistik.ru` |
+| Branch | main |
+| Server | Timeweb VPS, SSH: `root@wish.board-hub.com` `NEEDS_VERIFICATION` |
 | SSH Key | `~/.ssh/timeweb_wishlist` |
 | Stack | Node 20, TypeScript, Express, Next.js 14, React 18, Telegraf, PostgreSQL 16, Prisma 5.18, Docker |
 | Package Manager | pnpm 10.15.0 |
@@ -52,8 +52,8 @@ WishBoard lets Telegram users create wishlists and share them with friends. Frie
 
 | Property | Value |
 |----------|-------|
-| Audit date | March 17, 2026 |
-| Audited branch | `claude/wizardly-satoshi` |
+| Audit date | March 26, 2026 |
+| Audited branch | `main` |
 | Confidence | Most data VERIFIED_FROM_CODE; server-side items marked NEEDS_VERIFICATION |
 
 **Confidence markers used in all documents:**
@@ -91,7 +91,7 @@ wishlist/
 ├── apps/
 │   ├── api/                    # Express REST API (port 3001)
 │   │   ├── src/
-│   │   │   ├── index.ts        # ALL backend code (~4100 lines)
+│   │   │   ├── index.ts        # ALL backend code (~9000+ lines)
 │   │   │   ├── sort.ts         # Item sorting logic
 │   │   │   ├── sort.test.ts    # Sort unit tests
 │   │   │   └── seed.ts         # Demo data seeder
@@ -109,7 +109,7 @@ wishlist/
 │   └── web/                    # Next.js 14 Frontend (port 3000)
 │       ├── app/
 │       │   ├── miniapp/
-│       │   │   └── MiniApp.tsx  # ENTIRE Mini App (~6500 lines)
+│       │   │   └── MiniApp.tsx  # ENTIRE Mini App (~10000+ lines)
 │       │   ├── admin/           # Admin panel pages
 │       │   ├── w/[slug]/        # Public wishlist pages
 │       │   ├── layout.tsx       # Root layout
@@ -171,7 +171,7 @@ wishlist/
 ```bash
 # 1. Get code
 git clone https://github.com/brsvdmtr/wishlist.git /opt/wishlist
-cd /opt/wishlist && git checkout claude/wizardly-satoshi  # NEEDS_VERIFICATION: confirm branch
+cd /opt/wishlist && git checkout main
 
 # 2. Create .env (fill in secrets — full template in .env.example)
 cp .env.example .env && vi .env

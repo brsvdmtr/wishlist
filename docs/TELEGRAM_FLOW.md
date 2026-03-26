@@ -1,5 +1,5 @@
 # TELEGRAM_FLOW — Telegram Bot & Mini App Integration
-> Last updated: 2026-03-17 · Branch: claude/wizardly-satoshi
+> Last updated: 2026-03-26 · Branch: main
 
 ## Bot Overview
 
@@ -35,7 +35,7 @@
 ### Menu Button
 - Type: `web_app`
 - Text: "Вишлист"
-- URL: `MINI_APP_URL` (e.g., https://wishlistik.ru/miniapp)
+- URL: `MINI_APP_URL` (e.g., https://wish.board-hub.com/miniapp) `NEEDS_VERIFICATION`
 - Set globally via `setChatMenuButton()`
 
 ---
@@ -75,6 +75,7 @@ Owner sharing: https://t.me/{BOT_USERNAME}?startapp=share_{SHARE_TOKEN}
 | `share_` | Guest wishlist view (share token) | `share_abc123def456` |
 | `hint_` | Hint notification → opens item for recipient | `hint_cma1b2c3d4` |
 | `draft_` | URL import result → opens drafts screen | `draft_cma1b2c3d4` |
+| `profile_` | Public profile deep link | `profile_alice` |
 | `{slug}__item_{id}` | Direct item navigation within a wishlist | `my-wishlist__item_cma1b2c3d4` |
 | (no prefix) | Legacy: passed as wishlist slug or direct startapp param | `my-wishlist-slug` |
 
@@ -277,3 +278,12 @@ A ForceReply-based bridge between user DMs and a Telegram support group.
 - Chat ID stored only on /start - if user blocks/restarts, chatId may be stale
 - No retry mechanism for failed Telegram notifications
 - Telegram initData format is Telegram-controlled; changes would require updating `validateTelegramInitData()` in `apps/api/src/index.ts`
+
+---
+
+## Lifecycle Messaging via Bot DM
+
+The system sends targeted lifecycle messages via the bot's DM channel:
+- **Winback messages**: Sent to users whose PRO subscription has lapsed, encouraging re-subscription
+- **Engagement messages**: Sent based on user activity patterns
+- All lifecycle touches are logged in the `LifecycleTouch` model to prevent duplicate sends

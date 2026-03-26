@@ -7,7 +7,7 @@
 | Что | Где хранится | Способ бэкапа | Статус |
 |-----|-------------|---------------|--------|
 | Git-репозиторий | GitHub: `brsvdmtr/wishlist` | Автоматически при `git push` | OK |
-| Ветка `claude/wizardly-satoshi` | GitHub | `git push origin claude/wizardly-satoshi` | OK |
+| Ветка `main` | GitHub | `git push origin main` | OK |
 | Ветка `main` | GitHub | Проверить: все ли изменения мержатся в main? | ВНИМАНИЕ |
 | Локальная копия | Рабочая машина разработчика | `git clone` на второе устройство | Рекомендуется |
 
@@ -16,7 +16,7 @@
 # Убедиться, что все изменения запушены:
 cd /opt/wishlist
 git status
-git push origin claude/wizardly-satoshi
+git push origin main
 ```
 
 ---
@@ -174,7 +174,7 @@ certbot renew --dry-run
 ```bash
 ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
 cd /opt/wishlist
-git pull origin claude/wizardly-satoshi
+git pull origin main
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
