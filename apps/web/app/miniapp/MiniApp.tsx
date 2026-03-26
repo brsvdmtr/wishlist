@@ -431,20 +431,25 @@ function handleTextareaFocus(textarea: HTMLElement) {
   // Remove any leftover spacer from previous focus
   sp.querySelector('[data-kb-spacer]')?.remove();
 
-  // Add temporary spacer — creates enough scrollable space
+  // Add temporary spacer — creates enough scrollable space for keyboard
   const spacer = document.createElement('div');
   spacer.setAttribute('data-kb-spacer', '1');
-  spacer.style.height = '50vh';
+  spacer.style.height = '40vh';
   spacer.style.pointerEvents = 'none';
   sp.appendChild(spacer);
 
-  // Wait one frame for layout recalc with spacer, then scroll
-  requestAnimationFrame(() => {
+  // Wait for keyboard to appear + layout recalc, then only scroll if actually needed
+  // Use 300ms delay to let iOS keyboard animation settle
+  setTimeout(() => {
     const rect = textarea.getBoundingClientRect();
-    const target = window.innerHeight * 0.35;
-    const delta = rect.top - target;
-    if (delta > 10) sp.scrollTop += delta;
-  });
+    const viewH = window.visualViewport?.height ?? window.innerHeight;
+    // Only scroll if textarea is in the bottom 40% of visible area (likely under keyboard)
+    if (rect.top > viewH * 0.55) {
+      const target = viewH * 0.3;
+      const delta = rect.top - target;
+      sp.scrollTo({ top: sp.scrollTop + delta, behavior: 'smooth' });
+    }
+  }, 300);
 
   // Remove spacer when keyboard closes (blur)
   const cleanup = () => {
@@ -7268,9 +7273,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>⋯</button>
               )}
-              {/* Dropdown */}
+              {/* Dropdown + overlay for outside-tap dismiss */}
               {showItemMenu && (
-                <div onClick={() => setShowItemMenu(false)} style={{
+                <>
+                <div onClick={() => setShowItemMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+                <div onClick={(e) => { e.stopPropagation(); setShowItemMenu(false); }} style={{
                   position: 'absolute', top: 42, right: 0, zIndex: 100,
                   background: C.card, border: `1px solid ${C.borderLight}`, borderRadius: 14,
                   padding: '4px 0', minWidth: 190, boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
@@ -7291,6 +7298,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <span style={{ width: 22, textAlign: 'center' }}>🗑</span> {t('delete_btn', locale)}
                   </div>
                 </div>
+                </>
               )}
             </div>
 
@@ -11446,8 +11454,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             const photoPreviewSrc = itemPhotoDeleted ? null : (itemPhotoLocalUrl ?? (itemImageUrl || null));
             const hasPhoto = !!(itemPhotoLocalUrl || (!itemPhotoDeleted && itemImageUrl));
             return (
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_photo', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+          <div style={{ marginTop: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_photo', locale)}</div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <div
                 onClick={() => { setPhotoError(null); setPhotoPickerImgErr(false); photoInputRef.current?.click(); }}
@@ -11487,7 +11495,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           })()}
           {/* Price — input left, currency right */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_price', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_price', locale)}</div>
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1.5px solid rgba(255,255,255,0.07)', borderRadius: 14, background: '#1c1c22', overflow: 'hidden' }}
                 onClick={() => priceInputRef.current?.focus()}>
