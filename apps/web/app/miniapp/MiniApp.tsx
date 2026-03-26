@@ -7321,7 +7321,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   ...btnBase, flex: 1, padding: '11px', borderRadius: 12, fontSize: 14, fontWeight: 600,
                   background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, color: '#fff', border: 'none',
                 }}>
-                  ✏️ {t('edit_btn', locale)}
+                  {t('edit_btn', locale)}
                 </button>
                 {isDraftItem ? (
                   <button onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{
@@ -11425,6 +11425,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {locale === 'ru' ? t('item_url_hint_ru', locale) : t('item_url_hint_global', locale)}
             </div>
           </div>
+          {/* Description — after URL */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_description', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+            <textarea
+              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: 1.4 }}
+              maxLength={500}
+              placeholder={t('item_description_placeholder', locale)}
+              value={itemDescription}
+              ref={itemDescTextareaRef}
+              onChange={(e) => setItemDescription(e.target.value)}
+              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
+            />
+            <div style={{ fontSize: 10, color: '#3a3a44', textAlign: 'right', marginTop: 3 }}>{itemDescription.length}/500</div>
+          </div>
           {/* Photo picker — refreshed */}
           {(() => {
             const photoPreviewSrc = itemPhotoDeleted ? null : (itemPhotoLocalUrl ?? (itemImageUrl || null));
@@ -11469,28 +11483,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
             );
           })()}
-          {/* Price — refreshed */}
+          {/* Price — input left, currency right */}
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_price', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <div style={{ display: 'flex', gap: 0, borderRadius: 12, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-                {(['RUB', 'USD'] as const).map(c => (
-                  <button key={c} type="button" onClick={() => setItemCurrency(c)}
-                    style={{
-                      padding: '12px 16px', border: 'none', fontSize: 15, fontWeight: 700,
-                      cursor: 'pointer', fontFamily: font, minWidth: 48, transition: 'all 0.15s',
-                      background: itemCurrency === c ? 'rgba(124,106,255,0.15)' : '#1c1c22',
-                      color: itemCurrency === c ? C.accent : '#444',
-                    }}>
-                    {c === 'RUB' ? '₽' : '$'}
-                  </button>
-                ))}
-              </div>
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1.5px solid rgba(255,255,255,0.07)', borderRadius: 14, background: '#1c1c22', overflow: 'hidden' }}
                 onClick={() => priceInputRef.current?.focus()}>
                 <input
                   ref={priceInputRef}
-                  style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#fff', fontSize: 18, fontWeight: 700, fontFamily: font, padding: '12px 6px 12px 16px', minWidth: 0, letterSpacing: '-0.02em' }}
+                  style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#fff', fontSize: 18, fontWeight: 700, fontFamily: font, padding: '12px 16px', minWidth: 0, letterSpacing: '-0.02em' }}
                   placeholder="0" type="text" inputMode="numeric"
                   value={formatPriceForDisplay(itemPrice)}
                   onChange={(e) => {
@@ -11518,6 +11519,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   {itemCurrency === 'RUB' ? '₽' : '$'}
                 </span>
               </div>
+              <div style={{ display: 'flex', gap: 0, borderRadius: 12, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+                {(['RUB', 'USD'] as const).map(c => (
+                  <button key={c} type="button" onClick={() => setItemCurrency(c)}
+                    style={{
+                      padding: '12px 16px', border: 'none', fontSize: 15, fontWeight: 700,
+                      cursor: 'pointer', fontFamily: font, minWidth: 48, transition: 'all 0.15s',
+                      background: itemCurrency === c ? 'rgba(124,106,255,0.15)' : '#1c1c22',
+                      color: itemCurrency === c ? C.accent : '#444',
+                    }}>
+                    {c === 'RUB' ? '₽' : '$'}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           {/* Priority — refreshed with glow */}
@@ -11544,20 +11558,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 );
               })}
             </div>
-          </div>
-          {/* Description — moved to bottom */}
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_description', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
-            <textarea
-              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: 1.4 }}
-              maxLength={500}
-              placeholder={t('item_description_placeholder', locale)}
-              value={itemDescription}
-              ref={itemDescTextareaRef}
-              onChange={(e) => setItemDescription(e.target.value)}
-              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
-            />
-            <div style={{ fontSize: 10, color: '#3a3a44', textAlign: 'right', marginTop: 3 }}>{itemDescription.length}/500</div>
           </div>
           {/* Submit — with priority emoji */}
           <button
