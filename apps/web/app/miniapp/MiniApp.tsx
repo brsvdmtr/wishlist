@@ -1570,11 +1570,12 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
   const isMine = (c: CommentDTO) => c.authorActorHash === myActorHash;
 
   return (
-    <div style={{ marginTop: 24, padding: 20, background: C.surface, borderRadius: 20 }}>
-      <div style={{ fontSize: 17, fontWeight: 600, color: C.text, marginBottom: 4, fontFamily: font }}>
-        {t('comments_title', locale)}
+    <div style={{ marginTop: 20, padding: 14, background: C.surface, borderRadius: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{t('comments_title', locale)}</span>
+        <span style={{ fontSize: 11, color: C.textMuted, background: C.bg, padding: '2px 8px', borderRadius: 8 }}>{comments.length}</span>
       </div>
-      <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 16, lineHeight: 1.4 }}>
+      <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 10, lineHeight: 1.4 }}>
         {t('comments_subtitle', locale)}
       </div>
 
@@ -1586,7 +1587,7 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {comments.length === 0 && (
-          <div style={{ textAlign: 'center', fontSize: 14, color: C.textMuted, padding: '24px 0 16px' }}>
+          <div style={{ textAlign: 'center', fontSize: 13, color: C.textMuted, padding: '12px 0 8px' }}>
             {t('comments_empty', locale)}
           </div>
         )}
@@ -1649,17 +1650,17 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
         ))}
       </div>
 
-      {/* Composer */}
+      {/* Composer — compact */}
       {!isArchive && (
-        <div style={{ display: 'flex', gap: 10, marginTop: 16, alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'flex-end' }}>
           <div style={{ flex: 1, position: 'relative' }}>
             <textarea
               style={{
                 ...inputStyle,
-                minHeight: 48, maxHeight: 100, resize: 'none',
-                paddingRight: 48, padding: '14px 48px 14px 16px',
-                borderRadius: 16, fontSize: 15,
-                background: C.bg,
+                minHeight: 40, maxHeight: 80, resize: 'none',
+                padding: '10px 40px 10px 14px',
+                borderRadius: 12, fontSize: 14,
+                background: C.bg, lineHeight: 1.4,
               }}
               placeholder={t('comments_placeholder', locale)}
               value={commentText}
@@ -1669,9 +1670,9 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSendComment(); } }}
             />
             <span style={{
-              position: 'absolute', right: 14, bottom: 10,
-              fontSize: 10, color: C.textMuted,
-              opacity: commentText.length > 280 ? 1 : 0.5,
+              position: 'absolute', right: 12, bottom: 8,
+              fontSize: 9, color: C.textMuted,
+              opacity: commentText.length > 280 ? 1 : 0.4,
               ...(commentText.length > 280 ? { color: C.orange } : {}),
             }}>
               {commentText.length}/300
@@ -1681,8 +1682,8 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
             onClick={() => void onSendComment()}
             disabled={!commentText.trim() || commentSending}
             style={{
-              ...btnPrimary, width: 40, height: 40, padding: 0, borderRadius: 20,
-              opacity: commentText.trim() ? 1 : 0.35, flexShrink: 0, fontSize: 16,
+              ...btnPrimary, width: 36, height: 36, padding: 0, borderRadius: 18,
+              opacity: commentText.trim() ? 1 : 0.35, flexShrink: 0, fontSize: 14,
             }}
           >
             {commentSending ? '…' : '↑'}
@@ -2175,8 +2176,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [itemPrice, setItemPrice] = useState(''); // raw digits only, e.g. "5000000"
   const priceInputRef = useRef<HTMLInputElement>(null);
   const [itemPriority, setItemPriority] = useState<1 | 2 | 3>(2);
-  const [itemCurrency, setItemCurrency] = useState<'RUB' | 'USD'>('RUB');
-  const [defaultCurrency, setDefaultCurrency] = useState<'RUB' | 'USD'>('RUB');
+  const [itemCurrency, setItemCurrency] = useState<'RUB' | 'USD' | 'EUR' | 'GBP'>('RUB');
+  const [defaultCurrency, setDefaultCurrency] = useState<'RUB' | 'USD' | 'EUR' | 'GBP'>('RUB');
   const [itemImageUrl, setItemImageUrl] = useState(''); // existing/saved URL from DB
 
   // Photo upload state
@@ -2298,6 +2299,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showCopyPicker, setShowCopyPicker] = useState(false);
   const [copyingItem, setCopyingItem] = useState<Item | null>(null);
   const [showItemMenu, setShowItemMenu] = useState(false);
+  const [currencyExpanded, setCurrencyExpanded] = useState(false);
   const [pendingMoveItemId, setPendingMoveItemId] = useState<string | null>(null);
   const [importUrl, setImportUrl] = useState('');
   const [importLoading, setImportLoading] = useState(false);
@@ -11392,9 +11394,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {/* Title */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_name', locale)}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_name', locale)}</div>
             <input
-              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', fontSize: 16, fontWeight: 500 }}
+              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 15, fontWeight: 500, padding: '12px 14px' }}
               placeholder={t('item_name_placeholder', locale)}
               value={itemTitle}
               onChange={(e) => setItemTitle(e.target.value)}
@@ -11402,9 +11404,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
           {/* URL with hint + preview */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_url', locale)}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_url', locale)}</div>
             <input
-              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22' }}
+              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 14, padding: '12px 14px' }}
               placeholder={t('item_url_placeholder', locale)}
               value={itemUrl}
               onChange={(e) => setItemUrl(e.target.value)}
@@ -11427,9 +11429,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
           {/* Description — after URL */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_description', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('item_description', locale)}</div>
             <textarea
-              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: 1.4 }}
+              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: 1.4, fontSize: 14 }}
               maxLength={500}
               placeholder={t('item_description_placeholder', locale)}
               value={itemDescription}
@@ -11445,7 +11447,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             const hasPhoto = !!(itemPhotoLocalUrl || (!itemPhotoDeleted && itemImageUrl));
             return (
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 8 }}>{t('item_photo', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_photo', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <div
                 onClick={() => { setPhotoError(null); setPhotoPickerImgErr(false); photoInputRef.current?.click(); }}
@@ -11485,13 +11487,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           })()}
           {/* Price — input left, currency right */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_price', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_price', locale)} <span style={{ fontWeight: 400, color: '#444' }}>· {t('optional', locale)}</span></div>
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1.5px solid rgba(255,255,255,0.07)', borderRadius: 14, background: '#1c1c22', overflow: 'hidden' }}
                 onClick={() => priceInputRef.current?.focus()}>
                 <input
                   ref={priceInputRef}
-                  style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#fff', fontSize: 18, fontWeight: 700, fontFamily: font, padding: '12px 16px', minWidth: 0, letterSpacing: '-0.02em' }}
+                  style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: font, padding: '12px 14px', minWidth: 0, letterSpacing: '-0.02em' }}
                   placeholder="0" type="text" inputMode="numeric"
                   value={formatPriceForDisplay(itemPrice)}
                   onChange={(e) => {
@@ -11519,24 +11521,41 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   {itemCurrency === 'RUB' ? '₽' : '$'}
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: 0, borderRadius: 12, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
-                {(['RUB', 'USD'] as const).map(c => (
-                  <button key={c} type="button" onClick={() => setItemCurrency(c)}
+              {/* Collapsible currency selector */}
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                {currencyExpanded ? (
+                  (['RUB', 'USD', 'EUR', 'GBP'] as const).map(c => (
+                    <button key={c} type="button" onClick={() => { setItemCurrency(c); setCurrencyExpanded(false); }}
+                      style={{
+                        width: 40, height: 40, borderRadius: 12, border: `1.5px solid ${itemCurrency === c ? C.accent : 'rgba(255,255,255,0.06)'}`,
+                        background: itemCurrency === c ? 'rgba(124,106,255,0.15)' : '#1c1c22',
+                        color: itemCurrency === c ? C.accent : '#6B7280',
+                        fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                        transition: 'all 0.12s',
+                      }}>
+                      {{ RUB: '₽', USD: '$', EUR: '€', GBP: '£' }[c]}
+                    </button>
+                  ))
+                ) : (
+                  <button type="button" onClick={() => setCurrencyExpanded(true)}
                     style={{
-                      padding: '12px 16px', border: 'none', fontSize: 15, fontWeight: 700,
-                      cursor: 'pointer', fontFamily: font, minWidth: 48, transition: 'all 0.15s',
-                      background: itemCurrency === c ? 'rgba(124,106,255,0.15)' : '#1c1c22',
-                      color: itemCurrency === c ? C.accent : '#444',
+                      width: 48, height: 48, borderRadius: 14, border: `1.5px solid rgba(124,106,255,0.25)`,
+                      background: 'rgba(124,106,255,0.1)', color: C.accent,
+                      fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                      position: 'relative',
                     }}>
-                    {c === 'RUB' ? '₽' : '$'}
+                    {{ RUB: '₽', USD: '$', EUR: '€', GBP: '£' }[itemCurrency]}
+                    <span style={{ position: 'absolute', bottom: 3, right: 6, fontSize: 8, color: 'rgba(124,106,255,0.6)' }}>▾</span>
                   </button>
-                ))}
+                )}
               </div>
             </div>
           </div>
           {/* Priority — refreshed with glow */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#888', marginBottom: 7 }}>{t('item_priority_question', locale)}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_priority_question', locale)}</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {getPriorities(locale).map((p) => {
                 const isSelected = itemPriority === p.value;
