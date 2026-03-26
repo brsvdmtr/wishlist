@@ -420,11 +420,14 @@ const inputStyle: React.CSSProperties = {
  *  the visible area. The spacer creates the extra scroll room needed. */
 /**
  * Ensure a focused field is visible above the Telegram iOS keyboard.
- * Telegram WebView does NOT resize viewport or auto-scroll when keyboard opens,
- * so we must handle this manually.
  *
- * Strategy: add a bottom spacer (so there's room to scroll), wait for keyboard
- * animation (~350ms), then scrollIntoView with block:'nearest' for minimal movement.
+ * Telegram WebView does NOT resize viewport when keyboard opens AND the
+ * BottomSheet component hijacks all touch scroll (e.preventDefault on every
+ * touchmove). This means native scrollIntoView() has no effect.
+ *
+ * Fix: directly manipulate scrollTop on the BottomSheet scroll container,
+ * which is the nearest overflowY:auto ancestor. Add a spacer so there's
+ * room to scroll the last fields above the keyboard zone.
  */
 function handleTextareaFocus(el: HTMLElement) {
   let scrollParent: HTMLElement | null = el.parentElement;
@@ -439,16 +442,37 @@ function handleTextareaFocus(el: HTMLElement) {
   // Remove any leftover spacer from previous focus
   sp.querySelector('[data-kb-spacer]')?.remove();
 
-  // Add spacer so scroll container has room below
+  // Add spacer so scroll container has room to scroll bottom fields into view
   const spacer = document.createElement('div');
   spacer.setAttribute('data-kb-spacer', '1');
   spacer.style.height = '45vh';
   spacer.style.pointerEvents = 'none';
   sp.appendChild(spacer);
 
-  // Wait for iOS keyboard animation to settle, then minimal scroll
+  // Wait for keyboard to appear, then scroll field into view.
+  // We drive scrollTop directly because BottomSheet blocks native scroll.
   setTimeout(() => {
-    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const fieldRect = el.getBoundingClientRect();
+    const containerRect = sp.getBoundingClientRect();
+    // Target: place field ~35% from top of visible container area
+    const targetY = containerRect.top + containerRect.height * 0.35;
+    const delta = fieldRect.top - targetY;
+    if (Math.abs(delta) > 20) {
+      // Smooth manual scroll via CSS transition
+      const start = sp.scrollTop;
+      const end = start + delta;
+      const duration = 250;
+      const startTime = performance.now();
+      const step = (now: number) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // ease-out cubic
+        const ease = 1 - Math.pow(1 - progress, 3);
+        sp.scrollTop = start + (end - start) * ease;
+        if (progress < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
   }, 350);
 
   // Remove spacer on blur
@@ -880,6 +904,7 @@ function BottomSheet({ isOpen, onClose, title, children }: {
     if (!sheet || !isOpen) return;
     let prevY: number | null = null;
     let dismissOffset = 0;
+    let cumulativeMove = 0; // track total finger movement to decide blur threshold
     // Blur the keyboard at most once per gesture (prevents redundant calls)
     let blurFired = false;
 
@@ -891,6 +916,7 @@ function BottomSheet({ isOpen, onClose, title, children }: {
       if (!e.touches[0]) return;
       prevY = e.touches[0].clientY;
       dismissOffset = 0;
+      cumulativeMove = 0;
       blurFired = false;
       // Freeze any in-progress spring-back transition
       sheet.style.transition = 'none';
@@ -904,11 +930,15 @@ function BottomSheet({ isOpen, onClose, title, children }: {
       const dy = currentY - prevY; // positive = finger moved down
       prevY = currentY;
 
-      // Dismiss keyboard on first detected scroll motion — keeps the content
-      // readable while scrolling and prevents gesture leakage into WebView.
-      if (!blurFired && dy !== 0) {
-        blurActiveField();
-        blurFired = true;
+      // Dismiss keyboard on significant scroll — but NOT on micro-movements
+      // that happen naturally when tapping a field. This prevents the keyboard
+      // from closing immediately when user focuses a bottom-of-form input.
+      if (!blurFired) {
+        cumulativeMove += Math.abs(dy);
+        if (cumulativeMove > 20) {
+          blurActiveField();
+          blurFired = true;
+        }
       }
 
       if (dy < 0) {
