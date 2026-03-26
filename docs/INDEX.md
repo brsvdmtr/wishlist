@@ -109,7 +109,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 | `apps/bot/src/index.ts` | Telegram bot (~1000 lines) |
 | `apps/api/src/url-parser.ts` | URL import pipeline (~800 lines) |
 | `packages/db/prisma/schema.prisma` | Database schema |
-| `packages/shared/src/i18n.ts` | All UI strings (6 locales: RU, EN, UK, KK, DE, FR) |
+| `packages/shared/src/i18n.ts` | All UI strings (6 locales: ru, en, zh-CN, hi, es, ar) |
 
 ### Deployment
 
