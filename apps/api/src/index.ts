@@ -4534,6 +4534,84 @@ tgRouter.post(
   }),
 );
 
+// ─── Copy single item to another wishlist ────────────────────────────────────
+
+tgRouter.post(
+  '/items/:id/copy',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const parsed = z.object({ targetWishlistId: z.string().min(1) }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+
+    // Verify source item ownership
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: {
+        id: true, title: true, description: true, url: true, priceText: true,
+        currency: true, priority: true, imageUrl: true, sourceUrl: true,
+        sourceDomain: true, importMethod: true, status: true,
+        wishlist: { select: { ownerId: true } },
+      },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (item.status === 'DELETED') return res.status(400).json({ error: 'Cannot copy deleted item' });
+
+    // Verify target wishlist
+    const targetWl = await prisma.wishlist.findUnique({
+      where: { id: parsed.data.targetWishlistId },
+      select: { id: true, ownerId: true, type: true, archivedAt: true, title: true },
+    });
+    if (!targetWl || targetWl.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (targetWl.archivedAt) return res.status(400).json({ error: 'Cannot copy to archived wishlist' });
+    if (targetWl.type === 'SYSTEM_DRAFTS') return res.status(400).json({ error: 'Cannot copy to system wishlist' });
+
+    // Check item limit on target
+    if (targetWl.type === 'REGULAR') {
+      if (!(await isWishlistWritable(user.id, targetWl.id, ent.effectiveWishlistLimit))) {
+        return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
+      }
+      const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[targetWl.id] ?? 0);
+      const currentCount = await prisma.item.count({
+        where: { wishlistId: targetWl.id, status: { in: [...ACTIVE_STATUSES] } },
+      });
+      if (currentCount >= effectiveItemLimit) {
+        return res.status(402).json({ error: t('api_wishlist_items_limit', getRequestLocale(req)), limit: effectiveItemLimit, planCode: ent.plan.code });
+      }
+    }
+
+    // Create clean copy — no reservation/comment/hint data
+    const copy = await prisma.item.create({
+      data: {
+        wishlistId: targetWl.id,
+        title: item.title,
+        description: item.description,
+        url: item.url,
+        priceText: item.priceText,
+        currency: item.currency,
+        priority: item.priority,
+        imageUrl: item.imageUrl,
+        sourceUrl: item.sourceUrl,
+        sourceDomain: item.sourceDomain,
+        importMethod: item.importMethod,
+        status: 'AVAILABLE',
+      },
+      select: {
+        id: true, wishlistId: true, title: true, url: true, priceText: true,
+        imageUrl: true, priority: true, status: true, description: true,
+        sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+      },
+    });
+
+    return res.status(201).json({ item: mapTgItem(copy), targetWishlistTitle: targetWl.title });
+  }),
+);
+
 // ─── Billing & Plan endpoints ────────────────────────────────────────────────
 
 // GET /tg/me/plan — current user's plan, subscription, effective limits, and add-ons

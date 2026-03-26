@@ -2293,6 +2293,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [draftsItems, setDraftsItems] = useState<Item[]>([]);
   const [showMovePicker, setShowMovePicker] = useState(false);
   const [movingItem, setMovingItem] = useState<Item | null>(null);
+  const [showCopyPicker, setShowCopyPicker] = useState(false);
+  const [copyingItem, setCopyingItem] = useState<Item | null>(null);
   const [pendingMoveItemId, setPendingMoveItemId] = useState<string | null>(null);
   const [importUrl, setImportUrl] = useState('');
   const [importLoading, setImportLoading] = useState(false);
@@ -7472,9 +7474,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         <button onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{
                           ...btnBase, flex: 1, background: C.surface, color: C.accent,
                           border: `1px solid ${C.borderLight}`, borderRadius: 14,
-                          padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                          padding: '12px 16px', fontSize: 13, fontWeight: 500,
                         }}>
                           {t('item_move_short', locale)}
+                        </button>
+                        {/* Regular: Copy to another wishlist */}
+                        <button onClick={() => { setCopyingItem(viewingItem as Item); setShowCopyPicker(true); }} style={{
+                          ...btnBase, flex: 1, background: C.surface, color: C.green,
+                          border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                          padding: '12px 16px', fontSize: 13, fontWeight: 500,
+                        }}>
+                          {t('item_copy_short', locale)}
                         </button>
                         {/* Regular: Received */}
                         <button onClick={() => {
@@ -10174,6 +10184,52 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
         </div>
       )}
+
+      {/* ── Copy item to wishlist picker — triggered from item-detail ── */}
+      <BottomSheet isOpen={showCopyPicker} onClose={() => { setShowCopyPicker(false); setCopyingItem(null); }} title={t('item_copy_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {wishlists.filter(wl => wl.id !== draftsWishlistId).map((wl) => (
+            <button
+              key={wl.id}
+              style={{
+                ...btnGhost, width: '100%', textAlign: 'start', padding: '14px 16px',
+                borderRadius: 12, background: C.surface, border: `1px solid ${C.border}`,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+              onClick={async () => {
+                if (!copyingItem) return;
+                try {
+                  const r = await tgFetch(`/tg/items/${copyingItem.id}/copy`, {
+                    method: 'POST', body: JSON.stringify({ targetWishlistId: wl.id }),
+                  });
+                  if (!r.ok) {
+                    const body = await r.json().catch(() => ({})) as { error?: string };
+                    pushToast(body.error || t('toast_save_error', locale), 'error');
+                    return;
+                  }
+                  const data = await r.json() as { item: any; targetWishlistTitle: string };
+                  pushToast(t('item_copied_toast', locale, { name: data.targetWishlistTitle || wl.title }), 'success');
+                } catch {
+                  pushToast(t('toast_save_error', locale), 'error');
+                }
+                setShowCopyPicker(false);
+                setCopyingItem(null);
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>{t('wishes_count', locale, { count: wl.itemCount })}</div>
+              </div>
+              <span style={{ color: C.textMuted }}>›</span>
+            </button>
+          ))}
+          {wishlists.filter(wl => wl.id !== draftsWishlistId).length === 0 && (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: C.textMuted, fontSize: 14 }}>
+              {t('drafts_create_first', locale)}
+            </div>
+          )}
+        </div>
+      </BottomSheet>
 
       {/* ── Bulk move/copy target picker ── */}
       <BottomSheet isOpen={showBulkTargetPicker !== null} onClose={() => setShowBulkTargetPicker(null)} title={showBulkTargetPicker === 'move' ? t('bulk_move', locale) : t('bulk_copy', locale)}>
