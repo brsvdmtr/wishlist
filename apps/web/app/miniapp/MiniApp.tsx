@@ -431,25 +431,18 @@ function handleTextareaFocus(textarea: HTMLElement) {
   // Remove any leftover spacer from previous focus
   sp.querySelector('[data-kb-spacer]')?.remove();
 
-  // Add temporary spacer — creates enough scrollable space for keyboard
+  // Add temporary spacer — creates extra scroll room for keyboard
   const spacer = document.createElement('div');
   spacer.setAttribute('data-kb-spacer', '1');
-  spacer.style.height = '40vh';
+  spacer.style.height = '50vh';
   spacer.style.pointerEvents = 'none';
   sp.appendChild(spacer);
 
-  // Wait for keyboard to appear + layout recalc, then only scroll if actually needed
-  // Use 300ms delay to let iOS keyboard animation settle
-  setTimeout(() => {
-    const rect = textarea.getBoundingClientRect();
-    const viewH = window.visualViewport?.height ?? window.innerHeight;
-    // Only scroll if textarea is in the bottom 40% of visible area (likely under keyboard)
-    if (rect.top > viewH * 0.55) {
-      const target = viewH * 0.3;
-      const delta = rect.top - target;
-      sp.scrollTo({ top: sp.scrollTop + delta, behavior: 'smooth' });
-    }
-  }, 300);
+  // Scroll into view using smooth behavior — gentle, no jarring jump.
+  // requestAnimationFrame waits one frame for spacer to be in layout.
+  requestAnimationFrame(() => {
+    textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 
   // Remove spacer when keyboard closes (blur)
   const cleanup = () => {
@@ -11416,6 +11409,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <input
               style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 14, padding: '12px 14px' }}
               placeholder={t('item_url_placeholder', locale)}
+              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
               value={itemUrl}
               onChange={(e) => setItemUrl(e.target.value)}
             />
@@ -11503,6 +11497,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   ref={priceInputRef}
                   style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: font, padding: '12px 14px', minWidth: 0, letterSpacing: '-0.02em' }}
                   placeholder="0" type="text" inputMode="numeric"
+                  onFocus={(e) => handleTextareaFocus(e.currentTarget)}
                   value={formatPriceForDisplay(itemPrice)}
                   onChange={(e) => {
                     const cursorPos = e.target.selectionStart ?? e.target.value.length;
