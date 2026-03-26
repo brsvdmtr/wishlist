@@ -90,6 +90,8 @@ const PRIO_GLOW: Record<number, string> = {
 const CARD_REDESIGN_ENABLED = true;
 // Profile redesign canary — test before full rollout
 const PROFILE_REDESIGN_IDS = new Set(['8747175307']);
+// Item detail redesign canary — test before full rollout
+const ITEM_DETAIL_REDESIGN_IDS = new Set(['8747175307']);
 
 const getPriorities = (locale: Locale) => [
   { value: 1, emoji: PRIO_EMOJI[1], label: t('priority_low', locale),    sub: t('priority_low_sub', locale) },
@@ -2295,6 +2297,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [movingItem, setMovingItem] = useState<Item | null>(null);
   const [showCopyPicker, setShowCopyPicker] = useState(false);
   const [copyingItem, setCopyingItem] = useState<Item | null>(null);
+  const [showItemMenu, setShowItemMenu] = useState(false);
   const [pendingMoveItemId, setPendingMoveItemId] = useState<string | null>(null);
   const [importUrl, setImportUrl] = useState('');
   const [importLoading, setImportLoading] = useState(false);
@@ -7206,9 +7209,216 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       )}
 
       {/* ══════════════════════════════════════════════
-          OWNER — ITEM DETAIL (view + actions)
+          OWNER — ITEM DETAIL (REDESIGN — canary)
           ══════════════════════════════════════════════ */}
-      {screen === 'item-detail' && viewingItem && (() => {
+      {screen === 'item-detail' && viewingItem && ITEM_DETAIL_REDESIGN_IDS.has(String(tgUser?.id ?? '')) && (() => {
+        const displayTitle = normalizeTitle(viewingItem.title);
+        const isDraftItem = fromDrafts || draftsItems.some(d => d.id === (viewingItem as Item).id);
+        const copyTitleV2 = async () => {
+          if (!displayTitle) return;
+          try {
+            if (typeof window !== 'undefined' && window.Telegram?.WebApp?.writeToClipboard) {
+              window.Telegram.WebApp.writeToClipboard(displayTitle);
+              pushToast(t('title_copied', locale), 'success');
+              return;
+            }
+            await navigator.clipboard.writeText(displayTitle);
+            pushToast(t('title_copied', locale), 'success');
+          } catch { pushToast(t('title_copy_error', locale), 'error'); }
+        };
+        return (
+        <div style={{ padding: '0 0 40px' }}>
+          {/* Hero image */}
+          <div style={{ position: 'relative' }}>
+            {viewingItem.imageUrl ? (
+              <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', aspectRatio: '16/10', objectFit: 'cover', display: 'block', background: C.surface }} />
+            ) : (
+              <div style={{ width: '100%', aspectRatio: '16/8', background: `linear-gradient(145deg, ${C.surface}, ${C.card})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 72 }}>
+                {getEmoji(viewingItem.title)}
+              </div>
+            )}
+            {/* Priority float on image */}
+            <div style={{
+              position: 'absolute', bottom: 12, right: 12,
+              padding: '5px 11px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              background: viewingItem.priority === 3 ? 'rgba(240,78,110,0.85)' : viewingItem.priority === 2 ? 'rgba(232,147,10,0.85)' : 'rgba(107,127,212,0.85)',
+              color: '#fff',
+            }}>
+              {prioEmoji(viewingItem.priority)} {getPriorities(locale).find(p => p.value === viewingItem!.priority)?.label}
+            </div>
+          </div>
+
+          <div style={{ padding: '20px 20px 0' }}>
+            {/* Title + ⋯ menu */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, position: 'relative' }}>
+              <h1 onClick={() => void copyTitleV2()} style={{
+                flex: 1, minWidth: 0, fontSize: 20, fontWeight: 700, fontFamily: font,
+                color: C.text, margin: 0, lineHeight: 1.3, letterSpacing: '-0.3px',
+                cursor: displayTitle ? 'pointer' : 'default',
+              }}>{displayTitle}</h1>
+              {!isDraftItem && viewingItem.status !== 'purchased' && (
+                <button onClick={() => setShowItemMenu(v => !v)} style={{
+                  width: 36, height: 36, borderRadius: 12, flexShrink: 0, marginTop: 2,
+                  background: showItemMenu ? 'rgba(124,106,255,0.15)' : 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${showItemMenu ? 'rgba(124,106,255,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                  color: showItemMenu ? C.accent : C.textMuted, fontSize: 16, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>⋯</button>
+              )}
+              {/* Dropdown */}
+              {showItemMenu && (
+                <div onClick={() => setShowItemMenu(false)} style={{
+                  position: 'absolute', top: 42, right: 0, zIndex: 100,
+                  background: C.card, border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                  padding: '4px 0', minWidth: 190, boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+                }}>
+                  <div onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
+                    <span style={{ width: 22, textAlign: 'center' }}>↗</span> {t('item_move_short', locale)}
+                  </div>
+                  <div onClick={() => { setCopyingItem(viewingItem as Item); setShowCopyPicker(true); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
+                    <span style={{ width: 22, textAlign: 'center' }}>📋</span> {t('item_copy_short', locale)}
+                  </div>
+                  <div style={{ height: 1, background: C.border, margin: '2px 0' }} />
+                  <div onClick={() => {
+                    const item = viewingItem as Item;
+                    setViewingItem(null);
+                    setScreen(fromDrafts ? 'drafts' : 'wishlist-detail');
+                    setDeletingItem(item);
+                  }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.red, cursor: 'pointer' }}>
+                    <span style={{ width: 22, textAlign: 'center' }}>🗑</span> {t('delete_btn', locale)}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Price + Link */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
+              {viewingItem.price != null && (
+                <span style={{ fontSize: 22, fontWeight: 800, color: C.accent, letterSpacing: '-0.3px', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtPrice(viewingItem.price, locale, viewingItem.currency ?? 'RUB')}
+                </span>
+              )}
+              {viewingItem.url && (
+                <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+                  background: 'rgba(255,255,255,0.05)', border: `1px solid rgba(255,255,255,0.08)`,
+                  borderRadius: 20, fontSize: 12, color: C.textSec, textDecoration: 'none',
+                }}>
+                  🔗 {viewingItem.sourceDomain || new URL(viewingItem.url).hostname.replace(/^www\./, '')} ↗
+                </a>
+              )}
+            </div>
+
+            {/* 2 action buttons */}
+            {viewingItem.status !== 'purchased' && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                <button onClick={() => {
+                  setPendingEditItem(viewingItem as Item);
+                  setViewingItem(null);
+                  setScreen(isDraftItem ? 'drafts' : 'wishlist-detail');
+                }} style={{
+                  ...btnBase, flex: 1, padding: '11px', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                  background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, color: '#fff', border: 'none',
+                }}>
+                  ✏️ {t('edit_btn', locale)}
+                </button>
+                {isDraftItem ? (
+                  <button onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{
+                    ...btnBase, flex: 1, padding: '11px', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                    background: C.surface, color: C.accent, border: `1px solid rgba(124,106,255,0.12)`,
+                  }}>
+                    {t('item_move_cta', locale)}
+                  </button>
+                ) : (
+                  <button onClick={() => {
+                    setShowItemForm(false); resetItemForm();
+                    handleCompleteItem(viewingItem as Item);
+                    setViewingItem(null); setScreen('wishlist-detail');
+                  }} style={{
+                    ...btnBase, flex: 1, padding: '11px', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                    background: C.surface, color: C.green, border: `1px solid rgba(52,211,153,0.12)`,
+                  }}>
+                    {t('item_detail_gifted', locale)}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Status badge */}
+            {viewingItem.status === 'reserved' && (
+              <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10, background: `${C.accent}12`, border: `1px solid ${C.accent}18` }}>
+                <span style={{ fontSize: 18 }}>✨</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.accent }}>{t('status_someone_reserved', locale)}</span>
+              </div>
+            )}
+            {viewingItem.status === 'purchased' && (
+              <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10, background: C.greenSoft, border: `1px solid ${C.green}18` }}>
+                <span style={{ fontSize: 18 }}>✅</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.green }}>{t('status_gifted', locale)}</span>
+              </div>
+            )}
+
+            {/* Description — read only, hidden if empty */}
+            {viewingItem.description && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 }}>{t('description_title', locale)}</div>
+                <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, margin: 0 }}>{viewingItem.description}</p>
+              </div>
+            )}
+
+            {/* Comments */}
+            {planInfo.code === 'PRO' ? (
+              <CommentsThread
+                commentRole={commentRole} comments={comments} commentText={commentText}
+                setCommentText={setCommentText} commentSending={commentSending}
+                myActorHash={myActorHashRef.current} onDeleteComment={handleDeleteComment}
+                onSendComment={handleSendComment}
+                isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+                locale={locale}
+              />
+            ) : (
+              <div onClick={() => showUpsell('comments')} style={{
+                marginTop: 24, padding: 20, background: C.surface, borderRadius: 20,
+                cursor: 'pointer', border: `1px solid ${C.accent}15`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 20 }}>💬</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: C.text }}>{t('comments_pro_title', locale)}</span>
+                  <ProBadge />
+                </div>
+                <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>{t('comments_pro_hint', locale)}</div>
+                <div style={{ marginTop: 12, fontSize: 13, color: C.accent, fontWeight: 600 }}>{t('comments_pro_more', locale)}</div>
+              </div>
+            )}
+
+            {/* Hint button */}
+            {viewingItem.status === 'available' && (
+              <div onClick={() => !hintLoading && handleHintTap(viewingItem as Item)} style={{
+                marginTop: 16, padding: '12px 14px', background: `${C.accent}08`, border: `1px solid ${C.accent}12`,
+                borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: hintLoading ? 'wait' : 'pointer',
+                opacity: hintLoading ? 0.6 : 1,
+              }}>
+                <span style={{ fontSize: 18 }}>💡</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.textSec }}>{t('hint_friends_btn', locale)}</span>
+                    {planInfo.code === 'FREE' && <ProBadge />}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 1 }}>{t('item_detail_hint_sub', locale)}</div>
+                </div>
+                <span style={{ color: C.textMuted }}>›</span>
+              </div>
+            )}
+          </div>
+        </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          OWNER — ITEM DETAIL (view + actions) — ORIGINAL
+          ══════════════════════════════════════════════ */}
+      {screen === 'item-detail' && viewingItem && !ITEM_DETAIL_REDESIGN_IDS.has(String(tgUser?.id ?? '')) && (() => {
         const displayTitle = normalizeTitle(viewingItem.title);
         const copyTitle = async () => {
           if (!displayTitle) return;
