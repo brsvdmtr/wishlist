@@ -37,7 +37,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 | Doc | Status | What it covers |
 |-----|--------|---------------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | primary | Product overview, system diagram, module responsibilities, auth layers, design decisions |
-| [DATA_MODEL.md](./DATA_MODEL.md) | primary | All 25+ Prisma models, 14 enums, relationships, key behaviors |
+| [DATA_MODEL.md](./DATA_MODEL.md) | primary | All 49 Prisma models, 14 enums, relationships, key behaviors |
 | [ACCESS_MATRIX.md](./ACCESS_MATRIX.md) | primary | Auth tiers, role definitions, PRO vs FREE limits, data visibility rules |
 
 ### Backend
@@ -52,7 +52,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 | Doc | Status | What it covers |
 |-----|--------|---------------|
-| [FRONTEND_MAP.md](./FRONTEND_MAP.md) | primary | All 35+ screens, state management, design system, PRO upsell system, patterns |
+| [FRONTEND_MAP.md](./FRONTEND_MAP.md) | primary | All 33 screens, state management, design system, PRO upsell system, patterns |
 | [FRONTEND_API_MAP.md](./FRONTEND_API_MAP.md) | secondary | Per-screen API call map (38 calls). Detailed companion to FRONTEND_MAP + API_REFERENCE |
 
 ### Telegram Integration
