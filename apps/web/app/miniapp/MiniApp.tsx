@@ -9765,20 +9765,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     );
                   })()}
 
-                  {/* ─── Retention / Win-back metrics ─── */}
+                  {/* ─── Retention / Win-back metrics (rewritten for clarity) ─── */}
                   {godMode && (() => {
-                    const segNames: Record<string, string> = {
-                      S1: t('ret_seg_s1', locale),
-                      S2: t('ret_seg_s2', locale),
-                      S3: t('ret_seg_s3', locale),
-                      S4: t('ret_seg_s4', locale),
-                    };
-                    const segTarget: Record<string, string> = {
-                      S1: t('ret_seg_target_s1', locale),
-                      S2: t('ret_seg_target_s2', locale),
-                      S3: t('ret_seg_target_s3', locale),
-                      S4: t('ret_seg_target_s4', locale),
-                    };
+                    const segNames: Record<string, string> = { S1: t('ret_seg_s1', locale), S2: t('ret_seg_s2', locale), S3: t('ret_seg_s3', locale), S4: t('ret_seg_s4', locale) };
+                    const segTarget: Record<string, string> = { S1: t('ret_seg_target_s1', locale), S2: t('ret_seg_target_s2', locale), S3: t('ret_seg_target_s3', locale), S4: t('ret_seg_target_s4', locale) };
+                    const touchLabel = (seg: string, tn: number) => `${seg} · ${tn === 1 ? t('ret_wave_1', locale) : tn === 2 ? t('ret_wave_2', locale) : t('ret_wave_3', locale)}`;
                     const loadRetention = async (period: number) => {
                       setRetentionLoading(true);
                       try { const r = await tgFetch(`/tg/me/retention-stats?period=${period}`); if (r.ok) setRetentionStats(await r.json()); } catch {}
@@ -9796,7 +9787,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 12, fontWeight: 700, color: '#34D399', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                            {t('ret_title', locale)}
+                            📊 Retention & Win-back
                           </span>
                           <span style={{ fontSize: 14, color: C.textMuted }}>{retentionOpen ? '▾' : '▸'}</span>
                         </div>
@@ -9808,17 +9799,25 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
                       {retentionOpen && retentionStats && (() => {
                         const o = retentionStats.overview;
-                        const kpiRow = (label: string, value: number | string, color: string) => (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                            <span style={{ fontSize: 11, color: C.textMuted }}>{label}</span>
+                        const dbg = retentionStats.debug;
+                        const kpi = (label: string, value: number | string, color: string, hint?: string) => (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                            <span style={{ fontSize: 11, color: C.textMuted }}>{label}{hint ? <span style={{ fontSize: 9, color: '#555', marginLeft: 4 }}>({hint})</span> : null}</span>
                             <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
                           </div>
                         );
+                        const sectionTitle = (text: string) => (
+                          <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5, marginTop: 10 }}>{text}</div>
+                        );
+                        const card = (children: React.ReactNode) => (
+                          <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>{children}</div>
+                        );
+
                         return (
                           <div style={{ marginTop: 8 }}>
-                            {/* Period tabs */}
-                            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                              {[7, 30, 90].map(d => ({ d, l: t('ret_days', locale, { n: d }) })).map(({ d, l }) => (
+                            {/* Period selector */}
+                            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                              {[7, 30, 90].map(d => (
                                 <button key={d}
                                   style={{
                                     fontSize: 11, padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
@@ -9826,84 +9825,92 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                     color: retentionPeriod === d ? '#000' : C.textMuted, fontWeight: 600,
                                   }}
                                   onClick={() => { setRetentionPeriod(d); void loadRetention(d); }}
-                                >{l}</button>
+                                >{d} дн.</button>
                               ))}
                             </div>
 
-                            {/* ── Блок 1: Коммуникации ── */}
-                            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                              {t('ret_comms', locale)}
-                            </div>
-                            <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
-                              {kpiRow(t('ret_sent', locale), o.sent, C.text)}
-                              {kpiRow(t('ret_delivered', locale), o.delivered, C.text)}
-                              {kpiRow(t('ret_users', locale), o.uniqueUsers, C.text)}
-                            </div>
+                            {/* ── Коммуникации ── */}
+                            {sectionTitle('Коммуникации')}
+                            {card(<>
+                              {kpi('Отправлено сообщений', o.sent, C.text)}
+                              {kpi('Доставлено', o.delivered, C.text)}
+                              {kpi('Охвачено пользователей', o.uniqueUsers, C.text)}
+                              {kpi('Доставляемость', o.delivered > 0 && o.sent > 0 ? `${Math.round(o.delivered / o.sent * 100)}%` : '—', C.text)}
+                            </>)}
 
-                            {/* ── Блок 2: Возврат ── */}
-                            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                              {t('ret_return', locale)}
-                            </div>
-                            <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
-                              {kpiRow(t('ret_ret_24h', locale), o.returned24h, '#FBBF24')}
-                              {kpiRow(t('ret_ret_72h', locale), o.returned72h, '#34D399')}
-                              {kpiRow(t('ret_ret_7d', locale), o.returned7d, '#34D399')}
-                              {kpiRow(t('ret_target_7d', locale), o.targetCompleted7d, '#7C6AFF')}
+                            {/* ── Возврат пользователей ── */}
+                            {sectionTitle('Возврат пользователей')}
+                            {card(<>
+                              {kpi('Вернулись за 24ч', o.returned24h, '#FBBF24', 'от отправки')}
+                              {kpi('Вернулись за 72ч', o.returned72h, '#34D399', 'primary')}
+                              {kpi('Вернулись за 7д', o.returned7d, '#34D399')}
+                              {kpi('Целевое действие за 7д', o.targetCompleted7d, '#7C6AFF')}
                               <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
-                                {kpiRow(t('ret_conv_72h', locale), o.returnRate72h, '#34D399')}
+                                {kpi('Конверсия возврата 72ч', o.returnRate72h, '#34D399', 'ret72h / delivered')}
+                                {kpi('Конверсия в действие 7д', o.targetRate7d ?? '—', '#7C6AFF', 'target / delivered')}
                               </div>
-                            </div>
+                            </>)}
 
-                            {/* ── Блок 3: Промо ── */}
-                            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                              {t('ret_promo_section', locale)}
-                            </div>
-                            <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
-                              {kpiRow(t('ret_promo_sent', locale), o.promoOffered, C.text)}
-                              {kpiRow(t('ret_promo_used', locale), o.promoRedeemed, '#34D399')}
-                              {kpiRow(t('ret_promo_active', locale), o.activeGrants, '#34D399')}
-                              {kpiRow(t('ret_promo_expired', locale), o.expiredGrants, C.textMuted)}
-                            </div>
+                            {/* ── Промо (WISHPRO) ── */}
+                            {sectionTitle('Промо (WISHPRO)')}
+                            {card(<>
+                              {kpi('Назначено в touch', o.promoAssigned, C.text, 'touch + offerCode')}
+                              {kpi('Доставлено с промо', o.promoDelivered, C.text, 'delivered + offerCode')}
+                              {kpi('Активировано', o.promoRedeemed, '#34D399', 'redeemed after touch')}
+                              <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
+                                {kpi('PRO-доступы активны', o.activeGrants, '#34D399')}
+                                {kpi('PRO-доступы истекли', o.expiredGrants, C.textMuted)}
+                              </div>
+                            </>)}
 
                             {/* ── По сегментам ── */}
-                            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                              {t('ret_by_segment', locale)}
-                            </div>
+                            {sectionTitle('По сегментам')}
                             {(retentionStats.bySegment as any[]).filter((r: any) => r.sent > 0).map((r: any) => (
                               <div key={r.segment} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: '#34D399', marginBottom: 6 }}>
-                                  {segNames[r.segment] || r.segment}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#34D399' }}>{segNames[r.segment] || r.segment}</span>
+                                  <span style={{ fontSize: 9, color: C.textMuted, background: C.bg, padding: '2px 6px', borderRadius: 4 }}>{segTarget[r.segment] || '—'}</span>
                                 </div>
-                                {kpiRow(t('ret_sent', locale), r.sent, C.text)}
-                                {kpiRow(t('ret_delivered', locale), r.delivered, C.text)}
-                                {kpiRow(t('ret_ret_72h', locale), r.returned72h, '#FBBF24')}
-                                {kpiRow(t('ret_target_action', locale), r.targetCompleted7d, '#7C6AFF')}
-                                {kpiRow(t('ret_return_rate', locale), r.returnRate72h, '#34D399')}
-                                {r.promoRedeemed > 0 && kpiRow(t('ret_promo_used', locale), r.promoRedeemed, '#34D399')}
-                                <div style={{ fontSize: 9, color: C.textMuted, marginTop: 4, fontStyle: 'italic' }}>
-                                  {t('ret_target_action', locale)}: {segTarget[r.segment] || '—'}
-                                </div>
+                                {kpi('Отправлено', r.sent, C.text)}
+                                {kpi('Доставлено', r.delivered, C.text)}
+                                {kpi('Возврат 72ч', r.returned72h, '#FBBF24')}
+                                {kpi('Действие 7д', r.targetCompleted7d, '#7C6AFF')}
+                                {kpi('Конв. возврата', r.returnRate72h, '#34D399')}
+                                {kpi('Конв. действия', r.targetRate7d ?? '—', '#7C6AFF')}
+                                {(r.promoDelivered > 0 || r.promoRedeemed > 0) && <>
+                                  <div style={{ marginTop: 3, paddingTop: 3, borderTop: `1px solid ${C.border}` }}>
+                                    {kpi('Промо доставлено', r.promoDelivered, C.text)}
+                                    {kpi('Промо активировано', r.promoRedeemed, '#34D399')}
+                                  </div>
+                                </>}
                               </div>
                             ))}
 
-                            {/* ── По сообщениям (touch) ── */}
-                            {(retentionStats.byTouch as any[]).length > 0 && (
-                              <>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 4, marginBottom: 6 }}>
-                                  {t('ret_by_touch', locale)}
-                                </div>
-                                {(retentionStats.byTouch as any[]).map((r: any) => (
-                                  <div key={`${r.segment}-${r.touchNumber}`} style={{ background: C.surface, borderRadius: 8, padding: '8px 12px', marginBottom: 4 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 3 }}>
-                                      {r.segment} / #{r.touchNumber}
-                                    </div>
-                                    <div style={{ fontSize: 10, color: C.textMuted }}>
-                                      {r.sent} {t('ret_sent', locale).toLowerCase()} · <span style={{ color: '#FBBF24' }}>{r.returned72h} {t('ret_ret_72h', locale).toLowerCase()}</span> · <span style={{ color: '#7C6AFF' }}>{r.targetCompleted7d} {t('ret_target_action', locale).toLowerCase()}</span>
-                                      {r.promoRedeemed > 0 && <> · <span style={{ color: '#34D399' }}>{r.promoRedeemed} {t('ret_promo_used', locale).toLowerCase()}</span></>}
-                                    </div>
+                            {/* ── По сообщениям (волны) ── */}
+                            {(retentionStats.byTouch as any[]).length > 0 && (<>
+                              {sectionTitle('По волнам (touch)')}
+                              {(retentionStats.byTouch as any[]).map((r: any) => (
+                                <div key={`${r.segment}-${r.touchNumber}`} style={{ background: C.surface, borderRadius: 8, padding: '8px 12px', marginBottom: 4 }}>
+                                  <div style={{ fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 3 }}>{touchLabel(r.segment, r.touchNumber)}</div>
+                                  <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.6 }}>
+                                    {r.sent} отпр · {r.delivered} дост · <span style={{ color: '#FBBF24' }}>{r.returned72h} верн.</span> · <span style={{ color: '#7C6AFF' }}>{r.targetCompleted7d} дейст.</span>
+                                    {r.promoDelivered > 0 && <> · <span style={{ color: C.text }}>{r.promoDelivered} промо</span></>}
+                                    {r.promoRedeemed > 0 && <> · <span style={{ color: '#34D399' }}>{r.promoRedeemed} актив.</span></>}
                                   </div>
-                                ))}
-                              </>
+                                </div>
+                              ))}
+                            </>)}
+
+                            {/* ── Debug / dev info ── */}
+                            {dbg && (
+                              <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `1px dashed ${C.border}` }}>
+                                <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 3 }}>🔍 Debug</div>
+                                <div style={{ fontSize: 9, color: '#555', lineHeight: 1.6 }}>
+                                  Всего touches за период: {dbg.totalTouchesInPeriod}<br />
+                                  Исключено (test/godMode): {dbg.excludedTestUsers}<br />
+                                  Test user IDs: {dbg.testUserIds?.join(', ') || '—'}
+                                </div>
+                              </div>
                             )}
                           </div>
                         );

@@ -6143,6 +6143,7 @@ tgRouter.get(
 // ─── Retention Analytics (god mode only) ─────────────────────────────────────
 
 // GET /tg/me/retention-stats — lifecycle/winback analytics dashboard
+// Filters out godMode/test users from production metrics.
 tgRouter.get(
   '/me/retention-stats',
   asyncHandler(async (req, res) => {
@@ -6154,8 +6155,15 @@ tgRouter.get(
     const periodDays = parseInt(String(req.query.period ?? '30'), 10) || 30;
     const since = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
 
-    // Aggregate touches
-    const touches = await prisma.lifecycleTouch.findMany({
+    // Identify test/internal users to exclude from production metrics
+    const testUsers = await prisma.user.findMany({
+      where: { OR: [{ godMode: true }, { telegramId: { in: godModeAllowedIds } }] },
+      select: { id: true },
+    });
+    const testUserIds = new Set(testUsers.map(u => u.id));
+
+    // Load all touches in period
+    const allTouches = await prisma.lifecycleTouch.findMany({
       where: { sentAt: { gte: since, not: null } },
       select: {
         id: true, userId: true, segment: true, touchNumber: true,
@@ -6164,38 +6172,55 @@ tgRouter.get(
       },
     });
 
-    // Overview aggregates
+    // Production-clean touches (exclude test users)
+    const touches = allTouches.filter(t => !testUserIds.has(t.userId));
+    const excludedCount = allTouches.length - touches.length;
+
+    // Attribution helpers (FIXED: was using targetCompletedAt - targetCompletedAt, now uses sentAt)
+    const H = 3600 * 1000;
+    const D = 24 * H;
+    const within = (a: Date | null, b: Date | null, ms: number) => a && b && (a.getTime() - b.getTime()) <= ms && (a.getTime() - b.getTime()) >= 0;
+
+    // Overview
     const sent = touches.length;
     const delivered = touches.filter(t => t.delivered).length;
     const uniqueUsers = new Set(touches.map(t => t.userId)).size;
-    const returned24h = touches.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 24 * 3600 * 1000).length;
-    const returned72h = touches.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 72 * 3600 * 1000).length;
-    const returned7d = touches.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 7 * 24 * 3600 * 1000).length;
-    const targetCompleted7d = touches.filter(t => t.targetCompletedAt && t.sentAt && (t.targetCompletedAt.getTime() - t.sentAt.getTime()) <= 7 * 24 * 3600 * 1000).length;
-    const promoOffered = touches.filter(t => t.offerCode).length;
-    const promoRedeemed = touches.filter(t => t.promoRedeemedAt).length;
+    const returned24h = touches.filter(t => within(t.returnedAt, t.sentAt, 24 * H)).length;
+    const returned72h = touches.filter(t => within(t.returnedAt, t.sentAt, 72 * H)).length;
+    const returned7d = touches.filter(t => within(t.returnedAt, t.sentAt, 7 * D)).length;
+    const targetCompleted7d = touches.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length;
 
-    // Promo grant counts
+    // Promo: separated stages
+    const promoAssigned = touches.filter(t => t.offerCode).length; // touch had promo code assigned
+    const promoDelivered = touches.filter(t => t.offerCode && t.delivered).length; // promo message actually delivered
+    const promoRedeemed = touches.filter(t => t.promoRedeemedAt).length; // promo was activated
+
+    // Promo entitlement counts (exclude test users)
     const [activeGrants, expiredGrants] = await Promise.all([
-      prisma.promoRedemption.count({ where: { status: 'ACTIVE', expiresAt: { gt: new Date() } } }),
-      prisma.promoRedemption.count({ where: { status: 'EXPIRED' } }),
+      prisma.promoRedemption.count({ where: { status: 'ACTIVE', expiresAt: { gt: new Date() }, userId: { notIn: [...testUserIds] } } }),
+      prisma.promoRedemption.count({ where: { status: 'EXPIRED', userId: { notIn: [...testUserIds] } } }),
     ]);
 
+    // Conversion rates
+    const pct = (num: number, den: number) => den > 0 ? `${Math.round(num / den * 100)}%` : '—';
+
     // By segment
-    const segments = ['S1', 'S2', 'S3', 'S4'];
+    const segments = ['S1', 'S2', 'S3', 'S4'] as const;
     const bySegment = segments.map(seg => {
       const st = touches.filter(t => t.segment === seg);
       const del = st.filter(t => t.delivered);
+      const ret72 = st.filter(t => within(t.returnedAt, t.sentAt, 72 * H)).length;
+      const tgt7d = st.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length;
       return {
         segment: seg,
         sent: st.length,
         delivered: del.length,
-        returned24h: st.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 24 * 3600 * 1000).length,
-        returned72h: st.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 72 * 3600 * 1000).length,
-        returned7d: st.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 7 * 24 * 3600 * 1000).length,
-        targetCompleted7d: st.filter(t => t.targetCompletedAt && t.sentAt && (t.targetCompletedAt.getTime() - t.sentAt.getTime()) <= 7 * 24 * 3600 * 1000).length,
-        returnRate72h: del.length > 0 ? `${Math.round(st.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 72 * 3600 * 1000).length / del.length * 100)}%` : '—',
-        promoSent: st.filter(t => t.offerCode).length,
+        returned72h: ret72,
+        targetCompleted7d: tgt7d,
+        returnRate72h: pct(ret72, del.length),
+        targetRate7d: pct(tgt7d, del.length),
+        promoAssigned: st.filter(t => t.offerCode).length,
+        promoDelivered: st.filter(t => t.offerCode && t.delivered).length,
         promoRedeemed: st.filter(t => t.promoRedeemedAt).length,
       };
     });
@@ -6208,8 +6233,9 @@ tgRouter.get(
         return {
           segment: seg, touchNumber: tn,
           sent: st.length, delivered: del.length,
-          returned72h: st.filter(t => t.returnedAt && t.sentAt && (t.returnedAt.getTime() - t.sentAt.getTime()) <= 72 * 3600 * 1000).length,
-          targetCompleted7d: st.filter(t => t.targetCompletedAt && t.sentAt && (t.targetCompletedAt.getTime() - t.sentAt.getTime()) <= 7 * 24 * 3600 * 1000).length,
+          returned72h: st.filter(t => within(t.returnedAt, t.sentAt, 72 * H)).length,
+          targetCompleted7d: st.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length,
+          promoDelivered: st.filter(t => t.offerCode && t.delivered).length,
           promoRedeemed: st.filter(t => t.promoRedeemedAt).length,
         };
       }).filter(r => r.sent > 0),
@@ -6220,11 +6246,18 @@ tgRouter.get(
       overview: {
         sent, delivered, uniqueUsers,
         returned24h, returned72h, returned7d, targetCompleted7d,
-        returnRate72h: delivered > 0 ? `${Math.round(returned72h / delivered * 100)}%` : '—',
-        promoOffered, promoRedeemed, activeGrants, expiredGrants,
+        returnRate72h: pct(returned72h, delivered),
+        targetRate7d: pct(targetCompleted7d, delivered),
+        promoAssigned, promoDelivered, promoRedeemed,
+        activeGrants, expiredGrants,
       },
       bySegment,
       byTouch,
+      debug: {
+        totalTouchesInPeriod: allTouches.length,
+        excludedTestUsers: excludedCount,
+        testUserIds: [...testUserIds].map(id => id.slice(0, 8) + '…'),
+      },
       generatedAt: new Date().toISOString(),
     });
   }),
