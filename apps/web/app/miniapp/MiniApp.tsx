@@ -11525,40 +11525,53 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     });
                   }}
                 />
-                <span style={{ paddingRight: 14, fontSize: 16, color: '#444', flexShrink: 0, userSelect: 'none', pointerEvents: 'none' }}>
-                  {itemCurrency === 'RUB' ? '₽' : '$'}
+                <span style={{ paddingRight: 14, fontSize: 16, color: ({ RUB: '#7C6AFF', USD: '#34D399', EUR: '#60A5FA', GBP: '#FBBF24' } as Record<string, string>)[itemCurrency] ?? '#444', flexShrink: 0, userSelect: 'none', pointerEvents: 'none', opacity: 0.6 }}>
+                  {{ RUB: '₽', USD: '$', EUR: '€', GBP: '£' }[itemCurrency]}
                 </span>
               </div>
-              {/* Collapsible currency selector */}
+              {/* Collapsible currency selector — per-currency accent colors */}
+              {(() => {
+                const CUR_ACCENT: Record<string, string> = { RUB: '#7C6AFF', USD: '#34D399', EUR: '#60A5FA', GBP: '#FBBF24' };
+                const CUR_SYM: Record<string, string> = { RUB: '₽', USD: '$', EUR: '€', GBP: '£' };
+                const accent = CUR_ACCENT[itemCurrency] ?? '#7C6AFF';
+                return (
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                 {currencyExpanded ? (
-                  (['RUB', 'USD', 'EUR', 'GBP'] as const).map(c => (
+                  (['RUB', 'USD', 'EUR', 'GBP'] as const).map(c => {
+                    const ca = CUR_ACCENT[c]!;
+                    const active = itemCurrency === c;
+                    return (
                     <button key={c} type="button" onClick={() => { setItemCurrency(c); setCurrencyExpanded(false); }}
                       style={{
-                        width: 40, height: 40, borderRadius: 12, border: `1.5px solid ${itemCurrency === c ? C.accent : 'rgba(255,255,255,0.06)'}`,
-                        background: itemCurrency === c ? 'rgba(124,106,255,0.15)' : '#1c1c22',
-                        color: itemCurrency === c ? C.accent : '#6B7280',
+                        width: 40, height: 40, borderRadius: 12,
+                        border: `1.5px solid ${active ? ca + '40' : 'rgba(255,255,255,0.06)'}`,
+                        background: active ? ca + '18' : '#1c1c22',
+                        color: active ? ca : '#6B7280',
                         fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
                         transition: 'all 0.12s',
                       }}>
-                      {{ RUB: '₽', USD: '$', EUR: '€', GBP: '£' }[c]}
+                      {CUR_SYM[c]}
                     </button>
-                  ))
+                    );
+                  })
                 ) : (
                   <button type="button" onClick={() => setCurrencyExpanded(true)}
                     style={{
-                      width: 48, height: 48, borderRadius: 14, border: `1.5px solid rgba(124,106,255,0.25)`,
-                      background: 'rgba(124,106,255,0.1)', color: C.accent,
+                      width: 48, height: 48, borderRadius: 14,
+                      border: `1.5px solid ${accent}35`,
+                      background: accent + '12', color: accent,
                       fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
                       position: 'relative',
                     }}>
-                    {{ RUB: '₽', USD: '$', EUR: '€', GBP: '£' }[itemCurrency]}
-                    <span style={{ position: 'absolute', bottom: 3, right: 6, fontSize: 8, color: 'rgba(124,106,255,0.6)' }}>▾</span>
+                    {CUR_SYM[itemCurrency]}
+                    <span style={{ position: 'absolute', bottom: 3, right: 6, fontSize: 8, color: accent + '80' }}>▾</span>
                   </button>
                 )}
               </div>
+                );
+              })()}
             </div>
           </div>
           {/* Priority — refreshed with glow */}
