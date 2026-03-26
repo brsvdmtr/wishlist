@@ -53,7 +53,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 | Doc | Status | What it covers |
 |-----|--------|---------------|
 | [FRONTEND_MAP.md](./FRONTEND_MAP.md) | primary | All 33 screens, state management, design system, PRO upsell system, patterns |
-| [FRONTEND_API_MAP.md](./FRONTEND_API_MAP.md) | secondary | Per-screen API call map (38 calls). Detailed companion to FRONTEND_MAP + API_REFERENCE |
+| [FRONTEND_API_MAP.md](./FRONTEND_API_MAP.md) | secondary | Per-screen API call map (~50+ calls). Detailed companion to FRONTEND_MAP + API_REFERENCE |
 
 ### Telegram Integration
 
@@ -104,10 +104,10 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 | File | Purpose |
 |------|---------|
-| `apps/api/src/index.ts` | Entire Express API (~9000+ lines) |
-| `apps/web/app/miniapp/MiniApp.tsx` | Entire Mini App frontend (~10000+ lines) |
-| `apps/bot/src/index.ts` | Telegram bot (~1000 lines) |
-| `apps/api/src/url-parser.ts` | URL import pipeline (~800 lines) |
+| `apps/api/src/index.ts` | Entire Express API (~11,200 lines) |
+| `apps/web/app/miniapp/MiniApp.tsx` | Entire Mini App frontend (~15,000 lines) |
+| `apps/bot/src/index.ts` | Telegram bot (~1,180 lines) |
+| `apps/api/src/url-parser.ts` | URL import pipeline (~810 lines) |
 | `packages/db/prisma/schema.prisma` | Database schema |
 | `packages/shared/src/i18n.ts` | All UI strings (6 locales: ru, en, zh-CN, hi, es, ar) |
 
