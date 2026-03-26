@@ -94,7 +94,7 @@ Uploaded files are stored in a named Docker volume `wishlist_uploads`, mounted a
 | `bot` | `apps/bot/src/index.ts` | Telegraf bot. Commands, payment handlers, URL import relay, hints delivery, support ticket bridge, heartbeat. |
 | `web` | `apps/web/` | Next.js 14 app. Single-page Mini App (`MiniApp.tsx`), server-side admin routes (Basic Auth middleware). |
 | `db` | `packages/db/` | Prisma schema for PostgreSQL 16. Shared client exported as `@wishlist/db`. Both `api` and `bot` import this package directly. |
-| `shared` | `packages/shared/` | i18n strings (6 locales: RU, EN, UK, KK, DE, FR), `t()` translation function, `detectLocale()`, TypeScript types shared across packages. |
+| `shared` | `packages/shared/` | i18n strings (6 locales: ru, en, zh-CN, hi, es, ar), `t()` translation function, `normalizeLocale()`, `isRTL()`, `resolveEffectiveLocale()`, TypeScript types shared across packages. |
 
 ---
 
