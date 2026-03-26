@@ -1,15 +1,14 @@
 # INFRA_AND_ENV — Infrastructure, Environment & Deployment
 > Last updated: 2026-03-26 · Branch: main
 >
-> **Note:** Domain is transitioning from `wishlistik.ru` to `wish.board-hub.com` `NEEDS_VERIFICATION`. Many code blocks below still reference the old domain. Update commands accordingly once the domain migration is confirmed.
 
 ## Server
 
 | Property | Value |
 |----------|-------|
 | Provider | Timeweb (VPS) |
-| Hostname | wish.board-hub.com `NEEDS_VERIFICATION` |
-| SSH | `ssh -i ~/.ssh/timeweb_wishlist root@wish.board-hub.com` `NEEDS_VERIFICATION` |
+| Hostname | wishlistik.ru |
+| SSH | `ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru` |
 | Project path | `/opt/wishlist` |
 | OS | Debian 12 (bookworm) |
 | Node.js | 20 (via Docker images) |
@@ -20,8 +19,8 @@
 
 | Property | Value |
 |----------|-------|
-| Domain | wish.board-hub.com `NEEDS_VERIFICATION` |
-| Alt domain | www.wish.board-hub.com (redirected to non-www) `NEEDS_VERIFICATION` |
+| Domain | wishlistik.ru |
+| Alt domain | www.wishlistik.ru (redirected to non-www) |
 | SSL | Let's Encrypt |
 | Certificate | `/etc/letsencrypt/live/wishlistik.ru/fullchain.pem` |
 | Private key | `/etc/letsencrypt/live/wishlistik.ru/privkey.pem` |

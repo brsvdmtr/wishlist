@@ -1,6 +1,5 @@
 # RECOVERY_RUNBOOK.md - Step-by-Step Disaster Recovery
 
-> **Note:** Domain is transitioning from `wishlistik.ru` to `wish.board-hub.com` `NEEDS_VERIFICATION`. Many commands below still reference the old domain. Update accordingly once the domain migration is confirmed.
 > Last updated: 2026-03-26 · Branch: main
 
 ## Prerequisites

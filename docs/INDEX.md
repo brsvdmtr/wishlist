@@ -9,7 +9,7 @@
 
 WishBoard is a **Telegram Mini App** for managing wishlists. Users create and share wishlists; friends reserve gifts without spoiling the surprise. Monetized via Telegram Stars (PRO plan, 100 Stars/month).
 
-- **Production URL:** https://wish.board-hub.com/miniapp `NEEDS_VERIFICATION`
+- **Production URL:** https://wishlistik.ru/miniapp
 - **Bot:** [@WishHub_bot](https://t.me/WishHub_bot) (configured via `NEXT_PUBLIC_BOT_USERNAME`)
 - **Stack:** Express API + Telegraf bot + Next.js 14 + PostgreSQL + Docker Compose
 
@@ -115,7 +115,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 ```bash
 # SSH to server
-ssh -i ~/.ssh/timeweb_wishlist root@wish.board-hub.com  # NEEDS_VERIFICATION
+ssh -i ~/.ssh/timeweb_wishlist root@wishlistik.ru
 
 # Deploy (production branch: main)
 cd /opt/wishlist
@@ -184,4 +184,4 @@ These are known planned features, shown as disabled "Coming soon" placeholders i
 
 All docs last synchronized with code on **2026-03-26**.
 Branch: `main`
-Production: `wish.board-hub.com` `NEEDS_VERIFICATION`
+Production: `wishlistik.ru`
