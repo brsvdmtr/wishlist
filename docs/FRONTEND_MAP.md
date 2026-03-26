@@ -82,7 +82,7 @@ Navigation is done by calling `setScreen(...)` together with supporting state (`
 
 ### Screens added since March 17
 
-The screen count has grown from 14 to 35+. New screen types include:
+The screen count has grown from 14 to 33. New screen types include:
 
 - **Onboarding v2 screens** — multi-step welcome flow (welcome, import, share, reserve, complete)
 - **Promo redemption screen** — enter promo code, see result
