@@ -418,8 +418,16 @@ const inputStyle: React.CSSProperties = {
  *  Telegram WebView doesn't shrink viewport when keyboard opens, AND the container
  *  has limited bottom padding — scrollTop hits its max before the textarea can reach
  *  the visible area. The spacer creates the extra scroll room needed. */
-function handleTextareaFocus(textarea: HTMLElement) {
-  let scrollParent: HTMLElement | null = textarea.parentElement;
+/**
+ * Ensure a focused field is visible above the Telegram iOS keyboard.
+ * Telegram WebView does NOT resize viewport or auto-scroll when keyboard opens,
+ * so we must handle this manually.
+ *
+ * Strategy: add a bottom spacer (so there's room to scroll), wait for keyboard
+ * animation (~350ms), then scrollIntoView with block:'nearest' for minimal movement.
+ */
+function handleTextareaFocus(el: HTMLElement) {
+  let scrollParent: HTMLElement | null = el.parentElement;
   while (scrollParent) {
     const ov = window.getComputedStyle(scrollParent).overflowY;
     if (ov === 'auto' || ov === 'scroll') break;
@@ -431,25 +439,24 @@ function handleTextareaFocus(textarea: HTMLElement) {
   // Remove any leftover spacer from previous focus
   sp.querySelector('[data-kb-spacer]')?.remove();
 
-  // Add temporary spacer — creates extra scroll room for keyboard
+  // Add spacer so scroll container has room below
   const spacer = document.createElement('div');
   spacer.setAttribute('data-kb-spacer', '1');
-  spacer.style.height = '50vh';
+  spacer.style.height = '45vh';
   spacer.style.pointerEvents = 'none';
   sp.appendChild(spacer);
 
-  // Scroll into view using smooth behavior — gentle, no jarring jump.
-  // requestAnimationFrame waits one frame for spacer to be in layout.
-  requestAnimationFrame(() => {
-    textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
+  // Wait for iOS keyboard animation to settle, then minimal scroll
+  setTimeout(() => {
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 350);
 
-  // Remove spacer when keyboard closes (blur)
+  // Remove spacer on blur
   const cleanup = () => {
     spacer.remove();
-    textarea.removeEventListener('blur', cleanup);
+    el.removeEventListener('blur', cleanup);
   };
-  textarea.addEventListener('blur', cleanup);
+  el.addEventListener('blur', cleanup);
 }
 
 /** Blur whichever input/textarea currently has focus, dismissing the keyboard. */
@@ -11496,6 +11503,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   ref={priceInputRef}
                   style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: font, padding: '12px 14px', minWidth: 0, letterSpacing: '-0.02em' }}
                   placeholder="0" type="text" inputMode="numeric"
+                  onFocus={(e) => handleTextareaFocus(e.currentTarget)}
                   value={formatPriceForDisplay(itemPrice)}
                   onChange={(e) => {
                     const cursorPos = e.target.selectionStart ?? e.target.value.length;
