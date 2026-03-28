@@ -187,6 +187,15 @@ const ACTIVE_STATUSES = ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const;
 const ARCHIVE_VIEW_STATUSES = ['DELETED', 'COMPLETED', 'ARCHIVED'] as const;
 const PrioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH']);
 
+// Normalize bare domain URLs like "audi.com" → "https://audi.com"
+const normalizeUrl = (val: string) => {
+  const v = val.trim();
+  if (!v) return v;
+  if (/^https?:\/\//i.test(v)) return v;
+  return `https://${v}`;
+};
+const zUrl = () => z.string().transform(normalizeUrl).pipe(z.string().url());
+
 // Sort logic lives in sort.ts (no external deps → easy to unit-test)
 import { ITEM_ORDER_BY, sortItemsJs, type SortableItem } from './sort.js';
 export { ITEM_ORDER_BY, sortItemsJs, type SortableItem };
@@ -1085,7 +1094,7 @@ privateRouter.patch(
     const parsed = z
       .object({
         title: z.string().min(1).max(200).optional(),
-        url: z.string().url().optional(),
+        url: zUrl().optional(),
         priceText: z.string().max(200).nullable().optional(),
         commentOwner: z.string().max(2000).nullable().optional(),
         priority: PrioritySchema.optional(),
@@ -2896,7 +2905,7 @@ tgRouter.post(
     const parsed = z
       .object({
         title: z.string().min(1).max(200),
-        url: z.string().url().optional(),
+        url: zUrl().optional(),
         price: z.number().int().nonnegative().nullable().optional(),
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         imageUrl: z.string().url().optional(),
@@ -3387,7 +3396,7 @@ tgRouter.patch(
     const parsed = z
       .object({
         title: z.string().min(1).max(200).optional(),
-        url: z.string().url().nullable().optional(),
+        url: zUrl().nullable().optional(),
         price: z.number().int().nonnegative().nullable().optional(),
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         imageUrl: z.string().url().nullable().optional(),
