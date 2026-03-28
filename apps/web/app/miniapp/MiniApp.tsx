@@ -10540,10 +10540,28 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-          GIFT NOTES — Поводы и идеи (v2)
+          GIFT NOTES — Поводы и идеи (v2.1)
           ═══════════════════════════════════════════════════════════════ */}
 
-      {/* Paywall / onboarding */}
+      {(() => {
+        // Shared input component with clear button + char counter
+        const GnInput = ({ value, onChange, placeholder, maxLen, multiline }: { value: string; onChange: (v: string) => void; placeholder?: string; maxLen?: number; multiline?: boolean }) => (
+          <div style={{ position: 'relative' as const }}>
+            {multiline ? (
+              <textarea value={value} onChange={e => { if (maxLen && e.target.value.length > maxLen) return; onChange(e.target.value); }} placeholder={placeholder}
+                style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const, minHeight: 60, resize: 'none' as const }} />
+            ) : (
+              <input value={value} onChange={e => { if (maxLen && e.target.value.length > maxLen) return; onChange(e.target.value); }} placeholder={placeholder}
+                style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+            )}
+            {value && <button onClick={() => onChange('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>}
+            {maxLen && <div style={{ fontSize: 10, color: value.length > maxLen * 0.9 ? '#FBBF24' : '#444', textAlign: 'right' as const, marginTop: 2 }}>{value.length} / {maxLen}</div>}
+          </div>
+        );
+        return null;
+      })()}
+
+      {/* Paywall */}
       {screen === 'gift-notes-paywall' && (
         <div style={{ padding: '40px 24px 120px', animation: 'fadeIn 0.3s ease', textAlign: 'center' }}>
           <span style={{ fontSize: 48, display: 'block', marginBottom: 16 }}>🎁</span>
@@ -10569,7 +10587,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
                       pushToast(locale === 'ru' ? 'Доступ открыт!' : 'Unlocked!', 'success');
                       setGnLoading(true);
-                      try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) { const od = await or.json() as any; setGnOccasions(od.occasions); } } catch {}
+                      try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
                       setGnLoading(false);
                       setScreen('gift-notes');
                     }
@@ -10596,16 +10614,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const card = (o: any) => (
           <div key={o.id} onClick={async () => {
             const r = await tgFetch(`/tg/gift-occasions/${o.id}`);
-            if (r.ok) { const d = await r.json() as any; setGnViewingOccasion(d.occasion); setScreen('gift-notes-occasion'); }
+            if (r.ok) { setGnViewingOccasion((await r.json() as any).occasion); setScreen('gift-notes-occasion'); }
           }} style={{ background: C.surface, borderRadius: 14, padding: '14px 16px', marginBottom: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                 <span style={{ fontSize: 14 }}>{typeEmoji[o.type] ?? '🎁'}</span>
-                <span style={{ fontSize: 14, fontWeight: 650, color: o.status === 'ARCHIVED' ? '#555' : C.text }}>{o.title}</span>
+                <span style={{ fontSize: 14, fontWeight: 650, color: o.status === 'DONE' ? '#34D399' : o.status === 'ARCHIVED' ? '#555' : C.text }}>{o.title}</span>
+                {o.status === 'DONE' && <span style={{ fontSize: 10, color: '#34D399' }}>✓</span>}
               </div>
               {o.personName && <div style={{ fontSize: 11, color: C.textMuted, marginLeft: 22 }}>{o.personName}</div>}
               <div style={{ display: 'flex', gap: 6, marginTop: 4, marginLeft: 22 }}>
-                {o.daysUntil != null && (
+                {o.status === 'ACTIVE' && o.daysUntil != null && (
                   <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 600, background: o.daysUntil <= 7 ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.05)', color: o.daysUntil <= 7 ? '#FBBF24' : C.textMuted }}>
                     {o.daysUntil === 0 ? t('gn_today', locale) : o.daysUntil > 0 ? t('gn_days_left', locale, { n: o.daysUntil }) : t('gn_days_overdue', locale, { n: Math.abs(o.daysUntil) })}
                   </span>
@@ -10616,75 +10635,139 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>
           </div>
         );
-        const section = (title: string, items: any[]) => items.length > 0 && (
+        const section = (title: string, items: any[]) => items.length > 0 ? (
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 6 }}>{title}</div>
             {items.map(card)}
           </div>
-        );
+        ) : null;
         return (
           <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: 0 }}>🎁 {t('gn_title', locale)}</h1>
-              <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }} style={{ background: C.accent, color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font }}>+ {t('gn_add_occasion', locale)}</button>
-            </div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 16px' }}>🎁 {t('gn_title', locale)}</h1>
             {gnLoading && <div style={{ textAlign: 'center', color: C.textMuted, padding: 20 }}>...</div>}
             {!gnLoading && gnOccasions.length === 0 && <div style={{ textAlign: 'center', padding: '40px 0', color: C.textMuted, fontSize: 14 }}>{t('gn_empty', locale)}</div>}
             {section(t('gn_upcoming', locale), active)}
             {section(t('gn_no_date', locale), noDate)}
             {section(t('gn_done', locale), done)}
             {section(t('gn_archive', locale), archived)}
+            {/* Full-width CTA at bottom */}
+            <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
+              style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: C.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: 8 }}>
+              + {t('gn_add_occasion', locale)}
+            </button>
           </div>
         );
       })()}
 
-      {/* Occasion detail with ideas */}
+      {/* Occasion detail */}
       {screen === 'gift-notes-occasion' && gnViewingOccasion && (() => {
         const o = gnViewingOccasion;
         const typeLabel = ({ BIRTHDAY: t('gn_type_birthday', locale), ANNIVERSARY: t('gn_type_anniversary', locale), HOLIDAY: t('gn_type_holiday', locale), OTHER: t('gn_type_other', locale) } as Record<string, string>)[o.type] ?? o.type;
-        const daysText = o.daysUntil === 0 ? t('gn_today', locale) : o.daysUntil > 0 ? t('gn_days_left', locale, { n: o.daysUntil }) : o.daysUntil != null ? t('gn_days_overdue', locale, { n: Math.abs(o.daysUntil) }) : '';
-        const ideas = o.ideas ?? [];
+        const daysText = o.status !== 'ACTIVE' ? '' : o.daysUntil === 0 ? t('gn_today', locale) : o.daysUntil > 0 ? t('gn_days_left', locale, { n: o.daysUntil }) : o.daysUntil != null ? t('gn_days_overdue', locale, { n: Math.abs(o.daysUntil) }) : '';
+        const ideas = (o.ideas ?? []) as any[];
+        const [showActions, setShowActions] = useState(false);
+        const [showEdit, setShowEdit] = useState(false);
+        const [editTitle, setEditTitle] = useState(o.title);
+        const [editPerson, setEditPerson] = useState(o.personName ?? '');
+        const [editNote, setEditNote] = useState(o.note ?? '');
+        const refreshOccasion = async () => { const r = await tgFetch(`/tg/gift-occasions/${o.id}`); if (r.ok) setGnViewingOccasion((await r.json() as any).occasion); };
+        const refreshList = async () => { try { const r = await tgFetch('/tg/gift-occasions'); if (r.ok) setGnOccasions((await r.json() as any).occasions); } catch {} };
         return (
           <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 4px' }}>{o.title}</h1>
-            <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>{typeLabel}{o.personName ? ` · ${o.personName}` : ''}</div>
-            {o.eventDate && <div style={{ fontSize: 12, color: daysText && o.daysUntil <= 7 ? '#FBBF24' : C.textMuted, marginBottom: 8 }}>
-              {new Date(o.eventDate).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}{daysText ? ` · ${daysText}` : ''}
-            </div>}
-            {o.note && <div style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, marginBottom: 12 }}>{o.note}</div>}
+            {/* Header with actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+              <div style={{ flex: 1 }}>
+                <h1 style={{ fontSize: 20, fontWeight: 800, color: o.status === 'DONE' ? '#34D399' : C.text, fontFamily: font, margin: 0 }}>{o.title}</h1>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{typeLabel}{o.personName ? ` · ${o.personName}` : ''}</div>
+              </div>
+              <button onClick={() => setShowActions(!showActions)} style={{ background: 'none', border: 'none', fontSize: 18, color: C.textMuted, cursor: 'pointer', padding: '4px 0 4px 8px' }}>⋯</button>
+            </div>
 
-            {/* Ideas list */}
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginTop: 12, marginBottom: 8 }}>{t('gn_add_idea', locale)} ({ideas.length})</div>
+            {/* Actions menu */}
+            {showActions && (
+              <div style={{ background: C.surface, borderRadius: 12, padding: '4px 0', marginBottom: 10, border: `1px solid ${C.border}` }}>
+                <button onClick={() => { setShowActions(false); setEditTitle(o.title); setEditPerson(o.personName ?? ''); setEditNote(o.note ?? ''); setShowEdit(true); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: C.text, cursor: 'pointer', fontFamily: font }}>✏️ {t('gn_edit_occasion', locale)}</button>
+                {o.status === 'ACTIVE' && <button onClick={async () => { setShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/complete`, { method: 'POST' }); pushToast(t('gn_occasion_completed', locale), 'success'); await refreshList(); setScreen('gift-notes'); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: '#34D399', cursor: 'pointer', fontFamily: font }}>✅ {t('gn_complete', locale)}</button>}
+                {o.status === 'ACTIVE' && <button onClick={async () => { setShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/archive`, { method: 'POST' }); pushToast(t('gn_archive_occasion', locale), 'success'); await refreshList(); setScreen('gift-notes'); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: C.textMuted, cursor: 'pointer', fontFamily: font }}>📦 {t('gn_archive_occasion', locale)}</button>}
+                <button onClick={async () => {
+                  setShowActions(false);
+                  if (!confirm(t('gn_confirm_delete', locale))) return;
+                  await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'DELETE' });
+                  pushToast(t('gn_occasion_deleted', locale), 'success');
+                  await refreshList();
+                  setScreen('gift-notes');
+                }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: '#EF4444', cursor: 'pointer', fontFamily: font }}>🗑 {t('gn_delete_occasion', locale)}</button>
+              </div>
+            )}
+
+            {/* Date + countdown */}
+            {o.eventDate && o.status === 'ACTIVE' && (
+              <div style={{ fontSize: 12, color: daysText && o.daysUntil <= 7 ? '#FBBF24' : C.textMuted, marginBottom: 8 }}>
+                {new Date(o.eventDate).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}{daysText ? ` · ${daysText}` : ''}
+              </div>
+            )}
+            {o.status === 'DONE' && <div style={{ fontSize: 12, color: '#34D399', marginBottom: 8, fontWeight: 600 }}>✓ {t('gn_occasion_completed', locale)}</div>}
+
+            {/* Description */}
+            {o.note && <div style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, marginBottom: 12, lineHeight: 1.5 }}>{o.note}</div>}
+
+            {/* Ideas section */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted }}>{t('gn_ideas_label', locale)} <span style={{ fontWeight: 400 }}>({ideas.length})</span></div>
+            </div>
             {ideas.map((idea: any) => (
               <div key={idea.id} style={{ background: C.surface, borderRadius: 12, padding: '12px 14px', marginBottom: 6, opacity: idea.status === 'DONE' ? 0.5 : 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, textDecoration: idea.status === 'DONE' ? 'line-through' : 'none' }}>{idea.text}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, textDecoration: idea.status === 'DONE' ? 'line-through' : 'none', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{idea.text}</div>
                 {idea.link && <div style={{ fontSize: 11, color: C.accent, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{idea.link}</div>}
                 {idea.price != null && <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 2 }}>{idea.price.toLocaleString()} {idea.currency ?? '₽'}</div>}
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                   <span style={{ fontSize: 10, color: C.textMuted }}>{new Date(idea.createdAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' })}</span>
-                  {idea.status !== 'DONE' && <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}/complete`, { method: 'POST' }); const r = await tgFetch(`/tg/gift-occasions/${o.id}`); if (r.ok) { const d = await r.json() as any; setGnViewingOccasion(d.occasion); } pushToast(t('gn_idea_completed', locale), 'success'); }} style={{ fontSize: 10, color: '#34D399', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✓ {t('gn_complete', locale)}</button>}
-                  <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}`, { method: 'DELETE' }); const r = await tgFetch(`/tg/gift-occasions/${o.id}`); if (r.ok) { const d = await r.json() as any; setGnViewingOccasion(d.occasion); } }} style={{ fontSize: 10, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✕</button>
+                  {idea.status !== 'DONE' && <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}/complete`, { method: 'POST' }); await refreshOccasion(); pushToast(t('gn_idea_completed', locale), 'success'); }} style={{ fontSize: 10, color: '#34D399', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✓ {t('gn_complete', locale)}</button>}
+                  <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}`, { method: 'DELETE' }); await refreshOccasion(); }} style={{ fontSize: 10, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✕</button>
                 </div>
               </div>
             ))}
 
-            {/* Add idea inline */}
-            <button onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }} style={{ width: '100%', padding: '12px', borderRadius: 12, border: `1px dashed ${C.border}`, background: 'transparent', color: C.accent, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, marginTop: 4 }}>
+            {/* Add idea CTA */}
+            <button onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }}
+              style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: C.accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: 8 }}>
               + {t('gn_add_idea', locale)}
             </button>
 
-            {/* Complete occasion */}
-            {o.status === 'ACTIVE' && (
-              <button onClick={async () => {
-                await tgFetch(`/tg/gift-occasions/${o.id}/complete`, { method: 'POST' });
-                pushToast(t('gn_occasion_completed', locale), 'success');
-                // Refresh list and go back
-                try { const r = await tgFetch('/tg/gift-occasions'); if (r.ok) { const d = await r.json() as any; setGnOccasions(d.occasions); } } catch {}
-                setScreen('gift-notes');
-              }} style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: 'rgba(52,211,153,0.12)', color: '#34D399', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, marginTop: 10 }}>
-                ✅ {t('gn_complete', locale)}
-              </button>
-            )}
+            {/* Edit BottomSheet */}
+            <BottomSheet isOpen={showEdit} onClose={() => setShowEdit(false)} title={t('gn_edit_occasion', locale)}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_title', locale)}</label>
+                  <div style={{ position: 'relative' as const }}>
+                    <input value={editTitle} onChange={e => { if (e.target.value.length <= 150) setEditTitle(e.target.value); }} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+                    {editTitle && <button onClick={() => setEditTitle('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{editTitle.length} / 150</div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_person', locale)}</label>
+                  <div style={{ position: 'relative' as const }}>
+                    <input value={editPerson} onChange={e => { if (e.target.value.length <= 50) setEditPerson(e.target.value); }} placeholder={t('gn_ph_person', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+                    {editPerson && <button onClick={() => setEditPerson('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{editPerson.length} / 50</div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_description', locale)}</label>
+                  <div style={{ position: 'relative' as const }}>
+                    <textarea value={editNote} onChange={e => { if (e.target.value.length <= 300) setEditNote(e.target.value); }} placeholder={t('gn_ph_note', locale)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const, minHeight: 60, resize: 'none' as const }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{editNote.length} / 300</div>
+                </div>
+                <button disabled={!editTitle.trim()} onClick={async () => {
+                  await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'PATCH', body: JSON.stringify({ title: editTitle.trim(), personName: editPerson.trim() || null, note: editNote.trim() || null }) });
+                  setShowEdit(false);
+                  pushToast(t('gn_occasion_updated', locale), 'success');
+                  await refreshOccasion();
+                }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: editTitle.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}>{t('save', locale)}</button>
+              </div>
+            </BottomSheet>
           </div>
         );
       })()}
@@ -10694,15 +10777,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_title', locale)}</label>
-            <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} value={gnFormTitle} onChange={e => setGnFormTitle(e.target.value)} placeholder={t('gn_type_birthday', locale)} />
+            <div style={{ position: 'relative' as const }}>
+              <input value={gnFormTitle} onChange={e => { if (e.target.value.length <= 150) setGnFormTitle(e.target.value); }} placeholder={t('gn_ph_title', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+              {gnFormTitle && <button onClick={() => setGnFormTitle('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+            </div>
+            <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnFormTitle.length} / 150</div>
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_person', locale)}</label>
-            <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} value={gnFormPerson} onChange={e => setGnFormPerson(e.target.value)} placeholder="Маша, Папа..." />
+            <div style={{ position: 'relative' as const }}>
+              <input value={gnFormPerson} onChange={e => { if (e.target.value.length <= 50) setGnFormPerson(e.target.value); }} placeholder={t('gn_ph_person', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+              {gnFormPerson && <button onClick={() => setGnFormPerson('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+            </div>
+            <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnFormPerson.length} / 50</div>
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_date', locale)}</label>
-            <input type="date" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} value={gnFormDate} onChange={e => setGnFormDate(e.target.value)} />
+            <input type="date" value={gnFormDate} onChange={e => setGnFormDate(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_type', locale)}</label>
@@ -10712,26 +10803,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               ))}
             </div>
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_recurrence', locale)}</label>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {(['NONE', 'YEARLY', 'MONTHLY'] as const).map(r => (
-                <button key={r} onClick={() => setGnFormRecurrence(r)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormRecurrence === r ? C.accent : C.surface, color: gnFormRecurrence === r ? '#fff' : C.textMuted, whiteSpace: 'nowrap' as const }}>{({ NONE: t('gn_recurrence_none', locale), YEARLY: t('gn_recurrence_yearly', locale), MONTHLY: t('gn_recurrence_monthly', locale) })[r]}</button>
-              ))}
+          {gnFormDate && (
+            <div>
+              <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_recurrence', locale)}</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['NONE', 'YEARLY', 'MONTHLY'] as const).map(r => (
+                  <button key={r} onClick={() => setGnFormRecurrence(r)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormRecurrence === r ? C.accent : C.surface, color: gnFormRecurrence === r ? '#fff' : C.textMuted, whiteSpace: 'nowrap' as const }}>{({ NONE: t('gn_recurrence_none', locale), YEARLY: t('gn_recurrence_yearly', locale), MONTHLY: t('gn_recurrence_monthly', locale) })[r]}</button>
+                ))}
+              </div>
             </div>
-          </div>
-          <button
-            disabled={!gnFormTitle.trim()}
-            onClick={async () => {
-              const r = await tgFetch('/tg/gift-occasions', { method: 'POST', body: JSON.stringify({ title: gnFormTitle.trim(), eventDate: gnFormDate || undefined, type: gnFormType, recurrence: gnFormDate ? gnFormRecurrence : 'NONE', personName: gnFormPerson.trim() || undefined }) });
-              if (r.ok) {
-                setShowGnCreateOccasion(false);
-                pushToast(t('gn_add_occasion', locale), 'success');
-                try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) { const d = await or.json() as any; setGnOccasions(d.occasions); } } catch {}
-              } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
-            }}
-            style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnFormTitle.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}
-          >{t('gn_add_occasion', locale)}</button>
+          )}
+          <button disabled={!gnFormTitle.trim()} onClick={async () => {
+            const r = await tgFetch('/tg/gift-occasions', { method: 'POST', body: JSON.stringify({ title: gnFormTitle.trim(), eventDate: gnFormDate || undefined, type: gnFormType, recurrence: gnFormDate ? gnFormRecurrence : 'NONE', personName: gnFormPerson.trim() || undefined }) });
+            if (r.ok) {
+              setShowGnCreateOccasion(false);
+              pushToast(t('gn_add_occasion', locale), 'success');
+              try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
+            } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
+          }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnFormTitle.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}>{t('gn_add_occasion', locale)}</button>
         </div>
       </BottomSheet>
 
@@ -10740,26 +10829,29 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_idea_text', locale)}</label>
-            <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} value={gnIdeaText} onChange={e => setGnIdeaText(e.target.value)} />
+            <div style={{ position: 'relative' as const }}>
+              <input value={gnIdeaText} onChange={e => { if (e.target.value.length <= 500) setGnIdeaText(e.target.value); }} placeholder={t('gn_ph_idea', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+              {gnIdeaText && <button onClick={() => setGnIdeaText('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+            </div>
+            <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnIdeaText.length} / 500</div>
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_idea_link', locale)}</label>
-            <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} value={gnIdeaLink} onChange={e => setGnIdeaLink(e.target.value)} placeholder="https://..." />
+            <div style={{ position: 'relative' as const }}>
+              <input value={gnIdeaLink} onChange={e => setGnIdeaLink(e.target.value)} placeholder={t('gn_ph_link', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+              {gnIdeaLink && <button onClick={() => setGnIdeaLink('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+            </div>
           </div>
-          <button
-            disabled={!gnIdeaText.trim()}
-            onClick={async () => {
-              if (!gnViewingOccasion) return;
-              const r = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}/ideas`, { method: 'POST', body: JSON.stringify({ text: gnIdeaText.trim(), link: gnIdeaLink.trim() || undefined }) });
-              if (r.ok) {
-                setShowGnAddIdea(false);
-                pushToast(t('gn_idea_saved', locale), 'success');
-                const or = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}`);
-                if (or.ok) { const d = await or.json() as any; setGnViewingOccasion(d.occasion); }
-              } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
-            }}
-            style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnIdeaText.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}
-          >{t('gn_add_idea', locale)}</button>
+          <button disabled={!gnIdeaText.trim()} onClick={async () => {
+            if (!gnViewingOccasion) return;
+            const r = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}/ideas`, { method: 'POST', body: JSON.stringify({ text: gnIdeaText.trim(), link: gnIdeaLink.trim() || undefined }) });
+            if (r.ok) {
+              setShowGnAddIdea(false);
+              pushToast(t('gn_idea_saved', locale), 'success');
+              const or = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}`);
+              if (or.ok) setGnViewingOccasion((await or.json() as any).occasion);
+            } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
+          }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnIdeaText.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}>{t('gn_add_idea', locale)}</button>
         </div>
       </BottomSheet>
 

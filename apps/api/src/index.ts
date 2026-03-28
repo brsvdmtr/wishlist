@@ -6743,12 +6743,12 @@ tgRouter.post('/gift-occasions', asyncHandler(async (req, res) => {
   const ent = await getEffectiveEntitlements(user.id, user.godMode);
   if (!requireGiftNotes(ent, res)) return;
   const parsed = z.object({
-    title: z.string().min(1).max(120),
+    title: z.string().min(1).max(150),
     type: z.enum(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'OTHER']).optional(),
-    personName: z.string().max(100).optional(),
+    personName: z.string().max(50).optional(),
     eventDate: z.string().optional(), // YYYY-MM-DD or DD.MM.YYYY or empty
     recurrence: z.enum(['NONE', 'YEARLY', 'MONTHLY']).optional(),
-    note: z.string().max(1000).optional(),
+    note: z.string().max(300).optional(),
   }).safeParse(req.body);
   if (!parsed.success) return zodError(res, parsed.error);
   let eventDateVal: Date | null = null;
@@ -6791,12 +6791,12 @@ tgRouter.patch('/gift-occasions/:id', asyncHandler(async (req, res) => {
   const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
   if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
   const parsed = z.object({
-    title: z.string().min(1).max(120).optional(),
+    title: z.string().min(1).max(150).optional(),
     type: z.enum(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'OTHER']).optional(),
-    personName: z.string().max(100).nullable().optional(),
+    personName: z.string().max(50).nullable().optional(),
     eventDate: z.string().nullable().optional(),
     recurrence: z.enum(['NONE', 'YEARLY', 'MONTHLY']).optional(),
-    note: z.string().max(1000).nullable().optional(),
+    note: z.string().max(300).nullable().optional(),
   }).safeParse(req.body);
   if (!parsed.success) return zodError(res, parsed.error);
   const data: any = { ...parsed.data };
@@ -6814,6 +6814,18 @@ tgRouter.patch('/gift-occasions/:id', asyncHandler(async (req, res) => {
 }));
 
 tgRouter.delete('/gift-occasions/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  // Hard delete — cascades to ideas via FK onDelete: Cascade
+  await prisma.giftOccasion.delete({ where: { id: req.params.id } });
+  trackEvent('gift_occasion_deleted', user.id);
+  return res.json({ ok: true });
+}));
+
+tgRouter.post('/gift-occasions/:id/archive', asyncHandler(async (req, res) => {
   const user = await getOrCreateTgUser(req.tgUser!);
   const ent = await getEffectiveEntitlements(user.id, user.godMode);
   if (!requireGiftNotes(ent, res)) return;

@@ -1497,7 +1497,20 @@ const ru: Dict = {
   gn_upsell_cta: 'Купить навсегда за {{price}} ⭐',
   gn_upsell_later: 'Не сейчас',
   gn_badge_new: 'NEW',
-  gn_ideas_count: '{{n}} идей',
+  gn_ideas_count: 'Идей: {{n}}',
+  gn_edit_occasion: 'Редактировать',
+  gn_delete_occasion: 'Удалить событие',
+  gn_archive_occasion: 'Архивировать',
+  gn_confirm_delete: 'Удалить событие и все идеи внутри?',
+  gn_occasion_deleted: 'Событие удалено',
+  gn_occasion_updated: 'Событие обновлено',
+  gn_ph_title: 'Например, День рождения',
+  gn_ph_person: 'Например, Маша, папа',
+  gn_ph_note: 'Например, подготовить что-то особенное',
+  gn_ph_idea: 'Например, купить бамбуковый стол',
+  gn_ph_link: 'Например, https://...',
+  gn_description: 'Описание',
+  gn_ideas_label: 'Идеи',
 };
 
 const en: Dict = {
@@ -2867,7 +2880,20 @@ const en: Dict = {
   gn_upsell_cta: 'Unlock forever for {{price}} ⭐',
   gn_upsell_later: 'Not now',
   gn_badge_new: 'NEW',
-  gn_ideas_count: '{{n}} ideas',
+  gn_ideas_count: 'Ideas: {{n}}',
+  gn_edit_occasion: 'Edit',
+  gn_delete_occasion: 'Delete occasion',
+  gn_archive_occasion: 'Archive',
+  gn_confirm_delete: 'Delete occasion and all ideas inside?',
+  gn_occasion_deleted: 'Occasion deleted',
+  gn_occasion_updated: 'Occasion updated',
+  gn_ph_title: 'E.g., Birthday',
+  gn_ph_person: 'E.g., Mom, Alex',
+  gn_ph_note: 'E.g., prepare something special',
+  gn_ph_idea: 'E.g., buy a bamboo desk',
+  gn_ph_link: 'E.g., https://...',
+  gn_description: 'Description',
+  gn_ideas_label: 'Ideas',
 };
 
 // ─── Additional locale dictionaries ──────────────────────────────────────────
