@@ -10710,9 +10710,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gc_form_type', locale)}</label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+            <div style={{ display: 'flex', gap: 6 }}>
               {(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'CUSTOM'] as const).map(tp => (
-                <button key={tp} onClick={() => setGcFormType(tp)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gcFormType === tp ? C.accent : C.surface, color: gcFormType === tp ? '#fff' : C.textMuted }}>{({ BIRTHDAY: t('gc_occasion_birthday', locale), ANNIVERSARY: t('gc_occasion_anniversary', locale), HOLIDAY: t('gc_occasion_holiday', locale), CUSTOM: t('gc_occasion_custom', locale) })[tp]}</button>
+                <button key={tp} onClick={() => setGcFormType(tp)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gcFormType === tp ? C.accent : C.surface, color: gcFormType === tp ? '#fff' : C.textMuted, whiteSpace: 'nowrap' as const }}>{({ BIRTHDAY: t('gc_occasion_birthday', locale), ANNIVERSARY: t('gc_occasion_anniversary', locale), HOLIDAY: t('gc_occasion_holiday', locale), CUSTOM: t('gc_occasion_custom', locale) })[tp]}</button>
               ))}
             </div>
           </div>
@@ -10720,7 +10720,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gc_form_recurrence', locale)}</label>
             <div style={{ display: 'flex', gap: 6 }}>
               {(['NONE', 'YEARLY', 'MONTHLY'] as const).map(r => (
-                <button key={r} onClick={() => setGcFormRecurrence(r)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gcFormRecurrence === r ? C.accent : C.surface, color: gcFormRecurrence === r ? '#fff' : C.textMuted }}>{({ NONE: t('gc_recurrence_none', locale), YEARLY: t('gc_recurrence_yearly', locale), MONTHLY: t('gc_recurrence_monthly', locale) })[r]}</button>
+                <button key={r} onClick={() => setGcFormRecurrence(r)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gcFormRecurrence === r ? C.accent : C.surface, color: gcFormRecurrence === r ? '#fff' : C.textMuted, whiteSpace: 'nowrap' as const }}>{({ NONE: t('gc_recurrence_none', locale), YEARLY: t('gc_recurrence_yearly', locale), MONTHLY: t('gc_recurrence_monthly', locale) })[r]}</button>
               ))}
             </div>
           </div>

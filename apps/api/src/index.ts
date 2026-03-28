@@ -1472,7 +1472,7 @@ async function getEffectiveEntitlements(userId: string, godMode = false) {
     addOns,
     addons: {
       giftCalendar: {
-        active: !!gcSub,
+        active: !!gcSub || godMode,
         cancelAtPeriodEnd: gcSub?.cancelAtPeriodEnd ?? false,
         currentPeriodEnd: gcSub?.currentPeriodEnd?.toISOString() ?? null,
         priceXtr: GC_PRICE_XTR,
