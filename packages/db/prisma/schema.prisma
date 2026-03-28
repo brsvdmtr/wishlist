@@ -146,8 +146,8 @@ model User {
   promoRedemptions               PromoRedemption[]
   degradationState               DegradationState?
   lifecycleTouches               LifecycleTouch[]
-  giftPeople                     GiftPerson[]         @relation("GiftPeopleOwner")
   giftOccasions                  GiftOccasion[]       @relation("GiftOccasionsOwner")
+  giftOccasionIdeas              GiftOccasionIdea[]   @relation("GiftOccasionIdeasOwner")
 }
 
 model Wishlist {
@@ -1233,104 +1233,51 @@ model UserOnboardingState {
 }
 
 // ═══════════════════════════════════════════
-// Gift Calendar & Occasion Automation
+// Gift Notes — Поводы и идеи (v2)
+// Personal gift idea notebook by occasions
 // ═══════════════════════════════════════════
 
-model GiftPerson {
-  id               String    @id @default(cuid())
-  ownerUserId      String
-  linkedUserId     String?
-  displayName      String
-  telegramUsername  String?
-  relation         String    @default("OTHER") // PARTNER, FAMILY, FRIEND, COLLEAGUE, OTHER
-  avatarUrl        String?
-  timezone         String?
-  note             String?
-  archivedAt       DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  owner     User            @relation("GiftPeopleOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  occasions GiftOccasion[]
-
-  @@index([ownerUserId])
-}
-
 model GiftOccasion {
-  id                   String    @id @default(cuid())
-  ownerUserId          String
-  personId             String?
-  type                 String    @default("CUSTOM") // BIRTHDAY, ANNIVERSARY, HOLIDAY, CUSTOM
-  title                String
-  eventDate            DateTime  @db.Date
-  allDay               Boolean   @default(true)
-  timezone             String    @default("Europe/Moscow")
-  recurrence           String    @default("NONE") // NONE, YEARLY, MONTHLY
-  reminderOffsetsJson  String?   // e.g. "[30,7,1,0]"
-  isActive             Boolean   @default(true)
-  isMuted              Boolean   @default(false)
-  suggestWishlist      Boolean   @default(true)
-  suggestHint          Boolean   @default(true)
-  suggestGiftIdeas     Boolean   @default(true)
-  suggestSubscription  Boolean   @default(true)
-  archivedAt           DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  ownerUserId String
+  title       String
+  type        String    @default("OTHER") // BIRTHDAY, ANNIVERSARY, HOLIDAY, OTHER
+  personName  String?   // free text, no linked user requirement
+  eventDate   DateTime? @db.Date
+  recurrence  String    @default("NONE") // NONE, YEARLY, MONTHLY
+  note        String?
+  status      String    @default("ACTIVE") // ACTIVE, DONE, ARCHIVED
+  archivedAt  DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  owner     User                   @relation("GiftOccasionsOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  person    GiftPerson?            @relation(fields: [personId], references: [id], onDelete: SetNull)
-  reminders GiftReminderDelivery[]
-  mutes     GiftOccasionMute[]
-  planState GiftPlanState?
+  owner User               @relation("GiftOccasionsOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  ideas GiftOccasionIdea[]
 
   @@index([ownerUserId])
-  @@index([ownerUserId, isActive])
-  @@index([personId])
+  @@index([ownerUserId, status])
 }
 
-model GiftReminderDelivery {
-  id              String    @id @default(cuid())
-  occasionId      String
-  daysBefore      Int       // 30, 7, 1, 0
-  yearKey         String    // "2026" — idempotency per year
-  scheduledFor    DateTime
-  deliveredAt     DateTime?
-  clickedAt       DateTime? // set when user opens Mini App via reminder deep link
-  status          String    @default("PENDING") // PENDING, SENT, CLICKED, FAILED, CANCELLED
-  deepLinkPayload String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+model GiftOccasionIdea {
+  id          String    @id @default(cuid())
+  occasionId  String
+  ownerUserId String
+  text        String
+  link        String?
+  price       Int?
+  currency    String?
+  note        String?
+  status      String    @default("ACTIVE") // ACTIVE, DONE, ARCHIVED
+  archivedAt  DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   occasion GiftOccasion @relation(fields: [occasionId], references: [id], onDelete: Cascade)
+  owner    User         @relation("GiftOccasionIdeasOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
 
-  @@unique([occasionId, yearKey, daysBefore])
-  @@index([status, scheduledFor])
-}
-
-model GiftPlanState {
-  id                 String    @id @default(cuid())
-  occasionId         String    @unique
-  ownerUserId        String
-  status             String    @default("NONE") // NONE, IDEAS_STARTED, WISHLIST_OPENED, HINT_SENT, GIFT_SELECTED, DONE
-  selectedItemId     String?
-  selectedWishlistId String?
-  note               String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  occasion GiftOccasion @relation(fields: [occasionId], references: [id], onDelete: Cascade)
-
-  @@index([ownerUserId])
-}
-
-model GiftOccasionMute {
-  id         String   @id @default(cuid())
-  occasionId String
-  yearKey    String   // "2026" — snooze for specific year
-  createdAt  DateTime @default(now())
-
-  occasion GiftOccasion @relation(fields: [occasionId], references: [id], onDelete: Cascade)
-
-  @@unique([occasionId, yearKey])
   @@index([occasionId])
+  @@index([ownerUserId])
+  @@index([occasionId, status])
 }

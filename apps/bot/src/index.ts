@@ -564,14 +564,6 @@ if (!token) {
         }
         await ctx.answerPreCheckoutQuery(true);
 
-      } else if (payloadType === 'gc_monthly') {
-        // gc_monthly:<telegramId>:<uuid> — Gift Calendar addon subscription
-        if (parts.length < 3) { await ctx.answerPreCheckoutQuery(false, 'Invalid payment'); return; }
-        const telegramId = parts[1];
-        const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
-        if (!user) { await ctx.answerPreCheckoutQuery(false, 'User not found'); return; }
-        await ctx.answerPreCheckoutQuery(true);
-
       } else if (payloadType === 'addon') {
         // addon:<skuCode>:<telegramId>:<targetId|_>:<sessionId>
         if (parts.length < 5) {
@@ -586,6 +578,7 @@ if (!token) {
           'hints_pack_5', 'hints_pack_10',
           'import_pack_10', 'import_pack_25',
           'seasonal_decoration',
+          'gift_notes_unlock',
         ]);
         if (!skuCode || !KNOWN_SKUS.has(skuCode)) {
           await ctx.answerPreCheckoutQuery(false, 'Unknown SKU');
@@ -711,43 +704,6 @@ if (!token) {
         return;
       }
 
-      // ── Gift Calendar subscription: gc_monthly:<telegramId>:<uuid> ───────────
-      if (payloadType === 'gc_monthly') {
-        if (parts.length < 3) return;
-        const telegramId = parts[1];
-        const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
-        if (!user) { console.error('[bot] gc payment user not found:', telegramId); return; }
-        const chargeId = payment.telegram_payment_charge_id;
-        const providerChargeId = payment.provider_payment_charge_id ?? null;
-        // Idempotency
-        const existing = await prisma.paymentEvent.findUnique({ where: { telegramPaymentChargeId: chargeId } });
-        if (existing) { console.log('[bot] duplicate gc payment, skip:', chargeId); return; }
-        const now = new Date();
-        const periodEnd = payment.subscription_expiration_date
-          ? new Date(payment.subscription_expiration_date * 1000)
-          : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-        await prisma.$transaction(async (tx) => {
-          // Extend from max(now, currentPeriodEnd) if existing
-          const existingSub = await tx.subscription.findUnique({ where: { userId_planCode: { userId: user.id, planCode: 'GIFT_CALENDAR' } } });
-          const start = existingSub && existingSub.currentPeriodEnd > now ? existingSub.currentPeriodEnd : now;
-          const end = payment.subscription_expiration_date
-            ? new Date(payment.subscription_expiration_date * 1000)
-            : new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
-          const sub = await tx.subscription.upsert({
-            where: { userId_planCode: { userId: user.id, planCode: 'GIFT_CALENDAR' } },
-            create: { userId: user.id, planCode: 'GIFT_CALENDAR', status: 'ACTIVE', starsPrice: payment.total_amount, telegramChargeId: chargeId, currentPeriodStart: now, currentPeriodEnd: end, source: 'telegram_stars', billingPeriod: 'monthly', cancelAtPeriodEnd: false },
-            update: { status: 'ACTIVE', starsPrice: payment.total_amount, telegramChargeId: chargeId, currentPeriodStart: start, currentPeriodEnd: end, cancelledAt: null, cancelAtPeriodEnd: false, source: 'telegram_stars', billingPeriod: 'monthly' },
-          });
-          await tx.paymentEvent.create({
-            data: { subscriptionId: sub.id, userId: user.id, telegramPaymentChargeId: chargeId, providerPaymentChargeId: providerChargeId, invoicePayload: payment.invoice_payload, totalAmount: payment.total_amount, currency: payment.currency, eventType: 'gc_payment_received', rawPayload: JSON.stringify(payment) },
-          });
-        });
-        console.log(`[bot] gc_activated: userId=${user.id} charge=${chargeId} periodEnd=${periodEnd.toISOString()}`);
-        const locale = getLocale(ctx);
-        await ctx.reply('🎁 Gift Calendar activated!', Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]));
-        return;
-      }
-
       // ── One-time add-on: addon:<skuCode>:<telegramId>:<targetId|_>:<sessionId> ──
       if (payloadType === 'addon') {
         // parts: [addon, skuCode, telegramId, targetIdOrUnderscore, sessionId]
@@ -778,6 +734,7 @@ if (!token) {
           extra_items_5: 'item_slot_5',
           extra_items_15: 'item_slot_15',
           seasonal_decoration: 'seasonal_decoration',
+          gift_notes_unlock: 'gift_notes_unlock',
         };
         const SKU_CREDITS: Record<string, { key: 'hintCredits' | 'importCredits'; amount: number }> = {
           hints_pack_5:   { key: 'hintCredits',   amount: 5  },
