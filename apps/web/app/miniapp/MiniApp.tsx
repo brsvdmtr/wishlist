@@ -1279,7 +1279,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
                 fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap',
               }}
             >
-              🎁 {t('reserve_btn', locale)}
+              {t('reserve_btn', locale)}
             </button>
           )}
           {isGuest && isReservedByMe && (
@@ -1450,7 +1450,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
                 boxShadow: '0 4px 16px rgba(124,106,255,0.35)',
               }}
             >
-              🎁 {t('reserve_btn', locale)}
+              {t('reserve_btn', locale)}
             </button>
           )}
           {isGuest && isReservedByMe && (
@@ -4237,6 +4237,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // Always pre-load profile data so ownerName is available on the
       // Share screen without requiring the user to visit Profile first.
       loadProfile().catch(() => { /* non-critical — share screen has fallback */ });
+      // Pre-load subscription unread counts so badge is visible immediately
+      loadSubscriptions().catch(() => { /* non-critical */ });
       // Pre-load Santa season info
       loadSantaSeason().catch(() => {});
     };
@@ -10444,8 +10446,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
       {/* ── Copy item to wishlist picker — triggered from item-detail ── */}
       <BottomSheet isOpen={showCopyPicker} onClose={() => { setShowCopyPicker(false); setCopyingItem(null); }} title={t('item_copy_title', locale)}>
+        {(() => {
+          const copyTargets = wishlists.filter(wl => wl.id !== draftsWishlistId && wl.id !== currentWl?.id);
+          return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {wishlists.filter(wl => wl.id !== draftsWishlistId).map((wl) => (
+          {copyTargets.map((wl) => (
             <button
               key={wl.id}
               style={{
@@ -10480,12 +10485,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <span style={{ color: C.textMuted }}>›</span>
             </button>
           ))}
-          {wishlists.filter(wl => wl.id !== draftsWishlistId).length === 0 && (
-            <div style={{ textAlign: 'center', padding: '24px 0', color: C.textMuted, fontSize: 14 }}>
-              {t('drafts_create_first', locale)}
+          {copyTargets.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '24px 16px', color: C.textMuted, fontSize: 14, lineHeight: 1.5 }}>
+              {t('copy_no_other_wishlist', locale)}
             </div>
           )}
         </div>
+          );
+        })()}
       </BottomSheet>
 
       {/* ── Bulk move/copy target picker ── */}
@@ -11992,7 +11999,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </span>
                   <button
                     onClick={() => {
-                      try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
+                      try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch { /* ok */ }
+                      const url = `https://t.me/${botUsername}`;
+                      try {
+                        if (window.Telegram?.WebApp?.openTelegramLink) {
+                          window.Telegram.WebApp.openTelegramLink(url);
+                        } else {
+                          window.open(url, '_blank');
+                        }
+                      } catch { window.open(url, '_blank'); }
                     }}
                     style={{
                       flexShrink: 0, background: 'none', border: `1px solid ${C.border}`,
