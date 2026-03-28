@@ -2738,6 +2738,21 @@ tgRouter.get(
   }),
 );
 
+// GET /tg/me/subscriptions/meta — lightweight unread summary for boot badge
+tgRouter.get(
+  '/me/subscriptions/meta',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const subs = await prisma.wishlistSubscription.findMany({
+      where: { subscriberId: user.id },
+      select: { id: true, unreads: { select: { id: true } } },
+    });
+    const unreadCount = subs.reduce((sum, s) => sum + s.unreads.length, 0);
+    const subscriptionsWithUnread = subs.filter(s => s.unreads.length > 0).length;
+    return res.json({ unreadCount, hasUnread: unreadCount > 0, subscriptionsWithUnread });
+  }),
+);
+
 // POST /tg/me/subscriptions/:id/read — mark all unreads as read for a subscription
 tgRouter.post(
   '/me/subscriptions/:id/read',

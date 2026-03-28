@@ -155,6 +155,19 @@ type Wishlist = {
   shareToken?: string | null;
 };
 
+/** Filter wishlists to only valid writable targets for copy/move operations.
+ *  Excludes: current wishlist, drafts, readOnly wishlists. */
+function getWritableTargets(
+  wishlists: Wishlist[],
+  opts: { currentWlId?: string | null; draftsWlId?: string | null },
+): Wishlist[] {
+  return wishlists.filter(wl =>
+    wl.id !== opts.draftsWlId &&
+    wl.id !== opts.currentWlId &&
+    !wl.readOnly
+  );
+}
+
 type PlanInfo = {
   code: 'FREE' | 'PRO';
   wishlists: number;
@@ -2263,6 +2276,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [myWishlistsTab, setMyWishlistsTab] = useState<'mine' | 'subscribed'>('mine');
   const [subscriptions, setSubscriptions] = useState<SubscribedWishlist[]>([]);
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
+  // Lightweight unread summary for badge (loaded on boot, doesn't need full subscriptions)
+  const [subUnreadCount, setSubUnreadCount] = useState(0);
   // Guest subscription state
   const [guestSubId, setGuestSubId] = useState<string | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -3003,6 +3018,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (!res.ok) return;
       const json = await res.json() as { subscriptions: SubscribedWishlist[] };
       setSubscriptions(json.subscriptions);
+      // Sync lightweight unread counter with full data
+      setSubUnreadCount(json.subscriptions.reduce((s, sub) => s + sub.unreadCount, 0));
     } catch {
       // silent
     } finally {
@@ -4237,8 +4254,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // Always pre-load profile data so ownerName is available on the
       // Share screen without requiring the user to visit Profile first.
       loadProfile().catch(() => { /* non-critical — share screen has fallback */ });
-      // Pre-load subscription unread counts so badge is visible immediately
-      loadSubscriptions().catch(() => { /* non-critical */ });
+      // Lightweight unread summary for badge — avoids loading full subscription list on boot
+      tgFetch('/tg/me/subscriptions/meta').then(async r => {
+        if (!r.ok) return;
+        const meta = await r.json() as { unreadCount: number };
+        setSubUnreadCount(meta.unreadCount);
+      }).catch(() => { /* non-critical */ });
       // Pre-load Santa season info
       loadSantaSeason().catch(() => {});
     };
@@ -6072,7 +6093,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.surface, borderRadius: 12, padding: 4 }}>
               {(['mine', 'subscribed'] as const).map((tab) => {
                 const isActive = myWishlistsTab === tab;
-                const totalUnread = subscriptions.reduce((s, sub) => s + sub.unreadCount, 0);
+                const totalUnread = subscriptions.length > 0 ? subscriptions.reduce((s, sub) => s + sub.unreadCount, 0) : subUnreadCount;
                 return (
                   <button
                     key={tab}
@@ -6123,6 +6144,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     if (sub.unreadCount > 0) {
                       void tgFetch(`/tg/me/subscriptions/${sub.id}/read`, { method: 'POST' });
                       setSubscriptions((prev) => prev.map((s) => s.id === sub.id ? { ...s, unreadCount: 0, unreadEntityIds: [] } : s));
+                      setSubUnreadCount(prev => Math.max(0, prev - sub.unreadCount));
                     }
                     setGuestUnreadEntityIds(sub.unreadEntityIds);
                     setGuestSubId(sub.id);
@@ -10447,7 +10469,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ── Copy item to wishlist picker — triggered from item-detail ── */}
       <BottomSheet isOpen={showCopyPicker} onClose={() => { setShowCopyPicker(false); setCopyingItem(null); }} title={t('item_copy_title', locale)}>
         {(() => {
-          const copyTargets = wishlists.filter(wl => wl.id !== draftsWishlistId && wl.id !== currentWl?.id);
+          const copyTargets = getWritableTargets(wishlists, { currentWlId: currentWl?.id, draftsWlId: draftsWishlistId });
           return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {copyTargets.map((wl) => (
@@ -10498,7 +10520,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ── Bulk move/copy target picker ── */}
       <BottomSheet isOpen={showBulkTargetPicker !== null} onClose={() => setShowBulkTargetPicker(null)} title={showBulkTargetPicker === 'move' ? t('bulk_move', locale) : t('bulk_copy', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {wishlists.filter(wl => wl.id !== currentWl?.id && wl.id !== draftsWishlistId).map(wl => (
+          {getWritableTargets(wishlists, { currentWlId: currentWl?.id, draftsWlId: draftsWishlistId }).map(wl => (
             <button
               key={wl.id}
               disabled={bulkActionLoading}
@@ -10538,9 +10560,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <span style={{ color: C.textMuted }}>›</span>
             </button>
           ))}
-          {wishlists.filter(wl => wl.id !== currentWl?.id && wl.id !== draftsWishlistId).length === 0 && (
-            <div style={{ textAlign: 'center', padding: '24px 0', color: C.textMuted, fontSize: 14 }}>
-              {t('drafts_create_first', locale)}
+          {getWritableTargets(wishlists, { currentWlId: currentWl?.id, draftsWlId: draftsWishlistId }).length === 0 && (
+            <div style={{ textAlign: 'center', padding: '24px 16px', color: C.textMuted, fontSize: 14, lineHeight: 1.5 }}>
+              {t('copy_no_other_wishlist', locale)}
             </div>
           )}
         </div>
@@ -10549,11 +10571,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ── Move item to wishlist picker — triggered from Drafts screen or item-detail ── */}
       <BottomSheet isOpen={showMovePicker} onClose={() => { setShowMovePicker(false); setMovingItem(null); }} title={t('drafts_move_title', locale)}>
         {(() => {
-          // Exclude: drafts wishlist + current item's wishlist (can't move to same place)
           const currentItemWishlistId = movingItem?.wishlistId;
-          const moveTargets = wishlists.filter(wl =>
-            wl.id !== draftsWishlistId && wl.id !== currentItemWishlistId
-          );
+          const moveTargets = getWritableTargets(wishlists, { currentWlId: currentItemWishlistId, draftsWlId: draftsWishlistId });
           const calledFromItemDetail = screen === 'item-detail';
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -10592,7 +10611,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ── Bulk move picker ── */}
       <BottomSheet isOpen={showBulkMovePicker} onClose={() => { if (!draftsBulkLoading) setShowBulkMovePicker(false); }} title={t('drafts_move_title', locale)}>
         {(() => {
-          const moveTargets = wishlists.filter(wl => wl.id !== draftsWishlistId);
+          const moveTargets = getWritableTargets(wishlists, { currentWlId: null, draftsWlId: draftsWishlistId });
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {moveTargets.length === 0 && (
