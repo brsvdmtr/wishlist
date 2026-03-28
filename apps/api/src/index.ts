@@ -2129,6 +2129,7 @@ tgRouter.get(
       subscription: ent.subscription,
       proSource: ent.proSource,
       promoPro: ent.promoPro,
+      addons: ent.addons,
       cardDisplayMode: ent.isPro ? (userProfile?.cardDisplayMode ?? 'auto') : 'auto',
       godMode: user.godMode,
       canGodMode: user.telegramId

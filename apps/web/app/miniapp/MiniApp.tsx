@@ -2344,6 +2344,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [descriptionText, setDescriptionText] = useState('');
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Addons state (loaded from /tg/wishlists response)
+  const [gcAddon, setGcAddon] = useState<{ active: boolean; cancelAtPeriodEnd: boolean; currentPeriodEnd: string | null; priceXtr: number }>({ active: false, cancelAtPeriodEnd: false, currentPeriodEnd: null, priceXtr: 49 });
+
   // Gift Calendar state
   const [gcFeed, setGcFeed] = useState<any>(null);
   const [gcPeople, setGcPeople] = useState<any[]>([]);
@@ -2725,6 +2728,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setWishlists(json.wishlists);
     setPlanInfo(json.plan);
     setSubscription(json.subscription);
+    if ((json as any).addons?.giftCalendar) setGcAddon((json as any).addons.giftCalendar);
     if ((json as any).cardDisplayMode) setCardDisplayMode((json as any).cardDisplayMode);
     if ((json as any).proSource !== undefined) setProSource((json as any).proSource);
     if ((json as any).promoPro !== undefined) setPromoPro((json as any).promoPro);
@@ -6299,11 +6303,33 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             {/* ── Gift Calendar home widget ── */}
             {(() => {
-              const gcActive = (planInfo as any)?.addons?.giftCalendar?.active;
+              const gcActive = gcAddon.active;
               return (
                 <div
                   onClick={async () => {
-                    if (!gcActive) { /* upsell → open settings for now */ setScreen('settings'); return; }
+                    if (!gcActive) {
+                      // Upsell: start checkout flow
+                      try {
+                        const r = await tgFetch('/tg/billing/gift-calendar/checkout', { method: 'POST' });
+                        if (r.ok) {
+                          const data = await r.json() as { invoiceUrl?: string; alreadySubscribed?: boolean };
+                          if (data.alreadySubscribed) {
+                            // Refresh addons state
+                            const sr = await tgFetch('/tg/billing/gift-calendar/sync', { method: 'POST' });
+                            if (sr.ok) { const sd = await sr.json() as { giftCalendar: typeof gcAddon }; setGcAddon(sd.giftCalendar); }
+                          } else if (data.invoiceUrl) {
+                            try { window.Telegram?.WebApp?.openInvoice?.(data.invoiceUrl, async (status: string) => {
+                              if (status === 'paid') {
+                                const sr = await tgFetch('/tg/billing/gift-calendar/sync', { method: 'POST' });
+                                if (sr.ok) { const sd = await sr.json() as { giftCalendar: typeof gcAddon }; setGcAddon(sd.giftCalendar); }
+                                pushToast('Gift Calendar activated!', 'success');
+                              }
+                            }); } catch { window.open(data.invoiceUrl, '_blank'); }
+                          }
+                        }
+                      } catch { pushToast('Error', 'error'); }
+                      return;
+                    }
                     setGcLoading(true);
                     try { const r = await tgFetch('/tg/gift-calendar/feed'); if (r.ok) setGcFeed(await r.json()); } catch {}
                     try { const r = await tgFetch('/tg/gift-people'); if (r.ok) { const d = await r.json() as { people: any[] }; setGcPeople(d.people); } } catch {}
@@ -6321,13 +6347,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span style={{ fontSize: 24 }}>🎁</span>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{t('gc_home_widget_title', locale)}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{gcActive ? t('gc_home_widget_title', locale) : t('gc_upsell_title', locale)}</div>
                       <div style={{ fontSize: 12, color: C.textMuted }}>
-                        {!gcActive ? t('gc_upsell_subtitle', locale) : t('gc_no_occasions', locale)}
+                        {!gcActive ? t('gc_upsell_cta', locale, { price: gcAddon.priceXtr }) : t('gc_no_occasions', locale)}
                       </div>
                     </div>
                   </div>
-                  <span style={{ fontSize: 20, color: gcActive ? '#FBBF24' : C.accent }}>›</span>
+                  <span style={{ fontSize: 20, color: gcActive ? '#FBBF24' : C.accent }}>{gcActive ? '›' : '⭐'}</span>
                 </div>
               );
             })()}
