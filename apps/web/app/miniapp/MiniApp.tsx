@@ -10668,7 +10668,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   const draftTitle = o.person?.displayName ? `${o.title} — ${o.person.displayName}` : o.title;
                   const r = await tgFetch(`/tg/gift-occasions/${o.id}/create-draft-item`, { method: 'POST', body: JSON.stringify({ title: draftTitle }) });
                   if (r.ok) {
+                    const data = await r.json() as { item: { id: string; title: string } };
                     pushToast(locale === 'ru' ? 'Идея добавлена в черновики' : 'Idea added to drafts', 'success');
+                    // Refresh drafts and navigate
+                    await loadDrafts();
+                    const created = draftsItems.find(i => i.id === data.item.id) ?? { id: data.item.id, title: data.item.title } as any;
+                    if (created) { setViewingItem(created); setFromDrafts(true); }
+                    setScreen('drafts');
                   } else {
                     const err = await r.json().catch(() => ({})) as { error?: string };
                     pushToast(err.error || 'Error', 'error');
