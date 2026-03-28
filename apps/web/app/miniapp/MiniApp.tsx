@@ -1245,9 +1245,18 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
         <div style={{
           width: 88, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 36, background: `linear-gradient(160deg, #1c1c22, ${C.accentSoft})`,
-          minHeight: 88,
+          minHeight: 88, position: 'relative',
         }}>
           {getEmoji(item.title)}
+          <div style={{
+            position: 'absolute', bottom: 6, left: 6,
+            width: 22, height: 22, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, border: '1px solid rgba(255,255,255,0.1)',
+          }}>
+            {PRIO_EMOJI[item.priority] ?? '🙂'}
+          </div>
         </div>
       )}
 
@@ -1266,7 +1275,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
             <span style={{ fontSize: 17, fontWeight: 800, color: isPurchased ? '#444' : '#fff', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: font, textDecoration: isPurchased ? 'line-through' : 'none' }}>
               {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
             </span>
-          ) : !hasImg && (
+          ) : (
             <span style={{ fontSize: 12, color: '#444' }}>{t('price_not_set', locale)}</span>
           )}
         </div>
@@ -1275,11 +1284,6 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
           {item.sourceDomain && (
             <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, color: C.accent, background: 'rgba(124,106,255,0.08)', fontWeight: 500, whiteSpace: 'nowrap' }}>
               {item.sourceDomain}
-            </span>
-          )}
-          {!hasImg && !isPurchased && !isReserved && (
-            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, background: PRIO_BG[item.priority], color: PRIO_COLOR[item.priority] }}>
-              {PRIO_EMOJI[item.priority]} {item.priority === 3 ? t('prio_high_short', locale) : item.priority === 2 ? t('prio_med_short', locale) : t('prio_low_short', locale)}
             </span>
           )}
           {/* Status chips */}
