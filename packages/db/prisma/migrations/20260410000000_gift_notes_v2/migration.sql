@@ -19,6 +19,7 @@ ALTER TABLE "GiftOccasion" DROP COLUMN IF EXISTS "suggestSubscription";
 
 -- Add new columns
 ALTER TABLE "GiftOccasion" ADD COLUMN IF NOT EXISTS "personName" TEXT;
+ALTER TABLE "GiftOccasion" ADD COLUMN IF NOT EXISTS "note" TEXT;
 ALTER TABLE "GiftOccasion" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'ACTIVE';
 ALTER TABLE "GiftOccasion" ADD COLUMN IF NOT EXISTS "completedAt" TIMESTAMP(3);
 
