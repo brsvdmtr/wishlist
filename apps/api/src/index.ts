@@ -1336,6 +1336,12 @@ const PRO_PRICE_XTR = parseInt(process.env.PRO_PRICE_XTR ?? '100', 10);
 const PRO_SUBSCRIPTION_PERIOD = parseInt(process.env.PRO_SUBSCRIPTION_PERIOD ?? '2592000', 10);
 const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
 
+// ─── Gift Calendar addon subscription ─────────────────────────────────────────
+const GC_PRICE_XTR = parseInt(process.env.GC_PRICE_XTR ?? '49', 10);
+const GC_PLAN_CODE = 'GIFT_CALENDAR';
+const GC_SUBSCRIPTION_PERIOD = 2592000; // 30 days
+const GC_DEFAULT_REMINDER_OFFSETS = [30, 7, 1, 0];
+
 // ─── One-time SKU catalogue ──────────────────────────────────────────────────
 const ONE_TIME_SKUS = {
   extra_wishlist_slot:     { code: 'extra_wishlist_slot',     price: 39, type: 'permanent' as const,  addonType: 'wishlist_slot'       as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0,  targetRequired: false },
@@ -1425,10 +1431,13 @@ async function getUserEntitlement(userId: string, godMode = false): Promise<{
 
 /** Unified effective entitlement resolver — single source of truth for all limit checks */
 async function getEffectiveEntitlements(userId: string, godMode = false) {
-  const [base, addOns, credits] = await Promise.all([
+  const [base, addOns, credits, gcSub] = await Promise.all([
     getUserEntitlement(userId, godMode),
     prisma.userAddOn.findMany({ where: { userId } }),
     prisma.userCredits.findUnique({ where: { userId } }),
+    prisma.subscription.findFirst({
+      where: { userId, planCode: GC_PLAN_CODE, status: { in: ['ACTIVE', 'CANCELLED'] }, currentPeriodEnd: { gt: new Date() } },
+    }),
   ]);
 
   const extraWishlistSlots = addOns
@@ -1461,7 +1470,56 @@ async function getEffectiveEntitlements(userId: string, godMode = false) {
     hintCredits: credits?.hintCredits ?? 0,
     importCredits: credits?.importCredits ?? 0,
     addOns,
+    addons: {
+      giftCalendar: {
+        active: !!gcSub,
+        cancelAtPeriodEnd: gcSub?.cancelAtPeriodEnd ?? false,
+        currentPeriodEnd: gcSub?.currentPeriodEnd?.toISOString() ?? null,
+        priceXtr: GC_PRICE_XTR,
+      },
+    },
   };
+}
+
+/** Gate helper: Gift Calendar addon required */
+function requireGiftCalendar(ent: Awaited<ReturnType<typeof getEffectiveEntitlements>>, res: any): boolean {
+  if (!ent.addons?.giftCalendar?.active) {
+    trackEvent('feature_gate_hit_gift_calendar');
+    res.status(403).json({ error: 'gift_calendar_required' });
+    return false;
+  }
+  return true;
+}
+
+/** Compute next occurrence date, timezone-aware, handles Feb29 + day>daysInMonth */
+function getNextOccurrenceDate(eventDate: Date, recurrence: string, tz: string = 'Europe/Moscow'): Date | null {
+  if (recurrence === 'NONE') return eventDate;
+  const nowStr = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // "YYYY-MM-DD"
+  const parts = nowStr.split('-').map(Number);
+  const nowY = parts[0]!; const nowM = parts[1]!; const nowD = parts[2]!;
+  const todayNum = nowY * 10000 + nowM * 100 + nowD;
+  const evM = eventDate.getUTCMonth() + 1;
+  const evD = eventDate.getUTCDate();
+  if (recurrence === 'YEARLY') {
+    for (let y = nowY; y <= nowY + 1; y++) {
+      const dim = new Date(y, evM, 0).getDate();
+      const day = Math.min(evD, dim);
+      const cn = y * 10000 + evM * 100 + day;
+      if (cn >= todayNum) return new Date(Date.UTC(y, evM - 1, day));
+    }
+  }
+  if (recurrence === 'MONTHLY') {
+    for (let offset = 0; offset <= 1; offset++) {
+      const m = nowM + offset;
+      const y = nowY + Math.floor((m - 1) / 12);
+      const mN = ((m - 1) % 12) + 1;
+      const dim = new Date(y, mN, 0).getDate();
+      const day = Math.min(evD, dim);
+      const cn = y * 10000 + mN * 100 + day;
+      if (cn >= todayNum) return new Date(Date.UTC(y, mN - 1, day));
+    }
+  }
+  return eventDate;
 }
 
 /** Check if a wishlist is writable (within plan limits) for the given user */
@@ -1485,6 +1543,7 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
     event.startsWith('feature_gate_hit_') ||
     event.startsWith('onboarding_') ||
     event.startsWith('demo_item_') ||
+    event.startsWith('gc_') ||
     event.startsWith('error:');
   if (shouldPersist && userId) {
     prisma.analyticsEvent
@@ -6609,6 +6668,354 @@ tgRouter.post(
     });
   }),
 );
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Gift Calendar — billing, CRUD, feed, actions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// POST /tg/billing/gift-calendar/checkout — create Stars invoice for GC addon
+tgRouter.post(
+  '/billing/gift-calendar/checkout',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    // Check if already active
+    const existing = await prisma.subscription.findFirst({
+      where: { userId: user.id, planCode: GC_PLAN_CODE, status: 'ACTIVE', currentPeriodEnd: { gt: new Date() } },
+    });
+    if (existing && !existing.cancelAtPeriodEnd) {
+      return res.json({ alreadySubscribed: true });
+    }
+    const botToken = process.env.BOT_TOKEN;
+    if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
+    const sessionId = crypto.randomUUID();
+    const payload = `gc_monthly:${req.tgUser!.id}:${sessionId}`;
+    trackEvent('gc_checkout_started', user.id);
+    const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Gift Calendar \uD83C\uDF81',
+        description: 'Gift Calendar — 30 days',
+        payload, currency: 'XTR',
+        prices: [{ label: 'Gift Calendar', amount: GC_PRICE_XTR }],
+        subscription_period: GC_SUBSCRIPTION_PERIOD,
+      }),
+    });
+    const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
+    if (!data.ok || !data.result) {
+      console.error('[gc-billing] createInvoiceLink failed:', data);
+      trackEvent('gc_checkout_failed', user.id, { reason: data.description });
+      return res.status(502).json({ error: 'Failed to create invoice' });
+    }
+    await prisma.paymentEvent.create({
+      data: { userId: user.id, telegramPaymentChargeId: `gc_checkout_${sessionId}`, invoicePayload: payload, totalAmount: GC_PRICE_XTR, currency: 'XTR', eventType: 'gc_invoice_created' },
+    });
+    return res.json({ invoiceUrl: data.result, sessionId });
+  }),
+);
+
+// POST /tg/billing/gift-calendar/sync
+tgRouter.post(
+  '/billing/gift-calendar/sync',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    return res.json({ giftCalendar: ent.addons.giftCalendar });
+  }),
+);
+
+// POST /tg/billing/gift-calendar/cancel
+tgRouter.post(
+  '/billing/gift-calendar/cancel',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const sub = await prisma.subscription.findFirst({
+      where: { userId: user.id, planCode: GC_PLAN_CODE, status: 'ACTIVE', currentPeriodEnd: { gt: new Date() } },
+    });
+    if (!sub) return res.status(404).json({ error: 'No active Gift Calendar subscription' });
+    if (sub.cancelAtPeriodEnd) return res.json({ alreadyCancelled: true, periodEnd: sub.currentPeriodEnd.toISOString() });
+    await prisma.subscription.update({ where: { id: sub.id }, data: { cancelAtPeriodEnd: true, cancelledAt: new Date() } });
+    trackEvent('gc_subscription_cancelled', user.id);
+    return res.json({ ok: true, periodEnd: sub.currentPeriodEnd.toISOString() });
+  }),
+);
+
+// POST /tg/billing/gift-calendar/reactivate
+tgRouter.post(
+  '/billing/gift-calendar/reactivate',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const sub = await prisma.subscription.findFirst({
+      where: { userId: user.id, planCode: GC_PLAN_CODE, cancelAtPeriodEnd: true, currentPeriodEnd: { gt: new Date() } },
+    });
+    if (!sub) return res.status(404).json({ error: 'No cancelled Gift Calendar subscription' });
+    await prisma.subscription.update({ where: { id: sub.id }, data: { cancelAtPeriodEnd: false, cancelledAt: null, status: 'ACTIVE' } });
+    trackEvent('gc_subscription_reactivated', user.id);
+    return res.json({ ok: true });
+  }),
+);
+
+// ─── Gift Calendar: People CRUD ──────────────────────────────────────────────
+
+tgRouter.get('/gift-people', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const people = await prisma.giftPerson.findMany({ where: { ownerUserId: user.id, archivedAt: null }, orderBy: { displayName: 'asc' } });
+  return res.json({ people });
+}));
+
+tgRouter.post('/gift-people', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const parsed = z.object({
+    displayName: z.string().min(1).max(100),
+    relation: z.enum(['PARTNER', 'FAMILY', 'FRIEND', 'COLLEAGUE', 'OTHER']).optional(),
+    telegramUsername: z.string().max(100).optional(),
+    timezone: z.string().max(60).optional(),
+    note: z.string().max(500).optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  const person = await prisma.giftPerson.create({
+    data: { ownerUserId: user.id, displayName: parsed.data.displayName, relation: parsed.data.relation ?? 'OTHER', telegramUsername: parsed.data.telegramUsername, timezone: parsed.data.timezone, note: parsed.data.note },
+  });
+  trackEvent('gc_person_created', user.id);
+  return res.status(201).json({ person });
+}));
+
+tgRouter.patch('/gift-people/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const person = await prisma.giftPerson.findUnique({ where: { id: req.params.id } });
+  if (!person || person.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const parsed = z.object({
+    displayName: z.string().min(1).max(100).optional(),
+    relation: z.enum(['PARTNER', 'FAMILY', 'FRIEND', 'COLLEAGUE', 'OTHER']).optional(),
+    telegramUsername: z.string().max(100).nullable().optional(),
+    timezone: z.string().max(60).nullable().optional(),
+    note: z.string().max(500).nullable().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  const updated = await prisma.giftPerson.update({ where: { id: req.params.id }, data: parsed.data });
+  return res.json({ person: updated });
+}));
+
+tgRouter.delete('/gift-people/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const person = await prisma.giftPerson.findUnique({ where: { id: req.params.id } });
+  if (!person || person.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  await prisma.giftPerson.update({ where: { id: req.params.id }, data: { archivedAt: new Date() } });
+  return res.json({ ok: true });
+}));
+
+// ─── Gift Calendar: Occasions CRUD ───────────────────────────────────────────
+
+tgRouter.get('/gift-occasions', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const occasions = await prisma.giftOccasion.findMany({
+    where: { ownerUserId: user.id, archivedAt: null, isActive: true },
+    include: { person: { select: { id: true, displayName: true, relation: true } }, planState: true },
+  });
+  const mapped = occasions.map(o => {
+    const nextDate = getNextOccurrenceDate(o.eventDate, o.recurrence, o.timezone);
+    const nowStr = new Date().toLocaleDateString('en-CA', { timeZone: o.timezone || 'Europe/Moscow' });
+    const daysUntil = nextDate ? Math.round((nextDate.getTime() - new Date(nowStr).getTime()) / (24 * 3600 * 1000)) : null;
+    return { ...o, nextDate: nextDate?.toISOString() ?? null, daysUntil };
+  }).sort((a, b) => (a.daysUntil ?? 999) - (b.daysUntil ?? 999));
+  return res.json({ occasions: mapped });
+}));
+
+tgRouter.post('/gift-occasions', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const parsed = z.object({
+    title: z.string().min(1).max(120),
+    type: z.enum(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'CUSTOM']).optional(),
+    eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    recurrence: z.enum(['NONE', 'YEARLY', 'MONTHLY']).optional(),
+    personId: z.string().optional(),
+    timezone: z.string().max(60).optional(),
+    allDay: z.boolean().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  if (parsed.data.personId) {
+    const person = await prisma.giftPerson.findUnique({ where: { id: parsed.data.personId } });
+    if (!person || person.ownerUserId !== user.id) return res.status(400).json({ error: 'Invalid personId' });
+  }
+  const occasion = await prisma.giftOccasion.create({
+    data: {
+      ownerUserId: user.id,
+      title: parsed.data.title,
+      type: parsed.data.type ?? 'CUSTOM',
+      eventDate: new Date(parsed.data.eventDate + 'T00:00:00Z'),
+      recurrence: parsed.data.recurrence ?? 'NONE',
+      personId: parsed.data.personId ?? null,
+      timezone: parsed.data.timezone ?? 'Europe/Moscow',
+      allDay: parsed.data.allDay ?? true,
+      reminderOffsetsJson: JSON.stringify(GC_DEFAULT_REMINDER_OFFSETS),
+    },
+    include: { person: { select: { id: true, displayName: true, relation: true } } },
+  });
+  trackEvent('gc_occasion_created', user.id, { type: occasion.type, recurrence: occasion.recurrence });
+  return res.status(201).json({ occasion });
+}));
+
+tgRouter.get('/gift-occasions/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({
+    where: { id: req.params.id },
+    include: { person: true, planState: true },
+  });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const nextDate = getNextOccurrenceDate(occasion.eventDate, occasion.recurrence, occasion.timezone);
+  const nowStr = new Date().toLocaleDateString('en-CA', { timeZone: occasion.timezone || 'Europe/Moscow' });
+  const daysUntil = nextDate ? Math.round((nextDate.getTime() - new Date(nowStr).getTime()) / (24 * 3600 * 1000)) : null;
+  return res.json({ occasion: { ...occasion, nextDate: nextDate?.toISOString() ?? null, daysUntil } });
+}));
+
+tgRouter.patch('/gift-occasions/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const parsed = z.object({
+    title: z.string().min(1).max(120).optional(),
+    type: z.enum(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'CUSTOM']).optional(),
+    eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    recurrence: z.enum(['NONE', 'YEARLY', 'MONTHLY']).optional(),
+    personId: z.string().nullable().optional(),
+    timezone: z.string().max(60).optional(),
+    allDay: z.boolean().optional(),
+    isMuted: z.boolean().optional(),
+    isActive: z.boolean().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  const data: any = { ...parsed.data };
+  if (data.eventDate) data.eventDate = new Date(data.eventDate + 'T00:00:00Z');
+  const updated = await prisma.giftOccasion.update({ where: { id: req.params.id }, data });
+  return res.json({ occasion: updated });
+}));
+
+tgRouter.delete('/gift-occasions/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  await prisma.giftOccasion.update({ where: { id: req.params.id }, data: { archivedAt: new Date() } });
+  return res.json({ ok: true });
+}));
+
+// ─── Gift Calendar: Feed ─────────────────────────────────────────────────────
+
+tgRouter.get('/gift-calendar/feed', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const occasions = await prisma.giftOccasion.findMany({
+    where: { ownerUserId: user.id, archivedAt: null, isActive: true },
+    include: { person: { select: { id: true, displayName: true, relation: true, avatarUrl: true } }, planState: true },
+  });
+  const today: any[] = [];
+  const upcoming: any[] = [];
+  const overdue: any[] = [];
+  const done: any[] = [];
+  for (const o of occasions) {
+    const nextDate = getNextOccurrenceDate(o.eventDate, o.recurrence, o.timezone);
+    const nowStr = new Date().toLocaleDateString('en-CA', { timeZone: o.timezone || 'Europe/Moscow' });
+    const daysUntil = nextDate ? Math.round((nextDate.getTime() - new Date(nowStr).getTime()) / (24 * 3600 * 1000)) : null;
+    const card = { id: o.id, title: o.title, type: o.type, eventDate: o.eventDate.toISOString(), recurrence: o.recurrence, nextDate: nextDate?.toISOString() ?? null, daysUntil, person: o.person, planStatus: o.planState?.status ?? 'NONE' };
+    if (o.planState?.status === 'DONE') { done.push(card); continue; }
+    if (daysUntil === 0) today.push(card);
+    else if (daysUntil !== null && daysUntil > 0 && daysUntil <= 30) upcoming.push(card);
+    else if (daysUntil !== null && daysUntil < 0 && o.recurrence === 'NONE') overdue.push(card);
+    else upcoming.push(card); // recurring future > 30d still goes to upcoming
+  }
+  upcoming.sort((a, b) => (a.daysUntil ?? 999) - (b.daysUntil ?? 999));
+  overdue.sort((a, b) => (b.daysUntil ?? 0) - (a.daysUntil ?? 0));
+  trackEvent('gc_calendar_opened', user.id);
+  return res.json({ today, upcoming, overdue, done });
+}));
+
+// ─── Gift Calendar: Actions ──────────────────────────────────────────────────
+
+tgRouter.post('/gift-occasions/:id/mark-done', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const oid = occasion.id;
+  const ps = await prisma.giftPlanState.upsert({
+    where: { occasionId: oid },
+    create: { occasionId: oid, ownerUserId: user.id, status: 'DONE' },
+    update: { status: 'DONE' },
+  });
+  trackEvent('gc_occasion_mark_done', user.id, { occasionId: oid });
+  return res.json({ planState: ps });
+}));
+
+tgRouter.post('/gift-occasions/:id/start-ideas', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const oid = occasion.id;
+  const ps = await prisma.giftPlanState.upsert({
+    where: { occasionId: oid },
+    create: { occasionId: oid, ownerUserId: user.id, status: 'IDEAS_STARTED' },
+    update: { status: 'IDEAS_STARTED' },
+  });
+  return res.json({ planState: ps });
+}));
+
+tgRouter.post('/gift-occasions/:id/mark-gift-selected', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const parsed = z.object({ selectedItemId: z.string().optional(), note: z.string().max(500).optional() }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  const ps = await prisma.giftPlanState.upsert({
+    where: { occasionId: occasion.id },
+    create: { occasionId: occasion.id, ownerUserId: user.id, status: 'GIFT_SELECTED', selectedItemId: parsed.data.selectedItemId, note: parsed.data.note },
+    update: { status: 'GIFT_SELECTED', selectedItemId: parsed.data.selectedItemId, note: parsed.data.note },
+  });
+  return res.json({ planState: ps });
+}));
+
+tgRouter.post('/gift-occasions/:id/create-draft-item', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftCalendar(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const parsed = z.object({ title: z.string().min(1).max(200), note: z.string().max(500).optional() }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  const draftsWl = await getOrCreateDraftsWishlist(user.id);
+  const item = await prisma.item.create({
+    data: { wishlistId: draftsWl.id, title: parsed.data.title, description: parsed.data.note ?? null, url: '', priority: 'MEDIUM' },
+  });
+  // Link to occasion plan state
+  await prisma.giftPlanState.upsert({
+    where: { occasionId: occasion.id },
+    create: { occasionId: occasion.id, ownerUserId: user.id, status: 'IDEAS_STARTED', selectedItemId: item.id },
+    update: { selectedItemId: item.id, status: 'IDEAS_STARTED' },
+  });
+  trackEvent('gc_occasion_draft_created', user.id, { occasionId: occasion.id, itemId: item.id });
+  return res.status(201).json({ item: { id: item.id, title: item.title, description: item.description } });
+}));
 
 // ─── Internal router (bot → API communication) ──────────────────────────────
 

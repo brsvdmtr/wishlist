@@ -398,7 +398,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-calendar' | 'gift-calendar-occasion' | 'gift-calendar-person';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -2344,6 +2344,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [descriptionText, setDescriptionText] = useState('');
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Gift Calendar state
+  const [gcFeed, setGcFeed] = useState<any>(null);
+  const [gcPeople, setGcPeople] = useState<any[]>([]);
+  const [gcViewingOccasion, setGcViewingOccasion] = useState<any>(null);
+  const [gcViewingPerson, setGcViewingPerson] = useState<any>(null);
+  const [gcLoading, setGcLoading] = useState(false);
+  const [showGcCreateOccasion, setShowGcCreateOccasion] = useState(false);
+  const [showGcCreatePerson, setShowGcCreatePerson] = useState(false);
+  // GC create form state
+  const [gcFormTitle, setGcFormTitle] = useState('');
+  const [gcFormDate, setGcFormDate] = useState('');
+  const [gcFormType, setGcFormType] = useState<'BIRTHDAY' | 'ANNIVERSARY' | 'HOLIDAY' | 'CUSTOM'>('BIRTHDAY');
+  const [gcFormRecurrence, setGcFormRecurrence] = useState<'NONE' | 'YEARLY' | 'MONTHLY'>('YEARLY');
+  const [gcFormPersonId, setGcFormPersonId] = useState<string | null>(null);
+  const [gcPersonFormName, setGcPersonFormName] = useState('');
+  const [gcPersonFormRelation, setGcPersonFormRelation] = useState<'PARTNER' | 'FAMILY' | 'FRIEND' | 'COLLEAGUE' | 'OTHER'>('FRIEND');
+
   // Drafts (Неразобранное)
   const [draftsWishlistId, setDraftsWishlistId] = useState<string | null>(null);
   const [draftsCount, setDraftsCount] = useState(0);
@@ -4016,6 +4033,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       } else {
         setScreen('onboarding-try');
       }
+    } else if (screen === 'gift-calendar') {
+      setScreen('my-wishlists');
+    } else if (screen === 'gift-calendar-occasion') {
+      setScreen('gift-calendar');
+    } else if (screen === 'gift-calendar-person') {
+      setScreen('gift-calendar');
     } else if (screen === 'share') {
       setScreen('wishlist-detail');
     } else if (screen === 'archive') {
@@ -4177,6 +4200,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           .catch(() => setScreen('my-wishlists'))
           .finally(() => setSantaJoinLoading(false));
         loadWishlists().catch(() => {});
+      } else if (startParam && startParam.startsWith('occasion_')) {
+        // Deep link from Gift Calendar reminder: open occasion detail
+        const occasionId = startParam.slice(9);
+        loadWishlists().catch(() => {});
+        tgFetch(`/tg/gift-occasions/${occasionId}`).then(async r => {
+          if (r.ok) {
+            const data = await r.json() as { occasion: any };
+            setGcViewingOccasion(data.occasion);
+            setScreen('gift-calendar-occasion');
+          } else {
+            setScreen('my-wishlists');
+          }
+        }).catch(() => setScreen('my-wishlists'));
       } else if (startParam && startParam.startsWith('draft_')) {
         // Deep link from bot: open draft item
         const draftItemId = startParam.slice(6); // strip "draft_"
@@ -6260,6 +6296,41 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <span style={{ fontSize: 20, color: C.accent }}>›</span>
               </div>
             )}
+
+            {/* ── Gift Calendar home widget ── */}
+            {(() => {
+              const gcActive = (planInfo as any)?.addons?.giftCalendar?.active;
+              return (
+                <div
+                  onClick={async () => {
+                    if (!gcActive) { /* upsell → open settings for now */ setScreen('settings'); return; }
+                    setGcLoading(true);
+                    try { const r = await tgFetch('/tg/gift-calendar/feed'); if (r.ok) setGcFeed(await r.json()); } catch {}
+                    try { const r = await tgFetch('/tg/gift-people'); if (r.ok) { const d = await r.json() as { people: any[] }; setGcPeople(d.people); } } catch {}
+                    setGcLoading(false);
+                    setScreen('gift-calendar');
+                  }}
+                  style={{
+                    background: gcActive ? 'linear-gradient(135deg, rgba(251,191,36,0.12), rgba(251,191,36,0.04))' : `linear-gradient(135deg, rgba(124,106,255,0.08), rgba(124,106,255,0.02))`,
+                    borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
+                    border: `1px solid ${gcActive ? 'rgba(251,191,36,0.2)' : C.accent + '20'}`,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    marginBottom: 8, animation: 'fadeIn 0.3s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 24 }}>🎁</span>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{t('gc_home_widget_title', locale)}</div>
+                      <div style={{ fontSize: 12, color: C.textMuted }}>
+                        {!gcActive ? t('gc_upsell_subtitle', locale) : t('gc_no_occasions', locale)}
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 20, color: gcActive ? '#FBBF24' : C.accent }}>›</span>
+                </div>
+              );
+            })()}
 
             {/* ── Reorder trigger button (only in normal mode, 2+ wishlists) ── */}
             {!reorderMode && wishlists.length >= 2 && (
@@ -10485,6 +10556,206 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
         </div>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          GIFT CALENDAR SCREENS
+          ═══════════════════════════════════════════════════════════════ */}
+      {screen === 'gift-calendar' && (() => {
+        const feed = gcFeed ?? { today: [], upcoming: [], overdue: [], done: [] };
+        const renderOccasionCard = (o: any) => {
+          const statusColors: Record<string, string> = { NONE: '#555', IDEAS_STARTED: '#FBBF24', GIFT_SELECTED: '#7C6AFF', DONE: '#34D399' };
+          const statusLabel = (s: string) => s === 'DONE' ? t('gc_status_done', locale) : s === 'GIFT_SELECTED' ? t('gc_status_selected', locale) : s === 'IDEAS_STARTED' ? t('gc_status_ideas', locale) : t('gc_status_none', locale);
+          const daysText = o.daysUntil === 0 ? t('gc_today_label', locale) : o.daysUntil > 0 ? t('gc_days_left', locale, { n: o.daysUntil }) : t('gc_days_overdue', locale, { n: Math.abs(o.daysUntil) });
+          return (
+            <div key={o.id} onClick={async () => {
+              const r = await tgFetch(`/tg/gift-occasions/${o.id}`);
+              if (r.ok) { const d = await r.json() as any; setGcViewingOccasion(d.occasion); setScreen('gift-calendar-occasion'); }
+            }} style={{ background: C.surface, borderRadius: 14, padding: '14px 16px', marginBottom: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 650, color: C.text, marginBottom: 2 }}>{o.title}</div>
+                {o.person && <div style={{ fontSize: 11, color: C.textMuted }}>{o.person.displayName}</div>}
+                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: o.daysUntil <= 1 ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.05)', color: o.daysUntil <= 1 ? '#FBBF24' : C.textMuted, fontWeight: 600 }}>{daysText}</span>
+                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', color: statusColors[o.planStatus] ?? '#555', fontWeight: 500 }}>{statusLabel(o.planStatus)}</span>
+                </div>
+              </div>
+              <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>
+            </div>
+          );
+        };
+        const section = (title: string, items: any[], emoji: string) => items.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 6 }}>{emoji} {title}</div>
+            {items.map(renderOccasionCard)}
+          </div>
+        );
+        return (
+          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: 0 }}>🎁 {t('gc_title', locale)}</h1>
+              <button onClick={() => { setGcFormTitle(''); setGcFormDate(''); setGcFormType('BIRTHDAY'); setGcFormRecurrence('YEARLY'); setGcFormPersonId(null); setShowGcCreateOccasion(true); }} style={{ background: C.accent, color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font }}>+ {t('gc_add_occasion', locale)}</button>
+            </div>
+            {gcLoading && <div style={{ textAlign: 'center', color: C.textMuted, padding: 20 }}>Loading…</div>}
+            {!gcLoading && feed.today.length === 0 && feed.upcoming.length === 0 && feed.overdue.length === 0 && feed.done.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: C.textMuted, fontSize: 14 }}>{t('gc_empty_state', locale)}</div>
+            )}
+            {section(t('gc_today', locale), feed.today, '🔴')}
+            {section(t('gc_upcoming', locale), feed.upcoming, '📅')}
+            {section(t('gc_overdue', locale), feed.overdue, '⚠️')}
+            {section(t('gc_done', locale), feed.done, '✅')}
+          </div>
+        );
+      })()}
+
+      {screen === 'gift-calendar-occasion' && gcViewingOccasion && (() => {
+        const o = gcViewingOccasion;
+        const daysText = o.daysUntil === 0 ? t('gc_today_label', locale) : o.daysUntil > 0 ? t('gc_days_left', locale, { n: o.daysUntil }) : o.daysUntil != null ? t('gc_days_overdue', locale, { n: Math.abs(o.daysUntil) }) : '';
+        const typeLabel = ({ BIRTHDAY: t('gc_occasion_birthday', locale), ANNIVERSARY: t('gc_occasion_anniversary', locale), HOLIDAY: t('gc_occasion_holiday', locale), CUSTOM: t('gc_occasion_custom', locale) } as Record<string, string>)[o.type] ?? o.type;
+        const recLabel = ({ NONE: t('gc_recurrence_none', locale), YEARLY: t('gc_recurrence_yearly', locale), MONTHLY: t('gc_recurrence_monthly', locale) } as Record<string, string>)[o.recurrence] ?? '';
+        const ps = o.planState?.status ?? 'NONE';
+        const actionBtn = (label: string, color: string, bg: string, onClick: () => void) => (
+          <button onClick={onClick} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: 'none', background: bg, color, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, marginBottom: 6 }}>{label}</button>
+        );
+        return (
+          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 4px' }}>{o.title}</h1>
+            <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12 }}>{typeLabel} · {recLabel}</div>
+            {o.person && (
+              <div style={{ background: C.surface, borderRadius: 12, padding: '12px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 20 }}>👤</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{o.person.displayName}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted }}>{({ PARTNER: t('gc_relation_partner', locale), FAMILY: t('gc_relation_family', locale), FRIEND: t('gc_relation_friend', locale), COLLEAGUE: t('gc_relation_colleague', locale), OTHER: t('gc_relation_other', locale) } as any)[o.person.relation] ?? o.person.relation}</div>
+                </div>
+              </div>
+            )}
+            <div style={{ background: C.surface, borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 12, color: C.textMuted }}>{t('gc_form_date', locale)}</span>
+                <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>{new Date(o.eventDate).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}</span>
+              </div>
+              {daysText && <div style={{ fontSize: 13, fontWeight: 700, color: o.daysUntil <= 1 ? '#FBBF24' : '#34D399', textAlign: 'right' }}>{daysText}</div>}
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              {ps !== 'DONE' && actionBtn(`📝 ${t('gc_action_add_idea', locale)}`, '#fff', C.accent, async () => {
+                const title = prompt(t('gc_form_title', locale));
+                if (!title) return;
+                await tgFetch(`/tg/gift-occasions/${o.id}/create-draft-item`, { method: 'POST', body: JSON.stringify({ title }) });
+                pushToast('Idea added to drafts', 'success');
+              })}
+              {ps !== 'DONE' && ps !== 'GIFT_SELECTED' && actionBtn(`🎯 ${t('gc_action_mark_selected', locale)}`, '#7C6AFF', 'rgba(124,106,255,0.12)', async () => {
+                await tgFetch(`/tg/gift-occasions/${o.id}/mark-gift-selected`, { method: 'POST', body: JSON.stringify({}) });
+                const r2 = await tgFetch(`/tg/gift-occasions/${o.id}`);
+                if (r2.ok) { const d = await r2.json() as any; setGcViewingOccasion(d.occasion); }
+                pushToast(t('gc_action_mark_selected', locale), 'success');
+              })}
+              {ps !== 'DONE' && actionBtn(`✅ ${t('gc_action_mark_done', locale)}`, '#34D399', 'rgba(52,211,153,0.12)', async () => {
+                await tgFetch(`/tg/gift-occasions/${o.id}/mark-done`, { method: 'POST', body: JSON.stringify({}) });
+                const r2 = await tgFetch(`/tg/gift-occasions/${o.id}`);
+                if (r2.ok) { const d = await r2.json() as any; setGcViewingOccasion(d.occasion); }
+                pushToast(t('gc_action_mark_done', locale), 'success');
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {screen === 'gift-calendar-person' && gcViewingPerson && (() => {
+        const p = gcViewingPerson;
+        return (
+          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 4px' }}>👤 {p.displayName}</h1>
+            <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 16 }}>{({ PARTNER: t('gc_relation_partner', locale), FAMILY: t('gc_relation_family', locale), FRIEND: t('gc_relation_friend', locale), COLLEAGUE: t('gc_relation_colleague', locale), OTHER: t('gc_relation_other', locale) } as any)[p.relation] ?? p.relation}</div>
+            {p.note && <div style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, marginBottom: 12 }}>{p.note}</div>}
+          </div>
+        );
+      })()}
+
+      {/* ── GC: Create Occasion BottomSheet ── */}
+      <BottomSheet isOpen={showGcCreateOccasion} onClose={() => setShowGcCreateOccasion(false)} title={t('gc_add_occasion', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gc_form_title', locale)}</label>
+            <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} value={gcFormTitle} onChange={e => setGcFormTitle(e.target.value)} placeholder={t('gc_occasion_birthday', locale)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gc_form_date', locale)}</label>
+            <input type="date" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} value={gcFormDate} onChange={e => setGcFormDate(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gc_form_type', locale)}</label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+              {(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'CUSTOM'] as const).map(tp => (
+                <button key={tp} onClick={() => setGcFormType(tp)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gcFormType === tp ? C.accent : C.surface, color: gcFormType === tp ? '#fff' : C.textMuted }}>{({ BIRTHDAY: t('gc_occasion_birthday', locale), ANNIVERSARY: t('gc_occasion_anniversary', locale), HOLIDAY: t('gc_occasion_holiday', locale), CUSTOM: t('gc_occasion_custom', locale) })[tp]}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gc_form_recurrence', locale)}</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['NONE', 'YEARLY', 'MONTHLY'] as const).map(r => (
+                <button key={r} onClick={() => setGcFormRecurrence(r)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gcFormRecurrence === r ? C.accent : C.surface, color: gcFormRecurrence === r ? '#fff' : C.textMuted }}>{({ NONE: t('gc_recurrence_none', locale), YEARLY: t('gc_recurrence_yearly', locale), MONTHLY: t('gc_recurrence_monthly', locale) })[r]}</button>
+              ))}
+            </div>
+          </div>
+          {gcPeople.length > 0 && (
+            <div>
+              <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gc_form_person', locale)}</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+                <button onClick={() => setGcFormPersonId(null)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: font, background: !gcFormPersonId ? C.accent : C.surface, color: !gcFormPersonId ? '#fff' : C.textMuted }}>—</button>
+                {gcPeople.map(p => (
+                  <button key={p.id} onClick={() => setGcFormPersonId(p.id)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: font, background: gcFormPersonId === p.id ? C.accent : C.surface, color: gcFormPersonId === p.id ? '#fff' : C.textMuted }}>{p.displayName}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button
+            disabled={!gcFormTitle.trim() || !gcFormDate}
+            onClick={async () => {
+              const r = await tgFetch('/tg/gift-occasions', { method: 'POST', body: JSON.stringify({ title: gcFormTitle.trim(), eventDate: gcFormDate, type: gcFormType, recurrence: gcFormRecurrence, personId: gcFormPersonId }) });
+              if (r.ok) {
+                setShowGcCreateOccasion(false);
+                pushToast(t('gc_add_occasion', locale), 'success');
+                // Refresh feed
+                const fr = await tgFetch('/tg/gift-calendar/feed');
+                if (fr.ok) setGcFeed(await fr.json());
+              } else { pushToast('Error', 'error'); }
+            }}
+            style={{ padding: '14px', borderRadius: 14, border: 'none', background: gcFormTitle.trim() && gcFormDate ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}
+          >{t('gc_add_occasion', locale)}</button>
+        </div>
+      </BottomSheet>
+
+      {/* ── GC: Create Person BottomSheet ── */}
+      <BottomSheet isOpen={showGcCreatePerson} onClose={() => setShowGcCreatePerson(false)} title={t('gc_add_person', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gc_form_name', locale)}</label>
+            <input style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} value={gcPersonFormName} onChange={e => setGcPersonFormName(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gc_form_relation', locale)}</label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+              {(['PARTNER', 'FAMILY', 'FRIEND', 'COLLEAGUE', 'OTHER'] as const).map(r => (
+                <button key={r} onClick={() => setGcPersonFormRelation(r)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gcPersonFormRelation === r ? C.accent : C.surface, color: gcPersonFormRelation === r ? '#fff' : C.textMuted }}>{({ PARTNER: t('gc_relation_partner', locale), FAMILY: t('gc_relation_family', locale), FRIEND: t('gc_relation_friend', locale), COLLEAGUE: t('gc_relation_colleague', locale), OTHER: t('gc_relation_other', locale) })[r]}</button>
+              ))}
+            </div>
+          </div>
+          <button
+            disabled={!gcPersonFormName.trim()}
+            onClick={async () => {
+              const r = await tgFetch('/tg/gift-people', { method: 'POST', body: JSON.stringify({ displayName: gcPersonFormName.trim(), relation: gcPersonFormRelation }) });
+              if (r.ok) {
+                setShowGcCreatePerson(false);
+                pushToast(t('gc_add_person', locale), 'success');
+                const pr = await tgFetch('/tg/gift-people');
+                if (pr.ok) { const d = await pr.json() as any; setGcPeople(d.people); }
+              } else { pushToast('Error', 'error'); }
+            }}
+            style={{ padding: '14px', borderRadius: 14, border: 'none', background: gcPersonFormName.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}
+          >{t('gc_add_person', locale)}</button>
+        </div>
+      </BottomSheet>
 
       {/* ── Copy item to wishlist picker — triggered from item-detail ── */}
       <BottomSheet isOpen={showCopyPicker} onClose={() => { setShowCopyPicker(false); setCopyingItem(null); }} title={t('item_copy_title', locale)}>
