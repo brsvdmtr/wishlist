@@ -4267,6 +4267,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Refresh subscription unread badge when app returns to foreground
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        tgFetch('/tg/me/subscriptions/meta').then(async r => {
+          if (!r.ok) return;
+          const meta = await r.json() as { unreadCount: number };
+          setSubUnreadCount(meta.unreadCount);
+        }).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', refresh);
+    return () => document.removeEventListener('visibilitychange', refresh);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Load god stats when god mode is enabled; clear when disabled
   useEffect(() => {
     if (godMode) void loadGodStats();
@@ -6093,7 +6109,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.surface, borderRadius: 12, padding: 4 }}>
               {(['mine', 'subscribed'] as const).map((tab) => {
                 const isActive = myWishlistsTab === tab;
-                const totalUnread = subscriptions.length > 0 ? subscriptions.reduce((s, sub) => s + sub.unreadCount, 0) : subUnreadCount;
+                const totalUnread = subUnreadCount;
                 return (
                   <button
                     key={tab}
