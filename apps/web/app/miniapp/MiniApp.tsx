@@ -10664,10 +10664,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </div>
             <div style={{ marginBottom: 10 }}>
               {ps !== 'DONE' && actionBtn(`📝 ${t('gc_action_add_idea', locale)}`, '#fff', C.accent, async () => {
-                const title = prompt(t('gc_form_title', locale));
-                if (!title) return;
-                await tgFetch(`/tg/gift-occasions/${o.id}/create-draft-item`, { method: 'POST', body: JSON.stringify({ title }) });
-                pushToast('Idea added to drafts', 'success');
+                try {
+                  const draftTitle = o.person?.displayName ? `${o.title} — ${o.person.displayName}` : o.title;
+                  const r = await tgFetch(`/tg/gift-occasions/${o.id}/create-draft-item`, { method: 'POST', body: JSON.stringify({ title: draftTitle }) });
+                  if (r.ok) {
+                    pushToast(locale === 'ru' ? 'Идея добавлена в черновики' : 'Idea added to drafts', 'success');
+                  } else {
+                    const err = await r.json().catch(() => ({})) as { error?: string };
+                    pushToast(err.error || 'Error', 'error');
+                  }
+                } catch { pushToast('Error', 'error'); }
               })}
               {ps !== 'DONE' && ps !== 'GIFT_SELECTED' && actionBtn(`🎯 ${t('gc_action_mark_selected', locale)}`, '#7C6AFF', 'rgba(124,106,255,0.12)', async () => {
                 await tgFetch(`/tg/gift-occasions/${o.id}/mark-gift-selected`, { method: 'POST', body: JSON.stringify({}) });
