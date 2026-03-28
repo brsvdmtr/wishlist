@@ -1586,29 +1586,11 @@ const FORCED_ROLLOUT_USERS = new Set<string>(
   (process.env.ONBOARDING_FORCED_USERS ?? '').split(',').filter(Boolean)
 );
 
-// Onboarding v2 rollout mode: 'off' | 'ab50' | 'force_v1' | 'force_v2'
-const ONBOARDING_V2_ROLLOUT = (process.env.ONBOARDING_V2_ROLLOUT ?? 'off') as 'off' | 'ab50' | 'force_v1' | 'force_v2';
-
-// Test override: specific telegramIds that always get v2_try on first assignment.
-// Does NOT override already-saved variant — only affects first assignment.
-const ONBOARDING_V2_TEST_TELEGRAM_IDS = new Set(
-  (process.env.ONBOARDING_V2_TEST_IDS ?? '8747175307').split(',').filter(Boolean)
-);
-
-function assignOnboardingVariant(telegramId?: string): { variant: OnboardingVariant; source: 'test_override' | 'rollout_config' } {
-  // 1. Test override by telegramId
-  if (telegramId && ONBOARDING_V2_TEST_TELEGRAM_IDS.has(telegramId)) {
-    return { variant: 'v2_try', source: 'test_override' };
-  }
-  // 2. Rollout config
-  let variant: OnboardingVariant;
-  switch (ONBOARDING_V2_ROLLOUT) {
-    case 'force_v2': variant = 'v2_try'; break;
-    case 'force_v1': variant = 'v1_demo'; break;
-    case 'ab50': variant = Math.random() < 0.5 ? 'v1_demo' : 'v2_try'; break;
-    default: variant = 'v1_demo';
-  }
-  return { variant, source: 'rollout_config' };
+// Onboarding v2 is now the default for ALL new users.
+// A/B experiment concluded — v2_try won and became the main flow.
+// Historical variants (v1_demo) are still supported for users already assigned to them.
+function assignOnboardingVariant(_telegramId?: string): { variant: OnboardingVariant; source: 'rollout_config' } {
+  return { variant: 'v2_try', source: 'rollout_config' };
 }
 
 interface DemoItemTemplate {
@@ -1838,6 +1820,7 @@ async function completeOnboarding(userId: string, reason: CompletionReason): Pro
     market_segment: state.variantKey ? variantKeyToSegment(state.variantKey) : 'ru',
     onboarding_variant: meta.onboardingVariant ?? 'v1_demo',
     acquisition_path: meta.acquisitionPath ?? null,
+    rollout_phase: 'main',
   });
 }
 
@@ -5419,6 +5402,7 @@ tgRouter.post(
         forced_rollout: elig.forcedRollout,
         market_segment: marketSegment,
         locale_used: locale,
+        rollout_phase: 'main', // A/B concluded, v2 is the default
       });
 
       trackEvent('onboarding_started', user.id, {
@@ -5495,6 +5479,7 @@ tgRouter.post(
       forced_rollout: elig.forcedRollout,
       market_segment: marketSegment,
       locale_used: locale,
+      rollout_phase: 'main',
     });
 
     trackEvent('onboarding_started', user.id, {
