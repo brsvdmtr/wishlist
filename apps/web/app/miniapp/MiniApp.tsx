@@ -10738,14 +10738,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <button
             disabled={!gcFormTitle.trim() || !gcFormDate}
             onClick={async () => {
-              const r = await tgFetch('/tg/gift-occasions', { method: 'POST', body: JSON.stringify({ title: gcFormTitle.trim(), eventDate: gcFormDate, type: gcFormType, recurrence: gcFormRecurrence, personId: gcFormPersonId }) });
+              const r = await tgFetch('/tg/gift-occasions', { method: 'POST', body: JSON.stringify({ title: gcFormTitle.trim(), eventDate: gcFormDate, type: gcFormType, recurrence: gcFormRecurrence, personId: gcFormPersonId || undefined }) });
               if (r.ok) {
                 setShowGcCreateOccasion(false);
                 pushToast(t('gc_add_occasion', locale), 'success');
                 // Refresh feed
                 const fr = await tgFetch('/tg/gift-calendar/feed');
                 if (fr.ok) setGcFeed(await fr.json());
-              } else { pushToast('Error', 'error'); }
+              } else {
+                const err = await r.json().catch(() => ({})) as { error?: string };
+                pushToast(err.error || 'Error', 'error');
+              }
             }}
             style={{ padding: '14px', borderRadius: 14, border: 'none', background: gcFormTitle.trim() && gcFormDate ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}
           >{t('gc_add_occasion', locale)}</button>

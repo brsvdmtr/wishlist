@@ -6838,13 +6838,18 @@ tgRouter.post('/gift-occasions', asyncHandler(async (req, res) => {
   const parsed = z.object({
     title: z.string().min(1).max(120),
     type: z.enum(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'CUSTOM']).optional(),
-    eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    eventDate: z.string().min(1),
     recurrence: z.enum(['NONE', 'YEARLY', 'MONTHLY']).optional(),
     personId: z.string().optional(),
     timezone: z.string().max(60).optional(),
     allDay: z.boolean().optional(),
   }).safeParse(req.body);
   if (!parsed.success) return zodError(res, parsed.error);
+  // Normalize date: accept YYYY-MM-DD or DD.MM.YYYY
+  let isoDate = parsed.data.eventDate;
+  const dotMatch = isoDate.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (dotMatch) isoDate = `${dotMatch[3]}-${dotMatch[2]!.padStart(2, '0')}-${dotMatch[1]!.padStart(2, '0')}`;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return res.status(400).json({ error: 'Invalid date format, use YYYY-MM-DD' });
   if (parsed.data.personId) {
     const person = await prisma.giftPerson.findUnique({ where: { id: parsed.data.personId } });
     if (!person || person.ownerUserId !== user.id) return res.status(400).json({ error: 'Invalid personId' });
@@ -6854,7 +6859,7 @@ tgRouter.post('/gift-occasions', asyncHandler(async (req, res) => {
       ownerUserId: user.id,
       title: parsed.data.title,
       type: parsed.data.type ?? 'CUSTOM',
-      eventDate: new Date(parsed.data.eventDate + 'T00:00:00Z'),
+      eventDate: new Date(isoDate + 'T00:00:00Z'),
       recurrence: parsed.data.recurrence ?? 'NONE',
       personId: parsed.data.personId ?? null,
       timezone: parsed.data.timezone ?? 'Europe/Moscow',
