@@ -882,6 +882,7 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
     { icon: '💡', title: t('plan_pro_f6', locale), subtitle: t('plan_pro_sub6', locale) },
     { icon: '👁', title: t('plan_pro_f7', locale), subtitle: t('plan_pro_sub7', locale) },
     { icon: '🛡', title: t('plan_pro_f8', locale), subtitle: t('plan_pro_sub8', locale) },
+    { icon: '📅', title: t('plan_pro_f9', locale), subtitle: t('plan_pro_sub9', locale) },
   ];
 }
 
@@ -6002,7 +6003,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'my-wishlists' && (
         <div
-          style={{ padding: '16px 20px 120px' }}
+          style={{ padding: '16px 20px 120px', minHeight: 'calc(100vh - 80px)' }}
           onTouchStart={(e) => {
             if (reorderMode || itemReorderMode) return;
             const target = e.target as HTMLElement;
@@ -8271,13 +8272,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   const gap = cardMode === 'compact' ? 8 : 14;
                   const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
                   return (
-                    <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap, position: 'relative' }}>
+                    <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap, position: 'relative', ...(hasUnread ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
                       {hasUnread && (
                         <span style={{
-                          position: 'absolute', top: 10, right: 10, zIndex: 2,
-                          width: 8, height: 8, borderRadius: '50%', background: C.orange,
-                          boxShadow: `0 0 6px ${C.orange}`,
-                        }} />
+                          position: 'absolute', top: 8, right: 8, zIndex: 2,
+                          padding: '2px 6px', borderRadius: 6,
+                          background: 'rgba(251,191,36,0.2)', color: '#FBBF24',
+                          fontSize: 9, fontWeight: 700, fontFamily: font, letterSpacing: '0.03em',
+                        }}>{locale === 'ru' ? 'Новое' : 'New'}</span>
                       )}
                       <Card
                         item={item}
@@ -8292,13 +8294,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   );
                 }
                 return (
-                  <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative' }}>
+                  <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(hasUnread ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
                     {hasUnread && (
                       <span style={{
-                        position: 'absolute', top: 10, right: 10, zIndex: 2,
-                        width: 8, height: 8, borderRadius: '50%', background: C.orange,
-                        boxShadow: `0 0 6px ${C.orange}`,
-                      }} />
+                        position: 'absolute', top: 8, right: 8, zIndex: 2,
+                        padding: '2px 6px', borderRadius: 6,
+                        background: 'rgba(251,191,36,0.2)', color: '#FBBF24',
+                        fontSize: 9, fontWeight: 700, fontFamily: font, letterSpacing: '0.03em',
+                      }}>{locale === 'ru' ? 'Новое' : 'New'}</span>
                     )}
                     <WishCardGuest
                       item={item}
@@ -8495,7 +8498,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ══════════════════════════════════════════════
           ARCHIVE  (mode: 'wishlist' | 'global')
           ══════════════════════════════════════════════ */}
-      {screen === 'archive' && (archiveMode === 'global' || currentWl) && (() => {
+      {screen === 'archive' && (() => {
+        // Safety: if wishlist-mode archive lost its currentWl context, navigate back
+        if (archiveMode !== 'global' && !currentWl) { setScreen('my-wishlists'); return null; }
         const displayItems = archiveMode === 'global' ? globalArchiveItems : archiveItems;
         return (
           <div style={{ padding: '16px 20px 120px' }}>
@@ -9155,6 +9160,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         { label: t('settings_hints', locale), desc: t('settings_desc_hints', locale) },
                         { label: t('settings_subscriptions', locale), desc: t('settings_desc_subscriptions', locale) },
                         { label: t('settings_privacy_pro', locale), desc: t('settings_desc_privacy_pro', locale) },
+                        { label: t('settings_event_calendar', locale), desc: t('settings_desc_event_calendar', locale) },
                       ].map((row) => (
                         <div key={row.label}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -10567,46 +10573,83 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         return null;
       })()}
 
-      {/* Paywall */}
+      {/* Event Calendar — premium onboarding/paywall */}
       {screen === 'gift-notes-paywall' && (
-        <div style={{ padding: '40px 24px 120px', animation: 'fadeIn 0.3s ease', textAlign: 'center' }}>
-          <span style={{ fontSize: 48, display: 'block', marginBottom: 16 }}>🎁</span>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 8px' }}>{t('gn_upsell_title', locale)}</h1>
-          <p style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5, margin: '0 0 20px' }}>{t('gn_upsell_desc', locale)}</p>
-          <div style={{ background: C.surface, borderRadius: 14, padding: '14px 16px', marginBottom: 20, textAlign: 'left' }}>
-            <div style={{ fontSize: 12, color: '#34D399', fontWeight: 600, marginBottom: 4 }}>{t('gn_upsell_pro', locale)}</div>
-            <div style={{ fontSize: 12, color: C.textMuted }}>{t('gn_upsell_or', locale, { price: gnAccess.priceXtr })}</div>
+        <div style={{ padding: '0 0 calc(90px + env(safe-area-inset-bottom))', animation: 'fadeIn 0.3s ease' }}>
+          {/* Hero zone */}
+          <div style={{ background: 'linear-gradient(160deg, #1a1130 0%, #0d1628 60%, #091520 100%)', padding: '40px 24px 30px', textAlign: 'center', borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}>
+            <div style={{ fontSize: 56, marginBottom: 12, filter: 'drop-shadow(0 0 20px rgba(251,191,36,0.3))' }}>🎁📅</div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#fff', fontFamily: font, margin: '0 0 8px', lineHeight: 1.3 }}>
+              {locale === 'ru' ? 'Не забывай важные даты и подарки' : 'Never forget important dates and gifts'}
+            </h1>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5, margin: 0 }}>
+              {locale === 'ru' ? 'Храни события, идеи и будущие подарки в одном месте. Смотри, сколько дней осталось, и готовься заранее без суеты.' : 'Keep occasions, ideas and future gifts in one place. See how many days are left and prepare without the rush.'}
+            </p>
           </div>
-          <button onClick={async () => {
-            try {
-              const r = await tgFetch('/tg/billing/gift-notes/checkout', { method: 'POST' });
-              if (r.ok) {
-                const d = await r.json() as { invoiceUrl?: string; alreadyUnlocked?: boolean };
-                if (d.alreadyUnlocked) {
-                  const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
-                  if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
-                  setScreen('gift-notes');
-                } else if (d.invoiceUrl) {
-                  try { window.Telegram?.WebApp?.openInvoice?.(d.invoiceUrl, async (status: string) => {
-                    if (status === 'paid') {
-                      const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
-                      if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
-                      pushToast(locale === 'ru' ? 'Доступ открыт!' : 'Unlocked!', 'success');
-                      setGnLoading(true);
-                      try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
-                      setGnLoading(false);
-                      setScreen('gift-notes');
-                    }
-                  }); } catch { window.open(d.invoiceUrl, '_blank'); }
+
+          {/* Value bullets */}
+          <div style={{ padding: '20px 24px 0' }}>
+            {[
+              { icon: '📋', text: locale === 'ru' ? 'Все важные события под рукой' : 'All important events at hand' },
+              { icon: '💡', text: locale === 'ru' ? 'Идеи подарков можно сохранять заранее' : 'Save gift ideas way ahead of time' },
+              { icon: '⏳', text: locale === 'ru' ? 'Счётчик дней помогает ничего не забыть' : 'Day counter helps you never forget' },
+              { icon: '🎯', text: locale === 'ru' ? 'Удобно планировать подарки для близких' : 'Easily plan gifts for loved ones' },
+            ].map((b, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: i < 3 ? `1px solid ${C.border}` : 'none' }}>
+                <span style={{ fontSize: 20, width: 32, textAlign: 'center', flexShrink: 0 }}>{b.icon}</span>
+                <span style={{ fontSize: 14, color: C.text, lineHeight: 1.4 }}>{b.text}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Pricing block */}
+          <div style={{ padding: '20px 24px' }}>
+            <div style={{ background: C.surface, borderRadius: 16, padding: '16px 18px', border: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 14 }}>⭐</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{locale === 'ru' ? 'Разовая покупка' : 'One-time purchase'}</span>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, fontFamily: font, marginBottom: 4 }}>{gnAccess.priceXtr} Stars</div>
+              <div style={{ fontSize: 12, color: C.textMuted }}>{locale === 'ru' ? 'Навсегда. Без подписки.' : 'Forever. No subscription.'}</div>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}`, fontSize: 12, color: '#34D399', fontWeight: 600 }}>
+                ✓ {locale === 'ru' ? 'Также входит в подписку Pro' : 'Also included in Pro subscription'}
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky CTA */}
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom))', background: `linear-gradient(180deg, transparent, ${C.bg} 20%)`, zIndex: 50 }}>
+            <button onClick={async () => {
+              try {
+                const r = await tgFetch('/tg/billing/gift-notes/checkout', { method: 'POST' });
+                if (r.ok) {
+                  const d = await r.json() as { invoiceUrl?: string; alreadyUnlocked?: boolean };
+                  if (d.alreadyUnlocked) {
+                    const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
+                    if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
+                    setScreen('gift-notes');
+                  } else if (d.invoiceUrl) {
+                    try { window.Telegram?.WebApp?.openInvoice?.(d.invoiceUrl, async (status: string) => {
+                      if (status === 'paid') {
+                        const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
+                        if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
+                        pushToast(locale === 'ru' ? 'Доступ открыт!' : 'Unlocked!', 'success');
+                        setGnLoading(true);
+                        try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
+                        setGnLoading(false);
+                        setScreen('gift-notes');
+                      }
+                    }); } catch { window.open(d.invoiceUrl, '_blank'); }
+                  }
                 }
-              }
-            } catch { pushToast('Error', 'error'); }
-          }} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: C.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginBottom: 10 }}>
-            {t('gn_upsell_cta', locale, { price: gnAccess.priceXtr })}
-          </button>
-          <button onClick={() => setScreen('my-wishlists')} style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: font }}>
-            {t('gn_upsell_later', locale)}
-          </button>
+              } catch { pushToast('Error', 'error'); }
+            }} style={{ width: '100%', padding: '15px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: `0 6px 20px rgba(124,106,255,0.35)` }}>
+              {t('gn_upsell_cta', locale, { price: gnAccess.priceXtr })}
+            </button>
+            <button onClick={() => setScreen('my-wishlists')} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: font, marginTop: 6 }}>
+              {t('gn_upsell_later', locale)}
+            </button>
+          </div>
         </div>
       )}
 
@@ -12349,6 +12392,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             { key: 'cancel_feat_hints' },
             { key: 'cancel_feat_subs' },
             { key: 'cancel_feat_privacy' },
+            { key: 'cancel_feat_calendar' },
           ];
 
           return (
