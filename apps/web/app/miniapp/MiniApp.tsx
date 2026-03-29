@@ -9788,7 +9788,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                       );
                                     })()}
 
-                                    {/* ── Onboarding A/B test (30д) ── */}
+                                    {/* ── Onboarding metrics (historical A/B + main v2) ── */}
                                     {godStats.onboardingAB && (() => {
                                       const ab = godStats.onboardingAB!;
                                       const v1s = ab.started['v1_demo'] ?? 0;
@@ -9802,7 +9802,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                       return (
                                         <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
                                           <div style={{ fontSize: 10, fontWeight: 700, color: '#7C6AFF', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                            🧪 Onboarding A/B (30д)
+                                            📊 Onboarding (v2 main + historical)
                                           </div>
                                           {/* Header */}
                                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>

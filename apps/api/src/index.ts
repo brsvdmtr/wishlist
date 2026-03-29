@@ -1810,6 +1810,7 @@ async function completeOnboarding(userId: string, reason: CompletionReason): Pro
   }
 
   // Analytics — fires exactly once per completion (guard above prevents re-entry).
+  const isLegacyV1 = (meta.onboardingVariant ?? 'v1_demo') === 'v1_demo';
   trackEvent('onboarding_completed', userId, {
     onboarding_key: ONBOARDING_KEY,
     version: ONBOARDING_VERSION,
@@ -1820,7 +1821,8 @@ async function completeOnboarding(userId: string, reason: CompletionReason): Pro
     market_segment: state.variantKey ? variantKeyToSegment(state.variantKey) : 'ru',
     onboarding_variant: meta.onboardingVariant ?? 'v1_demo',
     acquisition_path: meta.acquisitionPath ?? null,
-    rollout_phase: 'main',
+    experiment_phase: isLegacyV1 ? 'legacy_recovery' : 'post_rollout',
+    onboarding_flow: isLegacyV1 ? 'v1_demo_recovery' : 'main_v2',
   });
 }
 
@@ -3041,6 +3043,8 @@ tgRouter.post(
         market_segment: onboardingState.variantKey ? variantKeyToSegment(onboardingState.variantKey) : 'ru',
         onboarding_variant: itemMeta.onboardingVariant ?? 'v1_demo',
         acquisition_path: itemMeta.acquisitionPath ?? null,
+        experiment_phase: (itemMeta.onboardingVariant ?? 'v1_demo') === 'v1_demo' ? 'legacy_recovery' : 'post_rollout',
+        onboarding_flow: (itemMeta.onboardingVariant ?? 'v1_demo') === 'v1_demo' ? 'v1_demo_recovery' : 'main_v2',
       });
       await completeOnboarding(user.id, reason);
     })();
@@ -5397,12 +5401,13 @@ tgRouter.post(
         onboarding_key: ONBOARDING_KEY,
         version: ONBOARDING_VERSION,
         onboarding_variant: 'v2_try',
+        onboarding_flow: 'main_v2',
+        experiment_phase: 'post_rollout',
         assignment_source: assignmentSource,
         entry_point: effectiveEntryPoint,
         forced_rollout: elig.forcedRollout,
         market_segment: marketSegment,
         locale_used: locale,
-        rollout_phase: 'main', // A/B concluded, v2 is the default
       });
 
       trackEvent('onboarding_started', user.id, {
@@ -5414,6 +5419,8 @@ tgRouter.post(
         market_segment: marketSegment,
         locale_used: locale,
         onboarding_variant: 'v2_try',
+        onboarding_flow: 'main_v2',
+        experiment_phase: 'post_rollout',
       });
 
       return res.json({ state, demoItem: null, onboardingVariant: 'v2_try' as OnboardingVariant });
@@ -5473,13 +5480,14 @@ tgRouter.post(
       onboarding_key: ONBOARDING_KEY,
       version: ONBOARDING_VERSION,
       onboarding_variant: 'v1_demo',
+      onboarding_flow: 'v1_demo_recovery',
+      experiment_phase: 'legacy_recovery',
       assignment_source: assignmentSource,
       variant_key: variantKey,
       entry_point: effectiveEntryPoint,
       forced_rollout: elig.forcedRollout,
       market_segment: marketSegment,
       locale_used: locale,
-      rollout_phase: 'main',
     });
 
     trackEvent('onboarding_started', user.id, {
@@ -5491,6 +5499,8 @@ tgRouter.post(
       market_segment: marketSegment,
       locale_used: locale,
       onboarding_variant: 'v1_demo',
+      onboarding_flow: 'v1_demo_recovery',
+      experiment_phase: 'legacy_recovery',
     });
     trackEvent('demo_item_created', user.id, {
       onboarding_key: ONBOARDING_KEY,
@@ -5582,6 +5592,8 @@ tgRouter.post(
       locale_used: dismissLocale,
       demo_item_deleted: demoItemDeleted,
       onboarding_variant: meta.onboardingVariant ?? 'v1_demo',
+      experiment_phase: (meta.onboardingVariant ?? 'v1_demo') === 'v1_demo' ? 'legacy_recovery' : 'post_rollout',
+      onboarding_flow: (meta.onboardingVariant ?? 'v1_demo') === 'v1_demo' ? 'v1_demo_recovery' : 'main_v2',
     });
 
     return res.json({ ok: true, demoItemDeleted });
