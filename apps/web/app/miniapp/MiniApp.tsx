@@ -6036,31 +6036,61 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'error' && (() => {
         const isTgRequired = errorMsg === t('error_open_in_telegram', locale);
         const tgDeepLink = buildTgDeepLink(urlStartParamRef.current || undefined);
+        if (isTgRequired) {
+          // Browser fallback — branded landing for non-Telegram visitors
+          return (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              height: '100vh', flexDirection: 'column', padding: '40px 24px',
+              background: 'radial-gradient(ellipse at 50% 30%, rgba(124,106,255,0.06) 0%, transparent 60%)',
+              maxWidth: 440, margin: '0 auto',
+            }}>
+              <div style={{ fontSize: 56, marginBottom: 16, filter: 'drop-shadow(0 0 16px rgba(124,106,255,0.3))' }}>🎁</div>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 8px', textAlign: 'center' }}>WishBoard</h1>
+              <p style={{ fontSize: 14, color: C.textMuted, textAlign: 'center', lineHeight: 1.6, margin: '0 0 24px' }}>
+                {locale === 'ru'
+                  ? 'Создавай вишлисты и делись с друзьями. Приложение работает внутри Telegram.'
+                  : 'Create wishlists and share with friends. The app works inside Telegram.'}
+              </p>
+
+              {/* Value bullets */}
+              {[
+                { icon: '📋', text: locale === 'ru' ? 'Создавай вишлисты для любого повода' : 'Create wishlists for any occasion' },
+                { icon: '🔗', text: locale === 'ru' ? 'Делись одной ссылкой' : 'Share with a single link' },
+                { icon: '🎁', text: locale === 'ru' ? 'Друзья бронируют подарки без спойлеров' : 'Friends reserve gifts with no spoilers' },
+              ].map((b, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', width: '100%' }}>
+                  <span style={{ fontSize: 18 }}>{b.icon}</span>
+                  <span style={{ fontSize: 13, color: C.text }}>{b.text}</span>
+                </div>
+              ))}
+
+              {/* CTA */}
+              {tgDeepLink && (
+                <a href={tgDeepLink} style={{ textDecoration: 'none', width: '100%', marginTop: 20 }}>
+                  <button style={{
+                    ...btnPrimary, width: '100%', padding: '14px',
+                    background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+                    fontSize: 15, fontWeight: 700, borderRadius: 14,
+                    boxShadow: `0 6px 20px rgba(124,106,255,0.35)`,
+                  }}>
+                    {locale === 'ru' ? 'Открыть в Telegram' : 'Open in Telegram'}
+                  </button>
+                </a>
+              )}
+
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 16, textAlign: 'center' }}>
+                {locale === 'ru' ? 'Скоро появится веб-версия с авторизацией' : 'Web version with login coming soon'}
+              </div>
+            </div>
+          );
+        }
         return (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
-            <div style={{ fontSize: 48 }}>{isTgRequired ? '✈️' : '😕'}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>
-              {isTgRequired ? t('error_open_in_telegram', locale) : t('error_loading', locale)}
-            </div>
-            <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>
-              {isTgRequired
-                ? t('error_telegram_only', locale)
-                : (errorMsg || t('error_unknown', locale))}
-            </div>
-            {isTgRequired && tgDeepLink ? (
-              <a href={tgDeepLink} style={{ textDecoration: 'none' }}>
-                <button style={{ ...btnPrimary, marginTop: 8, width: 220 }}>
-                  {t('error_open_in_telegram_btn', locale)}
-                </button>
-              </a>
-            ) : (
-              <button
-                style={{ ...btnPrimary, marginTop: 8, width: 200 }}
-                onClick={() => window.location.reload()}
-              >
-                {t('retry', locale)}
-              </button>
-            )}
+            <div style={{ fontSize: 48 }}>😕</div>
+            <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>{t('error_loading', locale)}</div>
+            <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>{errorMsg || t('error_unknown', locale)}</div>
+            <button style={{ ...btnPrimary, marginTop: 8, width: 200 }} onClick={() => window.location.reload()}>{t('retry', locale)}</button>
           </div>
         );
       })()}

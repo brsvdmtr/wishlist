@@ -1,0 +1,10 @@
+# WishBoard / wishlistik.ru
+User-agent: *
+Allow: /
+Allow: /w/
+Disallow: /miniapp/
+Disallow: /admin/
+Disallow: /app/
+Disallow: /api/
+
+Sitemap: https://wishlistik.ru/sitemap.xml

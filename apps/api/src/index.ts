@@ -6969,6 +6969,21 @@ internalRouter.post(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /internal/sitemap-wishlists — public wishlists for sitemap generation
+internalRouter.get(
+  '/sitemap-wishlists',
+  asyncHandler(async (_req, res) => {
+    // Only wishlists explicitly set to PUBLIC_PROFILE visibility
+    const wishlists = await prisma.wishlist.findMany({
+      where: { type: 'REGULAR', visibility: 'PUBLIC_PROFILE', archivedAt: null },
+      select: { slug: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 500, // reasonable limit for sitemap
+    });
+    return res.json(wishlists.map(w => ({ slug: w.slug, updatedAt: w.updatedAt.toISOString() })));
+  }),
+);
+
 // ─── Support ticket lookup (internal, for incident investigation) ────────────
 
 internalRouter.get(

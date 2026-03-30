@@ -4,6 +4,7 @@ import Script from 'next/script';
 export const metadata: Metadata = {
   title: 'WishBoard',
   description: 'Твой персональный вишлист',
+  manifest: '/manifest.json',
 };
 
 export const viewport: Viewport = {
