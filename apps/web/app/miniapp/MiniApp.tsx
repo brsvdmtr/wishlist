@@ -75,6 +75,23 @@ const PRIO_EMOJI: Record<number, string> = { 1: '🙂', 2: '😊', 3: '😍' };
 // accent color per priority level: LOW=blue-violet, MEDIUM=amber, HIGH=coral-rose
 const PRIO_COLOR: Record<number, string> = { 1: '#6B7FD4', 2: '#E8930A', 3: '#F04E6E' };
 const PRIO_BG:    Record<number, string> = { 1: 'rgba(107,127,212,0.13)', 2: 'rgba(232,147,10,0.13)', 3: 'rgba(240,78,110,0.13)' };
+const PRIO_GRADIENT: Record<number, string> = {
+  1: 'linear-gradient(90deg, #6B7FD4, #818cf8)',
+  2: 'linear-gradient(90deg, #E8930A, #fbbf24)',
+  3: 'linear-gradient(90deg, #F04E6E, #ff6b9d)',
+};
+const PRIO_GLOW: Record<number, string> = {
+  1: 'rgba(107,127,212,0.25)',
+  2: 'rgba(232,147,10,0.3)',
+  3: 'rgba(240,78,110,0.35)',
+};
+
+// Card redesign — rolled out to all users
+const CARD_REDESIGN_ENABLED = true;
+// Profile redesign canary — test before full rollout
+const PROFILE_REDESIGN_IDS = new Set(['8747175307']);
+// Item detail redesign — rolled out to all users
+const ITEM_DETAIL_REDESIGN_ALL = true;
 
 const getPriorities = (locale: Locale) => [
   { value: 1, emoji: PRIO_EMOJI[1], label: t('priority_low', locale),    sub: t('priority_low_sub', locale) },
@@ -137,6 +154,19 @@ type Wishlist = {
   commentPolicy: CommentPolicy;
   shareToken?: string | null;
 };
+
+/** Filter wishlists to only valid writable targets for copy/move operations.
+ *  Excludes: current wishlist, drafts, readOnly wishlists. */
+function getWritableTargets(
+  wishlists: Wishlist[],
+  opts: { currentWlId?: string | null; draftsWlId?: string | null },
+): Wishlist[] {
+  return wishlists.filter(wl =>
+    wl.id !== opts.draftsWlId &&
+    wl.id !== opts.currentWlId &&
+    !wl.readOnly
+  );
+}
 
 type PlanInfo = {
   code: 'FREE' | 'PRO';
@@ -332,7 +362,8 @@ type GodStats = {
   };
   funnel: {
     totalUsers: number; activatedUsers: number;
-    usersWithWishlist: number; usersWithItem: number;
+    usersWithWishlist: number; usersWithAnyWishlist: number;
+    usersWithItem: number; usersWithItemInAny: number;
     usersWhoInitiatedShare: number; sharedLinkOpens: number;
     wishlistsWithLinkOpen: number; usersWithLinkOpen: number;
     usersWithReservation: number;
@@ -367,7 +398,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -400,8 +431,19 @@ const inputStyle: React.CSSProperties = {
  *  Telegram WebView doesn't shrink viewport when keyboard opens, AND the container
  *  has limited bottom padding — scrollTop hits its max before the textarea can reach
  *  the visible area. The spacer creates the extra scroll room needed. */
-function handleTextareaFocus(textarea: HTMLElement) {
-  let scrollParent: HTMLElement | null = textarea.parentElement;
+/**
+ * Ensure a focused field is visible above the Telegram iOS keyboard.
+ *
+ * Telegram WebView does NOT resize viewport when keyboard opens AND the
+ * BottomSheet component hijacks all touch scroll (e.preventDefault on every
+ * touchmove). This means native scrollIntoView() has no effect.
+ *
+ * Fix: directly manipulate scrollTop on the BottomSheet scroll container,
+ * which is the nearest overflowY:auto ancestor. Add a spacer so there's
+ * room to scroll the last fields above the keyboard zone.
+ */
+function handleTextareaFocus(el: HTMLElement) {
+  let scrollParent: HTMLElement | null = el.parentElement;
   while (scrollParent) {
     const ov = window.getComputedStyle(scrollParent).overflowY;
     if (ov === 'auto' || ov === 'scroll') break;
@@ -413,27 +455,45 @@ function handleTextareaFocus(textarea: HTMLElement) {
   // Remove any leftover spacer from previous focus
   sp.querySelector('[data-kb-spacer]')?.remove();
 
-  // Add temporary spacer — creates enough scrollable space
+  // Add spacer so scroll container has room to scroll bottom fields into view
   const spacer = document.createElement('div');
   spacer.setAttribute('data-kb-spacer', '1');
-  spacer.style.height = '50vh';
+  spacer.style.height = '45vh';
   spacer.style.pointerEvents = 'none';
   sp.appendChild(spacer);
 
-  // Wait one frame for layout recalc with spacer, then scroll
-  requestAnimationFrame(() => {
-    const rect = textarea.getBoundingClientRect();
-    const target = window.innerHeight * 0.35;
-    const delta = rect.top - target;
-    if (delta > 10) sp.scrollTop += delta;
-  });
+  // Wait for keyboard to appear, then scroll field into view.
+  // We drive scrollTop directly because BottomSheet blocks native scroll.
+  setTimeout(() => {
+    const fieldRect = el.getBoundingClientRect();
+    const containerRect = sp.getBoundingClientRect();
+    // Target: place field ~35% from top of visible container area
+    const targetY = containerRect.top + containerRect.height * 0.35;
+    const delta = fieldRect.top - targetY;
+    if (Math.abs(delta) > 20) {
+      // Smooth manual scroll via CSS transition
+      const start = sp.scrollTop;
+      const end = start + delta;
+      const duration = 250;
+      const startTime = performance.now();
+      const step = (now: number) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // ease-out cubic
+        const ease = 1 - Math.pow(1 - progress, 3);
+        sp.scrollTop = start + (end - start) * ease;
+        if (progress < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+  }, 350);
 
-  // Remove spacer when keyboard closes (blur)
+  // Remove spacer on blur
   const cleanup = () => {
     spacer.remove();
-    textarea.removeEventListener('blur', cleanup);
+    el.removeEventListener('blur', cleanup);
   };
-  textarea.addEventListener('blur', cleanup);
+  el.addEventListener('blur', cleanup);
 }
 
 /** Blur whichever input/textarea currently has focus, dismissing the keyboard. */
@@ -822,6 +882,7 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
     { icon: '💡', title: t('plan_pro_f6', locale), subtitle: t('plan_pro_sub6', locale) },
     { icon: '👁', title: t('plan_pro_f7', locale), subtitle: t('plan_pro_sub7', locale) },
     { icon: '🛡', title: t('plan_pro_f8', locale), subtitle: t('plan_pro_sub8', locale) },
+    { icon: '📅', title: t('plan_pro_f9', locale), subtitle: t('plan_pro_sub9', locale) },
   ];
 }
 
@@ -857,6 +918,7 @@ function BottomSheet({ isOpen, onClose, title, children }: {
     if (!sheet || !isOpen) return;
     let prevY: number | null = null;
     let dismissOffset = 0;
+    let cumulativeMove = 0; // track total finger movement to decide blur threshold
     // Blur the keyboard at most once per gesture (prevents redundant calls)
     let blurFired = false;
 
@@ -868,6 +930,7 @@ function BottomSheet({ isOpen, onClose, title, children }: {
       if (!e.touches[0]) return;
       prevY = e.touches[0].clientY;
       dismissOffset = 0;
+      cumulativeMove = 0;
       blurFired = false;
       // Freeze any in-progress spring-back transition
       sheet.style.transition = 'none';
@@ -881,11 +944,15 @@ function BottomSheet({ isOpen, onClose, title, children }: {
       const dy = currentY - prevY; // positive = finger moved down
       prevY = currentY;
 
-      // Dismiss keyboard on first detected scroll motion — keeps the content
-      // readable while scrolling and prevents gesture leakage into WebView.
-      if (!blurFired && dy !== 0) {
-        blurActiveField();
-        blurFired = true;
+      // Dismiss keyboard on significant scroll — but NOT on micro-movements
+      // that happen naturally when tapping a field. This prevents the keyboard
+      // from closing immediately when user focuses a bottom-of-form input.
+      if (!blurFired) {
+        cumulativeMove += Math.abs(dy);
+        if (cumulativeMove > 20) {
+          blurActiveField();
+          blurFired = true;
+        }
       }
 
       if (dy < 0) {
@@ -1115,6 +1182,348 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
 }
 
 // ═══════════════════════════════════════════════════════
+// CARD REDESIGN — canary-only components
+// ═══════════════════════════════════════════════════════
+
+function resolveCardMode(itemCount: number, cardDisplayMode: string | undefined, isPro: boolean): 'compact' | 'showcase' {
+  if (isPro && cardDisplayMode === 'showcase') return 'showcase';
+  if (isPro && cardDisplayMode === 'compact') return 'compact';
+  return itemCount <= 5 ? 'showcase' : 'compact';
+}
+
+function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve, onUnreserve, myActorHash }: {
+  item: Item | GuestItem;
+  onTap: (item: any) => void;
+  locale: Locale;
+  sourceLabel?: string;
+  isGuest?: boolean;
+  onReserve?: (item: any) => void;
+  onUnreserve?: (item: any) => void;
+  myActorHash?: string;
+}) {
+  const [imgErr, setImgErr] = useState(false);
+  const isPurchased = item.status === 'purchased';
+  const isReserved = item.status === 'reserved';
+  const isReservedByMe = isGuest && isReserved && !!(myActorHash) && (item as GuestItem).reservedByActorHash === myActorHash;
+  const hasImg = !!item.imageUrl && !imgErr;
+  const prioGrad = PRIO_GRADIENT[item.priority] ?? PRIO_GRADIENT[1];
+
+  return (
+    <div
+      onClick={() => onTap(item)}
+      style={{
+        borderRadius: 16, overflow: 'hidden',
+        border: '1px solid rgba(255,255,255,0.06)',
+        background: '#1c1c22',
+        display: 'flex', position: 'relative',
+        minHeight: 88, opacity: isPurchased ? 0.45 : 1,
+        cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      {/* Top gradient strip */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: prioGrad, opacity: 0.5 }} />
+
+      {/* Left panel — image or emoji */}
+      {hasImg ? (
+        <div style={{ width: 88, flexShrink: 0, position: 'relative', overflow: 'hidden', maxHeight: 110 }}>
+          <img
+            src={item.imageUrl!}
+            alt=""
+            onError={() => setImgErr(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: 88, maxHeight: 110 }}
+          />
+          <div style={{
+            position: 'absolute', bottom: 6, left: 6,
+            width: 22, height: 22, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, border: '1px solid rgba(255,255,255,0.1)',
+          }}>
+            {PRIO_EMOJI[item.priority] ?? '🙂'}
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          width: 88, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 36, background: `linear-gradient(160deg, #1c1c22, ${C.accentSoft})`,
+          minHeight: 88, position: 'relative',
+        }}>
+          {getEmoji(item.title)}
+          <div style={{
+            position: 'absolute', bottom: 6, left: 6,
+            width: 22, height: 22, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, border: '1px solid rgba(255,255,255,0.1)',
+          }}>
+            {PRIO_EMOJI[item.priority] ?? '🙂'}
+          </div>
+        </div>
+      )}
+
+      {/* Info panel */}
+      <div style={{ flex: 1, padding: '10px 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 }}>
+        <div style={{
+          fontSize: 14, fontWeight: 650, color: isPurchased ? '#555' : '#fff', lineHeight: 1.25,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden',
+          textDecoration: isPurchased ? 'line-through' : 'none', fontFamily: font,
+        }}>
+          {item.title}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 5 }}>
+          {item.price != null ? (
+            <span style={{ fontSize: 17, fontWeight: 800, color: isPurchased ? '#444' : '#fff', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: font, textDecoration: isPurchased ? 'line-through' : 'none' }}>
+              {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
+            </span>
+          ) : (
+            <span style={{ fontSize: 12, color: '#444' }}>{t('price_not_set', locale)}</span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
+          {item.sourceDomain && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, color: C.accent, background: 'rgba(124,106,255,0.08)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              {item.sourceDomain}
+            </span>
+          )}
+          {/* Status chips */}
+          {isGuest && item.status === 'available' && onReserve && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onReserve(item); }}
+              style={{
+                background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)',
+                color: '#fff', border: 'none', padding: '5px 12px', borderRadius: 8,
+                fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap',
+              }}
+            >
+              {t('reserve_btn', locale)}
+            </button>
+          )}
+          {isGuest && isReservedByMe && (
+            <>
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(52,211,153,0.1)' }}>
+                ✅ {t('reserved_by_me', locale)}
+              </span>
+              {onUnreserve && <span onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ fontSize: 10, color: '#555', cursor: 'pointer' }}>{t('cancel', locale)}</span>}
+            </>
+          )}
+          {isGuest && isReserved && !isReservedByMe && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#fbbf24', background: 'rgba(251,191,36,0.1)' }}>
+              ⏳ {t('already_reserved', locale)}
+            </span>
+          )}
+          {!isGuest && isReserved && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#a599ff', background: 'rgba(124,106,255,0.1)' }}>
+              🔒 {t('status_someone_reserved', locale)}
+            </span>
+          )}
+          {isPurchased && (
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(52,211,153,0.1)' }}>
+              🎉 {t('status_gifted', locale)}
+            </span>
+          )}
+        </div>
+
+        {sourceLabel && (
+          <span style={{ display: 'inline-block', fontSize: 9, fontWeight: 500, color: C.textMuted, background: C.surface, border: `1px solid ${C.borderLight}`, padding: '1px 6px', borderRadius: 20, marginTop: 4 }}>
+            {sourceLabel}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve, onUnreserve, myActorHash }: {
+  item: Item | GuestItem;
+  onTap: (item: any) => void;
+  locale: Locale;
+  sourceLabel?: string;
+  isGuest?: boolean;
+  onReserve?: (item: any) => void;
+  onUnreserve?: (item: any) => void;
+  myActorHash?: string;
+}) {
+  const [imgErr, setImgErr] = useState(false);
+  const isPurchased = item.status === 'purchased';
+  const isReserved = item.status === 'reserved';
+  const isReservedByMe = isGuest && isReserved && !!(myActorHash) && (item as GuestItem).reservedByActorHash === myActorHash;
+  const hasImg = !!item.imageUrl && !imgErr;
+  const prioGrad = PRIO_GRADIENT[item.priority] ?? PRIO_GRADIENT[1];
+  const glowColor = PRIO_GLOW[item.priority] ?? PRIO_GLOW[1];
+
+  return (
+    <div
+      onClick={() => onTap(item)}
+      style={{
+        borderRadius: 20, overflow: 'hidden', position: 'relative',
+        background: '#1c1c22', border: '1px solid rgba(255,255,255,0.05)',
+        opacity: isPurchased ? 0.5 : 1,
+        cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      {/* Hero image or emoji */}
+      {hasImg ? (
+        <>
+          <img
+            src={item.imageUrl!}
+            alt=""
+            onError={() => setImgErr(true)}
+            style={{ width: '100%', height: 200, objectFit: 'cover', display: 'block' }}
+          />
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: 200,
+            background: 'linear-gradient(180deg, rgba(28,28,34,0) 40%, rgba(28,28,34,1) 100%)',
+            pointerEvents: 'none',
+          }} />
+          {/* Float chips on image */}
+          <div style={{ position: 'absolute', top: 12, left: 14, right: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{
+              background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '5px 12px',
+              fontSize: 12, fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <span>{PRIO_EMOJI[item.priority] ?? '🙂'}</span>
+              {item.priority === 3 && <span style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 500, fontSize: 11 }}>{t('prio_high_short', locale)}</span>}
+            </div>
+            {item.sourceDomain && (
+              <div style={{
+                background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '5px 12px',
+                fontSize: 12, fontWeight: 600, color: '#fff',
+              }}>
+                {item.sourceDomain}
+              </div>
+            )}
+          </div>
+          {/* Gifted overlay chip */}
+          {isPurchased && (
+            <div style={{
+              position: 'absolute', top: 12, right: 14,
+              background: 'rgba(52,211,153,0.85)', borderRadius: 20, padding: '5px 12px',
+              fontSize: 12, fontWeight: 600, color: '#fff',
+            }}>
+              🎉 {t('status_gifted', locale)}
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{
+          height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 56, background: `linear-gradient(160deg, #1c1c22, ${C.accentSoft})`,
+        }}>
+          {getEmoji(item.title)}
+        </div>
+      )}
+
+      {/* Body */}
+      <div style={{ padding: '14px 18px 18px', position: 'relative' }}>
+        {/* Priority glow */}
+        <div style={{
+          position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+          width: '60%', height: 1, boxShadow: `0 0 20px 8px ${glowColor}`, opacity: 0.6,
+        }} />
+
+        <div style={{ fontSize: 17, fontWeight: 700, color: isPurchased ? '#666' : '#fff', lineHeight: 1.3, letterSpacing: '-0.01em', fontFamily: font, textDecoration: isPurchased ? 'line-through' : 'none' }}>
+          {item.title}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
+          {item.price != null ? (
+            <span style={{ fontSize: 26, fontWeight: 900, color: isPurchased ? '#444' : '#fff', letterSpacing: '-0.04em', lineHeight: 1, fontFamily: font, textDecoration: isPurchased ? 'line-through' : 'none' }}>
+              {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
+            </span>
+          ) : (
+            <span style={{ fontSize: 14, color: '#444', fontWeight: 500 }}>{t('price_not_set', locale)}</span>
+          )}
+          {!hasImg && !isPurchased && (
+            <span style={{
+              padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+              background: PRIO_BG[item.priority], color: PRIO_COLOR[item.priority],
+              border: `1px solid ${PRIO_COLOR[item.priority]}20`,
+            }}>
+              {PRIO_EMOJI[item.priority]} {item.priority === 3 ? t('prio_high_short', locale) : item.priority === 2 ? t('prio_med_short', locale) : t('prio_low_short', locale)}
+            </span>
+          )}
+        </div>
+
+        {/* Domain link if no image */}
+        {!hasImg && item.sourceDomain && (
+          <div style={{ marginTop: 8, fontSize: 12, color: C.accent, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
+            🔗 <span>{item.sourceDomain}</span>
+          </div>
+        )}
+
+        {/* Status / action row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+          {isGuest && item.status === 'available' && onReserve && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onReserve(item); }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '10px 20px', borderRadius: 12, border: 'none',
+                background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)',
+                color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: font,
+                boxShadow: '0 4px 16px rgba(124,106,255,0.35)',
+              }}
+            >
+              {t('reserve_btn', locale)}
+            </button>
+          )}
+          {isGuest && isReservedByMe && (
+            <>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+                background: 'linear-gradient(135deg, rgba(52,211,153,0.15), rgba(52,211,153,0.08))',
+                color: '#6ee7b7', border: '1px solid rgba(52,211,153,0.2)',
+              }}>
+                ✅ {t('reserved_by_me', locale)}
+              </span>
+              {onUnreserve && <span onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ fontSize: 12, color: '#555', cursor: 'pointer' }}>{t('cancel', locale)}</span>}
+            </>
+          )}
+          {isGuest && isReserved && !isReservedByMe && (
+            <span style={{
+              padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+              background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.15)',
+            }}>
+              ⏳ {t('already_reserved', locale)}
+            </span>
+          )}
+          {!isGuest && isReserved && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+              background: 'linear-gradient(135deg, rgba(124,106,255,0.15), rgba(124,106,255,0.08))',
+              color: '#a599ff', border: '1px solid rgba(124,106,255,0.2)',
+            }}>
+              🔒 {t('status_someone_reserved', locale)}
+            </span>
+          )}
+          {isPurchased && !hasImg && (
+            <span style={{
+              padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+              background: 'linear-gradient(135deg, rgba(52,211,153,0.15), rgba(52,211,153,0.08))',
+              color: '#6ee7b7', border: '1px solid rgba(52,211,153,0.2)',
+            }}>
+              🎉 {t('status_gifted', locale)}
+            </span>
+          )}
+        </div>
+
+        {sourceLabel && (
+          <span style={{ display: 'inline-block', fontSize: 9, fontWeight: 500, color: C.textMuted, background: C.surface, border: `1px solid ${C.borderLight}`, padding: '1px 6px', borderRadius: 20, marginTop: 8 }}>
+            {sourceLabel}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
 // RESERVATION CARD (for "My Reservations" section)
 // ═══════════════════════════════════════════════════════
 
@@ -1214,11 +1623,12 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
   const isMine = (c: CommentDTO) => c.authorActorHash === myActorHash;
 
   return (
-    <div style={{ marginTop: 24, padding: 20, background: C.surface, borderRadius: 20 }}>
-      <div style={{ fontSize: 17, fontWeight: 600, color: C.text, marginBottom: 4, fontFamily: font }}>
-        {t('comments_title', locale)}
+    <div style={{ marginTop: 20, padding: 14, background: C.surface, borderRadius: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{t('comments_title', locale)}</span>
+        <span style={{ fontSize: 11, color: C.textMuted, background: C.bg, padding: '2px 8px', borderRadius: 8 }}>{comments.length}</span>
       </div>
-      <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 16, lineHeight: 1.4 }}>
+      <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 10, lineHeight: 1.4 }}>
         {t('comments_subtitle', locale)}
       </div>
 
@@ -1230,7 +1640,7 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {comments.length === 0 && (
-          <div style={{ textAlign: 'center', fontSize: 14, color: C.textMuted, padding: '24px 0 16px' }}>
+          <div style={{ textAlign: 'center', fontSize: 13, color: C.textMuted, padding: '12px 0 8px' }}>
             {t('comments_empty', locale)}
           </div>
         )}
@@ -1293,17 +1703,17 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
         ))}
       </div>
 
-      {/* Composer */}
+      {/* Composer — compact */}
       {!isArchive && (
-        <div style={{ display: 'flex', gap: 10, marginTop: 16, alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'flex-end' }}>
           <div style={{ flex: 1, position: 'relative' }}>
             <textarea
               style={{
                 ...inputStyle,
-                minHeight: 48, maxHeight: 100, resize: 'none',
-                paddingRight: 48, padding: '14px 48px 14px 16px',
-                borderRadius: 16, fontSize: 15,
-                background: C.bg,
+                minHeight: 40, maxHeight: 80, resize: 'none',
+                padding: '10px 40px 10px 14px',
+                borderRadius: 12, fontSize: 14,
+                background: C.bg, lineHeight: 1.4,
               }}
               placeholder={t('comments_placeholder', locale)}
               value={commentText}
@@ -1313,9 +1723,9 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSendComment(); } }}
             />
             <span style={{
-              position: 'absolute', right: 14, bottom: 10,
-              fontSize: 10, color: C.textMuted,
-              opacity: commentText.length > 280 ? 1 : 0.5,
+              position: 'absolute', right: 12, bottom: 8,
+              fontSize: 9, color: C.textMuted,
+              opacity: commentText.length > 280 ? 1 : 0.4,
               ...(commentText.length > 280 ? { color: C.orange } : {}),
             }}>
               {commentText.length}/300
@@ -1325,8 +1735,8 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
             onClick={() => void onSendComment()}
             disabled={!commentText.trim() || commentSending}
             style={{
-              ...btnPrimary, width: 40, height: 40, padding: 0, borderRadius: 20,
-              opacity: commentText.trim() ? 1 : 0.35, flexShrink: 0, fontSize: 16,
+              ...btnPrimary, width: 36, height: 36, padding: 0, borderRadius: 18,
+              opacity: commentText.trim() ? 1 : 0.35, flexShrink: 0, fontSize: 14,
             }}
           >
             {commentSending ? '…' : '↑'}
@@ -1618,7 +2028,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [planInfo, setPlanInfo] = useState<PlanInfo>({
     code: 'FREE', wishlists: 2, items: 20, subscriptions: 2, participants: 5, features: [],
   });
+  const [cardDisplayMode, setCardDisplayMode] = useState<string>('auto');
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
+  const [proSource, setProSource] = useState<string | null>(null);
+  const [promoPro, setPromoPro] = useState<{ id: string; expiresAt: string; campaignCode: string } | null>(null);
   const [upsellSheet, setUpsellSheet] = useState<UpsellSheetState>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [addonCheckoutLoading, setAddonCheckoutLoading] = useState(false);
@@ -1681,6 +2094,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [godStatsError, setGodStatsError] = useState(false);
   const [godStatsRefreshedAt, setGodStatsRefreshedAt] = useState<Date | null>(null);
   const [godStatsDetailsOpen, setGodStatsDetailsOpen] = useState(false);
+  const [retentionStats, setRetentionStats] = useState<any>(null);
+  const [retentionOpen, setRetentionOpen] = useState(false);
+  const [retentionLoading, setRetentionLoading] = useState(false);
+  const [retentionPeriod, setRetentionPeriod] = useState(30);
   const godStatsRefreshIdRef = useRef(0);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -1734,7 +2151,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     defaultCurrency: 'RUB' | 'USD';
     notifications: { comments: boolean; reservations: boolean; subscriptions: boolean; marketing: boolean };
     privacy: { profileVisibility: string; subscribePolicy: string; commentsEnabled: boolean; hintsEnabled: boolean };
-    appBehavior: { newWishlistPosition: string };
+    appBehavior: { newWishlistPosition: string; cardDisplayMode?: string };
     isPro: boolean;
     supportId?: string | null;
   };
@@ -1812,8 +2229,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [itemPrice, setItemPrice] = useState(''); // raw digits only, e.g. "5000000"
   const priceInputRef = useRef<HTMLInputElement>(null);
   const [itemPriority, setItemPriority] = useState<1 | 2 | 3>(2);
-  const [itemCurrency, setItemCurrency] = useState<'RUB' | 'USD'>('RUB');
-  const [defaultCurrency, setDefaultCurrency] = useState<'RUB' | 'USD'>('RUB');
+  const [itemCurrency, setItemCurrency] = useState<'RUB' | 'USD' | 'EUR' | 'GBP'>('RUB');
+  const [defaultCurrency, setDefaultCurrency] = useState<'RUB' | 'USD' | 'EUR' | 'GBP'>('RUB');
   const [itemImageUrl, setItemImageUrl] = useState(''); // existing/saved URL from DB
 
   // Photo upload state
@@ -1864,6 +2281,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [myWishlistsTab, setMyWishlistsTab] = useState<'mine' | 'subscribed'>('mine');
   const [subscriptions, setSubscriptions] = useState<SubscribedWishlist[]>([]);
   const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
+  // Lightweight unread summary for badge (loaded on boot, doesn't need full subscriptions)
+  const [subUnreadCount, setSubUnreadCount] = useState(0);
   // Guest subscription state
   const [guestSubId, setGuestSubId] = useState<string | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -1889,6 +2308,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [reorderSaving, setReorderSaving] = useState(false);
   const [reorderDragIdx, setReorderDragIdx] = useState<number | null>(null);
   const [reorderDragOverIdx, setReorderDragOverIdx] = useState<number | null>(null);
+
+  // Bulk selection state
+  const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [showBulkTargetPicker, setShowBulkTargetPicker] = useState<'move' | 'copy' | null>(null);
+  const bulkLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Item reorder state
   const [itemReorderMode, setItemReorderMode] = useState(false);
@@ -1919,12 +2345,40 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [descriptionText, setDescriptionText] = useState('');
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Gift Notes state
+  const [gnAccess, setGnAccess] = useState<{ unlocked: boolean; unlockType: string | null; priceXtr: number }>({ unlocked: false, unlockType: null, priceXtr: 19 });
+  const [gnOccasions, setGnOccasions] = useState<any[]>([]);
+  const [gnViewingOccasion, setGnViewingOccasion] = useState<any>(null);
+  const [gnLoading, setGnLoading] = useState(false);
+  const [gnSeenBadge, setGnSeenBadge] = useState(false);
+  const [showGnCreateOccasion, setShowGnCreateOccasion] = useState(false);
+  const [showGnAddIdea, setShowGnAddIdea] = useState(false);
+  const [gnFormTitle, setGnFormTitle] = useState('');
+  const [gnFormDate, setGnFormDate] = useState('');
+  const [gnFormType, setGnFormType] = useState<'BIRTHDAY' | 'ANNIVERSARY' | 'HOLIDAY' | 'OTHER'>('BIRTHDAY');
+  const [gnFormRecurrence, setGnFormRecurrence] = useState<'NONE' | 'YEARLY' | 'MONTHLY'>('YEARLY');
+  const [gnFormPerson, setGnFormPerson] = useState('');
+  const [gnIdeaText, setGnIdeaText] = useState('');
+  const [gnIdeaLink, setGnIdeaLink] = useState('');
+  // Loading screen staged text
+  const [loadTextIdx, setLoadTextIdx] = useState(0);
+  // GN occasion detail state (must be top-level, not inside IIFE)
+  const [gnShowActions, setGnShowActions] = useState(false);
+  const [gnShowEdit, setGnShowEdit] = useState(false);
+  const [gnEditTitle, setGnEditTitle] = useState('');
+  const [gnEditPerson, setGnEditPerson] = useState('');
+  const [gnEditNote, setGnEditNote] = useState('');
+
   // Drafts (Неразобранное)
   const [draftsWishlistId, setDraftsWishlistId] = useState<string | null>(null);
   const [draftsCount, setDraftsCount] = useState(0);
   const [draftsItems, setDraftsItems] = useState<Item[]>([]);
   const [showMovePicker, setShowMovePicker] = useState(false);
   const [movingItem, setMovingItem] = useState<Item | null>(null);
+  const [showCopyPicker, setShowCopyPicker] = useState(false);
+  const [copyingItem, setCopyingItem] = useState<Item | null>(null);
+  const [showItemMenu, setShowItemMenu] = useState(false);
+  const [currencyExpanded, setCurrencyExpanded] = useState(false);
   const [pendingMoveItemId, setPendingMoveItemId] = useState<string | null>(null);
   const [importUrl, setImportUrl] = useState('');
   const [importLoading, setImportLoading] = useState(false);
@@ -2279,6 +2733,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setWishlists(json.wishlists);
     setPlanInfo(json.plan);
     setSubscription(json.subscription);
+    if ((json as any).giftNotes) setGnAccess((json as any).giftNotes);
+    if ((json as any).cardDisplayMode) setCardDisplayMode((json as any).cardDisplayMode);
+    if ((json as any).proSource !== undefined) setProSource((json as any).proSource);
+    if ((json as any).promoPro !== undefined) setPromoPro((json as any).promoPro);
     if (json.godMode !== undefined) setGodMode(json.godMode);
     if (json.canGodMode !== undefined) setCanGodMode(json.canGodMode);
     setPlanLimits({ wishlists: json.plan.wishlists, items: json.plan.items });
@@ -2376,13 +2834,58 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [tgFetch]);
 
+  const onboardingStartInFlightRef = useRef(false);
   const startOnboarding = useCallback(async (entryPoint: string) => {
+    // Guard against duplicate in-flight calls
+    if (onboardingStartInFlightRef.current) {
+      console.log('[onboarding] start skipped — already in-flight');
+      return;
+    }
+    // Guard against calling start when onboarding is already done
+    if (onboardingState && ['COMPLETED', 'DISMISSED'].includes(onboardingState.status)) {
+      console.log('[onboarding] start skipped — already', onboardingState.status);
+      return;
+    }
+    onboardingStartInFlightRef.current = true;
     setOnboardingLoading(true);
     try {
+      // Pre-check eligibility from backend
+      const statusRes = await tgFetch('/tg/onboarding/status');
+      if (statusRes.ok) {
+        const statusJson = await statusRes.json() as { eligible: boolean; reason: string; state: any };
+        if (!statusJson.eligible) {
+          console.log('[onboarding] start skipped — not eligible:', statusJson.reason);
+          // If there's an existing IN_PROGRESS state, resume instead of starting fresh
+          if (statusJson.state?.status === 'IN_PROGRESS') {
+            setOnboardingState(statusJson.state);
+            const meta = getOnboardingMeta(statusJson.state.metaJson);
+            if (meta.onboardingVariant) setOnboardingVariant(meta.onboardingVariant);
+          }
+          setShowOnboardingSoftCta(false);
+          return;
+        }
+      }
+
       const res = await tgFetch('/tg/onboarding/start', {
         method: 'POST',
         body: JSON.stringify({ onboardingKey: 'hello_activation', entryPoint }),
       });
+
+      if (res.status === 409) {
+        // Not eligible anymore — NOT an error, just stale UI
+        console.log('[onboarding] start got 409 — onboarding no longer available');
+        setShowOnboardingSoftCta(false);
+        // Sync state from status endpoint
+        try {
+          const syncRes = await tgFetch('/tg/onboarding/status');
+          if (syncRes.ok) {
+            const syncJson = await syncRes.json() as { state: any };
+            if (syncJson.state) setOnboardingState(syncJson.state);
+          }
+        } catch { /* best-effort */ }
+        return;
+      }
+
       if (!res.ok) return;
       const json = await res.json() as {
         state: { id: string; status: string; variantKey: string | null; entryPoint: string | null; demoItemId: string | null; completionReason: string | null; metaJson?: unknown };
@@ -2403,8 +2906,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // silent
     } finally {
       setOnboardingLoading(false);
+      onboardingStartInFlightRef.current = false;
     }
-  }, [tgFetch]);
+  }, [tgFetch, onboardingState]);
 
   const dismissOnboarding = useCallback(async () => {
     setShowOnboardingSoftCta(false);
@@ -2544,6 +3048,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (!res.ok) return;
       const json = await res.json() as { subscriptions: SubscribedWishlist[] };
       setSubscriptions(json.subscriptions);
+      // Sync lightweight unread counter with full data
+      setSubUnreadCount(json.subscriptions.reduce((s, sub) => s + sub.unreadCount, 0));
     } catch {
       // silent
     } finally {
@@ -2740,6 +3246,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const data = await res.json() as SettingsData;
       setSettingsData(data);
       if (patch.defaultCurrency) setDefaultCurrency(patch.defaultCurrency as 'RUB' | 'USD');
+      if (data.appBehavior?.cardDisplayMode) setCardDisplayMode(data.appBehavior.cardDisplayMode);
       // Re-resolve locale after any settings change (catches both language and mode changes)
       setLocale(resolveEffectiveLocale(
         { languageMode: data.languageMode, manualLanguage: data.manualLanguage },
@@ -3360,6 +3867,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(async () => {
     // Cancel active reorder modes before navigating away
+    if (bulkSelectionMode) { setBulkSelectionMode(false); setBulkSelectedIds(new Set()); return; }
     if (itemReorderMode) { cancelItemReorderMode(); return; }
     if (reorderMode) { cancelReorderMode(); return; }
     if (screen === 'item-detail') {
@@ -3534,6 +4042,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       } else {
         setScreen('onboarding-try');
       }
+    } else if (screen === 'gift-notes' || screen === 'gift-notes-paywall') {
+      setScreen('my-wishlists');
+    } else if (screen === 'gift-notes-occasion') {
+      setScreen('gift-notes');
     } else if (screen === 'share') {
       setScreen('wishlist-detail');
     } else if (screen === 'archive') {
@@ -3695,6 +4207,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           .catch(() => setScreen('my-wishlists'))
           .finally(() => setSantaJoinLoading(false));
         loadWishlists().catch(() => {});
+      } else if (startParam && startParam.startsWith('occasion_')) {
+        // Deep link: open occasion detail in Gift Notes
+        const occasionId = startParam.slice(9);
+        loadWishlists().catch(() => {});
+        tgFetch(`/tg/gift-occasions/${occasionId}`).then(async r => {
+          if (r.ok) {
+            const data = await r.json() as { occasion: any };
+            setGnViewingOccasion(data.occasion);
+            setScreen('gift-notes-occasion');
+          } else {
+            setScreen('my-wishlists');
+          }
+        }).catch(() => setScreen('my-wishlists'));
       } else if (startParam && startParam.startsWith('draft_')) {
         // Deep link from bot: open draft item
         const draftItemId = startParam.slice(6); // strip "draft_"
@@ -3776,12 +4301,41 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // Always pre-load profile data so ownerName is available on the
       // Share screen without requiring the user to visit Profile first.
       loadProfile().catch(() => { /* non-critical — share screen has fallback */ });
+      // Lightweight unread summary for badge — avoids loading full subscription list on boot
+      tgFetch('/tg/me/subscriptions/meta').then(async r => {
+        if (!r.ok) return;
+        const meta = await r.json() as { unreadCount: number };
+        setSubUnreadCount(meta.unreadCount);
+      }).catch(() => { /* non-critical */ });
       // Pre-load Santa season info
       loadSantaSeason().catch(() => {});
     };
     tryInit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Refresh subscription unread badge when app returns to foreground
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        tgFetch('/tg/me/subscriptions/meta').then(async r => {
+          if (!r.ok) return;
+          const meta = await r.json() as { unreadCount: number };
+          setSubUnreadCount(meta.unreadCount);
+        }).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', refresh);
+    return () => document.removeEventListener('visibilitychange', refresh);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Loading screen text rotation
+  useEffect(() => {
+    if (screen !== 'loading') return;
+    const iv = setInterval(() => setLoadTextIdx(i => (i + 1) % 3), 1200);
+    return () => clearInterval(iv);
+  }, [screen]);
 
   // Load god stats when god mode is enabled; clear when disabled
   useEffect(() => {
@@ -4203,6 +4757,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   };
 
   const openWishlist = async (wl: Wishlist) => {
+    setItems([]); // Clear stale items immediately to prevent flash of previous wishlist
     setCurrentWl(wl);
     setScreen('wishlist-detail');
     setLoading(true);
@@ -5392,43 +5947,163 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         }
       `}</style>
 
-      {/* ── LOADING ── */}
-      {screen === 'loading' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16 }}>
-          <div style={{ fontSize: 40 }}>🎁</div>
-          <div style={{ color: C.textMuted, fontSize: 15 }}>{t('loading', locale)}</div>
-        </div>
-      )}
+      {/* ── LOADING — branded splash ── */}
+      {screen === 'loading' && (() => {
+        const loadingTexts = locale === 'ru'
+          ? ['Открываем WishBot', 'Загружаем вишлисты', 'Почти готово']
+          : ['Opening WishBot', 'Loading wishlists', 'Almost ready'];
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            height: '100vh', flexDirection: 'column',
+            background: 'radial-gradient(ellipse at 50% 40%, rgba(124,106,255,0.08) 0%, transparent 70%)',
+            position: 'relative', overflow: 'hidden',
+          }}>
+            {/* Decorative background cards */}
+            <div style={{ position: 'absolute', top: '20%', left: '10%', width: 120, height: 70, borderRadius: 14, background: 'rgba(124,106,255,0.04)', border: '1px solid rgba(124,106,255,0.06)', transform: 'rotate(-12deg)', opacity: 0.6 }} />
+            <div style={{ position: 'absolute', top: '25%', right: '8%', width: 100, height: 60, borderRadius: 12, background: 'rgba(251,191,36,0.03)', border: '1px solid rgba(251,191,36,0.05)', transform: 'rotate(8deg)', opacity: 0.5 }} />
+            <div style={{ position: 'absolute', bottom: '22%', left: '15%', width: 90, height: 55, borderRadius: 10, background: 'rgba(52,211,153,0.03)', border: '1px solid rgba(52,211,153,0.05)', transform: 'rotate(-6deg)', opacity: 0.4 }} />
+
+            {/* Gift box with glow + float animation */}
+            <div style={{
+              position: 'relative', marginBottom: 24,
+              animation: 'splashFloat 2.5s ease-in-out infinite',
+            }}>
+              {/* Glow behind */}
+              <div style={{
+                position: 'absolute', inset: -20, borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(124,106,255,0.25) 0%, transparent 70%)',
+                filter: 'blur(20px)',
+                animation: 'splashPulse 2.5s ease-in-out infinite',
+              }} />
+              {/* Box */}
+              <div style={{ position: 'relative', fontSize: 56, lineHeight: 1, zIndex: 1 }}>🎁</div>
+            </div>
+
+            {/* Brand name */}
+            <div style={{
+              fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font,
+              letterSpacing: '-0.02em', marginBottom: 6,
+            }}>
+              WishBot
+            </div>
+
+            {/* Staged loading text */}
+            <div style={{
+              fontSize: 13, color: C.textMuted, fontFamily: font,
+              minHeight: 20, transition: 'opacity 0.3s',
+              animation: 'splashTextFade 1.2s ease-in-out infinite',
+            }}>
+              {loadingTexts[loadTextIdx]}
+            </div>
+
+            {/* Subtle progress dots */}
+            <div style={{ display: 'flex', gap: 6, marginTop: 20 }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: C.accent,
+                  opacity: i <= loadTextIdx ? 0.8 : 0.15,
+                  transition: 'opacity 0.3s',
+                }} />
+              ))}
+            </div>
+
+            <style>{`
+              @keyframes splashFloat {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-8px); }
+              }
+              @keyframes splashPulse {
+                0%, 100% { opacity: 0.6; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.1); }
+              }
+              @keyframes splashTextFade {
+                0%, 100% { opacity: 0.7; }
+                50% { opacity: 1; }
+              }
+              @media (prefers-reduced-motion: reduce) {
+                [style*="splashFloat"] { animation: none !important; }
+                [style*="splashPulse"] { animation: none !important; }
+                [style*="splashTextFade"] { animation: none !important; }
+              }
+            `}</style>
+          </div>
+        );
+      })()}
 
       {/* ── ERROR ── */}
       {screen === 'error' && (() => {
         const isTgRequired = errorMsg === t('error_open_in_telegram', locale);
         const tgDeepLink = buildTgDeepLink(urlStartParamRef.current || undefined);
+        if (isTgRequired) {
+          // Browser fallback — branded landing for non-Telegram visitors
+          return (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              height: '100vh', flexDirection: 'column', padding: '40px 24px',
+              background: 'radial-gradient(ellipse at 50% 30%, rgba(124,106,255,0.06) 0%, transparent 60%)',
+              maxWidth: 440, margin: '0 auto',
+            }}>
+              <div style={{ fontSize: 56, marginBottom: 16, filter: 'drop-shadow(0 0 16px rgba(124,106,255,0.3))' }}>🎁</div>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 8px', textAlign: 'center' }}>WishBoard</h1>
+              <p style={{ fontSize: 14, color: C.textMuted, textAlign: 'center', lineHeight: 1.6, margin: '0 0 24px' }}>
+                {locale === 'ru'
+                  ? 'Создавай вишлисты и делись с друзьями. Приложение работает внутри Telegram.'
+                  : 'Create wishlists and share with friends. The app works inside Telegram.'}
+              </p>
+
+              {/* Value bullets */}
+              {[
+                { icon: '📋', text: locale === 'ru' ? 'Создавай вишлисты для любого повода' : 'Create wishlists for any occasion' },
+                { icon: '🔗', text: locale === 'ru' ? 'Делись одной ссылкой' : 'Share with a single link' },
+                { icon: '🎁', text: locale === 'ru' ? 'Друзья бронируют подарки без спойлеров' : 'Friends reserve gifts with no spoilers' },
+              ].map((b, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', width: '100%' }}>
+                  <span style={{ fontSize: 18 }}>{b.icon}</span>
+                  <span style={{ fontSize: 13, color: C.text }}>{b.text}</span>
+                </div>
+              ))}
+
+              {/* CTA */}
+              {tgDeepLink && (
+                <a href={tgDeepLink} style={{ textDecoration: 'none', width: '100%', marginTop: 20 }}>
+                  <button style={{
+                    ...btnPrimary, width: '100%', padding: '14px',
+                    background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+                    fontSize: 15, fontWeight: 700, borderRadius: 14,
+                    boxShadow: `0 6px 20px rgba(124,106,255,0.35)`,
+                  }}>
+                    {locale === 'ru' ? 'Открыть в Telegram' : 'Open in Telegram'}
+                  </button>
+                </a>
+              )}
+
+              {/* Web Login via Telegram Login Widget */}
+              <button
+                onClick={() => { window.location.href = `${apiBase}/auth/telegram/start`; }}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: 12, marginTop: 12,
+                  border: `1px solid ${C.border}`, background: C.surface,
+                  color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <span style={{ fontSize: 16 }}>✈️</span>
+                {locale === 'ru' ? 'Войти через Telegram' : 'Log in with Telegram'}
+              </button>
+              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8, textAlign: 'center' }}>
+                {locale === 'ru' ? 'Или откройте через Telegram для полного функционала' : 'Or open via Telegram for full functionality'}
+              </div>
+            </div>
+          );
+        }
         return (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
-            <div style={{ fontSize: 48 }}>{isTgRequired ? '✈️' : '😕'}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>
-              {isTgRequired ? t('error_open_in_telegram', locale) : t('error_loading', locale)}
-            </div>
-            <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>
-              {isTgRequired
-                ? t('error_telegram_only', locale)
-                : (errorMsg || t('error_unknown', locale))}
-            </div>
-            {isTgRequired && tgDeepLink ? (
-              <a href={tgDeepLink} style={{ textDecoration: 'none' }}>
-                <button style={{ ...btnPrimary, marginTop: 8, width: 220 }}>
-                  {t('error_open_in_telegram_btn', locale)}
-                </button>
-              </a>
-            ) : (
-              <button
-                style={{ ...btnPrimary, marginTop: 8, width: 200 }}
-                onClick={() => window.location.reload()}
-              >
-                {t('retry', locale)}
-              </button>
-            )}
+            <div style={{ fontSize: 48 }}>😕</div>
+            <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>{t('error_loading', locale)}</div>
+            <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>{errorMsg || t('error_unknown', locale)}</div>
+            <button style={{ ...btnPrimary, marginTop: 8, width: 200 }} onClick={() => window.location.reload()}>{t('retry', locale)}</button>
           </div>
         );
       })()}
@@ -5457,7 +6132,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'my-wishlists' && (
         <div
-          style={{ padding: '16px 20px 120px' }}
+          style={{ padding: '16px 20px 120px', minHeight: 'calc(100vh - 80px)' }}
           onTouchStart={(e) => {
             if (reorderMode || itemReorderMode) return;
             const target = e.target as HTMLElement;
@@ -5465,16 +6140,29 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             const t = e.touches[0];
             if (t) { homeSwipeStartX.current = t.clientX; homeSwipeStartY.current = t.clientY; }
           }}
+          onTouchMove={(e) => {
+            // Track latest position — onTouchEnd may not fire if browser scrolls
+            if (homeSwipeStartX.current === null) return;
+            const t = e.touches[0];
+            if (t) {
+              (homeSwipeStartX as any).__lastMoveX = t.clientX;
+              (homeSwipeStartX as any).__lastMoveY = t.clientY;
+            }
+          }}
           onTouchEnd={(e) => {
             if (homeSwipeStartX.current === null) return;
             if (reorderMode || itemReorderMode) { homeSwipeStartX.current = null; return; }
+            // Use changedTouches first, fallback to last tracked move position
             const t = e.changedTouches[0];
-            if (!t) { homeSwipeStartX.current = null; return; }
-            const dx = t.clientX - homeSwipeStartX.current;
-            const dy = t.clientY - (homeSwipeStartY.current ?? t.clientY);
+            const endX = t?.clientX ?? (homeSwipeStartX as any).__lastMoveX ?? homeSwipeStartX.current;
+            const endY = t?.clientY ?? (homeSwipeStartX as any).__lastMoveY ?? (homeSwipeStartY.current ?? 0);
+            const dx = endX - homeSwipeStartX.current;
+            const dy = endY - (homeSwipeStartY.current ?? endY);
             homeSwipeStartX.current = null; homeSwipeStartY.current = null;
-            if (Math.abs(dx) < 60) return;
-            if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
+            (homeSwipeStartX as any).__lastMoveX = undefined;
+            (homeSwipeStartX as any).__lastMoveY = undefined;
+            if (Math.abs(dx) < 40) return;
+            if (Math.abs(dx) < Math.abs(dy) * 1.0) return; // must be at least as horizontal as vertical
             const tabs: HomeTab[] = ['wishlists', 'wishes', 'reservations'];
             const idx = tabs.indexOf(homeTab);
             if (dx < 0 && idx < tabs.length - 1) {
@@ -5524,16 +6212,35 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
-              style={{
-                background: 'none', border: 'none', padding: 8, cursor: 'pointer',
-                fontSize: 20, color: C.textMuted, lineHeight: 1,
-              }}
-              aria-label={t('settings_title', locale)}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* Gift Notes entry icon */}
+              <button
+                onClick={async () => {
+                  setGnSeenBadge(true);
+                  if (gnAccess.unlocked) {
+                    setGnLoading(true);
+                    try { const r = await tgFetch('/tg/gift-occasions'); if (r.ok) { const d = await r.json() as { occasions: any[] }; setGnOccasions(d.occasions); } } catch {}
+                    setGnLoading(false);
+                    setScreen('gift-notes');
+                  } else {
+                    setScreen('gift-notes-paywall');
+                  }
+                }}
+                style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', fontSize: 18, color: C.textMuted, lineHeight: 1, position: 'relative' as const }}
+                aria-label={t('gn_title', locale)}
+              >
+                🎁
+                {!gnSeenBadge && <span style={{ position: 'absolute', top: 4, right: 2, fontSize: 7, fontWeight: 800, color: '#FBBF24', background: 'rgba(251,191,36,0.2)', padding: '1px 3px', borderRadius: 3, lineHeight: 1.2, fontFamily: font }}>{t('gn_badge_new', locale)}</span>}
+              </button>
+              {/* Settings gear */}
+              <button
+                onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
+                style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', fontSize: 20, color: C.textMuted, lineHeight: 1 }}
+                aria-label={t('settings_title', locale)}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              </button>
+            </div>
           </div>
           </div>{/* end seasonal wrapper */}
 
@@ -5595,7 +6302,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.surface, borderRadius: 12, padding: 4 }}>
               {(['mine', 'subscribed'] as const).map((tab) => {
                 const isActive = myWishlistsTab === tab;
-                const totalUnread = subscriptions.reduce((s, sub) => s + sub.unreadCount, 0);
+                const totalUnread = subUnreadCount;
                 return (
                   <button
                     key={tab}
@@ -5646,6 +6353,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     if (sub.unreadCount > 0) {
                       void tgFetch(`/tg/me/subscriptions/${sub.id}/read`, { method: 'POST' });
                       setSubscriptions((prev) => prev.map((s) => s.id === sub.id ? { ...s, unreadCount: 0, unreadEntityIds: [] } : s));
+                      setSubUnreadCount(prev => Math.max(0, prev - sub.unreadCount));
                     }
                     setGuestUnreadEntityIds(sub.unreadEntityIds);
                     setGuestSubId(sub.id);
@@ -5955,23 +6663,44 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </button>
                 </div>
               )}
-              {filteredAllItems.map((item) => (
-                <WishCardOwner
-                  key={item.id}
-                  item={item}
-                  locale={locale}
-                  sourceLabel={item.wishlistTitle}
-                  onTap={(it) => {
-                    const wl = wishlists.find(w => w.id === it.wishlistId) ?? null;
-                    setCurrentWl(wl);
-                    if (wl) void loadItems(wl.id);
-                    setViewingItem(it);
-                    setHomeReturnTab('wishes');
-                    setScreen('item-detail');
-                  }}
-                  onDelete={() => {}}
-                />
-              ))}
+              {filteredAllItems.map((item) => {
+                const useNewCards = CARD_REDESIGN_ENABLED;
+                if (useNewCards) {
+                  return (
+                    <WishCardCompact
+                      key={item.id}
+                      item={item}
+                      locale={locale}
+                      sourceLabel={item.wishlistTitle}
+                      onTap={(it: Item) => {
+                        const wl = wishlists.find(w => w.id === it.wishlistId) ?? null;
+                        setCurrentWl(wl);
+                        if (wl) void loadItems(wl.id);
+                        setViewingItem(it);
+                        setHomeReturnTab('wishes');
+                        setScreen('item-detail');
+                      }}
+                    />
+                  );
+                }
+                return (
+                  <WishCardOwner
+                    key={item.id}
+                    item={item}
+                    locale={locale}
+                    sourceLabel={item.wishlistTitle}
+                    onTap={(it) => {
+                      const wl = wishlists.find(w => w.id === it.wishlistId) ?? null;
+                      setCurrentWl(wl);
+                      if (wl) void loadItems(wl.id);
+                      setViewingItem(it);
+                      setHomeReturnTab('wishes');
+                      setScreen('item-detail');
+                    }}
+                    onDelete={() => {}}
+                  />
+                );
+              })}
             </div>
           )}
 
@@ -6647,12 +7376,89 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </>
             )}
 
-            {/* ── Normal mode items ── */}
-            {!itemReorderMode && items.map((item, i) => (
-              <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                <WishCardOwner item={item} onTap={(it) => { setViewingItem(it); setScreen('item-detail'); }} onDelete={setDeletingItem} onComplete={handleCompleteItem} locale={locale} />
+            {/* ── Bulk selection header bar ── */}
+            {bulkSelectionMode && (
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 0', marginBottom: 8,
+              }}>
+                <button onClick={() => { setBulkSelectionMode(false); setBulkSelectedIds(new Set()); }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
+                  {t('bulk_cancel', locale)}
+                </button>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                  {t('bulk_selected', locale, { count: bulkSelectedIds.size })}
+                </span>
+                <button onClick={() => {
+                  if (bulkSelectedIds.size === items.length) setBulkSelectedIds(new Set());
+                  else setBulkSelectedIds(new Set(items.map(i => i.id)));
+                }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
+                  {bulkSelectedIds.size === items.length ? t('bulk_cancel', locale) : t('bulk_select_all', locale)}
+                </button>
               </div>
-            ))}
+            )}
+
+            {/* ── Normal mode items (with selection overlay) ── */}
+            {!itemReorderMode && items.map((item, i) => {
+              const isSelected = bulkSelectedIds.has(item.id);
+              const onItemTap = bulkSelectionMode
+                ? () => {
+                    setBulkSelectedIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(item.id)) next.delete(item.id);
+                      else next.add(item.id);
+                      return next;
+                    });
+                  }
+                : (it: Item) => { setViewingItem(it); setScreen('item-detail'); };
+
+              const selectionWrapper = (child: React.ReactNode) => (
+                <div
+                  key={item.id}
+                  style={{ position: 'relative' }}
+                  onTouchStart={() => {
+                    if (!bulkSelectionMode) {
+                      bulkLongPressTimer.current = setTimeout(() => {
+                        setBulkSelectionMode(true);
+                        setBulkSelectedIds(new Set([item.id]));
+                      }, 500);
+                    }
+                  }}
+                  onTouchEnd={() => { if (bulkLongPressTimer.current) { clearTimeout(bulkLongPressTimer.current); bulkLongPressTimer.current = null; } }}
+                  onTouchMove={() => { if (bulkLongPressTimer.current) { clearTimeout(bulkLongPressTimer.current); bulkLongPressTimer.current = null; } }}
+                >
+                  {bulkSelectionMode && (
+                    <div style={{
+                      position: 'absolute', top: 8, left: 8, zIndex: 2,
+                      width: 24, height: 24, borderRadius: 12,
+                      background: isSelected ? C.accent : 'transparent',
+                      border: `2px solid ${isSelected ? C.accent : C.textMuted}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {isSelected && <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>✓</span>}
+                    </div>
+                  )}
+                  {child}
+                </div>
+              );
+
+              const useNewCards = CARD_REDESIGN_ENABLED;
+              if (useNewCards) {
+                const cardMode = resolveCardMode(items.length, cardDisplayMode, planInfo.code === 'PRO');
+                const stagger = cardMode === 'compact' ? 0.04 : 0.08;
+                const gap = cardMode === 'compact' ? 8 : 14;
+                const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
+                return selectionWrapper(
+                  <div style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap }}>
+                    <Card item={item} onTap={() => onItemTap(item)} locale={locale} />
+                  </div>
+                );
+              }
+              return selectionWrapper(
+                <div style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
+                  <WishCardOwner item={item} onTap={() => onItemTap(item)} onDelete={setDeletingItem} onComplete={handleCompleteItem} locale={locale} />
+                </div>
+              );
+            })}
 
             {!itemReorderMode && !loading && items.length === 0 && (
               <div style={{ textAlign: 'center', padding: '48px 24px' }}>
@@ -6673,9 +7479,219 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       )}
 
       {/* ══════════════════════════════════════════════
-          OWNER — ITEM DETAIL (view + actions)
+          OWNER — ITEM DETAIL (REDESIGN — canary)
           ══════════════════════════════════════════════ */}
-      {screen === 'item-detail' && viewingItem && (() => {
+      {screen === 'item-detail' && viewingItem && ITEM_DETAIL_REDESIGN_ALL && (() => {
+        const displayTitle = normalizeTitle(viewingItem.title);
+        const isDraftItem = fromDrafts || draftsItems.some(d => d.id === (viewingItem as Item).id);
+        const copyTitleV2 = async () => {
+          if (!displayTitle) return;
+          try {
+            if (typeof window !== 'undefined' && window.Telegram?.WebApp?.writeToClipboard) {
+              window.Telegram.WebApp.writeToClipboard(displayTitle);
+              pushToast(t('title_copied', locale), 'success');
+              return;
+            }
+            await navigator.clipboard.writeText(displayTitle);
+            pushToast(t('title_copied', locale), 'success');
+          } catch { pushToast(t('title_copy_error', locale), 'error'); }
+        };
+        return (
+        <div style={{ padding: '0 0 40px' }}>
+          {/* Hero image */}
+          <div style={{ position: 'relative' }}>
+            {viewingItem.imageUrl ? (
+              <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', aspectRatio: '16/10', objectFit: 'cover', display: 'block', background: C.surface }} />
+            ) : (
+              <div style={{ width: '100%', aspectRatio: '16/8', background: `linear-gradient(145deg, ${C.surface}, ${C.card})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 72 }}>
+                {getEmoji(viewingItem.title)}
+              </div>
+            )}
+            {/* Priority float on image */}
+            <div style={{
+              position: 'absolute', bottom: 12, right: 12,
+              padding: '5px 11px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              background: viewingItem.priority === 3 ? 'rgba(240,78,110,0.85)' : viewingItem.priority === 2 ? 'rgba(232,147,10,0.85)' : 'rgba(107,127,212,0.85)',
+              color: '#fff',
+            }}>
+              {prioEmoji(viewingItem.priority)} {getPriorities(locale).find(p => p.value === viewingItem!.priority)?.label}
+            </div>
+          </div>
+
+          <div style={{ padding: '20px 20px 0' }}>
+            {/* Title + ⋯ menu */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, position: 'relative' }}>
+              <h1 onClick={() => void copyTitleV2()} style={{
+                flex: 1, minWidth: 0, fontSize: 20, fontWeight: 700, fontFamily: font,
+                color: C.text, margin: 0, lineHeight: 1.3, letterSpacing: '-0.3px',
+                cursor: displayTitle ? 'pointer' : 'default',
+              }}>{displayTitle}</h1>
+              {!isDraftItem && viewingItem.status !== 'purchased' && (
+                <button onClick={() => setShowItemMenu(v => !v)} style={{
+                  width: 36, height: 36, borderRadius: 12, flexShrink: 0, marginTop: 2,
+                  background: showItemMenu ? 'rgba(124,106,255,0.15)' : 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${showItemMenu ? 'rgba(124,106,255,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                  color: showItemMenu ? C.accent : C.textMuted, fontSize: 16, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>⋯</button>
+              )}
+              {/* Dropdown + overlay for outside-tap dismiss */}
+              {showItemMenu && (
+                <>
+                <div onClick={() => setShowItemMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+                <div onClick={(e) => { e.stopPropagation(); setShowItemMenu(false); }} style={{
+                  position: 'absolute', top: 42, right: 0, zIndex: 100,
+                  background: C.card, border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                  padding: '4px 0', minWidth: 190, boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+                }}>
+                  <div onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
+                    <span style={{ width: 22, textAlign: 'center' }}>↗</span> {t('item_move_short', locale)}
+                  </div>
+                  <div onClick={() => { setCopyingItem(viewingItem as Item); setShowCopyPicker(true); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
+                    <span style={{ width: 22, textAlign: 'center' }}>📋</span> {t('item_copy_short', locale)}
+                  </div>
+                  <div style={{ height: 1, background: C.border, margin: '2px 0' }} />
+                  <div onClick={() => {
+                    const item = viewingItem as Item;
+                    setViewingItem(null);
+                    setScreen(fromDrafts ? 'drafts' : 'wishlist-detail');
+                    setDeletingItem(item);
+                  }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.red, cursor: 'pointer' }}>
+                    <span style={{ width: 22, textAlign: 'center' }}>🗑</span> {t('delete_btn', locale)}
+                  </div>
+                </div>
+                </>
+              )}
+            </div>
+
+            {/* Price + Link */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
+              {viewingItem.price != null && (
+                <span style={{ fontSize: 22, fontWeight: 800, color: C.accent, letterSpacing: '-0.3px', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtPrice(viewingItem.price, locale, viewingItem.currency ?? 'RUB')}
+                </span>
+              )}
+              {viewingItem.url && (
+                <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+                  background: 'rgba(255,255,255,0.05)', border: `1px solid rgba(255,255,255,0.08)`,
+                  borderRadius: 20, fontSize: 12, color: C.textSec, textDecoration: 'none',
+                }}>
+                  🔗 {viewingItem.sourceDomain || new URL(viewingItem.url).hostname.replace(/^www\./, '')} ↗
+                </a>
+              )}
+            </div>
+
+            {/* 2 action buttons */}
+            {viewingItem.status !== 'purchased' && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                <button onClick={() => {
+                  setPendingEditItem(viewingItem as Item);
+                  setViewingItem(null);
+                  setScreen(isDraftItem ? 'drafts' : 'wishlist-detail');
+                }} style={{
+                  ...btnBase, flex: 1, padding: '11px', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                  background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, color: '#fff', border: 'none',
+                }}>
+                  {t('edit_btn', locale)}
+                </button>
+                {isDraftItem ? (
+                  <button onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{
+                    ...btnBase, flex: 1, padding: '11px', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                    background: C.surface, color: C.accent, border: `1px solid rgba(124,106,255,0.12)`,
+                  }}>
+                    {t('item_move_cta', locale)}
+                  </button>
+                ) : (
+                  <button onClick={() => {
+                    setShowItemForm(false); resetItemForm();
+                    handleCompleteItem(viewingItem as Item);
+                    setViewingItem(null); setScreen('wishlist-detail');
+                  }} style={{
+                    ...btnBase, flex: 1, padding: '11px', borderRadius: 12, fontSize: 14, fontWeight: 600,
+                    background: C.surface, color: C.green, border: `1px solid rgba(52,211,153,0.12)`,
+                  }}>
+                    {t('item_detail_gifted', locale)}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Status badge */}
+            {viewingItem.status === 'reserved' && (
+              <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10, background: `${C.accent}12`, border: `1px solid ${C.accent}18` }}>
+                <span style={{ fontSize: 18 }}>✨</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.accent }}>{t('status_someone_reserved', locale)}</span>
+              </div>
+            )}
+            {viewingItem.status === 'purchased' && (
+              <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10, background: C.greenSoft, border: `1px solid ${C.green}18` }}>
+                <span style={{ fontSize: 18 }}>✅</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.green }}>{t('status_gifted', locale)}</span>
+              </div>
+            )}
+
+            {/* Description — read only, hidden if empty */}
+            {viewingItem.description && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 }}>{t('description_title', locale)}</div>
+                <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, margin: 0 }}>{viewingItem.description}</p>
+              </div>
+            )}
+
+            {/* Comments */}
+            {planInfo.code === 'PRO' ? (
+              <CommentsThread
+                commentRole={commentRole} comments={comments} commentText={commentText}
+                setCommentText={setCommentText} commentSending={commentSending}
+                myActorHash={myActorHashRef.current} onDeleteComment={handleDeleteComment}
+                onSendComment={handleSendComment}
+                isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+                locale={locale}
+              />
+            ) : (
+              <div onClick={() => showUpsell('comments')} style={{
+                marginTop: 24, padding: 20, background: C.surface, borderRadius: 20,
+                cursor: 'pointer', border: `1px solid ${C.accent}15`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 20 }}>💬</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: C.text }}>{t('comments_pro_title', locale)}</span>
+                  <ProBadge />
+                </div>
+                <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>{t('comments_pro_hint', locale)}</div>
+                <div style={{ marginTop: 12, fontSize: 13, color: C.accent, fontWeight: 600 }}>{t('comments_pro_more', locale)}</div>
+              </div>
+            )}
+
+            {/* Hint button */}
+            {viewingItem.status === 'available' && (
+              <div onClick={() => !hintLoading && handleHintTap(viewingItem as Item)} style={{
+                marginTop: 16, padding: '12px 14px', background: `${C.accent}08`, border: `1px solid ${C.accent}12`,
+                borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: hintLoading ? 'wait' : 'pointer',
+                opacity: hintLoading ? 0.6 : 1,
+              }}>
+                <span style={{ fontSize: 18 }}>💡</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.textSec }}>{t('hint_friends_btn', locale)}</span>
+                    {planInfo.code === 'FREE' && <ProBadge />}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 1 }}>{t('item_detail_hint_sub', locale)}</div>
+                </div>
+                <span style={{ color: C.textMuted }}>›</span>
+              </div>
+            )}
+          </div>
+        </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          OWNER — ITEM DETAIL (view + actions) — ORIGINAL
+          ══════════════════════════════════════════════ */}
+      {screen === 'item-detail' && viewingItem && !ITEM_DETAIL_REDESIGN_ALL && (() => {
         const displayTitle = normalizeTitle(viewingItem.title);
         const copyTitle = async () => {
           if (!displayTitle) return;
@@ -6923,9 +7939,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   )}
                   <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
                     {isDraftItem ? (
-                      // Draft: Edit in secondary slot (no Received).
-                      // Navigate to 'drafts' (not 'wishlist-detail') so pendingEditItem
-                      // effect fires with currentWl intact for the drafts flow.
+                      // Draft: Edit in secondary slot
                       <button onClick={() => {
                         setPendingEditItem(viewingItem as Item);
                         setViewingItem(null);
@@ -6938,20 +7952,38 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         {t('edit_btn', locale)}
                       </button>
                     ) : (
-                      // Regular: Received
-                      <button onClick={() => {
-                        setShowItemForm(false);
-                        resetItemForm();
-                        handleCompleteItem(viewingItem as Item);
-                        setViewingItem(null);
-                        setScreen('wishlist-detail');
-                      }} style={{
-                        ...btnBase, flex: 1, background: C.surface, color: C.green,
-                        border: `1px solid ${C.borderLight}`, borderRadius: 14,
-                        padding: '12px 16px', fontSize: 14, fontWeight: 500,
-                      }}>
-                        {t('received_btn', locale)}
-                      </button>
+                      <>
+                        {/* Regular: Move to another wishlist */}
+                        <button onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{
+                          ...btnBase, flex: 1, background: C.surface, color: C.accent,
+                          border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                          padding: '12px 16px', fontSize: 13, fontWeight: 500,
+                        }}>
+                          {t('item_move_short', locale)}
+                        </button>
+                        {/* Regular: Copy to another wishlist */}
+                        <button onClick={() => { setCopyingItem(viewingItem as Item); setShowCopyPicker(true); }} style={{
+                          ...btnBase, flex: 1, background: C.surface, color: C.green,
+                          border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                          padding: '12px 16px', fontSize: 13, fontWeight: 500,
+                        }}>
+                          {t('item_copy_short', locale)}
+                        </button>
+                        {/* Regular: Received */}
+                        <button onClick={() => {
+                          setShowItemForm(false);
+                          resetItemForm();
+                          handleCompleteItem(viewingItem as Item);
+                          setViewingItem(null);
+                          setScreen('wishlist-detail');
+                        }} style={{
+                          ...btnBase, flex: 1, background: C.surface, color: C.green,
+                          border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                          padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                        }}>
+                          {t('received_btn', locale)}
+                        </button>
+                      </>
                     )}
                     <button onClick={() => {
                       const item = viewingItem as Item;
@@ -7361,14 +8393,44 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {guestMainList.map((item, i) => {
                 const hasUnread = guestUnreadEntityIds.includes(item.id);
+                const useNewCards = CARD_REDESIGN_ENABLED;
+                if (useNewCards) {
+                  const allGuestItems = [...guestMainList, ...guestNoPriceBlock];
+                  const cardMode = resolveCardMode(allGuestItems.length, undefined, false);
+                  const stagger = cardMode === 'compact' ? 0.04 : 0.08;
+                  const gap = cardMode === 'compact' ? 8 : 14;
+                  const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
+                  return (
+                    <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap, position: 'relative', ...(hasUnread ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
+                      {hasUnread && (
+                        <span style={{
+                          position: 'absolute', top: 8, right: 8, zIndex: 2,
+                          padding: '2px 6px', borderRadius: 6,
+                          background: 'rgba(251,191,36,0.2)', color: '#FBBF24',
+                          fontSize: 9, fontWeight: 700, fontFamily: font, letterSpacing: '0.03em',
+                        }}>{locale === 'ru' ? 'Новое' : 'New'}</span>
+                      )}
+                      <Card
+                        item={item}
+                        isGuest
+                        onTap={(it: GuestItem) => { setViewingItem(it); setScreen('guest-item-detail'); }}
+                        onReserve={(w: GuestItem) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                        onUnreserve={handleUnreserve}
+                        myActorHash={myActorHashRef.current}
+                        locale={locale}
+                      />
+                    </div>
+                  );
+                }
                 return (
-                  <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative' }}>
+                  <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(hasUnread ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
                     {hasUnread && (
                       <span style={{
-                        position: 'absolute', top: 10, right: 10, zIndex: 2,
-                        width: 8, height: 8, borderRadius: '50%', background: C.orange,
-                        boxShadow: `0 0 6px ${C.orange}`,
-                      }} />
+                        position: 'absolute', top: 8, right: 8, zIndex: 2,
+                        padding: '2px 6px', borderRadius: 6,
+                        background: 'rgba(251,191,36,0.2)', color: '#FBBF24',
+                        fontSize: 9, fontWeight: 700, fontFamily: font, letterSpacing: '0.03em',
+                      }}>{locale === 'ru' ? 'Новое' : 'New'}</span>
                     )}
                     <WishCardGuest
                       item={item}
@@ -7394,18 +8456,37 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     {t('guest_no_price_title', locale)}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {guestNoPriceBlock.map((item, i) => (
-                      <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                        <WishCardGuest
-                          item={item}
-                          onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                          onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
-                          onUnreserve={handleUnreserve}
-                          myActorHash={myActorHashRef.current}
-                          locale={locale}
-                        />
-                      </div>
-                    ))}
+                    {guestNoPriceBlock.map((item, i) => {
+                      const useNewCards = CARD_REDESIGN_ENABLED;
+                      if (useNewCards) {
+                        const Card = WishCardCompact;
+                        return (
+                          <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both`, marginBottom: 8 }}>
+                            <Card
+                              item={item}
+                              isGuest
+                              onTap={(it: GuestItem) => { setViewingItem(it); setScreen('guest-item-detail'); }}
+                              onReserve={(w: GuestItem) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                              onUnreserve={handleUnreserve}
+                              myActorHash={myActorHashRef.current}
+                              locale={locale}
+                            />
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
+                          <WishCardGuest
+                            item={item}
+                            onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
+                            onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                            onUnreserve={handleUnreserve}
+                            myActorHash={myActorHashRef.current}
+                            locale={locale}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -7546,7 +8627,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ══════════════════════════════════════════════
           ARCHIVE  (mode: 'wishlist' | 'global')
           ══════════════════════════════════════════════ */}
-      {screen === 'archive' && (archiveMode === 'global' || currentWl) && (() => {
+      {screen === 'archive' && (() => {
+        // Safety: if wishlist-mode archive lost its currentWl context, navigate back
+        if (archiveMode !== 'global' && !currentWl) { setScreen('my-wishlists'); return null; }
         const displayItems = archiveMode === 'global' ? globalArchiveItems : archiveItems;
         return (
           <div style={{ padding: '16px 20px 120px' }}>
@@ -7744,39 +8827,49 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'profile' && (
         <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
-          {/* Header with gear icon for settings */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>
-              {t('profile_title', locale)}
-            </h1>
-            <button onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }} style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', color: C.textMuted }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            </button>
-          </div>
-
           {profileLoading && !profileData ? (
             <div style={{ textAlign: 'center', padding: 40, color: C.textMuted }}>{t('loading', locale)}</div>
           ) : profileData && (
             <>
-              {/* ── Hero card — asymmetric left-anchored layout ── */}
-              <div style={{
-                background: C.card,
-                borderRadius: 20,
-                padding: '18px 18px 20px',
-                marginBottom: 16,
-                border: `1px solid ${C.borderLight}`,
-              }}>
-                {/* Top row: avatar (left anchor) + edit button (top-right) */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                  {/* Avatar with camera badge */}
+              {/* ── Centered Hero Profile Header ── */}
+              <div style={{ position: 'relative', textAlign: 'center', paddingBottom: 4 }}>
+                {/* Background glow */}
+                <div style={{ position: 'absolute', top: -20, left: '50%', transform: 'translateX(-50%)', width: 200, height: 200, borderRadius: '50%', background: `radial-gradient(circle, ${C.accent}18 0%, transparent 70%)`, pointerEvents: 'none' }} />
+
+                {/* Edit button — top right */}
+                <button
+                  onClick={() => {
+                    setEditProfileName(profileData.displayName || '');
+                    setEditProfileUsername(profileData.username || '');
+                    setEditProfileBio(profileData.bio?.replace(/\n+$/, '') || '');
+                    setEditProfileBirthday(profileData.birthday ? profileData.birthday.slice(0, 10) : '');
+                    setEditingProfile(true);
+                  }}
+                  style={{
+                    position: 'absolute', top: 0, right: 0,
+                    background: C.surface, border: `1px solid ${C.borderLight}`,
+                    width: 36, height: 36, borderRadius: 12,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted,
+                  }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+
+                {/* Avatar */}
+                <div style={{ display: 'inline-block', position: 'relative', marginBottom: 14 }}>
                   <div
                     onClick={() => setShowAvatarSheet(true)}
                     style={{
-                      width: 76, height: 76, borderRadius: '50%',
+                      width: 96, height: 96, borderRadius: '50%',
                       background: `linear-gradient(135deg, ${C.accent}, ${C.accent}80)`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 30, fontWeight: 700, color: '#fff',
-                      cursor: 'pointer', flexShrink: 0, position: 'relative',
+                      fontSize: 38, fontWeight: 700, color: '#fff',
+                      cursor: 'pointer', position: 'relative',
+                      border: `3px solid ${C.accent}50`,
+                      boxShadow: `0 4px 24px ${C.accent}20`,
                       ...(profileData.avatarUrl
                         ? { backgroundImage: `url(${profileData.avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
                         : {}),
@@ -7785,102 +8878,94 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     {avatarUploading && (
                       <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#fff' }}>…</div>
                     )}
-                    {!avatarUploading && (
-                      <div style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${C.card}` }}>
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                      </div>
-                    )}
-                    {/* Seasonal hat — sits top-right, pointer-events:none (handled by SantaHatOverlay) */}
-                    {santaSeason?.inSeason && <SantaHatOverlay size={76} />}
+                    {santaSeason?.inSeason && <SantaHatOverlay size={96} />}
                   </div>
-
-                  {/* Edit icon button — top-right of card */}
-                  <button
-                    onClick={() => {
-                      setEditProfileName(profileData.displayName || '');
-                      setEditProfileUsername(profileData.username || '');
-                      setEditProfileBio(profileData.bio?.replace(/\n+$/, '') || '');
-                      setEditProfileBirthday(profileData.birthday ? profileData.birthday.slice(0, 10) : '');
-                      setEditingProfile(true);
-                    }}
-                    style={{
-                      background: C.surface, border: 'none',
-                      width: 34, height: 34, borderRadius: 10,
-                      cursor: 'pointer', flexShrink: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: C.textMuted,
-                    }}
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
-                  </button>
+                  {!avatarUploading && (
+                    <div onClick={() => setShowAvatarSheet(true)} style={{ position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #141418', cursor: 'pointer' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </div>
+                  )}
                 </div>
 
-                {/* Identity — left-aligned column */}
-                <div style={{ fontSize: 21, fontWeight: 800, color: C.text, fontFamily: font, lineHeight: 1.15, letterSpacing: -0.3 }}>
+                {/* PRO pill */}
+                {planInfo.code === 'PRO' && (
+                  <div style={{ marginBottom: 10 }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      background: `linear-gradient(135deg, ${C.accent}28, ${C.accent}10)`,
+                      border: `1px solid ${C.accent}35`, padding: '4px 14px', borderRadius: 20,
+                      fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: '0.05em',
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent, boxShadow: `0 0 6px ${C.accent}` }} />
+                      PRO
+                    </span>
+                  </div>
+                )}
+
+                {/* Name */}
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.2, fontFamily: font }}>
                   {profileData.displayName || tgUser?.first_name || t('profile_display_name', locale)}
                 </div>
 
-                {/* Username + plan badge on one row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
-                  {profileData.username && (
-                    <span style={{ fontSize: 13, color: C.textMuted, fontWeight: 500 }}>@{profileData.username}</span>
-                  )}
-                  <span style={{
-                    fontSize: 10, fontWeight: 800, letterSpacing: 0.7, padding: '3px 8px',
-                    borderRadius: 6, lineHeight: 1.4,
-                    background: planInfo.code === 'PRO'
-                      ? `linear-gradient(135deg, ${C.accent}28, ${C.accent}14)`
-                      : C.surface,
-                    border: `1px solid ${planInfo.code === 'PRO' ? C.accent + '45' : C.borderLight}`,
-                    color: planInfo.code === 'PRO' ? C.accent : C.textSec,
-                  }}>
-                    {planInfo.code}
-                  </span>
+                {/* Username */}
+                <div style={{ fontSize: 14, color: C.textMuted, marginTop: 4, fontWeight: 500 }}>
+                  {profileData.username ? `@${profileData.username}` : t('profile_no_username', locale)}
                 </div>
 
-                {/* Bio — only if present, no top margin if absent */}
+                {/* Bio */}
                 {profileData.bio && (
-                  <div style={{ fontSize: 13, color: C.textSec, marginTop: 10, lineHeight: 1.55 }}>
+                  <div style={{ fontSize: 13, color: C.textSec, marginTop: 8, lineHeight: 1.4, padding: '0 20px' }}>
                     {profileData.bio}
                   </div>
                 )}
-              </div>
 
-              {/* Share profile button */}
-              <div style={{ marginBottom: 16 }}>
-                <button
-                  onClick={() => {
-                    if (!profileData?.username) {
-                      // No username — prompt to create one
-                      pushToast(t('share_profile_need_username', locale), 'info');
-                      setEditProfileName(profileData?.displayName || '');
-                      setEditProfileUsername('');
-                      setEditProfileBio(profileData?.bio?.replace(/\n+$/, '') || '');
-                      setEditProfileBirthday(profileData?.birthday ? profileData.birthday.slice(0, 10) : '');
-                      setEditingProfile(true);
-                      return;
-                    }
-                    const link = buildTgDeepLink(`profile_${profileData.username}`);
-                    if (!link) return;
-                    // Copy to clipboard
-                    navigator.clipboard?.writeText(link).then(() => {
-                      pushToast(t('share_profile_copied', locale), 'success');
-                    }).catch(() => {});
-                  }}
-                  style={{
-                    width: '100%', padding: '12px 0', borderRadius: 12, border: `1px solid ${C.borderLight}`,
-                    background: C.surface, color: C.text, fontSize: 14, fontWeight: 600,
-                    cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  }}
-                >
-                  <span>📤</span> {t('share_profile_btn', locale)}
-                </button>
-                {profileData?.username && (
+                {/* Stats row */}
+                {profileStats && (
+                  <div style={{ display: 'flex', gap: 0, marginTop: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.04)', overflow: 'hidden' }}>
+                    <div onClick={() => setScreen('my-wishlists')} style={{ flex: 1, textAlign: 'center', padding: '14px 8px', borderRight: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{profileStats.wishlists}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{t('profile_stat_wishlists', locale)}</div>
+                    </div>
+                    <div onClick={() => { setHomeTab('wishes'); void loadAllItems(); setScreen('my-wishlists'); }} style={{ flex: 1, textAlign: 'center', padding: '14px 8px', borderRight: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{profileStats.totalWishes}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{t('profile_stat_wishes', locale)}</div>
+                    </div>
+                    <div onClick={() => setScreen('my-reservations')} style={{ flex: 1, textAlign: 'center', padding: '14px 8px', borderRight: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{profileStats.reservedByMe}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{t('profile_stat_reserved', locale)}</div>
+                    </div>
+                    <div onClick={() => { void loadGlobalArchive(); }} style={{ flex: 1, textAlign: 'center', padding: '14px 8px', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{profileStats.archived}</div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{t('profile_stat_archived', locale)}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action buttons — settings first, share second */}
+                <div style={{ display: 'flex', gap: 8, marginTop: 16, marginBottom: 8 }}>
+                  <button
+                    onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '12px 0', borderRadius: 14, fontSize: 14, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: font,
+                      background: 'rgba(255,255,255,0.05)', color: C.textSec,
+                      border: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    ⚙️ {t('settings_title', locale)}
+                  </button>
                   <button
                     onClick={() => {
+                      if (!profileData?.username) {
+                        pushToast(t('share_profile_need_username', locale), 'info');
+                        setEditProfileName(profileData?.displayName || '');
+                        setEditProfileUsername('');
+                        setEditProfileBio(profileData?.bio?.replace(/\n+$/, '') || '');
+                        setEditProfileBirthday(profileData?.birthday ? profileData.birthday.slice(0, 10) : '');
+                        setEditingProfile(true);
+                        return;
+                      }
                       const link = buildTgDeepLink(`profile_${profileData.username}`);
                       if (!link) return;
                       const shareText = `${profileData.displayName || profileData.username}\n${t('share_profile_cta', locale)}`;
@@ -7888,52 +8973,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       (window as any).Telegram?.WebApp?.openTelegramLink?.(tgShareUrl);
                     }}
                     style={{
-                      width: '100%', padding: '10px 0', borderRadius: 12, border: 'none',
-                      background: 'transparent', color: C.accent, fontSize: 13, fontWeight: 600,
-                      cursor: 'pointer', fontFamily: font, marginTop: 6,
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '12px 0', borderRadius: 14, fontSize: 14, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: font, border: 'none',
+                      background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+                      color: '#fff', boxShadow: `0 4px 16px ${C.accent}4D`,
                     }}
                   >
-                    {t('share_profile_telegram', locale)}
+                    {t('share_profile_btn_full', locale)}
                   </button>
-                )}
+                </div>
               </div>
 
-              {/* Stats card */}
-              {profileStats && (
-                <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 12 }}>
-                    {t('profile_stats_title', locale)}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div onClick={() => setScreen('my-wishlists')} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: C.accent, fontFamily: font }}>
-                        {profileStats.wishlists}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.textMuted }}>
-                        {t('profile_wishlists_of', locale, { count: profileStats.wishlists, max: profileStats.wishlistsLimit })}
-                      </div>
-                    </div>
-                    <div onClick={() => { setHomeTab('wishes'); void loadAllItems(); setScreen('my-wishlists'); }} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: C.accent, fontFamily: font }}>
-                        {profileStats.totalWishes}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_wishes_total', locale)}</div>
-                    </div>
-                    <div onClick={() => setScreen('my-reservations')} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: C.green, fontFamily: font }}>
-                        {profileStats.reservedByMe}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_reserved_by_me', locale)}</div>
-                    </div>
-                    <div onClick={() => { void loadGlobalArchive(); }} style={{ cursor: 'pointer', background: C.surface, borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: C.orange, fontFamily: font }}>
-                        {profileStats.archived}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.textMuted }}>{t('profile_archived', locale)}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Spacer between header and plan */}
+              <div style={{ height: 12 }} />
 
               {/* My Plan card — FREE: two semantic blocks; PRO: feature table */}
               {planInfo.code === 'FREE' ? (
@@ -7958,6 +9011,104 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       </div>
                     </div>
                   </div>
+
+                  {/* FREE — Promo code block (always visible, never hidden after success) */}
+                  {proSource !== 'subscription' && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
+                        {t('promo_title', locale)}
+                      </div>
+                      <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.border}` }}>
+                        {/* Active promo status — shown above input, not instead of it */}
+                        {promoPro && (
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+                              background: `${C.green}12`, borderRadius: 12, border: `1px solid ${C.green}25`,
+                            }}>
+                              <span style={{ fontSize: 16 }}>✅</span>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
+                                {t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }) })}
+                              </span>
+                            </div>
+                            <button
+                              style={{ ...btnPrimary, width: '100%', marginTop: 8, background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, fontSize: 14, padding: '12px 0' }}
+                              onClick={() => showUpsell('wishlist_limit')}
+                            >
+                              {t('promo_keep_pro', locale)}
+                            </button>
+                          </div>
+                        )}
+                        {/* Input + button — always visible, vertical layout for mobile */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <input
+                            id="promo-input"
+                            type="text"
+                            placeholder={t('promo_placeholder', locale)}
+                            style={{
+                              width: '100%', padding: '12px 14px', fontSize: 14, fontWeight: 500,
+                              background: C.surface, color: C.text, border: `1px solid ${C.borderLight}`,
+                              borderRadius: 12, outline: 'none', fontFamily: font,
+                              boxSizing: 'border-box',
+                            }}
+                            autoCapitalize="characters"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                                // Trigger activate on Enter
+                                document.getElementById('promo-activate-btn')?.click();
+                              }
+                            }}
+                          />
+                          <button
+                            id="promo-activate-btn"
+                            style={{
+                              ...btnPrimary, width: '100%', padding: '12px 0', fontSize: 15, fontWeight: 600,
+                              borderRadius: 12,
+                            }}
+                            onClick={async () => {
+                              const input = document.getElementById('promo-input') as HTMLInputElement | null;
+                              if (!input?.value?.trim()) return;
+                              const code = input.value.trim();
+                              const btn = document.getElementById('promo-activate-btn') as HTMLButtonElement | null;
+                              if (input) input.disabled = true;
+                              if (btn) { btn.disabled = true; btn.textContent = t('promo_activating', locale); }
+                              try {
+                                const r = await tgFetch('/tg/promo/apply', {
+                                  method: 'POST',
+                                  body: JSON.stringify({ code }),
+                                });
+                                const data = await r.json() as any;
+                                if (r.ok) {
+                                  if (data.status === 'activated' || data.status === 'already_active') {
+                                    pushToast(data.status === 'already_active' ? t('promo_already_active', locale) : t('promo_success', locale, { date: new Date(data.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US') }), 'success');
+                                    if (input) input.value = '';
+                                    loadWishlists().catch(() => {});
+                                  } else if (data.status === 'accepted_for_paid') {
+                                    pushToast(t('promo_accepted_paid', locale), 'success');
+                                    if (input) input.value = '';
+                                  }
+                                } else {
+                                  const errKey = data.error === 'already_used' ? 'promo_already_used'
+                                    : data.error === 'invalid_code' ? 'promo_invalid'
+                                    : data.error === 'campaign_exhausted' ? 'promo_campaign_exhausted'
+                                    : 'promo_error';
+                                  pushToast(t(errKey, locale), 'error');
+                                }
+                              } catch {
+                                pushToast(t('promo_error', locale), 'error');
+                              } finally {
+                                if (input) input.disabled = false;
+                                if (btn) { btn.disabled = false; btn.textContent = t('promo_activate', locale); }
+                              }
+                            }}
+                          >
+                            {t('promo_activate', locale)}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* FREE — Pro unlock block */}
                   <div style={{ marginBottom: 16 }}>
@@ -8138,6 +9289,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         { label: t('settings_hints', locale), desc: t('settings_desc_hints', locale) },
                         { label: t('settings_subscriptions', locale), desc: t('settings_desc_subscriptions', locale) },
                         { label: t('settings_privacy_pro', locale), desc: t('settings_desc_privacy_pro', locale) },
+                        { label: t('settings_event_calendar', locale), desc: t('settings_desc_event_calendar', locale) },
                       ].map((row) => (
                         <div key={row.label}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -8177,6 +9329,33 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         </div>
                       </div>
                     )}
+
+                    {/* Promo-PRO status — persistent, survives refresh */}
+                    {proSource === 'promo' && promoPro && (
+                      <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+                          background: `${C.green}12`, borderRadius: 10, border: `1px solid ${C.green}25`,
+                        }}>
+                          <span style={{ fontSize: 15 }}>🎁</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
+                            {t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }) })}
+                          </span>
+                        </div>
+                        <button
+                          style={{ ...btnPrimary, width: '100%', marginTop: 10, background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, fontSize: 14, padding: '12px 0' }}
+                          onClick={() => showUpsell('wishlist_limit')}
+                        >
+                          {t('promo_keep_pro', locale)}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Paid PRO + accepted promo fallback B */}
+                    {proSource === 'subscription' && promoPro === null && (() => {
+                      // Check if user has an accepted_for_paid redemption (we don't have this in state yet, so skip for now)
+                      return null;
+                    })()}
                   </div>
 
                   {/* Plan action buttons */}
@@ -8198,6 +9377,71 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         {cancelSubLoading ? t('settings_resuming', locale) : t('settings_resume_sub', locale)}
                       </button>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Promo code input — shown for PRO users too (promo-PRO or paid, for future codes) */}
+              {planInfo.code === 'PRO' && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>
+                    {t('promo_title', locale)}
+                  </div>
+                  <div style={{ background: C.card, borderRadius: 16, padding: 16, border: `1px solid ${C.border}` }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <input
+                        id="promo-input-pro"
+                        type="text"
+                        placeholder={t('promo_placeholder', locale)}
+                        style={{
+                          width: '100%', padding: '12px 14px', fontSize: 14, fontWeight: 500,
+                          background: C.surface, color: C.text, border: `1px solid ${C.borderLight}`,
+                          borderRadius: 12, outline: 'none', fontFamily: font, boxSizing: 'border-box',
+                        }}
+                        autoCapitalize="characters"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).blur();
+                            document.getElementById('promo-activate-btn-pro')?.click();
+                          }
+                        }}
+                      />
+                      <button
+                        id="promo-activate-btn-pro"
+                        style={{ ...btnPrimary, width: '100%', padding: '12px 0', fontSize: 15, fontWeight: 600, borderRadius: 12 }}
+                        onClick={async () => {
+                          const input = document.getElementById('promo-input-pro') as HTMLInputElement | null;
+                          if (!input?.value?.trim()) return;
+                          const code = input.value.trim();
+                          const btn = document.getElementById('promo-activate-btn-pro') as HTMLButtonElement | null;
+                          if (input) input.disabled = true;
+                          if (btn) { btn.disabled = true; btn.textContent = t('promo_activating', locale); }
+                          try {
+                            const r = await tgFetch('/tg/promo/apply', { method: 'POST', body: JSON.stringify({ code }) });
+                            const data = await r.json() as any;
+                            if (r.ok) {
+                              if (data.status === 'activated' || data.status === 'already_active') {
+                                pushToast(t(data.status === 'already_active' ? 'promo_already_active' : 'promo_success', locale, { date: data.expiresAt ? new Date(data.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US') : '' }), 'success');
+                                if (input) input.value = '';
+                                loadWishlists().catch(() => {});
+                              } else if (data.status === 'accepted_for_paid') {
+                                pushToast(t('promo_accepted_paid', locale), 'success');
+                                if (input) input.value = '';
+                              }
+                            } else {
+                              const errKey = data.error === 'already_used' ? 'promo_already_used' : data.error === 'invalid_code' ? 'promo_invalid' : data.error === 'campaign_exhausted' ? 'promo_campaign_exhausted' : 'promo_error';
+                              pushToast(t(errKey, locale), 'error');
+                            }
+                          } catch { pushToast(t('promo_error', locale), 'error'); }
+                          finally {
+                            if (input) input.disabled = false;
+                            if (btn) { btn.disabled = false; btn.textContent = t('promo_activate', locale); }
+                          }
+                        }}
+                      >
+                        {t('promo_activate', locale)}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -8436,8 +9680,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     // Funnel = уникальные пользователи
                     const funnelSteps = godStats ? [
                       { label: 'Все пользователи',                    value: godStats.funnel.totalUsers },
-                      { label: 'Создали хотя бы один вишлист',        value: godStats.funnel.usersWithWishlist },
-                      { label: 'Создали хотя бы одно желание',        value: godStats.funnel.usersWithItem },
+                      { label: 'Есть любой вишлист (вкл. черновики)', value: godStats.funnel.usersWithAnyWishlist ?? godStats.funnel.usersWithWishlist },
+                      { label: 'Создали обычный вишлист',             value: godStats.funnel.usersWithWishlist },
+                      { label: 'Добавили желание (обычн. вишлист)',   value: godStats.funnel.usersWithItem },
+                      { label: 'Добавили желание (вкл. черновики)',   value: godStats.funnel.usersWithItemInAny ?? godStats.funnel.usersWithItem },
                       { label: 'Перешли хотя бы по одной ссылке',    value: godStats.funnel.usersWithLinkOpen ?? godStats.funnel.usersWhoInitiatedShare },
                       { label: 'Забронировали хотя бы один подарок', value: godStats.funnel.usersWithReservation },
                     ] : [];
@@ -8677,7 +9923,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                       );
                                     })()}
 
-                                    {/* ── Onboarding A/B test (30д) ── */}
+                                    {/* ── Onboarding metrics (historical A/B + main v2) ── */}
                                     {godStats.onboardingAB && (() => {
                                       const ab = godStats.onboardingAB!;
                                       const v1s = ab.started['v1_demo'] ?? 0;
@@ -8691,7 +9937,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                       return (
                                         <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
                                           <div style={{ fontSize: 10, fontWeight: 700, color: '#7C6AFF', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                            🧪 Onboarding A/B (30д)
+                                            📊 Onboarding (v2 main + historical)
                                           </div>
                                           {/* Header */}
                                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -8754,6 +10000,160 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           );
                         })()}
                       </div>
+                    );
+                  })()}
+
+                  {/* ─── Retention / Win-back metrics (rewritten for clarity) ─── */}
+                  {godMode && (() => {
+                    const segNames: Record<string, string> = { S1: t('ret_seg_s1', locale), S2: t('ret_seg_s2', locale), S3: t('ret_seg_s3', locale), S4: t('ret_seg_s4', locale) };
+                    const segTarget: Record<string, string> = { S1: t('ret_seg_target_s1', locale), S2: t('ret_seg_target_s2', locale), S3: t('ret_seg_target_s3', locale), S4: t('ret_seg_target_s4', locale) };
+                    const touchLabel = (seg: string, tn: number) => `${seg} · ${tn === 1 ? t('ret_wave_1', locale) : tn === 2 ? t('ret_wave_2', locale) : t('ret_wave_3', locale)}`;
+                    const loadRetention = async (period: number) => {
+                      setRetentionLoading(true);
+                      try { const r = await tgFetch(`/tg/me/retention-stats?period=${period}`); if (r.ok) setRetentionStats(await r.json()); } catch {}
+                      setRetentionLoading(false);
+                    };
+                    return (
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                      <button
+                        onClick={async () => {
+                          if (retentionOpen) { setRetentionOpen(false); return; }
+                          setRetentionOpen(true);
+                          await loadRetention(retentionPeriod);
+                        }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', padding: 0, textAlign: 'left' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#34D399', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                            📊 Retention & Win-back
+                          </span>
+                          <span style={{ fontSize: 14, color: C.textMuted }}>{retentionOpen ? '▾' : '▸'}</span>
+                        </div>
+                      </button>
+
+                      {retentionOpen && retentionLoading && (
+                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>Загрузка…</div>
+                      )}
+
+                      {retentionOpen && retentionStats && (() => {
+                        const o = retentionStats.overview;
+                        const dbg = retentionStats.debug;
+                        const kpi = (label: string, value: number | string, color: string, hint?: string) => (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                            <span style={{ fontSize: 11, color: C.textMuted }}>{label}{hint ? <span style={{ fontSize: 9, color: '#555', marginLeft: 4 }}>({hint})</span> : null}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+                          </div>
+                        );
+                        const sectionTitle = (text: string) => (
+                          <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5, marginTop: 10 }}>{text}</div>
+                        );
+                        const card = (children: React.ReactNode) => (
+                          <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>{children}</div>
+                        );
+
+                        return (
+                          <div style={{ marginTop: 8 }}>
+                            {/* Period selector */}
+                            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                              {[7, 30, 90].map(d => (
+                                <button key={d}
+                                  style={{
+                                    fontSize: 11, padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                                    background: retentionPeriod === d ? '#34D399' : C.surface,
+                                    color: retentionPeriod === d ? '#000' : C.textMuted, fontWeight: 600,
+                                  }}
+                                  onClick={() => { setRetentionPeriod(d); void loadRetention(d); }}
+                                >{d} дн.</button>
+                              ))}
+                            </div>
+
+                            {/* ── Коммуникации ── */}
+                            {sectionTitle('Коммуникации')}
+                            {card(<>
+                              {kpi('Отправлено сообщений', o.sent, C.text)}
+                              {kpi('Доставлено', o.delivered, C.text)}
+                              {kpi('Охвачено пользователей', o.uniqueUsers, C.text)}
+                              {kpi('Доставляемость', o.delivered > 0 && o.sent > 0 ? `${Math.round(o.delivered / o.sent * 100)}%` : '—', C.text)}
+                            </>)}
+
+                            {/* ── Возврат пользователей ── */}
+                            {sectionTitle('Возврат пользователей')}
+                            {card(<>
+                              {kpi('Вернулись за 24ч', o.returned24h, '#FBBF24', 'от отправки')}
+                              {kpi('Вернулись за 72ч', o.returned72h, '#34D399', 'primary')}
+                              {kpi('Вернулись за 7д', o.returned7d, '#34D399')}
+                              {kpi('Целевое действие за 7д', o.targetCompleted7d, '#7C6AFF')}
+                              <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
+                                {kpi('Конверсия возврата 72ч', o.returnRate72h, '#34D399', 'ret72h / delivered')}
+                                {kpi('Конверсия в действие 7д', o.targetRate7d ?? '—', '#7C6AFF', 'target / delivered')}
+                              </div>
+                            </>)}
+
+                            {/* ── Промо (WISHPRO) ── */}
+                            {sectionTitle('Промо (WISHPRO)')}
+                            {card(<>
+                              {kpi('Назначено в touch', o.promoAssigned, C.text, 'touch + offerCode')}
+                              {kpi('Доставлено с промо', o.promoDelivered, C.text, 'delivered + offerCode')}
+                              {kpi('Активировано', o.promoRedeemed, '#34D399', 'redeemed after touch')}
+                              <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
+                                {kpi('PRO-доступы активны', o.activeGrants, '#34D399')}
+                                {kpi('PRO-доступы истекли', o.expiredGrants, C.textMuted)}
+                              </div>
+                            </>)}
+
+                            {/* ── По сегментам ── */}
+                            {sectionTitle('По сегментам')}
+                            {(retentionStats.bySegment as any[]).filter((r: any) => r.sent > 0).map((r: any) => (
+                              <div key={r.segment} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#34D399' }}>{segNames[r.segment] || r.segment}</span>
+                                  <span style={{ fontSize: 9, color: C.textMuted, background: C.bg, padding: '2px 6px', borderRadius: 4 }}>{segTarget[r.segment] || '—'}</span>
+                                </div>
+                                {kpi('Отправлено', r.sent, C.text)}
+                                {kpi('Доставлено', r.delivered, C.text)}
+                                {kpi('Возврат 72ч', r.returned72h, '#FBBF24')}
+                                {kpi('Действие 7д', r.targetCompleted7d, '#7C6AFF')}
+                                {kpi('Конв. возврата', r.returnRate72h, '#34D399')}
+                                {kpi('Конв. действия', r.targetRate7d ?? '—', '#7C6AFF')}
+                                {(r.promoDelivered > 0 || r.promoRedeemed > 0) && <>
+                                  <div style={{ marginTop: 3, paddingTop: 3, borderTop: `1px solid ${C.border}` }}>
+                                    {kpi('Промо доставлено', r.promoDelivered, C.text)}
+                                    {kpi('Промо активировано', r.promoRedeemed, '#34D399')}
+                                  </div>
+                                </>}
+                              </div>
+                            ))}
+
+                            {/* ── По сообщениям (волны) ── */}
+                            {(retentionStats.byTouch as any[]).length > 0 && (<>
+                              {sectionTitle('По волнам (touch)')}
+                              {(retentionStats.byTouch as any[]).map((r: any) => (
+                                <div key={`${r.segment}-${r.touchNumber}`} style={{ background: C.surface, borderRadius: 8, padding: '8px 12px', marginBottom: 4 }}>
+                                  <div style={{ fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 3 }}>{touchLabel(r.segment, r.touchNumber)}</div>
+                                  <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.6 }}>
+                                    {r.sent} отпр · {r.delivered} дост · <span style={{ color: '#FBBF24' }}>{r.returned72h} верн.</span> · <span style={{ color: '#7C6AFF' }}>{r.targetCompleted7d} дейст.</span>
+                                    {r.promoDelivered > 0 && <> · <span style={{ color: C.text }}>{r.promoDelivered} промо</span></>}
+                                    {r.promoRedeemed > 0 && <> · <span style={{ color: '#34D399' }}>{r.promoRedeemed} актив.</span></>}
+                                  </div>
+                                </div>
+                              ))}
+                            </>)}
+
+                            {/* ── Debug / dev info ── */}
+                            {dbg && (
+                              <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `1px dashed ${C.border}` }}>
+                                <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 3 }}>🔍 Debug</div>
+                                <div style={{ fontSize: 9, color: '#555', lineHeight: 1.6 }}>
+                                  Всего touches за период: {dbg.totalTouchesInPeriod}<br />
+                                  Исключено (test/godMode): {dbg.excludedTestUsers}<br />
+                                  Test user IDs: {dbg.testUserIds?.join(', ') || '—'}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                     );
                   })()}
                 </div>
@@ -9002,6 +10402,43 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <span style={{ fontSize: 12, color: C.textMuted }}>{t('settings_coming_soon', locale)}</span>
                   </div>
                 </div>
+                {/* Card display mode — only for canary + PRO users */}
+                {CARD_REDESIGN_ENABLED && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('settings_card_layout', locale)}</div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {(['auto', 'showcase', 'compact'] as const).map(mode => {
+                        const isActive = cardDisplayMode === mode;
+                        const needsPro = mode !== 'auto' && planInfo.code !== 'PRO';
+                        const label = mode === 'auto' ? t('settings_card_auto', locale)
+                          : mode === 'showcase' ? t('settings_card_showcase', locale)
+                          : t('settings_card_compact', locale);
+                        return (
+                          <button
+                            key={mode}
+                            onClick={() => {
+                              if (needsPro) { showUpsell('wishlist_limit'); return; }
+                              // Optimistic update — instant UI feedback
+                              setCardDisplayMode(mode);
+                              patchSettings({ appBehavior: { ...settingsData?.appBehavior, cardDisplayMode: mode } });
+                            }}
+                            style={{
+                              flex: 1, padding: '8px 6px', borderRadius: 10, cursor: 'pointer',
+                              fontSize: 13, fontWeight: 600, fontFamily: font,
+                              background: isActive ? C.accentSoft : C.surface,
+                              color: isActive ? C.accent : needsPro ? C.textMuted : C.text,
+                              border: `1.5px solid ${isActive ? C.accent + '40' : C.borderLight}`,
+                              opacity: needsPro ? 0.5 : 1,
+                            }}
+                          >
+                            {label}{needsPro ? ' 👑' : ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>{t('settings_card_auto_hint', locale)}</div>
+                  </div>
+                )}
               </SettingsSection>
 
               {/* Support */}
@@ -9180,10 +10617,524 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         </div>
       )}
 
+      {/* ── Bulk action bottom bar ── */}
+      {bulkSelectionMode && bulkSelectedIds.size > 0 && screen === 'wishlist-detail' && (
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 60,
+          background: C.surface, borderTop: `1px solid ${C.border}`,
+          padding: '12px 16px', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+            <button
+              disabled={bulkActionLoading}
+              onClick={async () => {
+                const ids = [...bulkSelectedIds];
+                const hasReserved = items.filter(i => ids.includes(i.id) && i.status === 'reserved').length > 0;
+                if (hasReserved && !confirm(t('bulk_confirm_delete_reserved', locale))) return;
+                setBulkActionLoading(true);
+                try {
+                  const r = await tgFetch('/tg/items/bulk-delete', { method: 'POST', body: JSON.stringify({ itemIds: ids }) });
+                  const data = await r.json() as any;
+                  pushToast(t('bulk_success_delete', locale, { count: data.deleted ?? ids.length }), 'success');
+                  setItems(prev => prev.filter(i => !ids.includes(i.id)));
+                } catch { pushToast(t('toast_save_error', locale), 'error'); }
+                setBulkSelectionMode(false); setBulkSelectedIds(new Set()); setBulkActionLoading(false);
+              }}
+              style={{ ...btnBase, background: C.redSoft, color: C.red, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+            >
+              {t('bulk_delete', locale)}
+            </button>
+            <button
+              disabled={bulkActionLoading}
+              onClick={async () => {
+                const ids = [...bulkSelectedIds];
+                setBulkActionLoading(true);
+                try {
+                  const r = await tgFetch('/tg/items/bulk-archive', { method: 'POST', body: JSON.stringify({ itemIds: ids }) });
+                  const data = await r.json() as any;
+                  if (data.failureCount > 0) pushToast(t('bulk_partial', locale, { success: data.successCount, total: ids.length }), 'info');
+                  else pushToast(t('bulk_success_archive', locale, { count: data.successCount }), 'success');
+                  setItems(prev => prev.filter(i => !ids.includes(i.id) || data.results?.find((r: any) => r.itemId === i.id && !r.ok)));
+                } catch { pushToast(t('toast_save_error', locale), 'error'); }
+                setBulkSelectionMode(false); setBulkSelectedIds(new Set()); setBulkActionLoading(false);
+              }}
+              style={{ ...btnBase, background: C.orangeSoft, color: C.orange, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+            >
+              {t('bulk_archive', locale)}
+            </button>
+            <button
+              disabled={bulkActionLoading}
+              onClick={() => setShowBulkTargetPicker('move')}
+              style={{ ...btnBase, background: C.accentSoft, color: C.accent, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+            >
+              {t('bulk_move', locale)}
+            </button>
+            <button
+              disabled={bulkActionLoading}
+              onClick={() => setShowBulkTargetPicker('copy')}
+              style={{ ...btnBase, background: C.greenSoft, color: C.green, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+            >
+              {t('bulk_copy', locale)}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          GIFT NOTES — Поводы и идеи (v2.1)
+          ═══════════════════════════════════════════════════════════════ */}
+
+      {(() => {
+        // Shared input component with clear button + char counter
+        const GnInput = ({ value, onChange, placeholder, maxLen, multiline }: { value: string; onChange: (v: string) => void; placeholder?: string; maxLen?: number; multiline?: boolean }) => (
+          <div style={{ position: 'relative' as const }}>
+            {multiline ? (
+              <textarea value={value} onChange={e => { if (maxLen && e.target.value.length > maxLen) return; onChange(e.target.value); }} placeholder={placeholder}
+                style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const, minHeight: 60, resize: 'none' as const }} />
+            ) : (
+              <input value={value} onChange={e => { if (maxLen && e.target.value.length > maxLen) return; onChange(e.target.value); }} placeholder={placeholder}
+                style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+            )}
+            {value && <button onClick={() => onChange('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>}
+            {maxLen && <div style={{ fontSize: 10, color: value.length > maxLen * 0.9 ? '#FBBF24' : '#444', textAlign: 'right' as const, marginTop: 2 }}>{value.length} / {maxLen}</div>}
+          </div>
+        );
+        return null;
+      })()}
+
+      {/* Event Calendar — premium onboarding/paywall */}
+      {screen === 'gift-notes-paywall' && (
+        <div style={{ padding: '0 0 calc(90px + env(safe-area-inset-bottom))', animation: 'fadeIn 0.3s ease' }}>
+          {/* Hero zone */}
+          <div style={{ background: 'linear-gradient(160deg, #1a1130 0%, #0d1628 60%, #091520 100%)', padding: '40px 24px 30px', textAlign: 'center', borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}>
+            <div style={{ fontSize: 56, marginBottom: 12, filter: 'drop-shadow(0 0 20px rgba(251,191,36,0.3))' }}>🎁📅</div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#fff', fontFamily: font, margin: '0 0 8px', lineHeight: 1.3 }}>
+              {locale === 'ru' ? 'Не забывай важные даты и подарки' : 'Never forget important dates and gifts'}
+            </h1>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5, margin: 0 }}>
+              {locale === 'ru' ? 'Храни события, идеи и будущие подарки в одном месте. Смотри, сколько дней осталось, и готовься заранее без суеты.' : 'Keep occasions, ideas and future gifts in one place. See how many days are left and prepare without the rush.'}
+            </p>
+          </div>
+
+          {/* Value bullets */}
+          <div style={{ padding: '20px 24px 0' }}>
+            {[
+              { icon: '📋', text: locale === 'ru' ? 'Все важные события под рукой' : 'All important events at hand' },
+              { icon: '💡', text: locale === 'ru' ? 'Идеи подарков можно сохранять заранее' : 'Save gift ideas way ahead of time' },
+              { icon: '⏳', text: locale === 'ru' ? 'Счётчик дней помогает ничего не забыть' : 'Day counter helps you never forget' },
+              { icon: '🎯', text: locale === 'ru' ? 'Удобно планировать подарки для близких' : 'Easily plan gifts for loved ones' },
+            ].map((b, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: i < 3 ? `1px solid ${C.border}` : 'none' }}>
+                <span style={{ fontSize: 20, width: 32, textAlign: 'center', flexShrink: 0 }}>{b.icon}</span>
+                <span style={{ fontSize: 14, color: C.text, lineHeight: 1.4 }}>{b.text}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Pricing block */}
+          <div style={{ padding: '20px 24px' }}>
+            <div style={{ background: C.surface, borderRadius: 16, padding: '16px 18px', border: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 14 }}>⭐</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{locale === 'ru' ? 'Разовая покупка' : 'One-time purchase'}</span>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, fontFamily: font, marginBottom: 4 }}>{gnAccess.priceXtr} Stars</div>
+              <div style={{ fontSize: 12, color: C.textMuted }}>{locale === 'ru' ? 'Навсегда. Без подписки.' : 'Forever. No subscription.'}</div>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}`, fontSize: 12, color: '#34D399', fontWeight: 600 }}>
+                ✓ {locale === 'ru' ? 'Также входит в подписку Pro' : 'Also included in Pro subscription'}
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky CTA */}
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom))', background: `linear-gradient(180deg, transparent, ${C.bg} 20%)`, zIndex: 50 }}>
+            <button onClick={async () => {
+              try {
+                const r = await tgFetch('/tg/billing/gift-notes/checkout', { method: 'POST' });
+                if (r.ok) {
+                  const d = await r.json() as { invoiceUrl?: string; alreadyUnlocked?: boolean };
+                  if (d.alreadyUnlocked) {
+                    const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
+                    if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
+                    setScreen('gift-notes');
+                  } else if (d.invoiceUrl) {
+                    try { window.Telegram?.WebApp?.openInvoice?.(d.invoiceUrl, async (status: string) => {
+                      if (status === 'paid') {
+                        const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
+                        if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
+                        pushToast(locale === 'ru' ? 'Доступ открыт!' : 'Unlocked!', 'success');
+                        setGnLoading(true);
+                        try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
+                        setGnLoading(false);
+                        setScreen('gift-notes');
+                      }
+                    }); } catch { window.open(d.invoiceUrl, '_blank'); }
+                  }
+                }
+              } catch { pushToast('Error', 'error'); }
+            }} style={{ width: '100%', padding: '15px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: `0 6px 20px rgba(124,106,255,0.35)` }}>
+              {t('gn_upsell_cta', locale, { price: gnAccess.priceXtr })}
+            </button>
+            <button onClick={() => setScreen('my-wishlists')} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: font, marginTop: 6 }}>
+              {t('gn_upsell_later', locale)}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Occasion list */}
+      {screen === 'gift-notes' && (() => {
+        const active = gnOccasions.filter((o: any) => o.status === 'ACTIVE' && o.daysUntil != null).sort((a: any, b: any) => (a.daysUntil ?? 999) - (b.daysUntil ?? 999));
+        const noDate = gnOccasions.filter((o: any) => o.status === 'ACTIVE' && o.daysUntil == null);
+        const done = gnOccasions.filter((o: any) => o.status === 'DONE');
+        const archived = gnOccasions.filter((o: any) => o.status === 'ARCHIVED');
+        const typeEmoji: Record<string, string> = { BIRTHDAY: '🎂', ANNIVERSARY: '💍', HOLIDAY: '🎄', OTHER: '🎁' };
+        const card = (o: any) => (
+          <div key={o.id} onClick={async () => {
+            const r = await tgFetch(`/tg/gift-occasions/${o.id}`);
+            if (r.ok) { setGnViewingOccasion((await r.json() as any).occasion); setGnShowActions(false); setGnShowEdit(false); setScreen('gift-notes-occasion'); }
+          }} style={{ background: C.surface, borderRadius: 14, padding: '14px 16px', marginBottom: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <span style={{ fontSize: 14 }}>{typeEmoji[o.type] ?? '🎁'}</span>
+                <span style={{ fontSize: 14, fontWeight: 650, color: o.status === 'DONE' ? '#34D399' : o.status === 'ARCHIVED' ? '#555' : C.text }}>{o.title}</span>
+                {o.status === 'DONE' && <span style={{ fontSize: 10, color: '#34D399' }}>✓</span>}
+              </div>
+              {o.personName && <div style={{ fontSize: 11, color: C.textMuted, marginLeft: 22 }}>{o.personName}</div>}
+              <div style={{ display: 'flex', gap: 6, marginTop: 4, marginLeft: 22 }}>
+                {o.status === 'ACTIVE' && o.daysUntil != null && (
+                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 600, background: o.daysUntil <= 7 ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.05)', color: o.daysUntil <= 7 ? '#FBBF24' : C.textMuted }}>
+                    {o.daysUntil === 0 ? t('gn_today', locale) : o.daysUntil > 0 ? t('gn_days_left', locale, { n: o.daysUntil }) : t('gn_days_overdue', locale, { n: Math.abs(o.daysUntil) })}
+                  </span>
+                )}
+                {o.ideasCount > 0 && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(124,106,255,0.1)', color: C.accent, fontWeight: 500 }}>{t('gn_ideas_count', locale, { n: o.ideasCount })}</span>}
+              </div>
+            </div>
+            <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>
+          </div>
+        );
+        const section = (title: string, items: any[]) => items.length > 0 ? (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 6 }}>{title}</div>
+            {items.map(card)}
+          </div>
+        ) : null;
+        return (
+          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 16px' }}>🎁 {t('gn_title', locale)}</h1>
+            {gnLoading && <div style={{ textAlign: 'center', color: C.textMuted, padding: 20 }}>...</div>}
+            {!gnLoading && gnOccasions.length === 0 && <div style={{ textAlign: 'center', padding: '40px 0', color: C.textMuted, fontSize: 14 }}>{t('gn_empty', locale)}</div>}
+            {section(t('gn_upcoming', locale), active)}
+            {section(t('gn_no_date', locale), noDate)}
+            {section(t('gn_done', locale), done)}
+            {section(t('gn_archive', locale), archived)}
+            {/* Full-width CTA at bottom */}
+            <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
+              style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: C.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: 8 }}>
+              + {t('gn_add_occasion', locale)}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* Occasion detail */}
+      {screen === 'gift-notes-occasion' && gnViewingOccasion && (() => {
+        const o = gnViewingOccasion;
+        const typeLabel = ({ BIRTHDAY: t('gn_type_birthday', locale), ANNIVERSARY: t('gn_type_anniversary', locale), HOLIDAY: t('gn_type_holiday', locale), OTHER: t('gn_type_other', locale) } as Record<string, string>)[o.type] ?? o.type;
+        const daysText = o.status !== 'ACTIVE' ? '' : o.daysUntil === 0 ? t('gn_today', locale) : o.daysUntil > 0 ? t('gn_days_left', locale, { n: o.daysUntil }) : o.daysUntil != null ? t('gn_days_overdue', locale, { n: Math.abs(o.daysUntil) }) : '';
+        const ideas = (o.ideas ?? []) as any[];
+        const refreshOccasion = async () => { const r = await tgFetch(`/tg/gift-occasions/${o.id}`); if (r.ok) setGnViewingOccasion((await r.json() as any).occasion); };
+        const refreshList = async () => { try { const r = await tgFetch('/tg/gift-occasions'); if (r.ok) setGnOccasions((await r.json() as any).occasions); } catch {} };
+        return (
+          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+            {/* Header with actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+              <div style={{ flex: 1 }}>
+                <h1 style={{ fontSize: 20, fontWeight: 800, color: o.status === 'DONE' ? '#34D399' : C.text, fontFamily: font, margin: 0 }}>{o.title}</h1>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{typeLabel}{o.personName ? ` · ${o.personName}` : ''}</div>
+              </div>
+              <button onClick={() => setGnShowActions(!gnShowActions)} style={{ background: 'none', border: 'none', fontSize: 18, color: C.textMuted, cursor: 'pointer', padding: '4px 0 4px 8px' }}>⋯</button>
+            </div>
+
+            {/* Actions menu */}
+            {gnShowActions && (
+              <div style={{ background: C.surface, borderRadius: 12, padding: '4px 0', marginBottom: 10, border: `1px solid ${C.border}` }}>
+                <button onClick={() => { setGnShowActions(false); setGnEditTitle(o.title); setGnEditPerson(o.personName ?? ''); setGnEditNote(o.note ?? ''); setGnShowEdit(true); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: C.text, cursor: 'pointer', fontFamily: font }}>✏️ {t('gn_edit_occasion', locale)}</button>
+                {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/complete`, { method: 'POST' }); pushToast(t('gn_occasion_completed', locale), 'success'); await refreshList(); setScreen('gift-notes'); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: '#34D399', cursor: 'pointer', fontFamily: font }}>✅ {t('gn_complete', locale)}</button>}
+                {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/archive`, { method: 'POST' }); pushToast(t('gn_archive_occasion', locale), 'success'); await refreshList(); setScreen('gift-notes'); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: C.textMuted, cursor: 'pointer', fontFamily: font }}>📦 {t('gn_archive_occasion', locale)}</button>}
+                <button onClick={async () => {
+                  setGnShowActions(false);
+                  if (!confirm(t('gn_confirm_delete', locale))) return;
+                  await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'DELETE' });
+                  pushToast(t('gn_occasion_deleted', locale), 'success');
+                  await refreshList();
+                  setScreen('gift-notes');
+                }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: '#EF4444', cursor: 'pointer', fontFamily: font }}>🗑 {t('gn_delete_occasion', locale)}</button>
+              </div>
+            )}
+
+            {/* Date + countdown */}
+            {o.eventDate && o.status === 'ACTIVE' && (
+              <div style={{ fontSize: 12, color: daysText && o.daysUntil <= 7 ? '#FBBF24' : C.textMuted, marginBottom: 8 }}>
+                {new Date(o.eventDate).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}{daysText ? ` · ${daysText}` : ''}
+              </div>
+            )}
+            {o.status === 'DONE' && <div style={{ fontSize: 12, color: '#34D399', marginBottom: 8, fontWeight: 600 }}>✓ {t('gn_occasion_completed', locale)}</div>}
+
+            {/* Description */}
+            {o.note && <div style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, marginBottom: 12, lineHeight: 1.5 }}>{o.note}</div>}
+
+            {/* Ideas section */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted }}>{t('gn_ideas_label', locale)} <span style={{ fontWeight: 400 }}>({ideas.length})</span></div>
+            </div>
+            {ideas.map((idea: any) => (
+              <div key={idea.id} style={{ background: C.surface, borderRadius: 12, padding: '12px 14px', marginBottom: 6, opacity: idea.status === 'DONE' ? 0.5 : 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, textDecoration: idea.status === 'DONE' ? 'line-through' : 'none', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{idea.text}</div>
+                {idea.link && <div style={{ fontSize: 11, color: C.accent, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{idea.link}</div>}
+                {idea.price != null && <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 2 }}>{idea.price.toLocaleString()} {idea.currency ?? '₽'}</div>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <span style={{ fontSize: 10, color: C.textMuted }}>{new Date(idea.createdAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' })}</span>
+                  {idea.status !== 'DONE' && <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}/complete`, { method: 'POST' }); await refreshOccasion(); pushToast(t('gn_idea_completed', locale), 'success'); }} style={{ fontSize: 10, color: '#34D399', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✓ {t('gn_complete', locale)}</button>}
+                  <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}`, { method: 'DELETE' }); await refreshOccasion(); }} style={{ fontSize: 10, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✕</button>
+                </div>
+              </div>
+            ))}
+
+            {/* Add idea CTA */}
+            <button onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }}
+              style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: C.accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: 8 }}>
+              + {t('gn_add_idea', locale)}
+            </button>
+
+            {/* Edit BottomSheet */}
+            <BottomSheet isOpen={gnShowEdit} onClose={() => setGnShowEdit(false)} title={t('gn_edit_occasion', locale)}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_title', locale)}</label>
+                  <div style={{ position: 'relative' as const }}>
+                    <input value={gnEditTitle} onChange={e => { if (e.target.value.length <= 150) setGnEditTitle(e.target.value); }} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+                    {gnEditTitle && <button onClick={() => setGnEditTitle('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnEditTitle.length} / 150</div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_person', locale)}</label>
+                  <div style={{ position: 'relative' as const }}>
+                    <input value={gnEditPerson} onChange={e => { if (e.target.value.length <= 50) setGnEditPerson(e.target.value); }} placeholder={t('gn_ph_person', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+                    {gnEditPerson && <button onClick={() => setGnEditPerson('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnEditPerson.length} / 50</div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_description', locale)}</label>
+                  <div style={{ position: 'relative' as const }}>
+                    <textarea value={gnEditNote} onChange={e => { if (e.target.value.length <= 300) setGnEditNote(e.target.value); }} placeholder={t('gn_ph_note', locale)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const, minHeight: 60, resize: 'none' as const }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnEditNote.length} / 300</div>
+                </div>
+                <button disabled={!gnEditTitle.trim()} onClick={async () => {
+                  await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'PATCH', body: JSON.stringify({ title: gnEditTitle.trim(), personName: gnEditPerson.trim() || null, note: gnEditNote.trim() || null }) });
+                  setGnShowEdit(false);
+                  pushToast(t('gn_occasion_updated', locale), 'success');
+                  await refreshOccasion();
+                }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnEditTitle.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}>{t('save', locale)}</button>
+              </div>
+            </BottomSheet>
+          </div>
+        );
+      })()}
+
+      {/* Create Occasion BottomSheet */}
+      <BottomSheet isOpen={showGnCreateOccasion} onClose={() => setShowGnCreateOccasion(false)} title={t('gn_add_occasion', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_title', locale)}</label>
+            <div style={{ position: 'relative' as const }}>
+              <input value={gnFormTitle} onChange={e => { if (e.target.value.length <= 150) setGnFormTitle(e.target.value); }} placeholder={t('gn_ph_title', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+              {gnFormTitle && <button onClick={() => setGnFormTitle('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+            </div>
+            <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnFormTitle.length} / 150</div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_person', locale)}</label>
+            <div style={{ position: 'relative' as const }}>
+              <input value={gnFormPerson} onChange={e => { if (e.target.value.length <= 50) setGnFormPerson(e.target.value); }} placeholder={t('gn_ph_person', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+              {gnFormPerson && <button onClick={() => setGnFormPerson('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+            </div>
+            <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnFormPerson.length} / 50</div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_date', locale)}</label>
+            <input type="date" value={gnFormDate} onChange={e => setGnFormDate(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_type', locale)}</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'OTHER'] as const).map(tp => (
+                <button key={tp} onClick={() => setGnFormType(tp)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormType === tp ? C.accent : C.surface, color: gnFormType === tp ? '#fff' : C.textMuted, whiteSpace: 'nowrap' as const }}>{({ BIRTHDAY: t('gn_type_birthday', locale), ANNIVERSARY: t('gn_type_anniversary', locale), HOLIDAY: t('gn_type_holiday', locale), OTHER: t('gn_type_other', locale) })[tp]}</button>
+              ))}
+            </div>
+          </div>
+          {gnFormDate && (
+            <div>
+              <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_recurrence', locale)}</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['NONE', 'YEARLY', 'MONTHLY'] as const).map(r => (
+                  <button key={r} onClick={() => setGnFormRecurrence(r)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormRecurrence === r ? C.accent : C.surface, color: gnFormRecurrence === r ? '#fff' : C.textMuted, whiteSpace: 'nowrap' as const }}>{({ NONE: t('gn_recurrence_none', locale), YEARLY: t('gn_recurrence_yearly', locale), MONTHLY: t('gn_recurrence_monthly', locale) })[r]}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button disabled={!gnFormTitle.trim()} onClick={async () => {
+            const r = await tgFetch('/tg/gift-occasions', { method: 'POST', body: JSON.stringify({ title: gnFormTitle.trim(), eventDate: gnFormDate || undefined, type: gnFormType, recurrence: gnFormDate ? gnFormRecurrence : 'NONE', personName: gnFormPerson.trim() || undefined }) });
+            if (r.ok) {
+              setShowGnCreateOccasion(false);
+              pushToast(t('gn_add_occasion', locale), 'success');
+              try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
+            } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
+          }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnFormTitle.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}>{t('gn_add_occasion', locale)}</button>
+        </div>
+      </BottomSheet>
+
+      {/* Add Idea BottomSheet */}
+      <BottomSheet isOpen={showGnAddIdea} onClose={() => setShowGnAddIdea(false)} title={t('gn_add_idea', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_idea_text', locale)}</label>
+            <div style={{ position: 'relative' as const }}>
+              <input value={gnIdeaText} onChange={e => { if (e.target.value.length <= 500) setGnIdeaText(e.target.value); }} placeholder={t('gn_ph_idea', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+              {gnIdeaText && <button onClick={() => setGnIdeaText('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+            </div>
+            <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnIdeaText.length} / 500</div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_idea_link', locale)}</label>
+            <div style={{ position: 'relative' as const }}>
+              <input value={gnIdeaLink} onChange={e => setGnIdeaLink(e.target.value)} placeholder={t('gn_ph_link', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+              {gnIdeaLink && <button onClick={() => setGnIdeaLink('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+            </div>
+          </div>
+          <button disabled={!gnIdeaText.trim()} onClick={async () => {
+            if (!gnViewingOccasion) return;
+            const r = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}/ideas`, { method: 'POST', body: JSON.stringify({ text: gnIdeaText.trim(), link: gnIdeaLink.trim() || undefined }) });
+            if (r.ok) {
+              setShowGnAddIdea(false);
+              pushToast(t('gn_idea_saved', locale), 'success');
+              const or = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}`);
+              if (or.ok) setGnViewingOccasion((await or.json() as any).occasion);
+            } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
+          }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnIdeaText.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}>{t('gn_add_idea', locale)}</button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Copy item to wishlist picker — triggered from item-detail ── */}
+      <BottomSheet isOpen={showCopyPicker} onClose={() => { setShowCopyPicker(false); setCopyingItem(null); }} title={t('item_copy_title', locale)}>
+        {(() => {
+          const copyTargets = getWritableTargets(wishlists, { currentWlId: currentWl?.id, draftsWlId: draftsWishlistId });
+          return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {copyTargets.map((wl) => (
+            <button
+              key={wl.id}
+              style={{
+                ...btnGhost, width: '100%', textAlign: 'start', padding: '14px 16px',
+                borderRadius: 12, background: C.surface, border: `1px solid ${C.border}`,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+              onClick={async () => {
+                if (!copyingItem) return;
+                try {
+                  const r = await tgFetch(`/tg/items/${copyingItem.id}/copy`, {
+                    method: 'POST', body: JSON.stringify({ targetWishlistId: wl.id }),
+                  });
+                  if (!r.ok) {
+                    const body = await r.json().catch(() => ({})) as { error?: string };
+                    pushToast(body.error || t('toast_save_error', locale), 'error');
+                    return;
+                  }
+                  const data = await r.json() as { item: any; targetWishlistTitle: string };
+                  pushToast(t('item_copied_toast', locale, { name: data.targetWishlistTitle || wl.title }), 'success');
+                } catch {
+                  pushToast(t('toast_save_error', locale), 'error');
+                }
+                setShowCopyPicker(false);
+                setCopyingItem(null);
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>{t('wishes_count', locale, { count: wl.itemCount })}</div>
+              </div>
+              <span style={{ color: C.textMuted }}>›</span>
+            </button>
+          ))}
+          {copyTargets.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '24px 16px', color: C.textMuted, fontSize: 14, lineHeight: 1.5 }}>
+              {t('copy_no_other_wishlist', locale)}
+            </div>
+          )}
+        </div>
+          );
+        })()}
+      </BottomSheet>
+
+      {/* ── Bulk move/copy target picker ── */}
+      <BottomSheet isOpen={showBulkTargetPicker !== null} onClose={() => setShowBulkTargetPicker(null)} title={showBulkTargetPicker === 'move' ? t('bulk_move', locale) : t('bulk_copy', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {getWritableTargets(wishlists, { currentWlId: currentWl?.id, draftsWlId: draftsWishlistId }).map(wl => (
+            <button
+              key={wl.id}
+              disabled={bulkActionLoading}
+              onClick={async () => {
+                const ids = [...bulkSelectedIds];
+                const action = showBulkTargetPicker;
+                setBulkActionLoading(true);
+                try {
+                  const endpoint = action === 'move' ? '/tg/items/bulk-move' : '/tg/items/bulk-copy';
+                  const r = await tgFetch(endpoint, { method: 'POST', body: JSON.stringify({ itemIds: ids, targetWishlistId: wl.id }) });
+                  const data = await r.json() as any;
+                  const successCount = action === 'move' ? (data.moved?.length ?? data.successCount ?? 0) : (data.successCount ?? 0);
+                  const total = ids.length;
+                  if (successCount < total) {
+                    pushToast(t('bulk_partial', locale, { success: successCount, total }), 'info');
+                  } else {
+                    pushToast(t(action === 'move' ? 'bulk_success_move' : 'bulk_success_copy', locale, { count: successCount }), 'success');
+                  }
+                  if (action === 'move') {
+                    const movedIds = data.moved ?? data.results?.filter((r: any) => r.ok).map((r: any) => r.itemId) ?? [];
+                    setItems(prev => prev.filter(i => !movedIds.includes(i.id)));
+                  }
+                } catch { pushToast(t('toast_save_error', locale), 'error'); }
+                setShowBulkTargetPicker(null);
+                setBulkSelectionMode(false); setBulkSelectedIds(new Set()); setBulkActionLoading(false);
+              }}
+              style={{
+                ...btnGhost, width: '100%', textAlign: 'start', padding: '14px 16px',
+                borderRadius: 12, background: C.surface, border: `1px solid ${C.border}`,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>{t('wishes_count', locale, { count: wl.itemCount })}</div>
+              </div>
+              <span style={{ color: C.textMuted }}>›</span>
+            </button>
+          ))}
+          {getWritableTargets(wishlists, { currentWlId: currentWl?.id, draftsWlId: draftsWishlistId }).length === 0 && (
+            <div style={{ textAlign: 'center', padding: '24px 16px', color: C.textMuted, fontSize: 14, lineHeight: 1.5 }}>
+              {t('copy_no_other_wishlist', locale)}
+            </div>
+          )}
+        </div>
+      </BottomSheet>
+
       {/* ── Move item to wishlist picker — triggered from Drafts screen or item-detail ── */}
       <BottomSheet isOpen={showMovePicker} onClose={() => { setShowMovePicker(false); setMovingItem(null); }} title={t('drafts_move_title', locale)}>
         {(() => {
-          const moveTargets = wishlists.filter(wl => wl.id !== draftsWishlistId);
+          const currentItemWishlistId = movingItem?.wishlistId;
+          const moveTargets = getWritableTargets(wishlists, { currentWlId: currentItemWishlistId, draftsWlId: draftsWishlistId });
           const calledFromItemDetail = screen === 'item-detail';
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -9222,7 +11173,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ── Bulk move picker ── */}
       <BottomSheet isOpen={showBulkMovePicker} onClose={() => { if (!draftsBulkLoading) setShowBulkMovePicker(false); }} title={t('drafts_move_title', locale)}>
         {(() => {
-          const moveTargets = wishlists.filter(wl => wl.id !== draftsWishlistId);
+          const moveTargets = getWritableTargets(wishlists, { currentWlId: null, draftsWlId: draftsWishlistId });
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {moveTargets.length === 0 && (
@@ -9551,6 +11502,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <span style={{ fontSize: 20 }}>↕️</span>
             <span>{t('wl_reorder', locale)}</span>
           </button>
+          {/* Select multiple (bulk actions) */}
+          {items.length > 0 && (
+            <button
+              onClick={() => {
+                setShowWlManage(false);
+                setBulkSelectionMode(true);
+                setBulkSelectedIds(new Set());
+              }}
+              style={{
+                background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+                textAlign: 'start', cursor: 'pointer', fontFamily: font,
+                fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              }}
+            >
+              <span style={{ fontSize: 20 }}>☑️</span>
+              {t('bulk_select', locale)}
+            </button>
+          )}
           {/* Privacy settings */}
           <button
             onClick={() => {
@@ -10053,6 +12022,228 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         )}
       </BottomSheet>
       <BottomSheet isOpen={showItemForm} onClose={() => { blurActiveField(); setShowItemForm(false); resetItemForm(); }} title={editingItem ? t('item_form_edit', locale) : t('item_form_new', locale)}>
+        {/* ── Redesigned form for canary users ── */}
+        {CARD_REDESIGN_ENABLED ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Title */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_name', locale)}</div>
+            <input
+              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 15, fontWeight: 500, padding: '12px 14px' }}
+              placeholder={t('item_name_placeholder', locale)}
+              value={itemTitle}
+              onChange={(e) => setItemTitle(e.target.value)}
+            />
+          </div>
+          {/* URL with hint + preview */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_url', locale)}</div>
+            <input
+              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 14, padding: '12px 14px' }}
+              placeholder={t('item_url_placeholder', locale)}
+              value={itemUrl}
+              onChange={(e) => setItemUrl(e.target.value)}
+            />
+            {itemUrl.startsWith('http') && (() => {
+              try {
+                const domain = new URL(itemUrl).hostname.replace(/^www\./, '');
+                return (
+                  <div style={{ marginTop: 8, padding: '10px 14px', borderRadius: 12, background: 'rgba(124,106,255,0.05)', border: '1px solid rgba(124,106,255,0.1)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(124,106,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>🔗</div>
+                    <span style={{ fontSize: 13, color: C.accent, fontWeight: 600 }}>{domain}</span>
+                    <span style={{ marginLeft: 'auto', color: C.green, fontSize: 16 }}>✓</span>
+                  </div>
+                );
+              } catch { return null; }
+            })()}
+            <div style={{ fontSize: 10, color: '#3a3a44', marginTop: 4 }}>
+              {locale === 'ru' ? t('item_url_hint_ru', locale) : t('item_url_hint_global', locale)}
+            </div>
+          </div>
+          {/* Description — after URL */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('item_description', locale)}</div>
+            <textarea
+              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: 1.4, fontSize: 14 }}
+              maxLength={500}
+              placeholder={t('item_description_placeholder', locale)}
+              value={itemDescription}
+              ref={itemDescTextareaRef}
+              onChange={(e) => setItemDescription(e.target.value)}
+              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
+            />
+            <div style={{ fontSize: 10, color: '#3a3a44', textAlign: 'right', marginTop: 3 }}>{itemDescription.length}/500</div>
+          </div>
+          {/* Photo picker — refreshed */}
+          {(() => {
+            const photoPreviewSrc = itemPhotoDeleted ? null : (itemPhotoLocalUrl ?? (itemImageUrl || null));
+            const hasPhoto = !!(itemPhotoLocalUrl || (!itemPhotoDeleted && itemImageUrl));
+            return (
+          <div style={{ marginTop: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_photo', locale)}</div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div
+                onClick={() => { setPhotoError(null); setPhotoPickerImgErr(false); photoInputRef.current?.click(); }}
+                style={{
+                  width: 80, height: 80, borderRadius: 16, overflow: 'hidden', flexShrink: 0,
+                  background: '#1c1c22',
+                  border: hasPhoto ? 'none' : '2px dashed rgba(255,255,255,0.08)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', transition: 'border-color 0.2s',
+                }}
+              >
+                {photoPreviewSrc && !photoPickerImgErr ? (
+                  <img src={photoPreviewSrc} onError={() => setPhotoPickerImgErr(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                ) : (
+                  <span style={{ fontSize: 28, color: '#333' }}>+</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <button type="button" onClick={() => { setPhotoError(null); setPhotoPickerImgErr(false); photoInputRef.current?.click(); }}
+                  style={{ background: 'none', border: 'none', padding: 0, fontSize: 14, fontWeight: 500, color: C.accent, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  📎 {hasPhoto ? t('item_photo_replace', locale) : t('item_photo_select', locale)}
+                </button>
+                {hasPhoto && (
+                  <button type="button" onClick={handlePhotoDelete}
+                    style={{ background: 'none', border: 'none', padding: 0, fontSize: 14, fontWeight: 500, color: C.red, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    🗑 {t('item_photo_delete', locale)}
+                  </button>
+                )}
+                {!hasPhoto && <span style={{ fontSize: 11, color: '#333' }}>JPG, PNG, WebP · 5 MB</span>}
+                {photoError && <span style={{ fontSize: 12, color: C.red, lineHeight: 1.4 }}>{photoError}</span>}
+                {photoUploading && <span style={{ fontSize: 12, color: C.textMuted }}>{t('item_photo_uploading', locale)}</span>}
+              </div>
+            </div>
+            <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }} onChange={handlePhotoSelect} />
+          </div>
+            );
+          })()}
+          {/* Price — input left, currency right */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_price', locale)}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1.5px solid rgba(255,255,255,0.07)', borderRadius: 14, background: '#1c1c22', overflow: 'hidden' }}
+                onClick={() => priceInputRef.current?.focus()}>
+                <input
+                  ref={priceInputRef}
+                  style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: font, padding: '12px 14px', minWidth: 0, letterSpacing: '-0.02em' }}
+                  placeholder="0" type="text" inputMode="numeric"
+                  onFocus={(e) => handleTextareaFocus(e.currentTarget)}
+                  value={formatPriceForDisplay(itemPrice)}
+                  onChange={(e) => {
+                    const cursorPos = e.target.selectionStart ?? e.target.value.length;
+                    const displayedValue = e.target.value;
+                    const raw = parsePriceFromDisplay(displayedValue);
+                    const digitsBeforeCursor = parsePriceFromDisplay(displayedValue.slice(0, cursorPos)).length;
+                    setItemPrice(raw);
+                    requestAnimationFrame(() => {
+                      const input = priceInputRef.current;
+                      if (!input) return;
+                      const newFormatted = formatPriceForDisplay(raw);
+                      let digitsSeen = 0;
+                      let newPos = newFormatted.length;
+                      if (digitsBeforeCursor === 0) { newPos = 0; } else {
+                        for (let i = 0; i < newFormatted.length; i++) {
+                          if (/\d/.test(newFormatted[i]!)) { digitsSeen++; if (digitsSeen === digitsBeforeCursor) { newPos = i + 1; break; } }
+                        }
+                      }
+                      input.selectionStart = newPos; input.selectionEnd = newPos;
+                    });
+                  }}
+                />
+                <span style={{ paddingRight: 14, fontSize: 16, color: ({ RUB: '#7C6AFF', USD: '#34D399', EUR: '#60A5FA', GBP: '#FBBF24' } as Record<string, string>)[itemCurrency] ?? '#444', flexShrink: 0, userSelect: 'none', pointerEvents: 'none', opacity: 0.6 }}>
+                  {{ RUB: '₽', USD: '$', EUR: '€', GBP: '£' }[itemCurrency]}
+                </span>
+              </div>
+              {/* Collapsible currency selector — per-currency accent colors */}
+              {(() => {
+                const CUR_ACCENT: Record<string, string> = { RUB: '#7C6AFF', USD: '#34D399', EUR: '#60A5FA', GBP: '#FBBF24' };
+                const CUR_SYM: Record<string, string> = { RUB: '₽', USD: '$', EUR: '€', GBP: '£' };
+                const accent = CUR_ACCENT[itemCurrency] ?? '#7C6AFF';
+                return (
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                {currencyExpanded ? (
+                  (['RUB', 'USD', 'EUR', 'GBP'] as const).map(c => {
+                    const ca = CUR_ACCENT[c]!;
+                    const active = itemCurrency === c;
+                    return (
+                    <button key={c} type="button" onClick={() => { setItemCurrency(c); setCurrencyExpanded(false); }}
+                      style={{
+                        width: 40, height: 40, borderRadius: 12,
+                        border: `1.5px solid ${active ? ca + '40' : 'rgba(255,255,255,0.06)'}`,
+                        background: active ? ca + '18' : '#1c1c22',
+                        color: active ? ca : '#6B7280',
+                        fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                        transition: 'all 0.12s',
+                      }}>
+                      {CUR_SYM[c]}
+                    </button>
+                    );
+                  })
+                ) : (
+                  <button type="button" onClick={() => setCurrencyExpanded(true)}
+                    style={{
+                      width: 48, height: 48, borderRadius: 14,
+                      border: `1.5px solid ${accent}35`,
+                      background: accent + '12', color: accent,
+                      fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                      position: 'relative',
+                    }}>
+                    {CUR_SYM[itemCurrency]}
+                    <span style={{ position: 'absolute', bottom: 3, right: 6, fontSize: 8, color: accent + '80' }}>▾</span>
+                  </button>
+                )}
+              </div>
+                );
+              })()}
+            </div>
+          </div>
+          {/* Priority — refreshed with glow */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_priority_question', locale)}</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {getPriorities(locale).map((p) => {
+                const isSelected = itemPriority === p.value;
+                const pc = PRIO_COLOR[p.value];
+                const pb = PRIO_BG[p.value];
+                const pg = PRIO_GRADIENT[p.value];
+                return (
+                  <div key={p.value} onClick={() => setItemPriority(p.value as 1 | 2 | 3)} style={{
+                    flex: 1, padding: '14px 6px', borderRadius: 14, textAlign: 'center',
+                    cursor: 'pointer', transition: 'all 0.2s', position: 'relative', overflow: 'hidden',
+                    background: isSelected ? pb : '#1c1c22',
+                    border: `1.5px solid ${isSelected ? pc : 'rgba(255,255,255,0.06)'}`,
+                  }}>
+                    {isSelected && <div style={{ position: 'absolute', top: -1, left: 0, right: 0, height: 2, background: pg }} />}
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>{p.emoji}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: isSelected ? pc : C.text, letterSpacing: '0.02em' }}>{p.label}</div>
+                    <div style={{ fontSize: 9, color: '#444', marginTop: 2 }}>{p.sub}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {/* Submit — with priority emoji */}
+          <button
+            style={{
+              width: '100%', padding: '16px 0', borderRadius: 16, border: 'none',
+              fontSize: 17, fontWeight: 800, cursor: 'pointer', fontFamily: font,
+              letterSpacing: '-0.01em', transition: 'all 0.15s',
+              ...(itemTitle.trim()
+                ? { background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)', color: '#fff', boxShadow: '0 6px 24px rgba(124,106,255,0.35)' }
+                : { background: '#1c1c22', color: '#333', boxShadow: 'none' }),
+              opacity: (loading || !itemTitle.trim()) ? 0.5 : 1,
+            }}
+            onClick={() => void handleSaveItem()}
+            disabled={!itemTitle.trim() || loading}
+          >
+            {loading ? '…' : editingItem ? `💾 ${t('save', locale)}` : `${PRIO_EMOJI[itemPriority] ?? '✨'} ${t('item_add_btn', locale)}`}
+          </button>
+        </div>
+        ) : (
+        /* ── Original form for non-canary users ── */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_name', locale)}</label>
@@ -10269,6 +12460,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {loading ? '…' : editingItem ? `💾 ${t('save', locale)}` : t('item_add_btn', locale)}
           </button>
         </div>
+        )}
       </BottomSheet>
 
       {/* Delete confirmation */}
@@ -10329,6 +12521,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             { key: 'cancel_feat_hints' },
             { key: 'cancel_feat_subs' },
             { key: 'cancel_feat_privacy' },
+            { key: 'cancel_feat_calendar' },
           ];
 
           return (
@@ -10388,7 +12581,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </span>
                   <button
                     onClick={() => {
-                      try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
+                      try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch { /* ok */ }
+                      const url = `https://t.me/${botUsername}`;
+                      try {
+                        if (window.Telegram?.WebApp?.openTelegramLink) {
+                          window.Telegram.WebApp.openTelegramLink(url);
+                        } else {
+                          window.open(url, '_blank');
+                        }
+                      } catch { window.open(url, '_blank'); }
                     }}
                     style={{
                       flexShrink: 0, background: 'none', border: `1px solid ${C.border}`,

@@ -34,16 +34,52 @@ const app = express();
 app.use(
   cors({
     origin: (origin, cb) => {
-      // Allow non-browser requests (curl, server-to-server).
       if (!origin) return cb(null, true);
       if (origin === WEB_ORIGIN) return cb(null, true);
       return cb(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV', 'X-INTERNAL-KEY'],
+    credentials: true, // allow cookies for web session
   }),
 );
 app.use(express.json());
+
+// ─── Cookie parser for web sessions ────────────────────────────────────────
+// Using manual cookie parsing instead of cookie-parser to avoid extra dependency
+function parseCookies(req: Request): Record<string, string> {
+  const header = req.headers.cookie ?? '';
+  const cookies: Record<string, string> = {};
+  for (const pair of header.split(';')) {
+    const [k, ...vParts] = pair.trim().split('=');
+    if (k) cookies[k.trim()] = decodeURIComponent(vParts.join('='));
+  }
+  return cookies;
+}
+
+// ─── JWT Web Session helpers ─────────────────────────────────────────────────
+const JWT_SECRET = process.env.JWT_SECRET ?? process.env.BOT_TOKEN ?? 'dev-secret-not-for-prod';
+const JWT_EXPIRY_SECONDS = 30 * 24 * 3600; // 30 days
+
+function signWebSession(payload: { telegramId: string; firstName?: string }): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const body = Buffer.from(JSON.stringify({ ...payload, iat: now, exp: now + JWT_EXPIRY_SECONDS })).toString('base64url');
+  const sig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  return `${header}.${body}.${sig}`;
+}
+
+function verifyWebSession(token: string): { telegramId: string; firstName?: string } | null {
+  try {
+    const [header, body, sig] = token.split('.');
+    if (!header || !body || !sig) return null;
+    const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+    if (sig !== expectedSig) return null;
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return { telegramId: payload.telegramId, firstName: payload.firstName };
+  } catch { return null; }
+}
 
 // ─── File uploads ─────────────────────────────────────────────────────────────
 const UPLOAD_DIR = (process.env.UPLOAD_DIR ?? '').trim() || path.join(process.cwd(), 'uploads');
@@ -173,6 +209,31 @@ const publicReadLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' },
 });
 
+/** Require auth for public write actions (reserve, comment, etc.).
+ *  Accepts either X-TG-INIT-DATA or web session cookie.
+ *  Falls back to actorHash for legacy Telegram-embedded compatibility. */
+function requirePublicWriteAuth(req: Request, res: Response, next: NextFunction) {
+  // Path 1: Telegram initData
+  const botToken = process.env.BOT_TOKEN ?? '';
+  const initData = req.get('X-TG-INIT-DATA') ?? '';
+  if (initData && botToken) {
+    const user = validateTelegramInitData(initData, botToken);
+    if (user) { req.tgUser = user; return next(); }
+  }
+  // Path 2: Web session cookie
+  const cookies = parseCookies(req);
+  const session = cookies.wb_session ? verifyWebSession(cookies.wb_session) : null;
+  if (session) {
+    req.tgUser = { id: Number(session.telegramId) || 0, first_name: session.firstName ?? 'Web User' };
+    return next();
+  }
+  // Path 3: Legacy actorHash (still allowed for backward compat during transition)
+  // TODO Phase 1 completion: remove actorHash path and require full auth
+  const body = req.body as { actorHash?: string } | undefined;
+  if (body?.actorHash) return next();
+  return res.status(401).json({ error: 'Authentication required. Please log in.' });
+}
+
 const publicActionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
@@ -182,9 +243,19 @@ const publicActionLimiter = rateLimit({
 });
 
 // --- Shared helpers
-const ItemStatusSchema = z.enum(['AVAILABLE', 'RESERVED', 'PURCHASED', 'COMPLETED', 'DELETED']);
+const ItemStatusSchema = z.enum(['AVAILABLE', 'RESERVED', 'PURCHASED', 'COMPLETED', 'DELETED', 'ARCHIVED']);
 const ACTIVE_STATUSES = ['AVAILABLE', 'RESERVED', 'PURCHASED'] as const;
+const ARCHIVE_VIEW_STATUSES = ['DELETED', 'COMPLETED', 'ARCHIVED'] as const;
 const PrioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH']);
+
+// Normalize bare domain URLs like "audi.com" → "https://audi.com"
+const normalizeUrl = (val: string) => {
+  const v = val.trim();
+  if (!v) return v;
+  if (/^https?:\/\//i.test(v)) return v;
+  return `https://${v}`;
+};
+const zUrl = () => z.string().transform(normalizeUrl).pipe(z.string().url());
 
 // Sort logic lives in sort.ts (no external deps → easy to unit-test)
 import { ITEM_ORDER_BY, sortItemsJs, type SortableItem } from './sort.js';
@@ -755,7 +826,7 @@ publicRouter.get(
     // For non-ALL visibility, return profile info only (no wishlist list)
     const isPublic = profile.profileVisibility === 'ALL';
 
-    let publicWishlists: Array<{ id: string; slug: string; title: string; deadline: string | null; itemCount: number }> = [];
+    let publicWishlists: Array<{ id: string; slug: string; title: string; deadline: string | null; itemCount: number; reservedCount: number }> = [];
     if (isPublic) {
       const wls = await prisma.wishlist.findMany({
         where: {
@@ -767,7 +838,7 @@ publicRouter.get(
         orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
         select: {
           id: true, slug: true, title: true, deadline: true,
-          items: { where: { status: { in: [...ACTIVE_STATUSES] } }, select: { id: true } },
+          items: { where: { status: { in: [...ACTIVE_STATUSES] } }, select: { id: true, status: true } },
         },
       });
       publicWishlists = wls.map((wl) => ({
@@ -776,6 +847,7 @@ publicRouter.get(
         title: wl.title,
         deadline: wl.deadline?.toISOString() ?? null,
         itemCount: wl.items.length,
+        reservedCount: wl.items.filter((i) => i.status !== 'AVAILABLE').length,
       }));
     }
 
@@ -801,6 +873,7 @@ publicRouter.get(
 publicRouter.post(
   '/items/:id/reserve',
   publicActionLimiter,
+  requirePublicWriteAuth,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -851,6 +924,7 @@ publicRouter.post(
 publicRouter.post(
   '/items/:id/unreserve',
   publicActionLimiter,
+  requirePublicWriteAuth,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -904,6 +978,7 @@ publicRouter.post(
 publicRouter.post(
   '/items/:id/purchase',
   publicActionLimiter,
+  requirePublicWriteAuth,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -1083,7 +1158,7 @@ privateRouter.patch(
     const parsed = z
       .object({
         title: z.string().min(1).max(200).optional(),
-        url: z.string().url().optional(),
+        url: zUrl().optional(),
         priceText: z.string().max(200).nullable().optional(),
         commentOwner: z.string().max(2000).nullable().optional(),
         priority: PrioritySchema.optional(),
@@ -1290,13 +1365,124 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction) {
     }
   }
 
+  // Path 1: Telegram Mini App auth (X-TG-INIT-DATA header)
   const initData = req.get('X-TG-INIT-DATA') ?? '';
-  const user = validateTelegramInitData(initData, botToken);
-  if (!user) return res.status(401).json({ error: 'Invalid Telegram auth' });
+  if (initData) {
+    const user = validateTelegramInitData(initData, botToken);
+    if (!user) return res.status(401).json({ error: 'Invalid Telegram auth' });
+    req.tgUser = user;
+    return next();
+  }
 
-  req.tgUser = user;
-  return next();
+  // Path 2: Web session auth (JWT cookie)
+  const cookies = parseCookies(req);
+  const session = cookies.wb_session ? verifyWebSession(cookies.wb_session) : null;
+  if (session) {
+    req.tgUser = { id: Number(session.telegramId) || 0, first_name: session.firstName ?? 'Web User' };
+    return next();
+  }
+
+  return res.status(401).json({ error: 'Authentication required' });
 }
+
+// ─── Telegram Login Widget Web Auth ──────────────────────────────────────────
+// Uses the legacy Telegram Login Widget flow (available for all bots with a domain set in BotFather).
+// Flow: /auth/telegram/start → redirect to oauth.telegram.org → callback with user data + HMAC hash.
+// Verification: HMAC-SHA256(data_check_string, SHA256(bot_token)) must equal the hash param.
+
+const TG_BOT_TOKEN = process.env.BOT_TOKEN ?? '';
+const TG_BOT_ID = TG_BOT_TOKEN.split(':')[0] ?? '';
+const TG_WIDGET_AUTH_TTL = 86400; // Accept auth_date within 24 hours
+
+/** Verify Telegram Login Widget data. See https://core.telegram.org/widgets/login#checking-authorization */
+function verifyTelegramWidget(params: Record<string, string>): boolean {
+  const { hash, ...data } = params;
+  if (!hash) return false;
+  // Check auth_date freshness
+  const authDate = parseInt(data.auth_date ?? '0', 10);
+  if (Math.abs(Date.now() / 1000 - authDate) > TG_WIDGET_AUTH_TTL) return false;
+  // Build data-check-string: sorted key=value pairs joined by \n
+  const checkString = Object.keys(data).sort().map(k => `${k}=${data[k]}`).join('\n');
+  const secretKey = crypto.createHash('sha256').update(TG_BOT_TOKEN).digest();
+  const hmac = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
+  return hmac === hash;
+}
+
+const authRouter = express.Router();
+
+// GET /auth/telegram/start — redirect user to Telegram Login Widget
+authRouter.get('/telegram/start', (_req, res) => {
+  if (!TG_BOT_ID) return res.status(500).json({ error: 'BOT_TOKEN not configured' });
+  const callbackUrl = `${WEB_ORIGIN}/api/auth/telegram/callback`;
+  const url = `https://oauth.telegram.org/auth?bot_id=${TG_BOT_ID}&origin=${encodeURIComponent(WEB_ORIGIN)}&return_to=${encodeURIComponent(callbackUrl)}&request_access=write`;
+  return res.redirect(url);
+});
+
+// GET /auth/telegram/callback — verify widget data and create session
+authRouter.get('/telegram/callback', async (req, res) => {
+  try {
+    const params = req.query as Record<string, string>;
+    if (!verifyTelegramWidget(params)) {
+      console.error('[auth] Widget verification failed', { id: params.id, auth_date: params.auth_date });
+      return res.status(403).send('Telegram login verification failed');
+    }
+
+    const telegramId = params.id;
+    const firstName = params.first_name ?? null;
+    const username = params.username ?? null;
+    const photoUrl = params.photo_url ?? null;
+
+    if (!telegramId) return res.status(400).send('No telegram ID');
+
+    // Upsert user
+    const user = await prisma.user.upsert({
+      where: { telegramId },
+      update: { firstName },
+      create: { telegramId, firstName },
+    });
+
+    // Update profile with Telegram photo/username if available
+    if (username || photoUrl) {
+      await prisma.userProfile.upsert({
+        where: { userId: user.id },
+        update: {
+          ...(photoUrl ? { avatarUrl: photoUrl } : {}),
+        },
+        create: {
+          userId: user.id,
+          ...(username ? { username } : {}),
+          ...(photoUrl ? { avatarUrl: photoUrl } : {}),
+        },
+      });
+    }
+
+    // Issue JWT session cookie
+    const jwt = signWebSession({ telegramId, firstName: firstName ?? undefined });
+    res.setHeader('Set-Cookie', `wb_session=${jwt}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${JWT_EXPIRY_SECONDS}`);
+
+    trackEvent('web_login_success', undefined, { telegramId, method: 'telegram_widget' });
+
+    // Redirect to Mini App
+    return res.redirect(`${WEB_ORIGIN}/miniapp`);
+  } catch (err) {
+    console.error('[auth] Widget callback error:', err);
+    return res.status(500).send('Authentication failed');
+  }
+});
+
+// GET /auth/me — check current web session
+authRouter.get('/me', (req, res) => {
+  const cookies = parseCookies(req);
+  const session = cookies.wb_session ? verifyWebSession(cookies.wb_session) : null;
+  if (!session) return res.json({ authenticated: false });
+  return res.json({ authenticated: true, telegramId: session.telegramId, firstName: session.firstName });
+});
+
+// POST /auth/logout — clear session
+authRouter.post('/logout', (_req, res) => {
+  res.setHeader('Set-Cookie', 'wb_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
+  return res.json({ ok: true });
+});
 
 // ─── Plan & Entitlement System ──────────────────────────────────────────────
 const PLANS = {
@@ -1324,6 +1510,10 @@ type PlanInfo = (typeof PLANS)[PlanCode];
 const PRO_PRICE_XTR = parseInt(process.env.PRO_PRICE_XTR ?? '100', 10);
 const PRO_SUBSCRIPTION_PERIOD = parseInt(process.env.PRO_SUBSCRIPTION_PERIOD ?? '2592000', 10);
 const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
+
+// ─── Gift Notes (Поводы и идеи) — one-time unlock ────────────────────────────
+const GIFT_NOTES_PRICE_XTR = parseInt(process.env.GIFT_NOTES_PRICE_XTR ?? '19', 10);
+const GIFT_NOTES_SKU = 'gift_notes_unlock';
 
 // ─── One-time SKU catalogue ──────────────────────────────────────────────────
 const ONE_TIME_SKUS = {
@@ -1450,7 +1640,53 @@ async function getEffectiveEntitlements(userId: string, godMode = false) {
     hintCredits: credits?.hintCredits ?? 0,
     importCredits: credits?.importCredits ?? 0,
     addOns,
+    // Gift Notes access: PRO users get it, or one-time unlock via UserAddOn
+    hasGiftNotes: base.isPro || godMode || addOns.some(a => a.addonType === GIFT_NOTES_SKU),
+    giftNotes: {
+      unlocked: base.isPro || godMode || addOns.some(a => a.addonType === GIFT_NOTES_SKU),
+      unlockType: base.isPro ? 'PRO' as const : addOns.some(a => a.addonType === GIFT_NOTES_SKU) ? 'ONE_TIME' as const : godMode ? 'GOD' as const : null,
+      priceXtr: GIFT_NOTES_PRICE_XTR,
+    },
   };
+}
+
+/** Gate helper: Gift Notes feature required */
+function requireGiftNotes(ent: Awaited<ReturnType<typeof getEffectiveEntitlements>>, res: any): boolean {
+  if (!ent.hasGiftNotes) {
+    trackEvent('feature_gate_hit_gift_notes');
+    res.status(403).json({ error: 'gift_notes_required' });
+    return false;
+  }
+  return true;
+}
+
+/** Compute next occurrence date. Handles Feb29 + day>daysInMonth */
+function getNextOccurrenceDate(eventDate: Date, recurrence: string): Date | null {
+  if (recurrence === 'NONE') return eventDate;
+  const now = new Date();
+  const nowStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  const [nowY, nowM, nowD] = nowStr.split('-').map(Number) as [number, number, number];
+  const todayNum = nowY * 10000 + nowM * 100 + nowD;
+  const evM = eventDate.getUTCMonth() + 1;
+  const evD = eventDate.getUTCDate();
+  if (recurrence === 'YEARLY') {
+    for (let y = nowY; y <= nowY + 1; y++) {
+      const dim = new Date(y, evM, 0).getDate();
+      const day = Math.min(evD, dim);
+      if (y * 10000 + evM * 100 + day >= todayNum) return new Date(Date.UTC(y, evM - 1, day));
+    }
+  }
+  if (recurrence === 'MONTHLY') {
+    for (let offset = 0; offset <= 1; offset++) {
+      const m = nowM + offset;
+      const y = nowY + Math.floor((m - 1) / 12);
+      const mN = ((m - 1) % 12) + 1;
+      const dim = new Date(y, mN, 0).getDate();
+      const day = Math.min(evD, dim);
+      if (y * 10000 + mN * 100 + day >= todayNum) return new Date(Date.UTC(y, mN - 1, day));
+    }
+  }
+  return eventDate;
 }
 
 /** Check if a wishlist is writable (within plan limits) for the given user */
@@ -1474,6 +1710,7 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
     event.startsWith('feature_gate_hit_') ||
     event.startsWith('onboarding_') ||
     event.startsWith('demo_item_') ||
+    event.startsWith('gift_') ||
     event.startsWith('error:');
   if (shouldPersist && userId) {
     prisma.analyticsEvent
@@ -1524,29 +1761,11 @@ const FORCED_ROLLOUT_USERS = new Set<string>(
   (process.env.ONBOARDING_FORCED_USERS ?? '').split(',').filter(Boolean)
 );
 
-// Onboarding v2 rollout mode: 'off' | 'ab50' | 'force_v1' | 'force_v2'
-const ONBOARDING_V2_ROLLOUT = (process.env.ONBOARDING_V2_ROLLOUT ?? 'off') as 'off' | 'ab50' | 'force_v1' | 'force_v2';
-
-// Test override: specific telegramIds that always get v2_try on first assignment.
-// Does NOT override already-saved variant — only affects first assignment.
-const ONBOARDING_V2_TEST_TELEGRAM_IDS = new Set(
-  (process.env.ONBOARDING_V2_TEST_IDS ?? '8747175307').split(',').filter(Boolean)
-);
-
-function assignOnboardingVariant(telegramId?: string): { variant: OnboardingVariant; source: 'test_override' | 'rollout_config' } {
-  // 1. Test override by telegramId
-  if (telegramId && ONBOARDING_V2_TEST_TELEGRAM_IDS.has(telegramId)) {
-    return { variant: 'v2_try', source: 'test_override' };
-  }
-  // 2. Rollout config
-  let variant: OnboardingVariant;
-  switch (ONBOARDING_V2_ROLLOUT) {
-    case 'force_v2': variant = 'v2_try'; break;
-    case 'force_v1': variant = 'v1_demo'; break;
-    case 'ab50': variant = Math.random() < 0.5 ? 'v1_demo' : 'v2_try'; break;
-    default: variant = 'v1_demo';
-  }
-  return { variant, source: 'rollout_config' };
+// Onboarding v2 is now the default for ALL new users.
+// A/B experiment concluded — v2_try won and became the main flow.
+// Historical variants (v1_demo) are still supported for users already assigned to them.
+function assignOnboardingVariant(_telegramId?: string): { variant: OnboardingVariant; source: 'rollout_config' } {
+  return { variant: 'v2_try', source: 'rollout_config' };
 }
 
 interface DemoItemTemplate {
@@ -1766,6 +1985,7 @@ async function completeOnboarding(userId: string, reason: CompletionReason): Pro
   }
 
   // Analytics — fires exactly once per completion (guard above prevents re-entry).
+  const isLegacyV1 = (meta.onboardingVariant ?? 'v1_demo') === 'v1_demo';
   trackEvent('onboarding_completed', userId, {
     onboarding_key: ONBOARDING_KEY,
     version: ONBOARDING_VERSION,
@@ -1776,6 +1996,8 @@ async function completeOnboarding(userId: string, reason: CompletionReason): Pro
     market_segment: state.variantKey ? variantKeyToSegment(state.variantKey) : 'ru',
     onboarding_variant: meta.onboardingVariant ?? 'v1_demo',
     acquisition_path: meta.acquisitionPath ?? null,
+    experiment_phase: isLegacyV1 ? 'legacy_recovery' : 'post_rollout',
+    onboarding_flow: isLegacyV1 ? 'v1_demo_recovery' : 'main_v2',
   });
 }
 
@@ -1932,12 +2154,63 @@ tgRouter.use((req, res, next) => {
   next();
 });
 
+/**
+ * Attribution: when a user visits, mark their most recent lifecycle touch as "returned".
+ * Fire-and-forget, best-effort. Also checks if target action completed.
+ */
+async function attributeLifecycleReturn(userId: string): Promise<void> {
+  try {
+    // Find latest sent touch without returnedAt, within 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const touch = await prisma.lifecycleTouch.findFirst({
+      where: { userId, sentAt: { gte: sevenDaysAgo }, delivered: true, returnedAt: null, stoppedAt: null },
+      orderBy: { sentAt: 'desc' },
+    });
+    if (!touch || !touch.sentAt) return;
+    const now = new Date();
+    // Mark return
+    await prisma.lifecycleTouch.update({
+      where: { id: touch.id },
+      data: { returnedAt: now },
+    });
+    // Check target completion
+    if (!touch.targetCompletedAt) {
+      let completed = false;
+      let completedType: string | null = null;
+      if (touch.segment === 'S1') {
+        const wl = await prisma.wishlist.count({ where: { ownerId: userId, type: 'REGULAR' } });
+        if (wl > 0) { completed = true; completedType = 'created_wishlist'; }
+      } else if (touch.segment === 'S2') {
+        const items = await prisma.item.count({ where: { wishlist: { ownerId: userId, type: 'REGULAR' }, status: { in: ['AVAILABLE', 'RESERVED'] } } });
+        if (items > 0) { completed = true; completedType = 'added_item'; }
+      } else if (touch.segment === 'S3' || touch.segment === 'S4') {
+        // Check if user has been active (updated anything since touch was sent)
+        const activity = await prisma.item.count({
+          where: { wishlist: { ownerId: userId, type: 'REGULAR' }, updatedAt: { gte: touch.sentAt } },
+        });
+        if (activity > 0) { completed = true; completedType = 'updated_content'; }
+      }
+      if (completed) {
+        await prisma.lifecycleTouch.update({
+          where: { id: touch.id },
+          data: { targetCompletedAt: now, targetCompletedType: completedType },
+        });
+      }
+    }
+  } catch { /* best-effort */ }
+}
+
 // GET /tg/wishlists — my wishlists
 tgRouter.get(
   '/wishlists',
   asyncHandler(async (req, res) => {
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    // Fire-and-forget: attribute lifecycle return if applicable
+    void attributeLifecycleReturn(user.id);
+    const [ent, userProfile] = await Promise.all([
+      getEffectiveEntitlements(user.id, user.godMode),
+      prisma.userProfile.findUnique({ where: { userId: user.id }, select: { cardDisplayMode: true } }),
+    ]);
 
     const wishlists = await prisma.wishlist.findMany({
       where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
@@ -2008,6 +2281,8 @@ tgRouter.get(
       subscription: ent.subscription,
       proSource: ent.proSource,
       promoPro: ent.promoPro,
+      giftNotes: ent.giftNotes,
+      cardDisplayMode: ent.isPro ? (userProfile?.cardDisplayMode ?? 'auto') : 'auto',
       godMode: user.godMode,
       canGodMode: user.telegramId
         ? (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean).includes(user.telegramId)
@@ -2291,6 +2566,17 @@ tgRouter.post(
       },
       select: { id: true, slug: true, title: true, description: true, deadline: true },
     });
+
+    // Canonical analytics: wishlist_created
+    const existingRegular = await prisma.wishlist.count({ where: { ownerId: user.id, type: 'REGULAR' } });
+    const existingAny = await prisma.wishlist.count({ where: { ownerId: user.id } });
+    trackEvent('wishlist_created', user.id, {
+      wishlistId: wishlist.id, wishlistType: 'REGULAR', source: 'manual',
+      platform: 'miniapp',
+      isFirstRegularWishlist: existingRegular === 1,
+      isFirstAnyWishlist: existingAny === 1,
+    });
+    if (existingRegular === 1) trackEvent('first_regular_wishlist_created', user.id, { wishlistId: wishlist.id, source: 'manual', platform: 'miniapp' });
 
     return res.status(201).json({
       wishlist: { ...wishlist, deadline: wishlist.deadline?.toISOString() ?? null, itemCount: 0, reservedCount: 0 },
@@ -2673,6 +2959,21 @@ tgRouter.get(
   }),
 );
 
+// GET /tg/me/subscriptions/meta — lightweight unread summary for boot badge
+tgRouter.get(
+  '/me/subscriptions/meta',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const subs = await prisma.wishlistSubscription.findMany({
+      where: { subscriberId: user.id },
+      select: { id: true, unreads: { select: { id: true } } },
+    });
+    const unreadCount = subs.reduce((sum, s) => sum + s.unreads.length, 0);
+    const subscriptionsWithUnread = subs.filter(s => s.unreads.length > 0).length;
+    return res.json({ unreadCount, hasUnread: unreadCount > 0, subscriptionsWithUnread });
+  }),
+);
+
 // POST /tg/me/subscriptions/:id/read — mark all unreads as read for a subscription
 tgRouter.post(
   '/me/subscriptions/:id/read',
@@ -2816,7 +3117,7 @@ tgRouter.post(
     const parsed = z
       .object({
         title: z.string().min(1).max(200),
-        url: z.string().url().optional(),
+        url: zUrl().optional(),
         price: z.number().int().nonnegative().nullable().optional(),
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         imageUrl: z.string().url().optional(),
@@ -2866,6 +3167,14 @@ tgRouter.post(
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
+    // Canonical analytics: item_created
+    const totalUserItems = await prisma.item.count({ where: { wishlist: { ownerId: user.id }, status: { not: 'DELETED' } } });
+    trackEvent('item_created', user.id, {
+      itemId: item.id, wishlistId, wishlistType: wishlist.type, source: 'manual',
+      platform: 'miniapp', isFirstItem: totalUserItems === 1,
+    });
+    if (totalUserItems === 1) trackEvent('first_item_created', user.id, { itemId: item.id, wishlistType: wishlist.type, source: 'manual', platform: 'miniapp' });
+
     // Notify wishlist subscribers
     void notifySubscribersOfChange(
       wishlistId,
@@ -2909,6 +3218,8 @@ tgRouter.post(
         market_segment: onboardingState.variantKey ? variantKeyToSegment(onboardingState.variantKey) : 'ru',
         onboarding_variant: itemMeta.onboardingVariant ?? 'v1_demo',
         acquisition_path: itemMeta.acquisitionPath ?? null,
+        experiment_phase: (itemMeta.onboardingVariant ?? 'v1_demo') === 'v1_demo' ? 'legacy_recovery' : 'post_rollout',
+        onboarding_flow: (itemMeta.onboardingVariant ?? 'v1_demo') === 'v1_demo' ? 'v1_demo_recovery' : 'main_v2',
       });
       await completeOnboarding(user.id, reason);
     })();
@@ -3056,7 +3367,7 @@ tgRouter.post(
         failed.push({ itemId: req_id, reason: 'not_found_or_forbidden' });
         continue;
       }
-      if (item.status !== 'DELETED' && item.status !== 'COMPLETED') {
+      if (item.status !== 'DELETED' && item.status !== 'COMPLETED' && item.status !== 'ARCHIVED') {
         failed.push({ itemId: req_id, reason: 'not_archived' });
         continue;
       }
@@ -3076,6 +3387,149 @@ tgRouter.post(
     }
 
     return res.json({ ok: true, restored, failed });
+  }),
+);
+
+// POST /tg/items/bulk-archive — archive items (separate from delete/complete)
+tgRouter.post(
+  '/items/bulk-archive',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      itemIds: z.array(z.string().min(1)).min(1).max(100),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const { itemIds } = parsed.data;
+
+    const items = await prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, status: true, wishlist: { select: { ownerId: true } } },
+    });
+
+    const results: Array<{ itemId: string; ok: boolean; code?: string }> = [];
+    const toArchive: string[] = [];
+
+    for (const reqId of itemIds) {
+      const item = items.find(i => i.id === reqId);
+      if (!item || item.wishlist.ownerId !== user.id) {
+        results.push({ itemId: reqId, ok: false, code: 'FORBIDDEN' });
+        continue;
+      }
+      if (item.status === 'RESERVED') {
+        results.push({ itemId: reqId, ok: false, code: 'ITEM_RESERVED' });
+        continue;
+      }
+      if (item.status !== 'AVAILABLE') {
+        results.push({ itemId: reqId, ok: false, code: 'INVALID_STATUS' });
+        continue;
+      }
+      toArchive.push(reqId);
+    }
+
+    if (toArchive.length > 0) {
+      await prisma.item.updateMany({
+        where: { id: { in: toArchive } },
+        data: { status: 'ARCHIVED', archivedAt: new Date() },
+        // No purgeAfter — archived items are recoverable indefinitely
+      });
+    }
+
+    for (const id of toArchive) results.push({ itemId: id, ok: true });
+    const successCount = toArchive.length;
+    const failureCount = results.filter(r => !r.ok).length;
+
+    return res.json({ successCount, failureCount, results });
+  }),
+);
+
+// POST /tg/items/bulk-copy — copy items to another wishlist (new records, clean state)
+tgRouter.post(
+  '/items/bulk-copy',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      itemIds: z.array(z.string().min(1)).min(1).max(100),
+      targetWishlistId: z.string().min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+    const { itemIds, targetWishlistId } = parsed.data;
+
+    // Validate target
+    const targetWl = await prisma.wishlist.findUnique({
+      where: { id: targetWishlistId },
+      select: { id: true, ownerId: true, type: true, archivedAt: true },
+    });
+    if (!targetWl || targetWl.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (targetWl.type === 'SYSTEM_DRAFTS') return res.status(400).json({ error: 'Cannot copy to system wishlist' });
+    if (targetWl.archivedAt) return res.status(400).json({ error: 'Cannot copy to archived wishlist' });
+
+    // Load source items (owned only)
+    const items = await prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: {
+        id: true, title: true, description: true, url: true, priceText: true,
+        currency: true, priority: true, imageUrl: true, sourceUrl: true,
+        sourceDomain: true, importMethod: true, status: true,
+        wishlist: { select: { ownerId: true, id: true } },
+      },
+    });
+
+    const results: Array<{ itemId: string; ok: boolean; code?: string; newItemId?: string }> = [];
+
+    // Capacity check
+    const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[targetWishlistId] ?? 0);
+    const currentTargetCount = await prisma.item.count({
+      where: { wishlistId: targetWishlistId, status: { in: [...ACTIVE_STATUSES] } },
+    });
+    let available = Math.max(0, effectiveItemLimit - currentTargetCount);
+
+    for (const reqId of itemIds) {
+      const item = items.find(i => i.id === reqId);
+      if (!item || item.wishlist.ownerId !== user.id) {
+        results.push({ itemId: reqId, ok: false, code: 'FORBIDDEN' });
+        continue;
+      }
+      if (item.status === 'RESERVED') {
+        results.push({ itemId: reqId, ok: false, code: 'ITEM_RESERVED' });
+        continue;
+      }
+      if (item.wishlist.id === targetWishlistId) {
+        results.push({ itemId: reqId, ok: false, code: 'SAME_WISHLIST' });
+        continue;
+      }
+      if (available <= 0) {
+        results.push({ itemId: reqId, ok: false, code: 'TARGET_LIMIT_REACHED' });
+        continue;
+      }
+      // Create clean copy
+      const copy = await prisma.item.create({
+        data: {
+          wishlistId: targetWishlistId,
+          title: item.title,
+          description: item.description,
+          url: item.url,
+          priceText: item.priceText,
+          currency: item.currency,
+          priority: item.priority,
+          imageUrl: item.imageUrl,
+          sourceUrl: item.sourceUrl,
+          sourceDomain: item.sourceDomain,
+          importMethod: item.importMethod,
+          status: 'AVAILABLE',
+        },
+        select: { id: true },
+      });
+      available--;
+      results.push({ itemId: reqId, ok: true, newItemId: copy.id });
+    }
+
+    const successCount = results.filter(r => r.ok).length;
+    const failureCount = results.filter(r => !r.ok).length;
+
+    return res.json({ successCount, failureCount, results });
   }),
 );
 
@@ -3108,7 +3562,7 @@ tgRouter.post(
       .filter(
         (i) =>
           i.wishlist.ownerId === user.id &&
-          (i.status === 'DELETED' || i.status === 'COMPLETED'),
+          (i.status === 'DELETED' || i.status === 'COMPLETED' || i.status === 'ARCHIVED'),
       )
       .map((i) => i.id);
 
@@ -3156,7 +3610,7 @@ tgRouter.patch(
     const parsed = z
       .object({
         title: z.string().min(1).max(200).optional(),
-        url: z.string().url().nullable().optional(),
+        url: zUrl().nullable().optional(),
         price: z.number().int().nonnegative().nullable().optional(),
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         imageUrl: z.string().url().nullable().optional(),
@@ -4088,7 +4542,7 @@ async function getOrCreateDraftsWishlist(userId: string) {
     select: { id: true },
   });
   if (existing) return existing;
-  return prisma.wishlist.create({
+  const drafts = await prisma.wishlist.create({
     data: {
       slug: `drafts-${crypto.randomUUID().slice(0, 12)}`,
       ownerId: userId,
@@ -4097,6 +4551,15 @@ async function getOrCreateDraftsWishlist(userId: string) {
     },
     select: { id: true },
   });
+  // Canonical analytics: auto-created SYSTEM_DRAFTS
+  const existingAny = await prisma.wishlist.count({ where: { ownerId: userId } });
+  trackEvent('wishlist_created', userId, {
+    wishlistId: drafts.id, wishlistType: 'SYSTEM_DRAFTS', source: 'auto_drafts',
+    platform: 'system',
+    isFirstRegularWishlist: false,
+    isFirstAnyWishlist: existingAny === 1,
+  });
+  return drafts;
 }
 
 async function importUrlForUser(
@@ -4169,6 +4632,17 @@ async function importUrlForUser(
       sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
     },
   });
+
+  // Canonical analytics: item created via import in SYSTEM_DRAFTS
+  const totalUserItems = await prisma.item.count({ where: { wishlist: { ownerId: userId }, status: { not: 'DELETED' } } });
+  trackEvent('item_created', userId, {
+    itemId: item.id, wishlistId: draftsWl.id, wishlistType: 'SYSTEM_DRAFTS',
+    source: source === 'bot' ? 'bot' : 'import_url',
+    platform: source === 'bot' ? 'bot' : 'miniapp',
+    isFirstItem: totalUserItems === 1,
+    triggeredFromDrafts: true,
+  });
+  if (totalUserItems === 1) trackEvent('first_item_created', userId, { itemId: item.id, wishlistType: 'SYSTEM_DRAFTS', source: source === 'bot' ? 'bot' : 'import_url', platform: source === 'bot' ? 'bot' : 'miniapp' });
 
   return { item: mapTgItem(item), wishlistId: draftsWl.id, parseStatus };
 }
@@ -4295,6 +4769,84 @@ tgRouter.post(
     }
 
     return res.json({ item: mapTgItem(updated) });
+  }),
+);
+
+// ─── Copy single item to another wishlist ────────────────────────────────────
+
+tgRouter.post(
+  '/items/:id/copy',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const parsed = z.object({ targetWishlistId: z.string().min(1) }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+
+    // Verify source item ownership
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: {
+        id: true, title: true, description: true, url: true, priceText: true,
+        currency: true, priority: true, imageUrl: true, sourceUrl: true,
+        sourceDomain: true, importMethod: true, status: true,
+        wishlist: { select: { ownerId: true } },
+      },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (item.status === 'DELETED') return res.status(400).json({ error: 'Cannot copy deleted item' });
+
+    // Verify target wishlist
+    const targetWl = await prisma.wishlist.findUnique({
+      where: { id: parsed.data.targetWishlistId },
+      select: { id: true, ownerId: true, type: true, archivedAt: true, title: true },
+    });
+    if (!targetWl || targetWl.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (targetWl.archivedAt) return res.status(400).json({ error: 'Cannot copy to archived wishlist' });
+    if (targetWl.type === 'SYSTEM_DRAFTS') return res.status(400).json({ error: 'Cannot copy to system wishlist' });
+
+    // Check item limit on target
+    if (targetWl.type === 'REGULAR') {
+      if (!(await isWishlistWritable(user.id, targetWl.id, ent.effectiveWishlistLimit))) {
+        return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
+      }
+      const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[targetWl.id] ?? 0);
+      const currentCount = await prisma.item.count({
+        where: { wishlistId: targetWl.id, status: { in: [...ACTIVE_STATUSES] } },
+      });
+      if (currentCount >= effectiveItemLimit) {
+        return res.status(402).json({ error: t('api_wishlist_items_limit', getRequestLocale(req)), limit: effectiveItemLimit, planCode: ent.plan.code });
+      }
+    }
+
+    // Create clean copy — no reservation/comment/hint data
+    const copy = await prisma.item.create({
+      data: {
+        wishlistId: targetWl.id,
+        title: item.title,
+        description: item.description,
+        url: item.url,
+        priceText: item.priceText,
+        currency: item.currency,
+        priority: item.priority,
+        imageUrl: item.imageUrl,
+        sourceUrl: item.sourceUrl,
+        sourceDomain: item.sourceDomain,
+        importMethod: item.importMethod,
+        status: 'AVAILABLE',
+      },
+      select: {
+        id: true, wishlistId: true, title: true, url: true, priceText: true,
+        imageUrl: true, priority: true, status: true, description: true,
+        sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+      },
+    });
+
+    return res.status(201).json({ item: mapTgItem(copy), targetWishlistTitle: targetWl.title });
   }),
 );
 
@@ -4729,6 +5281,7 @@ tgRouter.get(
       appBehavior: {
         // "top" is PRO-only — normalize to "bottom" for FREE users (handles PRO→FREE downgrade)
         newWishlistPosition: isPro ? profile.newWishlistPosition : 'bottom',
+        cardDisplayMode: isPro ? (profile.cardDisplayMode ?? 'auto') : 'auto',
       },
       isPro,
       // Owner-only — never exposed in public/share API responses
@@ -4760,6 +5313,7 @@ tgRouter.patch(
       }).optional(),
       appBehavior: z.object({
         newWishlistPosition: z.enum(['top', 'bottom']).optional(),
+        cardDisplayMode: z.enum(['auto', 'showcase', 'compact']).optional(),
       }).optional(),
     }).safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
@@ -4806,6 +5360,12 @@ tgRouter.patch(
           updateData.newWishlistPosition = data.appBehavior.newWishlistPosition;
         }
       }
+      // Pro-gated: cardDisplayMode non-auto requires Pro
+      if (data.appBehavior.cardDisplayMode !== undefined) {
+        if (isPro || data.appBehavior.cardDisplayMode === 'auto') {
+          updateData.cardDisplayMode = data.appBehavior.cardDisplayMode;
+        }
+      }
     }
 
     const profile = await prisma.userProfile.upsert({
@@ -4850,6 +5410,7 @@ tgRouter.patch(
       appBehavior: {
         // "top" is PRO-only — normalize to "bottom" for FREE users
         newWishlistPosition: isPro ? profile.newWishlistPosition : 'bottom',
+        cardDisplayMode: isPro ? (profile.cardDisplayMode ?? 'auto') : 'auto',
       },
       isPro,
       // Owner-only — never exposed in public/share API responses
@@ -5015,6 +5576,8 @@ tgRouter.post(
         onboarding_key: ONBOARDING_KEY,
         version: ONBOARDING_VERSION,
         onboarding_variant: 'v2_try',
+        onboarding_flow: 'main_v2',
+        experiment_phase: 'post_rollout',
         assignment_source: assignmentSource,
         entry_point: effectiveEntryPoint,
         forced_rollout: elig.forcedRollout,
@@ -5031,6 +5594,8 @@ tgRouter.post(
         market_segment: marketSegment,
         locale_used: locale,
         onboarding_variant: 'v2_try',
+        onboarding_flow: 'main_v2',
+        experiment_phase: 'post_rollout',
       });
 
       return res.json({ state, demoItem: null, onboardingVariant: 'v2_try' as OnboardingVariant });
@@ -5090,6 +5655,8 @@ tgRouter.post(
       onboarding_key: ONBOARDING_KEY,
       version: ONBOARDING_VERSION,
       onboarding_variant: 'v1_demo',
+      onboarding_flow: 'v1_demo_recovery',
+      experiment_phase: 'legacy_recovery',
       assignment_source: assignmentSource,
       variant_key: variantKey,
       entry_point: effectiveEntryPoint,
@@ -5107,6 +5674,8 @@ tgRouter.post(
       market_segment: marketSegment,
       locale_used: locale,
       onboarding_variant: 'v1_demo',
+      onboarding_flow: 'v1_demo_recovery',
+      experiment_phase: 'legacy_recovery',
     });
     trackEvent('demo_item_created', user.id, {
       onboarding_key: ONBOARDING_KEY,
@@ -5198,6 +5767,8 @@ tgRouter.post(
       locale_used: dismissLocale,
       demo_item_deleted: demoItemDeleted,
       onboarding_variant: meta.onboardingVariant ?? 'v1_demo',
+      experiment_phase: (meta.onboardingVariant ?? 'v1_demo') === 'v1_demo' ? 'legacy_recovery' : 'post_rollout',
+      onboarding_flow: (meta.onboardingVariant ?? 'v1_demo') === 'v1_demo' ? 'v1_demo_recovery' : 'main_v2',
     });
 
     return res.json({ ok: true, demoItemDeleted });
@@ -5533,7 +6104,9 @@ tgRouter.get(
       totalReservations,
       proUsers,
       withWishlistRows,
-      withItemRows,
+      withItemInRegularRows,
+      withItemInAnyRows,
+      withAnyWishlistRows,
       withShareRows,
       sharedLinkOpensRows,
       wishlistsWithLinkOpenRows,
@@ -5582,11 +6155,19 @@ tgRouter.get(
       prisma.$queryRaw<CountRow[]>`
         SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist"
         WHERE type = 'REGULAR'`,
-      // Users with ≥1 non-deleted item
+      // Users with ≥1 non-deleted item IN REGULAR WISHLIST (canonical funnel metric)
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT w."ownerId")::int AS count
+        FROM "Item" i JOIN "Wishlist" w ON i."wishlistId" = w.id
+        WHERE i.status != 'DELETED' AND w.type = 'REGULAR'`,
+      // Users with ≥1 non-deleted item in ANY wishlist (including SYSTEM_DRAFTS)
       prisma.$queryRaw<CountRow[]>`
         SELECT COUNT(DISTINCT w."ownerId")::int AS count
         FROM "Item" i JOIN "Wishlist" w ON i."wishlistId" = w.id
         WHERE i.status != 'DELETED'`,
+      // Users with ≥1 ANY wishlist (including SYSTEM_DRAFTS)
+      prisma.$queryRaw<CountRow[]>`
+        SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist"`,
       // Funnel share step 1: users who opened share screen (shareToken generated via POST /share-token)
       prisma.$queryRaw<CountRow[]>`
         SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist"
@@ -5687,7 +6268,9 @@ tgRouter.get(
         totalUsers,
         activatedUsers: withWishlist,
         usersWithWishlist: withWishlist,
-        usersWithItem: n(withItemRows[0]),
+        usersWithAnyWishlist: n(withAnyWishlistRows[0]),
+        usersWithItem: n(withItemInRegularRows[0]),
+        usersWithItemInAny: n(withItemInAnyRows[0]),
         // Share funnel:
         // 1. Intent — user generated share token (opened share screen)
         usersWhoInitiatedShare: n(withShareRows[0]),
@@ -5802,6 +6385,162 @@ tgRouter.get(
       },
       generatedAt: now.toISOString(),
     });
+  }),
+);
+
+// ─── Retention Analytics (god mode only) ─────────────────────────────────────
+
+// GET /tg/me/retention-stats — lifecycle/winback analytics dashboard
+// Filters out godMode/test users from production metrics.
+tgRouter.get(
+  '/me/retention-stats',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
+    if (!canGodMode || !user.godMode) return res.status(403).json({ error: 'Forbidden' });
+
+    const periodDays = parseInt(String(req.query.period ?? '30'), 10) || 30;
+    const since = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
+
+    // Identify test/internal users to exclude from production metrics
+    const testUsers = await prisma.user.findMany({
+      where: { OR: [{ godMode: true }, { telegramId: { in: godModeAllowedIds } }] },
+      select: { id: true },
+    });
+    const testUserIds = new Set(testUsers.map(u => u.id));
+
+    // Load all touches in period
+    const allTouches = await prisma.lifecycleTouch.findMany({
+      where: { sentAt: { gte: since, not: null } },
+      select: {
+        id: true, userId: true, segment: true, touchNumber: true,
+        sentAt: true, delivered: true, offerCode: true,
+        returnedAt: true, targetCompletedAt: true, promoRedeemedAt: true,
+      },
+    });
+
+    // Production-clean touches (exclude test users)
+    const touches = allTouches.filter(t => !testUserIds.has(t.userId));
+    const excludedCount = allTouches.length - touches.length;
+
+    // Attribution helpers (FIXED: was using targetCompletedAt - targetCompletedAt, now uses sentAt)
+    const H = 3600 * 1000;
+    const D = 24 * H;
+    const within = (a: Date | null, b: Date | null, ms: number) => a && b && (a.getTime() - b.getTime()) <= ms && (a.getTime() - b.getTime()) >= 0;
+
+    // Overview
+    const sent = touches.length;
+    const delivered = touches.filter(t => t.delivered).length;
+    const uniqueUsers = new Set(touches.map(t => t.userId)).size;
+    const returned24h = touches.filter(t => within(t.returnedAt, t.sentAt, 24 * H)).length;
+    const returned72h = touches.filter(t => within(t.returnedAt, t.sentAt, 72 * H)).length;
+    const returned7d = touches.filter(t => within(t.returnedAt, t.sentAt, 7 * D)).length;
+    const targetCompleted7d = touches.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length;
+
+    // Promo: separated stages
+    const promoAssigned = touches.filter(t => t.offerCode).length; // touch had promo code assigned
+    const promoDelivered = touches.filter(t => t.offerCode && t.delivered).length; // promo message actually delivered
+    const promoRedeemed = touches.filter(t => t.promoRedeemedAt).length; // promo was activated
+
+    // Promo entitlement counts (exclude test users)
+    const [activeGrants, expiredGrants] = await Promise.all([
+      prisma.promoRedemption.count({ where: { status: 'ACTIVE', expiresAt: { gt: new Date() }, userId: { notIn: [...testUserIds] } } }),
+      prisma.promoRedemption.count({ where: { status: 'EXPIRED', userId: { notIn: [...testUserIds] } } }),
+    ]);
+
+    // Conversion rates
+    const pct = (num: number, den: number) => den > 0 ? `${Math.round(num / den * 100)}%` : '—';
+
+    // By segment
+    const segments = ['S1', 'S2', 'S3', 'S4'] as const;
+    const bySegment = segments.map(seg => {
+      const st = touches.filter(t => t.segment === seg);
+      const del = st.filter(t => t.delivered);
+      const ret72 = st.filter(t => within(t.returnedAt, t.sentAt, 72 * H)).length;
+      const tgt7d = st.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length;
+      return {
+        segment: seg,
+        sent: st.length,
+        delivered: del.length,
+        returned72h: ret72,
+        targetCompleted7d: tgt7d,
+        returnRate72h: pct(ret72, del.length),
+        targetRate7d: pct(tgt7d, del.length),
+        promoAssigned: st.filter(t => t.offerCode).length,
+        promoDelivered: st.filter(t => t.offerCode && t.delivered).length,
+        promoRedeemed: st.filter(t => t.promoRedeemedAt).length,
+      };
+    });
+
+    // By touch (segment × touchNumber)
+    const byTouch = segments.flatMap(seg =>
+      [1, 2, 3].map(tn => {
+        const st = touches.filter(t => t.segment === seg && t.touchNumber === tn);
+        const del = st.filter(t => t.delivered);
+        return {
+          segment: seg, touchNumber: tn,
+          sent: st.length, delivered: del.length,
+          returned72h: st.filter(t => within(t.returnedAt, t.sentAt, 72 * H)).length,
+          targetCompleted7d: st.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length,
+          promoDelivered: st.filter(t => t.offerCode && t.delivered).length,
+          promoRedeemed: st.filter(t => t.promoRedeemedAt).length,
+        };
+      }).filter(r => r.sent > 0),
+    );
+
+    return res.json({
+      period: { days: periodDays, from: since.toISOString(), to: new Date().toISOString() },
+      overview: {
+        sent, delivered, uniqueUsers,
+        returned24h, returned72h, returned7d, targetCompleted7d,
+        returnRate72h: pct(returned72h, delivered),
+        targetRate7d: pct(targetCompleted7d, delivered),
+        promoAssigned, promoDelivered, promoRedeemed,
+        activeGrants, expiredGrants,
+      },
+      bySegment,
+      byTouch,
+      debug: {
+        totalTouchesInPeriod: allTouches.length,
+        excludedTestUsers: excludedCount,
+        testUserIds: [...testUserIds].map(id => id.slice(0, 8) + '…'),
+      },
+      generatedAt: new Date().toISOString(),
+    });
+  }),
+);
+
+// GET /tg/me/retention-recent — last 20 touches + returns for debugging
+tgRouter.get(
+  '/me/retention-recent',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
+    if (!canGodMode || !user.godMode) return res.status(403).json({ error: 'Forbidden' });
+
+    const [recentTouches, recentRedeems] = await Promise.all([
+      prisma.lifecycleTouch.findMany({
+        where: { sentAt: { not: null } },
+        orderBy: { sentAt: 'desc' },
+        take: 30,
+        select: {
+          id: true, userId: true, segment: true, touchNumber: true,
+          sentAt: true, delivered: true, offerCode: true, messageKind: true,
+          returnedAt: true, targetCompletedAt: true, targetCompletedType: true,
+          promoRedeemedAt: true, stoppedAt: true, stopReason: true,
+        },
+      }),
+      prisma.promoRedemption.findMany({
+        where: { source: 'winback', status: { in: ['ACTIVE', 'EXPIRED'] } },
+        orderBy: { activatedAt: 'desc' },
+        take: 10,
+        select: { id: true, userId: true, status: true, activatedAt: true, expiresAt: true, offeredVia: true },
+      }),
+    ]);
+
+    return res.json({ touches: recentTouches, redeems: recentRedeems });
   }),
 );
 
@@ -6095,6 +6834,255 @@ tgRouter.post(
   }),
 );
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Gift Notes (Поводы и идеи) — v2: personal gift idea notebook
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// POST /tg/billing/gift-notes/checkout — one-time unlock
+tgRouter.post(
+  '/billing/gift-notes/checkout',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    if (ent.hasGiftNotes) return res.json({ alreadyUnlocked: true });
+    const botToken = process.env.BOT_TOKEN;
+    if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
+    const sessionId = crypto.randomUUID();
+    const payload = `addon:${GIFT_NOTES_SKU}:${req.tgUser!.id}:_:${sessionId}`;
+    trackEvent('gift_notes_checkout_started', user.id);
+    const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Gift Notes \uD83C\uDF81',
+        description: 'Gift Notes — forever',
+        payload, currency: 'XTR',
+        prices: [{ label: 'Gift Notes', amount: GIFT_NOTES_PRICE_XTR }],
+      }),
+    });
+    const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
+    if (!data.ok || !data.result) {
+      trackEvent('gift_notes_checkout_failed', user.id);
+      return res.status(502).json({ error: 'Failed to create invoice' });
+    }
+    await prisma.paymentEvent.create({
+      data: { userId: user.id, telegramPaymentChargeId: `gn_checkout_${sessionId}`, invoicePayload: payload, totalAmount: GIFT_NOTES_PRICE_XTR, currency: 'XTR', eventType: 'gift_notes_invoice_created' },
+    });
+    return res.json({ invoiceUrl: data.result, sessionId });
+  }),
+);
+
+// POST /tg/billing/gift-notes/sync
+tgRouter.post(
+  '/billing/gift-notes/sync',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    return res.json({ giftNotes: ent.giftNotes });
+  }),
+);
+
+// ─── Gift Notes: Occasions CRUD ──────────────────────────────────────────────
+
+tgRouter.get('/gift-occasions', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const occasions = await prisma.giftOccasion.findMany({
+    where: { ownerUserId: user.id },
+    include: { _count: { select: { ideas: { where: { status: 'ACTIVE' } } } } },
+    orderBy: { createdAt: 'desc' },
+  });
+  const mapped = occasions.map(o => {
+    const nextDate = o.eventDate ? getNextOccurrenceDate(o.eventDate, o.recurrence) : null;
+    const daysUntil = nextDate ? Math.round((nextDate.getTime() - Date.now()) / (24 * 3600 * 1000)) : null;
+    return { ...o, eventDate: o.eventDate?.toISOString() ?? null, nextDate: nextDate?.toISOString() ?? null, daysUntil, ideasCount: o._count.ideas };
+  });
+  // Sort: upcoming first (by daysUntil asc), no-date after, archived last
+  mapped.sort((a, b) => {
+    if (a.status === 'ARCHIVED' && b.status !== 'ARCHIVED') return 1;
+    if (a.status !== 'ARCHIVED' && b.status === 'ARCHIVED') return -1;
+    if (a.daysUntil != null && b.daysUntil != null) return a.daysUntil - b.daysUntil;
+    if (a.daysUntil != null) return -1;
+    if (b.daysUntil != null) return 1;
+    return 0;
+  });
+  trackEvent('gift_notes_entry_opened', user.id);
+  return res.json({ occasions: mapped });
+}));
+
+tgRouter.post('/gift-occasions', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const parsed = z.object({
+    title: z.string().min(1).max(150),
+    type: z.enum(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'OTHER']).optional(),
+    personName: z.string().max(50).optional(),
+    eventDate: z.string().optional(), // YYYY-MM-DD or DD.MM.YYYY or empty
+    recurrence: z.enum(['NONE', 'YEARLY', 'MONTHLY']).optional(),
+    note: z.string().max(300).optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  let eventDateVal: Date | null = null;
+  if (parsed.data.eventDate) {
+    let iso = parsed.data.eventDate;
+    const dot = iso.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (dot) iso = `${dot[3]}-${dot[2]!.padStart(2, '0')}-${dot[1]!.padStart(2, '0')}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) eventDateVal = new Date(iso + 'T00:00:00Z');
+  }
+  const occasion = await prisma.giftOccasion.create({
+    data: {
+      ownerUserId: user.id, title: parsed.data.title, type: parsed.data.type ?? 'OTHER',
+      personName: parsed.data.personName ?? null, eventDate: eventDateVal,
+      recurrence: eventDateVal ? (parsed.data.recurrence ?? 'NONE') : 'NONE',
+      note: parsed.data.note ?? null,
+    },
+  });
+  trackEvent('gift_occasion_created', user.id, { type: occasion.type });
+  return res.status(201).json({ occasion });
+}));
+
+tgRouter.get('/gift-occasions/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({
+    where: { id: req.params.id },
+    include: { ideas: { where: { status: { not: 'ARCHIVED' } }, orderBy: { createdAt: 'desc' } } },
+  });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const nextDate = occasion.eventDate ? getNextOccurrenceDate(occasion.eventDate, occasion.recurrence) : null;
+  const daysUntil = nextDate ? Math.round((nextDate.getTime() - Date.now()) / (24 * 3600 * 1000)) : null;
+  return res.json({ occasion: { ...occasion, eventDate: occasion.eventDate?.toISOString() ?? null, nextDate: nextDate?.toISOString() ?? null, daysUntil } });
+}));
+
+tgRouter.patch('/gift-occasions/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const parsed = z.object({
+    title: z.string().min(1).max(150).optional(),
+    type: z.enum(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'OTHER']).optional(),
+    personName: z.string().max(50).nullable().optional(),
+    eventDate: z.string().nullable().optional(),
+    recurrence: z.enum(['NONE', 'YEARLY', 'MONTHLY']).optional(),
+    note: z.string().max(300).nullable().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  const data: any = { ...parsed.data };
+  if (data.eventDate !== undefined) {
+    if (!data.eventDate) { data.eventDate = null; } else {
+      let iso = data.eventDate;
+      const dot = iso.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+      if (dot) iso = `${dot[3]}-${dot[2]!.padStart(2, '0')}-${dot[1]!.padStart(2, '0')}`;
+      data.eventDate = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(iso + 'T00:00:00Z') : null;
+    }
+  }
+  const updated = await prisma.giftOccasion.update({ where: { id: req.params.id }, data });
+  trackEvent('gift_occasion_updated', user.id);
+  return res.json({ occasion: updated });
+}));
+
+tgRouter.delete('/gift-occasions/:id', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  // Hard delete — cascades to ideas via FK onDelete: Cascade
+  await prisma.giftOccasion.delete({ where: { id: req.params.id } });
+  trackEvent('gift_occasion_deleted', user.id);
+  return res.json({ ok: true });
+}));
+
+tgRouter.post('/gift-occasions/:id/archive', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  await prisma.giftOccasion.update({ where: { id: req.params.id }, data: { status: 'ARCHIVED', archivedAt: new Date() } });
+  trackEvent('gift_occasion_archived', user.id);
+  return res.json({ ok: true });
+}));
+
+tgRouter.post('/gift-occasions/:id/complete', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  await prisma.giftOccasion.update({ where: { id: req.params.id }, data: { status: 'DONE', completedAt: new Date() } });
+  trackEvent('gift_occasion_completed', user.id);
+  return res.json({ ok: true });
+}));
+
+// ─── Gift Notes: Ideas CRUD ─────────────────────────────────────────────────
+
+tgRouter.post('/gift-occasions/:id/ideas', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const occasion = await prisma.giftOccasion.findUnique({ where: { id: req.params.id } });
+  if (!occasion || occasion.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const parsed = z.object({
+    text: z.string().min(1).max(500),
+    link: zUrl().nullable().optional(),
+    price: z.number().int().nonnegative().nullable().optional(),
+    currency: z.enum(['RUB', 'USD', 'EUR', 'GBP']).optional(),
+    note: z.string().max(500).optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  const idea = await prisma.giftOccasionIdea.create({
+    data: { occasionId: occasion.id, ownerUserId: user.id, text: parsed.data.text, link: parsed.data.link ?? null, price: parsed.data.price ?? null, currency: parsed.data.currency ?? null, note: parsed.data.note ?? null },
+  });
+  trackEvent('gift_idea_created', user.id, { occasionId: occasion.id });
+  return res.status(201).json({ idea });
+}));
+
+tgRouter.patch('/gift-occasion-ideas/:ideaId', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const idea = await prisma.giftOccasionIdea.findUnique({ where: { id: req.params.ideaId } });
+  if (!idea || idea.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  const parsed = z.object({
+    text: z.string().min(1).max(500).optional(),
+    link: z.string().nullable().optional(),
+    price: z.number().int().nonnegative().nullable().optional(),
+    currency: z.enum(['RUB', 'USD', 'EUR', 'GBP']).nullable().optional(),
+    note: z.string().max(500).nullable().optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return zodError(res, parsed.error);
+  const updated = await prisma.giftOccasionIdea.update({ where: { id: req.params.ideaId }, data: parsed.data });
+  trackEvent('gift_idea_updated', user.id);
+  return res.json({ idea: updated });
+}));
+
+tgRouter.delete('/gift-occasion-ideas/:ideaId', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const idea = await prisma.giftOccasionIdea.findUnique({ where: { id: req.params.ideaId } });
+  if (!idea || idea.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  await prisma.giftOccasionIdea.update({ where: { id: req.params.ideaId }, data: { status: 'ARCHIVED', archivedAt: new Date() } });
+  trackEvent('gift_idea_archived', user.id);
+  return res.json({ ok: true });
+}));
+
+tgRouter.post('/gift-occasion-ideas/:ideaId/complete', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const idea = await prisma.giftOccasionIdea.findUnique({ where: { id: req.params.ideaId } });
+  if (!idea || idea.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+  await prisma.giftOccasionIdea.update({ where: { id: req.params.ideaId }, data: { status: 'DONE', completedAt: new Date() } });
+  trackEvent('gift_idea_completed', user.id);
+  return res.json({ ok: true });
+}));
+
 // ─── Internal router (bot → API communication) ──────────────────────────────
 
 const internalRouter = express.Router();
@@ -6156,6 +7144,117 @@ internalRouter.post(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /internal/sitemap-wishlists — public wishlists for sitemap generation
+internalRouter.get(
+  '/sitemap-wishlists',
+  asyncHandler(async (_req, res) => {
+    // Only wishlists explicitly set to PUBLIC_PROFILE visibility
+    const wishlists = await prisma.wishlist.findMany({
+      where: { type: 'REGULAR', visibility: 'PUBLIC_PROFILE', archivedAt: null },
+      select: { slug: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 500, // reasonable limit for sitemap
+    });
+    return res.json(wishlists.map(w => ({ slug: w.slug, updatedAt: w.updatedAt.toISOString() })));
+  }),
+);
+
+// ─── Support ticket lookup (internal, for incident investigation) ────────────
+
+internalRouter.get(
+  '/support/tickets/:ticketCode',
+  asyncHandler(async (req, res) => {
+    const { ticketCode } = req.params;
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { ticketCode: ticketCode!.toUpperCase() },
+      include: {
+        messages: { orderBy: { createdAt: 'asc' }, select: {
+          id: true, authorRole: true, kind: true, text: true, caption: true,
+          telegramUserMsgId: true, telegramSupportMsgId: true, createdAt: true,
+        }},
+        user: { select: {
+          id: true, telegramId: true, telegramChatId: true, firstName: true,
+          godMode: true, createdAt: true, updatedAt: true,
+          profile: { select: {
+            displayName: true, username: true, defaultCurrency: true,
+            profileVisibility: true, birthday: true,
+          }},
+        }},
+      },
+    });
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+    // Recent context for incident investigation
+    const userId = ticket.user.id;
+    const [wishlistsCount, activeReservations, subscription, lastItem] = await Promise.all([
+      prisma.wishlist.count({ where: { ownerId: userId, type: 'REGULAR' } }),
+      prisma.item.count({ where: { reserverUserId: userId, status: 'RESERVED' } }),
+      prisma.subscription.findFirst({ where: { userId, status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' }, select: { status: true, planCode: true, currentPeriodEnd: true } }),
+      prisma.item.findFirst({ where: { wishlist: { ownerId: userId } }, orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }),
+    ]);
+
+    return res.json({
+      ticket: {
+        id: ticket.id, ticketCode: ticket.ticketCode, status: ticket.status,
+        openedVia: ticket.openedVia, supportChatId: ticket.supportChatId,
+        createdAt: ticket.createdAt, updatedAt: ticket.updatedAt, closedAt: ticket.closedAt,
+      },
+      user: { ...ticket.user, profile: ticket.user.profile ?? null },
+      messages: ticket.messages,
+      recentContext: {
+        wishlistsCount,
+        activeReservationsCount: activeReservations,
+        subscriptionStatus: subscription?.status ?? 'NONE',
+        currentPlan: subscription?.planCode ?? 'FREE',
+        subscriptionEnd: subscription?.currentPeriodEnd ?? null,
+        lastActivityAt: lastItem?.updatedAt ?? null,
+      },
+    });
+  }),
+);
+
+// Also support god-mode lookup via TG auth (for Mini App investigation UI)
+tgRouter.get(
+  '/support/lookup/:ticketCode',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
+    if (!user.telegramId || !godModeAllowedIds.includes(user.telegramId) || !user.godMode) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const { ticketCode } = req.params;
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { ticketCode: ticketCode!.toUpperCase() },
+      include: {
+        messages: { orderBy: { createdAt: 'asc' }, take: 50, select: {
+          id: true, authorRole: true, kind: true, text: true, caption: true, createdAt: true,
+        }},
+        user: { select: {
+          id: true, telegramId: true, firstName: true,
+          profile: { select: { displayName: true, username: true } },
+        }},
+      },
+    });
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+    const userId = ticket.user.id;
+    const [wishlistsCount, subscription] = await Promise.all([
+      prisma.wishlist.count({ where: { ownerId: userId, type: 'REGULAR' } }),
+      prisma.subscription.findFirst({ where: { userId, status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' }, select: { planCode: true } }),
+    ]);
+
+    return res.json({
+      ticketCode: ticket.ticketCode, status: ticket.status,
+      createdAt: ticket.createdAt, closedAt: ticket.closedAt,
+      user: { telegramId: ticket.user.telegramId, name: ticket.user.profile?.displayName || ticket.user.firstName || 'Unknown', username: ticket.user.profile?.username },
+      plan: subscription?.planCode ?? 'FREE',
+      wishlists: wishlistsCount,
+      messagesCount: ticket.messages.length,
+      lastMessages: ticket.messages.slice(-5),
+    });
+  }),
+);
+
 // Secret Santa endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -9008,6 +10107,7 @@ app.use(['/tg', '/public'], (req: Request, res: Response, next: NextFunction) =>
 
 // ─── Mount routers ───────────────────────────────────────────────────────────
 
+app.use('/auth', authRouter);
 app.use('/public', publicRouter);
 app.use('/tg', tgRouter);
 app.use('/internal', internalRouter);
