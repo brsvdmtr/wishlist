@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
+import DesktopSidebar from './DesktopSidebar';
 
 export const metadata: Metadata = {
   title: 'WishBoard',
@@ -176,82 +177,31 @@ export default function MiniAppLayout({ children }: { children: React.ReactNode 
             font-weight: 600;
           }
 
-          /* App container — MiniApp renders here */
+          /* App container */
           .wb-app-container {
             flex: 1;
             position: relative;
             overflow: hidden;
           }
-          /* Override MiniApp's position:fixed → absolute within container */
           .wb-app-container > div {
             position: absolute !important;
             border-radius: 0 !important;
           }
         }
 
-        /* Wide desktop: wider sidebar */
         @media (min-width: 1200px) {
           .wb-desktop-sidebar { width: 260px; }
         }
       `}</style>
 
       <div className="wb-layout">
-        {/* Desktop Sidebar */}
-        <aside className="wb-desktop-sidebar">
-          <div className="wb-sidebar-logo">
-            <span style={{ fontSize: 24 }}>&#x1F381;</span>
-            <h1>WishBoard</h1>
-          </div>
+        <DesktopSidebar />
 
-          <nav className="wb-sidebar-nav">
-            <div className="wb-nav-section">Основное</div>
-            <button className="wb-nav-item active" data-screen="my-wishlists"
-              onClick={() => window.dispatchEvent(new CustomEvent('wb-navigate', { detail: 'my-wishlists' }))}>
-              <span className="nav-icon">&#x1F4CB;</span> Мои вишлисты
-            </button>
-            <button className="wb-nav-item" data-screen="my-reservations"
-              onClick={() => window.dispatchEvent(new CustomEvent('wb-navigate', { detail: 'my-reservations' }))}>
-              <span className="nav-icon">&#x1F516;</span> Мои брони
-            </button>
-            <button className="wb-nav-item" data-screen="gift-notes"
-              onClick={() => window.dispatchEvent(new CustomEvent('wb-navigate', { detail: 'gift-notes' }))}>
-              <span className="nav-icon">&#x1F381;</span> Поводы и идеи
-            </button>
-
-            <div className="wb-nav-section">Социальное</div>
-            <button className="wb-nav-item" data-screen="santa-hub"
-              onClick={() => window.dispatchEvent(new CustomEvent('wb-navigate', { detail: 'santa-hub' }))}>
-              <span className="nav-icon">&#x1F385;</span> Тайный Санта
-            </button>
-
-            <div className="wb-nav-section">Настройки</div>
-            <button className="wb-nav-item" data-screen="profile"
-              onClick={() => window.dispatchEvent(new CustomEvent('wb-navigate', { detail: 'profile' }))}>
-              <span className="nav-icon">&#x1F464;</span> Профиль
-            </button>
-            <button className="wb-nav-item" data-screen="settings"
-              onClick={() => window.dispatchEvent(new CustomEvent('wb-navigate', { detail: 'settings' }))}>
-              <span className="nav-icon">&#x2699;&#xFE0F;</span> Настройки
-            </button>
-          </nav>
-
-          <div className="wb-sidebar-footer">
-            <a href="https://t.me/WishHub_bot" target="_blank" rel="noopener">
-              <span>&#x2708;&#xFE0F;</span> Telegram Bot
-            </a>
-          </div>
-        </aside>
-
-        {/* Main area */}
         <div className="wb-main">
-          {/* Top bar */}
           <header className="wb-desktop-topbar">
-            <div className="wb-topbar-user" id="wb-topbar-user">
-              {/* Filled by MiniApp via DOM when user data loads */}
-            </div>
+            <div className="wb-topbar-user" id="wb-topbar-user" />
           </header>
 
-          {/* App content */}
           <div className="wb-app-container">
             {children}
           </div>
