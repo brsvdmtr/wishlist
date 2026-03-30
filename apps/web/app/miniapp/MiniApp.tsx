@@ -425,6 +425,9 @@ const inputStyle: React.CSSProperties = {
   width: '100%', padding: '14px 16px', borderRadius: 12,
   border: `1px solid ${C.borderLight}`, background: C.surface,
   color: C.text, fontSize: 16, fontFamily: font, outline: 'none', boxSizing: 'border-box',
+  // iOS WKWebView (Telegram): explicit user-select + touch-action so the native
+  // selection handles work even when ancestor touchmove handlers exist.
+  WebkitUserSelect: 'text', userSelect: 'text', touchAction: 'auto',
 };
 
 /** onFocus: adds a temp spacer so scrollTop has room, then scrolls textarea above keyboard.
@@ -903,7 +906,13 @@ function BottomSheet({ isOpen, onClose, title, children }: {
   useEffect(() => {
     const el = backdropRef.current;
     if (!el || !isOpen) return;
-    const block = (e: TouchEvent) => e.preventDefault();
+    const block = (e: TouchEvent) => {
+      // Allow native touch gestures when a text field is focused — iOS needs
+      // unblocked touchmove for selection handle dragging to work.
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+      e.preventDefault();
+    };
     el.addEventListener('touchmove', block, { passive: false });
     return () => el.removeEventListener('touchmove', block);
   }, [isOpen]);
@@ -4495,6 +4504,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
     const onTouchMove = (e: TouchEvent) => {
       if (!e.touches[0]) return;
+
+      // Let iOS handle touch gestures inside focused text fields so selection
+      // handle dragging works.  Without this, preventDefault() kills the native
+      // text-selection gesture in BottomSheet inputs that live inside this
+      // scroll container in the DOM tree (even though they're position:fixed).
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+        return;
+      }
+
       const dy = e.touches[0].clientY - startY; // > 0 = finger moved down
 
       const atTop    = el.scrollTop <= 0;
