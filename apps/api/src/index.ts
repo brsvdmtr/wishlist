@@ -34,52 +34,16 @@ const app = express();
 app.use(
   cors({
     origin: (origin, cb) => {
+      // Allow non-browser requests (curl, server-to-server).
       if (!origin) return cb(null, true);
       if (origin === WEB_ORIGIN) return cb(null, true);
       return cb(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV', 'X-INTERNAL-KEY'],
-    credentials: true, // allow cookies for web session
   }),
 );
 app.use(express.json());
-
-// ─── Cookie parser for web sessions ────────────────────────────────────────
-// Using manual cookie parsing instead of cookie-parser to avoid extra dependency
-function parseCookies(req: Request): Record<string, string> {
-  const header = req.headers.cookie ?? '';
-  const cookies: Record<string, string> = {};
-  for (const pair of header.split(';')) {
-    const [k, ...vParts] = pair.trim().split('=');
-    if (k) cookies[k.trim()] = decodeURIComponent(vParts.join('='));
-  }
-  return cookies;
-}
-
-// ─── JWT Web Session helpers ─────────────────────────────────────────────────
-const JWT_SECRET = process.env.JWT_SECRET ?? process.env.BOT_TOKEN ?? 'dev-secret-not-for-prod';
-const JWT_EXPIRY_SECONDS = 30 * 24 * 3600; // 30 days
-
-function signWebSession(payload: { telegramId: string; firstName?: string }): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const now = Math.floor(Date.now() / 1000);
-  const body = Buffer.from(JSON.stringify({ ...payload, iat: now, exp: now + JWT_EXPIRY_SECONDS })).toString('base64url');
-  const sig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
-  return `${header}.${body}.${sig}`;
-}
-
-function verifyWebSession(token: string): { telegramId: string; firstName?: string } | null {
-  try {
-    const [header, body, sig] = token.split('.');
-    if (!header || !body || !sig) return null;
-    const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
-    if (sig !== expectedSig) return null;
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
-    return { telegramId: payload.telegramId, firstName: payload.firstName };
-  } catch { return null; }
-}
 
 // ─── File uploads ─────────────────────────────────────────────────────────────
 const UPLOAD_DIR = (process.env.UPLOAD_DIR ?? '').trim() || path.join(process.cwd(), 'uploads');
@@ -208,31 +172,6 @@ const publicReadLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
 });
-
-/** Require auth for public write actions (reserve, comment, etc.).
- *  Accepts either X-TG-INIT-DATA or web session cookie.
- *  Falls back to actorHash for legacy Telegram-embedded compatibility. */
-function requirePublicWriteAuth(req: Request, res: Response, next: NextFunction) {
-  // Path 1: Telegram initData
-  const botToken = process.env.BOT_TOKEN ?? '';
-  const initData = req.get('X-TG-INIT-DATA') ?? '';
-  if (initData && botToken) {
-    const user = validateTelegramInitData(initData, botToken);
-    if (user) { req.tgUser = user; return next(); }
-  }
-  // Path 2: Web session cookie
-  const cookies = parseCookies(req);
-  const session = cookies.wb_session ? verifyWebSession(cookies.wb_session) : null;
-  if (session) {
-    req.tgUser = { id: Number(session.telegramId) || 0, first_name: session.firstName ?? 'Web User' };
-    return next();
-  }
-  // Path 3: Legacy actorHash (still allowed for backward compat during transition)
-  // TODO Phase 1 completion: remove actorHash path and require full auth
-  const body = req.body as { actorHash?: string } | undefined;
-  if (body?.actorHash) return next();
-  return res.status(401).json({ error: 'Authentication required. Please log in.' });
-}
 
 const publicActionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -873,7 +812,6 @@ publicRouter.get(
 publicRouter.post(
   '/items/:id/reserve',
   publicActionLimiter,
-  requirePublicWriteAuth,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -924,7 +862,6 @@ publicRouter.post(
 publicRouter.post(
   '/items/:id/unreserve',
   publicActionLimiter,
-  requirePublicWriteAuth,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -978,7 +915,6 @@ publicRouter.post(
 publicRouter.post(
   '/items/:id/purchase',
   publicActionLimiter,
-  requirePublicWriteAuth,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -1365,158 +1301,13 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction) {
     }
   }
 
-  // Path 1: Telegram Mini App auth (X-TG-INIT-DATA header)
   const initData = req.get('X-TG-INIT-DATA') ?? '';
-  if (initData) {
-    const user = validateTelegramInitData(initData, botToken);
-    if (!user) return res.status(401).json({ error: 'Invalid Telegram auth' });
-    req.tgUser = user;
-    return next();
-  }
+  const user = validateTelegramInitData(initData, botToken);
+  if (!user) return res.status(401).json({ error: 'Invalid Telegram auth' });
 
-  // Path 2: Web session auth (JWT cookie)
-  const cookies = parseCookies(req);
-  const session = cookies.wb_session ? verifyWebSession(cookies.wb_session) : null;
-  if (session) {
-    req.tgUser = { id: Number(session.telegramId) || 0, first_name: session.firstName ?? 'Web User' };
-    return next();
-  }
-
-  return res.status(401).json({ error: 'Authentication required' });
+  req.tgUser = user;
+  return next();
 }
-
-// ─── Telegram Login Widget Web Auth ──────────────────────────────────────────
-// Uses the legacy Telegram Login Widget flow (available for all bots with a domain set in BotFather).
-// Flow: /auth/telegram/start → redirect to oauth.telegram.org → callback with user data + HMAC hash.
-// Verification: HMAC-SHA256(data_check_string, SHA256(bot_token)) must equal the hash param.
-
-const TG_BOT_TOKEN = process.env.BOT_TOKEN ?? '';
-const TG_BOT_ID = TG_BOT_TOKEN.split(':')[0] ?? '';
-const TG_WIDGET_AUTH_TTL = 86400; // Accept auth_date within 24 hours
-
-/** Verify Telegram Login Widget data. See https://core.telegram.org/widgets/login#checking-authorization */
-function verifyTelegramWidget(params: Record<string, string>): boolean {
-  const { hash, ...data } = params;
-  if (!hash) return false;
-  // Check auth_date freshness
-  const authDate = parseInt(data.auth_date ?? '0', 10);
-  if (Math.abs(Date.now() / 1000 - authDate) > TG_WIDGET_AUTH_TTL) return false;
-  // Build data-check-string: sorted key=value pairs joined by \n
-  const checkString = Object.keys(data).sort().map(k => `${k}=${data[k]}`).join('\n');
-  const secretKey = crypto.createHash('sha256').update(TG_BOT_TOKEN).digest();
-  const hmac = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
-  return hmac === hash;
-}
-
-const authRouter = express.Router();
-
-// GET /auth/telegram/start — redirect user to Telegram Login Widget
-authRouter.get('/telegram/start', (_req, res) => {
-  if (!TG_BOT_ID) return res.status(500).json({ error: 'BOT_TOKEN not configured' });
-  const callbackUrl = `${WEB_ORIGIN}/api/auth/telegram/callback`;
-  const url = `https://oauth.telegram.org/auth?bot_id=${TG_BOT_ID}&origin=${encodeURIComponent(WEB_ORIGIN)}&return_to=${encodeURIComponent(callbackUrl)}&request_access=write`;
-  return res.redirect(url);
-});
-
-// GET /auth/telegram/callback — serve bridge page that reads #tgAuthResult and POSTs to /verify
-// Telegram's return_to puts auth data in URL hash fragment (#tgAuthResult=base64json),
-// which the server never sees. This bridge page decodes it client-side and POSTs to our verify endpoint.
-authRouter.get('/telegram/callback', (_req, res) => {
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  return res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WishBoard — Logging in...</title>
-<style>body{font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a14;color:#fff;flex-direction:column;gap:12px}
-.spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,.15);border-top-color:#7C6AFF;border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}</style></head><body>
-<div class="spinner"></div><div style="font-size:14px;opacity:.7">Logging in...</div>
-<script>
-(function(){
-  try {
-    var h = location.hash;
-    if (!h || !h.includes('tgAuthResult')) { document.body.innerHTML='<div style="color:#ff6b6b;font-size:16px">No auth data received</div>'; return; }
-    var b64 = h.split('tgAuthResult=')[1];
-    if (!b64) { document.body.innerHTML='<div style="color:#ff6b6b;font-size:16px">Invalid auth result</div>'; return; }
-    // Telegram uses URL-safe base64 without padding
-    var json = atob(b64.replace(/-/g,'+').replace(/_/g,'/'));
-    var data = JSON.parse(json);
-    fetch('/api/auth/telegram/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-      credentials: 'same-origin'
-    }).then(function(r) { return r.json(); }).then(function(r) {
-      if (r.ok) { window.location.href = '/miniapp'; }
-      else { document.body.innerHTML='<div style="color:#ff6b6b;font-size:16px">'+(r.error||'Login failed')+'</div>'; }
-    }).catch(function() { document.body.innerHTML='<div style="color:#ff6b6b;font-size:16px">Network error</div>'; });
-  } catch(e) { document.body.innerHTML='<div style="color:#ff6b6b;font-size:16px">Error: '+e.message+'</div>'; }
-})();
-</script></body></html>`);
-});
-
-// POST /auth/telegram/verify — verify widget HMAC data and create session
-authRouter.post('/telegram/verify', async (req, res) => {
-  try {
-    const params = req.body as Record<string, string>;
-    if (!verifyTelegramWidget(params)) {
-      console.error('[auth] Widget verification failed', { id: params.id, auth_date: params.auth_date });
-      return res.status(403).json({ ok: false, error: 'Telegram login verification failed' });
-    }
-
-    const telegramId = String(params.id ?? '');
-    const firstName = params.first_name ?? null;
-    const username = params.username ?? null;
-    const photoUrl = params.photo_url ?? null;
-
-    if (!telegramId) return res.status(400).json({ ok: false, error: 'No telegram ID' });
-
-    // Upsert user
-    const user = await prisma.user.upsert({
-      where: { telegramId },
-      update: { firstName },
-      create: { telegramId, firstName },
-    });
-
-    // Update profile with Telegram photo/username if available
-    if (username || photoUrl) {
-      await prisma.userProfile.upsert({
-        where: { userId: user.id },
-        update: {
-          ...(photoUrl ? { avatarUrl: photoUrl } : {}),
-        },
-        create: {
-          userId: user.id,
-          ...(username ? { username } : {}),
-          ...(photoUrl ? { avatarUrl: photoUrl } : {}),
-        },
-      });
-    }
-
-    // Issue JWT session cookie
-    const jwt = signWebSession({ telegramId, firstName: firstName ?? undefined });
-    res.setHeader('Set-Cookie', `wb_session=${jwt}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${JWT_EXPIRY_SECONDS}`);
-
-    trackEvent('web_login_success', undefined, { telegramId, method: 'telegram_widget' });
-
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error('[auth] Widget verify error:', err);
-    return res.status(500).json({ ok: false, error: 'Authentication failed' });
-  }
-});
-
-// GET /auth/me — check current web session
-authRouter.get('/me', (req, res) => {
-  const cookies = parseCookies(req);
-  const session = cookies.wb_session ? verifyWebSession(cookies.wb_session) : null;
-  if (!session) return res.json({ authenticated: false });
-  return res.json({ authenticated: true, telegramId: session.telegramId, firstName: session.firstName });
-});
-
-// POST /auth/logout — clear session
-authRouter.post('/logout', (_req, res) => {
-  res.setHeader('Set-Cookie', 'wb_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
-  return res.json({ ok: true });
-});
 
 // ─── Plan & Entitlement System ──────────────────────────────────────────────
 const PLANS = {
@@ -7178,21 +6969,6 @@ internalRouter.post(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /internal/sitemap-wishlists — public wishlists for sitemap generation
-internalRouter.get(
-  '/sitemap-wishlists',
-  asyncHandler(async (_req, res) => {
-    // Only wishlists explicitly set to PUBLIC_PROFILE visibility
-    const wishlists = await prisma.wishlist.findMany({
-      where: { type: 'REGULAR', visibility: 'PUBLIC_PROFILE', archivedAt: null },
-      select: { slug: true, updatedAt: true },
-      orderBy: { updatedAt: 'desc' },
-      take: 500, // reasonable limit for sitemap
-    });
-    return res.json(wishlists.map(w => ({ slug: w.slug, updatedAt: w.updatedAt.toISOString() })));
-  }),
-);
-
 // ─── Support ticket lookup (internal, for incident investigation) ────────────
 
 internalRouter.get(
@@ -10141,7 +9917,6 @@ app.use(['/tg', '/public'], (req: Request, res: Response, next: NextFunction) =>
 
 // ─── Mount routers ───────────────────────────────────────────────────────────
 
-app.use('/auth', authRouter);
 app.use('/public', publicRouter);
 app.use('/tg', tgRouter);
 app.use('/internal', internalRouter);
