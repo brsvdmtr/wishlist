@@ -938,7 +938,16 @@ function BottomSheet({ isOpen, onClose, title, children }: {
 
     const onMove = (e: TouchEvent) => {
       if (prevY === null || !e.touches[0]) return;
-      e.preventDefault(); // always prevent — we own all scroll behaviour
+
+      // Let iOS handle touch gestures inside focused text fields (input/textarea).
+      // Without this, selection handle dragging is completely broken because
+      // preventDefault() kills the native text selection gesture.
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+        return; // let the native text selection / cursor movement work
+      }
+
+      e.preventDefault(); // we own all scroll behaviour outside text fields
 
       const currentY = e.touches[0].clientY;
       const dy = currentY - prevY; // positive = finger moved down
