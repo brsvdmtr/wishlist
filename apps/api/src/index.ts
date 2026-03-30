@@ -1418,21 +1418,56 @@ authRouter.get('/telegram/start', (_req, res) => {
   return res.redirect(url);
 });
 
-// GET /auth/telegram/callback — verify widget data and create session
-authRouter.get('/telegram/callback', async (req, res) => {
+// GET /auth/telegram/callback — serve bridge page that reads #tgAuthResult and POSTs to /verify
+// Telegram's return_to puts auth data in URL hash fragment (#tgAuthResult=base64json),
+// which the server never sees. This bridge page decodes it client-side and POSTs to our verify endpoint.
+authRouter.get('/telegram/callback', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WishBoard — Logging in...</title>
+<style>body{font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a14;color:#fff;flex-direction:column;gap:12px}
+.spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,.15);border-top-color:#7C6AFF;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}</style></head><body>
+<div class="spinner"></div><div style="font-size:14px;opacity:.7">Logging in...</div>
+<script>
+(function(){
   try {
-    const params = req.query as Record<string, string>;
+    var h = location.hash;
+    if (!h || !h.includes('tgAuthResult')) { document.body.innerHTML='<div style="color:#ff6b6b;font-size:16px">No auth data received</div>'; return; }
+    var b64 = h.split('tgAuthResult=')[1];
+    if (!b64) { document.body.innerHTML='<div style="color:#ff6b6b;font-size:16px">Invalid auth result</div>'; return; }
+    // Telegram uses URL-safe base64 without padding
+    var json = atob(b64.replace(/-/g,'+').replace(/_/g,'/'));
+    var data = JSON.parse(json);
+    fetch('/api/auth/telegram/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      credentials: 'same-origin'
+    }).then(function(r) { return r.json(); }).then(function(r) {
+      if (r.ok) { window.location.href = '/miniapp'; }
+      else { document.body.innerHTML='<div style="color:#ff6b6b;font-size:16px">'+(r.error||'Login failed')+'</div>'; }
+    }).catch(function() { document.body.innerHTML='<div style="color:#ff6b6b;font-size:16px">Network error</div>'; });
+  } catch(e) { document.body.innerHTML='<div style="color:#ff6b6b;font-size:16px">Error: '+e.message+'</div>'; }
+})();
+</script></body></html>`);
+});
+
+// POST /auth/telegram/verify — verify widget HMAC data and create session
+authRouter.post('/telegram/verify', async (req, res) => {
+  try {
+    const params = req.body as Record<string, string>;
     if (!verifyTelegramWidget(params)) {
       console.error('[auth] Widget verification failed', { id: params.id, auth_date: params.auth_date });
-      return res.status(403).send('Telegram login verification failed');
+      return res.status(403).json({ ok: false, error: 'Telegram login verification failed' });
     }
 
-    const telegramId = params.id;
+    const telegramId = String(params.id ?? '');
     const firstName = params.first_name ?? null;
     const username = params.username ?? null;
     const photoUrl = params.photo_url ?? null;
 
-    if (!telegramId) return res.status(400).send('No telegram ID');
+    if (!telegramId) return res.status(400).json({ ok: false, error: 'No telegram ID' });
 
     // Upsert user
     const user = await prisma.user.upsert({
@@ -1462,11 +1497,10 @@ authRouter.get('/telegram/callback', async (req, res) => {
 
     trackEvent('web_login_success', undefined, { telegramId, method: 'telegram_widget' });
 
-    // Redirect to Mini App
-    return res.redirect(`${WEB_ORIGIN}/miniapp`);
+    return res.json({ ok: true });
   } catch (err) {
-    console.error('[auth] Widget callback error:', err);
-    return res.status(500).send('Authentication failed');
+    console.error('[auth] Widget verify error:', err);
+    return res.status(500).json({ ok: false, error: 'Authentication failed' });
   }
 });
 
