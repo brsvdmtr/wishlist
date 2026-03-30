@@ -6079,8 +6079,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </a>
               )}
 
-              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 16, textAlign: 'center' }}>
-                {locale === 'ru' ? 'Скоро появится веб-версия с авторизацией' : 'Web version with login coming soon'}
+              {/* Web Login via Telegram OIDC */}
+              <button
+                onClick={() => { window.location.href = `${apiBase}/auth/telegram/start`; }}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: 12, marginTop: 12,
+                  border: `1px solid ${C.border}`, background: C.surface,
+                  color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <span style={{ fontSize: 16 }}>✈️</span>
+                {locale === 'ru' ? 'Войти через Telegram' : 'Log in with Telegram'}
+              </button>
+              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8, textAlign: 'center' }}>
+                {locale === 'ru' ? 'Или откройте через Telegram для полного функционала' : 'Or open via Telegram for full functionality'}
               </div>
             </div>
           );

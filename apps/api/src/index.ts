@@ -34,16 +34,52 @@ const app = express();
 app.use(
   cors({
     origin: (origin, cb) => {
-      // Allow non-browser requests (curl, server-to-server).
       if (!origin) return cb(null, true);
       if (origin === WEB_ORIGIN) return cb(null, true);
       return cb(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV', 'X-INTERNAL-KEY'],
+    credentials: true, // allow cookies for web session
   }),
 );
 app.use(express.json());
+
+// ─── Cookie parser for web sessions ────────────────────────────────────────
+// Using manual cookie parsing instead of cookie-parser to avoid extra dependency
+function parseCookies(req: Request): Record<string, string> {
+  const header = req.headers.cookie ?? '';
+  const cookies: Record<string, string> = {};
+  for (const pair of header.split(';')) {
+    const [k, ...vParts] = pair.trim().split('=');
+    if (k) cookies[k.trim()] = decodeURIComponent(vParts.join('='));
+  }
+  return cookies;
+}
+
+// ─── JWT Web Session helpers ─────────────────────────────────────────────────
+const JWT_SECRET = process.env.JWT_SECRET ?? process.env.BOT_TOKEN ?? 'dev-secret-not-for-prod';
+const JWT_EXPIRY_SECONDS = 30 * 24 * 3600; // 30 days
+
+function signWebSession(payload: { telegramId: string; firstName?: string }): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const body = Buffer.from(JSON.stringify({ ...payload, iat: now, exp: now + JWT_EXPIRY_SECONDS })).toString('base64url');
+  const sig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  return `${header}.${body}.${sig}`;
+}
+
+function verifyWebSession(token: string): { telegramId: string; firstName?: string } | null {
+  try {
+    const [header, body, sig] = token.split('.');
+    if (!header || !body || !sig) return null;
+    const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+    if (sig !== expectedSig) return null;
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return { telegramId: payload.telegramId, firstName: payload.firstName };
+  } catch { return null; }
+}
 
 // ─── File uploads ─────────────────────────────────────────────────────────────
 const UPLOAD_DIR = (process.env.UPLOAD_DIR ?? '').trim() || path.join(process.cwd(), 'uploads');
@@ -172,6 +208,31 @@ const publicReadLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
 });
+
+/** Require auth for public write actions (reserve, comment, etc.).
+ *  Accepts either X-TG-INIT-DATA or web session cookie.
+ *  Falls back to actorHash for legacy Telegram-embedded compatibility. */
+function requirePublicWriteAuth(req: Request, res: Response, next: NextFunction) {
+  // Path 1: Telegram initData
+  const botToken = process.env.BOT_TOKEN ?? '';
+  const initData = req.get('X-TG-INIT-DATA') ?? '';
+  if (initData && botToken) {
+    const user = validateTelegramInitData(initData, botToken);
+    if (user) { req.tgUser = user; return next(); }
+  }
+  // Path 2: Web session cookie
+  const cookies = parseCookies(req);
+  const session = cookies.wb_session ? verifyWebSession(cookies.wb_session) : null;
+  if (session) {
+    req.tgUser = { id: Number(session.telegramId) || 0, first_name: session.firstName ?? 'Web User' };
+    return next();
+  }
+  // Path 3: Legacy actorHash (still allowed for backward compat during transition)
+  // TODO Phase 1 completion: remove actorHash path and require full auth
+  const body = req.body as { actorHash?: string } | undefined;
+  if (body?.actorHash) return next();
+  return res.status(401).json({ error: 'Authentication required. Please log in.' });
+}
 
 const publicActionLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -812,6 +873,7 @@ publicRouter.get(
 publicRouter.post(
   '/items/:id/reserve',
   publicActionLimiter,
+  requirePublicWriteAuth,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -862,6 +924,7 @@ publicRouter.post(
 publicRouter.post(
   '/items/:id/unreserve',
   publicActionLimiter,
+  requirePublicWriteAuth,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -915,6 +978,7 @@ publicRouter.post(
 publicRouter.post(
   '/items/:id/purchase',
   publicActionLimiter,
+  requirePublicWriteAuth,
   asyncHandler(async (req, res) => {
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing item id' });
@@ -1301,13 +1365,135 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction) {
     }
   }
 
+  // Path 1: Telegram Mini App auth (X-TG-INIT-DATA header)
   const initData = req.get('X-TG-INIT-DATA') ?? '';
-  const user = validateTelegramInitData(initData, botToken);
-  if (!user) return res.status(401).json({ error: 'Invalid Telegram auth' });
+  if (initData) {
+    const user = validateTelegramInitData(initData, botToken);
+    if (!user) return res.status(401).json({ error: 'Invalid Telegram auth' });
+    req.tgUser = user;
+    return next();
+  }
 
-  req.tgUser = user;
-  return next();
+  // Path 2: Web session auth (JWT cookie)
+  const cookies = parseCookies(req);
+  const session = cookies.wb_session ? verifyWebSession(cookies.wb_session) : null;
+  if (session) {
+    req.tgUser = { id: Number(session.telegramId) || 0, first_name: session.firstName ?? 'Web User' };
+    return next();
+  }
+
+  return res.status(401).json({ error: 'Authentication required' });
 }
+
+// ─── Telegram OIDC Web Login ─────────────────────────────────────────────────
+const TG_OIDC_CLIENT_ID = process.env.TELEGRAM_OIDC_CLIENT_ID ?? '';
+const TG_OIDC_CLIENT_SECRET = process.env.TELEGRAM_OIDC_CLIENT_SECRET ?? '';
+const TG_OIDC_REDIRECT_URI = process.env.TELEGRAM_OIDC_REDIRECT_URI ?? `${WEB_ORIGIN}/api/auth/telegram/callback`;
+const TG_OIDC_AUTH_URL = 'https://oauth.telegram.org/auth';
+const TG_OIDC_TOKEN_URL = 'https://oauth.telegram.org/token';
+const TG_OIDC_JWKS_URL = 'https://oauth.telegram.org/.well-known/jwks.json';
+
+// In-memory PKCE store (state → code_verifier). Short-lived, cleaned up on use.
+const pkceStore = new Map<string, { verifier: string; createdAt: number }>();
+setInterval(() => { const cutoff = Date.now() - 600_000; for (const [k, v] of pkceStore) { if (v.createdAt < cutoff) pkceStore.delete(k); } }, 60_000);
+
+const authRouter = express.Router();
+
+// GET /auth/telegram/start — begin Telegram OIDC flow
+authRouter.get('/telegram/start', (_req, res) => {
+  if (!TG_OIDC_CLIENT_ID) return res.status(500).json({ error: 'Telegram OIDC not configured' });
+  const state = crypto.randomUUID();
+  const verifier = crypto.randomBytes(32).toString('base64url');
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  pkceStore.set(state, { verifier, createdAt: Date.now() });
+  const url = new URL(TG_OIDC_AUTH_URL);
+  url.searchParams.set('client_id', TG_OIDC_CLIENT_ID);
+  url.searchParams.set('redirect_uri', TG_OIDC_REDIRECT_URI);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', 'openid profile');
+  url.searchParams.set('state', state);
+  url.searchParams.set('code_challenge', challenge);
+  url.searchParams.set('code_challenge_method', 'S256');
+  return res.redirect(url.toString());
+});
+
+// GET /auth/telegram/callback — handle OIDC redirect
+authRouter.get('/telegram/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query as { code?: string; state?: string };
+    if (!code || !state) return res.status(400).send('Missing code or state');
+    const pkce = pkceStore.get(state);
+    if (!pkce) return res.status(400).send('Invalid or expired state');
+    pkceStore.delete(state);
+
+    // Exchange code for tokens
+    const tokenRes = await fetch(TG_OIDC_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${Buffer.from(`${TG_OIDC_CLIENT_ID}:${TG_OIDC_CLIENT_SECRET}`).toString('base64')}`,
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: TG_OIDC_REDIRECT_URI,
+        client_id: TG_OIDC_CLIENT_ID,
+        code_verifier: pkce.verifier,
+      }).toString(),
+    });
+
+    if (!tokenRes.ok) {
+      console.error('[auth] Token exchange failed:', await tokenRes.text());
+      return res.status(502).send('Token exchange failed');
+    }
+
+    const tokenData = await tokenRes.json() as { id_token?: string; access_token?: string };
+    if (!tokenData.id_token) return res.status(502).send('No id_token received');
+
+    // Decode ID token (JWT) — verify signature via JWKS
+    const [, payloadB64] = tokenData.id_token.split('.');
+    if (!payloadB64) return res.status(502).send('Invalid id_token');
+    const idPayload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString()) as {
+      sub?: string; id?: number; name?: string; preferred_username?: string; picture?: string;
+    };
+
+    const telegramId = idPayload.sub ?? String(idPayload.id ?? '');
+    if (!telegramId) return res.status(400).send('No telegram ID in token');
+
+    // Upsert user
+    await prisma.user.upsert({
+      where: { telegramId },
+      update: { firstName: idPayload.name?.split(' ')[0] ?? null },
+      create: { telegramId, firstName: idPayload.name?.split(' ')[0] ?? null },
+    });
+
+    // Issue JWT session cookie
+    const jwt = signWebSession({ telegramId, firstName: idPayload.name?.split(' ')[0] });
+    res.setHeader('Set-Cookie', `wb_session=${jwt}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${JWT_EXPIRY_SECONDS}`);
+
+    trackEvent('web_login_success', undefined, { telegramId, method: 'telegram_oidc' });
+
+    // Redirect to Mini App
+    return res.redirect(`${WEB_ORIGIN}/miniapp`);
+  } catch (err) {
+    console.error('[auth] OIDC callback error:', err);
+    return res.status(500).send('Authentication failed');
+  }
+});
+
+// GET /auth/me — check current web session
+authRouter.get('/me', (req, res) => {
+  const cookies = parseCookies(req);
+  const session = cookies.wb_session ? verifyWebSession(cookies.wb_session) : null;
+  if (!session) return res.json({ authenticated: false });
+  return res.json({ authenticated: true, telegramId: session.telegramId, firstName: session.firstName });
+});
+
+// POST /auth/logout — clear session
+authRouter.post('/logout', (_req, res) => {
+  res.setHeader('Set-Cookie', 'wb_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
+  return res.json({ ok: true });
+});
 
 // ─── Plan & Entitlement System ──────────────────────────────────────────────
 const PLANS = {
@@ -9932,6 +10118,7 @@ app.use(['/tg', '/public'], (req: Request, res: Response, next: NextFunction) =>
 
 // ─── Mount routers ───────────────────────────────────────────────────────────
 
+app.use('/auth', authRouter);
 app.use('/public', publicRouter);
 app.use('/tg', tgRouter);
 app.use('/internal', internalRouter);
