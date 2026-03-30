@@ -12335,12 +12335,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {/* URL with hint + preview */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_url', locale)}</div>
-            <input
-              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 14, padding: '12px 14px' }}
-              placeholder={t('item_url_placeholder', locale)}
-              value={itemUrl}
-              onChange={(e) => setItemUrl(e.target.value)}
-            />
+            <div style={{ position: 'relative' as const }}>
+              <input
+                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 14, padding: '12px 38px 12px 14px' }}
+                placeholder={t('item_url_placeholder', locale)}
+                value={itemUrl}
+                onChange={(e) => setItemUrl(e.target.value)}
+                autoCapitalize="none" autoCorrect="off" spellCheck={false}
+              />
+              {itemUrl && <button type="button" aria-label="Clear" onClick={() => setItemUrl('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+            </div>
             {itemUrl.startsWith('http') && (() => {
               try {
                 const domain = new URL(itemUrl).hostname.replace(/^www\./, '');
@@ -12360,15 +12364,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {/* Description — after URL */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('item_description', locale)}</div>
-            <textarea
-              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: 1.4, fontSize: 14 }}
-              maxLength={500}
-              placeholder={t('item_description_placeholder', locale)}
-              value={itemDescription}
-              ref={itemDescTextareaRef}
-              onChange={(e) => setItemDescription(e.target.value)}
-              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
-            />
+            <div style={{ position: 'relative' as const }}>
+              <textarea
+                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: 1.4, fontSize: 14, paddingRight: 38 }}
+                maxLength={500}
+                placeholder={t('item_description_placeholder', locale)}
+                value={itemDescription}
+                ref={itemDescTextareaRef}
+                onChange={(e) => setItemDescription(e.target.value)}
+                onFocus={(e) => handleTextareaFocus(e.currentTarget)}
+              />
+              {itemDescription && <button type="button" aria-label="Clear" onClick={() => setItemDescription('')} style={{ position: 'absolute', right: 6, top: 8, background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+            </div>
             <div style={{ fontSize: 10, color: '#3a3a44', textAlign: 'right', marginTop: 3 }}>{itemDescription.length}/500</div>
           </div>
           {/* Photo picker — refreshed */}
@@ -12548,20 +12555,26 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_description', locale)}</label>
-            <textarea
-              style={{ ...inputStyle, minHeight: 48, resize: 'none', overflow: 'hidden' }}
-              maxLength={500}
-              placeholder={t('item_description_placeholder', locale)}
-              value={itemDescription}
-              ref={itemDescTextareaRef}
-              onChange={(e) => setItemDescription(e.target.value)}
-              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
-            />
+            <div style={{ position: 'relative' as const }}>
+              <textarea
+                style={{ ...inputStyle, minHeight: 48, resize: 'none', overflow: 'hidden', paddingRight: 38 }}
+                maxLength={500}
+                placeholder={t('item_description_placeholder', locale)}
+                value={itemDescription}
+                ref={itemDescTextareaRef}
+                onChange={(e) => setItemDescription(e.target.value)}
+                onFocus={(e) => handleTextareaFocus(e.currentTarget)}
+              />
+              {itemDescription && <button type="button" aria-label="Clear" onClick={() => setItemDescription('')} style={{ position: 'absolute', right: 6, top: 8, background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+            </div>
             <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 2 }}>{itemDescription.length}/500</div>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_url', locale)}</label>
-            <input style={inputStyle} placeholder="https://…" value={itemUrl} onChange={(e) => setItemUrl(e.target.value)} />
+            <div style={{ position: 'relative' as const }}>
+              <input style={{ ...inputStyle, paddingRight: 38 }} placeholder="https://…" value={itemUrl} onChange={(e) => setItemUrl(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+              {itemUrl && <button type="button" aria-label="Clear" onClick={() => setItemUrl('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+            </div>
           </div>
           {/* ── Photo picker ── */}
           {(() => {
