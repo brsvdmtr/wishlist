@@ -1385,98 +1385,87 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction) {
   return res.status(401).json({ error: 'Authentication required' });
 }
 
-// ─── Telegram OIDC Web Login ─────────────────────────────────────────────────
-const TG_OIDC_CLIENT_ID = process.env.TELEGRAM_OIDC_CLIENT_ID ?? '';
-const TG_OIDC_CLIENT_SECRET = process.env.TELEGRAM_OIDC_CLIENT_SECRET ?? '';
-const TG_OIDC_REDIRECT_URI = process.env.TELEGRAM_OIDC_REDIRECT_URI ?? `${WEB_ORIGIN}/api/auth/telegram/callback`;
-const TG_OIDC_AUTH_URL = 'https://oauth.telegram.org/auth';
-const TG_OIDC_TOKEN_URL = 'https://oauth.telegram.org/token';
-const TG_OIDC_JWKS_URL = 'https://oauth.telegram.org/.well-known/jwks.json';
+// ─── Telegram Login Widget Web Auth ──────────────────────────────────────────
+// Uses the legacy Telegram Login Widget flow (available for all bots with a domain set in BotFather).
+// Flow: /auth/telegram/start → redirect to oauth.telegram.org → callback with user data + HMAC hash.
+// Verification: HMAC-SHA256(data_check_string, SHA256(bot_token)) must equal the hash param.
 
-// In-memory PKCE store (state → code_verifier). Short-lived, cleaned up on use.
-const pkceStore = new Map<string, { verifier: string; createdAt: number }>();
-setInterval(() => { const cutoff = Date.now() - 600_000; for (const [k, v] of pkceStore) { if (v.createdAt < cutoff) pkceStore.delete(k); } }, 60_000);
+const TG_BOT_TOKEN = process.env.BOT_TOKEN ?? '';
+const TG_BOT_ID = TG_BOT_TOKEN.split(':')[0] ?? '';
+const TG_WIDGET_AUTH_TTL = 86400; // Accept auth_date within 24 hours
+
+/** Verify Telegram Login Widget data. See https://core.telegram.org/widgets/login#checking-authorization */
+function verifyTelegramWidget(params: Record<string, string>): boolean {
+  const { hash, ...data } = params;
+  if (!hash) return false;
+  // Check auth_date freshness
+  const authDate = parseInt(data.auth_date ?? '0', 10);
+  if (Math.abs(Date.now() / 1000 - authDate) > TG_WIDGET_AUTH_TTL) return false;
+  // Build data-check-string: sorted key=value pairs joined by \n
+  const checkString = Object.keys(data).sort().map(k => `${k}=${data[k]}`).join('\n');
+  const secretKey = crypto.createHash('sha256').update(TG_BOT_TOKEN).digest();
+  const hmac = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
+  return hmac === hash;
+}
 
 const authRouter = express.Router();
 
-// GET /auth/telegram/start — begin Telegram OIDC flow
+// GET /auth/telegram/start — redirect user to Telegram Login Widget
 authRouter.get('/telegram/start', (_req, res) => {
-  if (!TG_OIDC_CLIENT_ID) return res.status(500).json({ error: 'Telegram OIDC not configured' });
-  const state = crypto.randomUUID();
-  const verifier = crypto.randomBytes(32).toString('base64url');
-  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
-  pkceStore.set(state, { verifier, createdAt: Date.now() });
-  const url = new URL(TG_OIDC_AUTH_URL);
-  url.searchParams.set('client_id', TG_OIDC_CLIENT_ID);
-  url.searchParams.set('redirect_uri', TG_OIDC_REDIRECT_URI);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', 'openid profile');
-  url.searchParams.set('state', state);
-  url.searchParams.set('code_challenge', challenge);
-  url.searchParams.set('code_challenge_method', 'S256');
-  return res.redirect(url.toString());
+  if (!TG_BOT_ID) return res.status(500).json({ error: 'BOT_TOKEN not configured' });
+  const callbackUrl = `${WEB_ORIGIN}/api/auth/telegram/callback`;
+  const url = `https://oauth.telegram.org/auth?bot_id=${TG_BOT_ID}&origin=${encodeURIComponent(WEB_ORIGIN)}&return_to=${encodeURIComponent(callbackUrl)}&request_access=write`;
+  return res.redirect(url);
 });
 
-// GET /auth/telegram/callback — handle OIDC redirect
+// GET /auth/telegram/callback — verify widget data and create session
 authRouter.get('/telegram/callback', async (req, res) => {
   try {
-    const { code, state } = req.query as { code?: string; state?: string };
-    if (!code || !state) return res.status(400).send('Missing code or state');
-    const pkce = pkceStore.get(state);
-    if (!pkce) return res.status(400).send('Invalid or expired state');
-    pkceStore.delete(state);
-
-    // Exchange code for tokens
-    const tokenRes = await fetch(TG_OIDC_TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${Buffer.from(`${TG_OIDC_CLIENT_ID}:${TG_OIDC_CLIENT_SECRET}`).toString('base64')}`,
-      },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: TG_OIDC_REDIRECT_URI,
-        client_id: TG_OIDC_CLIENT_ID,
-        code_verifier: pkce.verifier,
-      }).toString(),
-    });
-
-    if (!tokenRes.ok) {
-      console.error('[auth] Token exchange failed:', await tokenRes.text());
-      return res.status(502).send('Token exchange failed');
+    const params = req.query as Record<string, string>;
+    if (!verifyTelegramWidget(params)) {
+      console.error('[auth] Widget verification failed', { id: params.id, auth_date: params.auth_date });
+      return res.status(403).send('Telegram login verification failed');
     }
 
-    const tokenData = await tokenRes.json() as { id_token?: string; access_token?: string };
-    if (!tokenData.id_token) return res.status(502).send('No id_token received');
+    const telegramId = params.id;
+    const firstName = params.first_name ?? null;
+    const username = params.username ?? null;
+    const photoUrl = params.photo_url ?? null;
 
-    // Decode ID token (JWT) — verify signature via JWKS
-    const [, payloadB64] = tokenData.id_token.split('.');
-    if (!payloadB64) return res.status(502).send('Invalid id_token');
-    const idPayload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString()) as {
-      sub?: string; id?: number; name?: string; preferred_username?: string; picture?: string;
-    };
-
-    const telegramId = idPayload.sub ?? String(idPayload.id ?? '');
-    if (!telegramId) return res.status(400).send('No telegram ID in token');
+    if (!telegramId) return res.status(400).send('No telegram ID');
 
     // Upsert user
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: { telegramId },
-      update: { firstName: idPayload.name?.split(' ')[0] ?? null },
-      create: { telegramId, firstName: idPayload.name?.split(' ')[0] ?? null },
+      update: { firstName },
+      create: { telegramId, firstName },
     });
 
+    // Update profile with Telegram photo/username if available
+    if (username || photoUrl) {
+      await prisma.userProfile.upsert({
+        where: { userId: user.id },
+        update: {
+          ...(photoUrl ? { avatarUrl: photoUrl } : {}),
+        },
+        create: {
+          userId: user.id,
+          ...(username ? { username } : {}),
+          ...(photoUrl ? { avatarUrl: photoUrl } : {}),
+        },
+      });
+    }
+
     // Issue JWT session cookie
-    const jwt = signWebSession({ telegramId, firstName: idPayload.name?.split(' ')[0] });
+    const jwt = signWebSession({ telegramId, firstName: firstName ?? undefined });
     res.setHeader('Set-Cookie', `wb_session=${jwt}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${JWT_EXPIRY_SECONDS}`);
 
-    trackEvent('web_login_success', undefined, { telegramId, method: 'telegram_oidc' });
+    trackEvent('web_login_success', undefined, { telegramId, method: 'telegram_widget' });
 
     // Redirect to Mini App
     return res.redirect(`${WEB_ORIGIN}/miniapp`);
   } catch (err) {
-    console.error('[auth] OIDC callback error:', err);
+    console.error('[auth] Widget callback error:', err);
     return res.status(500).send('Authentication failed');
   }
 });

@@ -6079,7 +6079,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </a>
               )}
 
-              {/* Web Login via Telegram OIDC */}
+              {/* Web Login via Telegram Login Widget */}
+              {/* Web Login via Telegram Login Widget */}
               <button
                 onClick={() => { window.location.href = `${apiBase}/auth/telegram/start`; }}
                 style={{
