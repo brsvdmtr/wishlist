@@ -11038,7 +11038,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             {/* CTA — always at bottom */}
             <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
-              style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: gnOccasions.length === 0 ? 0 : 8, boxShadow: `0 4px 16px ${C.accentGlow}` }}>
+              style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: gnOccasions.length === 0 ? 16 : 8, marginBottom: 32, boxShadow: `0 4px 16px ${C.accentGlow}` }}>
               + {t('gn_add_occasion', locale)}
             </button>
           </div>
@@ -11241,7 +11241,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_date', locale)}</label>
-            <input type="date" value={gnFormDate} onChange={e => setGnFormDate(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
+            <div style={{ position: 'relative' as const }}>
+              <input type="date" value={gnFormDate} onChange={e => setGnFormDate(e.target.value)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: gnFormDate ? C.text : 'transparent', fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const, minHeight: 42 }} />
+              {!gnFormDate && <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: C.textMuted, pointerEvents: 'none' }}>{locale === 'ru' ? 'Не выбрана' : 'Not set'}</span>}
+              {gnFormDate && <button onClick={(e) => { e.stopPropagation(); setGnFormDate(''); }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
+            </div>
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_type', locale)}</label>
