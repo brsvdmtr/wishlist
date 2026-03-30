@@ -21,6 +21,8 @@
  */
 
 import * as cheerio from 'cheerio';
+import * as dns from 'node:dns/promises';
+import * as net from 'node:net';
 import puppeteer, { type Browser } from 'puppeteer-core';
 import {
   browserExtract,
@@ -76,6 +78,7 @@ const TRACKING_PARAMS = new Set([
 
 const BLOCKED_HOSTNAMES = new Set([
   'localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]',
+  'metadata.google.internal', 'metadata.google',
 ]);
 
 /** Domains where a browser is always used for initial load */
@@ -127,12 +130,20 @@ async function getBrowser(): Promise<Browser> {
     executablePath: CHROMIUM_PATH,
     headless: true,
     args: [
+      // --no-sandbox is required in Docker without user-namespace remapping.
+      // TODO(security): move Puppeteer to an isolated container with sandbox enabled.
       '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
       '--disable-gpu', '--disable-extensions', '--disable-background-networking',
       '--disable-default-apps', '--disable-sync', '--no-first-run',
-      '--single-process', '--disable-crash-reporter',
+      // --single-process removed: keeps renderer in a separate process to limit
+      // blast radius if a page exploits a renderer vulnerability.
+      '--disable-crash-reporter',
       '--crash-dumps-dir=/tmp/crashes',
       '--disable-blink-features=AutomationControlled',
+      // Restrict renderer capabilities
+      '--disable-file-system',
+      '--disable-webgl',
+      '--disable-software-rasterizer',
     ],
   });
   browserTimer = setTimeout(closeBrowser, BROWSER_IDLE_MS);
@@ -150,6 +161,7 @@ async function closeBrowser(): Promise<void> {
 
 export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
   const url          = validateUrl(rawUrl);
+  await assertDnsIsSafe(url);
   const hostname     = url.hostname.replace(/^www\./, '').replace(/^m\./, '');
   const canonicalUrl = canonicalize(url);
 
@@ -236,29 +248,148 @@ export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
 
 // ─── URL Validation ───────────────────────────────────────────────────────────
 
+/**
+ * Synchronous URL structure validation (protocol, credentials, hostname blocklist).
+ * Does NOT resolve DNS — call `assertDnsIsSafe(url)` before making network requests.
+ */
 export function validateUrl(raw: string): URL {
   if (!raw || raw.length > MAX_URL_LENGTH) throw new Error('URL слишком длинный или пустой');
   let url: URL;
   try { url = new URL(raw); } catch { throw new Error('Некорректный URL'); }
   if (url.protocol !== 'http:' && url.protocol !== 'https:')
     throw new Error('Поддерживаются только http и https ссылки');
+  if (url.username || url.password)
+    throw new Error('URL с учётными данными не поддерживается');
   const h = url.hostname.toLowerCase();
   if (BLOCKED_HOSTNAMES.has(h)) throw new Error('Ссылка на локальный адрес недоступна');
-  if (isPrivateIP(h))           throw new Error('Ссылка на внутренний адрес недоступна');
+  if (isForbiddenIP(h))         throw new Error('Ссылка на внутренний адрес недоступна');
   return url;
 }
 
-function isPrivateIP(h: string): boolean {
-  const parts = h.split('.');
-  if (parts.length === 4 && parts.every(p => /^\d+$/.test(p))) {
-    const [a, b] = parts.map(Number) as [number, number];
-    if (a === 10) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 0)  return true;
+/**
+ * Resolve the hostname and reject if ANY A/AAAA record points to a forbidden IP.
+ * Must be called before fetch/Puppeteer navigation.
+ */
+export async function assertDnsIsSafe(url: URL): Promise<void> {
+  const hostname = url.hostname.replace(/^\[/, '').replace(/\]$/, '');
+
+  // If the hostname is already an IP literal, check it directly
+  if (net.isIP(hostname)) {
+    if (isForbiddenIP(hostname)) throw new Error('Ссылка на внутренний адрес недоступна');
+    return;
   }
+
+  let addresses: string[];
+  try {
+    const results = await dns.resolve(hostname);            // A records
+    const results6 = await dns.resolve6(hostname).catch(() => [] as string[]); // AAAA records
+    addresses = [...results, ...results6];
+  } catch {
+    // DNS resolution failure — let the fetch itself fail with a descriptive error
+    return;
+  }
+
+  for (const ip of addresses) {
+    if (isForbiddenIP(ip)) {
+      throw new Error('Ссылка на внутренний адрес недоступна (DNS)');
+    }
+  }
+}
+
+/**
+ * Check whether an IP address (IPv4 or IPv6, including IPv4-mapped IPv6) is forbidden.
+ * Covers loopback, private, link-local, metadata, and reserved ranges.
+ */
+export function isForbiddenIP(h: string): boolean {
+  // Strip brackets for IPv6 literals from URL hostname
+  const raw = h.replace(/^\[/, '').replace(/\]$/, '');
+
+  // ── IPv4 ────────────────────────────────────────────────────────────────
+  if (net.isIPv4(raw)) {
+    const parts = raw.split('.').map(Number) as [number, number, number, number];
+    const [a, b] = parts;
+    if (a === 0)                             return true;  // 0.0.0.0/8
+    if (a === 10)                            return true;  // 10.0.0.0/8
+    if (a === 100 && b >= 64 && b <= 127)    return true;  // 100.64.0.0/10 (CGN)
+    if (a === 127)                           return true;  // 127.0.0.0/8
+    if (a === 169 && b === 254)              return true;  // 169.254.0.0/16 (link-local + cloud metadata)
+    if (a === 172 && b >= 16 && b <= 31)     return true;  // 172.16.0.0/12
+    if (a === 192 && b === 168)              return true;  // 192.168.0.0/16
+    if (a === 192 && b === 0 && parts[2] === 0) return true; // 192.0.0.0/24
+    if (a >= 224)                            return true;  // multicast + reserved
+    return false;
+  }
+
+  // ── IPv6 ────────────────────────────────────────────────────────────────
+  if (net.isIPv6(raw)) {
+    // Mixed-notation IPv4-mapped IPv6 first (e.g. "::ffff:127.0.0.1")
+    const v4mixed = extractMappedIPv4Mixed(raw);
+    if (v4mixed) return isForbiddenIP(v4mixed);
+
+    const full = expandIPv6(raw);
+
+    // Pure-hex IPv4-mapped IPv6: ::ffff:7f00:0001
+    const v4mapped = extractMappedIPv4(full);
+    if (v4mapped) return isForbiddenIP(v4mapped);
+
+    // Loopback ::1
+    if (full === '0000:0000:0000:0000:0000:0000:0000:0001') return true;
+    // Unspecified ::
+    if (full === '0000:0000:0000:0000:0000:0000:0000:0000') return true;
+
+    const firstWord = parseInt(full.slice(0, 4), 16);
+    // Link-local fe80::/10
+    if ((firstWord & 0xffc0) === 0xfe80) return true;
+    // Unique local fc00::/7
+    if ((firstWord & 0xfe00) === 0xfc00) return true;
+    // Multicast ff00::/8
+    if ((firstWord & 0xff00) === 0xff00) return true;
+    // Teredo 2001:0000::/32
+    if (full.startsWith('2001:0000')) return true;
+
+    return false;
+  }
+
   return false;
+}
+
+/** Expand an IPv6 address to full 8-group form (lowercase hex). */
+function expandIPv6(ip: string): string {
+  let halves = ip.split('::');
+  let groups: string[];
+  if (halves.length === 2) {
+    const left  = halves[0] ? halves[0].split(':') : [];
+    const right = halves[1] ? halves[1].split(':') : [];
+    const fill  = 8 - left.length - right.length;
+    groups = [...left, ...Array(fill).fill('0'), ...right];
+  } else {
+    groups = ip.split(':');
+  }
+  return groups.map(g => g.padStart(4, '0').toLowerCase()).join(':');
+}
+
+/** Extract the IPv4 portion from an IPv4-mapped IPv6 address, or null. */
+function extractMappedIPv4(fullIPv6: string): string | null {
+  // ::ffff:xxxx:yyyy → last 32 bits are the IPv4
+  if (fullIPv6.startsWith('0000:0000:0000:0000:ffff:') ||
+      fullIPv6.startsWith('0000:0000:0000:0000:0000:ffff:')) {
+    const lastTwo = fullIPv6.split(':').slice(-2);
+    if (lastTwo.length === 2) {
+      const hi = parseInt(lastTwo[0]!, 16);
+      const lo = parseInt(lastTwo[1]!, 16);
+      return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Handle mixed-notation IPv4-mapped IPv6 (e.g. "::ffff:127.0.0.1")
+ * which net.isIPv6 recognizes but expandIPv6 won't handle correctly.
+ */
+function extractMappedIPv4Mixed(raw: string): string | null {
+  const match = raw.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i);
+  return match ? match[1]! : null;
 }
 
 // ─── Canonicalization ─────────────────────────────────────────────────────────
@@ -392,47 +523,67 @@ function mergeNetworkWithHtml(
 
 // ─── HTML Fetch (plain HTTP) ──────────────────────────────────────────────────
 
-async function fetchHtml(url: string): Promise<string> {
-  const ctrl  = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Upgrade-Insecure-Requests': '1',
-      },
-      redirect: 'follow',
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const ct = res.headers.get('content-type') ?? '';
-    if (!ct.includes('text/html') && !ct.includes('application/xhtml'))
-      throw new Error(`Not HTML: ${ct}`);
+const MAX_REDIRECTS = 5;
 
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error('No body');
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      chunks.push(value);
-      if (total >= MAX_HTML_BYTES) { reader.cancel(); break; }
+async function fetchHtml(url: string): Promise<string> {
+  let currentUrl = url;
+
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(currentUrl, {
+        signal: ctrl.signal,
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
+          'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Upgrade-Insecure-Requests': '1',
+        },
+        redirect: 'manual',
+      });
+
+      // Handle redirects manually: validate each redirect target
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get('location');
+        if (!location) throw new Error('Redirect without Location header');
+        const redirectUrl = new URL(location, currentUrl);
+        validateUrl(redirectUrl.href);                        // re-validate structure
+        await assertDnsIsSafe(redirectUrl);                    // re-validate resolved IPs
+        currentUrl = redirectUrl.href;
+        continue;
+      }
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const ct = res.headers.get('content-type') ?? '';
+      if (!ct.includes('text/html') && !ct.includes('application/xhtml'))
+        throw new Error(`Not HTML: ${ct}`);
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No body');
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        chunks.push(value);
+        if (total >= MAX_HTML_BYTES) { reader.cancel(); break; }
+      }
+      const buf = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) { buf.set(c, off); off += c.byteLength; }
+      return new TextDecoder('utf-8', { fatal: false }).decode(buf);
+    } finally {
+      clearTimeout(timer);
     }
-    const buf = new Uint8Array(total);
-    let off = 0;
-    for (const c of chunks) { buf.set(c, off); off += c.byteLength; }
-    return new TextDecoder('utf-8', { fatal: false }).decode(buf);
-  } finally {
-    clearTimeout(timer);
   }
+
+  throw new Error('Слишком много редиректов');
 }
 
 // ─── HTML Extraction (Cheerio + JSON-LD + domain adapters) ───────────────────

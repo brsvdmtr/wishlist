@@ -1261,6 +1261,11 @@ declare global {
   }
 }
 
+/** Max age for Telegram initData auth_date (seconds). Default 24 hours; configurable via INIT_DATA_MAX_AGE_SECONDS. */
+const INIT_DATA_MAX_AGE_SECONDS = Math.max(60, parseInt(process.env.INIT_DATA_MAX_AGE_SECONDS ?? '86400', 10));
+/** Allow minor clock skew (seconds). */
+const INIT_DATA_CLOCK_SKEW_SECONDS = 30;
+
 function validateTelegramInitData(initData: string, botToken: string): TelegramUser | null {
   try {
     const params = new URLSearchParams(initData);
@@ -1273,7 +1278,17 @@ function validateTelegramInitData(initData: string, botToken: string): TelegramU
       .join('\n');
     const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
     const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
-    if (expectedHash !== hash) return null;
+    if (!secureCompare(expectedHash, hash)) return null;
+
+    // ── auth_date expiry: reject stale or missing auth_date ───────────────
+    const authDateStr = params.get('auth_date');
+    if (!authDateStr) return null;
+    const authDate = Number(authDateStr);
+    if (!Number.isFinite(authDate) || authDate <= 0) return null;
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (authDate > nowSec + INIT_DATA_CLOCK_SKEW_SECONDS) return null;       // future beyond skew
+    if (nowSec - authDate > INIT_DATA_MAX_AGE_SECONDS) return null;          // expired
+
     const userStr = params.get('user');
     if (!userStr) return null;
     return JSON.parse(userStr) as TelegramUser;
