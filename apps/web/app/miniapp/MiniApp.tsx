@@ -6706,7 +6706,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 {t('connect_pro', locale)}
               </button>
             )}
-            {!reorderMode && <button style={btnPrimary} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</button>}
+            {/* spacer for fixed CTA */}
+            {!reorderMode && <div style={{ height: 70 }} />}
+            {!reorderMode && (
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', pointerEvents: 'none' }}>
+                <button style={{ ...btnPrimary, height: 50, borderRadius: 14, fontSize: 15, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</button>
+              </div>
+            )}
           </div>
           )}
 
@@ -11036,11 +11042,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {done.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('✓', t('gn_done', locale), done.length, '#34D399')}{done.map(card)}</div>}
             {archived.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('📦', t('gn_archive', locale), archived.length)}{archived.map(card)}</div>}
 
-            {/* CTA — always at bottom */}
-            <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
-              style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: gnOccasions.length === 0 ? 16 : 8, marginBottom: 32, boxShadow: `0 4px 16px ${C.accentGlow}` }}>
-              + {t('gn_add_occasion', locale)}
-            </button>
+            {/* CTA — fixed at bottom */}
+            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', pointerEvents: 'none' }}>
+              <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
+                style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
+                + {t('gn_add_occasion', locale)}
+              </button>
+            </div>
           </div>
         );
       })()}
@@ -11175,11 +11183,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </div>
               ))}
 
-              {/* Add idea CTA */}
-              <button onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }}
-                style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: 10, boxShadow: `0 4px 16px ${C.accentGlow}` }}>
-                + {t('gn_add_idea', locale)}
-              </button>
+              {/* Add idea CTA — fixed at bottom */}
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', pointerEvents: 'none' }}>
+                <button onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }}
+                  style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
+                  + {t('gn_add_idea', locale)}
+                </button>
+              </div>
             </div>
 
             {/* Edit BottomSheet */}
