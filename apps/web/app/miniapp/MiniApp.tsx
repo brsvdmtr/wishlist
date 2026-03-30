@@ -2022,6 +2022,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [tgUser, setTgUser] = useState<TgUser | null>(null);
   const [locale, setLocale] = useState<Locale>('ru');
 
+  // Desktop detection for responsive layout
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(min-width: 768px)');
+    setIsDesktop(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   // Owner state
   const [wishlists, setWishlists] = useState<Wishlist[]>([]);
   const [planLimits, setPlanLimits] = useState({ wishlists: 2, items: 20 });
@@ -4078,6 +4089,67 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   }, [screen, santaWishlistPickerReturnId]);
 
+  // --- Desktop sidebar navigation listener ---
+  useEffect(() => {
+    if (!isDesktop) return;
+    const handler = (e: Event) => {
+      const target = (e as CustomEvent).detail as string;
+      if (!target) return;
+      // Handle navigation to specific screens
+      if (target === 'my-wishlists') { setScreen('my-wishlists'); setHomeTab('wishlists'); }
+      else if (target === 'my-reservations') { setScreen('my-wishlists'); setHomeTab('reservations'); }
+      else if (target === 'gift-notes') {
+        if (gnAccess.unlocked) {
+          setGnLoading(true);
+          tgFetch('/tg/gift-occasions').then(async r => {
+            if (r.ok) { const d = await r.json() as { occasions: any[] }; setGnOccasions(d.occasions); }
+          }).catch(() => {}).finally(() => setGnLoading(false));
+          setScreen('gift-notes');
+        } else { setScreen('gift-notes-paywall'); }
+      }
+      else if (target === 'santa-hub') { setScreen('santa-hub'); }
+      else if (target === 'profile') { loadProfile(); setScreen('profile'); }
+      else if (target === 'settings') { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }
+    };
+    window.addEventListener('wb-navigate', handler);
+    return () => window.removeEventListener('wb-navigate', handler);
+  }, [isDesktop, gnAccess, tgFetch, screen]);
+
+  // --- Desktop sidebar active state sync ---
+  useEffect(() => {
+    if (!isDesktop || typeof document === 'undefined') return;
+    const screenToNav: Record<string, string> = {
+      'my-wishlists': 'my-wishlists',
+      'wishlist-detail': 'my-wishlists',
+      'item-detail': 'my-wishlists',
+      'share': 'my-wishlists',
+      'archive': 'my-wishlists',
+      'drafts': 'my-wishlists',
+      'gift-notes': 'gift-notes',
+      'gift-notes-occasion': 'gift-notes',
+      'gift-notes-paywall': 'gift-notes',
+      'santa-hub': 'santa-hub',
+      'santa-create': 'santa-hub',
+      'santa-campaign': 'santa-hub',
+      'santa-join': 'santa-hub',
+      'santa-chat': 'santa-hub',
+      'profile': 'profile',
+      'settings': 'settings',
+    };
+    const activeScreen = screenToNav[screen] ?? 'my-wishlists';
+    document.querySelectorAll('.wb-nav-item').forEach(el => {
+      el.classList.toggle('active', el.getAttribute('data-screen') === activeScreen);
+    });
+    // Update topbar user info
+    const topbar = document.getElementById('wb-topbar-user');
+    if (topbar && tgUser) {
+      topbar.innerHTML = `
+        <span>${tgUser.first_name || ''}</span>
+        <div class="wb-topbar-avatar">${(tgUser.first_name ?? 'U')[0]?.toUpperCase() ?? 'U'}</div>
+      `;
+    }
+  }, [isDesktop, screen, tgUser]);
+
   // --- Init
   useEffect(() => {
     // Capture start_param from URL query for graceful browser fallback
@@ -5933,7 +6005,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   return (
     <div ref={scrollContainerRef} dir={isRTL(locale) ? 'rtl' : 'ltr'} style={{
-      position: 'fixed', inset: 0, overflowY: 'auto', overflowX: 'hidden',
+      position: isDesktop ? 'absolute' as const : 'fixed' as const, inset: 0,
+      overflowY: 'auto', overflowX: 'hidden',
       background: C.bg, fontFamily: font, color: C.text,
       // Prevent scroll-chaining into Telegram WebView: when this container
       // reaches its top/bottom edge the gesture must NOT propagate upward to
@@ -6158,7 +6231,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'my-wishlists' && (
         <div
-          style={{ padding: '16px 20px 120px', minHeight: 'calc(100vh - 80px)' }}
+          style={{ padding: isDesktop ? '32px 40px 120px' : '16px 20px 120px', minHeight: 'calc(100vh - 80px)' }}
           onTouchStart={(e) => {
             if (reorderMode || itemReorderMode) return;
             const target = e.target as HTMLElement;
@@ -6204,6 +6277,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {/* ── Seasonal snowflakes — header area only, purely decorative ── */}
           <div style={{ position: 'relative' }}>
             {santaSeason?.inSeason && <SnowflakeOverlay height={72} />}
+          {/* Mobile-only header — hidden on desktop (sidebar handles navigation) */}
+          {!isDesktop && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, position: 'relative', zIndex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {/* Avatar → Profile; hat prop adds the seasonal SVG overlay */}
@@ -6268,6 +6343,28 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </button>
             </div>
           </div>
+          )}
+
+          {/* Desktop page header */}
+          {isDesktop && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+              <div>
+                <h1 style={{ fontSize: 28, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>
+                  {tgUser ? t('greeting', locale, { name: tgUser.first_name }) : t('my_wishlists', locale)}
+                </h1>
+                {planInfo.code === 'PRO' && (
+                  <span style={{
+                    display: 'inline-block', marginTop: 6,
+                    fontSize: 10, fontWeight: 800, letterSpacing: 0.6, padding: '3px 8px',
+                    borderRadius: 6,
+                    background: `linear-gradient(135deg, ${C.accent}20, ${C.accent}12)`,
+                    border: `1px solid ${C.accent}30`,
+                    color: C.accent,
+                  }}>PRO</span>
+                )}
+              </div>
+            </div>
+          )}
           </div>{/* end seasonal wrapper */}
 
           {/* ─── Primary home nav: Вишлисты | Желания | Мои брони ─── */}
@@ -6425,7 +6522,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
           {/* ── WISHLISTS TAB — mine subtab ─────────────────────────── */}
           {homeTab === 'wishlists' && myWishlistsTab === 'mine' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={isDesktop ? {
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16,
+          } : { display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
             {draftsCount > 0 && (
               <div onClick={() => { void loadDrafts(); setScreen('drafts'); }} style={{
                 background: `linear-gradient(135deg, ${C.orange}20, ${C.orange}08)`,
@@ -6612,7 +6711,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
           {/* ── WISHES TAB ──────────────────────────────────────────── */}
           {homeTab === 'wishes' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={isDesktop ? {
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16,
+            } : { display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
               {/* Priority filter chips */}
               {!allItemsLoading && allItems.length > 0 && (
                 <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
