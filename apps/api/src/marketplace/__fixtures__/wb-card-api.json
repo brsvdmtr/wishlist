@@ -1,0 +1,23 @@
+{
+  "data": {
+    "products": [
+      {
+        "id": 177335243,
+        "name": "Кроссовки беговые",
+        "brand": "Nike",
+        "salePriceU": 899900,
+        "sizes": [
+          {
+            "price": {
+              "total": 899900
+            }
+          }
+        ],
+        "mediaFiles": [
+          "https://basket-11.wbbasket.ru/vol1773/part17733/177335243/images/big/1.webp"
+        ],
+        "description": "Легкие беговые кроссовки для ежедневных тренировок. Амортизирующая подошва, дышащий верх из сетки."
+      }
+    ]
+  }
+}

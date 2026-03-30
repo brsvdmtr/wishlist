@@ -1,23 +1,22 @@
 /**
  * URL Parser — product card metadata extraction
  *
- * Extraction pipeline with 5-level source priority:
+ * Two-tier architecture:
+ *   A. Known marketplaces (WB, Ozon, YM, GoldApple) →
+ *      marketplace/orchestrator with field-level scoring, multi-strategy pipeline,
+ *      structured logging, and guards.
+ *   B. Unknown domains → legacy extraction pipeline (unchanged):
+ *      validateUrl → cache → HTTP/browser → Cheerio/JSON-LD/OG → merge
+ *
+ * The orchestrator produces ParsedProduct with per-field confidence,
+ * which is converted to ParsedUrlData for backward compatibility.
+ *
+ * Legacy pipeline (5-level source priority, for unknown domains):
  *   1. network_response  — XHR/fetch JSON intercepted during browser render
  *   2. next_data         — __NEXT_DATA__ (Next.js hydration)
  *   3. hydration_state   — window.__INITIAL_STATE__ / Redux / Vuex / etc.
  *   4. jsonld            — JSON-LD Product structured data
  *   5. og_meta / dom     — Open Graph meta tags + domain DOM selectors
- *
- * Overall flow per request:
- *   validateUrl + canonicalize
- *   → cache check (24 h success / 5 min negative)
- *   → WB shortcut: card.wb.ru JSON API (if nm extractable)
- *   → SPA/browser-first domains → browserExtract (network + hydration + HTML)
- *   → HTTP-first domains → fetchHtml + Cheerio
- *       → confidence < medium → browserExtract fallback
- *   → anti-bot / garbage guard
- *   → merge by priority
- *   → cache store
  */
 
 import * as cheerio from 'cheerio';
@@ -30,6 +29,22 @@ import {
   wbCdnImageUrl,
   wbBasket,
 } from './browser-network-extractor.js';
+
+// ─── Marketplace Orchestrator Integration ────────────────────────────────────
+import {
+  isKnownMarketplace,
+  parseMarketplaceUrl,
+  toOldFormat,
+  parseLog,
+  registerBrowserProvider,
+  registerFetchHtmlProvider,
+  stripHostPrefix,
+  getMarketplaceId,
+  shouldFallbackToLegacy,
+  isOrchestratorEnabled,
+} from './marketplace/index.js';
+// Auto-register all marketplace strategies on import
+import './marketplace/strategies/index.js';
 
 // ─── Public Types ─────────────────────────────────────────────────────────────
 
@@ -157,6 +172,12 @@ async function closeBrowser(): Promise<void> {
   }
 }
 
+// ─── Register providers for marketplace strategies ───────────────────────────
+// This allows marketplace strategies to use the browser singleton and fetchHtml
+// without circular imports.
+registerBrowserProvider(getBrowser);
+// fetchHtml provider is registered after the function definition below.
+
 // ─── Main Entry ───────────────────────────────────────────────────────────────
 
 export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
@@ -165,6 +186,68 @@ export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
   const hostname     = url.hostname.replace(/^www\./, '').replace(/^m\./, '');
   const canonicalUrl = canonicalize(url);
 
+  // ── Route: known marketplace → new orchestrator (if enabled) ────────────
+  if (isKnownMarketplace(hostname) && isOrchestratorEnabled()) {
+    return parseViaOrchestrator(url, hostname, canonicalUrl);
+  }
+
+  // ── Route: unknown domain OR kill switch active → legacy flow ───────────
+  return parseLegacy(url, hostname, canonicalUrl);
+}
+
+/**
+ * New orchestrator path for known marketplaces (WB, Ozon, YM, GoldApple, etc.).
+ *
+ * Runs the multi-strategy pipeline with field-level confidence scoring.
+ * Falls back to legacy in these cases:
+ *   - orchestrator returned 'none' confidence (total failure)
+ *   - orchestrator returned low-quality partial (shouldFallbackToLegacy)
+ *   - orchestrator threw an exception
+ *   - kill switch MARKETPLACE_PARSER_DISABLED=1 (checked before calling)
+ */
+async function parseViaOrchestrator(
+  url: URL,
+  hostname: string,
+  canonicalUrl: string,
+): Promise<ParsedUrlData> {
+  const marketplace = getMarketplaceId(hostname);
+
+  try {
+    const product = await parseMarketplaceUrl(url);
+
+    // Check if result is usable or should fall back to legacy
+    const fallbackReason = shouldFallbackToLegacy(product);
+
+    if (!fallbackReason) {
+      // Good result — convert and return
+      const result = toOldFormat(product, hostname, canonicalUrl);
+
+      // Cache in legacy cache too, so subsequent requests hit fast path
+      cacheSet(canonicalUrl, result);
+
+      return result;
+    }
+
+    // Orchestrator result is too weak — controlled fallback to legacy.
+    // Log why so we can track what class of failures trigger this.
+    parseLog.parseError(hostname, marketplace, `fallback_to_legacy:${fallbackReason}`);
+    return parseLegacy(url, hostname, canonicalUrl);
+
+  } catch (err) {
+    // Orchestrator threw — fall back to legacy for safety
+    parseLog.parseError(hostname, marketplace, `exception_fallback:${(err as Error).message}`);
+    return parseLegacy(url, hostname, canonicalUrl);
+  }
+}
+
+/**
+ * Legacy parser flow — used for:
+ *   1. Unknown domains (not a recognized marketplace)
+ *   2. Fallback when orchestrator returns 'none' for a known marketplace
+ *
+ * This is the original parseUrl logic, kept intact to prevent regressions.
+ */
+async function parseLegacy(url: URL, hostname: string, canonicalUrl: string): Promise<ParsedUrlData> {
   // ── Cache ────────────────────────────────────────────────────────────────
   const cached = cacheGet(canonicalUrl);
   if (cached) {
@@ -190,7 +273,6 @@ export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
           cacheSet(canonicalUrl, final);
           return final;
         }
-        // API failed — fall through to browser
       }
     }
 
@@ -208,7 +290,6 @@ export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
       if (html) {
         const fast = extractFromHtml(html, url.href, hostname, 'generic_html');
         if (confidenceScore(fast.confidence) >= 2) {
-          // medium or high — good enough
           result = fast;
         } else {
           console.log(`[parser] HTTP confidence=${fast.confidence}, trying browser: ${hostname}`);
@@ -585,6 +666,9 @@ async function fetchHtml(url: string): Promise<string> {
 
   throw new Error('Слишком много редиректов');
 }
+
+// Register fetchHtml provider for marketplace strategies
+registerFetchHtmlProvider(fetchHtml);
 
 // ─── HTML Extraction (Cheerio + JSON-LD + domain adapters) ───────────────────
 

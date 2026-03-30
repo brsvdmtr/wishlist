@@ -1,0 +1,70 @@
+/**
+ * marketplace/index.ts — Barrel exports for the marketplace parser module
+ */
+
+// Core types
+export type {
+  MarketplaceId,
+  FieldValue,
+  FieldSource,
+  PriceData,
+  ParsedProduct,
+  StrategyResult,
+  ParseStrategy,
+  ParseContext,
+  MarketplaceConfig,
+  NormalizedUrl,
+} from './types.js';
+
+// Orchestrator
+export {
+  parseMarketplaceUrl,
+  toOldFormat,
+  emptyProduct,
+  registerStrategies,
+  getStrategies,
+  shouldFallbackToLegacy,
+  isOrchestratorEnabled,
+} from './orchestrator.js';
+
+// Scoring
+export {
+  baseConfidence,
+  fieldValue,
+  titleField,
+  priceField,
+  imageField,
+  descriptionField,
+  mergeStrategyResults,
+  formatPrice,
+} from './scoring.js';
+
+// Normalizers
+export {
+  normalizeUrl,
+  detectMarketplace,
+  isKnownMarketplace,
+  getMarketplaceId,
+  stripHostPrefix,
+  buildWbCardApiUrl,
+  buildWbCanonicalUrl,
+  buildOzonCanonicalUrl,
+  buildYmCanonicalUrl,
+} from './normalizers.js';
+
+// Guards
+export {
+  isAntiBotPage,
+  isGarbageTitle,
+  isSuspiciousPrice,
+  isValidImageUrl,
+} from './guards.js';
+
+// Logger
+export { parseLog } from './logger.js';
+
+// Browser provider
+export {
+  registerBrowserProvider,
+  registerFetchHtmlProvider,
+} from './browser-provider.js';

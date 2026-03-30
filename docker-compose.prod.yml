@@ -35,6 +35,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       UPLOAD_DIR: /data/uploads
       ONBOARDING_V2_ROLLOUT: ${ONBOARDING_V2_ROLLOUT:-ab50}
+      MARKETPLACE_PARSER_DISABLED: ${MARKETPLACE_PARSER_DISABLED:-}
     volumes:
       - wishlist_uploads:/data/uploads
     depends_on:

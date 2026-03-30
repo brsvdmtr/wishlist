@@ -10,7 +10,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "seed": "pnpm -C ../../packages/db build && tsx src/seed.ts",
-    "test": "vitest run src/sort.test.ts src/security-auth.test.ts src/security-ssrf.test.ts"
+    "test": "vitest run src/sort.test.ts src/security-auth.test.ts src/security-ssrf.test.ts src/marketplace/normalizers.test.ts src/marketplace/scoring.test.ts src/marketplace/guards.test.ts src/marketplace/orchestrator.test.ts src/marketplace/integration.test.ts"
   },
   "dependencies": {
     "@wishlist/db": "workspace:*",
