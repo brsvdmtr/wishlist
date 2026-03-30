@@ -20,12 +20,12 @@ import {
   imageField,
   descriptionField,
 } from '../scoring.js';
-import { buildWbCardApiUrl } from '../normalizers.js';
-import { isGarbageTitle } from '../guards.js';
+import { isGarbageTitle, isAntiBotPage } from '../guards.js';
 import { wbCdnImageUrl } from '../../browser-network-extractor.js';
 import { getBrowser } from '../browser-provider.js';
 import { browserExtract } from '../../browser-network-extractor.js';
 import { networkProductToResult } from './shared-browser.js';
+import { parseLog } from '../logger.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -35,7 +35,20 @@ const USER_AGENT =
 
 const API_TIMEOUT_MS = 6_000;
 
-// ─── Strategy 1: Card API ────────────────────────────────────────────────────
+/**
+ * WB Card API `dest` profiles.  Different dest values correspond to
+ * different warehouse/delivery regions.  Some products are only visible
+ * under certain profiles, so we try several before giving up.
+ *
+ * The order is: Moscow region (most common), Saint-Petersburg, Krasnodar.
+ */
+const WB_DEST_PROFILES = [
+  '-1257786',       // Moscow (default — covers most items)
+  '-1029256,-102269,-2162196,-1257786',  // Multi-region fallback
+  '-577683',        // Saint-Petersburg
+];
+
+// ─── Strategy 1: Card API (with multi-profile retry) ────────────────────────
 
 export const wbCardApiStrategy: ParseStrategy = {
   name: 'wb_card_api',
@@ -44,37 +57,40 @@ export const wbCardApiStrategy: ParseStrategy = {
     if (!ctx.productId) return null;
 
     const startTime = Date.now();
-    const apiUrl = buildWbCardApiUrl(ctx.productId);
 
-    try {
-      const ctrl  = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
+    // Try multiple dest profiles — some products only appear under specific regions
+    for (const dest of WB_DEST_PROFILES) {
+      const apiUrl = `https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=${dest}&nm=${ctx.productId}`;
 
-      const res = await fetch(apiUrl, {
-        signal: ctrl.signal,
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Accept': 'application/json',
-          'Origin': 'https://www.wildberries.ru',
-          'Referer': ctx.url.href,
-        },
-      });
-      clearTimeout(timer);
+      try {
+        const ctrl  = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
 
-      if (!res.ok) {
-        return makeError('wb_card_api', startTime, `HTTP ${res.status}`);
+        const res = await fetch(apiUrl, {
+          signal: ctrl.signal,
+          headers: {
+            'User-Agent': USER_AGENT,
+            'Accept': 'application/json',
+            'Origin': 'https://www.wildberries.ru',
+            'Referer': ctx.url.href,
+          },
+        });
+        clearTimeout(timer);
+
+        if (!res.ok) continue;  // try next profile
+
+        const json = await res.json() as WbCardApiResponse;
+        const product = json?.data?.products?.[0];
+        if (!product) continue; // empty products[] → try next profile
+
+        return parseWbProduct(product, startTime);
+      } catch {
+        continue; // timeout / network error → try next profile
       }
-
-      const json = await res.json() as WbCardApiResponse;
-      const product = json?.data?.products?.[0];
-      if (!product) {
-        return makeError('wb_card_api', startTime, 'No products in response');
-      }
-
-      return parseWbProduct(product, startTime);
-    } catch (err) {
-      return makeError('wb_card_api', startTime, (err as Error).message);
     }
+
+    // All profiles exhausted
+    return makeError('wb_card_api', startTime, `No products found across ${WB_DEST_PROFILES.length} dest profiles`);
   },
 };
 
@@ -92,6 +108,17 @@ export const wbBrowserStrategy: ParseStrategy = {
 
       // Store HTML in context for DOM fallback strategy
       ctx.html = html;
+
+      // ── Diagnostic trail: log what the browser actually saw ──────────
+      const hasOgTitle = html.includes('og:title');
+      const hasJsonLd  = html.includes('application/ld+json');
+      const isCheck    = isAntiBotPage(html, null);
+      parseLog.browserDiag(ctx.hostname, 'wildberries', {
+        htmlLength: html.length,
+        hasOgTitle,
+        hasJsonLd,
+        isCheckPage: isCheck,
+      });
 
       return networkProductToResult(
         product ? {

@@ -206,4 +206,29 @@ export const parseLog = {
       marketplace,
     });
   },
+
+  /** Log browser diagnostic trail (navigation status, intercepted responses, HTML indicators) */
+  browserDiag(
+    hostname: string,
+    marketplace: MarketplaceId,
+    diag: {
+      navigationStatus?: string;
+      interceptedJsonCount?: number;
+      htmlLength?: number;
+      hasOgTitle?: boolean;
+      hasJsonLd?: boolean;
+      isCheckPage?: boolean;
+      firstJsonUrls?: string[];
+    },
+  ): void {
+    emit({
+      ts: new Date().toISOString(),
+      level: 'info',
+      module: 'parser',
+      event: 'browser_diag',
+      hostname,
+      marketplace,
+      ...diag,
+    });
+  },
 };

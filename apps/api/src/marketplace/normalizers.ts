@@ -201,17 +201,25 @@ export function buildYmCanonicalUrl(productId: string): string {
 // ─── Canonicalization ────────────────────────────────────────────────────────
 
 function canonicalize(url: URL, pattern: MarketplacePattern | null): string {
+  // WB shortcut: if we have a product ID, always return a deterministic canonical
+  // URL.  This prevents tracking params like targetUrl=MI from splitting the cache.
+  if (pattern?.id === 'wildberries') {
+    const productId = pattern.extractProductId(url);
+    if (productId) return buildWbCanonicalUrl(productId);
+  }
+
   const c = new URL(url.href);
 
-  // Strip common tracking params
+  // Strip common tracking params (case-insensitive match)
   for (const p of [...c.searchParams.keys()]) {
     if (TRACKING_PARAMS.has(p.toLowerCase())) c.searchParams.delete(p);
   }
 
-  // Strip marketplace-specific params
+  // Strip marketplace-specific params (case-insensitive match)
   if (pattern?.stripParams) {
+    const stripLower = new Set(pattern.stripParams.map(s => s.toLowerCase()));
     for (const p of [...c.searchParams.keys()]) {
-      if (pattern.stripParams.includes(p)) c.searchParams.delete(p);
+      if (stripLower.has(p.toLowerCase())) c.searchParams.delete(p);
     }
   }
 

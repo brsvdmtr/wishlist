@@ -69,13 +69,31 @@ export function isGarbageTitle(title: string): boolean {
 
 /**
  * Check if a price value looks suspicious.
+ * `source` is optional — when the price comes from a trusted API (card_api,
+ * network_intercept) we apply a more lenient policy to avoid false positives
+ * on legitimately cheap/expensive items.
  */
-export function isSuspiciousPrice(amount: number): boolean {
-  // Price too low (likely parsing error or cents)
+export function isSuspiciousPrice(
+  amount: number,
+  source?: string,
+): boolean {
+  // Price negative or zero — always suspicious
+  if (amount <= 0) return true;
+
+  // Trusted API sources: only reject truly impossible values
+  const trusted = source === 'card_api' || source === 'network_intercept';
+  if (trusted) {
+    // Prices below 1 ₽ are probably parsing errors (sub-kopeck)
+    if (amount < 1) return true;
+    // Above 100M ₽ is certainly wrong
+    if (amount > 100_000_000) return true;
+    return false;
+  }
+
+  // Untrusted sources: tighter bounds
   if (amount < 1) return true;
-  // Price unreasonably high
   if (amount > 10_000_000) return true;
-  // Common "placeholder" prices
+  // Common "placeholder" prices from DOM/regex
   if (amount === 9999 || amount === 99999 || amount === 999999) return true;
   return false;
 }

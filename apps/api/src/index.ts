@@ -4407,6 +4407,7 @@ async function importUrlForUser(
   rawUrl: string,
   note?: string,
   source?: string,
+  parseOpts?: { noCache?: boolean },
 ): Promise<{ item: ReturnType<typeof mapTgItem>; wishlistId: string; parseStatus: 'ok' | 'partial' | 'failed' }> {
   const draftsWl = await getOrCreateDraftsWishlist(userId);
 
@@ -4422,7 +4423,7 @@ async function importUrlForUser(
   let parseStatus: 'ok' | 'partial' | 'failed' = 'ok';
 
   try {
-    parsed = await parseUrl(rawUrl);
+    parsed = await parseUrl(rawUrl, parseOpts);
     if (!parsed.title && !parsed.priceText && !parsed.imageUrl) {
       parseStatus = 'failed';
     } else if (!parsed.title || !parsed.priceText) {
@@ -4528,7 +4529,8 @@ tgRouter.post(
     }
 
     try {
-      const result = await importUrlForUser(user.id, parsed.data.url, parsed.data.note, parsed.data.source || 'miniapp');
+      const noCache = req.headers['x-parse-no-cache'] === '1';
+      const result = await importUrlForUser(user.id, parsed.data.url, parsed.data.note, parsed.data.source || 'miniapp', noCache ? { noCache: true } : undefined);
       return res.status(201).json(result);
     } catch (err: any) {
       if (err.statusCode === 402) {

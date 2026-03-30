@@ -26,6 +26,7 @@ export {
   shouldFallbackToLegacy,
   isOrchestratorEnabled,
 } from './orchestrator.js';
+export type { ParseOptions } from './orchestrator.js';
 
 // Scoring
 export {

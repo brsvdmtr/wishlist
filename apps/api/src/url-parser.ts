@@ -180,7 +180,12 @@ registerBrowserProvider(getBrowser);
 
 // ─── Main Entry ───────────────────────────────────────────────────────────────
 
-export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
+export interface ParseUrlOptions {
+  /** Skip orchestrator cache for this request (debug diagnostics) */
+  noCache?: boolean;
+}
+
+export async function parseUrl(rawUrl: string, opts?: ParseUrlOptions): Promise<ParsedUrlData> {
   const url          = validateUrl(rawUrl);
   await assertDnsIsSafe(url);
   const hostname     = url.hostname.replace(/^www\./, '').replace(/^m\./, '');
@@ -188,7 +193,7 @@ export async function parseUrl(rawUrl: string): Promise<ParsedUrlData> {
 
   // ── Route: known marketplace → new orchestrator (if enabled) ────────────
   if (isKnownMarketplace(hostname) && isOrchestratorEnabled()) {
-    return parseViaOrchestrator(url, hostname, canonicalUrl);
+    return parseViaOrchestrator(url, hostname, canonicalUrl, opts);
   }
 
   // ── Route: unknown domain OR kill switch active → legacy flow ───────────
@@ -209,11 +214,12 @@ async function parseViaOrchestrator(
   url: URL,
   hostname: string,
   canonicalUrl: string,
+  opts?: ParseUrlOptions,
 ): Promise<ParsedUrlData> {
   const marketplace = getMarketplaceId(hostname);
 
   try {
-    const product = await parseMarketplaceUrl(url);
+    const product = await parseMarketplaceUrl(url, opts);
 
     // Check if result is usable or should fall back to legacy
     const fallbackReason = shouldFallbackToLegacy(product);

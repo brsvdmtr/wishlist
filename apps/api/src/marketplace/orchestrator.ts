@@ -128,28 +128,38 @@ const EARLY_STOP_CONFIDENCE = 70;
  */
 const FALLBACK_CONFIDENCE_THRESHOLD = 25;
 
+/** Options for parseMarketplaceUrl */
+export interface ParseOptions {
+  /** Skip cache read/write for this request (debug diagnostics) */
+  noCache?: boolean;
+}
+
 /**
  * Main orchestrator: parse a marketplace URL through the strategy pipeline.
  *
  * @param url - Validated URL object (must already be validated + DNS-safe)
+ * @param opts - Optional flags (e.g. noCache for debug)
  * @returns ParsedProduct with field-level confidence
  */
-export async function parseMarketplaceUrl(url: URL): Promise<ParsedProduct> {
+export async function parseMarketplaceUrl(url: URL, opts?: ParseOptions): Promise<ParsedProduct> {
   const startTime = Date.now();
   const { marketplace, productId, canonicalUrl } = normalizeUrl(url);
   const hostname = stripHostPrefix(url.hostname);
+  const skipCache = opts?.noCache === true;
 
   parseLog.parseStart(hostname, marketplace, productId);
 
-  // ── Cache check ────────────────────────────────────────────────────────
-  const cached = cacheGet(canonicalUrl);
-  if (cached) {
-    parseLog.cacheHit(hostname, 'positive');
-    return cached;
-  }
-  if (isNegativelyCached(canonicalUrl)) {
-    parseLog.cacheHit(hostname, 'negative');
-    return emptyProduct();
+  // ── Cache check (skip when debug no-cache is set) ─────────────────────
+  if (!skipCache) {
+    const cached = cacheGet(canonicalUrl);
+    if (cached) {
+      parseLog.cacheHit(hostname, 'positive');
+      return cached;
+    }
+    if (isNegativelyCached(canonicalUrl)) {
+      parseLog.cacheHit(hostname, 'negative');
+      return emptyProduct();
+    }
   }
 
   // ── Build context ──────────────────────────────────────────────────────
@@ -211,14 +221,16 @@ export async function parseMarketplaceUrl(url: URL): Promise<ParsedProduct> {
   // fields that passed scoring but fail quality checks.
   product = enforceGuards(product);
 
-  // ── Cache result ───────────────────────────────────────────────────────
+  // ── Cache result (skip when debug no-cache is set) ─────────────────────
   const totalDurationMs = Date.now() - startTime;
   parseLog.parseResult(hostname, marketplace, product, totalDurationMs);
 
-  if (product.confidenceLevel === 'none') {
-    setNegative(canonicalUrl);
-  } else {
-    cacheSet(canonicalUrl, product);
+  if (!skipCache) {
+    if (product.confidenceLevel === 'none') {
+      setNegative(canonicalUrl);
+    } else {
+      cacheSet(canonicalUrl, product);
+    }
   }
 
   return product;
@@ -280,8 +292,8 @@ function enforceGuards(product: ParsedProduct): ParsedProduct {
     changed = true;
   }
 
-  // Guard: suspicious price → reject
-  if (product.price && isSuspiciousPrice(product.price.value.amount)) {
+  // Guard: suspicious price → reject (pass source for lenient policy on trusted APIs)
+  if (product.price && isSuspiciousPrice(product.price.value.amount, product.price.source)) {
     product = { ...product, price: null };
     changed = true;
   }
