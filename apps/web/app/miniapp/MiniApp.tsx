@@ -2237,6 +2237,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [itemDescription, setItemDescription] = useState('');
   const itemDescTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [itemUrl, setItemUrl] = useState('');
+  const itemUrlInputRef = useRef<HTMLInputElement>(null);
+  /** Counter to force re-mount of uncontrolled URL/desc inputs when form opens or clears */
+  const [itemFieldKey, setItemFieldKey] = useState(0);
   const [itemPrice, setItemPrice] = useState(''); // raw digits only, e.g. "5000000"
   const priceInputRef = useRef<HTMLInputElement>(null);
   const [itemPriority, setItemPriority] = useState<1 | 2 | 3>(2);
@@ -4877,6 +4880,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setPhotoError(null);
     setPhotoPickerImgErr(false);
     setEditingItem(null);
+    setItemFieldKey(k => k + 1);
     if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
@@ -4895,6 +4899,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setItemPhotoDeleted(false);
     setPhotoError(null);
     setPhotoPickerImgErr(false);
+    setItemFieldKey(k => k + 1);
     if (photoInputRef.current) photoInputRef.current.value = '';
     setShowItemForm(true);
   };
@@ -4959,10 +4964,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     setLoading(true);
     setPhotoError(null);
     try {
+      // Read URL and description from DOM refs (uncontrolled inputs for iOS selection fix)
+      const liveUrl = itemUrlInputRef.current?.value ?? itemUrl;
+      const liveDesc = itemDescTextareaRef.current?.value ?? itemDescription;
       const body = {
         title: itemTitle.trim(),
-        description: itemDescription.trim() || null,
-        url: itemUrl.trim() || undefined,
+        description: liveDesc.trim() || null,
+        url: liveUrl.trim() || undefined,
         price: itemPrice ? Number(itemPrice) : null,
         priority: itemPriority,
         currency: itemCurrency,
@@ -12332,18 +12340,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               onChange={(e) => setItemTitle(e.target.value)}
             />
           </div>
-          {/* URL with hint + preview */}
+          {/* URL with hint + preview — uncontrolled to fix iOS selection */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_url', locale)}</div>
             <div style={{ position: 'relative' as const }}>
               <input
+                key={`url-${itemFieldKey}`}
+                ref={itemUrlInputRef}
                 style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 14, padding: '12px 38px 12px 14px' }}
                 placeholder={t('item_url_placeholder', locale)}
-                value={itemUrl}
-                onChange={(e) => setItemUrl(e.target.value)}
+                defaultValue={itemUrl}
+                onBlur={(e) => setItemUrl(e.target.value)}
                 autoCapitalize="none" autoCorrect="off" spellCheck={false}
               />
-              {itemUrl && <button type="button" aria-label="Clear" onClick={() => setItemUrl('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+              {itemUrl && <button type="button" aria-label="Clear" onClick={() => { setItemUrl(''); setItemFieldKey(k => k + 1); }} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
             </div>
             {itemUrl.startsWith('http') && (() => {
               try {
@@ -12361,20 +12371,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {locale === 'ru' ? t('item_url_hint_ru', locale) : t('item_url_hint_global', locale)}
             </div>
           </div>
-          {/* Description — after URL */}
+          {/* Description — after URL — uncontrolled to fix iOS selection */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('item_description', locale)}</div>
             <div style={{ position: 'relative' as const }}>
               <textarea
+                key={`desc-${itemFieldKey}`}
                 style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: 1.4, fontSize: 14, paddingRight: 38 }}
                 maxLength={500}
                 placeholder={t('item_description_placeholder', locale)}
-                value={itemDescription}
+                defaultValue={itemDescription}
                 ref={itemDescTextareaRef}
-                onChange={(e) => setItemDescription(e.target.value)}
+                onInput={(e) => growTextarea(e.currentTarget)}
+                onBlur={(e) => setItemDescription(e.target.value)}
                 onFocus={(e) => handleTextareaFocus(e.currentTarget)}
               />
-              {itemDescription && <button type="button" aria-label="Clear" onClick={() => setItemDescription('')} style={{ position: 'absolute', right: 6, top: 8, background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+              {itemDescription && <button type="button" aria-label="Clear" onClick={() => { setItemDescription(''); setItemFieldKey(k => k + 1); }} style={{ position: 'absolute', right: 6, top: 8, background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
             </div>
             <div style={{ fontSize: 10, color: '#3a3a44', textAlign: 'right', marginTop: 3 }}>{itemDescription.length}/500</div>
           </div>
@@ -12557,23 +12569,25 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_description', locale)}</label>
             <div style={{ position: 'relative' as const }}>
               <textarea
+                key={`desc-orig-${itemFieldKey}`}
                 style={{ ...inputStyle, minHeight: 48, resize: 'none', overflow: 'hidden', paddingRight: 38 }}
                 maxLength={500}
                 placeholder={t('item_description_placeholder', locale)}
-                value={itemDescription}
+                defaultValue={itemDescription}
                 ref={itemDescTextareaRef}
-                onChange={(e) => setItemDescription(e.target.value)}
+                onInput={(e) => growTextarea(e.currentTarget)}
+                onBlur={(e) => setItemDescription(e.target.value)}
                 onFocus={(e) => handleTextareaFocus(e.currentTarget)}
               />
-              {itemDescription && <button type="button" aria-label="Clear" onClick={() => setItemDescription('')} style={{ position: 'absolute', right: 6, top: 8, background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+              {itemDescription && <button type="button" aria-label="Clear" onClick={() => { setItemDescription(''); setItemFieldKey(k => k + 1); }} style={{ position: 'absolute', right: 6, top: 8, background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
             </div>
             <div style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', marginTop: 2 }}>{itemDescription.length}/500</div>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_url', locale)}</label>
             <div style={{ position: 'relative' as const }}>
-              <input style={{ ...inputStyle, paddingRight: 38 }} placeholder="https://…" value={itemUrl} onChange={(e) => setItemUrl(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
-              {itemUrl && <button type="button" aria-label="Clear" onClick={() => setItemUrl('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+              <input key={`url-orig-${itemFieldKey}`} ref={itemUrlInputRef} style={{ ...inputStyle, paddingRight: 38 }} placeholder="https://…" defaultValue={itemUrl} onBlur={(e) => setItemUrl(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+              {itemUrl && <button type="button" aria-label="Clear" onClick={() => { setItemUrl(''); setItemFieldKey(k => k + 1); }} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
             </div>
           </div>
           {/* ── Photo picker ── */}
