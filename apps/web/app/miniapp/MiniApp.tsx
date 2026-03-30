@@ -10844,17 +10844,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </p>
           </div>
 
-          {/* Value bullets */}
+          {/* Value features */}
           <div style={{ padding: '20px 24px 0' }}>
             {[
-              { icon: '📋', text: locale === 'ru' ? 'Все важные события под рукой' : 'All important events at hand' },
-              { icon: '💡', text: locale === 'ru' ? 'Идеи подарков можно сохранять заранее' : 'Save gift ideas way ahead of time' },
-              { icon: '⏳', text: locale === 'ru' ? 'Счётчик дней помогает ничего не забыть' : 'Day counter helps you never forget' },
-              { icon: '🎯', text: locale === 'ru' ? 'Удобно планировать подарки для близких' : 'Easily plan gifts for loved ones' },
+              { icon: '📋', text: locale === 'ru' ? 'Все важные события и даты под рукой' : 'All important events and dates at hand', color: C.accentSoft },
+              { icon: '💡', text: locale === 'ru' ? 'Сохраняй идеи подарков заранее' : 'Save gift ideas way ahead of time', color: 'rgba(251,191,36,0.12)' },
+              { icon: '⏳', text: locale === 'ru' ? 'Счётчик дней — ничего не забудешь' : 'Day counter — you\'ll never forget', color: 'rgba(52,211,153,0.12)' },
+              { icon: '🎯', text: locale === 'ru' ? 'Удобное планирование для близких' : 'Easily plan gifts for loved ones', color: 'rgba(96,165,250,0.12)' },
             ].map((b, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: i < 3 ? `1px solid ${C.border}` : 'none' }}>
-                <span style={{ fontSize: 20, width: 32, textAlign: 'center', flexShrink: 0 }}>{b.icon}</span>
-                <span style={{ fontSize: 14, color: C.text, lineHeight: 1.4 }}>{b.text}</span>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: i < 3 ? `1px solid ${C.border}` : 'none' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: b.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{b.icon}</div>
+                <span style={{ fontSize: 14, color: C.text, lineHeight: 1.4, fontFamily: font }}>{b.text}</span>
               </div>
             ))}
           </div>
@@ -10862,12 +10862,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {/* Pricing block */}
           <div style={{ padding: '20px 24px' }}>
             <div style={{ background: C.surface, borderRadius: 16, padding: '16px 18px', border: `1px solid ${C.border}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 14 }}>⭐</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{locale === 'ru' ? 'Разовая покупка' : 'One-time purchase'}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <span style={{ fontSize: 24, fontWeight: 800, color: C.accent, fontFamily: font }}>{gnAccess.priceXtr}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.textSec, marginLeft: 6 }}>Stars</span>
+                </div>
               </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, fontFamily: font, marginBottom: 4 }}>{gnAccess.priceXtr} Stars</div>
-              <div style={{ fontSize: 12, color: C.textMuted }}>{locale === 'ru' ? 'Навсегда. Без подписки.' : 'Forever. No subscription.'}</div>
+              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{locale === 'ru' ? 'Одна покупка навсегда. Без подписки.' : 'One-time purchase forever. No subscription.'}</div>
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}`, fontSize: 12, color: '#34D399', fontWeight: 600 }}>
                 ✓ {locale === 'ru' ? 'Также входит в подписку Pro' : 'Also included in Pro subscription'}
               </div>
@@ -10900,8 +10901,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   }
                 }
               } catch { pushToast('Error', 'error'); }
-            }} style={{ width: '100%', padding: '15px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: `0 6px 20px rgba(124,106,255,0.35)` }}>
-              {t('gn_upsell_cta', locale, { price: gnAccess.priceXtr })}
+            }} style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: `0 6px 20px ${C.accentGlow}` }}>
+              ⭐ {t('gn_upsell_cta', locale, { price: gnAccess.priceXtr })}
             </button>
             <button onClick={() => setScreen('my-wishlists')} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: font, marginTop: 6 }}>
               {t('gn_upsell_later', locale)}
@@ -10910,86 +10911,225 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         </div>
       )}
 
-      {/* Occasion list */}
+      {/* Occasion list — v3 redesign */}
       {screen === 'gift-notes' && (() => {
         const active = gnOccasions.filter((o: any) => o.status === 'ACTIVE' && o.daysUntil != null).sort((a: any, b: any) => (a.daysUntil ?? 999) - (b.daysUntil ?? 999));
         const noDate = gnOccasions.filter((o: any) => o.status === 'ACTIVE' && o.daysUntil == null);
         const done = gnOccasions.filter((o: any) => o.status === 'DONE');
         const archived = gnOccasions.filter((o: any) => o.status === 'ARCHIVED');
         const typeEmoji: Record<string, string> = { BIRTHDAY: '🎂', ANNIVERSARY: '💍', HOLIDAY: '🎄', OTHER: '🎁' };
-        const card = (o: any) => (
-          <div key={o.id} onClick={async () => {
-            const r = await tgFetch(`/tg/gift-occasions/${o.id}`);
-            if (r.ok) { setGnViewingOccasion((await r.json() as any).occasion); setGnShowActions(false); setGnShowEdit(false); setScreen('gift-notes-occasion'); }
-          }} style={{ background: C.surface, borderRadius: 14, padding: '14px 16px', marginBottom: 6, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <span style={{ fontSize: 14 }}>{typeEmoji[o.type] ?? '🎁'}</span>
-                <span style={{ fontSize: 14, fontWeight: 650, color: o.status === 'DONE' ? '#34D399' : o.status === 'ARCHIVED' ? '#555' : C.text }}>{o.title}</span>
-                {o.status === 'DONE' && <span style={{ fontSize: 10, color: '#34D399' }}>✓</span>}
-              </div>
-              {o.personName && <div style={{ fontSize: 11, color: C.textMuted, marginLeft: 22 }}>{o.personName}</div>}
-              <div style={{ display: 'flex', gap: 6, marginTop: 4, marginLeft: 22 }}>
+        const typeBg: Record<string, string> = { BIRTHDAY: 'rgba(251,191,36,0.12)', ANNIVERSARY: 'rgba(236,72,153,0.12)', HOLIDAY: 'rgba(52,211,153,0.12)', OTHER: C.accentSoft };
+        const totalIdeas = gnOccasions.reduce((sum: number, o: any) => sum + (o.ideasCount ?? 0), 0);
+
+        const openOccasion = async (o: any) => {
+          const r = await tgFetch(`/tg/gift-occasions/${o.id}`);
+          if (r.ok) { setGnViewingOccasion((await r.json() as any).occasion); setGnShowActions(false); setGnShowEdit(false); setScreen('gift-notes-occasion'); }
+        };
+
+        const card = (o: any, i: number) => {
+          const isUrgent = o.status === 'ACTIVE' && o.daysUntil != null && o.daysUntil <= 7;
+          const isSoon = o.status === 'ACTIVE' && o.daysUntil != null && o.daysUntil > 7;
+          const isDone = o.status === 'DONE';
+          const isArchived = o.status === 'ARCHIVED';
+          const stripColor = isUrgent ? 'linear-gradient(180deg, #FBBF24, #f59e0b)' : isSoon ? `linear-gradient(180deg, ${C.accent}, #a78bfa)` : isDone ? 'linear-gradient(180deg, #34D399, #6ee7b7)' : 'transparent';
+          return (
+            <div key={o.id} onClick={() => openOccasion(o)}
+              style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', position: 'relative' as const, overflow: 'hidden', opacity: isArchived ? 0.5 : 1, animation: `fadeIn 0.3s ease ${0.05 + i * 0.04}s both`, transition: 'border-color 0.15s' }}>
+              {/* Priority strip */}
+              <div style={{ position: 'absolute' as const, left: 0, top: 0, bottom: 0, width: 3, background: stripColor }} />
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                {/* Emoji in colored bg */}
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: typeBg[o.type] ?? C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, opacity: isDone ? 0.6 : 1 }}>
+                  {typeEmoji[o.type] ?? '🎁'}
+                </div>
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: isDone ? C.textSec : C.text, whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.title}</div>
+                  {o.personName && <div style={{ fontSize: 13, color: C.textSec, marginTop: 1 }}>{o.personName}</div>}
+                </div>
+                {/* Right side: countdown ring or done chip */}
                 {o.status === 'ACTIVE' && o.daysUntil != null && (
-                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 600, background: o.daysUntil <= 7 ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.05)', color: o.daysUntil <= 7 ? '#FBBF24' : C.textMuted }}>
-                    {o.daysUntil === 0 ? t('gn_today', locale) : o.daysUntil > 0 ? t('gn_days_left', locale, { n: o.daysUntil }) : t('gn_days_overdue', locale, { n: Math.abs(o.daysUntil) })}
-                  </span>
+                  <div style={{ width: 44, height: 44, position: 'relative' as const, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg viewBox="0 0 44 44" style={{ position: 'absolute' as const, inset: 0, transform: 'rotate(-90deg)' }}>
+                      <circle cx="22" cy="22" r="19" fill="none" stroke={C.surface} strokeWidth="3" />
+                      <circle cx="22" cy="22" r="19" fill="none" stroke={isUrgent ? '#FBBF24' : C.accent} strokeWidth="3" strokeLinecap="round"
+                        strokeDasharray="119" strokeDashoffset={Math.max(0, 119 - (119 * Math.min(o.daysUntil, 60) / 60))} />
+                    </svg>
+                    <div style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', zIndex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: isUrgent ? '#FBBF24' : C.accent }}>{o.daysUntil}</span>
+                      <span style={{ fontSize: 8, fontWeight: 600, color: C.textMuted, marginTop: -2 }}>{locale === 'ru' ? 'дн.' : 'd'}</span>
+                    </div>
+                  </div>
                 )}
-                {o.ideasCount > 0 && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(124,106,255,0.1)', color: C.accent, fontWeight: 500 }}>{t('gn_ideas_count', locale, { n: o.ideasCount })}</span>}
+                {isDone && <span style={{ padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: 'rgba(52,211,153,0.1)', color: '#34D399' }}>✓</span>}
+                {!isDone && o.daysUntil == null && <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>}
               </div>
+              {/* Meta chips */}
+              {(o.status === 'ACTIVE') && (o.daysUntil != null || o.ideasCount > 0) && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' as const }}>
+                  {o.daysUntil != null && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                      background: isUrgent ? 'rgba(251,191,36,0.12)' : o.daysUntil === 0 ? 'rgba(248,113,113,0.12)' : C.surface,
+                      color: isUrgent ? '#FBBF24' : o.daysUntil === 0 ? '#F87171' : C.textSec }}>
+                      {isUrgent && '🔥 '}{o.daysUntil === 0 ? t('gn_today', locale) : o.daysUntil > 0 ? t('gn_days_left', locale, { n: o.daysUntil }) : t('gn_days_overdue', locale, { n: Math.abs(o.daysUntil) })}
+                    </span>
+                  )}
+                  {o.ideasCount > 0 && <span style={{ padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: C.accentSoft, color: C.accent }}>💡 {t('gn_ideas_count', locale, { n: o.ideasCount })}</span>}
+                </div>
+              )}
             </div>
-            <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>
+          );
+        };
+
+        const sectionLabel = (icon: string, title: string, count: number, color?: string) => (
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: color ?? C.textMuted }}>{icon}</span> {title} <span style={{ background: C.surface, padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>{count}</span>
           </div>
         );
-        const section = (title: string, items: any[]) => items.length > 0 ? (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 6 }}>{title}</div>
-            {items.map(card)}
-          </div>
-        ) : null;
+
         return (
-          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 16px' }}>🎁 {t('gn_title', locale)}</h1>
+          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease', display: 'flex', flexDirection: 'column' as const, minHeight: 'calc(100vh - 60px)' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div>
+                <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: 0 }}>{t('gn_title', locale)}</h1>
+                <div style={{ fontSize: 13, color: C.textSec, marginTop: 2, fontFamily: font }}>{gnOccasions.length} {locale === 'ru' ? (gnOccasions.length === 1 ? 'событие' : gnOccasions.length < 5 ? 'события' : 'событий') : 'events'}{totalIdeas > 0 ? ` · ${totalIdeas} ${locale === 'ru' ? (totalIdeas === 1 ? 'идея' : totalIdeas < 5 ? 'идеи' : 'идей') : 'ideas'}` : ''}</div>
+              </div>
+            </div>
+
             {gnLoading && <div style={{ textAlign: 'center', color: C.textMuted, padding: 20 }}>...</div>}
-            {!gnLoading && gnOccasions.length === 0 && <div style={{ textAlign: 'center', padding: '40px 0', color: C.textMuted, fontSize: 14 }}>{t('gn_empty', locale)}</div>}
-            {section(t('gn_upcoming', locale), active)}
-            {section(t('gn_no_date', locale), noDate)}
-            {section(t('gn_done', locale), done)}
-            {section(t('gn_archive', locale), archived)}
-            {/* Full-width CTA at bottom */}
+
+            {/* Empty state */}
+            {!gnLoading && gnOccasions.length === 0 && (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const }}>
+                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                  <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, marginBottom: 4 }}>{t('gn_empty', locale)}</div>
+                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4, maxWidth: 280, margin: '0 auto' }}>{locale === 'ru' ? 'Добавьте первый повод — день рождения, годовщину или праздник. Записывайте идеи подарков, чтобы ничего не забыть.' : 'Add your first occasion — birthday, anniversary or holiday. Save gift ideas so you never forget.'}</div>
+                </div>
+                {/* Inspiration hints */}
+                <div style={{ marginBottom: 'auto' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ color: C.accent }}>💡</span> {locale === 'ru' ? 'Идеи для начала' : 'Ideas to start'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                    {[
+                      { emoji: '🎂', label: locale === 'ru' ? 'День рождения' : 'Birthday', type: 'BIRTHDAY' as const },
+                      { emoji: '💍', label: locale === 'ru' ? 'Годовщина' : 'Anniversary', type: 'ANNIVERSARY' as const },
+                      { emoji: '🎄', label: locale === 'ru' ? 'Новый год' : 'New Year', type: 'HOLIDAY' as const },
+                      { emoji: '👶', label: locale === 'ru' ? 'Рождение' : 'Birth', type: 'OTHER' as const },
+                      { emoji: '🎓', label: locale === 'ru' ? 'Выпускной' : 'Graduation', type: 'OTHER' as const },
+                    ].map((hint, i) => (
+                      <div key={i} onClick={() => { setGnFormTitle(hint.label); setGnFormDate(''); setGnFormType(hint.type); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
+                        style={{ padding: '10px 14px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, fontFamily: font, color: C.text }}>
+                        {hint.emoji} {hint.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Sections */}
+            {active.length > 0 && <div style={{ marginBottom: 14 }}>{sectionLabel('⚡', t('gn_upcoming', locale), active.length, '#FBBF24')}{active.map(card)}</div>}
+            {noDate.length > 0 && <div style={{ marginBottom: 14, marginTop: active.length > 0 ? 4 : 0 }}>{sectionLabel('📌', t('gn_no_date', locale), noDate.length)}{noDate.map(card)}</div>}
+            {done.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('✓', t('gn_done', locale), done.length, '#34D399')}{done.map(card)}</div>}
+            {archived.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('📦', t('gn_archive', locale), archived.length)}{archived.map(card)}</div>}
+
+            {/* CTA — always at bottom */}
             <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
-              style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: C.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: 8 }}>
+              style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: gnOccasions.length === 0 ? 0 : 8, boxShadow: `0 4px 16px ${C.accentGlow}` }}>
               + {t('gn_add_occasion', locale)}
             </button>
           </div>
         );
       })()}
 
-      {/* Occasion detail */}
+      {/* Occasion detail — v3 redesign */}
       {screen === 'gift-notes-occasion' && gnViewingOccasion && (() => {
         const o = gnViewingOccasion;
         const typeLabel = ({ BIRTHDAY: t('gn_type_birthday', locale), ANNIVERSARY: t('gn_type_anniversary', locale), HOLIDAY: t('gn_type_holiday', locale), OTHER: t('gn_type_other', locale) } as Record<string, string>)[o.type] ?? o.type;
-        const daysText = o.status !== 'ACTIVE' ? '' : o.daysUntil === 0 ? t('gn_today', locale) : o.daysUntil > 0 ? t('gn_days_left', locale, { n: o.daysUntil }) : o.daysUntil != null ? t('gn_days_overdue', locale, { n: Math.abs(o.daysUntil) }) : '';
+        const typeEmoji: Record<string, string> = { BIRTHDAY: '🎂', ANNIVERSARY: '💍', HOLIDAY: '🎄', OTHER: '🎁' };
+        const typeBg: Record<string, string> = { BIRTHDAY: 'rgba(251,191,36,0.12)', ANNIVERSARY: 'rgba(236,72,153,0.12)', HOLIDAY: 'rgba(52,211,153,0.12)', OTHER: C.accentSoft };
         const ideas = (o.ideas ?? []) as any[];
+        const recurrenceLabel: Record<string, string> = { YEARLY: locale === 'ru' ? 'каждый год' : 'yearly', MONTHLY: locale === 'ru' ? 'каждый мес.' : 'monthly', NONE: locale === 'ru' ? 'однократно' : 'once' };
         const refreshOccasion = async () => { const r = await tgFetch(`/tg/gift-occasions/${o.id}`); if (r.ok) setGnViewingOccasion((await r.json() as any).occasion); };
         const refreshList = async () => { try { const r = await tgFetch('/tg/gift-occasions'); if (r.ok) setGnOccasions((await r.json() as any).occasions); } catch {} };
         return (
-          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
-            {/* Header with actions */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-              <div style={{ flex: 1 }}>
-                <h1 style={{ fontSize: 20, fontWeight: 800, color: o.status === 'DONE' ? '#34D399' : C.text, fontFamily: font, margin: 0 }}>{o.title}</h1>
-                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{typeLabel}{o.personName ? ` · ${o.personName}` : ''}</div>
+          <div style={{ animation: 'fadeIn 0.3s ease', paddingBottom: 120 }}>
+            {/* Hero section */}
+            <div style={{ position: 'relative' as const, padding: '24px 20px 20px', background: 'linear-gradient(160deg, rgba(124,106,255,0.06) 0%, transparent 60%)' }}>
+              <button onClick={() => setScreen('gift-notes')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: C.accent, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font, padding: 0, marginBottom: 16 }}>
+                ← {t('gn_title', locale)}
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 56, height: 56, borderRadius: 16, background: typeBg[o.type] ?? C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0 }}>
+                  {typeEmoji[o.type] ?? '🎁'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: o.status === 'DONE' ? '#34D399' : C.text, fontFamily: font }}>{o.title}</div>
+                  <div style={{ fontSize: 13, color: C.textSec, marginTop: 2 }}>{typeLabel}{o.personName ? ` · ${o.personName}` : ''}</div>
+                </div>
               </div>
-              <button onClick={() => setGnShowActions(!gnShowActions)} style={{ background: 'none', border: 'none', fontSize: 18, color: C.textMuted, cursor: 'pointer', padding: '4px 0 4px 8px' }}>⋯</button>
             </div>
 
-            {/* Actions menu */}
+            {/* Stat cards */}
+            {o.status === 'ACTIVE' && (
+              <div style={{ display: 'flex', gap: 8, margin: '16px 20px 0', padding: 0 }}>
+                {o.daysUntil != null && (
+                  <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: 'center' as const }}>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: o.daysUntil <= 7 ? '#FBBF24' : C.text, fontFamily: font }}>{o.daysUntil}</div>
+                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{locale === 'ru' ? 'дня до' : 'days left'}</div>
+                  </div>
+                )}
+                <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: 'center' as const }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font }}>{ideas.length}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{locale === 'ru' ? (ideas.length === 1 ? 'идея' : ideas.length < 5 ? 'идеи' : 'идей') : 'ideas'}</div>
+                </div>
+                {o.recurrence && o.recurrence !== 'NONE' && (
+                  <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: 'center' as const }}>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: C.accent }}>🔄</div>
+                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{recurrenceLabel[o.recurrence] ?? ''}</div>
+                  </div>
+                )}
+              </div>
+            )}
+            {o.status === 'DONE' && (
+              <div style={{ margin: '12px 20px 0', padding: '10px 14px', background: 'rgba(52,211,153,0.08)', borderRadius: 12, fontSize: 13, fontWeight: 600, color: '#34D399', textAlign: 'center' as const }}>
+                ✓ {t('gn_occasion_completed', locale)}
+              </div>
+            )}
+
+            {/* Note */}
+            {o.note && (
+              <div style={{ margin: '14px 20px 0', padding: '12px 16px', background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5 }}>{o.note}</div>
+              </div>
+            )}
+
+            {/* Action buttons row */}
+            <div style={{ padding: '12px 20px 0', display: 'flex', gap: 8 }}>
+              <button onClick={() => { setGnEditTitle(o.title); setGnEditPerson(o.personName ?? ''); setGnEditNote(o.note ?? ''); setGnShowEdit(true); setGnShowActions(false); }}
+                style={{ flex: 1, padding: 10, borderRadius: 12, border: `1px solid rgba(124,106,255,0.15)`, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                ✏️ {t('gn_edit_occasion', locale)}
+              </button>
+              <button onClick={() => setGnShowActions(!gnShowActions)}
+                style={{ padding: '10px 14px', borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, color: C.textSec, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font }}>
+                ⋯
+              </button>
+            </div>
+
+            {/* Actions menu — compact sheet */}
             {gnShowActions && (
-              <div style={{ background: C.surface, borderRadius: 12, padding: '4px 0', marginBottom: 10, border: `1px solid ${C.border}` }}>
-                <button onClick={() => { setGnShowActions(false); setGnEditTitle(o.title); setGnEditPerson(o.personName ?? ''); setGnEditNote(o.note ?? ''); setGnShowEdit(true); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: C.text, cursor: 'pointer', fontFamily: font }}>✏️ {t('gn_edit_occasion', locale)}</button>
-                {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/complete`, { method: 'POST' }); pushToast(t('gn_occasion_completed', locale), 'success'); await refreshList(); setScreen('gift-notes'); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: '#34D399', cursor: 'pointer', fontFamily: font }}>✅ {t('gn_complete', locale)}</button>}
-                {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/archive`, { method: 'POST' }); pushToast(t('gn_archive_occasion', locale), 'success'); await refreshList(); setScreen('gift-notes'); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: C.textMuted, cursor: 'pointer', fontFamily: font }}>📦 {t('gn_archive_occasion', locale)}</button>}
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, margin: '12px 20px 0', overflow: 'hidden' }}>
+                {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/complete`, { method: 'POST' }); pushToast(t('gn_occasion_completed', locale), 'success'); await refreshList(); setScreen('gift-notes'); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left' as const, cursor: 'pointer', fontSize: 14, fontWeight: 500, color: '#34D399', fontFamily: font }}>
+                  <span style={{ fontSize: 15, width: 22, textAlign: 'center' as const, flexShrink: 0 }}>✅</span> {t('gn_complete', locale)}
+                </button>}
+                {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/archive`, { method: 'POST' }); pushToast(t('gn_archive_occasion', locale), 'success'); await refreshList(); setScreen('gift-notes'); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', border: 'none', borderTop: `1px solid ${C.border}`, background: 'none', width: '100%', textAlign: 'left' as const, cursor: 'pointer', fontSize: 14, fontWeight: 500, color: C.text, fontFamily: font }}>
+                  <span style={{ fontSize: 15, width: 22, textAlign: 'center' as const, flexShrink: 0 }}>📦</span> {t('gn_archive_occasion', locale)}
+                </button>}
                 <button onClick={async () => {
                   setGnShowActions(false);
                   if (!confirm(t('gn_confirm_delete', locale))) return;
@@ -10997,43 +11137,50 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   pushToast(t('gn_occasion_deleted', locale), 'success');
                   await refreshList();
                   setScreen('gift-notes');
-                }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left' as const, fontSize: 13, color: '#EF4444', cursor: 'pointer', fontFamily: font }}>🗑 {t('gn_delete_occasion', locale)}</button>
+                }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', border: 'none', borderTop: `1px solid ${C.border}`, background: 'none', width: '100%', textAlign: 'left' as const, cursor: 'pointer', fontSize: 14, fontWeight: 500, color: '#EF4444', fontFamily: font }}>
+                  <span style={{ fontSize: 15, width: 22, textAlign: 'center' as const, flexShrink: 0 }}>🗑</span> {t('gn_delete_occasion', locale)}
+                </button>
               </div>
             )}
-
-            {/* Date + countdown */}
-            {o.eventDate && o.status === 'ACTIVE' && (
-              <div style={{ fontSize: 12, color: daysText && o.daysUntil <= 7 ? '#FBBF24' : C.textMuted, marginBottom: 8 }}>
-                {new Date(o.eventDate).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}{daysText ? ` · ${daysText}` : ''}
-              </div>
-            )}
-            {o.status === 'DONE' && <div style={{ fontSize: 12, color: '#34D399', marginBottom: 8, fontWeight: 600 }}>✓ {t('gn_occasion_completed', locale)}</div>}
-
-            {/* Description */}
-            {o.note && <div style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: C.text, marginBottom: 12, lineHeight: 1.5 }}>{o.note}</div>}
 
             {/* Ideas section */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted }}>{t('gn_ideas_label', locale)} <span style={{ fontWeight: 400 }}>({ideas.length})</span></div>
-            </div>
-            {ideas.map((idea: any) => (
-              <div key={idea.id} style={{ background: C.surface, borderRadius: 12, padding: '12px 14px', marginBottom: 6, opacity: idea.status === 'DONE' ? 0.5 : 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, textDecoration: idea.status === 'DONE' ? 'line-through' : 'none', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{idea.text}</div>
-                {idea.link && <div style={{ fontSize: 11, color: C.accent, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{idea.link}</div>}
-                {idea.price != null && <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginTop: 2 }}>{idea.price.toLocaleString()} {idea.currency ?? '₽'}</div>}
-                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                  <span style={{ fontSize: 10, color: C.textMuted }}>{new Date(idea.createdAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' })}</span>
-                  {idea.status !== 'DONE' && <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}/complete`, { method: 'POST' }); await refreshOccasion(); pushToast(t('gn_idea_completed', locale), 'success'); }} style={{ fontSize: 10, color: '#34D399', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✓ {t('gn_complete', locale)}</button>}
-                  <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}`, { method: 'DELETE' }); await refreshOccasion(); }} style={{ fontSize: 10, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✕</button>
+            <div style={{ padding: '16px 20px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ color: C.accent }}>💡</span> {t('gn_ideas_label', locale)} <span style={{ background: C.surface, padding: '1px 7px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>{ideas.length}</span>
                 </div>
               </div>
-            ))}
 
-            {/* Add idea CTA */}
-            <button onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }}
-              style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: C.accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: 8 }}>
-              + {t('gn_add_idea', locale)}
-            </button>
+              {ideas.length === 0 && (
+                <div style={{ textAlign: 'center' as const, padding: '32px 20px' }}>
+                  <div style={{ fontSize: 40, marginBottom: 10 }}>💡</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, marginBottom: 4 }}>{locale === 'ru' ? 'Пока нет идей' : 'No ideas yet'}</div>
+                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>{locale === 'ru' ? 'Добавьте идеи подарков, чтобы не забыть' : 'Add gift ideas so you don\'t forget'}</div>
+                </div>
+              )}
+
+              {ideas.map((idea: any, i: number) => (
+                <div key={idea.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', marginBottom: 8, opacity: idea.status === 'DONE' ? 0.5 : 1, animation: `fadeIn 0.3s ease ${0.05 + i * 0.03}s both` }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: C.text, textDecoration: idea.status === 'DONE' ? 'line-through' : 'none', lineHeight: 1.35, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{idea.text}</div>
+                  {idea.link && <div style={{ fontSize: 12, color: C.accent, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{idea.link}</div>}
+                  {idea.price != null && <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginTop: 4 }}>{idea.price.toLocaleString()} {idea.currency ?? '₽'}</div>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                    <span style={{ fontSize: 11, color: C.textMuted }}>{new Date(idea.createdAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' })}</span>
+                    {idea.status === 'DONE' && <span style={{ fontSize: 11, color: '#34D399', fontWeight: 600 }}>✓ {locale === 'ru' ? 'Выбрано' : 'Selected'}</span>}
+                    {idea.status !== 'DONE' && <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}/complete`, { method: 'POST' }); await refreshOccasion(); pushToast(t('gn_idea_completed', locale), 'success'); }}
+                      style={{ fontSize: 11, fontWeight: 600, color: '#34D399', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✓ {t('gn_complete', locale)}</button>}
+                    <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}`, { method: 'DELETE' }); await refreshOccasion(); }}
+                      style={{ fontSize: 11, fontWeight: 600, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✕</button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Add idea CTA */}
+              <button onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }}
+                style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, marginTop: 10, boxShadow: `0 4px 16px ${C.accentGlow}` }}>
+                + {t('gn_add_idea', locale)}
+              </button>
+            </div>
 
             {/* Edit BottomSheet */}
             <BottomSheet isOpen={gnShowEdit} onClose={() => setGnShowEdit(false)} title={t('gn_edit_occasion', locale)}>
@@ -11044,7 +11191,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <input value={gnEditTitle} onChange={e => { if (e.target.value.length <= 150) setGnEditTitle(e.target.value); }} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
                     {gnEditTitle && <button onClick={() => setGnEditTitle('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
                   </div>
-                  <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnEditTitle.length} / 150</div>
+                  <div style={{ fontSize: 10, color: C.textMuted, textAlign: 'right' as const, marginTop: 2 }}>{gnEditTitle.length} / 150</div>
                 </div>
                 <div>
                   <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_person', locale)}</label>
@@ -11052,21 +11199,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <input value={gnEditPerson} onChange={e => { if (e.target.value.length <= 50) setGnEditPerson(e.target.value); }} placeholder={t('gn_ph_person', locale)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
                     {gnEditPerson && <button onClick={() => setGnEditPerson('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
                   </div>
-                  <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnEditPerson.length} / 50</div>
+                  <div style={{ fontSize: 10, color: C.textMuted, textAlign: 'right' as const, marginTop: 2 }}>{gnEditPerson.length} / 50</div>
                 </div>
                 <div>
                   <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_description', locale)}</label>
                   <div style={{ position: 'relative' as const }}>
                     <textarea value={gnEditNote} onChange={e => { if (e.target.value.length <= 300) setGnEditNote(e.target.value); }} placeholder={t('gn_ph_note', locale)} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const, minHeight: 60, resize: 'none' as const }} />
                   </div>
-                  <div style={{ fontSize: 10, color: '#444', textAlign: 'right' as const, marginTop: 2 }}>{gnEditNote.length} / 300</div>
+                  <div style={{ fontSize: 10, color: C.textMuted, textAlign: 'right' as const, marginTop: 2 }}>{gnEditNote.length} / 300</div>
                 </div>
                 <button disabled={!gnEditTitle.trim()} onClick={async () => {
                   await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'PATCH', body: JSON.stringify({ title: gnEditTitle.trim(), personName: gnEditPerson.trim() || null, note: gnEditNote.trim() || null }) });
                   setGnShowEdit(false);
                   pushToast(t('gn_occasion_updated', locale), 'success');
                   await refreshOccasion();
-                }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnEditTitle.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}>{t('save', locale)}</button>
+                }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnEditTitle.trim() ? `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)` : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: gnEditTitle.trim() ? `0 4px 16px ${C.accentGlow}` : 'none' }}>{t('save', locale)}</button>
               </div>
             </BottomSheet>
           </div>
@@ -11099,8 +11246,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div>
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_type', locale)}</label>
             <div style={{ display: 'flex', gap: 6 }}>
-              {(['BIRTHDAY', 'ANNIVERSARY', 'HOLIDAY', 'OTHER'] as const).map(tp => (
-                <button key={tp} onClick={() => setGnFormType(tp)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormType === tp ? C.accent : C.surface, color: gnFormType === tp ? '#fff' : C.textMuted, whiteSpace: 'nowrap' as const }}>{({ BIRTHDAY: t('gn_type_birthday', locale), ANNIVERSARY: t('gn_type_anniversary', locale), HOLIDAY: t('gn_type_holiday', locale), OTHER: t('gn_type_other', locale) })[tp]}</button>
+              {([
+                { type: 'BIRTHDAY' as const, emoji: '🎂', label: locale === 'ru' ? 'ДР' : 'Bday' },
+                { type: 'ANNIVERSARY' as const, emoji: '💍', label: locale === 'ru' ? 'Годовщ.' : 'Anniv.' },
+                { type: 'HOLIDAY' as const, emoji: '🎄', label: locale === 'ru' ? 'Праздник' : 'Holiday' },
+                { type: 'OTHER' as const, emoji: '🎁', label: locale === 'ru' ? 'Другое' : 'Other' },
+              ]).map(tp => (
+                <button key={tp.type} onClick={() => setGnFormType(tp.type)} style={{ flex: 1, padding: '10px 4px', borderRadius: 10, border: gnFormType === tp.type ? `1px solid rgba(124,106,255,0.3)` : `1px solid ${C.border}`, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormType === tp.type ? C.accentSoft : C.surface, color: gnFormType === tp.type ? C.accent : C.textMuted, whiteSpace: 'nowrap' as const, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 2 }}>
+                  <span style={{ fontSize: 16 }}>{tp.emoji}</span>
+                  {tp.label}
+                </button>
               ))}
             </div>
           </div>
@@ -11109,7 +11264,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_recurrence', locale)}</label>
               <div style={{ display: 'flex', gap: 6 }}>
                 {(['NONE', 'YEARLY', 'MONTHLY'] as const).map(r => (
-                  <button key={r} onClick={() => setGnFormRecurrence(r)} style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormRecurrence === r ? C.accent : C.surface, color: gnFormRecurrence === r ? '#fff' : C.textMuted, whiteSpace: 'nowrap' as const }}>{({ NONE: t('gn_recurrence_none', locale), YEARLY: t('gn_recurrence_yearly', locale), MONTHLY: t('gn_recurrence_monthly', locale) })[r]}</button>
+                  <button key={r} onClick={() => setGnFormRecurrence(r)} style={{ flex: 1, padding: '10px 4px', borderRadius: 10, border: gnFormRecurrence === r ? `1px solid rgba(124,106,255,0.3)` : `1px solid ${C.border}`, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormRecurrence === r ? C.accentSoft : C.surface, color: gnFormRecurrence === r ? C.accent : C.textSec, whiteSpace: 'nowrap' as const }}>{({ NONE: t('gn_recurrence_none', locale), YEARLY: t('gn_recurrence_yearly', locale), MONTHLY: t('gn_recurrence_monthly', locale) })[r]}</button>
                 ))}
               </div>
             </div>
@@ -11121,7 +11276,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               pushToast(t('gn_add_occasion', locale), 'success');
               try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
             } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
-          }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnFormTitle.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}>{t('gn_add_occasion', locale)}</button>
+          }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnFormTitle.trim() ? `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)` : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: gnFormTitle.trim() ? `0 4px 16px ${C.accentGlow}` : 'none', marginTop: 4 }}>{t('gn_add_occasion', locale)}</button>
         </div>
       </BottomSheet>
 
