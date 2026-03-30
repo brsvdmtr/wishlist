@@ -2360,6 +2360,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [gnFormPerson, setGnFormPerson] = useState('');
   const [gnIdeaText, setGnIdeaText] = useState('');
   const [gnIdeaLink, setGnIdeaLink] = useState('');
+  // Loading screen staged text
+  const [loadTextIdx, setLoadTextIdx] = useState(0);
   // GN occasion detail state (must be top-level, not inside IIFE)
   const [gnShowActions, setGnShowActions] = useState(false);
   const [gnShowEdit, setGnShowEdit] = useState(false);
@@ -4328,6 +4330,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Loading screen text rotation
+  useEffect(() => {
+    if (screen !== 'loading') return;
+    const iv = setInterval(() => setLoadTextIdx(i => (i + 1) % 3), 1200);
+    return () => clearInterval(iv);
+  }, [screen]);
+
   // Load god stats when god mode is enabled; clear when disabled
   useEffect(() => {
     if (godMode) void loadGodStats();
@@ -5938,13 +5947,90 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         }
       `}</style>
 
-      {/* ── LOADING ── */}
-      {screen === 'loading' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16 }}>
-          <div style={{ fontSize: 40 }}>🎁</div>
-          <div style={{ color: C.textMuted, fontSize: 15 }}>{t('loading', locale)}</div>
-        </div>
-      )}
+      {/* ── LOADING — branded splash ── */}
+      {screen === 'loading' && (() => {
+        const loadingTexts = locale === 'ru'
+          ? ['Открываем WishBot', 'Загружаем вишлисты', 'Почти готово']
+          : ['Opening WishBot', 'Loading wishlists', 'Almost ready'];
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            height: '100vh', flexDirection: 'column',
+            background: 'radial-gradient(ellipse at 50% 40%, rgba(124,106,255,0.08) 0%, transparent 70%)',
+            position: 'relative', overflow: 'hidden',
+          }}>
+            {/* Decorative background cards */}
+            <div style={{ position: 'absolute', top: '20%', left: '10%', width: 120, height: 70, borderRadius: 14, background: 'rgba(124,106,255,0.04)', border: '1px solid rgba(124,106,255,0.06)', transform: 'rotate(-12deg)', opacity: 0.6 }} />
+            <div style={{ position: 'absolute', top: '25%', right: '8%', width: 100, height: 60, borderRadius: 12, background: 'rgba(251,191,36,0.03)', border: '1px solid rgba(251,191,36,0.05)', transform: 'rotate(8deg)', opacity: 0.5 }} />
+            <div style={{ position: 'absolute', bottom: '22%', left: '15%', width: 90, height: 55, borderRadius: 10, background: 'rgba(52,211,153,0.03)', border: '1px solid rgba(52,211,153,0.05)', transform: 'rotate(-6deg)', opacity: 0.4 }} />
+
+            {/* Gift box with glow + float animation */}
+            <div style={{
+              position: 'relative', marginBottom: 24,
+              animation: 'splashFloat 2.5s ease-in-out infinite',
+            }}>
+              {/* Glow behind */}
+              <div style={{
+                position: 'absolute', inset: -20, borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(124,106,255,0.25) 0%, transparent 70%)',
+                filter: 'blur(20px)',
+                animation: 'splashPulse 2.5s ease-in-out infinite',
+              }} />
+              {/* Box */}
+              <div style={{ position: 'relative', fontSize: 56, lineHeight: 1, zIndex: 1 }}>🎁</div>
+            </div>
+
+            {/* Brand name */}
+            <div style={{
+              fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font,
+              letterSpacing: '-0.02em', marginBottom: 6,
+            }}>
+              WishBot
+            </div>
+
+            {/* Staged loading text */}
+            <div style={{
+              fontSize: 13, color: C.textMuted, fontFamily: font,
+              minHeight: 20, transition: 'opacity 0.3s',
+              animation: 'splashTextFade 1.2s ease-in-out infinite',
+            }}>
+              {loadingTexts[loadTextIdx]}
+            </div>
+
+            {/* Subtle progress dots */}
+            <div style={{ display: 'flex', gap: 6, marginTop: 20 }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: C.accent,
+                  opacity: i <= loadTextIdx ? 0.8 : 0.15,
+                  transition: 'opacity 0.3s',
+                }} />
+              ))}
+            </div>
+
+            <style>{`
+              @keyframes splashFloat {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-8px); }
+              }
+              @keyframes splashPulse {
+                0%, 100% { opacity: 0.6; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.1); }
+              }
+              @keyframes splashTextFade {
+                0%, 100% { opacity: 0.7; }
+                50% { opacity: 1; }
+              }
+              @media (prefers-reduced-motion: reduce) {
+                [style*="splashFloat"] { animation: none !important; }
+                [style*="splashPulse"] { animation: none !important; }
+                [style*="splashTextFade"] { animation: none !important; }
+              }
+            `}</style>
+          </div>
+        );
+      })()}
 
       {/* ── ERROR ── */}
       {screen === 'error' && (() => {
