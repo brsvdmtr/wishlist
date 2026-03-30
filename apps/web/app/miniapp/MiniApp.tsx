@@ -2654,9 +2654,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const res = await fetch(url, {
         ...init,
         signal: controller.signal,
+        credentials: 'include', // send wb_session cookie for web auth
         headers: {
           'Content-Type': 'application/json',
-          'X-TG-INIT-DATA': initDataRef.current,
+          ...(initDataRef.current ? { 'X-TG-INIT-DATA': initDataRef.current } : {}),
           ...(init?.headers as Record<string, string> | undefined),
         },
       });
@@ -4135,12 +4136,37 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         if (detectedLocale !== 'ru') setDefaultCurrency('USD');
       }
 
-      // If not inside real Telegram (initData is empty), show "Open in Telegram"
-      // instead of attempting a doomed auth/API flow.
+      // If not inside real Telegram (initData is empty), check for web session cookie.
+      // If authenticated via Telegram Login Widget, proceed with cookie-based auth.
+      // We use a synchronous XHR to avoid duplicating the entire post-auth init tree.
       if (!tg.initData) {
-        setErrorMsg(t('error_open_in_telegram', locale));
-        setScreen('error');
-        return;
+        try {
+          const xhr = new XMLHttpRequest();
+          xhr.open('GET', `${apiBase}/auth/me`, false); // synchronous
+          xhr.withCredentials = true;
+          xhr.send();
+          if (xhr.status === 200) {
+            const data = JSON.parse(xhr.responseText) as { authenticated?: boolean; telegramId?: string; firstName?: string };
+            if (data.authenticated && data.telegramId) {
+              // Web session active — set minimal user info and fall through to normal loading
+              setTgUser({ id: Number(data.telegramId), first_name: data.firstName ?? '' } as TgUser);
+              computeActorHash(Number(data.telegramId)).then(h => { myActorHashRef.current = h; }).catch(() => {});
+              // Don't return — fall through to the normal startParam / loadWishlists flow below
+            } else {
+              setErrorMsg(t('error_open_in_telegram', locale));
+              setScreen('error');
+              return;
+            }
+          } else {
+            setErrorMsg(t('error_open_in_telegram', locale));
+            setScreen('error');
+            return;
+          }
+        } catch {
+          setErrorMsg(t('error_open_in_telegram', locale));
+          setScreen('error');
+          return;
+        }
       }
 
       const handleErr = (e: unknown) => {
