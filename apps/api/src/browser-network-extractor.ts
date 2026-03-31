@@ -49,7 +49,7 @@ interface CollectedResponse {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const BROWSER_TIMEOUT_MS  = 25_000;
+const BROWSER_TIMEOUT_MS  = 30_000;
 const MAX_RESPONSE_BYTES  = 1_000_000;  // 1 MB per response
 const MAX_PENDING_READS   = 120;        // cap simultaneous response reads
 const MAX_SCAN_DEPTH      = 9;          // JSON recursive search depth
@@ -58,6 +58,9 @@ const MAX_SCRIPT_BYTES    = 8_000_000;  // skip enormous script blocks
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+/** Page titles that indicate an anti-bot challenge (not the real product page) */
+const CHALLENGE_TITLES = ['Почти готово', 'Just a moment', 'Attention Required'];
 
 // ─── Main Entry ───────────────────────────────────────────────────────────────
 
@@ -125,22 +128,42 @@ export async function browserExtract(
     // ── Navigate ─────────────────────────────────────────────────────────
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: BROWSER_TIMEOUT_MS });
 
-    // Wait for pending XHR reads and for network to idle
-    await Promise.allSettled(pending);
-    await page.waitForNetworkIdle({ idleTime: 500, timeout: 4_000 }).catch(() => {});
+    // ── Anti-bot challenge detection (WB "Почти готово..." etc.) ────────
+    // Some marketplaces show a JS challenge page that auto-resolves and
+    // redirects to the real product page within a few seconds.  If we
+    // detect a challenge page, wait for the navigation to the real page.
+    const challengeTitle = await page.title().catch(() => '');
+    const isChallenge = CHALLENGE_TITLES.some(t => challengeTitle.includes(t));
 
-    // Brief pause for React/Vue hydration to finish
-    await new Promise(r => setTimeout(r, 700));
+    if (isChallenge) {
+      // Wait for the challenge JS to redirect us to the real page.
+      // The challenge typically resolves in 2-8 seconds.
+      await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15_000 }).catch(() => {});
+      // Re-collect pending network responses after redirect
+      await Promise.allSettled(pending);
+      await page.waitForNetworkIdle({ idleTime: 500, timeout: 5_000 }).catch(() => {});
+      await new Promise(r => setTimeout(r, 1_000));
+    } else {
+      // Wait for pending XHR reads and for network to idle
+      await Promise.allSettled(pending);
+      await page.waitForNetworkIdle({ idleTime: 500, timeout: 4_000 }).catch(() => {});
+      // Brief pause for React/Vue hydration to finish
+      await new Promise(r => setTimeout(r, 700));
+    }
 
-    // Wait until <title> or og:title is populated
+    // Wait until <title> or og:title is populated (skip challenge titles)
     await page.waitForFunction(
-      () => {
+      (challengeTitles: string[]) => {
         const og = document.querySelector('meta[property="og:title"]');
         const t  = document.querySelector('title');
+        const titleText = t?.textContent ?? '';
+        // Don't consider challenge titles as "populated"
+        if (challengeTitles.some(ct => titleText.includes(ct))) return false;
         return (og?.getAttribute('content')?.length ?? 0) > 3
-            || (t?.textContent?.length ?? 0) > 3;
+            || titleText.length > 3;
       },
       { timeout: 7_000 },
+      CHALLENGE_TITLES,
     ).catch(() => {});
 
     const html = await page.content();
