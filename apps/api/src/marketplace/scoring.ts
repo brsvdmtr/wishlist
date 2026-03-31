@@ -31,6 +31,7 @@ const FIELD_WEIGHTS = {
  */
 const SOURCE_BASE_CONFIDENCE: Record<FieldSource, number> = {
   card_api:          90,
+  basket_cdn:        90,
   network_intercept: 85,
   hydration_state:   80,
   jsonld:            75,
