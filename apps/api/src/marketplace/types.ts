@@ -32,6 +32,7 @@ export interface FieldValue<T> {
 
 export type FieldSource =
   | 'card_api'          // Direct marketplace JSON API (WB card.wb.ru, etc.)
+  | 'basket_cdn'        // WB basket CDN static files (card.json, price-history.json)
   | 'network_intercept' // Browser network response interception
   | 'hydration_state'   // __NEXT_DATA__, window.__INITIAL_STATE__, etc.
   | 'jsonld'            // JSON-LD structured data

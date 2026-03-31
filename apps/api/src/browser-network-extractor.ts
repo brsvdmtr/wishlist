@@ -687,6 +687,30 @@ export function wbBasket(vol: number): string {
   else if (vol <= 2189) b = 14;
   else if (vol <= 2405) b = 15;
   else if (vol <= 2621) b = 16;
-  else                  b = 17;
+  else if (vol <= 2837) b = 17;
+  else if (vol <= 3053) b = 18;
+  else if (vol <= 3269) b = 19;
+  else if (vol <= 3485) b = 20;
+  else if (vol <= 3701) b = 21;
+  else if (vol <= 3917) b = 22;
+  else if (vol <= 4133) b = 23;
+  else if (vol <= 4349) b = 24;
+  else if (vol <= 4565) b = 25;
+  else if (vol <= 4781) b = 26;
+  else if (vol <= 4997) b = 27;
+  else if (vol <= 5213) b = 28;
+  else if (vol <= 5429) b = 29;
+  else if (vol <= 5645) b = 30;
+  else                  b = 31;
   return b.toString().padStart(2, '0');
+}
+
+/**
+ * Build a basket CDN URL for a WB product's card.json or price-history.json.
+ * These endpoints are static CDN files — no anti-bot, no rate limiting.
+ */
+export function wbCdnBaseUrl(nm: number): string {
+  const vol  = Math.floor(nm / 100_000);
+  const part = Math.floor(nm / 1_000);
+  return `https://basket-${wbBasket(vol)}.wbbasket.ru/vol${vol}/part${part}/${nm}`;
 }

@@ -81,7 +81,7 @@ export function isSuspiciousPrice(
   if (amount <= 0) return true;
 
   // Trusted API sources: only reject truly impossible values
-  const trusted = source === 'card_api' || source === 'network_intercept';
+  const trusted = source === 'card_api' || source === 'network_intercept' || source === 'basket_cdn';
   if (trusted) {
     // Prices below 1 ₽ are probably parsing errors (sub-kopeck)
     if (amount < 1) return true;

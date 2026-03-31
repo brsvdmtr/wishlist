@@ -2,7 +2,8 @@
  * marketplace/strategies/wildberries.ts — Wildberries multi-strategy parser
  *
  * Strategy pipeline (ordered by priority):
- *   1. Search API (search.wb.ru) — searches by nmId, no browser needed
+ *   0. Basket CDN (card.json + price-history.json) — static CDN, no anti-bot
+ *   1. Search API (search.wb.ru) — fallback for price if CDN missing
  *   2. Browser + network intercept — captures API responses live
  *   3. DOM fallback — Cheerio on rendered HTML
  *
@@ -23,11 +24,104 @@ import {
   descriptionField,
 } from '../scoring.js';
 import { isGarbageTitle, isAntiBotPage } from '../guards.js';
-import { wbCdnImageUrl } from '../../browser-network-extractor.js';
+import { wbCdnImageUrl, wbCdnBaseUrl } from '../../browser-network-extractor.js';
 import { getBrowser } from '../browser-provider.js';
 import { browserExtract } from '../../browser-network-extractor.js';
 import { networkProductToResult } from './shared-browser.js';
 import { parseLog } from '../logger.js';
+
+// ─── Strategy 0: Basket CDN (card.json + price-history.json) ────────────────
+// Static CDN files — no anti-bot, no rate limiting, fastest and most reliable.
+
+interface WbCardJson {
+  imt_name?: string;
+  nm_id?: number;
+  description?: string;
+  selling?: { brand_name?: string };
+  media?: { photo_count?: number };
+}
+
+interface WbPriceHistoryEntry {
+  dt: number;
+  price: { RUB: number };
+}
+
+export const wbBasketCdnStrategy: ParseStrategy = {
+  name: 'wb_basket_cdn',
+
+  async execute(ctx: ParseContext): Promise<StrategyResult | null> {
+    if (!ctx.productId) return null;
+
+    const startTime = Date.now();
+    const nm = parseInt(ctx.productId, 10);
+    if (nm <= 0 || isNaN(nm)) return null;
+
+    const baseUrl = wbCdnBaseUrl(nm);
+
+    try {
+      // Fetch card.json and price-history.json in parallel
+      const [cardRes, priceRes] = await Promise.all([
+        fetchJson<WbCardJson>(`${baseUrl}/info/ru/card.json`),
+        fetchJson<WbPriceHistoryEntry[]>(`${baseUrl}/info/price-history.json`),
+      ]);
+
+      if (!cardRes) {
+        return makeError('wb_basket_cdn', startTime, 'card.json not found on basket CDN');
+      }
+
+      // Title: brand / product name
+      let titleStr: string | null = null;
+      if (cardRes.imt_name) {
+        titleStr = cardRes.selling?.brand_name
+          ? `${cardRes.selling.brand_name} / ${cardRes.imt_name.trim()}`
+          : cardRes.imt_name.trim();
+      }
+      const title = titleStr ? titleField(titleStr, 'basket_cdn', 5) : null;
+
+      // Price: last entry in price history (kopecks ÷ 100)
+      let price: FieldValue<PriceData> | null = null;
+      if (Array.isArray(priceRes) && priceRes.length > 0) {
+        const latest = priceRes[priceRes.length - 1]!;
+        const amount = Math.round(latest.price.RUB / 100);
+        if (amount > 0 && amount < 10_000_000) {
+          price = priceField(amount, 'RUB', 'basket_cdn', 5);
+        }
+      }
+
+      // Image: CDN URL
+      const image = imageField(wbCdnImageUrl(nm), 'basket_cdn', 5);
+
+      // Description
+      const description = cardRes.description
+        ? descriptionField(cardRes.description.trim(), 'basket_cdn', 5)
+        : null;
+
+      return {
+        title, description, price, image,
+        strategyName: 'wb_basket_cdn',
+        durationMs: Date.now() - startTime,
+      };
+    } catch (err) {
+      return makeError('wb_basket_cdn', startTime, (err as Error).message);
+    }
+  },
+};
+
+async function fetchJson<T>(url: string): Promise<T | null> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': USER_AGENT },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return await res.json() as T;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -284,7 +378,8 @@ function makeError(strategyName: string, startTime: number, error: string): Stra
 // ─── All WB Strategies (ordered) ─────────────────────────────────────────────
 
 export const wildberriesStrategies: ParseStrategy[] = [
-  wbCardApiStrategy,
-  wbBrowserStrategy,
+  wbBasketCdnStrategy,   // Basket CDN: static files, no anti-bot, fastest
+  wbCardApiStrategy,     // search.wb.ru: fallback for price if CDN missing
+  wbBrowserStrategy,     // Browser: last resort, blocked by WBAAS anti-bot
   wbDomStrategy,
 ];
