@@ -13,6 +13,8 @@ declare global {
         expand(): void;
         close(): void;
         initData: string;
+        version: string;
+        platform: string;
         initDataUnsafe: { user?: TgWebAppUser; start_param?: string };
         setHeaderColor(color: string): void;
         setBackgroundColor(color: string): void;

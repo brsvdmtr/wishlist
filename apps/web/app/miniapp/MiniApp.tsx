@@ -4195,7 +4195,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         if (attempts++ < 40) {
           setTimeout(tryInit, 100); // retry up to 4s while SDK loads
         } else {
-          setErrorMsg(t('error_open_in_telegram', locale));
+          // eslint-disable-next-line no-console
+          console.error('[WishBoard] SDK not found after 40 retries', { telegram: !!window.Telegram, hash: location.hash?.substring(0, 80) });
+          setErrorMsg(t('error_open_in_telegram', locale) + `\n[SDK_NOT_LOADED] hash=${location.hash ? 'yes' : 'no'} tg=${!!window.Telegram}`);
           setScreen('error');
         }
         return;
@@ -4247,7 +4249,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       // If not inside real Telegram (initData is empty), show landing page
       // directing user to open the app via Telegram deep link.
       if (!tg.initData) {
-        setErrorMsg(t('error_open_in_telegram', locale));
+        // eslint-disable-next-line no-console
+        console.error('[WishBoard] initData empty', {
+          version: tg.version,
+          platform: tg.platform,
+          hash: location.hash ? 'yes(' + location.hash.length + ')' : 'no',
+          initDataLen: tg.initData?.length ?? 0,
+          user: !!tg.initDataUnsafe?.user,
+          colorScheme: tg.colorScheme,
+        });
+        const diag = `[EMPTY_INIT_DATA] v=${tg.version} p=${tg.platform} hash=${location.hash ? location.hash.length : 0} user=${!!tg.initDataUnsafe?.user}`;
+        setErrorMsg(t('error_open_in_telegram', locale) + '\n' + diag);
         setScreen('error');
         return;
       }
@@ -6199,7 +6211,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
       {/* ── ERROR ── */}
       {screen === 'error' && (() => {
-        const isTgRequired = errorMsg === t('error_open_in_telegram', locale);
+        const isTgRequired = errorMsg.startsWith(t('error_open_in_telegram', locale));
         const tgDeepLink = buildTgDeepLink(urlStartParamRef.current || undefined);
         if (isTgRequired) {
           // Browser fallback — branded landing for non-Telegram visitors
@@ -6247,6 +6259,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8, textAlign: 'center' }}>
                 {locale === 'ru' ? 'Откройте через Telegram для полного функционала' : 'Open via Telegram for full functionality'}
               </div>
+
+              {/* Diagnostic info for debugging initData issues */}
+              {errorMsg.includes('[') && (
+                <div style={{ fontSize: 9, color: C.textMuted, marginTop: 16, textAlign: 'center', fontFamily: 'monospace', opacity: 0.6, wordBreak: 'break-all' }}>
+                  {errorMsg.split('\n').slice(1).join(' ')}
+                </div>
+              )}
             </div>
           );
         }
