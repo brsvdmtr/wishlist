@@ -8629,16 +8629,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
                   return (
                     <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                      {itemUnreadCount > 0 && (
-                        <span style={{
-                          position: 'absolute', top: 8, right: 8, zIndex: 2,
-                          minWidth: 20, height: 20, borderRadius: 10, padding: '0 6px',
-                          background: C.orange, color: '#fff',
-                          fontSize: 10, fontWeight: 700, fontFamily: font,
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-                        }}>{itemUnreadCount}</span>
-                      )}
                       <Card
                         item={item}
                         isGuest
@@ -8648,21 +8638,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         myActorHash={myActorHashRef.current}
                         locale={locale}
                       />
+                      {itemUnreadCount > 0 && (
+                        <span style={{
+                          position: 'absolute', top: -6, right: -6, zIndex: 10,
+                          minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
+                          background: C.orange, color: '#fff',
+                          fontSize: 11, fontWeight: 800, fontFamily: font,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                          border: `2px solid ${C.bg}`,
+                          pointerEvents: 'none',
+                        }}>{itemUnreadCount}</span>
+                      )}
                     </div>
                   );
                 }
                 return (
                   <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                    {itemUnreadCount > 0 && (
-                      <span style={{
-                        position: 'absolute', top: 8, right: 8, zIndex: 2,
-                        minWidth: 20, height: 20, borderRadius: 10, padding: '0 6px',
-                        background: C.orange, color: '#fff',
-                        fontSize: 10, fontWeight: 700, fontFamily: font,
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-                      }}>{itemUnreadCount}</span>
-                    )}
                     <WishCardGuest
                       item={item}
                       onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
@@ -8671,6 +8663,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       myActorHash={myActorHashRef.current}
                       locale={locale}
                     />
+                    {itemUnreadCount > 0 && (
+                      <span style={{
+                        position: 'absolute', top: 6, right: 6, zIndex: 10,
+                        minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
+                        background: C.orange, color: '#fff',
+                        fontSize: 11, fontWeight: 800, fontFamily: font,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                        border: `2px solid ${C.bg}`,
+                        pointerEvents: 'none',
+                      }}>{itemUnreadCount}</span>
+                    )}
                   </div>
                 );
               })}
@@ -8694,16 +8698,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         const Card = WishCardCompact;
                         return (
                           <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both`, marginBottom: 8, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                            {itemUnreadCount > 0 && (
-                              <span style={{
-                                position: 'absolute', top: 8, right: 8, zIndex: 2,
-                                minWidth: 20, height: 20, borderRadius: 10, padding: '0 6px',
-                                background: C.orange, color: '#fff',
-                                fontSize: 10, fontWeight: 700, fontFamily: font,
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-                              }}>{itemUnreadCount}</span>
-                            )}
                             <Card
                               item={item}
                               isGuest
@@ -8713,21 +8707,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                               myActorHash={myActorHashRef.current}
                               locale={locale}
                             />
+                            {itemUnreadCount > 0 && (
+                              <span style={{
+                                position: 'absolute', top: -6, right: -6, zIndex: 10,
+                                minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
+                                background: C.orange, color: '#fff',
+                                fontSize: 11, fontWeight: 800, fontFamily: font,
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                border: `2px solid ${C.bg}`,
+                                pointerEvents: 'none',
+                              }}>{itemUnreadCount}</span>
+                            )}
                           </div>
                         );
                       }
                       return (
                         <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                          {itemUnreadCount > 0 && (
-                            <span style={{
-                              position: 'absolute', top: 8, right: 8, zIndex: 2,
-                              minWidth: 20, height: 20, borderRadius: 10, padding: '0 6px',
-                              background: C.orange, color: '#fff',
-                              fontSize: 10, fontWeight: 700, fontFamily: font,
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-                            }}>{itemUnreadCount}</span>
-                          )}
                           <WishCardGuest
                             item={item}
                             onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
@@ -8736,6 +8732,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             myActorHash={myActorHashRef.current}
                             locale={locale}
                           />
+                          {itemUnreadCount > 0 && (
+                            <span style={{
+                              position: 'absolute', top: -6, right: -6, zIndex: 10,
+                              minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
+                              background: C.orange, color: '#fff',
+                              fontSize: 11, fontWeight: 800, fontFamily: font,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                              border: `2px solid ${C.bg}`,
+                              pointerEvents: 'none',
+                            }}>{itemUnreadCount}</span>
+                          )}
                         </div>
                       );
                     })}
