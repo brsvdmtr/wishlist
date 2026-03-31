@@ -1371,6 +1371,7 @@ const ONE_TIME_SKUS = {
   import_pack_10:          { code: 'import_pack_10',          price: 39, type: 'consumable' as const, addonType: null as string | null,                  creditKey: 'import' as 'hint' | 'import' | null, creditAmount: 10, targetRequired: false },
   import_pack_25:          { code: 'import_pack_25',          price: 79, type: 'consumable' as const, addonType: null as string | null,                  creditKey: 'import' as 'hint' | 'import' | null, creditAmount: 25, targetRequired: false },
   seasonal_decoration:     { code: 'seasonal_decoration',     price: 29, type: 'cosmetic' as const,   addonType: 'seasonal_decoration' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0,  targetRequired: true  },
+  gift_notes_unlock:       { code: 'gift_notes_unlock',       price: GIFT_NOTES_PRICE_XTR, type: 'permanent' as const, addonType: 'gift_notes_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: false },
 } as const;
 
 type SkuCode = keyof typeof ONE_TIME_SKUS;
@@ -2800,7 +2801,7 @@ tgRouter.get(
           ? sub.wishlist.owner.profile.avatarUrl
           : null,
       },
-      unreadCount: sub.unreads.length,
+      unreadCount: new Set(sub.unreads.map((u) => u.entityId)).size,
       unreadEntityIds: [...new Set(sub.unreads.map((u) => u.entityId))],
     }));
 
@@ -2815,9 +2816,10 @@ tgRouter.get(
     const user = await getOrCreateTgUser(req.tgUser!);
     const subs = await prisma.wishlistSubscription.findMany({
       where: { subscriberId: user.id },
-      select: { id: true, unreads: { select: { id: true } } },
+      select: { id: true, unreads: { select: { id: true, entityId: true } } },
     });
-    const unreadCount = subs.reduce((sum, s) => sum + s.unreads.length, 0);
+    // Count distinct changed entities (not raw field-level rows)
+    const unreadCount = subs.reduce((sum, s) => sum + new Set(s.unreads.map(u => u.entityId)).size, 0);
     const subscriptionsWithUnread = subs.filter(s => s.unreads.length > 0).length;
     return res.json({ unreadCount, hasUnread: unreadCount > 0, subscriptionsWithUnread });
   }),
@@ -6606,6 +6608,9 @@ tgRouter.post(
     if (skuCode === 'extra_items_15' && targetId) {
       const existing = ent.addOns.filter(a => a.addonType === 'item_slot_15' && a.targetId === targetId).length;
       if (existing >= ADDON_CAPS.extraItems15PerWishlist) return res.status(409).json({ error: 'wishlist_cap_reached', cap: ADDON_CAPS.extraItems15PerWishlist, current: existing });
+    }
+    if (skuCode === 'gift_notes_unlock') {
+      if (ent.hasGiftNotes) return res.json({ alreadyUnlocked: true });
     }
 
     const botToken = process.env.BOT_TOKEN;

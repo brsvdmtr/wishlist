@@ -704,6 +704,10 @@ const ru: Dict = {
   addon_import_pack_25_desc: 'Расширенный пакет импортов.',
   addon_seasonal_decoration_title: 'Праздничный режим',
   addon_seasonal_decoration_desc: 'Визуальное украшение для выбранного вишлиста.',
+  addon_gift_notes_title: 'Календарь событий',
+  addon_gift_notes_desc: 'Поводы, даты и идеи подарков навсегда.',
+  addon_title_gift_notes_unlock: 'Календарь событий',
+  addon_desc_gift_notes_unlock: 'Сохраняй поводы, даты и идеи подарков. Одна покупка навсегда.',
   addon_stars_price: '{{price}} Stars',
   addon_cap_reached: 'Максимум уже подключён',
   addon_cap_reached_sub: 'Больше купить для этого расширения нельзя.',
@@ -716,6 +720,7 @@ const ru: Dict = {
   addon_activated_hints: 'Намёки добавлены! ✨',
   addon_activated_imports: 'Импорты добавлены! ✨',
   addon_activated_seasonal: 'Праздничный режим включён! 🎄',
+  addon_activated_gift_notes: 'Календарь событий разблокирован! 📅',
   addon_syncing: 'Покупка прошла! Данные обновятся через пару секунд',
 
   // ── Bot add-on notification ─────────────────────────────────────────────
@@ -2094,6 +2099,10 @@ const en: Dict = {
   addon_import_pack_25_desc: 'Extended import pack.',
   addon_seasonal_decoration_title: 'Festive mode',
   addon_seasonal_decoration_desc: 'Visual decoration for a selected wishlist.',
+  addon_gift_notes_title: 'Event Calendar',
+  addon_gift_notes_desc: 'Occasions, dates and gift ideas forever.',
+  addon_title_gift_notes_unlock: 'Event Calendar',
+  addon_desc_gift_notes_unlock: 'Save occasions, dates and gift ideas. One-time purchase forever.',
   addon_stars_price: '{{price}} Stars',
   addon_cap_reached: 'Already at maximum',
   addon_cap_reached_sub: 'You can\'t buy more of this upgrade right now.',
@@ -2106,6 +2115,7 @@ const en: Dict = {
   addon_activated_hints: 'Hints added! ✨',
   addon_activated_imports: 'Imports added! ✨',
   addon_activated_seasonal: 'Festive mode on! 🎄',
+  addon_activated_gift_notes: 'Event Calendar unlocked! 📅',
   addon_syncing: 'Purchase successful! Data will update in a few seconds',
 
   // ── Bot add-on notification ──────────────────────────────────────────────

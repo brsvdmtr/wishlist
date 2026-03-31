@@ -1789,6 +1789,7 @@ function getAddonOffers(locale: Locale): Record<string, { title: string; tag: st
     import_pack_10:         { title: t('addon_import_pack_10_title', locale),       tag: t('addon_tag_import_pack_10', locale) },
     import_pack_25:         { title: t('addon_import_pack_25_title', locale),       tag: t('addon_tag_import_pack_25', locale) },
     seasonal_decoration:    { title: t('addon_seasonal_decoration_title', locale),  tag: t('addon_seasonal_decoration_desc', locale) },
+    gift_notes_unlock:      { title: t('addon_gift_notes_title', locale),           tag: t('addon_gift_notes_desc', locale) },
   };
 }
 
@@ -2392,7 +2393,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [gnOccasions, setGnOccasions] = useState<any[]>([]);
   const [gnViewingOccasion, setGnViewingOccasion] = useState<any>(null);
   const [gnLoading, setGnLoading] = useState(false);
-  const [gnSeenBadge, setGnSeenBadge] = useState(false);
+  const [gnSeenBadge, setGnSeenBadge] = useState(() => {
+    try { return typeof window !== 'undefined' && window.localStorage.getItem('seen_event_calendar_v1') === '1'; } catch { return false; }
+  });
   const [showGnCreateOccasion, setShowGnCreateOccasion] = useState(false);
   const [showGnAddIdea, setShowGnAddIdea] = useState(false);
   const [gnFormTitle, setGnFormTitle] = useState('');
@@ -3847,7 +3850,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setAddonCheckoutLoading(false);
         return;
       }
-      const resData = await res.json() as { invoiceUrl?: string };
+      const resData = await res.json() as { invoiceUrl?: string; alreadyUnlocked?: boolean };
+      if (resData.alreadyUnlocked) {
+        // Already unlocked (e.g. gift_notes via PRO or prior purchase)
+        if (skuCode === 'gift_notes_unlock') {
+          setGnAccess(prev => ({ ...prev, unlocked: true }));
+          pushToast(locale === 'ru' ? 'Уже разблокировано!' : 'Already unlocked!', 'success');
+        }
+        setAddonCheckoutLoading(false);
+        return;
+      }
       if (!resData.invoiceUrl) {
         pushToast(t('addon_checkout_error', locale), 'error');
         setAddonCheckoutLoading(false);
@@ -3879,11 +3891,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             } catch { /* retry */ }
           }
           tg.HapticFeedback?.notificationOccurred?.('success');
+          // Sync gift notes access after purchase
+          if (skuCode === 'gift_notes_unlock') {
+            setGnAccess(prev => ({ ...prev, unlocked: true, unlockType: 'addon' }));
+          }
           const toastKey: string = skuCode.startsWith('extra_wishlist') ? 'addon_activated_wishlist'
             : skuCode.startsWith('extra_subscription') ? 'addon_activated_subscription'
             : skuCode.startsWith('extra_items') ? 'addon_activated_items'
             : skuCode.startsWith('hints') ? 'addon_activated_hints'
             : skuCode.startsWith('import') ? 'addon_activated_imports'
+            : skuCode === 'gift_notes_unlock' ? 'addon_activated_gift_notes'
             : 'addon_activated_seasonal';
           if (synced) {
             pushToast(t(toastKey as Parameters<typeof t>[0], locale), 'success');
@@ -6390,6 +6407,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <button
                 onClick={async () => {
                   setGnSeenBadge(true);
+                  try { window.localStorage.setItem('seen_event_calendar_v1', '1'); } catch { /* ok */ }
                   if (gnAccess.unlocked) {
                     setGnLoading(true);
                     try { const r = await tgFetch('/tg/gift-occasions'); if (r.ok) { const d = await r.json() as { occasions: any[] }; setGnOccasions(d.occasions); } } catch {}
@@ -6402,7 +6420,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', fontSize: 18, color: C.textMuted, lineHeight: 1, position: 'relative' as const }}
                 aria-label={t('gn_title', locale)}
               >
-                🎁
+                📅
                 {!gnSeenBadge && <span style={{ position: 'absolute', top: 4, right: 2, fontSize: 7, fontWeight: 800, color: '#FBBF24', background: 'rgba(251,191,36,0.2)', padding: '1px 3px', borderRadius: 3, lineHeight: 1.2, fontFamily: font }}>{t('gn_badge_new', locale)}</span>}
               </button>
               {/* Settings gear */}
@@ -8662,11 +8680,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {guestNoPriceBlock.map((item, i) => {
+                      const hasUnread = guestUnreadEntityIds.includes(item.id);
                       const useNewCards = CARD_REDESIGN_ENABLED;
                       if (useNewCards) {
                         const Card = WishCardCompact;
                         return (
-                          <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both`, marginBottom: 8 }}>
+                          <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both`, marginBottom: 8, position: 'relative', ...(hasUnread ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
+                            {hasUnread && (
+                              <span style={{
+                                position: 'absolute', top: 8, right: 8, zIndex: 2,
+                                padding: '2px 6px', borderRadius: 6,
+                                background: 'rgba(251,191,36,0.2)', color: '#FBBF24',
+                                fontSize: 9, fontWeight: 700, fontFamily: font, letterSpacing: '0.03em',
+                              }}>{locale === 'ru' ? 'Новое' : 'New'}</span>
+                            )}
                             <Card
                               item={item}
                               isGuest
@@ -8680,7 +8707,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         );
                       }
                       return (
-                        <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
+                        <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(hasUnread ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
+                          {hasUnread && (
+                            <span style={{
+                              position: 'absolute', top: 8, right: 8, zIndex: 2,
+                              padding: '2px 6px', borderRadius: 6,
+                              background: 'rgba(251,191,36,0.2)', color: '#FBBF24',
+                              fontSize: 9, fontWeight: 700, fontFamily: font, letterSpacing: '0.03em',
+                            }}>{locale === 'ru' ? 'Новое' : 'New'}</span>
+                          )}
                           <WishCardGuest
                             item={item}
                             onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
@@ -9363,7 +9398,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
                   {/* One-time upgrades block — shown when availableSkus populated */}
                   {availableSkus.length > 0 && (() => {
-                    const planScreenSkus = ['extra_wishlist_slot', 'extra_items_5', 'extra_items_15', 'extra_subscription_slot']
+                    const planScreenSkus = ['extra_wishlist_slot', 'extra_items_5', 'extra_items_15', 'extra_subscription_slot', 'gift_notes_unlock']
                       .map(code => availableSkus.find(s => s.code === code))
                       .filter((s): s is SkuInfo => s !== undefined);
                     if (planScreenSkus.length === 0) return null;
@@ -9383,6 +9418,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             if (!offer) return null;
                             // item-slot SKUs require a target wishlist — skip if no wishlists yet
                             if ((sku.code === 'extra_items_5' || sku.code === 'extra_items_15') && wishlists.length === 0) return null;
+                            // gift_notes_unlock — hide if already unlocked (via purchase or PRO)
+                            if (sku.code === 'gift_notes_unlock' && gnAccess.unlocked) return null;
                             const isCapped = cappedAddonCodes.includes(sku.code);
                             return (
                               <div

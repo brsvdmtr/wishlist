@@ -748,6 +748,7 @@ if (!token) {
           hints_pack_5: 29, hints_pack_10: 49,
           import_pack_10: 39, import_pack_25: 79,
           seasonal_decoration: 29,
+          gift_notes_unlock: 19,
         };
 
         await prisma.$transaction(async (tx) => {
