@@ -3,7 +3,7 @@ import { Telegraf, Markup } from 'telegraf';
 import fs from 'node:fs';
 import path from 'node:path';
 import { prisma } from '@wishlist/db';
-import { t, detectLocale, type Locale } from '@wishlist/shared';
+import { t, detectLocale, resolveEffectiveLocale, type Locale } from '@wishlist/shared';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/bot (pnpm -C apps/bot start).
@@ -261,7 +261,7 @@ if (!token) {
     // Find which ticket message was replied to
     const originalMsg = await prisma.supportMessage.findFirst({
       where: { telegramSupportMsgId: replyToMsgId },
-      include: { ticket: { include: { user: { select: { telegramChatId: true } } } } },
+      include: { ticket: { include: { user: { select: { telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true } } } } } } },
     });
 
     if (!originalMsg) {
@@ -301,7 +301,10 @@ if (!token) {
       return;
     }
 
-    const msgToUser = `[${ticket.ticketCode}] Ответ поддержки:\n${replyText}`;
+    const userLocale = resolveEffectiveLocale(
+      ticket.user.profile ? { languageMode: ticket.user.profile.languageMode as any, manualLanguage: ticket.user.profile.manualLanguage as any } : null,
+    );
+    const msgToUser = `[${ticket.ticketCode}] ${t('support_reply_label', userLocale)}:\n${replyText}`;
     try {
       const sent = await bot.telegram.sendMessage(userChatId, msgToUser, {
         reply_markup: { force_reply: true, selective: true },
@@ -322,7 +325,7 @@ if (!token) {
   async function handleCloseTicket(ctx: any, replyToMsgId: number): Promise<void> {
     const supportMsg = await prisma.supportMessage.findFirst({
       where: { telegramSupportMsgId: replyToMsgId },
-      include: { ticket: { include: { user: { select: { telegramChatId: true } } } } },
+      include: { ticket: { include: { user: { select: { telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true } } } } } } },
     });
 
     if (!supportMsg) {
@@ -342,11 +345,14 @@ if (!token) {
       data: { status: 'CLOSED', closedAt: new Date() },
     });
 
-    // Notify user (best-effort, locale unknown for closed-ticket notification — use RU as default)
+    // Notify user (best-effort)
     const userChatId = ticket.user.telegramChatId;
     if (userChatId) {
-      const closedTextRu = t('support_closed', 'ru', { code: ticket.ticketCode });
-      await bot.telegram.sendMessage(userChatId, closedTextRu).catch(() => {});
+      const userLocale = resolveEffectiveLocale(
+        ticket.user.profile ? { languageMode: ticket.user.profile.languageMode as any, manualLanguage: ticket.user.profile.manualLanguage as any } : null,
+      );
+      const closedText = t('support_closed', userLocale, { code: ticket.ticketCode });
+      await bot.telegram.sendMessage(userChatId, closedText).catch(() => {});
     }
 
     await ctx.reply(`✅ Тикет ${ticket.ticketCode} закрыт.`).catch(() => {});

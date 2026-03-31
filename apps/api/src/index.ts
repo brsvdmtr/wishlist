@@ -1984,6 +1984,26 @@ async function getItemRole(
 
 tgRouter.use(requireTelegramAuth);
 
+// Persist raw Telegram language_code to UserProfile.language on every authenticated request.
+// IMPORTANT: UserProfile.language stores the RAW Telegram language_code (e.g. "ru", "en", "zh-hans",
+// "hi-IN") — NOT the normalised/effective locale. Normalisation to canonical locales (ru/en/zh-CN/
+// hi/es/ar) happens in the localeSegments SQL aggregation via CASE expression.
+// Fire-and-forget: does not block the request path. Uses IS DISTINCT FROM to skip redundant writes.
+tgRouter.use((req, _res, next) => {
+  if (req.tgUser?.language_code != null) {
+    const telegramId = String(req.tgUser.id);
+    const rawLang = req.tgUser.language_code;
+    prisma.$executeRawUnsafe(
+      `UPDATE "UserProfile" SET language = $1
+       WHERE "userId" = (SELECT id FROM "User" WHERE "telegramId" = $2)
+         AND (language IS DISTINCT FROM $1)`,
+      rawLang,
+      telegramId,
+    ).catch(() => {});
+  }
+  next();
+});
+
 // Error-tracking middleware — records 4xx/5xx responses to AnalyticsEvent.
 // Fires on res.on('finish') so it never blocks the request path.
 // Excludes 401 (normal unauthenticated noise). Event format:
@@ -6115,6 +6135,89 @@ tgRouter.get(
       proByType[row.event] = Number(row.count);
     }
 
+    // ── Locale segments ──────────────────────────────────────────────────────
+    const localeScope = (req.query.localeScope as string) || 'active30d';
+    const localeScopeFilter =
+      localeScope === 'new7d'
+        ? `AND u."createdAt" >= '${cut7.toISOString()}'`
+        : localeScope === 'active30d'
+          ? `AND u.id IN (
+               SELECT "ownerId" FROM "Wishlist" WHERE "updatedAt" >= '${cut30.toISOString()}' AND type = 'REGULAR'
+               UNION
+               SELECT w."ownerId" FROM "Item" i JOIN "Wishlist" w ON i."wishlistId" = w.id
+               WHERE i."updatedAt" >= '${cut30.toISOString()}' AND i.status != 'DELETED'
+             )`
+          : ''; // 'all' — no filter
+
+    // normalizeLocale() equivalent in SQL: map raw Telegram language_code → canonical locale.
+    // Reads UserProfile.language which stores the RAW Telegram language_code (not effective locale).
+    // Replicates packages/shared/src/i18n.ts normalizeLocale() but defaults to 'other' (not 'en')
+    // so unknown/null languages don't inflate the English segment.
+    const normalizeSql = `
+      CASE
+        WHEN p."languageMode" = 'manual' AND p."manualLanguage" IS NOT NULL THEN p."manualLanguage"
+        WHEN p.language IS NULL THEN 'other'
+        WHEN LOWER(p.language) LIKE 'ru%' THEN 'ru'
+        WHEN LOWER(p.language) LIKE 'en%' THEN 'en'
+        WHEN LOWER(p.language) LIKE 'zh%' THEN 'zh-CN'
+        WHEN LOWER(p.language) LIKE 'hi%' THEN 'hi'
+        WHEN LOWER(p.language) LIKE 'es%' THEN 'es'
+        WHEN LOWER(p.language) LIKE 'ar%' THEN 'ar'
+        ELSE 'other'
+      END`;
+
+    type SegRow = { locale: string; count: number };
+    const localeSegmentRows = await prisma.$queryRawUnsafe<SegRow[]>(`
+      SELECT ${normalizeSql} AS locale, COUNT(*)::int AS count
+      FROM "User" u
+      LEFT JOIN "UserProfile" p ON p."userId" = u.id
+      WHERE 1=1 ${localeScopeFilter}
+      GROUP BY locale
+      ORDER BY count DESC`,
+    );
+
+    const CANONICAL_LOCALES = ['ru', 'en', 'zh-CN', 'hi', 'es', 'ar'] as const;
+    const segmentLabels: Record<string, string> = {
+      ru: 'Русскоязычный рынок',
+      en: 'Англоязычный рынок',
+      'zh-CN': 'Китайский рынок',
+      hi: 'Индийский рынок',
+      es: 'Испаноязычный рынок',
+      ar: 'Арабский рынок',
+      other: 'Other / Unknown',
+    };
+
+    let segTotal = 0;
+    const canonicalCounts: Record<string, number> = {};
+    let otherCount = 0;
+    for (const row of localeSegmentRows) {
+      const cnt = Number(row.count);
+      segTotal += cnt;
+      if ((CANONICAL_LOCALES as readonly string[]).includes(row.locale)) {
+        canonicalCounts[row.locale] = (canonicalCounts[row.locale] ?? 0) + cnt;
+      } else {
+        otherCount += cnt;
+      }
+    }
+
+    const segments = CANONICAL_LOCALES
+      .map(loc => ({
+        segmentKey: loc,
+        segmentLabel: segmentLabels[loc],
+        usersCount: canonicalCounts[loc] ?? 0,
+        sharePercent: segTotal > 0 ? Math.round(((canonicalCounts[loc] ?? 0) / segTotal) * 1000) / 10 : 0,
+      }))
+      .filter(s => s.usersCount > 0);
+
+    if (otherCount > 0) {
+      segments.push({
+        segmentKey: 'other',
+        segmentLabel: segmentLabels['other'],
+        usersCount: otherCount,
+        sharePercent: segTotal > 0 ? Math.round((otherCount / segTotal) * 1000) / 10 : 0,
+      });
+    }
+
     return res.json({
       overview: {
         totalUsers,
@@ -6245,6 +6348,12 @@ tgRouter.get(
         errors24hDef: '4xx/5xx responses on /tg/* routes (excludes 401); grouped by method+status+route pattern',
         onboardingDef: 'hello_activation started by variant + completed count; source: AnalyticsEvent; window: last 30d',
         onboardingABDef: 'v2 A/B: started/completed by onboarding_variant + v2 acquisition_path breakdown; window: last 30d',
+        localeSegmentsDef: 'users grouped by effective locale; scope: active30d (default), new7d, all',
+      },
+      localeSegments: {
+        scope: localeScope,
+        total: segTotal,
+        segments,
       },
       generatedAt: now.toISOString(),
     });
@@ -10303,27 +10412,27 @@ async function shouldStopLifecycle(userId: string, segment: string): Promise<str
   return null; // no stop reason
 }
 
-// Lifecycle message templates per segment+touch
-const LIFECYCLE_MESSAGES: Record<string, Record<number, { ru: string; en: string; hasPromo: boolean }>> = {
+// Lifecycle message templates per segment+touch — i18n keys from shared dictionaries
+const LIFECYCLE_MESSAGES: Record<string, Record<number, { i18nKey: string; hasPromo: boolean }>> = {
   S1: {
-    1: { ru: '👋 Привет! Ты заходил, но так и не создал вишлист. Это займёт меньше минуты — просто дай название и начни добавлять желания!', en: '👋 Hi! You visited but haven\'t created a wishlist yet. It takes less than a minute — just name it and start adding wishes!', hasPromo: false },
-    2: { ru: '✨ Напоминаем: твой вишлист ещё пуст. Создай первый список — близкие будут знать, что тебе подарить!', en: '✨ Reminder: your wishlist is still empty. Create your first list — your friends will know exactly what to get you!', hasPromo: false },
-    3: { ru: '🎁 Последнее напоминание: создай вишлист и поделись с друзьями. Больше никаких ненужных подарков!', en: '🎁 Last reminder: create a wishlist and share it with friends. No more unwanted gifts!', hasPromo: false },
+    1: { i18nKey: 'wb_s1_t1', hasPromo: false },
+    2: { i18nKey: 'wb_s1_t2', hasPromo: false },
+    3: { i18nKey: 'wb_s1_t3', hasPromo: false },
   },
   S2: {
-    1: { ru: '📝 Ты создал вишлист, но ещё не добавил ни одного желания. Добавь первое — можно просто вставить ссылку из магазина!', en: '📝 You created a wishlist but haven\'t added any wishes yet. Add your first one — just paste a link from any store!', hasPromo: false },
-    2: { ru: '🎯 В твоём вишлисте пока пусто. Добавь хотя бы одно желание — это займёт 10 секунд!', en: '🎯 Your wishlist is still empty. Add at least one wish — it takes just 10 seconds!', hasPromo: false },
-    3: { ru: '💡 Совет: добавь 3–5 желаний разной стоимости, чтобы друзьям было удобнее выбирать подарок.', en: '💡 Tip: add 3-5 wishes at different price points so friends can pick what suits their budget.', hasPromo: false },
+    1: { i18nKey: 'wb_s2_t1', hasPromo: false },
+    2: { i18nKey: 'wb_s2_t2', hasPromo: false },
+    3: { i18nKey: 'wb_s2_t3', hasPromo: false },
   },
   S3: {
-    1: { ru: '👀 Давно не заходил! Может, пора обновить вишлист? Добавь новые идеи или проверь, что уже забронировали.', en: '👀 Long time no see! Time to update your wishlist? Add new ideas or check what\'s been reserved.', hasPromo: false },
-    2: { ru: '🔄 Твои друзья могут заглядывать в твой вишлист. Убедись, что там актуальные желания!', en: '🔄 Your friends may be checking your wishlist. Make sure it\'s up to date!', hasPromo: false },
-    3: { ru: '🚀 Специально для тебя: попробуй WishBoard Pro бесплатно на 30 дней! Код: <b>WISHPRO</b>\n\nС Pro — до 10 вишлистов, импорт по ссылке, комментарии и подсказки.', en: '🚀 Just for you: try WishBoard Pro free for 30 days! Code: <b>WISHPRO</b>\n\nWith Pro — up to 10 wishlists, link import, comments and hints.', hasPromo: true },
+    1: { i18nKey: 'wb_s3_t1', hasPromo: false },
+    2: { i18nKey: 'wb_s3_t2', hasPromo: false },
+    3: { i18nKey: 'wb_s3_t3_promo', hasPromo: true },
   },
   S4: {
-    1: { ru: '👋 Скучаем по тебе! Загляни в WishBoard — может, пора обновить списки к новому сезону?', en: '👋 We miss you! Check in on WishBoard — maybe time to refresh your lists for the new season?', hasPromo: false },
-    2: { ru: '🎁 Вернись и попробуй Pro бесплатно на 30 дней! Код: <b>WISHPRO</b>\n\n10 вишлистов, импорт по ссылке, комментарии — всё включено.', en: '🎁 Come back and try Pro free for 30 days! Code: <b>WISHPRO</b>\n\n10 wishlists, link import, comments — all included.', hasPromo: true },
-    3: { ru: '⏰ Последний шанс: <b>WISHPRO</b> — Pro бесплатно на 30 дней. Не упусти!', en: '⏰ Last chance: <b>WISHPRO</b> — Pro free for 30 days. Don\'t miss it!', hasPromo: true },
+    1: { i18nKey: 'wb_s4_t1', hasPromo: false },
+    2: { i18nKey: 'wb_s4_t2_promo', hasPromo: true },
+    3: { i18nKey: 'wb_s4_t3_promo', hasPromo: true },
   },
 };
 
@@ -10347,7 +10456,7 @@ setInterval(async () => {
         // Exclude users created less than 6h ago
         createdAt: { lte: candidateThreshold },
       },
-      select: { id: true, telegramChatId: true, telegramId: true, updatedAt: true, createdAt: true, profile: { select: { notifyMarketing: true } } },
+      select: { id: true, telegramChatId: true, telegramId: true, updatedAt: true, createdAt: true, profile: { select: { notifyMarketing: true, languageMode: true, manualLanguage: true } } },
       take: 200, // process in batches to avoid overload
       orderBy: { updatedAt: 'asc' }, // oldest first
     });
@@ -10406,7 +10515,9 @@ setInterval(async () => {
       }
 
       // Determine locale
-      const locale = 'ru'; // TODO: detect from user profile/settings
+      const locale = resolveEffectiveLocale(
+        candidate.profile ? { languageMode: candidate.profile.languageMode as any, manualLanguage: candidate.profile.manualLanguage as any } : null,
+      );
 
       // Build episode key
       const monthKey = new Date().toISOString().slice(0, 7); // 2026-03
@@ -10451,7 +10562,7 @@ setInterval(async () => {
       if (!touch) continue;
 
       // Send DM
-      const msgText = locale === 'ru' ? template.ru : template.en;
+      const msgText = t(template.i18nKey, locale);
       const webAppUrl = touch.deepLinkPayload
         ? `${MINI_APP_URL_FOR_DM}?startapp=${touch.deepLinkPayload}`
         : MINI_APP_URL_FOR_DM;

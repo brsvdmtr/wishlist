@@ -99,10 +99,16 @@ const getPriorities = (locale: Locale) => [
   { value: 3, emoji: PRIO_EMOJI[3], label: t('priority_high', locale),   sub: t('priority_high_sub', locale) },
 ];
 
+/** Map app locale to Intl locale string for date/number formatting */
+const toIntlLocale = (locale: Locale): string => {
+  const map: Record<Locale, string> = { ru: 'ru-RU', en: 'en-US', 'zh-CN': 'zh-CN', hi: 'hi-IN', es: 'es-ES', ar: 'ar-SA' };
+  return map[locale];
+};
+
 const prioEmoji = (p: number) => PRIO_EMOJI[p] ?? '🙂';
 const fmtPrice = (p: number | null, locale: Locale = 'ru', currency: 'RUB' | 'USD' = 'RUB') => {
   if (!p) return null;
-  const formatted = p.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US');
+  const formatted = p.toLocaleString(toIntlLocale(locale));
   return currency === 'USD' ? `${formatted} $` : `${formatted} ₽`;
 };
 
@@ -129,7 +135,7 @@ function formatRetryAfter(seconds: number, locale: Locale): string {
       : t('retry_hours_only', locale, { hours });
   }
   const d = new Date(Date.now() + seconds * 1000);
-  return t('retry_tomorrow', locale, { time: d.toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' }) });
+  return t('retry_tomorrow', locale, { time: d.toLocaleTimeString(toIntlLocale(locale), { hour: '2-digit', minute: '2-digit' }) });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -396,6 +402,11 @@ type GodStats = {
     v2AcquisitionPaths: Record<string, number>;
     conversionRates: Record<string, { startToComplete: string }>;
   } | null;
+  localeSegments?: {
+    scope: string;
+    total: number;
+    segments: { segmentKey: string; segmentLabel: string; usersCount: number; sharePercent: number }[];
+  };
   generatedAt: string;
 };
 
@@ -795,7 +806,7 @@ const SANTA_ANIMAL: Record<string, { ru: string; gender: 'm' | 'f'; en: string }
 function renderSantaAlias(adjectiveKey: string, animalKey: string, locale: string): string {
   const adj = SANTA_ADJ[adjectiveKey];
   const animal = SANTA_ANIMAL[animalKey];
-  if (!adj || !animal) return locale === 'en' ? 'Participant' : 'Участник';
+  if (!adj || !animal) return t('santa_participant_default', locale as Locale);
   if (locale === 'en') return `${adj.en} ${animal.en}`;
   return `${animal.gender === 'f' ? adj.ru_f : adj.ru_m} ${animal.ru}`;
 }
@@ -1669,7 +1680,7 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
               textAlign: 'center', fontSize: 12, color: C.textMuted,
               padding: '8px 14px', background: C.bg, borderRadius: 12, margin: '6px 0',
             }}>
-              {c.text} · {new Date(c.createdAt).toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              {c.text} · {new Date(c.createdAt).toLocaleString(toIntlLocale(locale), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </div>
           ) : (
             <div key={c.id} style={{
@@ -1702,7 +1713,7 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
                     fontSize: 11,
                     color: isMine(c) ? 'rgba(255,255,255,0.45)' : C.textMuted,
                   }}>
-                    {new Date(c.createdAt).toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(c.createdAt).toLocaleTimeString(toIntlLocale(locale), { hour: '2-digit', minute: '2-digit' })}
                   </span>
                   {canDelete(c) && !isArchive && (
                     <button
@@ -2139,6 +2150,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [retentionOpen, setRetentionOpen] = useState(false);
   const [retentionLoading, setRetentionLoading] = useState(false);
   const [retentionPeriod, setRetentionPeriod] = useState(30);
+  const [localeSegmentScope, setLocaleSegmentScope] = useState<'active30d' | 'new7d' | 'all'>('active30d');
   const godStatsRefreshIdRef = useRef(0);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -2736,13 +2748,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } catch {}
   }, [tgFetch]);
 
-  const loadGodStats = useCallback(async () => {
+  const loadGodStats = useCallback(async (scope?: string) => {
     // Race condition guard: only apply state from the latest request
     const myId = ++godStatsRefreshIdRef.current;
     setGodStatsLoading(true);
     setGodStatsError(false);
     try {
-      const r = await tgFetch('/tg/me/god-stats');
+      const qs = scope ? `?localeScope=${scope}` : '';
+      const r = await tgFetch(`/tg/me/god-stats${qs}`);
       if (myId !== godStatsRefreshIdRef.current) return; // stale response — discard
       if (r.ok) {
         setGodStats(await r.json() as GodStats);
@@ -3764,7 +3777,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         });
         tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('warning');
         const cancelledPeriodEnd = new Date(data.subscription.periodEnd).toLocaleDateString(
-          locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' },
+          toIntlLocale(locale), { day: 'numeric', month: 'long' },
         );
         pushToast(t('cancel_success', locale, { date: cancelledPeriodEnd }), 'success');
         trackEvent('subscription_cancelled');
@@ -3857,7 +3870,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         // Already unlocked (e.g. gift_notes via PRO or prior purchase)
         if (skuCode === 'gift_notes_unlock') {
           setGnAccess(prev => ({ ...prev, unlocked: true }));
-          pushToast(locale === 'ru' ? 'Уже разблокировано!' : 'Already unlocked!', 'success');
+          pushToast(t('addon_already_unlocked', locale), 'success');
         }
         setAddonCheckoutLoading(false);
         return;
@@ -5609,7 +5622,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   const fmtDeadline = (d: string | null) => {
     if (!d) return null;
-    return new Date(d).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' });
+    return new Date(d).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long' });
   };
 
   // ─────────────────────────────────────────────────
@@ -6252,9 +6265,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
               {/* Value bullets */}
               {[
-                { icon: '📋', text: locale === 'ru' ? 'Создавай вишлисты для любого повода' : 'Create wishlists for any occasion' },
-                { icon: '🔗', text: locale === 'ru' ? 'Делись одной ссылкой' : 'Share with a single link' },
-                { icon: '🎁', text: locale === 'ru' ? 'Друзья бронируют подарки без спойлеров' : 'Friends reserve gifts with no spoilers' },
+                { icon: '📋', text: t('onboarding_feature_create_lists', locale) },
+                { icon: '🔗', text: t('onboarding_feature_share_link', locale) },
+                { icon: '🎁', text: t('onboarding_feature_reserve_gifts', locale) },
               ].map((b, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', width: '100%' }}>
                   <span style={{ fontSize: 18 }}>{b.icon}</span>
@@ -6271,13 +6284,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     fontSize: 15, fontWeight: 700, borderRadius: 14,
                     boxShadow: `0 6px 20px rgba(124,106,255,0.35)`,
                   }}>
-                    {locale === 'ru' ? 'Открыть в Telegram' : 'Open in Telegram'}
+                    {t('onboarding_telegram_button', locale)}
                   </button>
                 </a>
               )}
 
               <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8, textAlign: 'center' }}>
-                {locale === 'ru' ? 'Откройте через Telegram для полного функционала' : 'Open via Telegram for full functionality'}
+                {t('onboarding_telegram_hint', locale)}
               </div>
 
               {/* Diagnostic info for debugging initData issues */}
@@ -9289,8 +9302,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                               <span style={{ fontSize: 16 }}>✅</span>
                               <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
                                 {promoPro.expiresAt
-                                  ? t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }) })
-                                  : (locale === 'ru' ? '✨ PRO навсегда' : '✨ PRO forever')}
+                                  ? t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(toIntlLocale(locale), { day: '2-digit', month: '2-digit', year: 'numeric' }) })
+                                  : t('pro_forever', locale)}
                               </span>
                             </div>
                             <button
@@ -9343,7 +9356,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                 const data = await r.json() as any;
                                 if (r.ok) {
                                   if (data.status === 'activated' || data.status === 'already_active') {
-                                    pushToast(data.status === 'already_active' ? t('promo_already_active', locale) : t('promo_success', locale, { date: new Date(data.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US') }), 'success');
+                                    pushToast(data.status === 'already_active' ? t('promo_already_active', locale) : t('promo_success', locale, { date: new Date(data.expiresAt).toLocaleDateString(toIntlLocale(locale)) }), 'success');
                                     if (input) input.value = '';
                                     loadWishlists().catch(() => {});
                                   } else if (data.status === 'accepted_for_paid') {
@@ -9571,7 +9584,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 13, color: C.textSec }}>{t('settings_next_renewal', locale)}</span>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                            {new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}
+                            {new Date(subscription.periodEnd).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long' })}
                           </span>
                         </div>
                       </div>
@@ -9588,7 +9601,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           <span>⏳</span>
                           <span>
                             {t('settings_renewal_disabled', locale)}{' '}
-                            <strong>{new Date(subscription.periodEnd).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}</strong>.
+                            <strong>{new Date(subscription.periodEnd).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long' })}</strong>.
                           </span>
                         </div>
                       </div>
@@ -9604,8 +9617,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           <span style={{ fontSize: 15 }}>🎁</span>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
                             {promoPro.expiresAt
-                              ? t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }) })
-                              : (locale === 'ru' ? '✨ PRO навсегда' : '✨ PRO forever')}
+                              ? t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(toIntlLocale(locale), { day: '2-digit', month: '2-digit', year: 'numeric' }) })
+                              : t('pro_forever', locale)}
                           </span>
                         </div>
                         <button
@@ -9687,7 +9700,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             const data = await r.json() as any;
                             if (r.ok) {
                               if (data.status === 'activated' || data.status === 'already_active') {
-                                pushToast(t(data.status === 'already_active' ? 'promo_already_active' : 'promo_success', locale, { date: data.expiresAt ? new Date(data.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US') : '' }), 'success');
+                                pushToast(t(data.status === 'already_active' ? 'promo_already_active' : 'promo_success', locale, { date: data.expiresAt ? new Date(data.expiresAt).toLocaleDateString(toIntlLocale(locale)) : '' }), 'success');
                                 if (input) input.value = '';
                                 loadWishlists().catch(() => {});
                               } else if (data.status === 'accepted_for_paid') {
@@ -9721,7 +9734,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
                     <span style={{ fontSize: 14, color: C.text }}>{t('profile_birthday', locale)}</span>
                     <span style={{ fontSize: 14, color: profileData.birthday ? C.text : C.textMuted }}>
-                      {profileData.birthday ? new Date(profileData.birthday).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', {
+                      {profileData.birthday ? new Date(profileData.birthday).toLocaleDateString(toIntlLocale(locale), {
                         day: 'numeric', month: 'long', ...(profileData.hideYear ? {} : { year: 'numeric' })
                       }) : '\u2014'}
                     </span>
@@ -10241,6 +10254,57 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                               ))}
                                             </div>
                                           )}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* ── Locale Segments ── */}
+                                    {godStats?.localeSegments && (() => {
+                                      const ls = godStats.localeSegments;
+                                      const scopeLabels: Record<string, string> = { active30d: 'Активные 30д', new7d: 'Новые 7д', all: 'Все' };
+                                      const maxCount = Math.max(...ls.segments.map(s => s.usersCount), 1);
+                                      const segColors: Record<string, string> = {
+                                        ru: '#5B8DEF', en: '#34C759', 'zh-CN': '#FF6B6B', hi: '#FFB340',
+                                        es: '#AF52DE', ar: '#30D5C8', other: '#8E8E93',
+                                      };
+                                      return (
+                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                            <div style={{ fontSize: 10, fontWeight: 700, color: '#5B8DEF', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                                              🌐 Языковые сегменты
+                                            </div>
+                                            <div style={{ display: 'flex', gap: 4 }}>
+                                              {(['active30d', 'new7d', 'all'] as const).map(s => (
+                                                <button key={s} onClick={() => { setLocaleSegmentScope(s); void loadGodStats(s); }}
+                                                  style={{
+                                                    background: localeSegmentScope === s ? '#5B8DEF' : 'transparent',
+                                                    color: localeSegmentScope === s ? '#fff' : C.textMuted,
+                                                    border: `1px solid ${localeSegmentScope === s ? '#5B8DEF' : C.border}`,
+                                                    borderRadius: 4, padding: '1px 6px', fontSize: 9, cursor: 'pointer', fontFamily: font,
+                                                  }}>{scopeLabels[s]}</button>
+                                              ))}
+                                            </div>
+                                          </div>
+                                          <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 6 }}>
+                                            Всего: <span style={{ fontWeight: 700, color: C.text }}>{ls.total}</span>
+                                          </div>
+                                          {ls.segments.map(seg => (
+                                            <div key={seg.segmentKey} style={{ marginBottom: 4 }}>
+                                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 1 }}>
+                                                <span style={{ fontSize: 10, color: C.text }}>{seg.segmentLabel}</span>
+                                                <span style={{ fontSize: 10, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+                                                  {seg.usersCount} <span style={{ color: C.textMuted, fontWeight: 400 }}>({seg.sharePercent}%)</span>
+                                                </span>
+                                              </div>
+                                              <div style={{ height: 4, borderRadius: 2, background: C.border, overflow: 'hidden' }}>
+                                                <div style={{
+                                                  height: '100%', borderRadius: 2,
+                                                  width: `${(seg.usersCount / maxCount) * 100}%`,
+                                                  background: segColors[seg.segmentKey] ?? segColors['other'],
+                                                }} />
+                                              </div>
+                                            </div>
+                                          ))}
                                         </div>
                                       );
                                     })()}
@@ -10975,20 +11039,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div style={{ background: 'linear-gradient(160deg, #1a1130 0%, #0d1628 60%, #091520 100%)', padding: '40px 24px 30px', textAlign: 'center', borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}>
             <div style={{ fontSize: 56, marginBottom: 12, filter: 'drop-shadow(0 0 20px rgba(251,191,36,0.3))' }}>🎁📅</div>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: '#fff', fontFamily: font, margin: '0 0 8px', lineHeight: 1.3 }}>
-              {locale === 'ru' ? 'Не забывай важные даты и подарки' : 'Never forget important dates and gifts'}
+              {t('gn_hero_title', locale)}
             </h1>
             <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5, margin: 0 }}>
-              {locale === 'ru' ? 'Храни события, идеи и будущие подарки в одном месте. Смотри, сколько дней осталось, и готовься заранее без суеты.' : 'Keep occasions, ideas and future gifts in one place. See how many days are left and prepare without the rush.'}
+              {t('gn_hero_subtitle', locale)}
             </p>
           </div>
 
           {/* Value features */}
           <div style={{ padding: '20px 24px 0' }}>
             {[
-              { icon: '📋', text: locale === 'ru' ? 'Все важные события и даты под рукой' : 'All important events and dates at hand', color: C.accentSoft },
-              { icon: '💡', text: locale === 'ru' ? 'Сохраняй идеи подарков заранее' : 'Save gift ideas way ahead of time', color: 'rgba(251,191,36,0.12)' },
-              { icon: '⏳', text: locale === 'ru' ? 'Счётчик дней — ничего не забудешь' : 'Day counter — you\'ll never forget', color: 'rgba(52,211,153,0.12)' },
-              { icon: '🎯', text: locale === 'ru' ? 'Удобное планирование для близких' : 'Easily plan gifts for loved ones', color: 'rgba(96,165,250,0.12)' },
+              { icon: '📋', text: t('gn_feature_dates', locale), color: C.accentSoft },
+              { icon: '💡', text: t('gn_feature_ideas', locale), color: 'rgba(251,191,36,0.12)' },
+              { icon: '⏳', text: t('gn_feature_counter', locale), color: 'rgba(52,211,153,0.12)' },
+              { icon: '🎯', text: t('gn_feature_planning', locale), color: 'rgba(96,165,250,0.12)' },
             ].map((b, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: i < 3 ? `1px solid ${C.border}` : 'none' }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: b.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{b.icon}</div>
@@ -11006,9 +11070,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <span style={{ fontSize: 14, fontWeight: 600, color: C.textSec, marginLeft: 6 }}>Stars</span>
                 </div>
               </div>
-              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{locale === 'ru' ? 'Одна покупка навсегда. Без подписки.' : 'One-time purchase forever. No subscription.'}</div>
+              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{t('gn_purchase_info', locale)}</div>
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}`, fontSize: 12, color: '#34D399', fontWeight: 600 }}>
-                ✓ {locale === 'ru' ? 'Также входит в подписку Pro' : 'Also included in Pro subscription'}
+                ✓ {t('gn_pro_included', locale)}
               </div>
             </div>
           </div>
@@ -11029,7 +11093,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       if (status === 'paid') {
                         const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
                         if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
-                        pushToast(locale === 'ru' ? 'Доступ открыт!' : 'Unlocked!', 'success');
+                        pushToast(t('gn_access_unlocked', locale), 'success');
                         setGnLoading(true);
                         try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
                         setGnLoading(false);
@@ -11095,7 +11159,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     </svg>
                     <div style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', zIndex: 1 }}>
                       <span style={{ fontSize: 13, fontWeight: 800, color: isUrgent ? '#FBBF24' : C.accent }}>{o.daysUntil}</span>
-                      <span style={{ fontSize: 8, fontWeight: 600, color: C.textMuted, marginTop: -2 }}>{locale === 'ru' ? 'дн.' : 'd'}</span>
+                      <span style={{ fontSize: 8, fontWeight: 600, color: C.textMuted, marginTop: -2 }}>{t('gn_days_abbr', locale)}</span>
                     </div>
                   </div>
                 )}
@@ -11131,7 +11195,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div>
                 <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: 0 }}>{t('gn_title', locale)}</h1>
-                <div style={{ fontSize: 13, color: C.textSec, marginTop: 2, fontFamily: font }}>{gnOccasions.length} {locale === 'ru' ? (gnOccasions.length === 1 ? 'событие' : gnOccasions.length < 5 ? 'события' : 'событий') : 'events'}{totalIdeas > 0 ? ` · ${totalIdeas} ${locale === 'ru' ? (totalIdeas === 1 ? 'идея' : totalIdeas < 5 ? 'идеи' : 'идей') : 'ideas'}` : ''}</div>
+                <div style={{ fontSize: 13, color: C.textSec, marginTop: 2, fontFamily: font }}>{gnOccasions.length} {t('gn_events_count', locale, { count: gnOccasions.length })}{totalIdeas > 0 ? ` · ${totalIdeas} ${t('gn_ideas_count_label', locale, { count: totalIdeas })}` : ''}</div>
               </div>
             </div>
 
@@ -11143,20 +11207,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                   <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
                   <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, marginBottom: 4 }}>{t('gn_empty', locale)}</div>
-                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4, maxWidth: 280, margin: '0 auto' }}>{locale === 'ru' ? 'Добавьте первый повод — день рождения, годовщину или праздник. Записывайте идеи подарков, чтобы ничего не забыть.' : 'Add your first occasion — birthday, anniversary or holiday. Save gift ideas so you never forget.'}</div>
+                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4, maxWidth: 280, margin: '0 auto' }}>{t('gn_empty_description', locale)}</div>
                 </div>
                 {/* Inspiration hints */}
                 <div style={{ marginBottom: 'auto' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ color: C.accent }}>💡</span> {locale === 'ru' ? 'Идеи для начала' : 'Ideas to start'}
+                    <span style={{ color: C.accent }}>💡</span> {t('gn_inspiration_header', locale)}
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
                     {[
-                      { emoji: '🎂', label: locale === 'ru' ? 'День рождения' : 'Birthday', type: 'BIRTHDAY' as const },
-                      { emoji: '💍', label: locale === 'ru' ? 'Годовщина' : 'Anniversary', type: 'ANNIVERSARY' as const },
-                      { emoji: '🎄', label: locale === 'ru' ? 'Новый год' : 'New Year', type: 'HOLIDAY' as const },
-                      { emoji: '👶', label: locale === 'ru' ? 'Рождение' : 'Birth', type: 'OTHER' as const },
-                      { emoji: '🎓', label: locale === 'ru' ? 'Выпускной' : 'Graduation', type: 'OTHER' as const },
+                      { emoji: '🎂', label: t('gn_type_birthday', locale), type: 'BIRTHDAY' as const },
+                      { emoji: '💍', label: t('gn_type_anniversary', locale), type: 'ANNIVERSARY' as const },
+                      { emoji: '🎄', label: t('occasion_type_newyear', locale), type: 'HOLIDAY' as const },
+                      { emoji: '👶', label: t('occasion_type_birth', locale), type: 'OTHER' as const },
+                      { emoji: '🎓', label: t('occasion_type_graduation', locale), type: 'OTHER' as const },
                     ].map((hint, i) => (
                       <div key={i} onClick={() => { setGnFormTitle(hint.label); setGnFormDate(''); setGnFormType(hint.type); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
                         style={{ padding: '10px 14px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, fontFamily: font, color: C.text }}>
@@ -11192,7 +11256,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const typeEmoji: Record<string, string> = { BIRTHDAY: '🎂', ANNIVERSARY: '💍', HOLIDAY: '🎄', OTHER: '🎁' };
         const typeBg: Record<string, string> = { BIRTHDAY: 'rgba(251,191,36,0.12)', ANNIVERSARY: 'rgba(236,72,153,0.12)', HOLIDAY: 'rgba(52,211,153,0.12)', OTHER: C.accentSoft };
         const ideas = (o.ideas ?? []) as any[];
-        const recurrenceLabel: Record<string, string> = { YEARLY: locale === 'ru' ? 'каждый год' : 'yearly', MONTHLY: locale === 'ru' ? 'каждый мес.' : 'monthly', NONE: locale === 'ru' ? 'однократно' : 'once' };
+        const recurrenceLabel: Record<string, string> = { YEARLY: t('recurrence_yearly_short', locale), MONTHLY: t('recurrence_monthly_short', locale), NONE: t('recurrence_once', locale) };
         const refreshOccasion = async () => { const r = await tgFetch(`/tg/gift-occasions/${o.id}`); if (r.ok) setGnViewingOccasion((await r.json() as any).occasion); };
         const refreshList = async () => { try { const r = await tgFetch('/tg/gift-occasions'); if (r.ok) setGnOccasions((await r.json() as any).occasions); } catch {} };
         return (
@@ -11219,12 +11283,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 {o.daysUntil != null && (
                   <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: 'center' as const }}>
                     <div style={{ fontSize: 20, fontWeight: 800, color: o.daysUntil <= 7 ? '#FBBF24' : C.text, fontFamily: font }}>{o.daysUntil}</div>
-                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{locale === 'ru' ? 'дня до' : 'days left'}</div>
+                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{t('gn_days_left', locale)}</div>
                   </div>
                 )}
                 <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: 'center' as const }}>
                   <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font }}>{ideas.length}</div>
-                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{locale === 'ru' ? (ideas.length === 1 ? 'идея' : ideas.length < 5 ? 'идеи' : 'идей') : 'ideas'}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{t('gn_ideas_count_label', locale, { count: ideas.length })}</div>
                 </div>
                 {o.recurrence && o.recurrence !== 'NONE' && (
                   <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: 'center' as const }}>
@@ -11294,8 +11358,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {ideas.length === 0 && (
                 <div style={{ textAlign: 'center' as const, padding: '32px 20px' }}>
                   <div style={{ fontSize: 40, marginBottom: 10 }}>💡</div>
-                  <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, marginBottom: 4 }}>{locale === 'ru' ? 'Пока нет идей' : 'No ideas yet'}</div>
-                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>{locale === 'ru' ? 'Добавьте идеи подарков, чтобы не забыть' : 'Add gift ideas so you don\'t forget'}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, marginBottom: 4 }}>{t('gn_no_ideas_title', locale)}</div>
+                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>{t('gn_no_ideas_description', locale)}</div>
                 </div>
               )}
 
@@ -11305,8 +11369,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   {idea.link && <div style={{ fontSize: 12, color: C.accent, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{idea.link}</div>}
                   {idea.price != null && <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginTop: 4 }}>{idea.price.toLocaleString()} {idea.currency ?? '₽'}</div>}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                    <span style={{ fontSize: 11, color: C.textMuted }}>{new Date(idea.createdAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' })}</span>
-                    {idea.status === 'DONE' && <span style={{ fontSize: 11, color: '#34D399', fontWeight: 600 }}>✓ {locale === 'ru' ? 'Выбрано' : 'Selected'}</span>}
+                    <span style={{ fontSize: 11, color: C.textMuted }}>{new Date(idea.createdAt).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'short' })}</span>
+                    {idea.status === 'DONE' && <span style={{ fontSize: 11, color: '#34D399', fontWeight: 600 }}>✓ {t('gn_idea_status_selected', locale)}</span>}
                     {idea.status !== 'DONE' && <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}/complete`, { method: 'POST' }); await refreshOccasion(); pushToast(t('gn_idea_completed', locale), 'success'); }}
                       style={{ fontSize: 11, fontWeight: 600, color: '#34D399', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✓ {t('gn_complete', locale)}</button>}
                     <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}`, { method: 'DELETE' }); await refreshOccasion(); }}
@@ -11385,7 +11449,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_date', locale)}</label>
             <div style={{ position: 'relative' as const }}>
               <input type="date" value={gnFormDate} onChange={e => setGnFormDate(e.target.value)} style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: gnFormDate ? C.text : 'transparent', fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const, minHeight: 42 }} />
-              {!gnFormDate && <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: C.textMuted, pointerEvents: 'none' }}>{locale === 'ru' ? 'Не выбрана' : 'Not set'}</span>}
+              {!gnFormDate && <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: C.textMuted, pointerEvents: 'none' }}>{t('gn_date_not_set', locale)}</span>}
               {gnFormDate && <button onClick={(e) => { e.stopPropagation(); setGnFormDate(''); }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
             </div>
           </div>
@@ -11393,10 +11457,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_type', locale)}</label>
             <div style={{ display: 'flex', gap: 6 }}>
               {([
-                { type: 'BIRTHDAY' as const, emoji: '🎂', label: locale === 'ru' ? 'ДР' : 'Bday' },
-                { type: 'ANNIVERSARY' as const, emoji: '💍', label: locale === 'ru' ? 'Годовщ.' : 'Anniv.' },
-                { type: 'HOLIDAY' as const, emoji: '🎄', label: locale === 'ru' ? 'Праздник' : 'Holiday' },
-                { type: 'OTHER' as const, emoji: '🎁', label: locale === 'ru' ? 'Другое' : 'Other' },
+                { type: 'BIRTHDAY' as const, emoji: '🎂', label: t('occasion_type_bday_short', locale) },
+                { type: 'ANNIVERSARY' as const, emoji: '💍', label: t('occasion_type_anniv_short', locale) },
+                { type: 'HOLIDAY' as const, emoji: '🎄', label: t('gn_type_holiday', locale) },
+                { type: 'OTHER' as const, emoji: '🎁', label: t('gn_type_other', locale) },
               ]).map(tp => (
                 <button key={tp.type} onClick={() => setGnFormType(tp.type)} style={{ flex: 1, padding: '10px 4px', borderRadius: 10, border: gnFormType === tp.type ? `1px solid rgba(124,106,255,0.3)` : `1px solid ${C.border}`, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormType === tp.type ? C.accentSoft : C.surface, color: gnFormType === tp.type ? C.accent : C.textMuted, whiteSpace: 'nowrap' as const, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 2 }}>
                   <span style={{ fontSize: 16 }}>{tp.emoji}</span>
@@ -12166,7 +12230,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       <div>
                         <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>{wl.title}</div>
                         <div style={{ fontSize: 12, color: C.textMuted }}>
-                          {wl.itemCount} {locale === 'ru' ? 'желаний' : 'wishes'}
+                          {wl.itemCount} {t('wishlist_items_label', locale)}
                         </div>
                       </div>
                     </div>
@@ -12189,7 +12253,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             }
             {wishlists.filter((wl) => wl.id !== currentWl?.id).length === 0 && (
               <p style={{ fontSize: 14, color: C.textMuted, textAlign: 'center', padding: '20px 0' }}>
-                {locale === 'ru' ? 'Нет других вишлистов' : 'No other wishlists'}
+                {t('wl_transfer_no_other', locale)}
               </p>
             )}
           </div>
@@ -12956,7 +13020,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         {(() => {
           const periodEndDate = subscription
             ? new Date(subscription.periodEnd).toLocaleDateString(
-                locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' },
+                toIntlLocale(locale), { day: 'numeric', month: 'long' },
               )
             : null;
 
@@ -13211,7 +13275,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       <BottomSheet
         isOpen={!!wishlistPickerSku}
         onClose={() => setWishlistPickerSku(null)}
-        title={locale === 'ru' ? 'Выберите вишлист' : 'Choose a wishlist'}
+        title={t('choose_wishlist', locale)}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8 }}>
           <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 4 }}>
@@ -13247,9 +13311,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     {wl.title}
                   </div>
                   <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                    {wl.itemCount} {locale === 'ru' ? 'желаний' : 'wishes'}
+                    {wl.itemCount} {t('wishlist_items_label', locale)}
                     {' · '}
-                    {locale === 'ru' ? 'лимит' : 'limit'}: {planLimits.items + extraSlots}
+                    {t('wishlist_limit_label', locale)}: {planLimits.items + extraSlots}
                     {extraSlots > 0 && <span style={{ color: C.accent }}> (+{extraSlots})</span>}
                     {isWlCapped && (
                       <span style={{ color: C.textMuted }}> · {t('addon_wishlist_cap_label', locale)}</span>
@@ -13346,8 +13410,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   flexShrink: 0,
                 }}>
                   {c._role === 'organizer'
-                    ? (locale === 'ru' ? 'Организатор' : 'Organizer')
-                    : (locale === 'ru' ? 'Участник'    : 'Member')}
+                    ? t('santa_role_organizer', locale)
+                    : t('santa_role_member', locale)}
                 </span>
               </div>
               <div style={{ fontSize: 12, color: C.textMuted }}>
@@ -13409,7 +13473,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {!santaCampaignsLoading && activeCamps.length > 0 && (
               <div style={{ marginBottom: finishedCamps.length > 0 ? 28 : 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  {locale === 'ru' ? 'Активные' : 'Active'}
+                  {t('santa_tab_active', locale)}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {activeCamps.map(c => <CampaignCard key={c.id} c={c} />)}
@@ -13421,7 +13485,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {!santaCampaignsLoading && finishedCamps.length > 0 && (
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  {locale === 'ru' ? 'Завершённые' : 'Finished'}
+                  {t('santa_tab_finished', locale)}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {finishedCamps.map(c => <CampaignCard key={c.id} c={c} dimmed />)}
@@ -13595,7 +13659,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 }}>
                   {t(statusKey, locale) || camp.status}
                 </span>
-                {isOwner && <span style={{ fontSize: 12, color: C.textMuted }}>👑 {locale === 'ru' ? 'Владелец' : 'Owner'}</span>}
+                {isOwner && <span style={{ fontSize: 12, color: C.textMuted }}>👑 {t('santa_role_owner', locale)}</span>}
                 {!isOwner && myRole === 'ADMIN' && <span style={{ fontSize: 12, color: C.accent }}>{t('santa_organizer_badge', locale)}</span>}
                 {showRoundBadge && currentRoundNumber && (
                   <span style={{ fontSize: 12, fontWeight: 600, color: C.accent, background: `${C.accent}15`, padding: '3px 10px', borderRadius: 8 }}>
@@ -13664,7 +13728,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 {isOwner && camp.status === 'LOCKED' && (
                   <div style={{ background: C.card, borderRadius: 14, padding: 16 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 10 }}>
-                      {locale === 'ru' ? 'Жеребьёвка' : 'Draw'}
+                      {t('santa_draw_section_title', locale)}
                     </div>
 
                     {/* Validate button */}
@@ -13710,7 +13774,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                           onClick={() => setSantaDrawValidation(null)}
                           style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 12, cursor: 'pointer', padding: 0 }}
                         >
-                          {locale === 'ru' ? 'Перепроверить' : 'Re-check'}
+                          {t('santa_draw_recheck', locale)}
                         </button>
                       </div>
                     )}
@@ -13719,7 +13783,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <button
                       disabled={santaDrawLoading || (santaDrawValidation !== null && !santaDrawValidation.feasible)}
                       onClick={async () => {
-                        if (!confirm(locale === 'ru' ? `Запустить жеребьёвку для ${participants.filter(p => p.status === 'JOINED').length} участников?` : `Run draw for ${participants.filter(p => p.status === 'JOINED').length} participants?`)) return;
+                        if (!confirm(t('santa_draw_confirm_msg', locale, { count: participants.filter(p => p.status === 'JOINED').length }))) return;
                         setSantaDrawLoading(true);
                         const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/draw`, { method: 'POST' });
                         setSantaDrawLoading(false);
@@ -13780,7 +13844,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <SantaAvatar alias={myAlias.alias} emoji={myAlias.emoji} size={40} hat={santaSeason?.inSeason} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 2 }}>
-                      {locale === 'ru' ? 'Твоё имя в этой жеребьёвке' : 'Your name in this round'}
+                      {t('santa_your_name_label', locale)}
                     </div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
                       {renderSantaAlias(myAlias.adjectiveKey, myAlias.animalKey, locale) || myAlias.alias}
@@ -13813,8 +13877,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
-                          {renderSantaAlias(p.adjectiveKey, p.animalKey, locale) || p.displayName || (locale === 'ru' ? 'Участник' : 'Participant')}
-                          {p.isMe && <span style={{ fontSize: 11, color: C.textMuted, marginLeft: 4 }}>({locale === 'ru' ? 'я' : 'me'})</span>}
+                          {renderSantaAlias(p.adjectiveKey, p.animalKey, locale) || p.displayName || t('santa_participant_default', locale)}
+                          {p.isMe && <span style={{ fontSize: 11, color: C.textMuted, marginLeft: 4 }}>({t('me_label', locale)})</span>}
                         </span>
                         {p.role === 'ADMIN' && (
                           <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, background: `${C.accent}15`, padding: '1px 6px', borderRadius: 6 }}>
@@ -14336,7 +14400,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       {santaInboundStatus.canReveal && santaReveal?.revealed && santaReveal.giver && (
                         <div style={{ marginTop: 12, background: `${C.accent}12`, borderRadius: 12, padding: 14, border: `1px solid ${C.accent}30` }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 10 }}>
-                            🎅 {locale === 'ru' ? 'Твой Санта открыт!' : 'Your Santa revealed!'}
+                            🎅 {t('santa_revealed_title', locale)}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                             <SantaAvatar alias={santaReveal.giver.displayName} emoji={santaReveal.giver.emoji || '🎅'} size={44} hat={santaSeason?.inSeason} />
@@ -14345,7 +14409,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                 {renderSantaAlias(santaReveal.giver.adjectiveKey ?? '', santaReveal.giver.animalKey ?? '', locale) || santaReveal.giver.displayName}
                               </div>
                               <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
-                                {locale === 'ru' ? 'Это твой Тайный Санта в этом раунде' : 'Your Secret Santa this round'}
+                                {t('santa_reveal_subtitle', locale)}
                               </div>
                             </div>
                           </div>
@@ -14488,7 +14552,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             {renderSantaAlias(santaReveal.giver.adjectiveKey ?? '', santaReveal.giver.animalKey ?? '', locale) || santaReveal.giver.displayName}
                           </div>
                           <div style={{ fontSize: 11, color: C.textMuted }}>
-                            {locale === 'ru' ? 'Твой Тайный Санта' : 'Your Secret Santa'}
+                            {t('santa_my_santa_label', locale)}
                           </div>
                         </div>
                       </div>
@@ -14840,7 +14904,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       setSantaHintPickerSelectedIds([]);
                     } else {
                       const err = await res.json() as { error?: string };
-                      if (err.error === 'invalid_items') pushToast(locale === 'ru' ? 'Некоторые желания недоступны' : 'Some items are unavailable', 'error');
+                      if (err.error === 'invalid_items') pushToast(t('santa_items_unavailable', locale), 'error');
                       else pushToast(t('error_generic', locale), 'error');
                     }
                     setSantaHintFulfillLoading(false);
@@ -15699,7 +15763,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <SantaAvatar alias={name} emoji={member.emoji ?? '🎅'} size={24} hat={santaSeason?.inSeason} />
                               <span style={{ fontSize: 13, color: member.isStale ? C.textMuted : C.textSec }}>
-                                {name}{member.isStale ? (locale === 'ru' ? ' (вышел)' : ' (left)') : ''}
+                                {name}{member.isStale ? t('member_status_left', locale) : ''}
                               </span>
                             </div>
                             <button
@@ -15816,7 +15880,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <div>
                     {available.length === 0 ? (
                       <div style={{ fontSize: 14, color: C.textMuted, textAlign: 'center', padding: '20px 0' }}>
-                        {locale === 'ru' ? 'Все участники уже в группе' : 'All participants already in group'}
+                        {t('santa_all_participants_in_group', locale)}
                       </div>
                     ) : (
                       <>
@@ -16006,13 +16070,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ background: C.card, borderRadius: 16, padding: 24, textAlign: 'center' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
               <div style={{ color: C.textMuted, fontSize: 14, marginBottom: 16 }}>
-                {locale === 'ru' ? 'Кампания недоступна или не принимает участников' : 'This campaign is not available or not accepting participants'}
+                {t('santa_campaign_unavailable', locale)}
               </div>
               <button
                 onClick={() => setScreen('my-wishlists')}
                 style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 24px', cursor: 'pointer', fontFamily: font }}
               >
-                {locale === 'ru' ? 'На главную' : 'Go home'}
+                {t('go_home', locale)}
               </button>
             </div>
           )}
@@ -16186,9 +16250,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {/* Feature highlights */}
           <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {([
-              { icon: '✨', title: locale === 'ru' ? 'Любой товар из сети' : 'Any item from the web', desc: locale === 'ru' ? 'Вставь ссылку — карточка соберётся сама' : 'Paste a link and the card fills itself' },
-              { icon: '🔗', title: locale === 'ru' ? 'Делись без регистрации' : 'Share without sign-up', desc: locale === 'ru' ? 'Твои желания открываются по ссылке' : 'Your list opens via a simple link' },
-              { icon: '🎁', title: locale === 'ru' ? 'Сюрприз не раскроется' : 'No spoilers', desc: locale === 'ru' ? 'Кто что берёт — видно только дарящим' : 'Who picks what stays secret from you' },
+              { icon: '✨', title: t('onboarding_feature_any_item', locale), desc: t('onboarding_feature_any_item_desc', locale) },
+              { icon: '🔗', title: t('onboarding_feature_share_no_signup', locale), desc: t('onboarding_feature_share_no_signup_desc', locale) },
+              { icon: '🎁', title: t('onboarding_feature_no_spoilers', locale), desc: t('onboarding_feature_no_spoilers_desc', locale) },
             ] as { icon: string; title: string; desc: string }[]).map((f, i) => (
               <div key={i} style={{
                 display: 'flex', gap: 12, alignItems: 'center',
@@ -16509,7 +16573,7 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
 
   const fmtDeadline = (d: string | null) => {
     if (!d) return null;
-    return new Date(d).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' });
+    return new Date(d).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long' });
   };
 
   const copy = async () => {

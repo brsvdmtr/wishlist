@@ -7,6 +7,10 @@ const __dirname = path.dirname(__filename);
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  env: {
+    // Injected at build time — used as a cache-bust marker and debug indicator
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+  },
   experimental: {
     outputFileTracingRoot: path.join(__dirname, '../../'),
   },
