@@ -6153,16 +6153,23 @@ tgRouter.get(
     // Reads UserProfile.language which stores the RAW Telegram language_code (not effective locale).
     // Replicates packages/shared/src/i18n.ts normalizeLocale() but defaults to 'other' (not 'en')
     // so unknown/null languages don't inflate the English segment.
+    // Fallback chain for NULL language: defaultCurrency='RUB' → 'ru' (set at registration from
+    // Telegram locale), otherwise 'other'. This covers users who registered before the language
+    // persistence middleware was deployed.
     const normalizeSql = `
       CASE
         WHEN p."languageMode" = 'manual' AND p."manualLanguage" IS NOT NULL THEN p."manualLanguage"
-        WHEN p.language IS NULL THEN 'other'
-        WHEN LOWER(p.language) LIKE 'ru%' THEN 'ru'
-        WHEN LOWER(p.language) LIKE 'en%' THEN 'en'
-        WHEN LOWER(p.language) LIKE 'zh%' THEN 'zh-CN'
-        WHEN LOWER(p.language) LIKE 'hi%' THEN 'hi'
-        WHEN LOWER(p.language) LIKE 'es%' THEN 'es'
-        WHEN LOWER(p.language) LIKE 'ar%' THEN 'ar'
+        WHEN p.language IS NOT NULL THEN
+          CASE
+            WHEN LOWER(p.language) LIKE 'ru%' THEN 'ru'
+            WHEN LOWER(p.language) LIKE 'en%' THEN 'en'
+            WHEN LOWER(p.language) LIKE 'zh%' THEN 'zh-CN'
+            WHEN LOWER(p.language) LIKE 'hi%' THEN 'hi'
+            WHEN LOWER(p.language) LIKE 'es%' THEN 'es'
+            WHEN LOWER(p.language) LIKE 'ar%' THEN 'ar'
+            ELSE 'other'
+          END
+        WHEN p."defaultCurrency" = 'RUB' THEN 'ru'
         ELSE 'other'
       END`;
 
