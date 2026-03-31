@@ -4229,37 +4229,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         if (detectedLocale !== 'ru') setDefaultCurrency('USD');
       }
 
-      // If not inside real Telegram (initData is empty), check for web session cookie.
-      // If authenticated via Telegram Login Widget, proceed with cookie-based auth.
-      // We use a synchronous XHR to avoid duplicating the entire post-auth init tree.
+      // If not inside real Telegram (initData is empty), show landing page
+      // directing user to open the app via Telegram deep link.
       if (!tg.initData) {
-        try {
-          const xhr = new XMLHttpRequest();
-          xhr.open('GET', `${apiBase}/auth/me`, false); // synchronous
-          xhr.withCredentials = true;
-          xhr.send();
-          if (xhr.status === 200) {
-            const data = JSON.parse(xhr.responseText) as { authenticated?: boolean; telegramId?: string; firstName?: string };
-            if (data.authenticated && data.telegramId) {
-              // Web session active — set minimal user info and fall through to normal loading
-              setTgUser({ id: Number(data.telegramId), first_name: data.firstName ?? '' } as TgUser);
-              computeActorHash(Number(data.telegramId)).then(h => { myActorHashRef.current = h; }).catch(() => {});
-              // Don't return — fall through to the normal startParam / loadWishlists flow below
-            } else {
-              setErrorMsg(t('error_open_in_telegram', locale));
-              setScreen('error');
-              return;
-            }
-          } else {
-            setErrorMsg(t('error_open_in_telegram', locale));
-            setScreen('error');
-            return;
-          }
-        } catch {
-          setErrorMsg(t('error_open_in_telegram', locale));
-          setScreen('error');
-          return;
-        }
+        setErrorMsg(t('error_open_in_telegram', locale));
+        setScreen('error');
+        return;
       }
 
       const handleErr = (e: unknown) => {
@@ -6214,22 +6189,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 </a>
               )}
 
-              {/* Web Login via Telegram Login Widget */}
-              {/* Web Login via Telegram Login Widget */}
-              <button
-                onClick={() => { window.location.href = `${apiBase}/auth/telegram/start`; }}
-                style={{
-                  width: '100%', padding: '12px', borderRadius: 12, marginTop: 12,
-                  border: `1px solid ${C.border}`, background: C.surface,
-                  color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}
-              >
-                <span style={{ fontSize: 16 }}>✈️</span>
-                {locale === 'ru' ? 'Войти через Telegram' : 'Log in with Telegram'}
-              </button>
               <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8, textAlign: 'center' }}>
-                {locale === 'ru' ? 'Или откройте через Telegram для полного функционала' : 'Or open via Telegram for full functionality'}
+                {locale === 'ru' ? 'Откройте через Telegram для полного функционала' : 'Open via Telegram for full functionality'}
               </div>
             </div>
           );
