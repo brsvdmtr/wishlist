@@ -4489,6 +4489,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         return;
       }
 
+      // Don't block touch events inside fixed overlays (onboarding, modals)
+      // that have their own scrolling. They live inside this container in the
+      // DOM tree but are visually separate (position:fixed, z-index:100+).
+      const target = e.target as Element | null;
+      if (target && target.closest('[data-overlay-scroll]')) {
+        return;
+      }
+
       const dy = e.touches[0].clientY - startY; // > 0 = finger moved down
 
       const atTop    = el.scrollTop <= 0;
@@ -5539,11 +5547,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   function renderOnboardingTry() {
     const catalog = getCatalogForSegment(onboardingMarketSegment);
     return (
-      <div style={{
+      <div data-overlay-scroll style={{
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
         display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
         padding: '20px 24px calc(40px + env(safe-area-inset-bottom, 0px))',
+        WebkitOverflowScrolling: 'touch' as never, overscrollBehavior: 'contain',
       }}>
         {/* Skip */}
         <div style={{ alignSelf: 'flex-end' }}>
@@ -5654,11 +5663,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     const item = onboardingTryResult?.item;
     const isPartial = onboardingTryResult?.parseStatus === 'partial';
     return (
-      <div style={{
+      <div data-overlay-scroll style={{
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
         display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
         padding: '20px 24px calc(40px + env(safe-area-inset-bottom, 0px))',
+        WebkitOverflowScrolling: 'touch' as never, overscrollBehavior: 'contain',
       }}>
         <div style={{ textAlign: 'center', fontSize: 42, marginTop: 20 }}>🎉</div>
         <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.25, marginTop: 12, whiteSpace: 'pre-line' }}>
@@ -5772,13 +5782,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   function renderOnboardingCatalog() {
     const catalog = getCatalogForSegment(onboardingMarketSegment);
     return (
-      <div style={{
+      <div data-overlay-scroll style={{
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
         display: 'flex', flexDirection: 'column', fontFamily: font,
+        touchAction: 'pan-y',
       }}>
         {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 0' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 0', WebkitOverflowScrolling: 'touch' as never, overscrollBehavior: 'contain' }}>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button onClick={() => { trackEvent('onboarding_catalog_skipped'); void updateOnboardingStep('onboarding-share', 'fallback_demo'); setScreen('onboarding-share'); }}
               style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 14px', color: 'rgba(255,255,255,0.45)', fontSize: 13, cursor: 'pointer', fontFamily: font }}>
@@ -5873,6 +5884,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             (document.activeElement as HTMLElement)?.blur?.();
           }
         }}
+        data-overlay-scroll
         style={{
           position: 'fixed', inset: 0, zIndex: 100,
           background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
@@ -5954,11 +5966,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   function renderOnboardingShare() {
     return (
-      <div style={{
+      <div data-overlay-scroll style={{
         position: 'fixed', inset: 0, zIndex: 100,
         background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
         display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
         padding: '20px 24px calc(40px + env(safe-area-inset-bottom, 0px))',
+        WebkitOverflowScrolling: 'touch' as never, overscrollBehavior: 'contain',
       }}>
         <div style={{ textAlign: 'center', fontSize: 40, marginTop: 12 }}>🎁</div>
         <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 800, color: '#fff', lineHeight: 1.25, marginTop: 12, whiteSpace: 'pre-line' }}>
@@ -15995,10 +16008,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
       {/* ── ONBOARDING ENTRY SCREEN ── */}
       {screen === 'onboarding-entry' && (
-        <div style={{
+        <div data-overlay-scroll style={{
           position: 'fixed', inset: 0, zIndex: 100,
           background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
           display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch' as never, overscrollBehavior: 'contain',
         }}>
           {/* Skip top-right */}
           <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1 }}>
