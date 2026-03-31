@@ -31,6 +31,11 @@ const WEB_ORIGIN = (process.env.WEB_ORIGIN ?? '').trim() || 'http://localhost:30
 
 const app = express();
 
+// Trust the first proxy (nginx) so X-Forwarded-For is used for req.ip.
+// Without this, express-rate-limit sees 127.0.0.1 for all requests behind nginx
+// and rate-limits incorrectly. Also silences ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set('trust proxy', 1);
+
 app.use(
   cors({
     origin: (origin, cb) => {

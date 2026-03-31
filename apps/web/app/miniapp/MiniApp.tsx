@@ -2016,6 +2016,16 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
 // MAIN APP
 // ═══════════════════════════════════════════════════════
 
+// ─── Service startapp payloads ─────────────────────────────────────────────
+// These are internal commands passed via ?startapp= that should NOT be treated
+// as public share tokens or wishlist slugs. They route to authenticated flows.
+const SERVICE_START_PARAMS = new Set([
+  'create_wishlist',
+  'add_item',
+  'open_drafts',
+  'open_profile',
+]);
+
 export default function MiniApp({ apiBase, botUsername, miniappShortName }: { apiBase: string; botUsername: string; miniappShortName: string }) {
   /** Build t.me deep link.
    *  Uses ?startapp= format which opens the Mini App directly via BotFather configuration.
@@ -4213,6 +4223,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const startParam = tg.initDataUnsafe.start_param
         || new URLSearchParams(window.location.search).get('startapp')
         || '';
+      urlStartParamRef.current = startParam;
+      if (startParam) {
+        // eslint-disable-next-line no-console
+        console.log('[WishBoard] startapp payload:', startParam);
+      }
       const user = tg.initDataUnsafe.user;
       if (user) {
         setTgUser(user);
@@ -4374,13 +4389,40 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           // Empty username — fallback to home
           loadWishlists().then(() => setScreen('my-wishlists')).catch(handleErr);
         }
+      } else if (startParam && SERVICE_START_PARAMS.has(startParam)) {
+        // Service deep links: create_wishlist, add_item, etc.
+        // These are NOT public share tokens — route to authenticated flows.
+        trackEvent('miniapp_start_payload_resolved', { payload: startParam, type: 'service_command' });
+        loadWishlists()
+          .then(async () => {
+            void loadReservations();
+            if (startParam === 'create_wishlist') {
+              const redirected = await checkOnboarding();
+              if (!redirected) setScreen('my-wishlists');
+            } else {
+              setScreen('my-wishlists');
+            }
+          })
+          .catch(handleErr);
       } else if (startParam) {
         // Load guest wishlist AND owner wishlists in parallel.
         // Owner wishlists are needed so that "back" from guest-view shows
         // the user's own data instead of an empty "Пока пусто" screen.
+        trackEvent('miniapp_start_payload_resolved', { payload: startParam, type: 'public_share' });
         loadGuestWishlist(startParam)
           .then(() => setScreen('guest-view'))
-          .catch(handleErr);
+          .catch((err) => {
+            // Public link 404: don't crash the app — fall back to home screen.
+            trackEvent('miniapp_start_payload_public_fetch_failed', { payload: startParam, error: (err as Error).message });
+            // eslint-disable-next-line no-console
+            console.warn('[WishBoard] Public deep link failed, falling back to home', startParam);
+            loadWishlists()
+              .then(async () => {
+                const redirected = await checkOnboarding();
+                if (!redirected) setScreen('my-wishlists');
+              })
+              .catch(handleErr);
+          });
         loadWishlists().catch(() => { /* non-critical for guest flow */ });
       } else {
         loadWishlists()
