@@ -6200,10 +6200,10 @@ tgRouter.get(
       }
     }
 
-    const segments = CANONICAL_LOCALES
+    const segments: { segmentKey: string; segmentLabel: string; usersCount: number; sharePercent: number }[] = CANONICAL_LOCALES
       .map(loc => ({
-        segmentKey: loc,
-        segmentLabel: segmentLabels[loc],
+        segmentKey: loc as string,
+        segmentLabel: segmentLabels[loc] ?? loc,
         usersCount: canonicalCounts[loc] ?? 0,
         sharePercent: segTotal > 0 ? Math.round(((canonicalCounts[loc] ?? 0) / segTotal) * 1000) / 10 : 0,
       }))
@@ -6212,7 +6212,7 @@ tgRouter.get(
     if (otherCount > 0) {
       segments.push({
         segmentKey: 'other',
-        segmentLabel: segmentLabels['other'],
+        segmentLabel: segmentLabels['other'] ?? 'Other / Unknown',
         usersCount: otherCount,
         sharePercent: segTotal > 0 ? Math.round((otherCount / segTotal) * 1000) / 10 : 0,
       });
