@@ -2803,6 +2803,16 @@ tgRouter.get(
       },
       unreadCount: new Set(sub.unreads.map((u) => u.entityId)).size,
       unreadEntityIds: [...new Set(sub.unreads.map((u) => u.entityId))],
+      // Per-item change counts (excludes wishlist-level changes where entityId === wishlistId)
+      unreadItemCounts: (() => {
+        const counts: Record<string, number> = {};
+        for (const u of sub.unreads) {
+          // Skip wishlist-level changes (entityId matches wishlistId)
+          if (u.entityId === sub.wishlistId) continue;
+          counts[u.entityId] = (counts[u.entityId] ?? 0) + 1;
+        }
+        return counts;
+      })(),
     }));
 
     return res.json({ subscriptions: result });

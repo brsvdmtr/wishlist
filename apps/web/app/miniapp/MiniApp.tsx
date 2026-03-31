@@ -240,6 +240,7 @@ type SubscribedWishlist = {
   };
   unreadCount: number;
   unreadEntityIds: string[];
+  unreadItemCounts: Record<string, number>;
 };
 
 type ReservationItem = Item & {
@@ -2333,6 +2334,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [subscribing, setSubscribing] = useState(false);
   // Items with unreads (for highlight in guest-view opened from subscriptions)
   const [guestUnreadEntityIds, setGuestUnreadEntityIds] = useState<string[]>([]);
+  const [guestUnreadItemCounts, setGuestUnreadItemCounts] = useState<Record<string, number>>({});
 
   // Guest filter & sort state
   const [guestBudgetMax, setGuestBudgetMax] = useState<number | null>(null);
@@ -4601,6 +4603,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setSubscriberCount(0);
       setGuestSubId(null);
       setGuestUnreadEntityIds([]);
+      setGuestUnreadItemCounts({});
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, guestWl?.id]);
@@ -6565,10 +6568,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   onClick={async () => {
                     if (sub.unreadCount > 0) {
                       void tgFetch(`/tg/me/subscriptions/${sub.id}/read`, { method: 'POST' });
-                      setSubscriptions((prev) => prev.map((s) => s.id === sub.id ? { ...s, unreadCount: 0, unreadEntityIds: [] } : s));
+                      setSubscriptions((prev) => prev.map((s) => s.id === sub.id ? { ...s, unreadCount: 0, unreadEntityIds: [], unreadItemCounts: {} } : s));
                       setSubUnreadCount(prev => Math.max(0, prev - sub.unreadCount));
                     }
                     setGuestUnreadEntityIds(sub.unreadEntityIds);
+                    setGuestUnreadItemCounts(sub.unreadItemCounts ?? {});
                     setGuestSubId(sub.id);
                     setIsSubscribed(true);
                     setSubscriberCount(0);
@@ -8615,7 +8619,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {guestMainList.map((item, i) => {
-                const hasUnread = guestUnreadEntityIds.includes(item.id);
+                const itemUnreadCount = guestUnreadItemCounts[item.id] ?? 0;
                 const useNewCards = CARD_REDESIGN_ENABLED;
                 if (useNewCards) {
                   const allGuestItems = [...guestMainList, ...guestNoPriceBlock];
@@ -8624,14 +8628,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   const gap = cardMode === 'compact' ? 8 : 14;
                   const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
                   return (
-                    <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap, position: 'relative', ...(hasUnread ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                      {hasUnread && (
+                    <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
+                      {itemUnreadCount > 0 && (
                         <span style={{
                           position: 'absolute', top: 8, right: 8, zIndex: 2,
-                          padding: '2px 6px', borderRadius: 6,
-                          background: 'rgba(251,191,36,0.2)', color: '#FBBF24',
-                          fontSize: 9, fontWeight: 700, fontFamily: font, letterSpacing: '0.03em',
-                        }}>{locale === 'ru' ? 'Новое' : 'New'}</span>
+                          minWidth: 20, height: 20, borderRadius: 10, padding: '0 6px',
+                          background: C.orange, color: '#fff',
+                          fontSize: 10, fontWeight: 700, fontFamily: font,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                        }}>{itemUnreadCount}</span>
                       )}
                       <Card
                         item={item}
@@ -8646,14 +8652,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   );
                 }
                 return (
-                  <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(hasUnread ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                    {hasUnread && (
+                  <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
+                    {itemUnreadCount > 0 && (
                       <span style={{
                         position: 'absolute', top: 8, right: 8, zIndex: 2,
-                        padding: '2px 6px', borderRadius: 6,
-                        background: 'rgba(251,191,36,0.2)', color: '#FBBF24',
-                        fontSize: 9, fontWeight: 700, fontFamily: font, letterSpacing: '0.03em',
-                      }}>{locale === 'ru' ? 'Новое' : 'New'}</span>
+                        minWidth: 20, height: 20, borderRadius: 10, padding: '0 6px',
+                        background: C.orange, color: '#fff',
+                        fontSize: 10, fontWeight: 700, fontFamily: font,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                      }}>{itemUnreadCount}</span>
                     )}
                     <WishCardGuest
                       item={item}
@@ -8680,19 +8688,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {guestNoPriceBlock.map((item, i) => {
-                      const hasUnread = guestUnreadEntityIds.includes(item.id);
+                      const itemUnreadCount = guestUnreadItemCounts[item.id] ?? 0;
                       const useNewCards = CARD_REDESIGN_ENABLED;
                       if (useNewCards) {
                         const Card = WishCardCompact;
                         return (
-                          <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both`, marginBottom: 8, position: 'relative', ...(hasUnread ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                            {hasUnread && (
+                          <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.04}s both`, marginBottom: 8, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
+                            {itemUnreadCount > 0 && (
                               <span style={{
                                 position: 'absolute', top: 8, right: 8, zIndex: 2,
-                                padding: '2px 6px', borderRadius: 6,
-                                background: 'rgba(251,191,36,0.2)', color: '#FBBF24',
-                                fontSize: 9, fontWeight: 700, fontFamily: font, letterSpacing: '0.03em',
-                              }}>{locale === 'ru' ? 'Новое' : 'New'}</span>
+                                minWidth: 20, height: 20, borderRadius: 10, padding: '0 6px',
+                                background: C.orange, color: '#fff',
+                                fontSize: 10, fontWeight: 700, fontFamily: font,
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                              }}>{itemUnreadCount}</span>
                             )}
                             <Card
                               item={item}
@@ -8707,14 +8717,16 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         );
                       }
                       return (
-                        <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(hasUnread ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                          {hasUnread && (
+                        <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
+                          {itemUnreadCount > 0 && (
                             <span style={{
                               position: 'absolute', top: 8, right: 8, zIndex: 2,
-                              padding: '2px 6px', borderRadius: 6,
-                              background: 'rgba(251,191,36,0.2)', color: '#FBBF24',
-                              fontSize: 9, fontWeight: 700, fontFamily: font, letterSpacing: '0.03em',
-                            }}>{locale === 'ru' ? 'Новое' : 'New'}</span>
+                              minWidth: 20, height: 20, borderRadius: 10, padding: '0 6px',
+                              background: C.orange, color: '#fff',
+                              fontSize: 10, fontWeight: 700, fontFamily: font,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                            }}>{itemUnreadCount}</span>
                           )}
                           <WishCardGuest
                             item={item}
