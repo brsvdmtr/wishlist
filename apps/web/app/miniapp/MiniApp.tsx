@@ -2070,7 +2070,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [cardDisplayMode, setCardDisplayMode] = useState<string>('auto');
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
   const [proSource, setProSource] = useState<string | null>(null);
-  const [promoPro, setPromoPro] = useState<{ id: string; expiresAt: string; campaignCode: string } | null>(null);
+  const [promoPro, setPromoPro] = useState<{ id: string; expiresAt: string | null; campaignCode: string } | null>(null);
   const [upsellSheet, setUpsellSheet] = useState<UpsellSheetState>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [addonCheckoutLoading, setAddonCheckoutLoading] = useState(false);
@@ -9214,7 +9214,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             }}>
                               <span style={{ fontSize: 16 }}>✅</span>
                               <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
-                                {t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }) })}
+                                {promoPro.expiresAt
+                                  ? t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }) })
+                                  : (locale === 'ru' ? '✨ PRO навсегда' : '✨ PRO forever')}
                               </span>
                             </div>
                             <button
@@ -9525,7 +9527,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         }}>
                           <span style={{ fontSize: 15 }}>🎁</span>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
-                            {t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }) })}
+                            {promoPro.expiresAt
+                              ? t('promo_success', locale, { date: new Date(promoPro.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: '2-digit', month: '2-digit', year: 'numeric' }) })
+                              : (locale === 'ru' ? '✨ PRO навсегда' : '✨ PRO forever')}
                           </span>
                         </div>
                         <button

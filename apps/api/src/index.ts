@@ -1383,7 +1383,7 @@ const ADDON_CAPS = {
   extraItems15PerWishlist:   1,                   // +15×1 = +15 items per wishlist
 } as const;
 
-type PromoProInfo = { id: string; expiresAt: string; campaignCode: string } | null;
+type PromoProInfo = { id: string; expiresAt: string | null; campaignCode: string } | null;
 
 async function getUserEntitlement(userId: string, godMode = false): Promise<{
   plan: PlanInfo;
@@ -1403,13 +1403,17 @@ async function getUserEntitlement(userId: string, godMode = false): Promise<{
     orderBy: { currentPeriodEnd: 'desc' },
   });
 
-  // Also check active promo-PRO
+  // Also check active promo-PRO (expiresAt === null means lifetime PRO)
   const promoRedemption = await prisma.promoRedemption.findFirst({
-    where: { userId, status: 'ACTIVE', expiresAt: { gt: new Date() } },
+    where: {
+      userId,
+      status: 'ACTIVE',
+      OR: [{ expiresAt: { gt: new Date() } }, { expiresAt: null }],
+    },
     include: { campaign: { select: { code: true } } },
   });
   const promoPro: PromoProInfo = promoRedemption
-    ? { id: promoRedemption.id, expiresAt: promoRedemption.expiresAt!.toISOString(), campaignCode: promoRedemption.campaign.code }
+    ? { id: promoRedemption.id, expiresAt: promoRedemption.expiresAt?.toISOString() ?? null, campaignCode: promoRedemption.campaign.code }
     : null;
 
   if (sub) {
