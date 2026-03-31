@@ -167,10 +167,11 @@ export function getMarketplaceId(hostname: string): MarketplaceId {
 // ─── Wildberries Helpers ─────────────────────────────────────────────────────
 
 /**
- * Build a WB card API URL from a product nm ID.
+ * Build a WB search API URL from a product nm ID.
+ * (card.wb.ru was shut down April 2025; search.wb.ru is the replacement)
  */
 export function buildWbCardApiUrl(nm: string): string {
-  return `https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-1257786&nm=${nm}`;
+  return `https://search.wb.ru/exactmatch/ru/common/v18/search?appType=1&curr=rub&dest=-1257786&query=${nm}&resultset=catalog`;
 }
 
 /**

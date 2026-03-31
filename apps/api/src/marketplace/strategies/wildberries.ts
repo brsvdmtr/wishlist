@@ -2,11 +2,13 @@
  * marketplace/strategies/wildberries.ts — Wildberries multi-strategy parser
  *
  * Strategy pipeline (ordered by priority):
- *   1. Card API (card.wb.ru/cards/v2/detail) — fastest, no browser
- *   2. Browser + network intercept — captures card.wb.ru responses live
+ *   1. Search API (search.wb.ru) — searches by nmId, no browser needed
+ *   2. Browser + network intercept — captures API responses live
  *   3. DOM fallback — Cheerio on rendered HTML
  *
  * WB-specific knowledge:
+ *   - card.wb.ru was SHUT DOWN (April 2025, all *.wb.ru domains deprecated)
+ *   - search.wb.ru/exactmatch/ru/common/v18/search is the replacement
  *   - Prices in API are in kopecks (÷100 = rubles)
  *   - Product ID = "nm" (article number), 6-12 digits
  *   - CDN image URL formula: basket-XX.wbbasket.ru/volN/partN/nm/images/big/1.webp
@@ -36,11 +38,9 @@ const USER_AGENT =
 const API_TIMEOUT_MS = 6_000;
 
 /**
- * WB Card API `dest` profiles.  Different dest values correspond to
+ * WB dest profiles for the search API.  Different dest values correspond to
  * different warehouse/delivery regions.  Some products are only visible
  * under certain profiles, so we try several before giving up.
- *
- * The order is: Moscow region (most common), Saint-Petersburg, Krasnodar.
  */
 const WB_DEST_PROFILES = [
   '-1257786',       // Moscow (default — covers most items)
@@ -48,7 +48,7 @@ const WB_DEST_PROFILES = [
   '-577683',        // Saint-Petersburg
 ];
 
-// ─── Strategy 1: Card API (with multi-profile retry) ────────────────────────
+// ─── Strategy 1: Search API (replaces dead card.wb.ru) ──────────────────────
 
 export const wbCardApiStrategy: ParseStrategy = {
   name: 'wb_card_api',
@@ -57,10 +57,13 @@ export const wbCardApiStrategy: ParseStrategy = {
     if (!ctx.productId) return null;
 
     const startTime = Date.now();
+    const nmId = parseInt(ctx.productId, 10);
 
-    // Try multiple dest profiles — some products only appear under specific regions
+    // search.wb.ru returns search results; we search by article number
+    // and then filter for the exact nmId in the response.
     for (const dest of WB_DEST_PROFILES) {
-      const apiUrl = `https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=${dest}&nm=${ctx.productId}`;
+      const apiUrl = `https://search.wb.ru/exactmatch/ru/common/v18/search`
+        + `?appType=1&curr=rub&dest=${dest}&query=${ctx.productId}&resultset=catalog`;
 
       try {
         const ctrl  = new AbortController();
@@ -72,16 +75,22 @@ export const wbCardApiStrategy: ParseStrategy = {
             'User-Agent': USER_AGENT,
             'Accept': 'application/json',
             'Origin': 'https://www.wildberries.ru',
-            'Referer': ctx.url.href,
+            'Referer': `https://www.wildberries.ru/catalog/${ctx.productId}/detail.aspx`,
           },
         });
         clearTimeout(timer);
 
         if (!res.ok) continue;  // try next profile
 
+        const ct = res.headers.get('content-type') ?? '';
+        if (!ct.includes('json')) continue;  // got HTML anti-bot page
+
         const json = await res.json() as WbCardApiResponse;
-        const product = json?.data?.products?.[0];
-        if (!product) continue; // empty products[] → try next profile
+        const products = json?.data?.products;
+        if (!Array.isArray(products) || products.length === 0) continue;
+
+        // Find the exact product by nmId (search may return related items)
+        const product = products.find(p => p.id === nmId) ?? products[0]!;
 
         return parseWbProduct(product, startTime);
       } catch {
@@ -90,7 +99,7 @@ export const wbCardApiStrategy: ParseStrategy = {
     }
 
     // All profiles exhausted
-    return makeError('wb_card_api', startTime, `No products found across ${WB_DEST_PROFILES.length} dest profiles`);
+    return makeError('wb_card_api', startTime, `No products found via search.wb.ru across ${WB_DEST_PROFILES.length} dest profiles`);
   },
 };
 

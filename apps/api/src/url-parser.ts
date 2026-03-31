@@ -516,7 +516,8 @@ function extractWbArticleId(url: URL): string | null {
 }
 
 async function fetchWbCardApi(nmStr: string, referer: string): Promise<ParseResult | null> {
-  const apiUrl = `https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-1257786&nm=${nmStr}`;
+  // card.wb.ru shut down April 2025; use search.wb.ru as replacement
+  const apiUrl = `https://search.wb.ru/exactmatch/ru/common/v18/search?appType=1&curr=rub&dest=-1257786&query=${nmStr}&resultset=catalog`;
   try {
     const ctrl  = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 6_000);
@@ -532,6 +533,10 @@ async function fetchWbCardApi(nmStr: string, referer: string): Promise<ParseResu
     clearTimeout(timer);
     if (!res.ok) return null;
 
+    // Reject HTML responses (anti-bot pages return text/html)
+    const ct = res.headers.get('content-type') ?? '';
+    if (!ct.includes('json')) return null;
+
     const json = await res.json() as {
       data?: { products?: Array<{
         id: number; name?: string;
@@ -540,8 +545,11 @@ async function fetchWbCardApi(nmStr: string, referer: string): Promise<ParseResu
         mediaFiles?: string[];
       }> };
     };
-    const p = json?.data?.products?.[0];
-    if (!p) return null;
+    const products = json?.data?.products;
+    if (!Array.isArray(products) || products.length === 0) return null;
+    // Search returns multiple results; prefer exact nmId match
+    const nmInt = parseInt(nmStr, 10);
+    const p = products.find(x => x.id === nmInt) ?? products[0]!;
 
     const title      = p.name?.trim() ?? null;
     const kopecks    = p.salePriceU ?? p.sizes?.[0]?.price?.total ?? null;

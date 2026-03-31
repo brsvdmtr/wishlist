@@ -187,7 +187,7 @@ function analyzeNetworkResponses(
     let candidate: ProductCandidate | null = null;
 
     // Domain-specific fast paths (known API response shapes)
-    if (isWildberriesHost(h) && resp.url.includes('card.wb.ru')) {
+    if (isWildberriesHost(h) && (resp.url.includes('card.wb.ru') || resp.url.includes('search.wb.ru'))) {
       candidate = parseWbCardResponse(json);
     } else if (isWildberriesHost(h) && resp.url.includes('catalog.wb.ru')) {
       candidate = findProductInJson(json, 0); // generic scan
