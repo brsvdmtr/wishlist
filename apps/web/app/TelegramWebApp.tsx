@@ -1,7 +1,4 @@
-'use client';
-
 import Script from 'next/script';
-import { useEffect } from 'react';
 
 type TgWebAppUser = { id: number; first_name: string; last_name?: string; username?: string; language_code?: string };
 
@@ -37,26 +34,16 @@ declare global {
 }
 
 /**
- * Подключает Telegram Web App API и разворачивает контент на весь экран при открытии из кнопки меню бота (модалка).
- * На десктопе модалка уже открыта на полный экран; на мобильных expand() раскрывает нижнюю панель.
+ * Loads the Telegram Web App SDK script before React hydration.
+ * strategy="beforeInteractive" ensures window.Telegram is available
+ * by the time any client component mounts.
+ * ready() and expand() are called from MiniApp.tsx after init.
  */
 export default function TelegramWebApp() {
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const tw = window.Telegram?.WebApp;
-    if (!tw) return;
-    tw.ready();
-    tw.expand();
-  }, []);
-
   return (
     <Script
       src="https://telegram.org/js/telegram-web-app.js"
-      strategy="afterInteractive"
-      onLoad={() => {
-        window.Telegram?.WebApp?.ready();
-        window.Telegram?.WebApp?.expand();
-      }}
+      strategy="beforeInteractive"
     />
   );
 }

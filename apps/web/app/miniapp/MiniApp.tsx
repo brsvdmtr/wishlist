@@ -4192,11 +4192,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     const tryInit = () => {
       const tg = window.Telegram?.WebApp;
       if (!tg) {
-        if (attempts++ < 40) {
-          setTimeout(tryInit, 100); // retry up to 4s while SDK loads
+        if (attempts++ < 80) {
+          setTimeout(tryInit, 100); // retry up to 8s while SDK loads
         } else {
           // eslint-disable-next-line no-console
-          console.error('[WishBoard] SDK not found after 40 retries', { telegram: !!window.Telegram, hash: location.hash?.substring(0, 80) });
+          console.error('[WishBoard] SDK not found after 80 retries', { telegram: !!window.Telegram, hash: location.hash?.substring(0, 80) });
           setErrorMsg(t('error_open_in_telegram', locale) + `\n[SDK_NOT_LOADED] hash=${location.hash ? 'yes' : 'no'} tg=${!!window.Telegram}`);
           setScreen('error');
         }
