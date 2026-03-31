@@ -2686,7 +2686,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const res = await fetch(url, {
         ...init,
         signal: controller.signal,
-        credentials: 'include', // send wb_session cookie for web auth
+        credentials: 'omit',
         headers: {
           'Content-Type': 'application/json',
           ...(initDataRef.current ? { 'X-TG-INIT-DATA': initDataRef.current } : {}),
