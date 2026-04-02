@@ -43,6 +43,7 @@ async function sendAdminAlert(text: string): Promise<void> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+        signal: AbortSignal.timeout(10_000),
       }),
     ),
   );
@@ -1178,15 +1179,17 @@ if (!token) {
       // Startup alert + initial heartbeat
       void sendAdminAlert(`🟢 <b>Bot started</b>\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
       void updateHeartbeat();
+      // Heartbeat: update every 60 s so /health/deep can detect bot absence.
+      // Only start AFTER successful launch — a failed bot must not fake a heartbeat.
+      setInterval(() => void updateHeartbeat(), 60_000);
     })
     .catch((err: unknown) => {
       logger.fatal({ err }, 'failed to start');
       if (process.env.GLITCHTIP_DSN && err instanceof Error) Sentry.captureException(err);
+      // Hard exit deadline: if sendAdminAlert hangs, exit anyway after 15 s
+      setTimeout(() => process.exit(1), 15_000).unref();
       void sendAdminAlert(`🔴 <b>Bot failed to start</b>\n${String(err)}`).finally(() => process.exit(1));
     });
-
-  // Heartbeat: update every 60 s so /health/deep can detect bot absence
-  setInterval(() => void updateHeartbeat(), 60_000);
 
   // Uncaught exception / rejection alerts
   process.on('uncaughtException', (err) => {
@@ -1194,6 +1197,7 @@ if (!token) {
     // eslint-disable-next-line no-console
     console.error('[bot] uncaughtException:', err);
     if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
+    setTimeout(() => process.exit(1), 15_000).unref();
     void sendAdminAlert(`🔴 <b>Bot uncaughtException</b>\n${String(err)}`).finally(() => process.exit(1));
   });
 
