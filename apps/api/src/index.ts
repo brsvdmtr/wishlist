@@ -10176,6 +10176,7 @@ const telemetryLimiter = rateLimit({
   keyGenerator: (req) => (req as Request & { tgUser?: { id?: number } }).tgUser?.id?.toString() || req.ip || 'unknown',
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
 });
 
 tgRouter.post('/telemetry', telemetryLimiter, asyncHandler(async (req, res) => {
