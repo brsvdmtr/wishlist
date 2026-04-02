@@ -10062,6 +10062,74 @@ tgRouter.post('/santa/campaigns/:id/inbound/hint/fulfill', asyncHandler(async (r
   return res.json({ ok: true });
 }));
 
+// ── Telemetry ingestion ─────────────────────────────────
+const ANALYTICS_EVENTS_ALLOWLIST = new Set([
+  'bot.start_received', 'miniapp.open_attempt', 'miniapp.tg_context_detected',
+  'miniapp.initdata_present', 'miniapp.bootstrap_started', 'miniapp.bootstrap_succeeded',
+  'miniapp.bootstrap_failed', 'miniapp.first_rendered', 'miniapp.boot_timeout',
+  'miniapp.fatal_render_error', 'wishlist.created', 'wish.created',
+  'import.started', 'import.succeeded', 'import.failed',
+  'guest.view_opened', 'reservation.succeeded',
+]);
+
+const telemetryEventSchema = z.object({
+  event: z.string().refine(e => ANALYTICS_EVENTS_ALLOWLIST.has(e), 'Unknown event'),
+  ts: z.number(),
+  props: z.record(z.unknown()).optional(),
+});
+
+const telemetryBodySchema = z.object({
+  events: z.array(telemetryEventSchema).max(20),
+});
+
+const telemetryLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 5,
+  keyGenerator: (req) => (req as Request & { tgUser?: { id?: number } }).tgUser?.id?.toString() || req.ip || 'unknown',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+tgRouter.post('/telemetry', telemetryLimiter, asyncHandler(async (req, res) => {
+  const parsed = telemetryBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid telemetry payload', issues: parsed.error.issues });
+  }
+
+  const userId = req.tgUser?.id ? String(req.tgUser.id) : null;
+  const now = Date.now();
+  const oneHourAgo = now - 3_600_000;
+
+  const records = parsed.data.events.map(ev => {
+    // Clamp timestamp to last hour
+    const ts = Math.max(oneHourAgo, Math.min(now, ev.ts));
+    // Truncate props
+    let props: Record<string, unknown> = ev.props || {};
+    for (const [key, val] of Object.entries(props)) {
+      if (typeof val === 'string' && val.length > 300) {
+        props[key] = val.slice(0, 300) + '...';
+      }
+    }
+    const serialized = JSON.stringify(props);
+    if (serialized.length > 1024) {
+      props = { _truncated: true, event: ev.event };
+    }
+    return {
+      event: ev.event,
+      userId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      props: props as any,
+      createdAt: new Date(ts),
+    };
+  });
+
+  if (records.length > 0) {
+    await prisma.analyticsEvent.createMany({ data: records });
+  }
+
+  return res.json({ ok: true });
+}));
+
 // ─── Maintenance mode middleware ──────────────────────────────────────────────
 // When MAINTENANCE_MODE=true, block /tg/* and /public/* with 503 + code=MAINTENANCE.
 // /health, /health/deep, /uploads, /internal remain accessible.

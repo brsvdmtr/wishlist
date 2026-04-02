@@ -2057,6 +2057,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const myActorHashRef = useRef<string>(''); // SHA-256 hash of tg_actor:{telegramId}
   // Telegram language_code captured at init — used by resolveEffectiveLocale
   const tgLangCodeRef = useRef<string | undefined>(undefined);
+  const bootSessionIdRef = useRef(crypto.randomUUID());
+  const bootStartTimeRef = useRef(Date.now());
+  const firstRenderedRef = useRef(false);
 
   const [screen, setScreen] = useState<Screen>('loading');
   const [errorMsg, setErrorMsg] = useState('');
@@ -2660,10 +2663,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     guestPriorityFilter.length < 3 ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
 
-  // Analytics stub — will be replaced with real analytics later
+  // Telemetry event buffer — flushed to server after auth confirmed
+  const telemetryBufferRef = useRef<Array<{event: string; ts: number; props?: Record<string, unknown>}>>([]);
+
   const trackEvent = useCallback((event: string, props?: Record<string, unknown>) => {
+    const entry = {
+      event,
+      ts: Date.now(),
+      props: {
+        ...props,
+        bootSessionId: bootSessionIdRef.current,
+        clientEventId: crypto.randomUUID(),
+      },
+    };
+    telemetryBufferRef.current.push(entry);
     // eslint-disable-next-line no-console
-    console.log(`[analytics] ${event}`, props ?? '');
+    if (process.env.NODE_ENV === 'development') console.log(`[telemetry] ${event}`, entry.props);
   }, []);
 
   /** Show context-aware PRO upsell sheet with anti-spam throttling.
@@ -2739,6 +2754,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       throw wrapped;
     }
   }, [apiBase]);
+
+  const flushTelemetry = useCallback(() => {
+    const events = telemetryBufferRef.current;
+    if (events.length === 0) return;
+    telemetryBufferRef.current = [];
+    tgFetch('/tg/telemetry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events }),
+    }).catch(() => {
+      // Silent fail — telemetry is non-critical
+    });
+  }, [tgFetch]);
 
   // --- Santa season loader (used on init + after god/testMode toggles)
   const loadSantaSeason = useCallback(async () => {
@@ -4215,6 +4243,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   // --- Init
   useEffect(() => {
+    trackEvent('miniapp.open_attempt', { platform: navigator?.platform, userAgent: navigator?.userAgent?.substring(0, 120), release: process.env.NEXT_PUBLIC_APP_RELEASE || 'unknown' });
+
     // Capture start_param from URL query for graceful browser fallback
     if (typeof window !== 'undefined') {
       urlStartParamRef.current = new URLSearchParams(window.location.search).get('startapp') ?? '';
@@ -4229,11 +4259,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         } else {
           // eslint-disable-next-line no-console
           console.error('[WishBoard] SDK not found after 80 retries', { telegram: !!window.Telegram, hash: location.hash?.substring(0, 80) });
+          trackEvent('miniapp.bootstrap_failed', { platform: navigator?.platform, hasTelegramWebApp: !!window.Telegram, hasInitData: false, screen: 'loading', errorCode: 'SDK_NOT_LOADED', errorSummary: 'SDK not found after 80 retries', userAgent: navigator?.userAgent?.substring(0, 120) });
+          flushTelemetry();
           setErrorMsg(t('error_open_in_telegram', locale) + `\n[SDK_NOT_LOADED] hash=${location.hash ? 'yes' : 'no'} tg=${!!window.Telegram}`);
           setScreen('error');
         }
         return;
       }
+
+      trackEvent('miniapp.tg_context_detected', { sdkVersion: tg.version });
 
       try {
         tgRef.current = window.Telegram;
@@ -4245,6 +4279,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       } catch (sdkErr) {
         // eslint-disable-next-line no-console
         console.error('[WishBoard] SDK error:', sdkErr);
+        trackEvent('miniapp.bootstrap_failed', { platform: navigator?.platform, hasTelegramWebApp: !!window.Telegram, hasInitData: !!tg?.initData, screen: 'loading', errorCode: 'SDK_ERROR', errorSummary: (sdkErr instanceof Error ? sdkErr.message : String(sdkErr)).substring(0, 200), userAgent: navigator?.userAgent?.substring(0, 120) });
+        flushTelemetry();
         setErrorMsg(t('error_load_failed', locale));
         setScreen('error');
         return;
@@ -4291,10 +4327,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           colorScheme: tg.colorScheme,
         });
         const diag = `[EMPTY_INIT_DATA] v=${tg.version} p=${tg.platform} hash=${location.hash ? location.hash.length : 0} user=${!!tg.initDataUnsafe?.user}`;
+        trackEvent('miniapp.bootstrap_failed', { platform: navigator?.platform, hasTelegramWebApp: !!window.Telegram, hasInitData: false, screen: 'loading', errorCode: 'EMPTY_INIT_DATA', errorSummary: diag.substring(0, 200), userAgent: navigator?.userAgent?.substring(0, 120) });
+        flushTelemetry();
         setErrorMsg(t('error_open_in_telegram', locale) + '\n' + diag);
         setScreen('error');
         return;
       }
+
+      trackEvent('miniapp.initdata_present');
 
       const handleErr = (e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
@@ -4311,6 +4351,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         }
       };
 
+      trackEvent('miniapp.bootstrap_started', { startParamType: startParam ? (startParam.startsWith('santa_') ? 'santa' : startParam.includes('__') ? 'guest' : 'service') : 'none' });
+
       if (startParam && startParam.startsWith('santa_')) {
         // Deep link from Santa invite.
         // Two formats are supported:
@@ -4325,6 +4367,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setSantaJoinLoading(true);
         tgFetch(`/tg/santa/invite/${encodeURIComponent(token)}`)
           .then(async (res) => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
             if (res.ok) {
               const json = await res.json() as { campaign: SantaJoinPreview; alreadyJoined?: boolean };
               setSantaJoinPreview(json.campaign);
@@ -4365,6 +4408,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const occasionId = startParam.slice(9);
         loadWishlists().catch(() => {});
         tgFetch(`/tg/gift-occasions/${occasionId}`).then(async r => {
+          trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
           if (r.ok) {
             const data = await r.json() as { occasion: any };
             setGnViewingOccasion(data.occasion);
@@ -4378,6 +4422,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const draftItemId = startParam.slice(6); // strip "draft_"
         loadWishlists()
           .then(async () => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
             // Load drafts items to find the target
             const dRes = await tgFetch('/tg/wishlists');
             if (dRes.ok) {
@@ -4410,6 +4455,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const targetItemId = startParam.slice(sepIdx + 7);
         loadGuestWishlist(slug)
           .then((items) => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
             const found = items.find((i) => i.id === targetItemId);
             if (found) {
               setViewingItem(found);
@@ -4427,11 +4473,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         if (username) {
           setPublicProfileUsername(username);
           void loadPublicProfile(username);
+          trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
           setScreen('public-profile');
           loadWishlists().catch(() => {});
         } else {
           // Empty username — fallback to home
-          loadWishlists().then(() => setScreen('my-wishlists')).catch(handleErr);
+          loadWishlists().then(() => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+            setScreen('my-wishlists');
+          }).catch(handleErr);
         }
       } else if (startParam && SERVICE_START_PARAMS.has(startParam)) {
         // Service deep links: create_wishlist, add_item, etc.
@@ -4439,6 +4489,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         trackEvent('miniapp_start_payload_resolved', { payload: startParam, type: 'service_command' });
         loadWishlists()
           .then(async () => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
             void loadReservations();
             if (startParam === 'create_wishlist') {
               const redirected = await checkOnboarding();
@@ -4454,7 +4505,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         // the user's own data instead of an empty "Пока пусто" screen.
         trackEvent('miniapp_start_payload_resolved', { payload: startParam, type: 'public_share' });
         loadGuestWishlist(startParam)
-          .then(() => setScreen('guest-view'))
+          .then(() => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+            setScreen('guest-view');
+          })
           .catch((err) => {
             // Public link 404: don't crash the app — fall back to home screen.
             trackEvent('miniapp_start_payload_public_fetch_failed', { payload: startParam, error: (err as Error).message });
@@ -4462,6 +4516,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             console.warn('[WishBoard] Public deep link failed, falling back to home', startParam);
             loadWishlists()
               .then(async () => {
+                trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
                 const redirected = await checkOnboarding();
                 if (!redirected) setScreen('my-wishlists');
               })
@@ -4471,6 +4526,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       } else {
         loadWishlists()
           .then(async () => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
             void loadReservations();
             // Check onboarding first — if eligible, it sets screen to 'onboarding-entry'
             const redirected = await checkOnboarding();
@@ -4493,6 +4549,26 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     tryInit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Track first rendered screen — covers all setScreen paths including checkOnboarding
+  useEffect(() => {
+    if (!firstRenderedRef.current && screen !== 'loading' && screen !== 'error' && screen !== 'maintenance') {
+      firstRenderedRef.current = true;
+      trackEvent('miniapp.first_rendered', { screen, durationMs: Date.now() - bootStartTimeRef.current });
+      flushTelemetry();
+    }
+  }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Boot timeout — fire event if app hasn't rendered a real screen within 60s
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!firstRenderedRef.current) {
+        trackEvent('miniapp.boot_timeout', { lastScreen: screen });
+        flushTelemetry();
+      }
+    }, 60_000);
+    return () => clearTimeout(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh subscription unread badge when app returns to foreground
   useEffect(() => {
