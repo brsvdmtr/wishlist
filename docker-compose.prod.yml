@@ -33,6 +33,8 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-}
       SYSTEM_USER_EMAIL: ${SYSTEM_USER_EMAIL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: ${LOG_PRETTY:-false}
+      APP_RELEASE: ${APP_RELEASE:-unknown}
       UPLOAD_DIR: /data/uploads
       ONBOARDING_V2_ROLLOUT: ${ONBOARDING_V2_ROLLOUT:-ab50}
       MARKETPLACE_PARSER_DISABLED: ${MARKETPLACE_PARSER_DISABLED:-}
@@ -62,6 +64,7 @@ services:
       ADMIN_KEY: ${ADMIN_KEY}
       ADMIN_BASIC_USER: ${ADMIN_BASIC_USER}
       ADMIN_BASIC_PASS: ${ADMIN_BASIC_PASS}
+      APP_RELEASE: ${APP_RELEASE:-unknown}
     depends_on:
       api:
         condition: service_started
@@ -82,6 +85,9 @@ services:
       API_BASE_URL: http://api:3001
       MINI_APP_URL: ${MINI_APP_URL:-https://wishlistik.ru/miniapp}
       SITE_URL: ${SITE_URL:-${NEXT_PUBLIC_SITE_URL:-https://wishlistik.ru}}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: ${LOG_PRETTY:-false}
+      APP_RELEASE: ${APP_RELEASE:-unknown}
     depends_on:
       api:
         condition: service_started
