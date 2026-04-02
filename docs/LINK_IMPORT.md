@@ -1,5 +1,5 @@
 > Source of truth for the URL-based wish import system (PRO feature).
-> Last updated: 2026-03-26 · Branch: main
+> Last updated: 2026-04-02 · Branch: main
 
 # Link Import (URL-based Wish Import)
 
@@ -36,30 +36,46 @@ If extraction partially fails (e.g., price not found), the item is still created
 
 ## 3. Extraction Pipeline
 
-Each URL goes through the following pipeline in order:
+### Two-tier architecture
+
+The import system has two tiers:
+
+| Tier | Module | Handles | Features |
+|---|---|---|---|
+| **Marketplace orchestrator** | `marketplace/orchestrator.ts` | Known marketplaces (WB, Ozon, YM, GoldApple, etc.) | Field-level confidence scoring (0-100), tiered cache TTLs, early stop, strategy pipeline |
+| **Legacy parser** | `url-parser.ts` | Unknown domains + orchestrator fallback | 5-level source priority merge, flat cache TTLs |
+
+The orchestrator is tried first for known marketplaces. If it fails, returns `none` confidence, or produces a low-quality partial (below the fallback threshold of 25), the legacy parser takes over. A kill switch (`MARKETPLACE_PARSER_DISABLED=1`) instantly routes all marketplace URLs through the legacy flow.
+
+### Full pipeline
 
 ```
 1. Validate URL + canonicalize (strip tracking params)
         ↓
-2. Cache check
-   ├─ Hit (success, < 24h)  → return cached result
-   └─ Hit (negative, < 5m)  → return cached failure
+2. DNS SSRF check (assertDnsIsSafe() — resolve A/AAAA, reject private IPs)
         ↓
 3. Route by domain
-   ├─ wildberries.ru / wb.ru  →  WB Card API (card.wb.ru)
-   │                              └─ fail → browser fallback
-   ├─ ozon.ru                 →  browser-first (skip HTTP fetch)
-   ├─ market.yandex.ru        →  browser-first (skip HTTP fetch)
-   └─ all others              →  HTTP fetch + Cheerio
-                                   └─ confidence < medium → browser fallback
-        ↓
-4. Extraction (one or more sources, merged by priority)
-        ↓
-5. Anti-bot / garbage guard
-        ↓
-6. Cache store
-        ↓
-7. Return result
+   ├─ Known marketplace + orchestrator enabled → orchestrator pipeline:
+   │   a. Cache check (tiered TTL: high=24h, medium=4h, low=30min, negative=5min)
+   │   b. Execute strategies in priority order
+   │   c. Early stop when field confidence >= 70
+   │   d. Merge results at field level (0-100 confidence per field)
+   │   e. Anti-bot + garbage guard
+   │   f. Cache with quality-based TTL → return
+   │   g. If result is garbage (< 25 threshold) → fall through to legacy
+   │
+   └─ Unknown domain or orchestrator disabled/failed → legacy pipeline:
+       a. Cache check (success=24h, negative=5min)
+       b. Route:
+          ├─ wildberries.ru / wb.ru  →  WB Search API (search.wb.ru)
+          │                              └─ fail → browser fallback
+          ├─ ozon.ru                 →  browser-first (skip HTTP fetch)
+          ├─ market.yandex.ru        →  browser-first (skip HTTP fetch)
+          └─ all others              →  HTTP fetch + Cheerio
+                                         └─ confidence < medium → browser fallback
+       c. Extraction (one or more sources, merged by priority)
+       d. Anti-bot / garbage guard
+       e. Cache store → return
 ```
 
 ### Source priority (highest to lowest)
@@ -86,7 +102,7 @@ These domains have hand-written extraction logic with the highest reliability:
 
 | Domain | Method | Confidence |
 |---|---|---|
-| `wildberries.ru`, `wb.ru` | WB Card JSON API (`card.wb.ru/cards/v2/detail?nm={id}`) | High |
+| `wildberries.ru`, `wb.ru` | WB Search API (`search.wb.ru/exactmatch/...?query={id}`) | High |
 | `ozon.ru` | Browser-first + `ozonAdapter` CSS selectors | High |
 | `market.yandex.ru` | Browser-first + `ymAdapter` CSS selectors | High |
 | `lamoda.ru` | HTTP fetch + `lamodaAdapter` CSS selectors | Medium–High |
@@ -119,7 +135,7 @@ When is it used:
 - Headless Chromium via `puppeteer-core`.
 - Binary path: `/usr/bin/chromium` (override via `CHROMIUM_PATH` environment variable).
 - **Singleton instance** with a 90-second idle timeout — the browser process is kept alive between requests and automatically closed after 90 seconds of inactivity.
-- Launch flags: `--no-sandbox`, `--disable-setuid-sandbox`, `--single-process`.
+- Launch flags: `--no-sandbox`, `--disable-setuid-sandbox`, `--disable-dev-shm-usage`, `--disable-gpu`, `--disable-extensions`, `--disable-background-networking`, `--disable-default-apps`, `--disable-sync`, `--no-first-run`, `--disable-crash-reporter` (note: `--single-process` was removed to keep the renderer in a separate process and limit blast radius from renderer exploits).
 
 ### What the browser does
 
@@ -133,7 +149,9 @@ When is it used:
 
 ## 6. Caching Behavior
 
-Results are cached in-process using a `Map`.
+Results are cached in-process using a `Map`. The two tiers have different TTL strategies:
+
+### Legacy cache (unknown domains)
 
 | Property | Value |
 |---|---|
@@ -144,7 +162,18 @@ Results are cached in-process using a `Map`.
 | Negative TTL | 5 minutes (for failed or empty extractions) |
 | Cache key | Canonical URL (after tracking param stripping) |
 
-Because the cache is in-memory, it is cleared on every API process restart. Two users importing the same URL within 24 hours share the cached result.
+### Orchestrator cache (known marketplaces) -- tiered TTLs
+
+| Result quality | TTL | Rationale |
+|---|---|---|
+| High confidence | 24 hours | Reliable result, no point re-fetching |
+| Medium confidence | 4 hours | Decent but might improve on retry |
+| Low confidence | 30 minutes | Likely garbage, retry sooner |
+| Negative (anti-bot, total failure) | 5 minutes | Transient failures clear quickly |
+
+Max entries: 1,000. Eviction: FIFO. Cache key: canonical URL or product key.
+
+Because both caches are in-memory, they are cleared on every API process restart. Two users importing the same URL within the TTL window share the cached result.
 
 ---
 
@@ -161,6 +190,14 @@ Before any fetch attempt, the URL is validated and cleaned:
   - `172.16.0.0/12`
   - `192.168.0.0/16`
 
+**DNS SSRF protection (`assertDnsIsSafe()`):**
+
+After URL structure validation, `assertDnsIsSafe(url)` resolves the hostname's A and AAAA records and rejects the request if any resolved IP falls within a forbidden range. This prevents SSRF attacks where a public hostname resolves to a private IP. The check runs before any HTTP fetch or Puppeteer navigation.
+
+**Redirect validation:**
+
+HTTP redirects are followed manually (`redirect: 'manual'`). Each redirect target is re-validated through both `validateUrl()` (structure check) and `assertDnsIsSafe()` (DNS resolution check) before following. This prevents redirect-based SSRF where the initial URL is safe but redirects to an internal address.
+
 **Canonicalization (tracking param stripping):**
 
 The following query parameters are removed before processing and caching:
@@ -172,6 +209,17 @@ Stripping happens before the cache lookup, so `https://example.com/product?utm_s
 ---
 
 ## 8. Error Handling and Graceful Degradation
+
+### Field-level confidence (orchestrator)
+
+The marketplace orchestrator produces per-field confidence scores (0-100) for each extracted field (title, description, price, image). Each field carries a `confidence` number and a `source` string identifying which strategy produced it. The overall confidence level is derived from these field scores:
+
+- `>= 70`: `high` (triggers early stop -- no further strategies are executed)
+- `>= 40`: `medium`
+- `> 0`: `low`
+- `0`: `none`
+
+The fallback threshold is 25 -- if the orchestrator's overall score falls below this, the result is considered garbage and the legacy parser takes over.
 
 ### Parse status
 
@@ -304,10 +352,10 @@ Same extraction logic and result shape as the public endpoint.
 ## 12. Known Limitations and Gaps
 
 - **In-memory cache only.** Cache is lost on every API restart. High-traffic deployments or rolling restarts mean the same URLs are re-fetched frequently.
-- **Single Chromium process.** The browser singleton with `--single-process` may be unstable under concurrent load. Concurrent browser-first requests queue behind one another.
+- **Single Chromium process.** The browser singleton may be unstable under concurrent load. Concurrent browser-first requests queue behind one another.
 - **No retry logic.** If a browser-based extraction fails transiently (timeout, crash), the result is cached as a failure for 5 minutes.
 - **Anti-bot limitations.** Sites with aggressive Cloudflare or Yandex SmartCaptcha protection return failures. No headless browser fingerprint spoofing is implemented.
-- **`defaultCurrency` not yet in API.** The `UserProfile` schema includes a `defaultCurrency` field (`RUB` | `USD`) for displaying prices in the user's preferred currency, but it is not currently surfaced in the settings API or applied during import.
+- **`defaultCurrency` is surfaced but not applied during import.** The `UserProfile` schema includes a `defaultCurrency` field (`RUB` | `USD` | `EUR` | `GBP`) surfaced via `GET/PATCH /tg/me/settings`, but it is not applied to normalise extracted prices during import.
 - **`priceText` is a raw string.** The extracted price is not normalized to a number or currency code — it is stored as a string (e.g., `"4 990 ₽"`). Structured price parsing is not implemented.
 - **No image re-hosting.** The `imageUrl` is the original URL from the product page. If the source site rotates or deletes the image, the wish item loses its image.
 - **Drafts item limit is fixed.** `DRAFTS_ITEM_LIMIT` is a constant, not a plan-based setting, so PRO users cannot exceed it regardless of their subscription.

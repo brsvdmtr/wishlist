@@ -1,6 +1,6 @@
 # Architecture
 
-**Date:** 2026-03-26
+**Date:** 2026-04-02
 **Project:** Wishlist Telegram Mini App (wishlistik.ru)
 
 ---
@@ -32,7 +32,7 @@ Wishlist is a Telegram Mini App that allows users to create and share gift wishl
 ┌──────────────────────┐    ┌─────────────────────┐
 │   apps/web           │    │   apps/bot           │
 │   Next.js 14 :3000   │    │   Telegraf 4.16      │
-│   MiniApp.tsx        │    │   Webhook / polling  │
+│   MiniApp.tsx        │    │   Long polling       │
 └──────────┬───────────┘    └──────────┬────────────┘
            │ fetch (X-TG-INIT-DATA)     │ HTTP (X-INTERNAL-KEY)
            ▼                            ▼
@@ -70,14 +70,14 @@ Internet
                 │ Docker network: wishlist-network
      ┌──────────┼──────────────────────┐
      ▼          ▼                      ▼
- api:3001    web:3000               bot (no port exposed)
-     │                                 │
-     └──────────┬──────────────────────┘
-                ▼
+ api:3001    web:3000         bot (no port exposed)    cron (no port exposed)
+     │                           │                         │
+     └──────────┬────────────────┤─────────────────────────┘
+                ▼                ▼
            postgres:5432
 ```
 
-All services run as Docker containers defined in `docker-compose.prod.yml`. The `api` and `web` services expose ports 3001 and 3000 respectively; Nginx acts as the TLS terminator and reverse proxy. The `bot` container has no exposed port and communicates outbound to the Telegram Bot API and inbound to `api:3001` over the Docker internal network.
+All four services run as Docker containers defined in `docker-compose.prod.yml`. The `api` and `web` services expose ports 3001 and 3000 respectively; Nginx acts as the TLS terminator and reverse proxy. The `bot` container has no exposed port and communicates outbound to the Telegram Bot API and inbound to `api:3001` over the Docker internal network. The `cron` container runs scheduled lifecycle, degradation, and promo-reminder jobs against the database directly.
 
 Uploaded files are stored in a named Docker volume `wishlist_uploads`, mounted at `/data/uploads` inside the `api` container and served as static files at `/uploads/*` by the API process itself (with a 30-day immutable cache header). Nginx forwards `/api/uploads/*` to the API.
 
@@ -87,12 +87,12 @@ Uploaded files are stored in a named Docker volume `wishlist_uploads`, mounted a
 
 | Module | Path | Responsibility |
 |---|---|---|
-| `api` | `apps/api/src/index.ts` | Express HTTP server. All business logic: wishlists, items, reservations, comments, hints, subscriptions, billing, profile, settings, URL import, image processing, background jobs. |
-| `api` | `apps/api/src/url-parser.ts` | Multi-strategy product card extractor: Cheerio + Puppeteer, in-memory cache, 7 domain adapters. |
+| `api` | `apps/api/src/index.ts` (~11,964 lines) | Express HTTP server. All business logic: wishlists, items, reservations, comments, hints, subscriptions, billing, profile, settings, URL import, image processing, background jobs, add-on SKU store, promo code system, lifecycle/degradation engine, locale segments analytics, Secret Santa subsystem, gift notes/occasions. |
+| `api` | `apps/api/src/url-parser.ts` (~1,059 lines) | Multi-strategy product card extractor: Cheerio + Puppeteer, in-memory cache, 7 domain adapters. |
 | `api` | `apps/api/src/browser-network-extractor.ts` | Puppeteer-based XHR/fetch interception for SPA product pages. |
 | `api` | `apps/api/src/sort.ts` | Item sort order logic (side-effect-free, unit-tested). |
-| `bot` | `apps/bot/src/index.ts` | Telegraf bot. Commands, payment handlers, URL import relay, hints delivery, support ticket bridge, heartbeat. |
-| `web` | `apps/web/` | Next.js 14 app. Single-page Mini App (`MiniApp.tsx`), server-side admin routes (Basic Auth middleware). |
+| `bot` | `apps/bot/src/index.ts` (~1,190 lines) | Telegraf bot. Commands, payment handlers, URL import relay, hints delivery, support ticket bridge, heartbeat, add-on purchase flow, promo code redemption, Secret Santa notifications. |
+| `web` | `apps/web/` (MiniApp.tsx ~16,663 lines) | Next.js 14 app. Single-page Mini App (`MiniApp.tsx`), server-side admin routes (Basic Auth middleware). |
 | `db` | `packages/db/` | Prisma schema for PostgreSQL 16. Shared client exported as `@wishlist/db`. Both `api` and `bot` import this package directly. |
 | `shared` | `packages/shared/` | i18n strings (6 locales: ru, en, zh-CN, hi, es, ar), `t()` translation function, `normalizeLocale()`, `isRTL()`, `resolveEffectiveLocale()`, TypeScript types shared across packages. |
 
@@ -183,9 +183,9 @@ When an item photo or avatar is replaced or deleted, the old file is removed via
 
 ## 9. Telegram Integration Points
 
-### Webhook
+### Long Polling
 
-The bot connects to Telegram via Telegraf. In production, Telegraf uses a webhook. The bot updates a `ServiceHeartbeat` database record on each processed message; the API's `GET /health/deep` endpoint checks that this heartbeat is not older than 120 seconds.
+The bot connects to Telegram via Telegraf using long polling (`bot.launch()` with no arguments). The bot updates a `ServiceHeartbeat` database record on each processed message; the API's `GET /health/deep` endpoint checks that this heartbeat is not older than 120 seconds.
 
 ### Payment flow (Telegram Stars)
 
@@ -225,12 +225,77 @@ The bot maintains a ForceReply-based support flow. When a user starts a support 
 
 ---
 
-## 10. Key Design Decisions
+## 10. Add-on SKU Store
 
-**Single-file API (`index.ts`, ~9 000+ lines)**
+The platform offers 10 one-time-purchase SKUs via Telegram Stars, defined in an `ADDON_CAPS` constant. SKUs include extra wishlist slots, subscription slots, per-wishlist item upgrades (5 or 15), seasonal decorations, hint credit packs, and import credit packs. Each purchase creates a `Purchase` audit record (idempotent on `telegramChargeId`). Permanent add-ons are tracked in `UserAddOn` rows; consumable balances (hints, imports) are stored in `UserCredits`. PRO users bypass credit checks entirely.
+
+---
+
+## 11. Gift Notes / Occasions
+
+A personal gift idea notebook (`GiftOccasion` + `GiftOccasionIdea`) allows users to track gift ideas organized by occasion (birthday, anniversary, holiday, other). Each occasion has a person name, optional recurring event date, and a list of ideas with optional links, prices, and notes. Occasions support `ACTIVE`, `DONE`, and `ARCHIVED` statuses.
+
+---
+
+## 12. Lifecycle & Degradation
+
+When a PRO or promo-PRO subscription expires, the user enters a four-phase degradation lifecycle tracked by `DegradationState`:
+
+| Phase | Meaning |
+|---|---|
+| `NONE` | Active PRO or never subscribed |
+| `GRACE_PERIOD` | 14-day window after downgrade; PRO features still available |
+| `ARCHIVED` | Grace ended; excess wishlists/items archived to fit FREE limits |
+| `PURGED` | 90 days after archive; archived items hard-deleted |
+
+The `LifecycleTouch` table drives a multi-touch winback messaging sequence (segments S1-S4) with attribution tracking (returnedAt, targetCompletedAt, promoRedeemedAt). Each touch has a scheduled delivery time, message kind (activation, winback, promo_offer), and optional promo offer code.
+
+---
+
+## 13. Promo Code System
+
+`PromoCampaign` defines reusable promo codes (e.g., `WISHPRO`). Each campaign specifies a reward type, duration in days, active flag, and optional max redemptions. `PromoRedemption` tracks per-user usage with status machine: `PENDING` -> `ACTIVE` -> `EXPIRED`, plus `ACCEPTED_FOR_PAID` (user already has paid PRO) and `FAILED`. Redemptions include lifecycle attribution fields (`offeredAt`, `offeredVia`, reminder flags).
+
+---
+
+## 14. Locale Segments Analytics
+
+God Mode includes a locale segments analytics dashboard. The API computes per-locale user segments and tracks feature gate hits via `AnalyticsEvent`. The `packages/shared` module provides 6 locales (ru, en, zh-CN, hi, es, ar) with `normalizeLocale()`, `isRTL()`, and `resolveEffectiveLocale()`.
+
+---
+
+## 15. Secret Santa Subsystem
+
+A full-featured Secret Santa platform built as a subsystem within the API. Key components:
+
+- **Campaigns** (`SantaCampaign`): CLASSIC or MULTI_WAVE type, seasonal (Nov-Feb), with invite tokens and budget ranges.
+- **Participants** (`SantaParticipant`): JOINED/LEFT/REMOVED status, optional linked wishlist, PARTICIPANT or ADMIN role.
+- **Rounds & Draw** (`SantaRound`, `SantaAssignment`): Multi-round support with constraint-respecting random draw. Exclusion groups prevent pairs within families/teams.
+- **Gift Progress** (`SantaGiftProgress`, `SantaGiftStatus`): 9-state gift lifecycle from PENDING through RECEIVED, with ORPHANED for approved exits.
+- **Anonymous Hints** (`SantaHintRequest`): Giver anonymously requests receiver to select wishlist items; 48h TTL; identity never leaked across sides.
+- **Campaign Chat** (`SantaChatMessage`, `SantaChatReadCursor`, `SantaChatMute`): In-campaign group messaging with unread tracking and per-participant mute.
+- **Polls** (`SantaPoll`, `SantaPollVote`): Campaign-scoped polls with optional anonymity and deadlines.
+- **Exit Requests** (`SantaExitRequest`): Participants can request to leave active campaigns; organizer approves/denies.
+- **Aliases** (`SantaParticipantAlias`): Round-scoped anonymous identities (adjective + animal + emoji), locale-independent keys.
+- **Season Control** (`SantaGlobalConfig`, `SantaSeasonConfig`, `SantaSeasonalBroadcastLog`): Global kill switch, per-year overrides, duplicate broadcast prevention.
+- **Notifications** (`SantaNotification`): 16 notification types with dedup keys; push via bot DMs.
+- **Audit** (`SantaAdminAuditLog`): Immutable log of organizer actions.
+- **Item Reservations** (`SantaItemReservation`): Santa-specific item claims distinct from general reservations; receiver identity never exposed.
+
+---
+
+## 16. Support Bridge
+
+The bot maintains a ForceReply-based support flow. `SupportSession` stores short-lived routing context for ForceReply prompts. `SupportTicket` tracks conversation threads bridging user DMs and a staff Telegram group (`SUPPORT_CHAT_ID`). `SupportMessage` links user-side and group-side Telegram message IDs with support for text, photo, video, and document media types.
+
+---
+
+## 17. Key Design Decisions
+
+**Single-file API (`index.ts`, ~11,964 lines)**
 All route handlers, middleware, helpers, and background jobs live in one file. This avoids module boundary complexity at this project scale and keeps cross-cutting concerns (e.g., `sendTgNotification`, `getUserEntitlement`, `processImage`) directly accessible from any handler without import chains.
 
-**Single-file frontend (`MiniApp.tsx`, ~10 000+ lines)**
+**Single-file frontend (`MiniApp.tsx`, ~16,663 lines)**
 The Mini App is a single React component tree with screen state managed as a `screen` discriminated union. This avoids client-side routing inside the Telegram WebApp frame, where standard Next.js navigation would trigger full page reloads and lose Telegram WebApp state.
 
 **Prisma used by both `api` and `bot`**

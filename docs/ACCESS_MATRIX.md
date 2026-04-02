@@ -1,6 +1,6 @@
 # ACCESS_MATRIX.md — Access Control Matrix
 
-> Date: 2026-03-26. Verified from source code (`apps/api/src/index.ts`, `apps/web/middleware.ts`).
+> Date: 2026-04-02. Verified from source code (`apps/api/src/index.ts`, `apps/web/middleware.ts`).
 
 ---
 
@@ -130,6 +130,37 @@ The `getItemRole(itemId, tgUser)` helper returns one of `{ role: 'owner' | 'rese
 | GET/POST | `/tg/me/plan` and `/tg/billing/*` | Any TG user (own billing only) |
 | POST | `/tg/me/god-mode` | Whitelisted TG IDs only |
 
+### Telegram Routes — Billing & Add-ons
+
+| Method | Path | Requirement | Notes |
+|--------|------|------------|-------|
+| GET | `/tg/me/plan` | Any TG user | Own plan + usage counters |
+| POST | `/tg/billing/pro/checkout` | Any TG user | Creates Telegram Stars invoice |
+| POST | `/tg/billing/pro/sync` | Any TG user | Verifies subscription after payment |
+| GET | `/tg/billing/history` | Any TG user | Own payment history |
+| POST | `/tg/billing/subscription/cancel` | Subscriber | Soft-cancel |
+| POST | `/tg/billing/subscription/reactivate` | Subscriber | Re-enable auto-renewal |
+| POST | `/tg/billing/addon/checkout` | Any TG user | Creates Stars invoice for SKU. Body: `{ sku, targetId? }` |
+| POST | `/tg/billing/addon/sync` | Any TG user | Verifies add-on purchase |
+| GET | `/tg/billing/addon/status` | Any TG user | Own add-on inventory |
+| POST | `/tg/billing/gift-notes/checkout` | Any TG user | Creates Stars invoice for Gift Notes unlock |
+| POST | `/tg/billing/gift-notes/sync` | Any TG user | Verifies Gift Notes purchase |
+
+### Telegram Routes — Gift Occasions
+
+| Method | Path | Requirement | Notes |
+|--------|------|------------|-------|
+| GET | `/tg/gift-occasions` | Any TG user | Own occasions. Requires Gift Notes access (PRO or unlocked) |
+| POST | `/tg/gift-occasions` | Any TG user | Create occasion. Requires Gift Notes access |
+| PATCH | `/tg/gift-occasions/:id` | Occasion owner | |
+| DELETE | `/tg/gift-occasions/:id` | Occasion owner | |
+
+### Telegram Routes — Promo
+
+| Method | Path | Requirement | Notes |
+|--------|------|------------|-------|
+| POST | `/tg/promo/apply` | Any TG user | Rate limited: 5/60s. Body: `{ code }` |
+
 ### Internal Routes
 
 | Method | Path | Requirement |
@@ -162,6 +193,35 @@ All gates are **server-side enforced**. The client UI shows upsell prompts but c
 | Items in SYSTEM_DRAFTS | 50 | 50 | 402 (same for both) |
 
 When the wishlist count exceeds plan.wishlists, excess wishlists become `readOnly: true` — they are still visible but items cannot be added to them (402).
+
+### Effective Limits (Base + Add-ons)
+
+Add-ons extend base plan limits. `getEffectiveEntitlements()` computes the actual limits used for enforcement:
+
+| Resource | FREE base | FREE max (with add-ons) | PRO base | PRO max (with add-ons) |
+|----------|:---------:|:----------------------:|:--------:|:---------------------:|
+| Wishlists | 2 | 5 (max 3 slots) | 10 | 15 (max 5 slots) |
+| Items per wishlist | 20 | 50 (+5×3 or +15×1) | 70 | 100 (+5×3 or +15×1) |
+| Subscriptions | 2 | 5 (max 3 slots) | 5 | 8 (max 3 slots) |
+
+### Credits-Based Feature Access
+
+FREE users can access PRO-gated features via credits purchased as consumable add-ons:
+
+| Feature | FREE without credits | FREE with credits | PRO |
+|---------|:-------------------:|:-----------------:|:---:|
+| Hints | 402 blocked | 1 credit per use | Unlimited |
+| URL import | 402 blocked | 1 credit per use | Unlimited |
+| Comments | 402 blocked (unless other party is PRO) | No credit path | Unlimited |
+
+### Gift Notes Access
+
+| User type | Access |
+|-----------|--------|
+| PRO | Included |
+| FREE + `gift_notes_unlock` purchased | Full access |
+| FREE without unlock | 403 (paywall shown, 19 XTR) |
+| God Mode | Included |
 
 ### Feature Gates
 

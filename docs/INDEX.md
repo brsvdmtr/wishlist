@@ -1,7 +1,7 @@
 # Documentation Index — WishBoard
 
 > Start here. All documentation for the WishBoard Telegram Mini App project.
-> Last updated: 2026-03-26 · Branch: main
+> Last updated: 2026-04-02 · Branch: main
 
 ---
 
@@ -37,7 +37,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 | Doc | Status | What it covers |
 |-----|--------|---------------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | primary | Product overview, system diagram, module responsibilities, auth layers, design decisions |
-| [DATA_MODEL.md](./DATA_MODEL.md) | primary | All 49 Prisma models, 14 enums, relationships, key behaviors |
+| [DATA_MODEL.md](./DATA_MODEL.md) | primary | All 51 Prisma models, 30 enums, relationships, key behaviors |
 | [ACCESS_MATRIX.md](./ACCESS_MATRIX.md) | primary | Auth tiers, role definitions, PRO vs FREE limits, data visibility rules |
 
 ### Backend
@@ -52,14 +52,14 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 | Doc | Status | What it covers |
 |-----|--------|---------------|
-| [FRONTEND_MAP.md](./FRONTEND_MAP.md) | primary | All 33 screens, state management, design system, PRO upsell system, patterns |
-| [FRONTEND_API_MAP.md](./FRONTEND_API_MAP.md) | secondary | Per-screen API call map (~50+ calls). Detailed companion to FRONTEND_MAP + API_REFERENCE |
+| [FRONTEND_MAP.md](./FRONTEND_MAP.md) | primary | All 36 screens, state management, design system, PRO upsell system, patterns |
+| [FRONTEND_API_MAP.md](./FRONTEND_API_MAP.md) | secondary | Per-screen API call map (~100+ calls). Detailed companion to FRONTEND_MAP + API_REFERENCE |
 
 ### Telegram Integration
 
 | Doc | Status | What it covers |
 |-----|--------|---------------|
-| [TELEGRAM_FLOW.md](./TELEGRAM_FLOW.md) | primary | Bot commands, deep linking, WebApp SDK, auth validation, billing webhooks, notifications |
+| [TELEGRAM_FLOW.md](./TELEGRAM_FLOW.md) | primary | Bot commands, deep linking, WebApp SDK, auth validation, Telegram Stars billing, notifications, support bridge |
 
 ### Monetization
 
@@ -72,7 +72,22 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 | Doc | Status | What it covers |
 |-----|--------|---------------|
-| [USER_FLOWS.md](./USER_FLOWS.md) | primary | 19 step-by-step user flows: onboarding, wishlist lifecycle, sharing, reservation, billing |
+| [USER_FLOWS.md](./USER_FLOWS.md) | primary | 24 step-by-step user flows: onboarding v2, wishlist lifecycle, sharing, reservation, billing, Gift Notes, add-ons, promo, lifecycle |
+
+### Product & Analytics
+
+| Doc | Status | What it covers |
+|-----|--------|---------------|
+| [CURRENT_PRODUCT_STATE.md](./CURRENT_PRODUCT_STATE.md) | primary | Production feature inventory, rollout states, constraints |
+| [ONBOARDING_AND_ACTIVATION.md](./ONBOARDING_AND_ACTIVATION.md) | primary | Onboarding v2 flow, activation logic, experiment flags |
+| [ANALYTICS_AND_GODMODE.md](./ANALYTICS_AND_GODMODE.md) | secondary | God Mode dashboard, locale segments, funnel metrics |
+
+### Feature Architecture
+
+| Doc | Status | What it covers |
+|-----|--------|---------------|
+| [SANTA_ARCHITECTURE.md](./SANTA_ARCHITECTURE.md) | secondary | Secret Santa subsystem architecture and flows |
+| [WEB_EXPANSION_AND_AUTH_MODEL.md](./WEB_EXPANSION_AND_AUTH_MODEL.md) | primary | Web auth model, public pages, Telegram/web auth coexistence |
 
 ### Infrastructure & Operations
 
@@ -80,10 +95,12 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 |-----|--------|---------------|
 | [INFRA_AND_ENV.md](./INFRA_AND_ENV.md) | primary | Server, Docker, nginx, environment variables, deployment commands, monitoring |
 | [KNOWN_GAPS_AND_RISKS.md](./KNOWN_GAPS_AND_RISKS.md) | secondary | Critical risks, architecture gaps, security concerns, missing features |
+| [OPERATIONS_RUNBOOK_LIGHT.md](./OPERATIONS_RUNBOOK_LIGHT.md) | ops | Quick prod checks, post-deploy verification, incident triage |
 | [BACKUP_CHECKLIST.md](./BACKUP_CHECKLIST.md) | ops | What must be backed up and how, with cron examples |
 | [RECOVERY_RUNBOOK.md](./RECOVERY_RUNBOOK.md) | ops | Step-by-step server recovery procedures |
 | [MASTER_RESTORE_GUIDE.md](./MASTER_RESTORE_GUIDE.md) | ops | Full restore guide from scratch + doc index |
 | [CRITICAL_BACKUP_ACTIONS.md](./CRITICAL_BACKUP_ACTIONS.md) | ops | Urgent top-10 backup actions checklist |
+| [CHANGELOG_DOCS.md](./CHANGELOG_DOCS.md) | secondary | Documentation revision history |
 
 ---
 
@@ -104,10 +121,10 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 
 | File | Purpose |
 |------|---------|
-| `apps/api/src/index.ts` | Entire Express API (~11,200 lines) |
-| `apps/web/app/miniapp/MiniApp.tsx` | Entire Mini App frontend (~15,000 lines) |
-| `apps/bot/src/index.ts` | Telegram bot (~1,180 lines) |
-| `apps/api/src/url-parser.ts` | URL import pipeline (~810 lines) |
+| `apps/api/src/index.ts` | Entire Express API (~11,964 lines) |
+| `apps/web/app/miniapp/MiniApp.tsx` | Entire Mini App frontend (~16,663 lines) |
+| `apps/bot/src/index.ts` | Telegram bot (~1,190 lines) |
+| `apps/api/src/url-parser.ts` | URL import pipeline (~1,059 lines) |
 | `packages/db/prisma/schema.prisma` | Database schema |
 | `packages/shared/src/i18n.ts` | All UI strings (6 locales: ru, en, zh-CN, hi, es, ar) |
 
@@ -163,8 +180,7 @@ The table below defines the canonical terms used across all documentation. Where
 
 ## What the documentation does NOT cover
 
-- Manual language selection (auto-detected from Telegram locale only)
-- Currency conversion / exchange rates (items support RUB/USD, but no conversion between them)
+- Currency conversion / exchange rates (items support RUB/USD/EUR/GBP, but no conversion between them)
 - Custom archive/inbox display
 - Full "reserved by me" visibility for other users
 
@@ -172,16 +188,53 @@ These are known planned features, shown as disabled "Coming soon" placeholders i
 
 ### Features added since March 17
 
-- **Onboarding v2** — multi-step onboarding flow with A/B testing
+- **Onboarding v2** — multi-step onboarding flow with A/B testing (v1 deprecated)
 - **Promo system** — promo code redemption (e.g. WISHPRO) with entitlement grants
 - **Lifecycle messaging** — winback and engagement messages via bot DM
 - **Public profiles** — deep link `profile_` payload for sharing user profiles
 - **Card display modes** — configurable card appearance in wishlists
+- **Add-on SKU store** — 10 one-time purchase SKUs (extra slots, packs, decorations)
+- **Credits system** — hint and import credits for FREE users
+- **Gift Notes / Occasions** — occasion-based gift planning (19 XTR or included in PRO)
+- **Locale segments analytics** — God Mode language segment dashboard with scope selector
+- **Manual language selection** — users can override auto-detected Telegram locale
+- **Secret Santa** — full Secret Santa campaign subsystem
+- **Support bridge** — in-bot ticket system with admin reply flow
+
+---
+
+## Documentation Rules
+
+### Source of Truth Hierarchy
+
+1. **Code** — always wins over documentation
+2. **Prisma schema** (`packages/db/prisma/schema.prisma`) — canonical for data model
+3. **PLANS / SKU constants** in `apps/api/src/index.ts` — canonical for limits and pricing
+4. **docker-compose.prod.yml** — canonical for infrastructure
+5. **Documentation** — describes and explains, but never overrides code
+
+### How to Update Docs Safely
+
+1. Read the relevant code section before changing any doc
+2. Verify claims against actual constants, not other docs
+3. Update `Last updated` date on every touched file
+4. Add an entry to `CHANGELOG_DOCS.md`
+5. Cross-check related docs for consistency (e.g., if you change a limit in MONETIZATION.md, check ACCESS_MATRIX.md too)
+
+### Canonical Constants Location
+
+| Constant | Source file |
+|----------|-----------|
+| Plan limits (FREE/PRO) | `apps/api/src/index.ts` → `PLANS` |
+| Add-on SKUs | `apps/api/src/index.ts` → `ONE_TIME_SKUS` |
+| Locales | `packages/shared/src/i18n.ts` → `CANONICAL_LOCALES` |
+| Prisma models | `packages/db/prisma/schema.prisma` |
+| Docker services | `docker-compose.prod.yml` |
 
 ---
 
 ## Documentation Status
 
-All docs last synchronized with code on **2026-03-26**.
+All docs last synchronized with code on **2026-04-02**.
 Branch: `main`
 Production: `wishlistik.ru`

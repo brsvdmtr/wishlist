@@ -1,5 +1,5 @@
 # INFRA_AND_ENV — Infrastructure, Environment & Deployment
-> Last updated: 2026-03-26 · Branch: main
+> Last updated: 2026-04-02 · Branch: main
 >
 
 ## Server
@@ -135,9 +135,11 @@ server {
 | NEXT_PUBLIC_MINIAPP_SHORT_NAME | web | (empty) | Not used in current code |
 | INTERNAL_API_BASE_URL | web | http://api:3001 | SSR API URL |
 | MAINTENANCE_MODE | api, bot | false | Set to `true` to block all /tg/* and /public/* with 503+MAINTENANCE code |
-| ONBOARDING_V2_ROLLOUT | api | 0 | Percentage (0-100) of new users who see onboarding v2 flow |
+| ONBOARDING_V2_ROLLOUT | api | ab50 | Percentage (0-100) of new users who see onboarding v2 flow |
 | GOD_MODE_TELEGRAM_IDS | api | (empty) | Comma-separated Telegram user IDs allowed to toggle god mode |
 | ADMIN_ALERT_CHAT_IDS | api, bot | (empty) | Comma-separated Telegram chat IDs for startup/crash alerts |
+| MARKETPLACE_PARSER_DISABLED | api | (empty) | Set to `1` to disable the marketplace orchestrator and route all marketplace URLs through the legacy parser |
+| NEXT_TELEMETRY_DISABLED | web | 1 | Disables Next.js anonymous telemetry collection |
 | WATCHDOG_BASE_URL | watchdog | (required) | Base URL to check, e.g. `https://wishlistik.ru` |
 | WATCHDOG_STATE_FILE | watchdog | /tmp/watchdog-state.json | State file for deduplicating alerts |
 | WATCHDOG_TIMEOUT_MS | watchdog | 8000 | HTTP timeout for watchdog checks |

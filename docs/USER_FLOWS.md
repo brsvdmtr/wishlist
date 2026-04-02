@@ -1,6 +1,6 @@
 # 📋 WishBoard — User Flows
 
-> Source of truth for all user journeys. Last updated: 2026-03-26 · Branch: main
+> Source of truth for all user journeys. Last updated: 2026-04-02 · Branch: main
 >
 > This document reflects the product as implemented, not aspirational features.
 
@@ -27,6 +27,11 @@
 17. [PRO Subscription Cancellation](#flow-17-pro-subscription-cancellation)
 18. [Support / Contact](#flow-18-support--contact)
 19. [Guest Detecting They Are the Owner](#flow-19-guest-detecting-they-are-the-owner)
+20. [Gift Notes / Occasions](#flow-20-gift-notes--occasions)
+21. [Add-on Purchase](#flow-21-add-on-purchase)
+22. [Promo Code Redemption](#flow-22-promo-code-redemption)
+23. [Lifecycle / Degradation](#flow-23-lifecycle--degradation)
+24. [Change Badges / Unread](#flow-24-change-badges--unread)
 
 ---
 
@@ -48,25 +53,33 @@
 
 ---
 
-## Flow 1: 🚀 Onboarding / First Launch
+## Flow 1: 🚀 Onboarding / First Launch (v2)
 
-**Actor:** New user, no prior session.
+**Actor:** New user, no prior session. v1 onboarding is deprecated; all new users go through v2.
 
-1. User finds or is linked to the WishBoard bot in Telegram.
-2. User sends `/start` to the bot.
-3. Bot registers the menu button labelled "Вишлист" in the Telegram chat.
-4. User taps the "Вишлист" menu button.
-5. Telegram opens the Mini App WebView.
-6. Mini App initialises: reads `window.Telegram.WebApp.initData` (contains `tg_user` payload).
-7. Server validates the HMAC signature of `initData`.
-8. Server calls `getOrCreateTgUser()` — creates a new user record if one does not exist, or returns the existing record.
-9. If the user has no wishlists yet, the app displays the **welcome screen** with a "Создать первый вишлист" call-to-action button.
-10. User taps "Создать первый вишлист" → proceeds to [Flow 2](#flow-2-creating-a-wishlist).
-11. Once at least one wishlist exists, the app displays the **home screen** (`my-wishlists` view) on subsequent opens.
+**Eligibility:** User has no real (non-demo) items and no COMPLETED/DISMISSED onboarding state.
+
+**Controlled by:** `ONBOARDING_V2_ROLLOUT` env (default: `ab50` = 50% A/B), `ONBOARDING_FORCED_USERS` env.
+
+1. User opens WishBoard via bot menu button, `/start` deep link, or shared link.
+2. Mini App initializes: validates `initData` HMAC, calls `getOrCreateTgUser()`.
+3. Server checks onboarding eligibility. If eligible → frontend enters onboarding flow.
+4. **`onboarding-entry`** — Welcome screen with CTA to start.
+5. **`onboarding-try`** — User is prompted to try adding an item (demo or URL import). Two market segments with locale-based catalog templates (ru vs global).
+6. **`onboarding-success`** — Shown if try-import succeeds. Or **`onboarding-recovery`** — shown if import fails, with manual item creation option.
+7. **`onboarding-catalog`** — Browse catalog of template wishlists for inspiration.
+8. **`onboarding-create-wishlist`** — Create first wishlist.
+9. **`onboarding-share`** — Prompt to share the new wishlist.
+10. Onboarding state is persisted as `COMPLETED` with a `completionReason`.
+
+**Completion reasons:** `completed`, `skipped`, `dismissed`, `created_wishlist`, `imported_item`, `manual_item`, `timeout`.
+
+**Post-onboarding:** User lands on `my-wishlists` home screen.
 
 **Edge cases:**
-- If `initData` HMAC validation fails, the server returns `401`. The Mini App shows an error and does not proceed.
-- If Telegram is unreachable or the WebApp context is missing, the app cannot function (it requires the Telegram WebApp environment).
+- If `initData` HMAC validation fails → 401, error screen.
+- If user already has real items → onboarding is skipped, goes directly to `my-wishlists`.
+- Demo items created during onboarding are marked with `origin: 'DEMO'` and placed in a SYSTEM_DRAFTS wishlist.
 
 ---
 
@@ -531,11 +544,85 @@
 
 ---
 
-## New Flows Added Since March 17
+## Flow 20: 🎂 Gift Notes / Occasions
 
-The following user flows have been added but are not yet fully documented here:
+**Actor:** Authenticated user with Gift Notes access (PRO or purchased unlock).
 
-- **Onboarding v2** — Multi-step guided onboarding (welcome, import, share, reserve, complete) with A/B testing against v1
-- **Promo code redemption** — User enters a promo code (e.g. WISHPRO) to receive entitlement grants
-- **Public profile sharing** — User shares their profile via `profile_` deep link; recipients see public wishlists
-- **Lifecycle messaging** — Automated winback messages via bot DM when PRO expires; engagement nudges for inactive users
+1. User navigates to Gift Notes from settings or deep link (`startapp=occasion_{id}`).
+2. **Access check:** PRO users have access automatically. FREE users see a paywall (19 XTR one-time unlock via `POST /tg/billing/gift-notes/checkout`).
+3. User sees list of occasions (`GET /tg/gift-occasions`).
+4. User creates a new occasion: name, type (`BIRTHDAY`/`ANNIVERSARY`/`HOLIDAY`/`OTHER`), date, recurrence.
+5. Within an occasion, user adds gift ideas (sub-CRUD).
+6. Occasions can be shared via deep link `startapp=occasion_{id}`.
+
+**PRO gate:** Gift Notes feature requires either PRO plan or `gift_notes_unlock` add-on.
+
+---
+
+## Flow 21: 🛒 Add-on Purchase
+
+**Actor:** FREE or PRO user hitting a limit.
+
+1. User hits a limit (e.g., wishlist count = plan limit) → API returns 402.
+2. Frontend shows **upsell sheet** with context-specific messaging.
+3. Upsell sheet offers: "Upgrade to PRO" (if FREE) and/or relevant add-on SKU.
+4. User selects an add-on → `POST /tg/billing/addon/checkout` with `{ sku, targetId? }`.
+5. Server validates SKU exists, checks per-SKU cap (ADDON_CAPS), creates Telegram Stars invoice.
+6. Returns `{ invoiceLink }` → frontend opens via `Telegram.WebApp.openInvoice()`.
+7. User pays in Telegram → bot receives `successful_payment` → records `Purchase` + creates `UserAddOn` or increments `UserCredits`.
+8. Frontend polls `POST /tg/billing/addon/sync` to confirm.
+9. User can now proceed past the limit.
+
+**Per-SKU caps:** e.g., max 3 extra wishlist slots for FREE, max 5 for PRO.
+
+---
+
+## Flow 22: 🎟️ Promo Code Redemption
+
+**Actor:** Any authenticated user.
+
+1. User opens Settings screen.
+2. User enters a promo code in the promo input field.
+3. App sends `POST /tg/promo/apply` with `{ code }`. Code is uppercased and trimmed.
+4. Server validates:
+   - Campaign exists and is active
+   - Not expired, redemption cap not reached
+   - User hasn't already redeemed this campaign
+5. **If user is FREE:** Creates `PromoRedemption` with `status='ACTIVE'`. User gets PRO for the campaign's grant duration.
+6. **If user is paid PRO:** Creates `PromoRedemption` with `status='ACCEPTED_FOR_PAID'`. Recorded but PRO source remains `subscription`.
+7. Frontend refreshes plan state and shows success.
+
+**Rate limit:** 5 attempts per 60 seconds per user.
+**Error codes:** `INVALID_CODE`, `EXPIRED`, `LIMIT_REACHED`, `ALREADY_REDEEMED`, `RATE_LIMITED`.
+
+---
+
+## Flow 23: ⏳ Lifecycle / Degradation
+
+**Actor:** System (automated), affecting users who lose PRO.
+
+**Trigger:** PRO subscription expires or promo grant expires.
+
+1. **Phase 1 — GRACE_PERIOD (14 days):** User retains access but receives lifecycle DM via bot warning about upcoming degradation. Message includes promo code (e.g., WISHPRO).
+2. **Phase 2 — ARCHIVED:** Wishlists and items beyond FREE limits are marked `readOnly: true`. User can still view but not add/edit. Excess wishlists become read-only (oldest first).
+3. **Phase 3 — PURGED (90 days):** Archived items beyond limits are permanently deleted.
+
+**Recovery:** If user regains PRO (subscription or promo) at any phase, `DegradationState` resets to `NONE`. All read-only restrictions are lifted.
+
+**Automation:** Hourly cron jobs check for expired subscriptions and progress degradation phases. `LifecycleTouch` model prevents duplicate messages.
+
+---
+
+## Flow 24: 🔴 Change Badges / Unread
+
+**Actor:** Subscriber viewing subscribed wishlists.
+
+1. User subscribes to a friend's wishlist (see Flow 10).
+2. When changes occur in a subscribed wishlist (items added/edited/removed), unread counts increment per-wishlist.
+3. On home screen (`my-wishlists`), subscribed wishlists with changes show a badge with the unread count.
+4. User opens the subscribed wishlist → `POST /tg/me/subscriptions/:id/read` marks changes as read.
+5. Badge clears.
+
+**Comment unreads:** Similar per-item unread tracking for comments via `POST /tg/items/:id/comments/mark-read`.
+
+**Refresh:** Unread counts refresh when the app comes to foreground (Telegram WebApp `viewportChanged` or `resume` event).

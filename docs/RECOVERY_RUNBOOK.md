@@ -1,6 +1,6 @@
 # RECOVERY_RUNBOOK.md - Step-by-Step Disaster Recovery
 
-> Last updated: 2026-03-26 · Branch: main
+> Last updated: 2026-04-02 · Branch: main
 
 ## Prerequisites
 
@@ -440,7 +440,7 @@ ls -lh /tmp/backup.sql
 
 # Count tables in dump:
 grep -c "^CREATE TABLE" /tmp/backup.sql
-# Expected: ~7 tables (User, Wishlist, Item, Tag, ItemTag, ReservationEvent, Comment + _prisma_migrations)
+# Expected: ~51 tables (schema has 51 models as of April 2026 + _prisma_migrations)
 ```
 
 ### 8.2 Verify DB Restore Integrity
