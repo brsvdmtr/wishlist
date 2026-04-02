@@ -52,7 +52,7 @@ WishBoard lets Telegram users create wishlists and share them with friends. Frie
 
 | Property | Value |
 |----------|-------|
-| Audit date | March 26, 2026 |
+| Audit date | April 2, 2026 |
 | Audited branch | `main` |
 | Confidence | Most data VERIFIED_FROM_CODE; server-side items marked NEEDS_VERIFICATION |
 
@@ -91,7 +91,7 @@ wishlist/
 ├── apps/
 │   ├── api/                    # Express REST API (port 3001)
 │   │   ├── src/
-│   │   │   ├── index.ts        # ALL backend code (~9000+ lines)
+│   │   │   ├── index.ts        # ALL backend code (~11,964 lines)
 │   │   │   ├── sort.ts         # Item sorting logic
 │   │   │   ├── sort.test.ts    # Sort unit tests
 │   │   │   └── seed.ts         # Demo data seeder
@@ -109,7 +109,7 @@ wishlist/
 │   └── web/                    # Next.js 14 Frontend (port 3000)
 │       ├── app/
 │       │   ├── miniapp/
-│       │   │   └── MiniApp.tsx  # ENTIRE Mini App (~10000+ lines)
+│       │   │   └── MiniApp.tsx  # ENTIRE Mini App (~16,663 lines)
 │       │   ├── admin/           # Admin panel pages
 │       │   ├── w/[slug]/        # Public wishlist pages
 │       │   ├── layout.tsx       # Root layout

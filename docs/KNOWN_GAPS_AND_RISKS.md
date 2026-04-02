@@ -1,5 +1,5 @@
 # KNOWN_GAPS_AND_RISKS — Risks, Weak Points & Missing Items
-> Last updated: 2026-03-26 · Branch: main
+> Last updated: 2026-04-02 · Branch: main
 
 ---
 
@@ -33,12 +33,12 @@
 ## ARCHITECTURE RISKS
 
 ### 5. Monolithic API (Single File)
-- **Risk**: `apps/api/src/index.ts` is ~9000+ lines (verified 2026-03-26) — grew significantly since March 17 (~4100 lines then) due to promo system, lifecycle messaging, public profiles, and other features
-- **Impact**: Hard to maintain, test, and reason about. File size has more than doubled.
-- **Note**: Post-monetization + URL import + promo + lifecycle expansion; works for current scale but becomes fragile as features grow
+- **Risk**: `apps/api/src/index.ts` is ~11,964 lines (verified 2026-04-02) — grew significantly since March 17 (~4100 lines then) due to promo system, lifecycle messaging, public profiles, i18n, credits/billing, and other features
+- **Impact**: Hard to maintain, test, and reason about. File size has nearly tripled.
+- **Note**: Post-monetization + URL import + promo + lifecycle + i18n + credits expansion; works for current scale but becomes fragile as features grow
 
 ### 6. Monolithic Frontend (Single File)
-- **Risk**: `MiniApp.tsx` is ~10000+ lines with 50+ useState hooks (verified 2026-03-26) — grew significantly since March 17 (~6500 lines then)
+- **Risk**: `MiniApp.tsx` is ~16,663 lines with 50+ useState hooks (verified 2026-04-02) — grew significantly since March 17 (~6500 lines then)
 - **Impact**: State management complexity, no code splitting
 - **Note**: Acceptable for Telegram Mini App constraints
 
@@ -163,11 +163,6 @@
 - **Gap**: NEEDS VERIFICATION if certbot auto-renewal is configured
 - **Impact**: Site goes down if cert expires
 
-### 29. Git Branch Strategy
-- **Status**: Production now runs `main` branch. Work from `claude/wizardly-satoshi` has been merged.
-- **Risk**: RESOLVED — production is on `main` as expected
-- **Impact**: Standard workflow now applies; contributors target `main`
-
 ### 30. Client-Only PRO Gate for Recommended Sort
 - **Risk**: Guest sort "Recommended" is shown as PRO on client, but no server-side enforcement
 - **Impact**: Can be bypassed with custom client
@@ -182,6 +177,45 @@
 - **Risk**: URL import cache (1000 entries, 24h TTL) is in-memory in url-parser.ts
 - **Impact**: After API restart, all cached parses must be re-fetched
 - **Severity**: LOW (performance only)
+
+---
+
+## NEWLY IDENTIFIED RISKS (April 2026)
+
+### 33. No Automated Tests
+- **Risk**: No unit, integration, or E2E test suite (except one `sort.test.ts`)
+- **Impact**: Regressions can only be caught manually; refactoring is high-risk
+- **Severity**: CRITICAL
+
+### 34. No Rate Limiting on Most Authenticated Endpoints
+- **Risk**: Telegram-authenticated `/tg/*` endpoints have no rate limiting
+- **Impact**: A malicious or buggy client can flood the API with requests
+- **Severity**: HIGH
+
+### 35. Credits/Billing Without Automated Reconciliation
+- **Risk**: Credit purchases and plan upgrades have no automated reconciliation against payment provider records
+- **Impact**: Discrepancies between payment provider and internal credit balance may go undetected
+- **Severity**: HIGH
+
+### 36. Monolith File Sizes (~12K API + ~17K Frontend in 2 Files)
+- **Risk**: Two files contain virtually all application logic (~11,964 + ~16,663 lines)
+- **Impact**: IDE performance, merge conflicts, impossible to assign ownership or review efficiently
+- **Severity**: HIGH
+
+### 37. In-Memory setInterval Cron Jobs Without Distributed Locking
+- **Risk**: 11+ `setInterval` background jobs run in the API process (promo expiry, lifecycle messages, notification queue flush, etc.)
+- **Impact**: If multiple API instances run, jobs execute in parallel with no deduplication; on restart, timers reset and may skip or double-fire
+- **Severity**: MEDIUM
+
+### 38. Language Data Migration — Legacy Users Have NULL Language
+- **Risk**: Users created before i18n launch have `language = NULL` in the database
+- **Impact**: Fallback logic must handle NULL everywhere; analytics on language distribution is incomplete
+- **Severity**: MEDIUM
+
+### 39. Support System via supportId Only — Admin-Only Reply
+- **Risk**: Support tickets are created with a `supportId` and only admins can reply via the admin panel
+- **Impact**: No user-facing ticket history or status; users have no way to check if their issue was addressed
+- **Severity**: LOW
 
 ---
 
@@ -215,9 +249,9 @@
 
 | File | Lines | Why Critical |
 |------|-------|-------------|
-| `apps/api/src/index.ts` | ~9000+ | ENTIRE backend logic |
-| `apps/web/app/miniapp/MiniApp.tsx` | ~10000+ | ENTIRE Mini App frontend |
-| `packages/db/prisma/schema.prisma` | ~440 | Database schema |
+| `apps/api/src/index.ts` | ~11,964 | ENTIRE backend logic |
+| `apps/web/app/miniapp/MiniApp.tsx` | ~16,663 | ENTIRE Mini App frontend |
+| `packages/db/prisma/schema.prisma` | ~1,283 | Database schema (51 models) |
 | `packages/db/prisma/migrations/*` | varies | Migration history |
 | `docker-compose.prod.yml` | 91 | Production deployment config |
 | `Dockerfile.api` | 43 | API container build |
