@@ -645,6 +645,8 @@ publicRouter.get(
       ? ownerProfile.avatarUrl
       : null;
 
+    trackAnalyticsEvent({ event: 'guest.view_opened', props: { slug, itemCount: wishlist.items.length } });
+
     return res.json({
       wishlist: {
         id: wishlist.id,
@@ -859,6 +861,8 @@ publicRouter.post(
     if (result.kind === 'not_found') return res.status(404).json({ error: 'Item not found' });
     if (result.kind === 'conflict')
       return res.status(409).json({ error: 'Item is not available' });
+
+    trackAnalyticsEvent({ event: 'reservation.succeeded', props: { itemId: id, hasReserverUser: !!parsed.data.actorHash } });
 
     return res.json({ item: mapItemForPublic(result.item) });
   }),
@@ -1568,6 +1572,38 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
       .create({ data: { event, userId, props: props ? (props as any) : undefined } })
       .catch(() => {});
   }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Product analytics event helper ──────────────────────────────────────────
+const ANALYTICS_EVENTS_SET = new Set([
+  'bot.start_received', 'miniapp.open_attempt', 'miniapp.tg_context_detected',
+  'miniapp.initdata_present', 'miniapp.bootstrap_started', 'miniapp.bootstrap_succeeded',
+  'miniapp.bootstrap_failed', 'miniapp.first_rendered', 'miniapp.boot_timeout',
+  'miniapp.fatal_render_error', 'wishlist.created', 'wish.created',
+  'import.started', 'import.succeeded', 'import.failed',
+  'guest.view_opened', 'reservation.succeeded',
+]);
+
+function trackAnalyticsEvent(params: {
+  event: string;
+  userId?: string;
+  props?: Record<string, unknown>;
+}): void {
+  if (!ANALYTICS_EVENTS_SET.has(params.event)) return;
+  let props = params.props;
+  if (props) {
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(props)) {
+      cleaned[k] = typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '...' : v;
+    }
+    const ser = JSON.stringify(cleaned);
+    props = ser.length > 1024 ? { _truncated: true } : cleaned;
+  }
+  prisma.analyticsEvent.create({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: { event: params.event, userId: params.userId ?? null, props: props ? (props as any) : undefined },
+  }).catch(() => {});
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2448,6 +2484,8 @@ tgRouter.post(
     });
     if (existingRegular === 1) trackEvent('first_regular_wishlist_created', user.id, { wishlistId: wishlist.id, source: 'manual', platform: 'miniapp' });
 
+    trackAnalyticsEvent({ event: 'wishlist.created', userId: user.id, props: { source: 'miniapp' } });
+
     return res.status(201).json({
       wishlist: { ...wishlist, deadline: wishlist.deadline?.toISOString() ?? null, itemCount: 0, reservedCount: 0 },
     });
@@ -3055,6 +3093,12 @@ tgRouter.post(
       platform: 'miniapp', isFirstItem: totalUserItems === 1,
     });
     if (totalUserItems === 1) trackEvent('first_item_created', user.id, { itemId: item.id, wishlistType: wishlist.type, source: 'manual', platform: 'miniapp' });
+
+    trackAnalyticsEvent({
+      event: 'wish.created',
+      userId: String(req.tgUser!.id),
+      props: { wishlistId, hasUrl: !!parsed.data.url, hasPrice: !!parsed.data.price },
+    });
 
     // Notify wishlist subscribers
     void notifySubscribersOfChange(
@@ -4569,11 +4613,33 @@ tgRouter.post(
       return res.status(402).json({ error: 'Pro feature', feature: 'url_import', planCode: ent.plan.code });
     }
 
+    let importDomain = '';
+    try { importDomain = new URL(parsed.data.url).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
+
+    trackAnalyticsEvent({
+      event: 'import.started',
+      userId: user.id,
+      props: { domain: importDomain },
+    });
+
     try {
       const noCache = req.headers['x-parse-no-cache'] === '1';
       const result = await importUrlForUser(user.id, parsed.data.url, parsed.data.note, parsed.data.source || 'miniapp', noCache ? { noCache: true } : undefined);
+
+      trackAnalyticsEvent({
+        event: 'import.succeeded',
+        userId: user.id,
+        props: { domain: importDomain, hasPrice: !!result.item.price, hasTitle: !!result.item.title },
+      });
+
       return res.status(201).json(result);
     } catch (err: any) {
+      trackAnalyticsEvent({
+        event: 'import.failed',
+        userId: user.id,
+        props: { domain: importDomain, reason: String(err.message ?? 'unknown').slice(0, 200) },
+      });
+
       if (err.statusCode === 402) {
         return res.status(402).json({ error: t('api_import_too_many', getRequestLocale(req)), limit: DRAFTS_ITEM_LIMIT });
       }
