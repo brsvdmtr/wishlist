@@ -1181,7 +1181,8 @@ if (!token) {
     })
     .catch((err: unknown) => {
       logger.fatal({ err }, 'failed to start');
-      process.exitCode = 1;
+      if (process.env.GLITCHTIP_DSN && err instanceof Error) Sentry.captureException(err);
+      void sendAdminAlert(`🔴 <b>Bot failed to start</b>\n${String(err)}`).finally(() => process.exit(1));
     });
 
   // Heartbeat: update every 60 s so /health/deep can detect bot absence
