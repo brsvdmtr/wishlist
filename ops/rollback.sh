@@ -60,6 +60,23 @@ for s in "${SERVICES[@]}"; do
   [[ "$s" = "api" || "$s" = "web" ]] && NEEDS_MAINTENANCE=true
 done
 
+# ── Safety trap: disable maintenance mode on unexpected exit ──────────────────
+
+MAINTENANCE_ENABLED=false
+cleanup_maintenance() {
+  if $MAINTENANCE_ENABLED; then
+    warn "Unexpected exit — disabling maintenance mode"
+    "$PROJECT_DIR/ops/maintenance/off.sh" 2>/dev/null || true
+    local cid
+    cid=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null || true)
+    if [ -n "$cid" ]; then
+      docker exec "$cid" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || true
+      docker compose -f "$COMPOSE_FILE" restart api 2>/dev/null || true
+    fi
+  fi
+}
+trap cleanup_maintenance EXIT
+
 # ── Read last successful release ──────────────────────────────────────────────
 
 cd "$PROJECT_DIR"
@@ -86,6 +103,7 @@ log "  Target:   $SHORT_TARGET"
 if $NEEDS_MAINTENANCE; then
   log "Enabling MAINTENANCE_MODE"
   "$PROJECT_DIR/ops/maintenance/on.sh"
+  MAINTENANCE_ENABLED=true
 fi
 
 # ── Checkout target SHA ───────────────────────────────────────────────────────
@@ -135,17 +153,19 @@ log "  /health/deep → $DEEP_STATUS ✓"
 if $NEEDS_MAINTENANCE; then
   log "Disabling MAINTENANCE_MODE"
   "$PROJECT_DIR/ops/maintenance/off.sh"
+  MAINTENANCE_ENABLED=false
 
   # The Docker image has MAINTENANCE_MODE=true baked in (COPY . . includes .env).
   # off.sh only updates the host file. Patch the running container and restart.
   for s in "${SERVICES[@]}"; do
     if [[ "$s" = "api" ]]; then
-      CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -q api 2>/dev/null || true)
+      CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null || true)
       if [ -n "$CONTAINER" ]; then
-        docker exec "$CONTAINER" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || true
+        docker exec "$CONTAINER" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || \
+          warn "Could not patch /app/.env inside container"
         log "Restarting api to apply MAINTENANCE_MODE=false..."
         docker compose -f "$COMPOSE_FILE" restart api
-        sleep 5
+        sleep 8
         RS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || true)
         if [ "$RS" != "200" ]; then
           warn "Post-maintenance restart health check returned $RS"

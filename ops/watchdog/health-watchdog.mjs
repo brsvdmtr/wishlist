@@ -110,8 +110,9 @@ const [healthResult, webResult, tgResult] = await Promise.all([
 ]);
 
 // /tg/bootstrap should return 401 (unauthorized) — that means the route is live.
-// 503 = MAINTENANCE_MODE is stuck on. Anything else non-200 is also fine (route is reachable).
-const tgRouteDown = tgResult.status === 503 || tgResult.status === 0;
+// 503 = MAINTENANCE_MODE is stuck on. 502/504 = nginx can't reach the container.
+// 0 = network error / timeout. Anything else (401, 400, etc.) = route is reachable = OK.
+const tgRouteDown = tgResult.status === 503 || tgResult.status === 502 || tgResult.status === 504 || tgResult.status === 0;
 
 const isDown = !healthResult.ok || !webResult.ok || tgRouteDown;
 

@@ -43,6 +43,14 @@ log "Starting backup $TIMESTAMP"
 
 mkdir -p "$WORK_DIR" "$BACKUP_DIR"
 
+# Cleanup temp dir on any exit (success or failure)
+cleanup_work_dir() {
+  if [ -d "$WORK_DIR" ]; then
+    rm -rf "$WORK_DIR"
+  fi
+}
+trap cleanup_work_dir EXIT
+
 # ── 1. pg_dump ────────────────────────────────────────────────────────────────
 log "Dumping PostgreSQL..."
 docker compose -f "$COMPOSE_FILE" exec -T postgres \
@@ -63,7 +71,11 @@ fi
 
 # ── 3. .env ───────────────────────────────────────────────────────────────────
 log "Copying .env..."
-cp "$PROJECT_DIR/.env" "$WORK_DIR/dot-env"
+if [ -f "$PROJECT_DIR/.env" ]; then
+  cp "$PROJECT_DIR/.env" "$WORK_DIR/dot-env"
+else
+  log "  WARNING: .env not found at $PROJECT_DIR/.env, skipping"
+fi
 
 # ── 4. Bundle ─────────────────────────────────────────────────────────────────
 ARCHIVE="$BACKUP_DIR/wishlist_${TIMESTAMP}.tar.gz"
@@ -106,6 +118,7 @@ fi
 
 # ── 7. Cleanup ────────────────────────────────────────────────────────────────
 log "Cleaning up..."
+# WORK_DIR cleaned by EXIT trap, but remove explicitly here for clarity
 rm -rf "$WORK_DIR"
 find "$BACKUP_DIR" -name "wishlist_*.tar.gz" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null
 find "$BACKUP_DIR" -name "wishlist_*.tar.gz.sha256" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null

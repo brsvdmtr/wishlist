@@ -61,6 +61,24 @@ done
 
 log "Services to deploy: ${SERVICES[*]}"
 
+# ── Safety trap: disable maintenance mode on unexpected exit ──────────────────
+
+MAINTENANCE_ENABLED=false
+cleanup_maintenance() {
+  if $MAINTENANCE_ENABLED; then
+    warn "Unexpected exit — disabling maintenance mode"
+    "$PROJECT_DIR/ops/maintenance/off.sh" 2>/dev/null || true
+    # Also patch running api container if it exists
+    local cid
+    cid=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null || true)
+    if [ -n "$cid" ]; then
+      docker exec "$cid" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || true
+      docker compose -f "$COMPOSE_FILE" restart api 2>/dev/null || true
+    fi
+  fi
+}
+trap cleanup_maintenance EXIT
+
 # ── Pre-flight checks ────────────────────────────────────────────────────────
 
 cd "$PROJECT_DIR"
@@ -81,6 +99,7 @@ echo "$FULL_SHA" > "$DEPLOY_DIR/last-attempted-release"
 if $NEEDS_MAINTENANCE; then
   log "Enabling MAINTENANCE_MODE (suppresses watchdog alerts)"
   "$PROJECT_DIR/ops/maintenance/on.sh"
+  MAINTENANCE_ENABLED=true
 fi
 
 # ── Build ─────────────────────────────────────────────────────────────────────
@@ -135,7 +154,7 @@ log "  /health/deep → $DEEP_STATUS ✓"
 
 # Parse bot heartbeat age from response
 if $HAS_BOT; then
-  BOT_AGE=$(echo "$DEEP_RESPONSE" | grep -o '"ageSec":[0-9]*' | head -1 | cut -d: -f2)
+  BOT_AGE=$(echo "$DEEP_RESPONSE" | grep -oP '"ageSec"\s*:\s*\K[0-9]+' | head -1)
   if [ -n "$BOT_AGE" ] && [ "$BOT_AGE" -lt 120 ] 2>/dev/null; then
     log "  bot heartbeat: ${BOT_AGE}s ago ✓"
   else
@@ -149,18 +168,20 @@ fi
 if $NEEDS_MAINTENANCE; then
   log "Disabling MAINTENANCE_MODE"
   "$PROJECT_DIR/ops/maintenance/off.sh"
+  MAINTENANCE_ENABLED=false  # prevent EXIT trap from double-running
 
   # The Docker image has MAINTENANCE_MODE=true baked in (COPY . . includes .env).
   # off.sh only updates the host file. We must also patch the running container
   # and restart so the API process picks up MAINTENANCE_MODE=false.
   for s in "${SERVICES[@]}"; do
     if [[ "$s" = "api" ]]; then
-      CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -q api 2>/dev/null || true)
+      CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null || true)
       if [ -n "$CONTAINER" ]; then
-        docker exec "$CONTAINER" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || true
+        docker exec "$CONTAINER" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || \
+          warn "Could not patch /app/.env inside container"
         log "Restarting api to apply MAINTENANCE_MODE=false..."
         docker compose -f "$COMPOSE_FILE" restart api
-        sleep 5
+        sleep 8
         # Quick health re-check after restart
         RS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || true)
         if [ "$RS" != "200" ]; then
