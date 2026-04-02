@@ -358,6 +358,22 @@ nginx will serve the static maintenance page for 502/503/504 automatically.
 
 ---
 
+## Observability Environment Variables
+
+| Variable | Used by | Default | Description |
+|----------|---------|---------|-------------|
+| `LOG_LEVEL` | api, bot | `info` | Pino log level (trace/debug/info/warn/error/fatal) |
+| `LOG_PRETTY` | api, bot | `false` | Human-readable log output (dev only) |
+| `APP_RELEASE` | api, bot, web | `unknown` | Git SHA or version tag for release tracking |
+| `GLITCHTIP_DSN` | api, bot | — | GlitchTip/Sentry DSN for server-side error tracking |
+| `GLITCHTIP_ENVIRONMENT` | api, bot | `production` | Environment tag for error reports |
+| `NEXT_PUBLIC_GLITCHTIP_DSN` | web | — | GlitchTip DSN for frontend error tracking |
+| `ENABLE_ERROR_TRACKING` | api, bot | `false` | Master switch for error tracking |
+| `DAILY_REPORT_HOUR` | cron | `9` | UTC hour for daily digest delivery |
+| `GRAFANA_ADMIN_PASSWORD` | grafana | `wishboard` | Admin password for Grafana UI |
+
+---
+
 ## Dockerfile Notes
 
 ### Dockerfile.api (node:20-bookworm-slim)
