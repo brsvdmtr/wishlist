@@ -10,6 +10,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '@wishlist/db';
+import logger from './logger';
+import pinoHttp from 'pino-http';
 import { parseUrl, validateUrl } from './url-parser.js';
 import { t, detectLocale, resolveEffectiveLocale, pluralize, type Locale, getOnboardingMeta, type OnboardingMeta, type OnboardingVariant, type AcquisitionPath, type CatalogTemplate, getCatalogForSegment } from '@wishlist/shared';
 
@@ -49,6 +51,16 @@ app.use(
   }),
 );
 app.use(express.json());
+app.use(pinoHttp({
+  logger,
+  autoLogging: {
+    ignore: (req) => req.url === '/api/health' || req.url === '/api/health/deep',
+  },
+  customProps: (req) => ({
+    requestId: req.id,
+  }),
+  genReqId: () => crypto.randomUUID(),
+}));
 
 // ─── File uploads ─────────────────────────────────────────────────────────────
 const UPLOAD_DIR = (process.env.UPLOAD_DIR ?? '').trim() || path.join(process.cwd(), 'uploads');
@@ -645,6 +657,8 @@ publicRouter.get(
       ? ownerProfile.avatarUrl
       : null;
 
+    trackAnalyticsEvent({ event: 'guest.view_opened', props: { slug, itemCount: wishlist.items.length } });
+
     return res.json({
       wishlist: {
         id: wishlist.id,
@@ -859,6 +873,8 @@ publicRouter.post(
     if (result.kind === 'not_found') return res.status(404).json({ error: 'Item not found' });
     if (result.kind === 'conflict')
       return res.status(409).json({ error: 'Item is not available' });
+
+    trackAnalyticsEvent({ event: 'reservation.succeeded', props: { itemId: id, hasReserverUser: !!parsed.data.actorHash } });
 
     return res.json({ item: mapItemForPublic(result.item) });
   }),
@@ -1568,6 +1584,38 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
       .create({ data: { event, userId, props: props ? (props as any) : undefined } })
       .catch(() => {});
   }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Product analytics event helper ──────────────────────────────────────────
+const ANALYTICS_EVENTS_SET = new Set([
+  'bot.start_received', 'miniapp.open_attempt', 'miniapp.tg_context_detected',
+  'miniapp.initdata_present', 'miniapp.bootstrap_started', 'miniapp.bootstrap_succeeded',
+  'miniapp.bootstrap_failed', 'miniapp.first_rendered', 'miniapp.boot_timeout',
+  'miniapp.fatal_render_error', 'wishlist.created', 'wish.created',
+  'import.started', 'import.succeeded', 'import.failed',
+  'guest.view_opened', 'reservation.succeeded',
+]);
+
+function trackAnalyticsEvent(params: {
+  event: string;
+  userId?: string;
+  props?: Record<string, unknown>;
+}): void {
+  if (!ANALYTICS_EVENTS_SET.has(params.event)) return;
+  let props = params.props;
+  if (props) {
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(props)) {
+      cleaned[k] = typeof v === 'string' && v.length > 300 ? v.slice(0, 300) + '...' : v;
+    }
+    const ser = JSON.stringify(cleaned);
+    props = ser.length > 1024 ? { _truncated: true } : cleaned;
+  }
+  prisma.analyticsEvent.create({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: { event: params.event, userId: params.userId ?? null, props: props ? (props as any) : undefined },
+  }).catch(() => {});
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2448,6 +2496,8 @@ tgRouter.post(
     });
     if (existingRegular === 1) trackEvent('first_regular_wishlist_created', user.id, { wishlistId: wishlist.id, source: 'manual', platform: 'miniapp' });
 
+    trackAnalyticsEvent({ event: 'wishlist.created', userId: user.id, props: { source: 'miniapp' } });
+
     return res.status(201).json({
       wishlist: { ...wishlist, deadline: wishlist.deadline?.toISOString() ?? null, itemCount: 0, reservedCount: 0 },
     });
@@ -3055,6 +3105,12 @@ tgRouter.post(
       platform: 'miniapp', isFirstItem: totalUserItems === 1,
     });
     if (totalUserItems === 1) trackEvent('first_item_created', user.id, { itemId: item.id, wishlistType: wishlist.type, source: 'manual', platform: 'miniapp' });
+
+    trackAnalyticsEvent({
+      event: 'wish.created',
+      userId: String(req.tgUser!.id),
+      props: { wishlistId, hasUrl: !!parsed.data.url, hasPrice: !!parsed.data.price },
+    });
 
     // Notify wishlist subscribers
     void notifySubscribersOfChange(
@@ -4569,11 +4625,33 @@ tgRouter.post(
       return res.status(402).json({ error: 'Pro feature', feature: 'url_import', planCode: ent.plan.code });
     }
 
+    let importDomain = '';
+    try { importDomain = new URL(parsed.data.url).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
+
+    trackAnalyticsEvent({
+      event: 'import.started',
+      userId: user.id,
+      props: { domain: importDomain },
+    });
+
     try {
       const noCache = req.headers['x-parse-no-cache'] === '1';
       const result = await importUrlForUser(user.id, parsed.data.url, parsed.data.note, parsed.data.source || 'miniapp', noCache ? { noCache: true } : undefined);
+
+      trackAnalyticsEvent({
+        event: 'import.succeeded',
+        userId: user.id,
+        props: { domain: importDomain, hasPrice: !!result.item.price, hasTitle: !!result.item.title },
+      });
+
       return res.status(201).json(result);
     } catch (err: any) {
+      trackAnalyticsEvent({
+        event: 'import.failed',
+        userId: user.id,
+        props: { domain: importDomain, reason: String(err.message ?? 'unknown').slice(0, 200) },
+      });
+
       if (err.statusCode === 402) {
         return res.status(402).json({ error: t('api_import_too_many', getRequestLocale(req)), limit: DRAFTS_ITEM_LIMIT });
       }
@@ -10062,6 +10140,75 @@ tgRouter.post('/santa/campaigns/:id/inbound/hint/fulfill', asyncHandler(async (r
   return res.json({ ok: true });
 }));
 
+// ── Telemetry ingestion ─────────────────────────────────
+const ANALYTICS_EVENTS_ALLOWLIST = new Set([
+  'bot.start_received', 'miniapp.open_attempt', 'miniapp.tg_context_detected',
+  'miniapp.initdata_present', 'miniapp.bootstrap_started', 'miniapp.bootstrap_succeeded',
+  'miniapp.bootstrap_failed', 'miniapp.first_rendered', 'miniapp.boot_timeout',
+  'miniapp.fatal_render_error', 'wishlist.created', 'wish.created',
+  'import.started', 'import.succeeded', 'import.failed',
+  'guest.view_opened', 'reservation.succeeded',
+]);
+
+const telemetryEventSchema = z.object({
+  event: z.string().refine(e => ANALYTICS_EVENTS_ALLOWLIST.has(e), 'Unknown event'),
+  ts: z.number(),
+  props: z.record(z.unknown()).optional(),
+});
+
+const telemetryBodySchema = z.object({
+  events: z.array(telemetryEventSchema).max(20),
+});
+
+const telemetryLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 5,
+  keyGenerator: (req) => (req as Request & { tgUser?: { id?: number } }).tgUser?.id?.toString() || req.ip || 'unknown',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+tgRouter.post('/telemetry', telemetryLimiter, asyncHandler(async (req, res) => {
+  const parsed = telemetryBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid telemetry payload', issues: parsed.error.issues });
+  }
+
+  const userId = req.tgUser?.id ? String(req.tgUser.id) : null;
+  const now = Date.now();
+  const oneHourAgo = now - 3_600_000;
+
+  const records = parsed.data.events.map(ev => {
+    // Clamp timestamp to last hour
+    const ts = Math.max(oneHourAgo, Math.min(now, ev.ts));
+    // Truncate props
+    let props: Record<string, unknown> = ev.props || {};
+    for (const [key, val] of Object.entries(props)) {
+      if (typeof val === 'string' && val.length > 300) {
+        props[key] = val.slice(0, 300) + '...';
+      }
+    }
+    const serialized = JSON.stringify(props);
+    if (serialized.length > 1024) {
+      props = { _truncated: true, event: ev.event };
+    }
+    return {
+      event: ev.event,
+      userId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      props: props as any,
+      createdAt: new Date(ts),
+    };
+  });
+
+  // Batch insert
+  if (records.length > 0) {
+    await prisma.analyticsEvent.createMany({ data: records });
+  }
+
+  return res.json({ ok: true });
+}));
+
 // ─── Maintenance mode middleware ──────────────────────────────────────────────
 // When MAINTENANCE_MODE=true, block /tg/* and /public/* with 503 + code=MAINTENANCE.
 // /health, /health/deep, /uploads, /internal remain accessible.
@@ -11890,8 +12037,7 @@ tgRouter.post('/santa/campaigns/:id/exit-requests/:requestId/deny', asyncHandler
 }));
 
 app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`[api] listening on http://localhost:${PORT}`);
+  logger.info({ port: PORT }, 'API server listening');
   // Send startup alert to admins (best-effort)
   void sendAdminAlert(`🟢 <b>API started</b>\nPort: ${PORT}\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
 
@@ -11952,13 +12098,11 @@ app.listen(PORT, () => {
 
 // ─── Uncaught exception / rejection alerts ────────────────────────────────────
 process.on('uncaughtException', (err) => {
-  // eslint-disable-next-line no-console
-  console.error('[api] uncaughtException:', err);
+  logger.fatal({ err }, 'uncaughtException');
   void sendAdminAlert(`🔴 <b>API uncaughtException</b>\n${String(err)}`).finally(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (reason) => {
-  // eslint-disable-next-line no-console
-  console.error('[api] unhandledRejection:', reason);
+  logger.error({ reason }, 'unhandledRejection');
   void sendAdminAlert(`🔴 <b>API unhandledRejection</b>\n${String(reason)}`);
 });
