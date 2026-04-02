@@ -149,6 +149,28 @@ fi
 if $NEEDS_MAINTENANCE; then
   log "Disabling MAINTENANCE_MODE"
   "$PROJECT_DIR/ops/maintenance/off.sh"
+
+  # The Docker image has MAINTENANCE_MODE=true baked in (COPY . . includes .env).
+  # off.sh only updates the host file. We must also patch the running container
+  # and restart so the API process picks up MAINTENANCE_MODE=false.
+  for s in "${SERVICES[@]}"; do
+    if [[ "$s" = "api" ]]; then
+      CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -q api 2>/dev/null || true)
+      if [ -n "$CONTAINER" ]; then
+        docker exec "$CONTAINER" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || true
+        log "Restarting api to apply MAINTENANCE_MODE=false..."
+        docker compose -f "$COMPOSE_FILE" restart api
+        sleep 5
+        # Quick health re-check after restart
+        RS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || true)
+        if [ "$RS" != "200" ]; then
+          warn "Post-maintenance restart health check returned $RS"
+        else
+          log "  post-restart /health → $RS ✓"
+        fi
+      fi
+    fi
+  done
 fi
 
 # ── Record success ────────────────────────────────────────────────────────────
