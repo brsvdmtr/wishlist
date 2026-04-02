@@ -18,6 +18,16 @@ for (const p of envCandidates) {
   }
 }
 
+// Sentry/GlitchTip error tracking (opt-in)
+import * as Sentry from '@sentry/node';
+if (process.env.GLITCHTIP_DSN) {
+  Sentry.init({
+    dsn: process.env.GLITCHTIP_DSN,
+    environment: process.env.GLITCHTIP_ENVIRONMENT || process.env.NODE_ENV || 'production',
+    release: process.env.APP_RELEASE || 'unknown',
+  });
+}
+
 const token = process.env.BOT_TOKEN;
 const MINI_APP_URL = process.env.MINI_APP_URL ?? 'https://example.com/miniapp';
 
@@ -603,6 +613,7 @@ if (!token) {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[bot] pre_checkout error:', err);
+      if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
       await ctx.answerPreCheckoutQuery(false, 'Error').catch(() => {});
     }
   });
@@ -823,6 +834,7 @@ if (!token) {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[bot] payment processing error:', err);
+      if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
     }
   });
 
@@ -1176,12 +1188,14 @@ if (!token) {
   process.on('uncaughtException', (err) => {
     // eslint-disable-next-line no-console
     console.error('[bot] uncaughtException:', err);
+    if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
     void sendAdminAlert(`🔴 <b>Bot uncaughtException</b>\n${String(err)}`).finally(() => process.exit(1));
   });
 
   process.on('unhandledRejection', (reason) => {
     // eslint-disable-next-line no-console
     console.error('[bot] unhandledRejection:', reason);
+    if (process.env.GLITCHTIP_DSN && reason instanceof Error) Sentry.captureException(reason);
     void sendAdminAlert(`🔴 <b>Bot unhandledRejection</b>\n${String(reason)}`);
   });
 

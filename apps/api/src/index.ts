@@ -26,6 +26,16 @@ for (const p of envCandidates) {
   }
 }
 
+// Sentry/GlitchTip error tracking (opt-in)
+import * as Sentry from '@sentry/node';
+if (process.env.GLITCHTIP_DSN) {
+  Sentry.init({
+    dsn: process.env.GLITCHTIP_DSN,
+    environment: process.env.GLITCHTIP_ENVIRONMENT || process.env.NODE_ENV || 'production',
+    release: process.env.APP_RELEASE || 'unknown',
+  });
+}
+
 const PORT = Number(process.env.PORT ?? 3001);
 const WEB_ORIGIN = (process.env.WEB_ORIGIN ?? '').trim() || 'http://localhost:3000';
 
@@ -10097,6 +10107,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
   // eslint-disable-next-line no-console
   console.error(err);
+  if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
   return res.status(500).json({ error: 'Internal server error' });
 });
 
@@ -11954,11 +11965,13 @@ app.listen(PORT, () => {
 process.on('uncaughtException', (err) => {
   // eslint-disable-next-line no-console
   console.error('[api] uncaughtException:', err);
+  if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
   void sendAdminAlert(`🔴 <b>API uncaughtException</b>\n${String(err)}`).finally(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (reason) => {
   // eslint-disable-next-line no-console
   console.error('[api] unhandledRejection:', reason);
+  if (process.env.GLITCHTIP_DSN && reason instanceof Error) Sentry.captureException(reason);
   void sendAdminAlert(`🔴 <b>API unhandledRejection</b>\n${String(reason)}`);
 });
