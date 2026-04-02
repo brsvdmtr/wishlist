@@ -1,6 +1,8 @@
 # Data Model — Wishlist Telegram Mini App
 
-_Last updated: 2026-03-26_
+_Last updated: 2026-04-02_
+
+> **51 models, 30 enums** (PostgreSQL 16, managed by Prisma ORM)
 
 ---
 
@@ -35,6 +37,7 @@ Lifecycle state of a wish item.
 | `PURCHASED` | Reserver has marked it as purchased                                     |
 | `COMPLETED` | Owner has confirmed receipt (retired state, rarely used)                |
 | `DELETED`   | Soft-deleted. `purgeAfter` set to 90 days from deletion. Excluded from all normal queries |
+| `ARCHIVED`  | Archived by degradation engine when PRO expires and item exceeds FREE limits |
 
 ### `ReservationType`
 Action recorded in the immutable reservation audit log.
@@ -53,6 +56,25 @@ Origin of a comment message.
 | `USER`   | Written by a human (owner or reserver)                   |
 | `SYSTEM` | Auto-generated (e.g., reservation event notification)    |
 
+### `ItemOriginType`
+How an item was created.
+
+| Value      | Meaning                                |
+|------------|----------------------------------------|
+| `MANUAL`   | Created manually by the user (default) |
+| `IMPORTED` | Imported via URL parser                |
+| `DEMO`     | Created as a demo item during onboarding |
+
+### `OnboardingStatus`
+State of a user's onboarding flow.
+
+| Value          | Meaning                           |
+|----------------|-----------------------------------|
+| `NOT_STARTED`  | Onboarding not yet begun          |
+| `IN_PROGRESS`  | User is mid-onboarding            |
+| `COMPLETED`    | User finished the onboarding flow |
+| `DISMISSED`    | User dismissed the onboarding     |
+
 ### `WishlistType`
 Category of wishlist, controls special behavior.
 
@@ -69,6 +91,27 @@ Billing state of a PRO subscription.
 | `ACTIVE`    | PRO features are currently accessible                            |
 | `CANCELLED` | User cancelled; access continues until `currentPeriodEnd`        |
 | `EXPIRED`   | Period ended; PRO features revoked                               |
+
+### `PromoRedemptionStatus`
+State of a promo code redemption.
+
+| Value              | Meaning                                                |
+|--------------------|--------------------------------------------------------|
+| `PENDING`          | Redemption initiated, not yet activated                |
+| `ACTIVE`           | Promo PRO access is currently active                   |
+| `EXPIRED`          | Promo period ended                                     |
+| `ACCEPTED_FOR_PAID`| User already had a paid PRO subscription               |
+| `FAILED`           | Redemption failed (e.g., max redemptions reached)      |
+
+### `DegradationPhase`
+Lifecycle phase after PRO expiration.
+
+| Value          | Meaning                                                    |
+|----------------|------------------------------------------------------------|
+| `NONE`         | Active PRO or never subscribed                             |
+| `GRACE_PERIOD` | 14-day window after downgrade; PRO features still available|
+| `ARCHIVED`     | Grace ended; excess wishlists/items archived               |
+| `PURGED`       | 90 days after archive; archived items hard-deleted          |
 
 ### `HintStatus`
 Delivery state of a hint sent to a friend.
@@ -87,6 +130,8 @@ Supported currencies for item prices.
 |-------|------------------|
 | `RUB` | Russian Ruble (default) |
 | `USD` | US Dollar        |
+| `EUR` | Euro             |
+| `GBP` | British Pound    |
 
 ### `ProfileVisibility`
 Controls who can see a user's public profile page.
@@ -163,6 +208,119 @@ Media type of a support message.
 | `DOCUMENT` | File attachment                  |
 | `OTHER`    | Unsupported or unknown media type|
 
+### `SantaCampaignStatus`
+State machine for a Secret Santa campaign.
+
+| Value              | Meaning                                 |
+|--------------------|-----------------------------------------|
+| `DRAFT`            | Campaign created, not yet open          |
+| `OPEN`             | Accepting participants                  |
+| `LOCKED`           | Registrations closed, awaiting draw     |
+| `DRAW_IN_PROGRESS` | Draw algorithm running                  |
+| `ACTIVE`           | Assignments made, gift exchange live    |
+| `COMPLETED`        | All gifts exchanged                     |
+| `CANCELLED`        | Campaign cancelled by organizer         |
+
+### `SantaCampaignType`
+Type of Secret Santa campaign.
+
+| Value        | Meaning                               |
+|--------------|---------------------------------------|
+| `CLASSIC`    | Single-round Secret Santa (default)   |
+| `MULTI_WAVE` | Multiple rounds of gift exchange      |
+
+### `SantaParticipantStatus`
+State of a participant in a campaign.
+
+| Value     | Meaning                              |
+|-----------|--------------------------------------|
+| `INVITED` | Invited but hasn't joined yet        |
+| `JOINED`  | Active participant                   |
+| `LEFT`    | Voluntarily left the campaign        |
+| `REMOVED` | Removed by organizer                 |
+
+### `SantaGiftStatus`
+Lifecycle state of a gift assignment.
+
+| Value                    | Meaning                                              |
+|--------------------------|------------------------------------------------------|
+| `PENDING`                | Giver hasn't decided yet (initial)                   |
+| `BUYING`                 | Legacy; treated as SELECTED_OUTSIDE in new flows     |
+| `SELECTED_FROM_WISHLIST` | Giver chose an item from receiver's wishlist         |
+| `SELECTED_OUTSIDE`       | Giver chose something not from the wishlist          |
+| `DECLINED_TO_SAY`        | Giver confirms participation but won't disclose      |
+| `SENT`                   | Gift physically sent/handed over                     |
+| `RECEIVED`               | Receiver confirmed; terminal; unlocks reveal         |
+| `MISSED_DEADLINE`        | Auto-set by cron when deadline passed; recoverable   |
+| `ORPHANED`               | Terminal: giver's exit request approved while active  |
+
+### `SantaParticipantRole`
+Role of a participant within a campaign.
+
+| Value         | Meaning                                          |
+|---------------|--------------------------------------------------|
+| `PARTICIPANT` | Default role                                     |
+| `ADMIN`       | Elevated role; can perform organizer actions      |
+
+### `SantaExitRequestStatus`
+State of a participant's exit request.
+
+| Value      | Meaning                                          |
+|------------|--------------------------------------------------|
+| `PENDING`  | Submitted, awaiting organizer decision           |
+| `APPROVED` | Organizer approved; participant removed           |
+| `DENIED`   | Organizer denied; participant stays              |
+
+### `SantaDrawStatus`
+State of a draw operation within a round.
+
+| Value         | Meaning                    |
+|---------------|----------------------------|
+| `PENDING`     | Not yet started            |
+| `IN_PROGRESS` | Draw algorithm running     |
+| `DONE`        | Draw completed             |
+| `FAILED`      | Draw failed (constraints)  |
+
+### `SantaHintStatus`
+State of a Secret Santa hint request.
+
+| Value       | Meaning                                         |
+|-------------|-------------------------------------------------|
+| `PENDING`   | Giver requested, receiver hasn't responded      |
+| `FULFILLED` | Receiver selected wishlist items                |
+| `EXPIRED`   | 48h TTL exceeded without response               |
+| `CANCELLED` | Campaign cancelled or draw invalidated          |
+
+### `SantaNotificationType`
+Types of Santa campaign notifications.
+
+| Value                    | Meaning                                      |
+|--------------------------|----------------------------------------------|
+| `JOINED`                 | Participant joined                           |
+| `LEFT`                   | Participant left                             |
+| `DRAW_DONE`              | Draw completed                               |
+| `GIFT_STATUS_CHANGED`    | Gift status updated                          |
+| `HINT_REQUEST`           | Hint requested from receiver                 |
+| `HINT_RESPONDED`         | Receiver responded to hint                   |
+| `CAMPAIGN_CANCELLED`     | Campaign was cancelled                       |
+| `GIFT_RECEIVED`          | Receiver marked gift as received             |
+| `REVEAL_UNLOCKED`        | Receiver's reveal is ready                   |
+| `DEADLINE_WARNING`       | ~3 days before deadline, giver still pending |
+| `DEADLINE_MISSED`        | Giver auto-updated to MISSED_DEADLINE        |
+| `CHAT_MESSAGE`           | New campaign chat message                    |
+| `POLL_CREATED`           | New poll opened                              |
+| `EXIT_REQUEST_SUBMITTED` | Exit request submitted (to organizers)       |
+| `EXIT_REQUEST_APPROVED`  | Exit request approved (to participant)       |
+| `EXIT_REQUEST_DENIED`    | Exit request denied (to participant)         |
+
+### `SantaChatMessageType`
+Type of message in a campaign chat.
+
+| Value    | Meaning                            |
+|----------|------------------------------------|
+| `USER`   | Regular participant message        |
+| `SYSTEM` | System-generated event message     |
+
 ---
 
 ## Models
@@ -181,6 +339,8 @@ A registered user, identified primarily by their Telegram account.
 | `createdAt`      | DateTime  | Yes      | now     |                                                                    |
 | `updatedAt`      | DateTime  | Yes      | auto    |                                                                    |
 
+| `santaTestMode`  | Boolean   | Yes      | `false` | When `true`, bypasses Santa season restrictions for testing          |
+
 **Relations:**
 - `wishlists[]` → `Wishlist` (owned wishlists)
 - `subscriptions[]` → `Subscription` (billing records)
@@ -190,6 +350,19 @@ A registered user, identified primarily by their Telegram account.
 - `profile` → `UserProfile` (nullable, created lazily)
 - `wishlistSubscriptions[]` → `WishlistSubscription` (wishlists this user follows)
 - `supportTickets[]` → `SupportTicket`
+- `addOns[]` → `UserAddOn` (purchased add-ons)
+- `credits` → `UserCredits` (nullable, consumable balances)
+- `purchases[]` → `Purchase` (SKU purchase audit log)
+- `ownedSantaCampaigns[]` → `SantaCampaign`
+- `santaParticipations[]` → `SantaParticipant`
+- `santaNotifications[]` → `SantaNotification`
+- `santaExclusionGroupMemberships[]` → `SantaExclusionGroupMember`
+- `onboardingStates[]` → `UserOnboardingState`
+- `promoRedemptions[]` → `PromoRedemption`
+- `degradationState` → `DegradationState` (nullable)
+- `lifecycleTouches[]` → `LifecycleTouch`
+- `giftOccasions[]` → `GiftOccasion`
+- `giftOccasionIdeas[]` → `GiftOccasionIdea`
 
 ---
 
@@ -204,18 +377,26 @@ Extended preferences and privacy settings for a user. Created lazily on the firs
 | `username`             | String             | No       | —            | Unique handle for public profile URL (e.g. `@alice`)                  |
 | `bio`                  | VarChar(300)       | No       | —            | Short biography                                                       |
 | `avatarUrl`            | String             | No       | —            | URL to profile picture                                                |
+| `avatarThumbUrl`       | String             | No       | —            | URL to thumbnail profile picture                                      |
+| `avatarUpdatedAt`      | DateTime           | No       | —            | Timestamp of last avatar change                                       |
+| `avatarPublic`         | Boolean            | Yes      | `true`       | Whether avatar is publicly visible                                    |
 | `birthday`             | DateTime           | No       | —            | Date of birth                                                         |
 | `hideYear`             | Boolean            | Yes      | `false`      | When `true`, birth year is hidden from public profile                 |
 | `defaultCurrency`      | `Currency`         | Yes      | `RUB`        | Used as default currency when creating new items                      |
 | `notifyComments`       | Boolean            | Yes      | `true`       | Receive Telegram notifications for new comments                       |
 | `notifyReservations`   | Boolean            | Yes      | `true`       | Receive Telegram notifications when items are reserved/purchased      |
 | `notifySubscriptions`  | Boolean            | Yes      | `true`       | Receive Telegram notifications when someone subscribes to a wishlist  |
-| `notifyMarketing`      | Boolean            | Yes      | `false`      | Receive promotional messages from the bot                             |
+| `notifyMarketing`      | Boolean            | Yes      | `true`       | Receive promotional messages from the bot                             |
 | `profileVisibility`    | `ProfileVisibility`| Yes      | `ALL`        | Who can view the user's public profile page                           |
 | `subscribePolicy`      | `SubscribePolicy`  | Yes      | `ALL`        | Who can subscribe to the user's wishlists (partially enforced)        |
 | `commentsEnabled`      | Boolean            | Yes      | `true`       | User preference; PRO feature gate applies regardless                  |
 | `hintsEnabled`         | Boolean            | Yes      | `true`       | User preference; PRO feature gate applies regardless                  |
-| `newWishlistPosition`  | String             | Yes      | `"top"`      | Whether new wishlists are inserted at the top or bottom of the list   |
+| `language`             | String             | No       | —            | Legacy language field; no longer used as effective locale source       |
+| `languageMode`         | String             | Yes      | `"auto"`     | `auto` = follow Telegram language_code; `manual` = use manualLanguage |
+| `manualLanguage`       | String             | No       | —            | Locale chosen by user when languageMode='manual'                      |
+| `newWishlistPosition`  | String             | Yes      | `"bottom"`   | Whether new wishlists are inserted at the top or bottom of the list   |
+| `cardDisplayMode`      | String             | Yes      | `"auto"`     | Card display mode: auto, showcase, compact                            |
+| `supportId`            | String             | No       | —            | Unique support identifier                                             |
 | `createdAt`            | DateTime           | Yes      | now          |                                                                       |
 | `updatedAt`            | DateTime           | Yes      | auto         |                                                                       |
 
@@ -242,11 +423,14 @@ An ordered collection of wish items owned by a user.
 | `createdAt`          | DateTime              | Yes      | now          |                                                                                |
 | `updatedAt`          | DateTime              | Yes      | auto         |                                                                                |
 
+| `shareOpenCount`     | Int                   | Yes      | `0`          | Incremented on each `GET /public/share/:token` call                    |
+
 **Relations:**
 - `owner` → `User`
 - `items[]` → `Item`
 - `tags[]` → `Tag`
 - `wishlistSubscriptions[]` → `WishlistSubscription`
+- `santaParticipants[]` → `SantaParticipant` (linked wishlists in Santa campaigns)
 
 ---
 
@@ -269,6 +453,10 @@ A single wish within a wishlist.
 | `sourceUrl`       | String         | No       | —           | Original URL the item was imported from                                                   |
 | `sourceDomain`    | String         | No       | —           | Domain extracted from `sourceUrl` (e.g. `"wildberries.ru"`)                               |
 | `importMethod`    | String         | No       | —           | How the item was imported (e.g. `"url_parser"`, `"manual"`)                               |
+| `isDemo`          | Boolean        | Yes      | `false`     | Whether this is a demo item from onboarding                                               |
+| `originType`      | `ItemOriginType` | Yes    | `MANUAL`    | How the item was created                                                                  |
+| `originVariantKey`| String         | No       | —           | Onboarding variant key for demo items                                                      |
+| `becameRealAt`    | DateTime       | No       | —           | When a demo item was converted to a real item                                              |
 | `status`          | `ItemStatus`   | Yes      | `AVAILABLE` |                                                                                           |
 | `reservationEpoch`| Int            | Yes      | `0`         | Increments on each new reservation cycle; used to scope comments to the current reservation |
 | `position`        | Int            | Yes      | `0`         | Manual sort order within a priority group                                                  |
@@ -285,6 +473,7 @@ A single wish within a wishlist.
 - `comments[]` → `Comment`
 - `commentReadCursors[]` → `CommentReadCursor`
 - `hints[]` → `Hint`
+- `santaItemReservations[]` → `SantaItemReservation`
 
 ---
 
@@ -513,6 +702,258 @@ Tracks an active bot interaction session for the ForceReply routing pattern. Lin
 
 ---
 
+### `UserAddOn`
+Permanent add-on purchased via Telegram Stars. Each row represents one unit of a specific add-on type.
+
+| Field       | Type     | Required | Default | Notes                                                              |
+|-------------|----------|----------|---------|--------------------------------------------------------------------|
+| `id`        | String   | Yes      | cuid    |                                                                    |
+| `userId`    | String   | Yes      | --      | FK -> `User`                                                      |
+| `addonType` | String   | Yes      | --      | `wishlist_slot`, `subscription_slot`, `item_slot_5`, `item_slot_15`, `seasonal_decoration` |
+| `quantity`  | Int      | Yes      | `1`     |                                                                    |
+| `targetId`  | String   | No       | --      | Wishlist ID for wishlist-scoped add-ons; null for account-level    |
+| `createdAt` | DateTime | Yes      | now     |                                                                    |
+
+---
+
+### `UserCredits`
+Consumable credit balances. PRO users bypass credit checks entirely.
+
+| Field          | Type     | Required | Default | Notes                   |
+|----------------|----------|----------|---------|-------------------------|
+| `id`           | String   | Yes      | cuid    |                         |
+| `userId`       | String   | Yes      | --      | Unique FK -> `User`     |
+| `hintCredits`  | Int      | Yes      | `0`     | Available hint credits  |
+| `importCredits`| Int      | Yes      | `0`     | Available import credits|
+| `updatedAt`    | DateTime | Yes      | auto    |                         |
+
+---
+
+### `Purchase`
+Immutable purchase log for one-time SKU payments (not subscriptions). Idempotent on `telegramChargeId`.
+
+| Field              | Type     | Required | Default       | Notes                          |
+|--------------------|----------|----------|---------------|--------------------------------|
+| `id`               | String   | Yes      | cuid          |                                |
+| `userId`           | String   | Yes      | --            | FK -> `User`                   |
+| `skuCode`          | String   | Yes      | --            | SKU identifier                 |
+| `quantity`         | Int      | Yes      | `1`           |                                |
+| `targetId`         | String   | No       | --            | Target entity (e.g., wishlist) |
+| `starsPrice`       | Int      | Yes      | --            | Price paid in Telegram Stars   |
+| `telegramChargeId` | String   | Yes      | --            | Unique. From Telegram payment  |
+| `invoicePayload`   | String   | Yes      | --            | Original invoice payload       |
+| `status`           | String   | Yes      | `"completed"` |                                |
+| `createdAt`        | DateTime | Yes      | now           |                                |
+
+---
+
+### `PromoCampaign`
+Defines a reusable promo code (e.g., `WISHPRO`).
+
+| Field           | Type     | Required | Default       | Notes                                 |
+|-----------------|----------|----------|---------------|---------------------------------------|
+| `id`            | String   | Yes      | cuid          |                                       |
+| `code`          | String   | Yes      | --            | Unique canonical code                 |
+| `rewardType`    | String   | Yes      | `"promo_pro"` | `promo_pro` or future types           |
+| `durationDays`  | Int      | Yes      | `30`          | Duration of the promo grant           |
+| `isActive`      | Boolean  | Yes      | `true`        |                                       |
+| `maxRedemptions`| Int      | No       | --            | null = unlimited                      |
+| `createdAt`     | DateTime | Yes      | now           |                                       |
+| `updatedAt`     | DateTime | Yes      | auto          |                                       |
+
+**Relations:**
+- `redemptions[]` -> `PromoRedemption`
+
+---
+
+### `PromoRedemption`
+Per-user promo code redemption record.
+
+| Field            | Type                    | Required | Default     | Notes                                    |
+|------------------|-------------------------|----------|-------------|------------------------------------------|
+| `id`             | String                  | Yes      | cuid        |                                          |
+| `userId`         | String                  | Yes      | --          | FK -> `User`                             |
+| `campaignId`     | String                  | Yes      | --          | FK -> `PromoCampaign`                    |
+| `status`         | `PromoRedemptionStatus` | Yes      | `PENDING`   |                                          |
+| `attemptedAt`    | DateTime                | Yes      | now         |                                          |
+| `activatedAt`    | DateTime                | No       | --          |                                          |
+| `expiresAt`      | DateTime                | No       | --          |                                          |
+| `failureReason`  | String                  | No       | --          |                                          |
+| `source`         | String                  | No       | `"miniapp"` | `miniapp`, `bot`, `winback`              |
+| `offeredAt`      | DateTime                | No       | --          | When lifecycle system offered promo      |
+| `offeredVia`     | String                  | No       | --          | Lifecycle touch ID or manual             |
+| `reminder3dSent` | Boolean                 | Yes      | `false`     | 3-day reminder sent flag                 |
+| `reminderExpSent`| Boolean                 | Yes      | `false`     | Expiry reminder sent flag                |
+| `createdAt`      | DateTime                | Yes      | now         |                                          |
+| `updatedAt`      | DateTime                | Yes      | auto        |                                          |
+
+**Unique constraint:** `(userId, campaignId)`
+
+---
+
+### `DegradationState`
+Tracks PRO-to-FREE degradation lifecycle per user.
+
+| Field                 | Type               | Required | Default | Notes                                    |
+|-----------------------|--------------------|----------|---------|------------------------------------------|
+| `id`                  | String             | Yes      | cuid    |                                          |
+| `userId`              | String             | Yes      | --      | Unique FK -> `User`                      |
+| `phase`               | `DegradationPhase` | Yes      | `NONE`  |                                          |
+| `graceEndsAt`         | DateTime           | No       | --      | 14 days after downgrade                  |
+| `archivedAt`          | DateTime           | No       | --      | When items were archived                 |
+| `purgeScheduledAt`    | DateTime           | No       | --      | 90 days after archive                    |
+| `archivedWishlistIds` | String             | No       | --      | JSON array of archived wishlist IDs      |
+| `archivedItemIds`     | String             | No       | --      | JSON array of archived item IDs          |
+| `createdAt`           | DateTime           | Yes      | now     |                                          |
+| `updatedAt`           | DateTime           | Yes      | auto    |                                          |
+
+---
+
+### `LifecycleTouch`
+Multi-touch winback / engagement messaging log with attribution tracking.
+
+| Field                | Type     | Required | Default | Notes                                                |
+|----------------------|----------|----------|---------|------------------------------------------------------|
+| `id`                 | String   | Yes      | cuid    |                                                      |
+| `userId`             | String   | Yes      | --      | FK -> `User`                                         |
+| `segment`            | String   | Yes      | --      | S1, S2, S3, S4                                       |
+| `episodeKey`         | String   | Yes      | --      | Unique per churn episode (e.g. `"S3_userId_2026-03"`)|
+| `touchNumber`        | Int      | Yes      | --      | 1, 2, 3                                             |
+| `scheduledFor`       | DateTime | Yes      | --      |                                                      |
+| `sentAt`             | DateTime | No       | --      |                                                      |
+| `delivered`          | Boolean  | Yes      | `false` |                                                      |
+| `targetAction`       | String   | No       | --      | `create_wishlist`, `add_item`, `return_visit`, `share`|
+| `offerCode`          | String   | No       | --      | `WISHPRO` or null                                    |
+| `messageKind`        | String   | Yes      | --      | `activation`, `winback`, `promo_offer`               |
+| `deepLinkPayload`    | String   | No       | --      | startapp payload for CTA button                      |
+| `stoppedAt`          | DateTime | No       | --      |                                                      |
+| `stopReason`         | String   | No       | --      | `returned`, `target_completed`, `unsubscribed`, etc. |
+| `returnedAt`         | DateTime | No       | --      | When user came back after this touch                 |
+| `targetCompletedAt`  | DateTime | No       | --      | When user completed segment target action            |
+| `targetCompletedType`| String   | No       | --      | e.g. `created_wishlist`, `added_item`                |
+| `promoRedeemedAt`    | DateTime | No       | --      | When WISHPRO was activated after this touch           |
+| `createdAt`          | DateTime | Yes      | now     |                                                      |
+| `updatedAt`          | DateTime | Yes      | auto    |                                                      |
+
+**Unique constraint:** `(userId, episodeKey, touchNumber)`
+
+---
+
+### `UserOnboardingState`
+Tracks per-user, per-key, per-version onboarding state. Supports multiple onboarding flows.
+
+| Field              | Type               | Required | Default       | Notes                                              |
+|--------------------|--------------------|----------|---------------|----------------------------------------------------|
+| `id`               | String             | Yes      | cuid          |                                                    |
+| `userId`           | String             | Yes      | --            | FK -> `User`                                       |
+| `onboardingKey`    | String             | Yes      | --            | e.g. `"hello_activation"`                          |
+| `version`          | Int                | Yes      | --            | Increment to re-show to all users                  |
+| `status`           | `OnboardingStatus` | Yes      | `NOT_STARTED` |                                                    |
+| `variantKey`       | String             | No       | --            | A/B test variant; assigned once on start           |
+| `entryPoint`       | String             | No       | --            | How the user entered onboarding                    |
+| `demoItemId`       | String             | No       | --            | FK to the demo item for this onboarding session    |
+| `completionReason` | String             | No       | --            | `demo_converted`, `real_item_created`, etc.        |
+| `metaJson`         | Json               | No       | --            |                                                    |
+| `startedAt`        | DateTime           | No       | --            |                                                    |
+| `completedAt`      | DateTime           | No       | --            |                                                    |
+| `dismissedAt`      | DateTime           | No       | --            |                                                    |
+| `createdAt`        | DateTime           | Yes      | now           |                                                    |
+| `updatedAt`        | DateTime           | Yes      | auto          |                                                    |
+
+**Unique constraint:** `(userId, onboardingKey, version)`
+
+---
+
+### `GiftOccasion`
+A gift-giving occasion in a user's personal gift notebook.
+
+| Field         | Type     | Required | Default    | Notes                                              |
+|---------------|----------|----------|------------|----------------------------------------------------|
+| `id`          | String   | Yes      | cuid       |                                                    |
+| `ownerUserId` | String   | Yes      | --         | FK -> `User`                                       |
+| `title`       | String   | Yes      | --         |                                                    |
+| `type`        | String   | Yes      | `"OTHER"`  | `BIRTHDAY`, `ANNIVERSARY`, `HOLIDAY`, `OTHER`      |
+| `personName`  | String   | No       | --         | Free text, no linked user requirement              |
+| `eventDate`   | Date     | No       | --         |                                                    |
+| `recurrence`  | String   | Yes      | `"NONE"`   | `NONE`, `YEARLY`, `MONTHLY`                        |
+| `note`        | String   | No       | --         |                                                    |
+| `status`      | String   | Yes      | `"ACTIVE"` | `ACTIVE`, `DONE`, `ARCHIVED`                       |
+| `archivedAt`  | DateTime | No       | --         |                                                    |
+| `completedAt` | DateTime | No       | --         |                                                    |
+| `createdAt`   | DateTime | Yes      | now        |                                                    |
+| `updatedAt`   | DateTime | Yes      | auto       |                                                    |
+
+**Relations:**
+- `owner` -> `User`
+- `ideas[]` -> `GiftOccasionIdea`
+
+---
+
+### `GiftOccasionIdea`
+A gift idea within an occasion.
+
+| Field         | Type     | Required | Default    | Notes                          |
+|---------------|----------|----------|------------|--------------------------------|
+| `id`          | String   | Yes      | cuid       |                                |
+| `occasionId`  | String   | Yes      | --         | FK -> `GiftOccasion`           |
+| `ownerUserId` | String   | Yes      | --         | FK -> `User`                   |
+| `text`        | String   | Yes      | --         |                                |
+| `link`        | String   | No       | --         |                                |
+| `price`       | Int      | No       | --         |                                |
+| `currency`    | String   | No       | --         |                                |
+| `note`        | String   | No       | --         |                                |
+| `status`      | String   | Yes      | `"ACTIVE"` | `ACTIVE`, `DONE`, `ARCHIVED`   |
+| `archivedAt`  | DateTime | No       | --         |                                |
+| `completedAt` | DateTime | No       | --         |                                |
+| `createdAt`   | DateTime | Yes      | now        |                                |
+| `updatedAt`   | DateTime | Yes      | auto       |                                |
+
+---
+
+### `AnalyticsEvent`
+Lightweight analytics event log for god-mode dashboard metrics. Not a full event sourcing system.
+
+| Field      | Type     | Required | Default | Notes                                        |
+|------------|----------|----------|---------|----------------------------------------------|
+| `id`       | String   | Yes      | cuid    |                                              |
+| `event`    | String   | Yes      | --      | Event name                                   |
+| `userId`   | String   | No       | --      | Associated user (nullable)                   |
+| `props`    | Json     | No       | --      | Structured event properties                  |
+| `createdAt`| DateTime | Yes      | now     |                                              |
+
+---
+
+### Secret Santa Models
+
+The Secret Santa subsystem adds 20 models. Key models are summarized below; see `packages/db/prisma/schema.prisma` for full field definitions.
+
+| Model | Purpose |
+|---|---|
+| `SantaGlobalConfig` | Singleton global master switch (santaEnabled flag) |
+| `SantaSeasonalBroadcastLog` | Prevents duplicate seasonal broadcast notifications per year |
+| `SantaSeasonConfig` | Optional per-year admin override for season dates |
+| `SantaCampaign` | A Secret Santa event with participants, budget, and invite token |
+| `SantaParticipant` | A user participating in a campaign with optional linked wishlist |
+| `SantaRound` | A draw round within a campaign (supports multi-round) |
+| `SantaAssignment` | Giver-receiver pairing within a round |
+| `SantaGiftProgress` | Immutable log of gift status transitions |
+| `SantaExclusion` | Pair-wise exclusion for draw constraints |
+| `SantaExclusionGroup` | Named exclusion group (e.g., "Family") |
+| `SantaExclusionGroupMember` | Member of an exclusion group |
+| `SantaHintRequest` | Anonymous hint request from giver to receiver (48h TTL) |
+| `SantaChatMessage` | Campaign group chat message (USER or SYSTEM) |
+| `SantaChatReadCursor` | Per-participant read cursor for unread tracking |
+| `SantaChatMute` | Per-participant mute for chat notifications |
+| `SantaPoll` | Campaign-scoped poll with optional anonymity |
+| `SantaPollVote` | Individual vote on a poll |
+| `SantaNotification` | Push notification with dedup keys (16 types) |
+| `SantaAdminAuditLog` | Immutable organizer action log |
+| `SantaExitRequest` | Participant request to leave an active campaign |
+| `SantaItemReservation` | Santa-specific item claim (distinct from general reservations) |
+| `SantaParticipantAlias` | Round-scoped anonymous identity (adjective + animal + emoji) |
+
+---
+
 ## Entity Relationship Overview
 
 ```
@@ -526,7 +967,8 @@ User ─────────────────────────
   │              │                  ├──► Comment              ││
   │              │                  ├──► CommentReadCursor ◄──┤│
   │              │                  ├──► ItemTag              ││
-  │              │                  └──► Hint ◄───────────────┤│
+  │              │                  ├──► Hint ◄───────────────┤│
+  │              │                  └──► SantaItemReservation ││
   │              │                                            ││
   │              ├── has ──► Tag ◄── ItemTag                  ││
   │              │                                            ││
@@ -535,15 +977,31 @@ User ─────────────────────────
   │                                                             │
   ├── has ──► UserProfile                                       │
   ├── has ──► Subscription ──► PaymentEvent                     │
-  └── opens ──► SupportTicket ──► SupportMessage               │
+  ├── has ──► UserAddOn[] (permanent add-ons)                   │
+  ├── has ──► UserCredits (consumable balances)                 │
+  ├── has ──► Purchase[] (SKU purchase audit log)               │
+  ├── has ──► UserOnboardingState[]                             │
+  ├── has ──► GiftOccasion[] ──► GiftOccasionIdea[]             │
+  ├── opens ──► SupportTicket ──► SupportMessage                │
+  │                                                             │
+  ├── owns ──► SantaCampaign ──► SantaParticipant[]             │
+  │              ├──► SantaRound[] ──► SantaAssignment[]        │
+  │              ├──► SantaChatMessage[] / ReadCursor / Mute    │
+  │              ├──► SantaPoll[] ──► SantaPollVote[]            │
+  │              ├──► SantaHintRequest[]                         │
+  │              ├──► SantaExclusionGroup[] ──► Member[]         │
+  │              ├──► SantaExitRequest[]                         │
+  │              ├──► SantaNotification[]                        │
+  │              └──► SantaAdminAuditLog[]                       │
+  │                                                             │
+  ├── has ──► PromoRedemption ◄── PromoCampaign                 │
+  ├── has ──► DegradationState (tracks PRO→FREE transitions)    │
+  └── has ──► LifecycleTouch[] (winback / engagement messaging) │
                                                                 │
 SupportSession (standalone, TTL-based routing)                  │
 ServiceHeartbeat (standalone, liveness ping)                    │
-                                                                │
-PromoCampaign ──► PromoRedemption ◄── User                     │
-DegradationState (tracks PRO→FREE transitions)                 │
-LifecycleTouch (winback / engagement messaging log)            │
-EntitlementGrant (promo-granted entitlements)                   │
+AnalyticsEvent (standalone, god-mode metrics)                   │
+SantaGlobalConfig / SantaSeasonConfig / SantaSeasonalBroadcastLog │
 ```
 
 **Key relationships at a glance:**
@@ -562,10 +1020,20 @@ EntitlementGrant (promo-granted entitlements)                   │
 | WishlistSubscription → SubscriptionUnread | 1 : many  |                                                |
 | SupportTicket → SupportMessage      | 1 : many         |                                                |
 | PromoCampaign → PromoRedemption     | 1 : many         | Promo codes and their redemptions              |
-| User → PromoRedemption              | 1 : many         | User promo code usage history                  |
-| User → DegradationState             | 1 : 0..1         | Tracks PRO→FREE transitions                    |
-| User → LifecycleTouch               | 1 : many         | Winback / engagement messaging log             |
-| User → EntitlementGrant             | 1 : many         | Promo-granted entitlements                     |
+| User -> PromoRedemption              | 1 : many         | User promo code usage history                  |
+| User -> DegradationState             | 1 : 0..1         | Tracks PRO->FREE transitions                   |
+| User -> LifecycleTouch               | 1 : many         | Winback / engagement messaging log             |
+| User -> UserAddOn                    | 1 : many         | Purchased permanent add-ons                    |
+| User -> UserCredits                  | 1 : 0..1         | Consumable credit balances                     |
+| User -> Purchase                     | 1 : many         | SKU purchase audit log                         |
+| User -> UserOnboardingState          | 1 : many         | Onboarding flow state per key/version          |
+| User -> GiftOccasion                 | 1 : many         | Gift notebook occasions                        |
+| GiftOccasion -> GiftOccasionIdea     | 1 : many         | Gift ideas within an occasion                  |
+| User -> SantaCampaign (owned)        | 1 : many         | Campaigns organized by user                    |
+| User -> SantaParticipant             | 1 : many         | Campaign participations                        |
+| SantaCampaign -> SantaRound          | 1 : many         | Draw rounds within a campaign                  |
+| SantaRound -> SantaAssignment        | 1 : many         | Giver-receiver pairings per round              |
+| SantaAssignment -> SantaItemReservation | 1 : many      | Santa-specific item claims                     |
 
 ---
 
