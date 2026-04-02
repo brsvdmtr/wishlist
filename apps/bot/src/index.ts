@@ -1198,9 +1198,11 @@ if (!token) {
     });
 
   // Startup alert — delayed 5 s to confirm bot didn't crash immediately (409 etc).
-  // If .catch() fires first, startFailed flag prevents a false "started" alert.
+  // Guards: startFailed flag (set by .catch) + bot.botInfo (set after getMe() succeeds).
+  // Without botInfo check, a slow getMe() (Telegraf timeout = 500 s) would cause
+  // a false "started" alert before the bot has actually connected.
   setTimeout(() => {
-    if (!startFailed) {
+    if (!startFailed && bot.botInfo) {
       logger.info('bot polling active');
       void sendAdminAlert(`🟢 <b>Bot started</b>\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
     }
