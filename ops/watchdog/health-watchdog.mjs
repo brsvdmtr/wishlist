@@ -101,14 +101,21 @@ const now = new Date().toISOString();
 console.log(`[watchdog] ${now} checking ${BASE_URL} …`);
 
 // Run checks in parallel
-const [healthResult, webResult] = await Promise.all([
+const [healthResult, webResult, tgResult] = await Promise.all([
   fetchWithTimeout(`${BASE_URL}/api/health/deep`),
   fetchWithTimeout(`${BASE_URL}/`),
+  // Check a /tg/ endpoint to detect stuck MAINTENANCE_MODE.
+  // Expected: 401 (no auth) = healthy. 503 = maintenance stuck. 0 = down.
+  fetchWithTimeout(`${BASE_URL}/api/tg/bootstrap`),
 ]);
 
-const isDown = !healthResult.ok || !webResult.ok;
+// /tg/bootstrap should return 401 (unauthorized) — that means the route is live.
+// 503 = MAINTENANCE_MODE is stuck on. Anything else non-200 is also fine (route is reachable).
+const tgRouteDown = tgResult.status === 503 || tgResult.status === 0;
 
-console.log(`[watchdog] health/deep: ${JSON.stringify(healthResult)} | web: ${JSON.stringify(webResult)} | isDown: ${isDown}`);
+const isDown = !healthResult.ok || !webResult.ok || tgRouteDown;
+
+console.log(`[watchdog] health/deep: ${JSON.stringify(healthResult)} | web: ${JSON.stringify(webResult)} | tg: ${JSON.stringify(tgResult)} (down=${tgRouteDown}) | isDown: ${isDown}`);
 
 if (isDown) {
   if (!state.wasDown) {
@@ -123,6 +130,7 @@ if (isDown) {
       const details = [
         !healthResult.ok ? `• /api/health/deep → ${healthResult.status || healthResult.error}` : '',
         !webResult.ok ? `• web homepage → ${webResult.status || webResult.error}` : '',
+        tgRouteDown ? `• /api/tg/bootstrap → ${tgResult.status || tgResult.error} (MAINTENANCE_MODE stuck?)` : '',
       ].filter(Boolean).join('\n');
       await sendAlert(`🔴 <b>Wishlistik DOWN</b> at ${now}\n\n${details}`);
       console.log('[watchdog] alert sent: DOWN');
