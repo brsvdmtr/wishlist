@@ -97,7 +97,7 @@ if [ -n "${RCLONE_REMOTE:-}" ] && command -v rclone &>/dev/null; then
 
     # Verify remote file exists and size matches
     LOCAL_SIZE=$(stat -c%s "$ARCHIVE" 2>/dev/null || stat -f%z "$ARCHIVE")
-    REMOTE_SIZE=$(rclone size "$RCLONE_REMOTE/$(basename "$ARCHIVE")" --json 2>/dev/null | grep -o '"bytes":[0-9]*' | cut -d: -f2 || echo "0")
+    REMOTE_SIZE=$(rclone size "$RCLONE_REMOTE/$(basename "$ARCHIVE")" --json 2>/dev/null | grep -oP '"bytes"\s*:\s*\K[0-9]+' || echo "0")
     if [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ]; then
       log "  verified: remote size matches ($LOCAL_SIZE bytes)"
     else
@@ -122,7 +122,7 @@ log "Cleaning up..."
 rm -rf "$WORK_DIR"
 find "$BACKUP_DIR" -name "wishlist_*.tar.gz" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null
 find "$BACKUP_DIR" -name "wishlist_*.tar.gz.sha256" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null
-REMAINING=$(ls -1 "$BACKUP_DIR"/wishlist_*.tar.gz 2>/dev/null | wc -l)
+REMAINING=$(find "$BACKUP_DIR" -maxdepth 1 -name "wishlist_*.tar.gz" 2>/dev/null | wc -l)
 log "  local backups: $REMAINING"
 
 log "Backup $TIMESTAMP complete"

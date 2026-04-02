@@ -68,7 +68,7 @@ cleanup_maintenance() {
     warn "Unexpected exit — disabling maintenance mode"
     "$PROJECT_DIR/ops/maintenance/off.sh" 2>/dev/null || true
     local cid
-    cid=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null || true)
+    cid=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null | head -1 || true)
     if [ -n "$cid" ]; then
       docker exec "$cid" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || true
       docker compose -f "$COMPOSE_FILE" restart api 2>/dev/null || true
@@ -110,6 +110,8 @@ fi
 
 log "Checking out $SHORT_TARGET..."
 git checkout "$TARGET_SHA" -- .
+# Remove files that were added after TARGET_SHA (git checkout -- . doesn't delete them)
+git clean -fd 2>/dev/null || true
 
 # ── Build & deploy ────────────────────────────────────────────────────────────
 
@@ -153,13 +155,12 @@ log "  /health/deep → $DEEP_STATUS ✓"
 if $NEEDS_MAINTENANCE; then
   log "Disabling MAINTENANCE_MODE"
   "$PROJECT_DIR/ops/maintenance/off.sh"
-  MAINTENANCE_ENABLED=false
 
   # The Docker image has MAINTENANCE_MODE=true baked in (COPY . . includes .env).
   # off.sh only updates the host file. Patch the running container and restart.
   for s in "${SERVICES[@]}"; do
     if [[ "$s" = "api" ]]; then
-      CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null || true)
+      CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null | head -1 || true)
       if [ -n "$CONTAINER" ]; then
         docker exec "$CONTAINER" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || \
           warn "Could not patch /app/.env inside container"
@@ -175,12 +176,15 @@ if $NEEDS_MAINTENANCE; then
       fi
     fi
   done
+
+  MAINTENANCE_ENABLED=false
 fi
 
 # ── Return to main branch ────────────────────────────────────────────────────
 
 log "Restoring repo to main branch..."
 git checkout main -- .
+git clean -fd 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"

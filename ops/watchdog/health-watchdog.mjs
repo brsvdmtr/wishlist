@@ -93,6 +93,26 @@ async function sendAlert(text) {
   );
 }
 
+// ─── Checks ──────────────────────────────────────────────────────────────────
+
+async function runChecks() {
+  const [healthResult, webResult, tgResult] = await Promise.all([
+    fetchWithTimeout(`${BASE_URL}/api/health/deep`),
+    fetchWithTimeout(`${BASE_URL}/`),
+    // Check a /tg/ endpoint to detect stuck MAINTENANCE_MODE.
+    // Expected: 401 (no auth) = healthy. 503 = maintenance stuck. 0 = down.
+    fetchWithTimeout(`${BASE_URL}/api/tg/bootstrap`),
+  ]);
+
+  // /tg/bootstrap should return 401 (unauthorized) — that means the route is live.
+  // 503 = MAINTENANCE_MODE is stuck on. 502/504 = nginx can't reach the container.
+  // 0 = network error / timeout. Anything else (401, 400, etc.) = route is reachable = OK.
+  const tgRouteDown = tgResult.status === 503 || tgResult.status === 502 || tgResult.status === 504 || tgResult.status === 0;
+  const isDown = !healthResult.ok || !webResult.ok || tgRouteDown;
+
+  return { healthResult, webResult, tgResult, tgRouteDown, isDown };
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 const state = loadState();
@@ -100,21 +120,16 @@ const now = new Date().toISOString();
 
 console.log(`[watchdog] ${now} checking ${BASE_URL} …`);
 
-// Run checks in parallel
-const [healthResult, webResult, tgResult] = await Promise.all([
-  fetchWithTimeout(`${BASE_URL}/api/health/deep`),
-  fetchWithTimeout(`${BASE_URL}/`),
-  // Check a /tg/ endpoint to detect stuck MAINTENANCE_MODE.
-  // Expected: 401 (no auth) = healthy. 503 = maintenance stuck. 0 = down.
-  fetchWithTimeout(`${BASE_URL}/api/tg/bootstrap`),
-]);
+let result = await runChecks();
 
-// /tg/bootstrap should return 401 (unauthorized) — that means the route is live.
-// 503 = MAINTENANCE_MODE is stuck on. 502/504 = nginx can't reach the container.
-// 0 = network error / timeout. Anything else (401, 400, etc.) = route is reachable = OK.
-const tgRouteDown = tgResult.status === 503 || tgResult.status === 502 || tgResult.status === 504 || tgResult.status === 0;
+// Retry once after 5s to avoid false positives from transient network blips
+if (result.isDown) {
+  console.log('[watchdog] first check failed, retrying in 5s…');
+  await new Promise((r) => setTimeout(r, 5000));
+  result = await runChecks();
+}
 
-const isDown = !healthResult.ok || !webResult.ok || tgRouteDown;
+const { healthResult, webResult, tgResult, tgRouteDown, isDown } = result;
 
 console.log(`[watchdog] health/deep: ${JSON.stringify(healthResult)} | web: ${JSON.stringify(webResult)} | tg: ${JSON.stringify(tgResult)} (down=${tgRouteDown}) | isDown: ${isDown}`);
 

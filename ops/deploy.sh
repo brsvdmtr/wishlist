@@ -70,7 +70,7 @@ cleanup_maintenance() {
     "$PROJECT_DIR/ops/maintenance/off.sh" 2>/dev/null || true
     # Also patch running api container if it exists
     local cid
-    cid=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null || true)
+    cid=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null | head -1 || true)
     if [ -n "$cid" ]; then
       docker exec "$cid" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || true
       docker compose -f "$COMPOSE_FILE" restart api 2>/dev/null || true
@@ -131,7 +131,7 @@ log "Health check: $HEALTH_URL"
 HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || true)
 if [ "$HTTP_STATUS" != "200" ]; then
   warn "Shallow health check returned HTTP $HTTP_STATUS"
-  fail "Health check failed. MAINTENANCE_MODE is still ON. Investigate manually."
+  fail "Health check failed. EXIT trap will attempt to disable maintenance mode."
 fi
 log "  /health → $HTTP_STATUS ✓"
 
@@ -142,13 +142,15 @@ if $HAS_BOT; then
 fi
 
 log "Deep health check: $HEALTH_DEEP_URL"
-DEEP_RESPONSE=$(curl -s "$HEALTH_DEEP_URL" || true)
-DEEP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_DEEP_URL" || true)
+# Single curl call: body + status from the same HTTP response (avoids race)
+DEEP_RAW=$(curl -s -w "\nHTTP_STATUS:%{http_code}" "$HEALTH_DEEP_URL" || true)
+DEEP_RESPONSE=$(echo "$DEEP_RAW" | sed '$d')
+DEEP_STATUS=$(echo "$DEEP_RAW" | tail -1 | sed 's/HTTP_STATUS://')
 
 if [ "$DEEP_STATUS" != "200" ]; then
   warn "Deep health check returned HTTP $DEEP_STATUS"
   echo "$DEEP_RESPONSE"
-  fail "Deep health check failed. MAINTENANCE_MODE is still ON. Investigate manually."
+  fail "Deep health check failed. EXIT trap will attempt to disable maintenance mode."
 fi
 log "  /health/deep → $DEEP_STATUS ✓"
 
@@ -159,7 +161,7 @@ if $HAS_BOT; then
     log "  bot heartbeat: ${BOT_AGE}s ago ✓"
   else
     warn "Bot heartbeat age: ${BOT_AGE:-unknown}s"
-    fail "Bot heartbeat stale or missing. MAINTENANCE_MODE is still ON."
+    fail "Bot heartbeat stale or missing. EXIT trap will attempt to disable maintenance mode."
   fi
 fi
 
@@ -168,14 +170,13 @@ fi
 if $NEEDS_MAINTENANCE; then
   log "Disabling MAINTENANCE_MODE"
   "$PROJECT_DIR/ops/maintenance/off.sh"
-  MAINTENANCE_ENABLED=false  # prevent EXIT trap from double-running
 
   # The Docker image has MAINTENANCE_MODE=true baked in (COPY . . includes .env).
   # off.sh only updates the host file. We must also patch the running container
   # and restart so the API process picks up MAINTENANCE_MODE=false.
   for s in "${SERVICES[@]}"; do
     if [[ "$s" = "api" ]]; then
-      CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null || true)
+      CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null | head -1 || true)
       if [ -n "$CONTAINER" ]; then
         docker exec "$CONTAINER" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || \
           warn "Could not patch /app/.env inside container"
@@ -192,6 +193,10 @@ if $NEEDS_MAINTENANCE; then
       fi
     fi
   done
+
+  # Only clear the flag AFTER off.sh + container patch + restart are all done.
+  # If anything above failed, the EXIT trap will still attempt cleanup.
+  MAINTENANCE_ENABLED=false
 fi
 
 # ── Record success ────────────────────────────────────────────────────────────
