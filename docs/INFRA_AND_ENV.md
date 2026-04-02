@@ -180,30 +180,44 @@ pnpm dev:web    # Web on port 3000
 ```
 
 ### Production Deployment
+
+> **Always use `ops/deploy.sh`** — never raw `docker compose up -d --build`.
+> The deploy script handles maintenance mode, health checks, heartbeat verification, and success recording.
+> See [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) for the full runbook.
+
 ```bash
 # On server:
+ssh timeweb
 cd /opt/wishlist
-git pull origin main  # Production runs main branch
+git pull origin main
 
-# Rebuild and restart specific service:
-docker compose -f docker-compose.prod.yml up -d --build api
-docker compose -f docker-compose.prod.yml up -d --build web
-docker compose -f docker-compose.prod.yml up -d --build bot
+# Deploy one service:
+./ops/deploy.sh bot
+./ops/deploy.sh api
+./ops/deploy.sh web
 
-# Rebuild all:
-docker compose -f docker-compose.prod.yml up -d --build
+# Deploy multiple:
+./ops/deploy.sh api web
 
-# Force rebuild (no cache):
-docker compose -f docker-compose.prod.yml build --no-cache api
+# Deploy everything:
+./ops/deploy.sh all
+```
 
-# View logs (use `docker compose exec` to avoid hardcoded container names):
+**Rollback** (to last successful release):
+```bash
+./ops/rollback.sh bot
+./ops/rollback.sh api web
+./ops/rollback.sh all
+```
+
+**View logs:**
+```bash
 docker compose -f docker-compose.prod.yml logs --tail 50 api
 docker compose -f docker-compose.prod.yml logs --tail 50 web
 docker compose -f docker-compose.prod.yml logs --tail 50 bot
 ```
 
-> **Note on container names**: The examples below use `wishlist-prod-api-1` etc.
-> Actual names depend on the compose project name (set by directory or `-p` flag).
+> **Note on container names**: Actual names depend on the compose project name (set by directory or `-p` flag).
 > Prefer `docker compose -f docker-compose.prod.yml exec <service>` over hardcoded names.
 
 ### Database Migrations `VERIFIED_FROM_CODE`
@@ -346,13 +360,16 @@ proxy_intercept_errors on;
 
 ### Maintenance Mode
 
-To enable planned downtime:
-1. Set `MAINTENANCE_MODE=true` in `.env`
-2. `docker compose -f docker-compose.prod.yml up -d api bot`
+```bash
+# Enable (suppresses watchdog alerts, blocks /tg/* and /public/* with 503):
+./ops/maintenance/on.sh
 
-To disable:
-1. Remove or set `MAINTENANCE_MODE=false`
-2. `docker compose -f docker-compose.prod.yml up -d api bot`
+# Disable:
+./ops/maintenance/off.sh
+```
+
+> `deploy.sh` manages maintenance mode automatically for api/web deploys.
+> Manual use only needed for planned work outside of deployments.
 
 nginx will serve the static maintenance page for 502/503/504 automatically.
 

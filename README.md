@@ -88,14 +88,29 @@ pnpm db:generate    # сгенерировать Prisma Client
 
 ```bash
 # На сервере:
+ssh timeweb
 cd /opt/wishlist
 git pull origin main
-docker compose -f docker-compose.prod.yml up -d --build
+
+# Деплой одного сервиса:
+./ops/deploy.sh bot
+
+# Деплой нескольких:
+./ops/deploy.sh api web
+
+# Деплой всего:
+./ops/deploy.sh all
+
+# Откат к последнему успешному релизу:
+./ops/rollback.sh bot
 ```
+
+> **Всегда используйте `ops/deploy.sh`** — не `docker compose up -d --build` напрямую.
+> Скрипт управляет maintenance mode, health-чеками, записью успешного SHA.
 
 Миграции применяются автоматически при старте контейнера `api` (`prisma migrate deploy`).
 
-Подробнее: [docs/INFRA_AND_ENV.md](./docs/INFRA_AND_ENV.md)
+Подробнее: [docs/DEPLOYMENT_RUNBOOK.md](./docs/DEPLOYMENT_RUNBOOK.md) · [docs/INFRA_AND_ENV.md](./docs/INFRA_AND_ENV.md)
 
 ---
 
@@ -110,9 +125,12 @@ packages/
   db/         Prisma schema + миграции
   shared/     i18n строки (6 локалей), shared типы
 ops/
-  watchdog/   Health-check скрипт (Node.js)
-  nginx/      Конфиги nginx
-  maintenance/ Страница технического обслуживания
+  deploy.sh     Деплой с health-чеками и maintenance mode
+  rollback.sh   Откат к последнему успешному релизу
+  backup.sh     Ежедневный бэкап (pg_dump + uploads + .env)
+  watchdog/     Health-мониторинг (Node.js, каждые 5 мин)
+  nginx/        Конфиги nginx
+  maintenance/  on.sh / off.sh + статическая страница
 docs/         Документация (INDEX.md — точка входа)
 ```
 
