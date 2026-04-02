@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { prisma } from '@wishlist/db';
 import { t, detectLocale, resolveEffectiveLocale, type Locale } from '@wishlist/shared';
+import logger from './logger';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/bot (pnpm -C apps/bot start).
@@ -51,8 +52,7 @@ async function updateHeartbeat(): Promise<void> {
 }
 
 if (!token) {
-  // eslint-disable-next-line no-console
-  console.warn('[bot] BOT_TOKEN is missing. Bot is disabled (see apps/bot/.env.example).');
+  logger.warn('BOT_TOKEN is missing. Bot is disabled (see apps/bot/.env.example).');
   // Keep process alive so `pnpm dev` can still run web+api without a bot token.
   setInterval(() => {}, 60_000);
 } else {
@@ -124,7 +124,7 @@ if (!token) {
       }
       return sent;
     } catch (err) {
-      console.error('[bot][support] failed to send to support chat:', err);
+      logger.error({ err }, 'failed to send to support chat');
       return null;
     }
   }
@@ -142,7 +142,7 @@ if (!token) {
         promptMessageId: sent.message_id,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
-    }).catch((err: unknown) => console.error('[bot][support] failed to save session:', err));
+    }).catch((err: unknown) => logger.error({ err }, 'failed to save support session'));
   }
 
   // ─── Support: create a new ticket ────────────────────────────────────────
@@ -211,7 +211,7 @@ if (!token) {
       }).catch(() => {});
     }
 
-    console.log(`[bot][support] ticket created: ${ticketCode} userId=${user.id}`);
+    logger.info({ ticketCode, userId: user.id }, 'support ticket created');
   }
 
   // ─── Support: handle user follow-up ──────────────────────────────────────
@@ -316,7 +316,7 @@ if (!token) {
       }).catch(() => {});
       await ctx.reply(`✅ Ответ доставлен (${ticket.ticketCode})`).catch(() => {});
     } catch (err) {
-      console.error('[bot][support] failed to deliver support reply to user:', err);
+      logger.error({ err, ticketCode: ticket.ticketCode }, 'failed to deliver support reply to user');
       await ctx.reply(`⚠️ [${ticket.ticketCode}] Не удалось доставить ответ пользователю: ${String(err)}`).catch(() => {});
     }
   }
@@ -356,7 +356,7 @@ if (!token) {
     }
 
     await ctx.reply(`✅ Тикет ${ticket.ticketCode} закрыт.`).catch(() => {});
-    console.log(`[bot][support] ticket closed: ${ticket.ticketCode}`);
+    logger.info({ ticketCode: ticket.ticketCode }, 'support ticket closed');
   }
 
   // ─── Support: handle all messages from support chat ───────────────────────
@@ -392,8 +392,7 @@ if (!token) {
       },
     })
     .catch((err: unknown) => {
-      // eslint-disable-next-line no-console
-      console.error('[bot] failed to set menu button', err);
+      logger.error({ err }, 'failed to set menu button');
     });
 
   const menuButton = {
@@ -416,6 +415,18 @@ if (!token) {
       update: { telegramChatId: chatId },
       create: { telegramId, telegramChatId: chatId },
     }).catch(() => { /* user may not exist yet — will be created by API later */ });
+
+    // Fire-and-forget analytics
+    prisma.analyticsEvent.create({
+      data: {
+        event: 'bot.start_received',
+        userId: String(ctx.from.id),
+        props: {
+          telegramId: ctx.from.id,
+          hasStartParam: !!ctx.startPayload,
+        },
+      },
+    }).catch(() => {});
 
     const payload = ctx.startPayload; // slug passed via ?start=SLUG deep link
     if (payload?.startsWith('santa_')) {
@@ -440,8 +451,7 @@ if (!token) {
           ]),
         );
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[bot] santa deep link error:', err);
+        logger.error({ err }, 'santa deep link error');
         return ctx.reply(t('bot_error', locale));
       }
     }
@@ -485,15 +495,14 @@ if (!token) {
           Markup.button.webApp(t('bot_hint_view_btn', locale), `${MINI_APP_URL}?startapp=${item.wishlist.slug}__item_${item.id}`),
         ]));
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[bot] hint deep link error:', err);
+        logger.error({ err }, 'hint deep link error');
         return ctx.reply(t('bot_error', locale));
       }
     }
     if (payload?.startsWith('profile_')) {
       // Public profile deep link
       const username = payload.slice('profile_'.length);
-      console.log('[bot][start] bot_start_with_payload', { telegramId, type: 'profile', username });
+      logger.info({ telegramId, type: 'profile', username }, 'deep link received');
       if (username) {
         return ctx.reply(
           t('bot_view_profile', locale),
@@ -550,8 +559,7 @@ if (!token) {
   bot.on('pre_checkout_query', async (ctx) => {
     try {
       const raw = ctx.preCheckoutQuery.invoice_payload;
-      // eslint-disable-next-line no-console
-      console.log('[bot] pre_checkout_received:', raw);
+      logger.info({ invoicePayload: raw }, 'pre_checkout received');
 
       const parts = raw.split(':');
       const payloadType = parts[0];
@@ -601,8 +609,7 @@ if (!token) {
         await ctx.answerPreCheckoutQuery(false, 'Invalid payment');
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[bot] pre_checkout error:', err);
+      logger.error({ err }, 'pre_checkout error');
       await ctx.answerPreCheckoutQuery(false, 'Error').catch(() => {});
     }
   });
@@ -625,8 +632,7 @@ if (!token) {
 
     try {
       const raw = payment.invoice_payload;
-      // eslint-disable-next-line no-console
-      console.log('[bot] payment_success_received:', raw);
+      logger.info({ invoicePayload: raw, totalAmount: payment.total_amount, currency: payment.currency }, 'payment success received');
 
       const parts = raw.split(':');
       const payloadType = parts[0];
@@ -638,7 +644,7 @@ if (!token) {
 
         const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
         if (!user) {
-          console.error('[bot] payment user not found, telegramId:', telegramId);
+          logger.error({ telegramId }, 'payment user not found');
           return;
         }
 
@@ -648,7 +654,7 @@ if (!token) {
         // Idempotency: skip duplicate webhook
         const existing = await prisma.paymentEvent.findUnique({ where: { telegramPaymentChargeId: chargeId } });
         if (existing) {
-          console.log('[bot] duplicate payment, skip:', chargeId);
+          logger.info({ chargeId }, 'duplicate payment, skip');
           return;
         }
 
@@ -706,7 +712,7 @@ if (!token) {
           t('bot_pro_activated', locale, { date: fmtDate }),
           Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
         );
-        console.log(`[bot] subscription_activated: userId=${user.id} charge=${chargeId} periodEnd=${periodEnd.toISOString()}`);
+        logger.info({ userId: user.id, chargeId, periodEnd: periodEnd.toISOString() }, 'subscription activated');
         return;
       }
 
@@ -720,7 +726,7 @@ if (!token) {
 
         const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
         if (!user) {
-          console.error('[bot] addon payment user not found, telegramId:', telegramId);
+          logger.error({ telegramId }, 'addon payment user not found');
           return;
         }
 
@@ -729,7 +735,7 @@ if (!token) {
         // Idempotency via Purchase table
         const existingPurchase = await prisma.purchase.findUnique({ where: { telegramChargeId: chargeId } });
         if (existingPurchase) {
-          console.log('[bot] duplicate addon payment, skip:', chargeId);
+          logger.info({ chargeId }, 'duplicate addon payment, skip');
           return;
         }
 
@@ -815,14 +821,13 @@ if (!token) {
           t('bot_addon_activated', locale),
           Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
         );
-        console.log(`[bot] addon_activated: userId=${user.id} sku=${skuCode} targetId=${targetId} charge=${chargeId}`);
+        logger.info({ userId: user.id, skuCode, targetId, chargeId }, 'addon activated');
         return;
       }
 
-      console.warn('[bot] unknown payment payload format:', raw);
+      logger.warn({ invoicePayload: raw }, 'unknown payment payload format');
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[bot] payment processing error:', err);
+      logger.error({ err }, 'payment processing error');
     }
   });
 
@@ -939,7 +944,7 @@ if (!token) {
       where: { id: hint.id },
       data: { status: 'DELIVERED', sentCount: directSent, pendingCount, deliveredAt: new Date() },
     }).catch((err) => {
-      console.error('[bot] failed to update hint delivery status:', err);
+      logger.error({ err, hintId: hint.id }, 'failed to update hint delivery status');
     });
 
     // Summary to sender (uses sender's locale)
@@ -1100,8 +1105,7 @@ if (!token) {
         ]),
       });
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[bot] import-url error:', err);
+      logger.error({ err }, 'import-url error');
       await ctx.reply(t('bot_error', locale));
     }
   });
@@ -1114,8 +1118,7 @@ if (!token) {
       { command: 'paysupport', description: t('bot_cmd_paysupport', 'en') },
     ])
     .catch((err: unknown) => {
-      // eslint-disable-next-line no-console
-      console.error('[bot] failed to set commands', err);
+      logger.error({ err }, 'failed to set commands');
     });
 
   bot.telegram
@@ -1128,8 +1131,7 @@ if (!token) {
       { language_code: 'ru' },
     )
     .catch((err: unknown) => {
-      // eslint-disable-next-line no-console
-      console.error('[bot] failed to set ru commands', err);
+      logger.error({ err }, 'failed to set ru commands');
     });
 
   // Set bot description for all supported locales (shown in "What can this bot do?").
@@ -1149,23 +1151,20 @@ if (!token) {
         ...(tgCode ? { language_code: tgCode } : {}),
       } as Parameters<typeof bot.telegram.callApi>[1])
       .catch((err: unknown) => {
-        // eslint-disable-next-line no-console
-        console.error(`[bot] failed to set description for locale=${locale}`, err);
+        logger.error({ err, locale }, 'failed to set description');
       });
   }
 
   bot
     .launch()
     .then(() => {
-      // eslint-disable-next-line no-console
-      console.log('[bot] started');
+      logger.info('bot started');
       // Startup alert + initial heartbeat
       void sendAdminAlert(`🟢 <b>Bot started</b>\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
       void updateHeartbeat();
     })
     .catch((err: unknown) => {
-      // eslint-disable-next-line no-console
-      console.error('[bot] failed to start', err);
+      logger.fatal({ err }, 'failed to start');
       process.exitCode = 1;
     });
 
@@ -1174,14 +1173,12 @@ if (!token) {
 
   // Uncaught exception / rejection alerts
   process.on('uncaughtException', (err) => {
-    // eslint-disable-next-line no-console
-    console.error('[bot] uncaughtException:', err);
+    logger.fatal({ err }, 'uncaughtException');
     void sendAdminAlert(`🔴 <b>Bot uncaughtException</b>\n${String(err)}`).finally(() => process.exit(1));
   });
 
   process.on('unhandledRejection', (reason) => {
-    // eslint-disable-next-line no-console
-    console.error('[bot] unhandledRejection:', reason);
+    logger.error({ reason }, 'unhandledRejection');
     void sendAdminAlert(`🔴 <b>Bot unhandledRejection</b>\n${String(reason)}`);
   });
 
