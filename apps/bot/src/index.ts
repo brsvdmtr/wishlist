@@ -1172,24 +1172,39 @@ if (!token) {
       });
   }
 
+  // Heartbeat: update every 60 s so /health/deep can detect bot absence.
+  // Starts immediately — cleared on launch failure so zombies can't fake health.
+  void updateHeartbeat();
+  const heartbeatTimer = setInterval(() => void updateHeartbeat(), 60_000);
+
+  // Track launch failure so the delayed startup alert doesn't fire on crash.
+  let startFailed = false;
+
+  // NOTE: bot.launch() resolves when polling STOPS (on SIGTERM), not on start.
+  // Use .catch() to detect startup failure (e.g. 409 Conflict).
   bot
     .launch()
     .then(() => {
-      logger.info('bot started');
-      // Startup alert + initial heartbeat
-      void sendAdminAlert(`🟢 <b>Bot started</b>\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
-      void updateHeartbeat();
-      // Heartbeat: update every 60 s so /health/deep can detect bot absence.
-      // Only start AFTER successful launch — a failed bot must not fake a heartbeat.
-      setInterval(() => void updateHeartbeat(), 60_000);
+      logger.info('bot stopped gracefully');
     })
     .catch((err: unknown) => {
+      startFailed = true;
+      clearInterval(heartbeatTimer);
       logger.fatal({ err }, 'failed to start');
       if (process.env.GLITCHTIP_DSN && err instanceof Error) Sentry.captureException(err);
       // Hard exit deadline: if sendAdminAlert hangs, exit anyway after 15 s
       setTimeout(() => process.exit(1), 15_000).unref();
       void sendAdminAlert(`🔴 <b>Bot failed to start</b>\n${String(err)}`).finally(() => process.exit(1));
     });
+
+  // Startup alert — delayed 5 s to confirm bot didn't crash immediately (409 etc).
+  // If .catch() fires first, startFailed flag prevents a false "started" alert.
+  setTimeout(() => {
+    if (!startFailed) {
+      logger.info('bot polling active');
+      void sendAdminAlert(`🟢 <b>Bot started</b>\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
+    }
+  }, 5_000).unref();
 
   // Uncaught exception / rejection alerts
   process.on('uncaughtException', (err) => {
