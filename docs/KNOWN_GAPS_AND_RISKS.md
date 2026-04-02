@@ -51,6 +51,7 @@
 - **Risk**: No structured logging for API requests
 - **Impact**: Hard to debug production issues
 - **Note**: Only `console.error` on unhandled errors
+- **Status**: RESOLVED — pino-http structured logging added (2026-04-02)
 
 ---
 
@@ -148,10 +149,12 @@
 ### 25. No Monitoring / Alerting
 - **Impact**: No way to know if services are down unless user reports
 - **Need**: Health check monitoring (even simple uptime ping)
+- **Status**: MITIGATED — Grafana+Loki log aggregation + daily digest added (2026-04-02)
 
 ### 26. No Error Tracking
 - **Impact**: Errors only visible in docker logs (if you look)
 - **Need**: Sentry or similar
+- **Status**: MITIGATED — GlitchTip/Sentry integration (opt-in) + structured error logging added (2026-04-02)
 
 ### 27. No Database Migration Rollback Plan
 - **Risk**: Prisma migrations are forward-only
@@ -233,6 +236,12 @@
 - **Risk**: No dedicated admin panel or ops-control surface for Santa campaigns; edge cases require manual DB intervention
 - **Impact**: Slow incident response for stuck/corrupt campaigns; no safe replay or recovery path without direct DB access
 - **Severity**: MEDIUM
+
+### 43. AnalyticsEvent Retention Policy
+- **Policy**: Rows older than 90 days deleted by `ops/cleanup-analytics.mjs`
+- **Schedule**: Daily at 03:00 UTC via system cron
+- **Cron entry**: `0 3 * * * node /opt/wishlist/ops/cleanup-analytics.mjs`
+- **Severity**: INFO (documented policy)
 
 ---
 
