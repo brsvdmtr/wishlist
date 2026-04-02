@@ -1,6 +1,6 @@
 # ACCESS_MATRIX.md — Access Control Matrix
 
-> Date: 2026-03-26. Verified from source code (`apps/api/src/index.ts`, `apps/web/middleware.ts`).
+> Date: 2026-04-02. Verified from source code (`apps/api/src/index.ts`, `apps/web/middleware.ts`).
 
 ---
 
@@ -130,6 +130,22 @@ The `getItemRole(itemId, tgUser)` helper returns one of `{ role: 'owner' | 'rese
 | GET/POST | `/tg/me/plan` and `/tg/billing/*` | Any TG user (own billing only) |
 | POST | `/tg/me/god-mode` | Whitelisted TG IDs only |
 
+### Telegram Routes — Add-on Store & Gift Notes
+
+| Method | Path | Requirement | Notes |
+|--------|------|------------|-------|
+| POST | `/tg/billing/addon/checkout` | Any TG user | Creates Stars invoice for a one-time SKU; requires `skuCode`, optional `targetId` |
+| POST | `/tg/billing/addon/sync` | Any TG user | Returns current add-ons and credits after purchase |
+| POST | `/tg/billing/gift-notes/checkout` | Any TG user | Creates Stars invoice for Gift Notes unlock (19 XTR); no-op if already unlocked |
+| POST | `/tg/billing/gift-notes/sync` | Any TG user | Returns Gift Notes unlock status |
+| GET | `/tg/gift-occasions` | Any TG user (Gift Notes required) | 402 if Gift Notes not unlocked |
+
+### Telegram Routes — Promo Codes
+
+| Method | Path | Requirement | Notes |
+|--------|------|------------|-------|
+| POST | `/tg/promo/apply` | Any TG user | Rate-limited: 5 req/60s per user; code normalized (trim, uppercase, remove spaces/dashes) |
+
 ### Internal Routes
 
 | Method | Path | Requirement |
@@ -151,10 +167,10 @@ The `getItemRole(itemId, tgUser)` helper returns one of `{ role: 'owner' | 'rese
 
 All gates are **server-side enforced**. The client UI shows upsell prompts but cannot bypass the API checks.
 
-### Quantitative Limits
+### Quantitative Limits (Base Plan)
 
-| Resource | FREE limit | PRO limit | HTTP error on exceed |
-|----------|:----------:|:---------:|:-------------------:|
+| Resource | FREE base | PRO base | HTTP error on exceed |
+|----------|:---------:|:--------:|:-------------------:|
 | Wishlists (REGULAR, non-archived) | 2 | 10 | 402 |
 | Items per wishlist (active) | 20 | 70 | 402 |
 | Distinct reservers per wishlist | 5 | 20 | 402 |
@@ -163,13 +179,35 @@ All gates are **server-side enforced**. The client UI shows upsell prompts but c
 
 When the wishlist count exceeds plan.wishlists, excess wishlists become `readOnly: true` — they are still visible but items cannot be added to them (402).
 
+### Effective Limits (Base + Add-ons)
+
+Add-on SKU purchases extend base limits. All limit checks use `getEffectiveEntitlements()`.
+
+| Resource | FREE max (base + add-ons) | PRO max (base + add-ons) | Add-on cap |
+|----------|:-------------------------:|:------------------------:|:----------:|
+| Wishlists | 2 + 3 = **5** | 10 + 5 = **15** | `extra_wishlist_slot` cap: FREE=3, PRO=5 |
+| Subscriptions | 2 + 3 = **5** | 5 + 3 = **8** | `extra_subscription_slot` cap: 3 (any plan) |
+| Items per wishlist | 20 + 30 = **50** | 70 + 30 = **100** | `extra_items_5` x3 (+15) + `extra_items_15` x1 (+15) = +30 |
+
+### Credits-Based Access
+
+FREE users can access PRO-gated features via purchased credit packs. PRO users bypass credits entirely.
+
+| Feature | FREE without credits | FREE with credits | PRO |
+|---------|:-------------------:|:-----------------:|:---:|
+| Hints (`/tg/items/:id/hint`) | 402 | Allowed (decrements `hintCredits`) | Unlimited |
+| URL Import (`/tg/import-url`) | 402 | Allowed (decrements `importCredits`) | Unlimited |
+
+Credit packs: `hints_pack_5` (29 XTR), `hints_pack_10` (49 XTR), `import_pack_10` (39 XTR), `import_pack_25` (79 XTR).
+
 ### Feature Gates
 
 | Feature | FREE | PRO | Gate behavior |
 |---------|:----:|:---:|--------------|
 | Comments (read + write) | No | Yes | 402 `{ error: 'Pro feature', feature: 'comments' }` — the code checks if **both** parties lack the feature; if **either** party (owner or commenter) has PRO, access is granted (OR logic) |
-| URL import (`/tg/import-url`) | No | Yes | 402 `{ error: 'Pro feature', feature: 'url_import' }` |
-| Hint waves (`/tg/items/:id/hint`) | No | Yes | 402 `{ error: 'Pro feature', feature: 'hints' }` |
+| URL import (`/tg/import-url`) | No (or credits) | Yes | 402 `{ error: 'Pro feature', feature: 'url_import' }` — FREE users with `importCredits > 0` bypass the gate |
+| Hint waves (`/tg/items/:id/hint`) | No (or credits) | Yes | 402 `{ error: 'Pro feature', feature: 'hints' }` — FREE users with `hintCredits > 0` bypass the gate |
+| Gift Notes | No (or one-time unlock) | Yes (included) | 402 if not unlocked; unlock via 19 XTR one-time purchase or PRO subscription |
 | Wishlist visibility `PUBLIC_PROFILE` | No | Yes | 403 `{ error: 'pro_required' }` |
 | Wishlist visibility `PRIVATE` | No | Yes | 403 `{ error: 'pro_required' }` |
 | `allowSubscriptions=NOBODY` | No | Yes | 403 `{ error: 'pro_required' }` |
