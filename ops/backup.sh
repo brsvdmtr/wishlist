@@ -24,9 +24,18 @@ UPLOADS_VOLUME="/var/lib/docker/volumes/wishlist-prod_wishlist_uploads/_data"
 TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
 WORK_DIR="$BACKUP_DIR/tmp_$TIMESTAMP"
 
+# Source .env for RCLONE_REMOTE (and BOT_TOKEN/ADMIN_ALERT_CHAT_IDS if needed)
+if [ -f "$PROJECT_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$PROJECT_DIR/.env"
+  set +a
+fi
+
 # rclone remote name (configure with: rclone config)
-# Uncomment when S3 is set up:
-# RCLONE_REMOTE="wishlist-s3:wishlist-backups"
+# Set up: rclone config → "wishlist-s3" → S3-compatible → endpoint/keys
+RCLONE_REMOTE="${RCLONE_REMOTE:-}"
+# To enable: add RCLONE_REMOTE=wishlist-s3:wishlist-backups to /opt/wishlist/.env
 
 log() { echo "[backup] $(date -u +%Y-%m-%dT%H:%M:%SZ) $*"; }
 
@@ -70,9 +79,27 @@ log "  checksum: $(cat "$ARCHIVE.sha256")"
 # ── 6. Upload to S3 (when configured) ────────────────────────────────────────
 if [ -n "${RCLONE_REMOTE:-}" ] && command -v rclone &>/dev/null; then
   log "Uploading to $RCLONE_REMOTE ..."
-  rclone copy "$ARCHIVE" "$RCLONE_REMOTE/" --progress
-  rclone copy "$ARCHIVE.sha256" "$RCLONE_REMOTE/"
-  log "  upload complete"
+  if rclone copy "$ARCHIVE" "$RCLONE_REMOTE/" --transfers=1 --retries=3 --low-level-retries=5 2>&1; then
+    rclone copy "$ARCHIVE.sha256" "$RCLONE_REMOTE/" 2>&1
+    log "  upload complete"
+
+    # Verify remote file exists and size matches
+    LOCAL_SIZE=$(stat -c%s "$ARCHIVE" 2>/dev/null || stat -f%z "$ARCHIVE")
+    REMOTE_SIZE=$(rclone size "$RCLONE_REMOTE/$(basename "$ARCHIVE")" --json 2>/dev/null | grep -o '"bytes":[0-9]*' | cut -d: -f2 || echo "0")
+    if [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ]; then
+      log "  verified: remote size matches ($LOCAL_SIZE bytes)"
+    else
+      log "  WARNING: size mismatch local=$LOCAL_SIZE remote=$REMOTE_SIZE"
+    fi
+
+    # Remote retention: delete backups older than 30 days
+    S3_RETENTION_DAYS=30
+    rclone delete "$RCLONE_REMOTE/" --min-age "${S3_RETENTION_DAYS}d" 2>&1 || true
+    REMOTE_COUNT=$(rclone ls "$RCLONE_REMOTE/" 2>/dev/null | grep -c "\.tar\.gz$" || echo "?")
+    log "  remote backups: $REMOTE_COUNT (retention: ${S3_RETENTION_DAYS}d)"
+  else
+    log "  ERROR: upload failed — backup remains local only"
+  fi
 else
   log "  rclone not configured, keeping local only"
 fi
