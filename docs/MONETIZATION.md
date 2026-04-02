@@ -1,7 +1,7 @@
 # MONETIZATION
 
 > Source of truth for plans, limits, entitlements, billing flow, and paywall content.
-> Last updated: 2026-03-26 · Branch: main
+> Last updated: 2026-04-02 · Branch: main
 
 ---
 
@@ -94,21 +94,176 @@ All limits and feature gates are **enforced server-side**. The client performs p
 
 ---
 
-## 4. Entitlement Resolution
+## 4. Two-Layer Entitlement System
 
-Function: `getUserEntitlement(userId, godMode?)` — `apps/api/src/index.ts`
+Entitlements are resolved in two layers:
 
-**Resolution order:**
-1. Look for `Subscription` with `planCode='PRO'`, `status IN ('ACTIVE','CANCELLED')`, `currentPeriodEnd > now()`
-2. If found → return `PLANS.PRO`, `isPro: true`
-3. If not found AND `godMode=true` (user's `telegramId` in `GOD_MODE_TELEGRAM_IDS` env) → return `PLANS.PRO`, `isPro: true`, no subscription object
-4. Otherwise → return `PLANS.FREE`, `isPro: false`
+### Layer 1: Base Plan — `getUserEntitlement(userId, godMode?)`
 
-**God Mode:** Virtual PRO for testing/development. Activated via `GOD_MODE_TELEGRAM_IDS` env var. No billing involved. Visible in Settings as "⚡ Режим бога".
+Determines the user's base plan (`FREE` or `PRO`) and `proSource`. Resolution order (first match wins):
+
+1. **Paid subscription** — `Subscription` with `planCode='PRO'`, `status IN ('ACTIVE','CANCELLED')`, `currentPeriodEnd > now()` → `proSource: 'subscription'`
+2. **Promo-PRO** — `PromoRedemption` with `status='ACTIVE'`, `expiresAt > now()` (or `null` for lifetime) → `proSource: 'promo'`
+3. **God Mode** — `godMode=true` (user's `telegramId` in `GOD_MODE_TELEGRAM_IDS` env) → `proSource: 'god_mode'`
+4. **Fallback** → `PLANS.FREE`, `isPro: false`, `proSource: null`
+
+**God Mode:** Virtual PRO for testing/development. No billing involved. Visible in Settings as "⚡ Режим бога".
+
+### Layer 2: Effective Entitlements — `getEffectiveEntitlements(userId, godMode?)`
+
+Layers add-ons, credits, and Gift Notes access on top of the base plan. Returns:
+
+| Field | Source |
+|-------|--------|
+| `effectiveWishlistLimit` | `plan.wishlists + extraWishlistSlots` (from `UserAddOn` rows with `addonType='wishlist_slot'`) |
+| `effectiveSubscriptionLimit` | `plan.subscriptions + extraSubscriptionSlots` (from `addonType='subscription_slot'`) |
+| `extraItemsPerWishlist` | Map of `wishlistId → extra items` (from `item_slot_5` / `item_slot_15` add-ons) |
+| `seasonalWishlists` | Set of wishlist IDs with seasonal decoration add-on |
+| `hintCredits` | `UserCredits.hintCredits` (0 if no row) |
+| `importCredits` | `UserCredits.importCredits` (0 if no row) |
+| `hasGiftNotes` | `isPro OR godMode OR has 'gift_notes_unlock' add-on` |
+| `giftNotes.unlockType` | `'PRO'` / `'ONE_TIME'` / `'GOD'` / `null` |
+
+All limit-check endpoints use `getEffectiveEntitlements()`, not the raw plan values.
 
 ---
 
-## 5. Billing Flow (Telegram Stars)
+## 5. Add-on SKU Store
+
+One-time Telegram Stars purchases that extend limits beyond the base plan. Defined in `ONE_TIME_SKUS` in `apps/api/src/index.ts`.
+
+### SKU Catalogue
+
+| SKU Code | Price (XTR) | Type | What it does |
+|----------|:-----------:|------|-------------|
+| `extra_wishlist_slot` | 39 | permanent | +1 wishlist slot |
+| `extra_subscription_slot` | 25 | permanent | +1 subscription (follow) slot |
+| `extra_items_5` | 19 | permanent | +5 item slots for a specific wishlist |
+| `extra_items_15` | 39 | permanent | +15 item slots for a specific wishlist |
+| `hints_pack_5` | 29 | consumable | +5 hint credits |
+| `hints_pack_10` | 49 | consumable | +10 hint credits |
+| `import_pack_10` | 39 | consumable | +10 URL-import credits |
+| `import_pack_25` | 79 | consumable | +25 URL-import credits |
+| `seasonal_decoration` | 29 | cosmetic | Seasonal decoration for a specific wishlist |
+| `gift_notes_unlock` | 19 | permanent | Unlock Gift Notes feature (one-time) |
+
+- **permanent** add-ons persist forever and are stored as `UserAddOn` rows.
+- **consumable** add-ons increment `UserCredits.hintCredits` or `UserCredits.importCredits`.
+- **cosmetic** add-ons attach to a target wishlist (visual only).
+- SKUs with `targetRequired: true` require a `targetId` (wishlist ID) at checkout.
+
+### Per-SKU Caps (`ADDON_CAPS`)
+
+| Cap | FREE | PRO |
+|-----|:----:|:---:|
+| Extra wishlist slots | 3 (total limit 5) | 5 (total limit 15) |
+| Extra subscription slots | 3 (any plan) | 3 (any plan) |
+| Extra items +5 per wishlist | 3 max (+15 items) | 3 max (+15 items) |
+| Extra items +15 per wishlist | 1 max (+15 items) | 1 max (+15 items) |
+
+Caps prevent add-ons from fully substituting a PRO subscription.
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/tg/billing/addon/checkout` | Create Telegram Stars invoice for a SKU (requires `skuCode`, optional `targetId`) |
+| `POST` | `/tg/billing/addon/sync` | Return current add-ons and credits after purchase |
+
+---
+
+## 6. Credits System
+
+Credits allow FREE users to access PRO-gated features (hints, URL import) on a per-use basis via purchased credit packs.
+
+### `UserCredits` Model
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hintCredits` | `Int` (default 0) | Remaining hint sends |
+| `importCredits` | `Int` (default 0) | Remaining URL imports |
+
+### Behavior
+
+- **PRO users** bypass the credit check entirely (server-side). They have unlimited hints and imports within their plan features.
+- **FREE users** must have `hintCredits > 0` to send a hint or `importCredits > 0` to import a URL. Each use decrements the counter.
+- Credits are replenished by purchasing consumable SKU packs (`hints_pack_5`, `hints_pack_10`, `import_pack_10`, `import_pack_25`).
+
+---
+
+## 7. Gift Notes (Поводы и идеи)
+
+A personal gift idea notebook organized by occasions. One-time unlock at 19 XTR, or included with PRO.
+
+### Access
+
+| User type | How they get access |
+|-----------|-------------------|
+| PRO subscriber | Included automatically |
+| God Mode | Included automatically |
+| FREE user | One-time purchase of `gift_notes_unlock` SKU (19 XTR) |
+
+### Occasion Types
+
+| Type | Description |
+|------|-------------|
+| `BIRTHDAY` | Birthday occasions |
+| `ANNIVERSARY` | Anniversary occasions |
+| `HOLIDAY` | Holiday occasions |
+| `OTHER` | Custom/other occasions |
+
+### Data Model
+
+- `GiftOccasion` — an occasion (title, type, personName, targetDate, etc.) owned by a user
+- `GiftOccasionIdea` — individual gift ideas linked to an occasion
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/tg/billing/gift-notes/checkout` | Create Telegram Stars invoice for Gift Notes unlock |
+| `POST` | `/tg/billing/gift-notes/sync` | Verify unlock status after payment |
+| `GET` | `/tg/gift-occasions` | List user's occasions (requires Gift Notes access) |
+
+---
+
+## 8. Promo System
+
+Promotional codes grant entitlements without Telegram Stars payment.
+
+### Flow
+
+```
+User enters promo code
+  → POST /tg/promo/apply { code: "WISHPRO" }
+  → Code normalized: trim, uppercase, remove spaces/dashes
+  → Validated against PromoCampaign (active, within date range, not exhausted)
+  → Redemption created/updated
+  → Returns plan + entitlements
+```
+
+### Redemption Logic
+
+| User state | Result |
+|-----------|--------|
+| FREE user | `PromoRedemption` created with `status='ACTIVE'`, `expiresAt` set per campaign grant duration. User gets PRO for the promo period. |
+| Paid PRO user (active subscription) | `PromoRedemption` created with `status='ACCEPTED_FOR_PAID'`. Code is recorded but promo period does not activate (subscription takes priority). |
+| Already redeemed (active/expired) | `409 already_used` |
+| Campaign exhausted (max redemptions hit) | `409 campaign_exhausted` |
+
+### Rate Limiting
+
+`POST /tg/promo/apply` is rate-limited to **5 requests per 60 seconds** per user (`promoLimiter`).
+
+### Models
+
+- **`PromoCampaign`** — code, grant type, grant duration, max redemptions, active date range
+- **`PromoRedemption`** — tracks which user redeemed which campaign, status (`ACTIVE`, `EXPIRED`, `ACCEPTED_FOR_PAID`), expiry
+- **`EntitlementGrant`** — records promo-granted entitlements as add-ons to base plan
+
+---
+
+## 9. Billing Flow (Telegram Stars)
 
 ### Environment Variables
 
@@ -159,7 +314,7 @@ When user taps "Отменить продление", a bottom sheet appears lis
 
 ---
 
-## 6. UI Screens Using Entitlements
+## 10. UI Screens Using Entitlements
 
 | Screen / Component | Locale path | What changes |
 |--------------------|-------------|--------------|
@@ -178,7 +333,7 @@ When user taps "Отменить продление", a bottom sheet appears lis
 
 ---
 
-## 7. Upsell Contexts
+## 11. Upsell Contexts
 
 ```typescript
 type UpsellContext =
@@ -196,7 +351,7 @@ Each context has a dedicated `emoji`, `title`, `subtitle`, and optional `benefit
 
 ---
 
-## 8. i18n Keys — Source of Truth
+## 12. i18n Keys — Source of Truth
 
 All paywall text lives in `packages/shared/src/i18n.ts`.
 
@@ -226,7 +381,7 @@ All paywall text lives in `packages/shared/src/i18n.ts`.
 
 ---
 
-## 9. Adding or Changing a PRO Benefit
+## 13. Adding or Changing a PRO Benefit
 
 To add a new PRO benefit to the paywall:
 
@@ -242,7 +397,7 @@ To change a limit value (e.g., raise PRO wishlists from 10 to 15):
 
 ---
 
-## 10. Known Non-Advertised PRO Gates
+## 14. Known Non-Advertised PRO Gates
 
 These are server-side enforced but not shown on the main paywall (intentionally):
 
@@ -256,37 +411,13 @@ These are server-side enforced but not shown on the main paywall (intentionally)
 
 ---
 
-## 11. Promo System
-
-Promo codes (e.g. `WISHPRO`) allow granting entitlements without a Telegram Stars payment.
-
-### PromoCampaign model
-
-Each promo code is a `PromoCampaign` record with: code, grant type, grant duration, max redemptions, active date range.
-
-### PromoRedemption model
-
-Tracks which users redeemed which promo codes and when.
-
-### EntitlementGrant model
-
-Records promo-granted entitlements (add-ons to base plan).
-
-### Effective Entitlements
-
-`getUserEntitlement()` now resolves entitlements from multiple sources in priority order:
-1. Active `Subscription` (Telegram Stars payment)
-2. `EntitlementGrant` from promo redemption
-3. `godMode` flag (dev/testing)
-4. Otherwise: FREE plan
-
-### Degradation Flow
+## 15. Degradation Flow
 
 When a user's PRO access expires (subscription lapses, promo grant expires), a `DegradationState` record tracks the transition. This is used by the lifecycle messaging system to send winback messages.
 
 ---
 
-## 12. Lifecycle Messaging
+## 16. Lifecycle Messaging
 
 The system sends targeted messages via bot DM based on user lifecycle state:
 - **Winback**: Users who had PRO and lost it receive re-engagement messages
