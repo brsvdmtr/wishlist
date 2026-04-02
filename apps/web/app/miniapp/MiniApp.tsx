@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
+import { initSentry, captureException } from './sentry';
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES
@@ -2065,6 +2066,18 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [errorMsg, setErrorMsg] = useState('');
   const [tgUser, setTgUser] = useState<TgUser | null>(null);
   const [locale, setLocale] = useState<Locale>('ru');
+
+  // Initialize error tracking (safe: no-op if DSN not configured)
+  useEffect(() => { initSentry(); }, []);
+
+  // Forward unhandled promise rejections to error tracking
+  useEffect(() => {
+    const handler = (event: PromiseRejectionEvent) => {
+      captureException(event.reason, { type: 'unhandledrejection' });
+    };
+    window.addEventListener('unhandledrejection', handler);
+    return () => window.removeEventListener('unhandledrejection', handler);
+  }, []);
 
   // Desktop detection for responsive layout
   const [isDesktop, setIsDesktop] = useState(false);
@@ -4271,6 +4284,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           console.error('[WishBoard] SDK not found after 80 retries', { telegram: !!window.Telegram, hash: location.hash?.substring(0, 80) });
           trackEvent('miniapp.bootstrap_failed', { platform: navigator?.platform, hasTelegramWebApp: !!window.Telegram, hasInitData: false, screen: 'loading', errorCode: 'SDK_NOT_LOADED', errorSummary: 'SDK not found after 80 retries', userAgent: navigator?.userAgent?.substring(0, 120) });
           flushTelemetry();
+          captureException(new Error('SDK not loaded'), { retries: 80 });
           setErrorMsg(t('error_open_in_telegram', locale) + `\n[SDK_NOT_LOADED] hash=${location.hash ? 'yes' : 'no'} tg=${!!window.Telegram}`);
           setScreen('error');
         }
@@ -4291,6 +4305,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         console.error('[WishBoard] SDK error:', sdkErr);
         trackEvent('miniapp.bootstrap_failed', { platform: navigator?.platform, hasTelegramWebApp: !!window.Telegram, hasInitData: !!tg?.initData, screen: 'loading', errorCode: 'SDK_ERROR', errorSummary: (sdkErr instanceof Error ? sdkErr.message : String(sdkErr)).substring(0, 200), userAgent: navigator?.userAgent?.substring(0, 120) });
         flushTelemetry();
+        captureException(sdkErr, { phase: 'sdk_init' });
         setErrorMsg(t('error_load_failed', locale));
         setScreen('error');
         return;
@@ -4339,6 +4354,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         const diag = `[EMPTY_INIT_DATA] v=${tg.version} p=${tg.platform} hash=${location.hash ? location.hash.length : 0} user=${!!tg.initDataUnsafe?.user}`;
         trackEvent('miniapp.bootstrap_failed', { platform: navigator?.platform, hasTelegramWebApp: !!window.Telegram, hasInitData: false, screen: 'loading', errorCode: 'EMPTY_INIT_DATA', errorSummary: diag.substring(0, 200), userAgent: navigator?.userAgent?.substring(0, 120) });
         flushTelemetry();
+        captureException(new Error('Empty initData'), { version: tg.version, platform: tg.platform });
         setErrorMsg(t('error_open_in_telegram', locale) + '\n' + diag);
         setScreen('error');
         return;

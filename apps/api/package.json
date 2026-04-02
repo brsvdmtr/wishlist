@@ -13,6 +13,7 @@
     "test": "vitest run src/sort.test.ts src/security-auth.test.ts src/security-ssrf.test.ts src/marketplace/normalizers.test.ts src/marketplace/scoring.test.ts src/marketplace/guards.test.ts src/marketplace/orchestrator.test.ts src/marketplace/integration.test.ts"
   },
   "dependencies": {
+    "@sentry/node": "^10.47.0",
     "@wishlist/db": "workspace:*",
     "@wishlist/shared": "workspace:*",
     "cheerio": "^1.0.0",

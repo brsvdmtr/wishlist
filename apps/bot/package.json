@@ -9,6 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@sentry/node": "^10.47.0",
     "@wishlist/db": "workspace:*",
     "@wishlist/shared": "workspace:*",
     "dotenv": "16.4.5",
