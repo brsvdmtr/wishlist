@@ -1,5 +1,5 @@
 > Source of truth for user settings, privacy controls, and notification preferences.
-> Last updated: 2026-03-26 · Branch: main
+> Last updated: 2026-04-02 · Branch: main
 
 # Settings and Privacy
 
@@ -7,12 +7,13 @@
 
 ## 1. Overview
 
-Settings are split across two scopes:
+Settings are split across three scopes:
 
 | Scope | What it controls | Where it lives |
 |---|---|---|
-| **Profile-level** | Notifications, profile visibility, subscribe policy, UI preferences | `UserProfile` row, `PATCH /tg/me/settings` |
+| **Profile-level** | Notifications, privacy, language, currency, UI preferences | `UserProfile` row, `PATCH /tg/me/settings` |
 | **Wishlist-level** | Who can view a specific list, subscribe to it, or comment on it | `Wishlist` row, `PATCH /tg/wishlists/:id` |
+| **Language** | Auto/manual locale selection, RTL rendering | `UserProfile.languageMode` + `manualLanguage`, resolved via `resolveEffectiveLocale()` |
 
 Profile-level settings apply globally to the user. Wishlist-level settings override or extend profile-level behavior for individual lists.
 
@@ -20,7 +21,42 @@ Some settings are gated behind the PRO plan. For FREE users, sending a PRO-only 
 
 ---
 
-## 2. Notification Settings
+## 2. Language Settings
+
+The app supports six locales: `ru`, `en`, `zh-CN`, `hi`, `es`, `ar`.
+
+### Language mode
+
+| Mode | Behavior |
+|---|---|
+| `auto` (default) | Locale is derived from Telegram's `language_code` via `normalizeLocale()`. Falls back to `en` for unrecognised codes. |
+| `manual` | Uses the value stored in `manualLanguage`. When switching back to `auto`, `manualLanguage` is cleared to `null`. |
+
+### Effective locale resolution (`resolveEffectiveLocale()`)
+
+Single source of truth used by API, bot, and Mini App:
+
+1. If `languageMode = 'manual'` and `manualLanguage` is set, use `manualLanguage`.
+2. Otherwise, `normalizeLocale(telegramLanguageCode)` -- falls back to `en`.
+
+This function lives in `packages/shared/src/i18n.ts` and must be used everywhere locale is determined.
+
+### RTL support
+
+Arabic (`ar`) is the only RTL locale. `isRTL(locale)` returns `true` for `ar`, used to set `dir="rtl"` on the Mini App root container.
+
+### Support ID
+
+Each user has a `supportId` on their `UserProfile` -- a 16-character lowercase hex string generated via `crypto.randomBytes(8)`. It is:
+
+- Created on first profile creation for new users.
+- Lazy-backfilled for pre-migration users (existing rows without a `supportId` get one on next profile access).
+- Guaranteed unique (up to 10 collision retries, then falls back to 32-char hex).
+- Returned in `GET /tg/me/settings` and `GET /tg/me` (owner-only, never exposed in public/share responses).
+
+---
+
+## 3. Notification Settings
 
 All four notification toggles live on `UserProfile`. They control whether the Telegram bot sends a message to the user when the corresponding event occurs.
 
@@ -43,7 +79,7 @@ This means FREE users cannot disable notifications, and cannot enable marketing 
 
 ---
 
-## 3. Privacy Settings — Profile Level
+## 4. Privacy Settings — Profile Level
 
 These fields on `UserProfile` are set via `PATCH /tg/me/settings` and are available to all users (no PRO gate).
 
@@ -82,9 +118,9 @@ Both must pass for a subscription to succeed.
 
 ---
 
-## 4. Privacy Settings — Wishlist Level
+## 5. Privacy Settings — Wishlist Level
 
-Each wishlist has three privacy fields, set via `PATCH /tg/wishlists/:id`. All three have PRO gates — see Section 5.
+Each wishlist has three privacy fields, set via `PATCH /tg/wishlists/:id`. All three have PRO gates — see Section 6.
 
 ### `visibility`
 
@@ -117,11 +153,31 @@ Comments use OR logic for PRO gating: the code checks if **both** parties lack t
 
 A comment succeeds when at least one side has PRO. A PRO user can comment on a FREE owner's wishlist, and a FREE user can comment on a PRO owner's wishlist.
 
-Additionally, a new **card display mode** setting is available for configuring wishlist card appearance.
+### `commentsEnabled` (profile-level privacy)
+
+| Value | Effect | PRO required? |
+|---|---|---|
+| `true` (default) | Comments feature is enabled for the user | Yes -- PRO-gated (silently ignored for FREE) |
+| `false` | User opts out of comments on their wishlists | Yes -- PRO-gated (silently ignored for FREE) |
+
+### `hintsEnabled` (profile-level privacy)
+
+| Value | Effect | PRO required? |
+|---|---|---|
+| `true` (default) | Hint feature is enabled | No |
+| `false` | User disables hints; `POST /tg/items/:id/hint` returns 403 | No |
+
+### `cardDisplayMode` (app behavior)
+
+| Value | Effect | PRO required? |
+|---|---|---|
+| `auto` (default) | System chooses card layout | No (FREE always sees `auto`) |
+| `showcase` | Large image-first card layout | Yes -- FREE users always resolve to `auto` |
+| `compact` | Dense list layout | Yes -- FREE users always resolve to `auto` |
 
 ---
 
-## 5. PRO-Gated Settings Summary
+## 6. PRO-Gated Settings Summary
 
 | Setting | Scope | FREE user behavior |
 |---|---|---|
@@ -130,6 +186,8 @@ Additionally, a new **card display mode** setting is available for configuring w
 | `notifySubscriptions` | Profile | Silently ignored — value not applied |
 | `notifyMarketing` | Profile | Silently ignored — value not applied |
 | `newWishlistPosition=bottom` | Profile | Silently ignored — value not applied |
+| `cardDisplayMode` | Profile | Silently ignored — FREE always resolves to `auto` |
+| `commentsEnabled` | Profile | Silently ignored — value not applied |
 | `visibility=PUBLIC_PROFILE` | Wishlist | HTTP 403 |
 | `visibility=PRIVATE` | Wishlist | HTTP 403 |
 | `allowSubscriptions=NOBODY` | Wishlist | HTTP 403 |
@@ -140,36 +198,62 @@ Profile-level PRO settings fail silently (no error, value discarded). Wishlist-l
 
 ---
 
-## 6. God Mode
+## 7. God Mode
 
 God Mode grants a virtual PRO subscription for development and testing without any billing.
 
 - **Activation:** Set the `GOD_MODE_TELEGRAM_IDS` environment variable to a comma-separated list of Telegram user IDs.
-- **Effect:** The user is treated as PRO in all plan feature checks.
+- **Toggle endpoint:** `POST /tg/me/god-mode` -- flips `user.godMode` boolean. Returns `{ godMode: true/false }`. Only whitelisted Telegram IDs may call this; others get 403.
+- **Effect:** The user is treated as PRO in all plan feature checks (`proSource: 'god_mode'`).
 - **UI label:** Shown in the settings screen as "⚡ Режим бога".
 - **Billing:** No subscription is created; no payment is involved.
+- **Analytics:** God Mode stats endpoint includes `localeSegments` -- users grouped by effective locale (scopes: `active30d`, `new7d`, `all`) with per-locale counts, computed via SQL CASE normalisation of raw `language_code`.
 
 God Mode is intended for internal use only and should not be enabled in production for real users.
 
 ---
 
-## 7. API Reference
+## 8. API Reference
 
-### GET settings (inlined in plan response)
+### GET /tg/me/settings
 
-Settings are returned as part of the plan/profile response rather than a dedicated endpoint. The shape of the settings block:
+Returns all user settings in a structured response.
+
+**Auth:** Telegram Mini App init data required.
+
+**Response shape:**
 
 ```json
 {
-  "notifyComments": true,
-  "notifyReservations": true,
-  "notifySubscriptions": true,
-  "notifyMarketing": false,
-  "newWishlistPosition": "top",
-  "profileVisibility": "ALL",
-  "subscribePolicy": "ALL"
+  "languageMode": "auto",
+  "manualLanguage": null,
+  "effectiveLanguage": "en",
+  "defaultCurrency": "USD",
+  "notifications": {
+    "comments": true,
+    "reservations": true,
+    "subscriptions": true,
+    "marketing": false
+  },
+  "privacy": {
+    "profileVisibility": "ALL",
+    "subscribePolicy": "ALL",
+    "commentsEnabled": true,
+    "hintsEnabled": true
+  },
+  "appBehavior": {
+    "newWishlistPosition": "bottom",
+    "cardDisplayMode": "auto"
+  },
+  "isPro": false,
+  "supportId": "a1b2c3d4e5f6a7b8"
 }
 ```
+
+**Notes:**
+- FREE users: `notifications` are normalised to all `true` (they cannot opt out).
+- FREE users: `appBehavior.newWishlistPosition` is normalised to `"bottom"`, `cardDisplayMode` to `"auto"`.
+- `supportId` is owner-only, never exposed in public/share responses.
 
 ### PATCH /tg/me/settings
 
@@ -177,17 +261,29 @@ Update one or more profile-level settings.
 
 **Auth:** Telegram Mini App init data required.
 
-**Request body** (all fields optional):
+**Request body** (all fields optional, nested):
 
 ```json
 {
-  "notifyComments": true,
-  "notifyReservations": false,
-  "notifySubscriptions": true,
-  "notifyMarketing": false,
-  "newWishlistPosition": "top",
-  "profileVisibility": "ALL",
-  "subscribePolicy": "NOBODY"
+  "languageMode": "manual",
+  "manualLanguage": "es",
+  "defaultCurrency": "EUR",
+  "notifications": {
+    "comments": true,
+    "reservations": false,
+    "subscriptions": true,
+    "marketing": false
+  },
+  "privacy": {
+    "profileVisibility": "ALL",
+    "subscribePolicy": "NOBODY",
+    "commentsEnabled": true,
+    "hintsEnabled": false
+  },
+  "appBehavior": {
+    "newWishlistPosition": "top",
+    "cardDisplayMode": "showcase"
+  }
 }
 ```
 
@@ -195,15 +291,25 @@ Update one or more profile-level settings.
 
 | Field | Values |
 |---|---|
-| `newWishlistPosition` | `"top"` \| `"bottom"` |
-| `profileVisibility` | `"ALL"` \| `"LINK_ONLY"` \| `"SUBSCRIBERS"` \| `"NOBODY"` |
-| `subscribePolicy` | `"ALL"` \| `"LINK_ONLY"` \| `"APPROVED"` \| `"NOBODY"` |
+| `languageMode` | `"auto"` \| `"manual"` |
+| `manualLanguage` | `"ru"` \| `"en"` \| `"zh-CN"` \| `"hi"` \| `"es"` \| `"ar"` \| `null` |
+| `defaultCurrency` | `"RUB"` \| `"USD"` \| `"EUR"` \| `"GBP"` |
+| `notifications.comments` | `boolean` |
+| `notifications.reservations` | `boolean` |
+| `notifications.subscriptions` | `boolean` |
+| `notifications.marketing` | `boolean` |
+| `privacy.profileVisibility` | `"ALL"` \| `"LINK_ONLY"` \| `"SUBSCRIBERS"` \| `"NOBODY"` |
+| `privacy.subscribePolicy` | `"ALL"` \| `"LINK_ONLY"` \| `"APPROVED"` \| `"NOBODY"` |
+| `privacy.commentsEnabled` | `boolean` |
+| `privacy.hintsEnabled` | `boolean` |
+| `appBehavior.newWishlistPosition` | `"top"` \| `"bottom"` |
+| `appBehavior.cardDisplayMode` | `"auto"` \| `"showcase"` \| `"compact"` |
 
-**Response:** Updated `UserProfile` object (HTTP 200).
+**Response:** Updated settings object (HTTP 200).
 
-**Notes:**
-- PRO-only fields sent by FREE users are silently ignored in the response (no error).
-- `defaultCurrency` (enum: `RUB` | `USD`) is surfaced via `GET/PATCH /tg/me/settings` (see [API_REFERENCE.md](./API_REFERENCE.md)).
+**PRO gating:**
+- PRO-only fields sent by FREE users are silently ignored (no error): `notifications.comments`, `notifications.subscriptions`, `privacy.commentsEnabled`, `appBehavior.newWishlistPosition=bottom`, `appBehavior.cardDisplayMode`.
+- Available to all users: `defaultCurrency`, `hintsEnabled`, `notifications.reservations`, `notifications.marketing`, `languageMode`, `manualLanguage`.
 
 ### PATCH /tg/wishlists/:id (privacy fields)
 
