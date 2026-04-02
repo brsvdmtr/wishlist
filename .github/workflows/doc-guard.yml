@@ -1,0 +1,26 @@
+name: doc-guard
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - ".github/workflows/doc-guard.yml"
+      - "scripts/doc-guard.sh"
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - ".github/workflows/doc-guard.yml"
+      - "scripts/doc-guard.sh"
+
+jobs:
+  doc-guard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run doc guard
+        run: bash scripts/doc-guard.sh

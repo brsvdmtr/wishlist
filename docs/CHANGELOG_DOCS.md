@@ -45,5 +45,5 @@
 - Screen count: 33 → 36
 - File sizes updated to actual values (API ~11,964, MiniApp ~16,663, bot ~1,190, url-parser ~1,059)
 - Bot runtime: "webhook/polling" → "long polling"
-- i18n: "ru + en" → 6 locales (ru, en, zh-CN, hi, es, ar)
+- i18n: was ru+en only → now 6 locales (ru, en, zh-CN, hi, es, ar)
 - Added missing shipped features: add-on SKUs, credits, Gift Notes, promo, lifecycle, locale segments, Secret Santa, support bridge
