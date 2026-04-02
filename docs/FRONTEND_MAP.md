@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-03-26. Verified from source code.
+> Date: 2026-04-02. Verified from source code.
 
 ---
 
@@ -8,17 +8,17 @@
 
 ```
 apps/web/
-  middleware.ts                  - Basic Auth for /admin/*, www→canonical redirect
+  middleware.ts                  - Basic Auth for /admin/*, www->canonical redirect
   app/
     layout.tsx                   - Root layout (fonts, metadata)
     page.tsx                     - Home/landing page
     globals.css                  - Global styles (Tailwind)
     app/
-      page.tsx                   - Redirects /app → /miniapp
+      page.tsx                   - Redirects /app -> /miniapp
     miniapp/
       layout.tsx                 - Mini App layout (viewport meta, Telegram script)
       page.tsx                   - Mini App page entry (renders <MiniApp />)
-      MiniApp.tsx                - THE ENTIRE MINI APP (~10000+ lines, single component)
+      MiniApp.tsx                - THE ENTIRE MINI APP (~16,663 lines, single component)
       TelegramWebApp.tsx         - Telegram WebApp type declarations / helper
     admin/
       page.tsx                   - Admin: wishlist list
@@ -31,7 +31,7 @@ apps/web/
       not-found.tsx              - 404 page
 
 packages/shared/src/
-  i18n.ts                        - ru + en dictionaries, t(), detectLocale(), pluralize()
+  i18n.ts                        - 6-locale i18n: t(), detectLocale(), pluralize(), isRTL()
   index.ts                       - Package exports
 ```
 
@@ -39,29 +39,38 @@ packages/shared/src/
 
 ## 2. Screen State Machine
 
-`MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook. There is no routing library.
+`MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook. There is no routing library. ~300 `useState` calls and 240+ in the main component.
+
+### Screen Type Union (36 screens)
 
 ```typescript
 type Screen =
-  | 'loading'
-  | 'error'
-  | 'maintenance'
-  | 'my-wishlists'
-  | 'wishlist-detail'
-  | 'item-detail'
-  | 'share'
-  | 'guest-view'
-  | 'guest-item-detail'
-  | 'archive'
-  | 'drafts'
-  | 'settings'
-  | 'my-reservations'
-  | 'profile';
+  // Core (6)
+  | 'loading' | 'error' | 'maintenance'
+  | 'my-wishlists' | 'wishlist-detail' | 'item-detail'
+  // Social (4)
+  | 'share' | 'guest-view' | 'guest-item-detail' | 'my-reservations'
+  // Settings & Profile (3)
+  | 'settings' | 'profile' | 'public-profile'
+  // Archive / Drafts (2)
+  | 'archive' | 'drafts'
+  // Onboarding v2 (9)
+  | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete'
+  | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery'
+  | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share'
+  // Secret Santa (9)
+  | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join'
+  | 'santa-chat' | 'santa-polls' | 'santa-exclusions'
+  | 'santa-organizer' | 'santa-receiver-wishlist'
+  // Gift Notes (3)
+  | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall';
 ```
 
 Navigation is done by calling `setScreen(...)` together with supporting state (`setSelectedWishlist(...)`, `setSelectedItem(...)`, etc.). There are no URL changes.
 
-### Screen Descriptions
+### Screen Descriptions by Subsystem
+
+#### Core (6)
 
 | # | Screen | Description |
 |---|--------|-------------|
@@ -71,26 +80,72 @@ Navigation is done by calling `setScreen(...)` together with supporting state (`
 | 4 | `my-wishlists` | Home: 3-tab segmented nav (My Wishlists / All Wishes / My Reservations) |
 | 5 | `wishlist-detail` | Items list for a specific wishlist (owner view). Filter/sort, item counter, privacy settings, share button, add item, drag-to-reorder within priority group |
 | 6 | `item-detail` | Full item edit/view for owner: title, description, price, priority, currency, URL, photo. Complete/delete. Comments thread. Hint button (PRO). Move to another wishlist |
+
+#### Social (4)
+
+| # | Screen | Description |
+|---|--------|-------------|
 | 7 | `share` | Share screen: share token link, Telegram share button, copy link |
 | 8 | `guest-view` | Wishlist seen by a friend: items + reservation statuses. Filter/sort (price_asc, price_desc, priority_desc, recommended[PRO]). Budget filter. Subscribe button |
 | 9 | `guest-item-detail` | Single item seen by guest: reserve/unreserve button, comments (PRO), purchased button |
-| 10 | `archive` | Archived/completed items — either wishlist-specific or global. Restore/purge |
-| 11 | `drafts` | SYSTEM_DRAFTS wishlist: URL-imported items awaiting curation. Move to real wishlist or edit |
-| 12 | `settings` | Plan card (FREE: upgrade block; PRO: subscription info + cancel/resume). Notifications. Privacy (profileVisibility, subscribePolicy, commentsEnabled, hintsEnabled). App behavior (currency, wishlist position). Subscriptions (wishlists user follows with unread counts) |
-| 13 | `my-reservations` | Items reserved by current user across all wishlists. Unread comment count badge per item |
-| 14 | `profile` | User profile: avatar, displayName, username, bio, birthday. Stats (wishlists count, total wishes, reservations, archived). Plan card. Edit profile |
+| 10 | `my-reservations` | Items reserved by current user across all wishlists. Unread comment count badge per item |
 
-### Screens added since March 17
+#### Settings & Profile (3)
 
-The screen count has grown from 14 to 33. New screen types include:
+| # | Screen | Description |
+|---|--------|-------------|
+| 11 | `settings` | Plan card (FREE: upgrade block; PRO: subscription info + cancel/resume). Notifications. Privacy (profileVisibility, subscribePolicy, commentsEnabled, hintsEnabled). App behavior (currency, wishlist position). Subscriptions (wishlists user follows with unread counts). God Mode dashboard (A/B onboarding metrics, feature toggles, locale segments analytics, retention stats) |
+| 12 | `profile` | User profile: avatar, displayName, username, bio, birthday. Stats (wishlists count, total wishes, reservations, archived). Plan card. Edit profile. Delete account |
+| 13 | `public-profile` | View another user's public profile via `profile_` deep link |
 
-- **Onboarding v2 screens** — multi-step welcome flow (welcome, import, share, reserve, complete)
-- **Promo redemption screen** — enter promo code, see result
-- **Public profile screen** — view another user's public profile via `profile_` deep link
-- **Profile sharing screen** — share own profile link
-- **Card display mode settings** — configure wishlist card appearance
-- **Lifecycle messaging screens** — winback and engagement prompts
-- **God mode dashboard** — A/B onboarding metrics, feature toggles
+#### Archive / Drafts (2)
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 14 | `archive` | Archived/completed items -- either wishlist-specific or global. Restore/purge. Bulk restore, bulk hard-delete |
+| 15 | `drafts` | SYSTEM_DRAFTS wishlist: URL-imported items awaiting curation. Move to real wishlist or edit. Bulk move, bulk delete, bulk archive |
+
+#### Onboarding v2 (9)
+
+Multi-step welcome flow for new users. Controlled by server-side onboarding status (`/tg/onboarding/status`).
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 16 | `onboarding-entry` | Welcome entry point; presents the onboarding flow |
+| 17 | `onboarding-demo` | Interactive demo of app features |
+| 18 | `onboarding-complete` | Onboarding completion confirmation |
+| 19 | `onboarding-try` | Try URL import: paste a product URL to test the import flow |
+| 20 | `onboarding-success` | Success state after a successful try-import |
+| 21 | `onboarding-recovery` | Recovery flow when try-import fails |
+| 22 | `onboarding-catalog` | Browse catalog items to select for first wishlist |
+| 23 | `onboarding-create-wishlist` | Create first wishlist during onboarding |
+| 24 | `onboarding-share` | Share newly created wishlist; final onboarding step |
+
+#### Secret Santa (9)
+
+Full Secret Santa campaign system with group chat, polls, exclusions, and gift tracking.
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 25 | `santa-hub` | Dashboard listing all Secret Santa campaigns the user participates in |
+| 26 | `santa-create` | Create a new Secret Santa campaign (title, budget, deadline) |
+| 27 | `santa-campaign` | Campaign detail: participants, status, draw, gift tracking, hints, linked wishlist. Actions vary by role (organizer vs participant) |
+| 28 | `santa-join` | Join preview / confirmation for a Secret Santa invite link |
+| 29 | `santa-chat` | Group chat within a campaign (messages, pagination, mute toggle, read tracking) |
+| 30 | `santa-polls` | Polls within a campaign: create, vote, close |
+| 31 | `santa-exclusions` | Manage draw exclusions: individual pairs and exclusion groups |
+| 32 | `santa-organizer` | Organizer summary dashboard: participant statuses, exit requests (approve/deny) |
+| 33 | `santa-receiver-wishlist` | View the receiver's wishlist items within a Santa campaign context; reserve items for gift |
+
+#### Gift Notes (3)
+
+Occasion-based gift idea tracker. Requires add-on purchase (`gift_notes_unlock`).
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 34 | `gift-notes` | List of gift occasions (birthdays, holidays, etc.). Create/edit occasions with recurrence |
+| 35 | `gift-notes-occasion` | Detail view for a single occasion: ideas list, add/complete/delete ideas, edit occasion metadata, complete/archive/delete occasion |
+| 36 | `gift-notes-paywall` | Paywall gate for Gift Notes add-on purchase via Telegram Stars |
 
 ---
 
@@ -109,7 +164,7 @@ type HomeTab = 'wishlists' | 'wishes' | 'reservations';
 | `reservations` | Items reserved by the current user | `GET /tg/reservations` |
 
 The `wishlists` tab also shows:
-- A drafts banner (if SYSTEM_DRAFTS has pending items) — tapping navigates to the `drafts` screen
+- A drafts banner (if SYSTEM_DRAFTS has pending items) -- tapping navigates to the `drafts` screen
 - A PRO upsell card for FREE users (limit info + upgrade CTA)
 - A "My Reservations" quick link if `reservationsCount > 0`
 
@@ -146,9 +201,9 @@ All colors are defined in the `C` constant at the top of `MiniApp.tsx`.
 
 | Level | num | Emoji | Color | Background |
 |-------|-----|-------|-------|-----------|
-| LOW | 1 | 🙂 | `#6B7FD4` | `rgba(107,127,212,0.13)` |
-| MEDIUM | 2 | 😊 | `#E8930A` | `rgba(232,147,10,0.13)` |
-| HIGH | 3 | 😍 | `#F04E6E` | `rgba(240,78,110,0.13)` |
+| LOW | 1 | -- | `#6B7FD4` | `rgba(107,127,212,0.13)` |
+| MEDIUM | 2 | -- | `#E8930A` | `rgba(232,147,10,0.13)` |
+| HIGH | 3 | -- | `#F04E6E` | `rgba(240,78,110,0.13)` |
 
 ### Typography
 
@@ -171,19 +226,28 @@ All buttons: `borderRadius: 14`, `fontSize: 15`, `fontWeight: 600`, `padding: '1
 
 ## 5. PRO Upsell System
 
-### UpsellContext type
+### UpsellContext type (8 trigger points)
 
 ```typescript
 type UpsellContext =
-  | 'comments'
-  | 'url_import'
-  | 'hints'
-  | 'wishlist_limit'
-  | 'item_limit'
-  | 'participant_limit'
-  | 'subscription_limit'
-  | 'sort_recommended';
+  | 'comments' | 'url_import' | 'hints'
+  | 'wishlist_limit' | 'item_limit' | 'participant_limit'
+  | 'subscription_limit' | 'sort_recommended';
 ```
+
+Each context can trigger either a PRO upgrade sheet or an add-on purchase offer (when available).
+
+### Add-on SKUs by Context
+
+| Context | Add-on SKUs |
+|---------|-------------|
+| `wishlist_limit` | `extra_wishlist_slot` |
+| `item_limit` | `extra_items_5`, `extra_items_15` |
+| `subscription_limit` | `extra_subscription_slot` |
+| `hints` | `hints_pack_5`, `hints_pack_10` |
+| `url_import` | `import_pack_10`, `import_pack_25` |
+
+Additional standalone add-ons: `seasonal_decoration`, `gift_notes_unlock`.
 
 ### getProBenefits(locale)
 
@@ -191,33 +255,33 @@ Returns an array of 8 PRO feature items (icon + title + subtitle from i18n):
 
 | # | Icon | Feature |
 |---|------|---------|
-| 1 | 📋 | More wishlists (10 vs 2) |
-| 2 | 🎁 | More items per wishlist (70 vs 20) |
-| 3 | 👥 | More participants (20 vs 5) |
-| 4 | 💬 | Comments between owner and reserver |
-| 5 | 🔗 | URL import / auto-fill from product pages |
-| 6 | 💡 | Hint waves to friends |
-| 7 | 👁 | Advanced wishlist visibility (public profile / private) |
-| 8 | 🛡 | Privacy controls (allowSubscriptions, commentPolicy) |
+| 1 | -- | More wishlists (10 vs 2) |
+| 2 | -- | More items per wishlist (70 vs 20) |
+| 3 | -- | More participants (20 vs 5) |
+| 4 | -- | Comments between owner and reserver |
+| 5 | -- | URL import / auto-fill from product pages |
+| 6 | -- | Hint waves to friends |
+| 7 | -- | Advanced wishlist visibility (public profile / private) |
+| 8 | -- | Privacy controls (allowSubscriptions, commentPolicy) |
 
 ### getUpsellContent(locale)
 
 Returns context-specific upsell sheet content:
 
-| Context | Emoji | showTable | bullets |
-|---------|-------|:---------:|:-------:|
-| `comments` | 💬 | false | 3 |
-| `url_import` | 🔗 | false | 3 |
-| `hints` | 💡 | false | 3 |
-| `wishlist_limit` | 📋 | true | — |
-| `item_limit` | 🎁 | true | — |
-| `participant_limit` | 👥 | true | — |
-| `subscription_limit` | 🔔 | true | — |
-| `sort_recommended` | ✨ | true | — |
+| Context | showTable | bullets |
+|---------|:---------:|:-------:|
+| `comments` | false | 3 |
+| `url_import` | false | 3 |
+| `hints` | false | 3 |
+| `wishlist_limit` | true | -- |
+| `item_limit` | true | -- |
+| `participant_limit` | true | -- |
+| `subscription_limit` | true | -- |
+| `sort_recommended` | true | -- |
 
 ### ProUpsellSheet component
 
-Bottom sheet rendered when `upsellSheet: UpsellSheetState` is non-null. Shows either feature-specific bullet list or a FREE vs PRO comparison table. Always includes an "Upgrade to PRO" CTA that calls `POST /tg/billing/pro/checkout` and opens the Telegram Stars invoice link.
+Bottom sheet rendered when `upsellSheet: UpsellSheetState` is non-null. Shows either feature-specific bullet list or a FREE vs PRO comparison table. Always includes an "Upgrade to PRO" CTA that calls `POST /tg/billing/pro/checkout` and opens the Telegram Stars invoice link. When add-on SKUs are available for the context, also shows add-on purchase options via `POST /tg/billing/addon/checkout`.
 
 ### ProBadge component
 
@@ -238,8 +302,8 @@ type GuestSort = 'default' | 'price_asc' | 'price_desc' | 'priority_desc' | 'rec
 | Option | Description | PRO Required |
 |--------|-------------|:------------:|
 | `default` | Server order (priority groups + position) | No |
-| `price_asc` | Price low → high | No |
-| `price_desc` | Price high → low | No |
+| `price_asc` | Price low -> high | No |
+| `price_desc` | Price high -> low | No |
 | `priority_desc` | High priority first | No |
 | `recommended` | Scored sort (see below) | Yes |
 
@@ -298,7 +362,7 @@ const res = await fetch(`${API_BASE}/tg/wishlists`, {
 });
 ```
 
-When `NEXT_PUBLIC_API_URL` is not set, `/api` is proxied to the backend by Next.js `rewrites`, avoiding CORS in development.
+When `NEXT_PUBLIC_API_URL` is not set, `/api` is proxied to the backend by Next.js `rewrites`, avoiding CORS in development. A wrapper `tgFetch()` function auto-injects the `X-TG-INIT-DATA` header and handles JSON parsing.
 
 ### Telegram Auth
 
@@ -316,7 +380,7 @@ This compensates for Telegram WebView not shrinking the viewport when the softwa
 
 ### ActorHash
 
-Guest identity is represented as a deterministic UUID derived from `SHA-256('tg_actor:' + telegramId)`. This is computed both client-side (`computeActorHash`) and server-side (`tgActorHash`) for reservation ownership checks. The owner never sees the guest's Telegram ID — only the actorHash (opaque to owner).
+Guest identity is represented as a deterministic UUID derived from `SHA-256('tg_actor:' + telegramId)`. This is computed both client-side (`computeActorHash`) and server-side (`tgActorHash`) for reservation ownership checks. The owner never sees the guest's Telegram ID -- only the actorHash (opaque to owner).
 
 ---
 
@@ -324,16 +388,62 @@ Guest identity is represented as a deterministic UUID derived from `SHA-256('tg_
 
 Source: `packages/shared/src/i18n.ts`
 
-- Two dictionaries: `ru` and `en`
-- `t(key, locale, params?)` — interpolates `{param}` placeholders in dictionary strings
-- `detectLocale(languageCode?)` — returns `'ru'` if code starts with `'ru'`, otherwise `'en'`
-- `pluralize(count, one, few, many, locale)` — Russian-aware pluralization
+### 6-Locale Model
+
+```typescript
+type Locale = 'ru' | 'en' | 'zh-CN' | 'hi' | 'es' | 'ar';
+```
+
+| Locale | Language | Direction |
+|--------|----------|-----------|
+| `ru` | Russian | LTR |
+| `en` | English | LTR |
+| `zh-CN` | Chinese (Simplified) | LTR |
+| `hi` | Hindi | LTR |
+| `es` | Spanish | LTR |
+| `ar` | Arabic | RTL |
+
+### Core Functions
+
+- `t(key, locale, params?)` -- interpolates `{param}` placeholders in dictionary strings
+- `detectLocale(languageCode?)` -- maps Telegram `language_code` to one of the 6 supported locales
+- `pluralize(count, one, few, many, locale)` -- Russian-aware pluralization
+- `isRTL(locale)` -- returns `true` for Arabic (`ar`)
+
+### Locale Resolution
+
 - Locale is resolved once on mount from `tg.initDataUnsafe.user?.language_code`
 - All API notifications default to Russian (`notifLocale: 'ru'`) regardless of user locale
 
+### RTL Support (Arabic)
+
+The root container sets `dir={isRTL(locale) ? 'rtl' : 'ltr'}` to flip the entire layout direction for Arabic users. All inline styles use logical properties or are mirrored via the `dir` attribute.
+
 ---
 
-## 9. Non-Mini-App Pages
+## 9. Key State Variable Categories
+
+The main component has ~300 `useState` calls. Major categories:
+
+| Category | Examples | Approx. count |
+|----------|----------|---------------|
+| Screen / navigation | `screen`, `screenHistory`, `previousScreen` | ~5 |
+| Wishlist data | `wishlists`, `currentWl`, `items`, `archiveItems`, `draftsItems` | ~15 |
+| Item editing | `editingItem`, `viewingItem`, `editForm*` fields | ~20 |
+| Guest/reservation | `guestWl`, `guestItems`, `reservations`, `reservingItem` | ~10 |
+| Comments | `comments`, `commentText`, `commentRole` | ~5 |
+| PRO / billing | `upsellSheet`, `planLimits`, `billingLoading` | ~8 |
+| Onboarding v2 | `onboardingStatus`, `onboardingTryUrl`, `onboardingCatalog*` | ~15 |
+| Secret Santa | `santaCampaigns`, `currentSantaCampaign`, `santaChat*`, `santaExcl*`, `santaPolls*` | ~30 |
+| Gift Notes | `gnOccasions`, `gnViewingOccasion`, `gnForm*`, `gnIdea*` | ~15 |
+| Profile / settings | `profileData`, `settingsData`, `displayName`, `avatarUrl` | ~10 |
+| God Mode | `godStats`, `retentionStats`, `godMode` | ~5 |
+| UI state | `toasts`, `bottomSheet*`, `searchQuery`, `dragState` | ~20 |
+| Subscriptions | `subscriptions`, `subscriptionsMeta` | ~5 |
+
+---
+
+## 10. Non-Mini-App Pages
 
 ### Admin Panel (`/admin/*`)
 
@@ -359,6 +469,6 @@ If `visibility === 'PRIVATE'` and the requester is not the owner or a subscriber
 
 Runs on all routes except `_next/static`, `_next/image`, `favicon.ico`:
 
-1. `/admin/*` — HTTP Basic Auth gate; returns `401 WWW-Authenticate` if credentials are missing or wrong
-2. Production `www.*` hostname → `301` redirect to canonical (non-www) host
-3. After successful admin auth — adds `X-Robots-Tag: noindex, nofollow` response header
+1. `/admin/*` -- HTTP Basic Auth gate; returns `401 WWW-Authenticate` if credentials are missing or wrong
+2. Production `www.*` hostname -- `301` redirect to canonical (non-www) host
+3. After successful admin auth -- adds `X-Robots-Tag: noindex, nofollow` response header
