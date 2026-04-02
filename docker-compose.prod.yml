@@ -88,6 +88,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_PRETTY: ${LOG_PRETTY:-false}
       APP_RELEASE: ${APP_RELEASE:-unknown}
+      ADMIN_ALERT_CHAT_IDS: ${ADMIN_ALERT_CHAT_IDS:-}
     depends_on:
       api:
         condition: service_started

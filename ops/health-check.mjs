@@ -18,7 +18,7 @@ try {
   }
 } catch { /* .env optional */ }
 
-const HEALTH_URL = process.env.HEALTH_URL || 'https://wishlistik.ru/health';
+const HEALTH_URL = process.env.HEALTH_URL || 'https://wishlistik.ru/api/health';
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_IDS = (process.env.ADMIN_ALERT_CHAT_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
 const TIMEOUT_MS = 10_000;
