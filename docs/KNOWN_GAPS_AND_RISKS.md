@@ -217,6 +217,23 @@
 - **Impact**: No user-facing ticket history or status; users have no way to check if their issue was addressed
 - **Severity**: LOW
 
+### Secret Santa Subsystem
+
+#### 40. Token Rotation / Lifecycle Risk
+- **Risk**: Token invalidation rules (when santa tokens expire or are rotated after campaign state transitions) have no explicit operational validation
+- **Impact**: Stale campaign access and potential support incidents if users retain old tokens after campaign completion or cancellation
+- **Severity**: MEDIUM
+
+#### 41. Multi-Wave Delivery / Orchestration Consistency
+- **Risk**: Multi-wave sequencing carries consistency risk if retries, partial sends, or delayed jobs overlap across waves
+- **Impact**: Duplicate messages, inconsistent participant state, or silent delivery failures in large campaigns
+- **Severity**: MEDIUM
+
+#### 42. Admin Tooling Gap for Santa Campaigns
+- **Risk**: No dedicated admin panel or ops-control surface for Santa campaigns; edge cases require manual DB intervention
+- **Impact**: Slow incident response for stuck/corrupt campaigns; no safe replay or recovery path without direct DB access
+- **Severity**: MEDIUM
+
 ---
 
 ## MISSING FOR SAFE RECOVERY

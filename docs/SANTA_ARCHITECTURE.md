@@ -1,7 +1,7 @@
 # Secret Santa — Architecture Document v2.2
 
 > **Status:** Batch 1 deployed. Batch 2 approved to start.
-> **Last updated:** 2026-03-18
+> **Last updated:** 2026-04-02
 > v2.1 — 5 final clarifications codified
 > v2.2 — 8 pre-Batch-2 invariant rules added (§19)
 
