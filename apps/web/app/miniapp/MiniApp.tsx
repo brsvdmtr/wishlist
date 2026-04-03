@@ -471,6 +471,14 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-04',
+    date: '04.04.2026',
+    items: [
+      { ru: 'Премиум-редизайн раздела «Настройки» — карточка профиля, иконки, новый стиль', en: 'Premium Settings redesign — profile card, icons, new style' },
+      { ru: 'Улучшена стабильность загрузки вишлистов при слабом интернете', en: 'Improved wishlist loading stability on slow networks' },
+    ],
+  },
+  {
     id: '2026-04-03',
     date: '03.04.2026',
     items: [
@@ -3071,6 +3079,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // UI state
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loading, setLoading] = useState(false);
+  const [itemsLoadFailed, setItemsLoadFailed] = useState(false);
 
   // Owner forms
   const [showCreateWl, setShowCreateWl] = useState(false);
@@ -4173,6 +4182,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
     const json = await res.json() as { items: Item[] };
     setItems(json.items);
+    setItemsLoadFailed(false);
   }, [tgFetch]);
 
   // --- Drafts API calls
@@ -5876,12 +5886,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
   const openWishlist = async (wl: Wishlist) => {
     setItems([]); // Clear stale items immediately to prevent flash of previous wishlist
+    setItemsLoadFailed(false);
     setCurrentWl(wl);
     setScreen('wishlist-detail');
     setLoading(true);
+    trackEvent('wishlist_detail_open_started', { wishlistId: wl.id, knownItemCount: wl.itemCount });
     try {
       await loadItems(wl.id);
+      trackEvent('wishlist_detail_open_succeeded', { wishlistId: wl.id });
     } catch {
+      setItemsLoadFailed(true);
+      if (wl.itemCount > 0) {
+        trackEvent('wishlist_detail_false_empty_prevented', { wishlistId: wl.id, knownItemCount: wl.itemCount });
+      } else {
+        trackEvent('wishlist_detail_open_failed_network', { wishlistId: wl.id });
+      }
       pushToast(t('toast_load_error', locale), 'error');
     } finally {
       setLoading(false);
@@ -7356,7 +7375,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'my-wishlists' && (
         <div
-          style={{ padding: isDesktop ? '16px 40px 120px' : '8px 20px 120px', minHeight: 'calc(100vh - 80px)' }}
+          style={{ padding: isDesktop ? '16px 40px 120px' : '20px 20px 120px', minHeight: 'calc(100vh - 80px)' }}
           onTouchStart={(e) => {
             if (reorderMode || itemReorderMode) return;
             const target = e.target as HTMLElement;
@@ -8763,7 +8782,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3,
               }}>{currentWl.title}</h1>
               <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0' }}>
-                {t('wishes_count', locale, { count: items.length })}
+                {t('wishes_count', locale, { count: items.length > 0 ? items.length : (loading || itemsLoadFailed) ? currentWl.itemCount : 0 })}
                 {currentWl.deadline && ` • ${fmtDeadline(currentWl.deadline)}`}
               </p>
             </div>
@@ -8964,13 +8983,105 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               );
             })}
 
-            {!itemReorderMode && !loading && items.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-                <div style={{ fontSize: 48, marginBottom: 16 }}>✨</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('add_first_wish', locale)}</div>
-                <div style={{ fontSize: 14, color: C.textMuted }}>{t('add_first_wish_hint', locale)}</div>
-              </div>
-            )}
+            {/* ── Empty / Error state ── */}
+            {!itemReorderMode && !loading && items.length === 0 && (() => {
+              const knownNonEmpty = (currentWl.itemCount ?? 0) > 0;
+              const isFalseEmpty = itemsLoadFailed && knownNonEmpty;
+              const isNetworkError = itemsLoadFailed && !knownNonEmpty;
+
+              if (isFalseEmpty) {
+                // Load failed but we KNOW items exist → show error, NOT empty state
+                return (
+                  <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>📶</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>
+                      {locale === 'ru' ? 'Похоже, интернет слишком медленный или соединение пропало' : 'Looks like the connection is too slow or lost'}
+                    </div>
+                    <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 20, lineHeight: 1.4 }}>
+                      {locale === 'ru' ? 'Попробуй ещё раз, когда сеть станет стабильнее' : 'Try again when you have a better connection'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                      <button
+                        onClick={async () => {
+                          setItemsLoadFailed(false);
+                          setLoading(true);
+                          try {
+                            await loadItems(currentWl.id);
+                          } catch {
+                            setItemsLoadFailed(true);
+                            pushToast(t('toast_load_error', locale), 'error');
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                        style={{
+                          padding: '10px 24px', borderRadius: 12, border: 'none',
+                          background: C.accent, color: '#fff', fontSize: 14, fontWeight: 600,
+                          cursor: 'pointer', fontFamily: font,
+                        }}
+                      >
+                        {locale === 'ru' ? 'Повторить' : 'Retry'}
+                      </button>
+                      <button
+                        onClick={() => setScreen('my-wishlists')}
+                        style={{
+                          padding: '10px 24px', borderRadius: 12, border: `1px solid ${C.borderLight}`,
+                          background: 'transparent', color: C.textSec, fontSize: 14, fontWeight: 600,
+                          cursor: 'pointer', fontFamily: font,
+                        }}
+                      >
+                        {locale === 'ru' ? 'Назад' : 'Back'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (isNetworkError) {
+                // Load failed and we don't know itemCount → generic error, no false empty
+                return (
+                  <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>
+                      {locale === 'ru' ? 'Не удалось загрузить желания' : 'Failed to load wishes'}
+                    </div>
+                    <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 20, lineHeight: 1.4 }}>
+                      {locale === 'ru' ? 'Проверь подключение к интернету и попробуй снова' : 'Check your internet connection and try again'}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setItemsLoadFailed(false);
+                        setLoading(true);
+                        try {
+                          await loadItems(currentWl.id);
+                        } catch {
+                          setItemsLoadFailed(true);
+                          pushToast(t('toast_load_error', locale), 'error');
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      style={{
+                        padding: '10px 24px', borderRadius: 12, border: 'none',
+                        background: C.accent, color: '#fff', fontSize: 14, fontWeight: 600,
+                        cursor: 'pointer', fontFamily: font,
+                      }}
+                    >
+                      {locale === 'ru' ? 'Повторить' : 'Retry'}
+                    </button>
+                  </div>
+                );
+              }
+
+              // True empty: load succeeded, items genuinely empty
+              return (
+                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>✨</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('add_first_wish', locale)}</div>
+                  <div style={{ fontSize: 14, color: C.textMuted }}>{t('add_first_wish_hint', locale)}</div>
+                </div>
+              );
+            })()}
 
             {!itemReorderMode && !currentWl.readOnly && (
               <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
