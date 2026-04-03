@@ -394,6 +394,63 @@ if (!token) {
     logger.info({ ticketCode: ticket.ticketCode }, 'support ticket closed');
   }
 
+  // ─── Support: close ticket by code (standalone /close SUP-XXXX) ──────────
+  async function handleCloseTicketByCode(ctx: any, code: string): Promise<void> {
+    const ticket = await prisma.supportTicket.findFirst({
+      where: { ticketCode: code.toUpperCase() },
+      include: { user: { select: { telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true } } } } },
+    });
+
+    if (!ticket) {
+      await ctx.reply(`⚠️ Тикет ${code} не найден.`).catch(() => {});
+      return;
+    }
+    if (ticket.status === 'CLOSED') {
+      await ctx.reply(`ℹ️ Тикет ${ticket.ticketCode} уже закрыт.`).catch(() => {});
+      return;
+    }
+
+    await prisma.supportTicket.update({
+      where: { id: ticket.id },
+      data: { status: 'CLOSED', closedAt: new Date() },
+    });
+
+    const userChatId = ticket.user.telegramChatId;
+    if (userChatId) {
+      const userLocale = resolveEffectiveLocale(
+        ticket.user.profile ? { languageMode: ticket.user.profile.languageMode as any, manualLanguage: ticket.user.profile.manualLanguage as any } : null,
+      );
+      await bot.telegram.sendMessage(userChatId, t('support_closed', userLocale, { code: ticket.ticketCode })).catch(() => {});
+    }
+
+    await ctx.reply(`✅ Тикет ${ticket.ticketCode} закрыт.`).catch(() => {});
+    logger.info({ ticketCode: ticket.ticketCode }, 'support ticket closed by code');
+  }
+
+  // ─── Support: list open tickets ──────────────────────────────────────────
+  async function handleListTickets(ctx: any): Promise<void> {
+    const tickets = await prisma.supportTicket.findMany({
+      where: { status: { notIn: ['CLOSED'] } },
+      include: { user: { select: { firstName: true, telegramId: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (tickets.length === 0) {
+      await ctx.reply('📋 Нет открытых тикетов.').catch(() => {});
+      return;
+    }
+
+    const lines = tickets.map((tk: any) => {
+      const status = tk.status === 'WAITING_SUPPORT' ? '🔴' : '🟡';
+      const name = tk.firstName || 'User';
+      const date = tk.createdAt.toISOString().slice(0, 10);
+      return `${status} <b>${tk.ticketCode}</b> — ${name} (ID: ${tk.user.telegramId})\n   ${tk.openedVia} · ${date} · ${tk.status}`;
+    });
+
+    const msg = `📋 <b>Открытые тикеты (${tickets.length}):</b>\n\n${lines.join('\n\n')}\n\nЗакрыть: <code>/close SUP-XXXX</code>`;
+    await ctx.reply(msg, { parse_mode: 'HTML' }).catch(() => {});
+  }
+
   // ─── Support: handle all messages from support chat ───────────────────────
   async function handleSupportChatMessage(ctx: any): Promise<void> {
     const msg = ctx.message as any;
@@ -401,15 +458,30 @@ if (!token) {
 
     const text: string | undefined = 'text' in msg ? msg.text : undefined;
 
-    // Must be a reply to be actionable
-    if (!msg.reply_to_message) return;
-    const replyToMsgId = (msg.reply_to_message as { message_id: number }).message_id;
-
-    // /close command (reply to a ticket message)
-    if (text?.startsWith('/close')) {
-      await handleCloseTicket(ctx, replyToMsgId);
+    // /tickets — list open tickets (no reply needed)
+    if (text?.startsWith('/tickets')) {
+      await handleListTickets(ctx);
       return;
     }
+
+    // /close — by reply or by ticket code
+    if (text?.startsWith('/close')) {
+      if (msg.reply_to_message) {
+        await handleCloseTicket(ctx, (msg.reply_to_message as { message_id: number }).message_id);
+      } else {
+        const match = text.match(/\/close\s+(SUP-\d+)/i);
+        if (match) {
+          await handleCloseTicketByCode(ctx, match[1]!);
+        } else {
+          await ctx.reply('Используй: <code>/close SUP-XXXX</code> или reply на сообщение тикета с /close', { parse_mode: 'HTML' }).catch(() => {});
+        }
+      }
+      return;
+    }
+
+    // Must be a reply for staff replies
+    if (!msg.reply_to_message) return;
+    const replyToMsgId = (msg.reply_to_message as { message_id: number }).message_id;
 
     // Support staff reply — extract full content (text, photo, video, document)
     const content = extractMessageContent(msg);
@@ -1076,39 +1148,56 @@ if (!token) {
       return; // consumed — don't fall through to URL import handler
     }
 
-    // ── Handle user replies in private chat ────────────────────────────────
-    if (!msg.reply_to_message) return next();
-    const replyToId: number = (msg.reply_to_message as { message_id: number }).message_id;
+    // ── Handle user messages in private chat ─────────────────────────────
+    const replyToId: number | null = msg.reply_to_message
+      ? (msg.reply_to_message as { message_id: number }).message_id
+      : null;
 
-    // Case 1: Reply to a ForceReply support prompt → create new ticket
-    const session = await prisma.supportSession.findFirst({
-      where: {
-        telegramChatId: chatId,
-        promptMessageId: replyToId,
-        expiresAt: { gte: new Date() },
-      },
-    });
-    if (session) {
-      // Consume the session so it can't be used again
-      await prisma.supportSession.delete({ where: { id: session.id } }).catch(() => {});
-      await handleCreateTicket(ctx);
-      return;
+    if (replyToId) {
+      // Case 1: Reply to a ForceReply support prompt → create new ticket
+      const session = await prisma.supportSession.findFirst({
+        where: {
+          telegramChatId: chatId,
+          promptMessageId: replyToId,
+          expiresAt: { gte: new Date() },
+        },
+      });
+      if (session) {
+        // Consume the session so it can't be used again
+        await prisma.supportSession.delete({ where: { id: session.id } }).catch(() => {});
+        await handleCreateTicket(ctx);
+        return;
+      }
+
+      // Case 2: Reply to a bot support message (support reply sent to user) → follow-up
+      const linkedMsg = await prisma.supportMessage.findFirst({
+        where: { telegramUserChatId: chatId, telegramUserMsgId: replyToId },
+        include: { ticket: true },
+      });
+      if (linkedMsg) {
+        const ticket = linkedMsg.ticket;
+        const locale = getLocale(ctx);
+        if (ticket.status === 'CLOSED') {
+          await ctx.reply(t('support_ticket_closed', locale, { code: ticket.ticketCode }));
+        } else {
+          await handleUserFollowUp(ctx, ticket);
+        }
+        return;
+      }
     }
 
-    // Case 2: Reply to a bot support message (support reply sent to user) → follow-up
-    const linkedMsg = await prisma.supportMessage.findFirst({
-      where: { telegramUserChatId: chatId, telegramUserMsgId: replyToId },
-      include: { ticket: true },
-    });
-    if (linkedMsg) {
-      const ticket = linkedMsg.ticket;
-      const locale = getLocale(ctx);
-      if (ticket.status === 'CLOSED') {
-        await ctx.reply(t('support_ticket_closed', locale, { code: ticket.ticketCode }));
-      } else {
-        await handleUserFollowUp(ctx, ticket);
+    // Case 3: User has an open ticket → any non-URL, non-command message is a follow-up
+    const msgText: string = 'text' in msg ? String((msg as any).text || '') : '';
+    const looksLikeUrl = /^https?:\/\/\S+$/i.test(msgText.trim());
+    const isCommand = msgText.startsWith('/');
+    if (!looksLikeUrl && !isCommand) {
+      const openTicket = await prisma.supportTicket.findFirst({
+        where: { user: { telegramChatId: chatId }, status: { notIn: ['CLOSED'] } },
+      });
+      if (openTicket) {
+        await handleUserFollowUp(ctx, openTicket);
+        return;
       }
-      return;
     }
 
     return next();
