@@ -2329,6 +2329,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [resReminderCustomDate, setResReminderCustomDate] = useState('');
   const [resPurchasedConfirmItem, setResPurchasedConfirmItem] = useState<ReservationItem | null>(null);
   const [resPurchasedLoading, setResPurchasedLoading] = useState(false);
+  const [resCommentsExpanded, setResCommentsExpanded] = useState(false);
   const [fromReservations, setFromReservations] = useState(false);
   const [santaDetailContext, setSantaDetailContext] = useState<{
     source: 'reservation' | 'receiver-wishlist';
@@ -2358,6 +2359,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Item detail view (for both owner and guest)
   const [viewingItem, setViewingItem] = useState<(Item | GuestItem) | null>(null);
   const [pendingEditItem, setPendingEditItem] = useState<Item | null>(null);
+  const viewingItemIdRef = useRef<string | null>(null);
+  if (viewingItem?.id !== viewingItemIdRef.current) {
+    viewingItemIdRef.current = viewingItem?.id ?? null;
+    if (resCommentsExpanded) setResCommentsExpanded(false);
+  }
 
   // UI state
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -6706,9 +6712,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   hat={santaSeason?.inSeason ?? false}
                 />
               </button>
-              <div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>WishBoard</h1>
+                  <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0, lineHeight: 1.2 }}>WishBoard</h1>
                   {planInfo.code === 'PRO' && (
                     <span style={{
                       fontSize: 10, fontWeight: 800, letterSpacing: 0.6, padding: '3px 8px',
@@ -6719,7 +6725,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     }}>PRO</span>
                   )}
                 </div>
-                <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
+                <p style={{ fontSize: 13, color: C.textMuted, margin: 0, lineHeight: 1.3 }}>
                   {tgUser ? t('greeting', locale, { name: tgUser.first_name }) : t('my_wishlists', locale)}
                 </p>
               </div>
@@ -8877,13 +8883,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
             {/* URL */}
             {viewingItem.url && (
-              <div style={{ marginTop: 0 }}>
+              <div style={{ marginTop: 0, maxWidth: '100%' }}>
                 <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
                   color: C.accent, background: C.accentSoft, padding: '8px 14px',
-                  borderRadius: 12, textDecoration: 'none', wordBreak: 'break-all',
+                  borderRadius: 12, textDecoration: 'none',
+                  maxWidth: '100%', overflow: 'hidden',
                 }}>
-                  🔗 {viewingItem.url.replace(/^https?:\/\//, '').slice(0, 40)}{viewingItem.url.length > 47 ? '…' : ''}
+                  <span style={{ flexShrink: 0 }}>🔗</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {viewingItem.url.replace(/^https?:\/\//, '')}
+                  </span>
                 </a>
               </div>
             )}
@@ -9078,6 +9088,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: C.orange }}>
                             {reminderDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}
+                            {locale === 'ru' ? ' в ' : ' at '}
                             {reminderDate.toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' }).replace(/^0/, '')}
                           </div>
                           <div style={{ fontSize: 12, color: C.textSec }}>
@@ -9088,7 +9099,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         </div>
                         <span
                           onClick={(e) => { e.stopPropagation(); handleResReminderRemove(resItem.id); }}
-                          style={{ fontSize: 12, color: C.textSec, cursor: 'pointer', padding: 4 }}
+                          style={{ fontSize: 18, color: C.textSec, cursor: 'pointer', padding: '6px 8px', lineHeight: 1 }}
                         >
                           ✕
                         </span>
@@ -9164,19 +9175,48 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               }
             })()}
 
-            {/* Comments — for reserver and owner */}
-            <CommentsThread
-              commentRole={commentRole}
-              comments={comments}
-              commentText={commentText}
-              setCommentText={setCommentText}
-              commentSending={commentSending}
-              myActorHash={myActorHashRef.current}
-              onDeleteComment={handleDeleteComment}
-              onSendComment={handleSendComment}
-              isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
-              locale={locale}
-            />
+            {/* Separator before comments */}
+            {commentRole && (
+              <div style={{ borderTop: `1px solid ${C.border}`, margin: '20px 0 0' }} />
+            )}
+
+            {/* Comments — collapsible expand button */}
+            {commentRole && !resCommentsExpanded && (
+              <button
+                onClick={() => setResCommentsExpanded(true)}
+                style={{
+                  ...btnBase, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+                  padding: '12px 16px', marginTop: 16, cursor: 'pointer',
+                }}
+              >
+                <span style={{ fontSize: 15 }}>💬</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('comments_title', locale)}</span>
+                {comments.length > 0 && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, color: C.accent,
+                    background: C.accentSoft, padding: '2px 8px', borderRadius: 8,
+                  }}>{comments.length}</span>
+                )}
+                <span style={{ fontSize: 14, color: C.textMuted, marginLeft: 'auto' }}>›</span>
+              </button>
+            )}
+
+            {/* Comments — expanded thread */}
+            {resCommentsExpanded && (
+              <CommentsThread
+                commentRole={commentRole}
+                comments={comments}
+                commentText={commentText}
+                setCommentText={setCommentText}
+                commentSending={commentSending}
+                myActorHash={myActorHashRef.current}
+                onDeleteComment={handleDeleteComment}
+                onSendComment={handleSendComment}
+                isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+                locale={locale}
+              />
+            )}
 
             {/* Hint for third parties */}
             {viewingItem.status === 'available' && !commentRole && (
@@ -13300,13 +13340,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {/* ── Reservation Pro: Purchased confirmation ── */}
       <BottomSheet isOpen={!!resPurchasedConfirmItem} onClose={() => setResPurchasedConfirmItem(null)} title="">
         <div style={{ textAlign: 'center', padding: '8px 0 0' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🎁</div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 6 }}>{t('res_purchased_confirm_title', locale)}</div>
-          <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 20, whiteSpace: 'pre-line' }}>{t('res_purchased_confirm_body', locale)}</div>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>{resPurchasedConfirmItem?.meta?.purchased ? '🔄' : '🎁'}</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+            {resPurchasedConfirmItem?.meta?.purchased ? t('res_unpurchase_confirm_title', locale) : t('res_purchased_confirm_title', locale)}
+          </div>
+          <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 20, whiteSpace: 'pre-line' }}>
+            {resPurchasedConfirmItem?.meta?.purchased ? t('res_unpurchase_confirm_body', locale) : t('res_purchased_confirm_body', locale)}
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => setResPurchasedConfirmItem(null)} style={{ ...btnSecondary, flex: 1 }}>{t('cancel', locale)}</button>
-            <button onClick={handleResPurchasedToggle} disabled={resPurchasedLoading} style={{ ...btnPrimary, flex: 2, opacity: resPurchasedLoading ? 0.6 : 1 }}>
-              {resPurchasedLoading ? '…' : (resPurchasedConfirmItem?.meta?.purchased ? t('res_mark_not_purchased', locale) : t('res_purchased_confirm_yes', locale))}
+            <button onClick={handleResPurchasedToggle} disabled={resPurchasedLoading} style={{
+              ...btnPrimary, flex: 2, opacity: resPurchasedLoading ? 0.6 : 1,
+              ...(resPurchasedConfirmItem?.meta?.purchased ? { background: C.redSoft, color: C.red } : {}),
+            }}>
+              {resPurchasedLoading ? '…' : (resPurchasedConfirmItem?.meta?.purchased ? t('res_unpurchase_confirm_yes', locale) : t('res_purchased_confirm_yes', locale))}
             </button>
           </div>
         </div>
