@@ -214,6 +214,7 @@ model Item {
   commentReadCursors    CommentReadCursor[]
   hints                 Hint[]
   santaItemReservations SantaItemReservation[]
+  reservationMeta       ReservationMeta[]
 
   @@index([wishlistId])
   @@index([purgeAfter])
@@ -1280,4 +1281,28 @@ model GiftOccasionIdea {
   @@index([occasionId])
   @@index([ownerUserId])
   @@index([occasionId, status])
+}
+
+// ─── Reservation Pro: private notes, purchased flag, reminders, history ──────
+model ReservationMeta {
+  id              String    @id @default(cuid())
+  itemId          String
+  reserverUserId  String
+  note            String?   @db.VarChar(500)
+  purchased       Boolean   @default(false)
+  purchasedAt     DateTime?
+  reminderAt      DateTime?
+  reminderSent    Boolean   @default(false)
+  // History tracking — when the reservation ends, these fields get populated
+  active          Boolean   @default(true)
+  endedAt         DateTime?
+  endReason       String?   // 'unreserved' | 'completed' | 'archived'
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, reserverUserId])
+  @@index([reserverUserId, active])
+  @@index([reminderAt, reminderSent])
 }

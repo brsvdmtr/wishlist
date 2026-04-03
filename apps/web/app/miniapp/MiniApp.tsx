@@ -207,7 +207,8 @@ type SkuInfo = { code: string; price: number; type: string; targetRequired: bool
 type UpsellContext =
   | 'comments' | 'url_import' | 'hints'
   | 'wishlist_limit' | 'item_limit' | 'participant_limit' | 'subscription_limit'
-  | 'sort_recommended';
+  | 'sort_recommended'
+  | 'reservation_pro';
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -250,11 +251,31 @@ type SubscribedWishlist = {
   unreadItemCounts: Record<string, number>;
 };
 
+type ReservationMeta = {
+  note: string | null;
+  purchased: boolean;
+  purchasedAt: string | null;
+  reminderAt: string | null;
+  reminderSent: boolean;
+};
+
 type ReservationItem = Item & {
   ownerName: string;
   ownerAvatarUrl: string | null;
   ownerId: string;
   unreadComments: number;
+  reservedAt?: string;
+  meta?: ReservationMeta | null;
+};
+
+type HistoryReservationItem = Item & {
+  ownerName: string;
+  ownerAvatarUrl: string | null;
+  ownerId: string;
+  endedAt: string | null;
+  endReason: string | null;
+  note: string | null;
+  purchased: boolean;
 };
 
 type SantaReservationItem = Item & {
@@ -885,6 +906,13 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     showTable: false,
     benefits: [t('upsell_sort_b1', locale), t('upsell_sort_b2', locale), t('upsell_sort_b3', locale)],
   },
+  reservation_pro: {
+    emoji: '🎯',
+    title: t('res_pro_full_title', locale),
+    subtitle: t('res_pro_full_desc', locale),
+    showTable: false,
+    benefits: [t('plan_pro_f10', locale), t('plan_pro_f11', locale), t('plan_pro_f12', locale), t('plan_pro_f13', locale), t('plan_pro_f14', locale)],
+  },
 });
 
 // Centralized PRO benefits config — single source of truth for all paywall/plan screens
@@ -899,6 +927,12 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
     { icon: '👁', title: t('plan_pro_f7', locale), subtitle: t('plan_pro_sub7', locale) },
     { icon: '🛡', title: t('plan_pro_f8', locale), subtitle: t('plan_pro_sub8', locale) },
     { icon: '📅', title: t('plan_pro_f9', locale), subtitle: t('plan_pro_sub9', locale) },
+    // Reservation Pro features
+    { icon: '📋', title: t('plan_pro_f10', locale), subtitle: t('plan_pro_sub10', locale) },
+    { icon: '📝', title: t('plan_pro_f11', locale), subtitle: t('plan_pro_sub11', locale) },
+    { icon: '🔔', title: t('plan_pro_f12', locale), subtitle: t('plan_pro_sub12', locale) },
+    { icon: '✓', title: t('plan_pro_f13', locale), subtitle: t('plan_pro_sub13', locale) },
+    { icon: '🔍', title: t('plan_pro_f14', locale), subtitle: t('plan_pro_sub14', locale) },
   ];
 }
 
@@ -2250,6 +2284,27 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [reservations, setReservations] = useState<ReservationItem[]>([]);
   const [reservationsCount, setReservationsCount] = useState(0);
   const [reservationsLoading, setReservationsLoading] = useState(false);
+  const [reservationPro, setReservationPro] = useState(false);
+  // Reservation Pro state
+  type ResTab = 'active' | 'history';
+  const [resTab, setResTab] = useState<ResTab>('active');
+  const [resHistory, setResHistory] = useState<HistoryReservationItem[]>([]);
+  const [resHistoryLoading, setResHistoryLoading] = useState(false);
+  type ResSort = 'date' | 'price_asc' | 'price_desc' | 'activity';
+  const [resSort, setResSort] = useState<ResSort>('date');
+  type ResStatusFilter = 'all' | 'not_purchased' | 'purchased' | 'with_comments';
+  const [resStatusFilter, setResStatusFilter] = useState<ResStatusFilter>('all');
+  const [resOwnerFilter, setResOwnerFilter] = useState<string | null>(null);
+  type ResHistoryFilter = 'all' | 'completed' | 'unreserved' | 'archived';
+  const [resHistoryFilter, setResHistoryFilter] = useState<ResHistoryFilter>('all');
+  const [resFilterSheetOpen, setResFilterSheetOpen] = useState(false);
+  const [resNoteSheetItem, setResNoteSheetItem] = useState<ReservationItem | null>(null);
+  const [resNoteText, setResNoteText] = useState('');
+  const [resNoteSaving, setResNoteSaving] = useState(false);
+  const [resReminderSheetItem, setResReminderSheetItem] = useState<ReservationItem | null>(null);
+  const [resReminderSaving, setResReminderSaving] = useState(false);
+  const [resPurchasedConfirmItem, setResPurchasedConfirmItem] = useState<ReservationItem | null>(null);
+  const [resPurchasedLoading, setResPurchasedLoading] = useState(false);
   const [fromReservations, setFromReservations] = useState(false);
   const [santaDetailContext, setSantaDetailContext] = useState<{
     source: 'reservation' | 'receiver-wishlist';
@@ -2841,6 +2896,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     if ((json as any).promoPro !== undefined) setPromoPro((json as any).promoPro);
     if (json.godMode !== undefined) setGodMode(json.godMode);
     if (json.canGodMode !== undefined) setCanGodMode(json.canGodMode);
+    if ((json as any).reservationPro !== undefined) setReservationPro((json as any).reservationPro);
     setPlanLimits({ wishlists: json.plan.wishlists, items: json.plan.items });
     if (json.addOns) setAddOns(json.addOns);
     if (json.credits) setCredits(json.credits);
@@ -2864,8 +2920,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         tgFetch('/tg/santa/my-reservations'),
       ]);
       if (res.ok) {
-        const json = await res.json() as { reservations: ReservationItem[] };
+        const json = await res.json() as { reservations: ReservationItem[]; reservationPro?: boolean };
         setReservations(json.reservations);
+        if (json.reservationPro !== undefined) setReservationPro(json.reservationPro);
         const santaJson = santaRes.ok ? await santaRes.json() as { reservations: SantaReservationItem[] } : { reservations: [] };
         setSantaReservationItems(santaJson.reservations);
         setReservationsCount(json.reservations.length + santaJson.reservations.length);
@@ -2877,6 +2934,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setSantaReservationItemsLoading(false);
     }
   }, [tgFetch]);
+
+  const loadResHistory = useCallback(async () => {
+    if (!reservationPro) return;
+    setResHistoryLoading(true);
+    try {
+      const res = await tgFetch('/tg/reservations/history');
+      if (res.ok) {
+        const json = await res.json() as { history: HistoryReservationItem[] };
+        setResHistory(json.history);
+      }
+    } catch { /* silent */ } finally {
+      setResHistoryLoading(false);
+    }
+  }, [tgFetch, reservationPro]);
 
   const loadAllItems = useCallback(async () => {
     setAllItemsLoading(true);
@@ -5651,6 +5722,105 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   };
 
+  // ── Reservation Pro handlers ─────────────────────────────────────────────
+  const handleResMetaUpdate = async (itemId: string, data: { note?: string | null; purchased?: boolean }) => {
+    try {
+      const res = await tgFetch(`/tg/reservations/${itemId}/meta`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        const json = await res.json() as { meta: ReservationMeta };
+        setReservations((prev) => prev.map((r) => r.id === itemId ? { ...r, meta: json.meta } : r));
+        return true;
+      }
+    } catch { /* silent */ }
+    return false;
+  };
+
+  const handleResNoteSave = async () => {
+    if (!resNoteSheetItem) return;
+    setResNoteSaving(true);
+    const ok = await handleResMetaUpdate(resNoteSheetItem.id, { note: resNoteText || null });
+    setResNoteSaving(false);
+    if (ok) {
+      setResNoteSheetItem(null);
+      pushToast(t('res_note_save', locale), 'success');
+    }
+  };
+
+  const handleResPurchasedToggle = async () => {
+    if (!resPurchasedConfirmItem) return;
+    setResPurchasedLoading(true);
+    const newVal = !resPurchasedConfirmItem.meta?.purchased;
+    const ok = await handleResMetaUpdate(resPurchasedConfirmItem.id, { purchased: newVal });
+    setResPurchasedLoading(false);
+    if (ok) {
+      setResPurchasedConfirmItem(null);
+      pushToast(newVal ? t('res_purchased', locale) : 'OK', 'success');
+    }
+  };
+
+  const handleResReminderSet = async (itemId: string, reminderAt: Date) => {
+    setResReminderSaving(true);
+    try {
+      const res = await tgFetch(`/tg/reservations/${itemId}/reminder`, {
+        method: 'POST',
+        body: JSON.stringify({ reminderAt: reminderAt.toISOString() }),
+      });
+      if (res.ok) {
+        const json = await res.json() as { reminderAt: string | null };
+        setReservations((prev) => prev.map((r) => r.id === itemId ? {
+          ...r,
+          meta: { ...(r.meta ?? { note: null, purchased: false, purchasedAt: null, reminderAt: null, reminderSent: false }), reminderAt: json.reminderAt, reminderSent: false },
+        } : r));
+        setResReminderSheetItem(null);
+        pushToast(t('res_reminder_set', locale), 'success');
+      }
+    } catch { /* silent */ } finally {
+      setResReminderSaving(false);
+    }
+  };
+
+  const handleResReminderRemove = async (itemId: string) => {
+    try {
+      await tgFetch(`/tg/reservations/${itemId}/reminder`, { method: 'DELETE' });
+      setReservations((prev) => prev.map((r) => r.id === itemId ? {
+        ...r,
+        meta: r.meta ? { ...r.meta, reminderAt: null, reminderSent: false } : r.meta,
+      } : r));
+    } catch { /* silent */ }
+  };
+
+  // Filtered + sorted reservations (Pro)
+  const filteredReservations = React.useMemo(() => {
+    let list = [...reservations];
+    // Status filter
+    if (resStatusFilter === 'not_purchased') list = list.filter((r) => !r.meta?.purchased);
+    else if (resStatusFilter === 'purchased') list = list.filter((r) => r.meta?.purchased);
+    else if (resStatusFilter === 'with_comments') list = list.filter((r) => r.unreadComments > 0);
+    // Owner filter
+    if (resOwnerFilter) list = list.filter((r) => r.ownerId === resOwnerFilter);
+    // Sort
+    if (resSort === 'price_asc') list.sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
+    else if (resSort === 'price_desc') list.sort((a, b) => (b.price ?? 0) - (a.price ?? 0));
+    // date and activity use default order from API (updatedAt desc)
+    return list;
+  }, [reservations, resStatusFilter, resOwnerFilter, resSort]);
+
+  const filteredResHistory = React.useMemo(() => {
+    if (resHistoryFilter === 'all') return resHistory;
+    return resHistory.filter((r) => r.endReason === resHistoryFilter);
+  }, [resHistory, resHistoryFilter]);
+
+  const resOwners = React.useMemo(() => {
+    const map = new Map<string, { name: string; avatarUrl: string | null }>();
+    for (const r of reservations) {
+      if (!map.has(r.ownerId)) map.set(r.ownerId, { name: r.ownerName, avatarUrl: r.ownerAvatarUrl });
+    }
+    return [...map.entries()];
+  }, [reservations]);
+
   const handleSantaReceiverReserve = useCallback(async (itemId: string) => {
     const campId = currentSantaCampaign?.campaign.id;
     if (!campId) return;
@@ -7048,118 +7218,346 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
           {/* ── RESERVATIONS TAB ────────────────────────────────────── */}
           {homeTab === 'reservations' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {reservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-                  <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
-                  <div style={{ fontSize: 14, color: C.textMuted }}>{t('reservations_loading', locale)}</div>
-                </div>
-              )}
-              {!reservationsLoading && !santaReservationItemsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('reservations_empty_title', locale)}</div>
-                  <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('reservations_empty_hint', locale)}</div>
-                </div>
-              )}
-              {/* Santa reservations sub-section */}
-              {santaReservationItems.length > 0 && (() => {
-                const campGroups: Record<string, { campaignTitle: string; campaignStatus: string; items: SantaReservationItem[] }> = {};
-                for (const r of santaReservationItems) {
-                  const g = campGroups[r.campaignId] ?? (campGroups[r.campaignId] = { campaignTitle: r.campaignTitle, campaignStatus: r.campaignStatus, items: [] });
-                  g.items.push(r);
-                }
-                let si = 0;
-                return (
-                  <div style={{ marginBottom: 4 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                      🎅 {t('santa_reservations_section_title', locale)}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {/* Active/History segment */}
+              <div style={{ display: 'flex', margin: '14px 16px 0', background: C.surface, borderRadius: 10, padding: 3, gap: 2 }}>
+                <button onClick={() => setResTab('active')} style={{
+                  flex: 1, padding: '7px 0', borderRadius: 8, fontSize: 13, fontWeight: 600, textAlign: 'center', border: 'none', cursor: 'pointer', fontFamily: font,
+                  background: resTab === 'active' ? C.accent : 'transparent', color: resTab === 'active' ? '#fff' : C.textSec,
+                  boxShadow: resTab === 'active' ? `0 2px 8px ${C.accentGlow}` : 'none', transition: 'all 0.2s',
+                }}>{t('res_tab_active', locale)}</button>
+                <button onClick={() => {
+                  if (reservationPro) { setResTab('history'); if (resHistory.length === 0) loadResHistory(); }
+                  else setUpsellSheet({ context: 'reservation_pro' });
+                }} style={{
+                  flex: 1, padding: '7px 0', borderRadius: 8, fontSize: 13, fontWeight: 600, textAlign: 'center', border: 'none', cursor: 'pointer', fontFamily: font,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  background: resTab === 'history' ? C.accent : 'transparent', color: resTab === 'history' ? '#fff' : C.textSec,
+                  boxShadow: resTab === 'history' ? `0 2px 8px ${C.accentGlow}` : 'none', opacity: reservationPro ? 1 : 0.5, transition: 'all 0.2s',
+                }}>{t('res_tab_history', locale)} {!reservationPro && <span style={{ fontSize: 10 }}>🔒</span>}</button>
+              </div>
+
+              {/* Active tab */}
+              {resTab === 'active' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {/* Filters bar */}
+                  {reservationPro && reservations.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px 0', gap: 8 }}>
+                      <button onClick={() => {
+                        if (resStatusFilter === 'with_comments') setResStatusFilter('all');
+                        else setResStatusFilter('with_comments');
+                      }} style={{
+                        display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        border: `1px solid ${resStatusFilter === 'with_comments' ? C.accent : C.borderLight}`,
+                        background: resStatusFilter === 'with_comments' ? C.accentSoft : C.surface,
+                        color: resStatusFilter === 'with_comments' ? C.accent : C.textSec, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap',
+                      }}><span style={{ fontSize: 13 }}>💬</span> {t('res_filter_unread', locale)}</button>
+                      <button onClick={() => setResFilterSheetOpen(true)} style={{
+                        display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        border: `1px solid ${(resOwnerFilter || resStatusFilter !== 'all' && resStatusFilter !== 'with_comments') ? C.accent : C.borderLight}`,
+                        background: C.surface, color: C.textSec, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap',
+                      }}>⚙ {t('res_filter_title', locale)}</button>
+                      <button onClick={() => setResFilterSheetOpen(true)} style={{
+                        marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        border: `1px solid ${C.borderLight}`, background: C.surface, color: C.textSec, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap',
+                      }}>↕ {resSort === 'date' ? t('res_sort_date', locale) : resSort === 'price_asc' ? t('res_sort_price_asc', locale) : resSort === 'price_desc' ? t('res_sort_price_desc', locale) : t('res_sort_activity', locale)}</button>
                     </div>
-                    {Object.entries(campGroups).map(([campaignId, group]) => (
-                      <div key={campaignId} style={{ marginBottom: 14 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: font }}>{group.campaignTitle}</div>
-                          {group.campaignStatus === 'COMPLETED' && (
-                            <div style={{ fontSize: 10, fontWeight: 600, color: C.textMuted, background: C.surface, borderRadius: 5, padding: '2px 5px' }}>
-                              {t('santa_reservations_completed', locale)}
+                  )}
+                  {/* Non-Pro filter hint */}
+                  {!reservationPro && reservations.length > 2 && (
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '10px 16px 0', gap: 8 }}>
+                      <span onClick={() => setUpsellSheet({ context: 'reservation_pro' })} style={{
+                        display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        border: `1px dashed ${C.borderLight}`, background: 'transparent', color: C.textMuted, cursor: 'pointer', fontFamily: font, opacity: 0.5,
+                      }}>⚙ {t('res_filter_title', locale)} 🔒</span>
+                    </div>
+                  )}
+
+                  {reservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                      <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
+                      <div style={{ fontSize: 14, color: C.textMuted }}>{t('reservations_loading', locale)}</div>
+                    </div>
+                  )}
+                  {!reservationsLoading && !santaReservationItemsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                      <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('reservations_empty_title', locale)}</div>
+                      <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('reservations_empty_hint', locale)}</div>
+                    </div>
+                  )}
+                  {/* Santa reservations sub-section */}
+                  {santaReservationItems.length > 0 && (() => {
+                    const campGroups: Record<string, { campaignTitle: string; campaignStatus: string; items: SantaReservationItem[] }> = {};
+                    for (const r of santaReservationItems) {
+                      const g = campGroups[r.campaignId] ?? (campGroups[r.campaignId] = { campaignTitle: r.campaignTitle, campaignStatus: r.campaignStatus, items: [] });
+                      g.items.push(r);
+                    }
+                    let si = 0;
+                    return (
+                      <div style={{ marginBottom: 4, padding: '0 16px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                          🎅 {t('santa_reservations_section_title', locale)}
+                        </div>
+                        {Object.entries(campGroups).map(([campaignId, group]) => (
+                          <div key={campaignId} style={{ marginBottom: 14 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: font }}>{group.campaignTitle}</div>
+                              {group.campaignStatus === 'COMPLETED' && (
+                                <div style={{ fontSize: 10, fontWeight: 600, color: C.textMuted, background: C.surface, borderRadius: 5, padding: '2px 5px' }}>
+                                  {t('santa_reservations_completed', locale)}
+                                </div>
+                              )}
                             </div>
-                          )}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {group.items.map((item) => {
+                                const delay = si * 0.06; si++;
+                                return (
+                                  <ReservationCard
+                                    key={item.id}
+                                    item={item as unknown as ReservationItem}
+                                    animDelay={delay}
+                                    locale={locale}
+                                    onTap={async () => {
+                                      setSantaReceiverWishlistLoading(true);
+                                      try {
+                                        const [detailRes, wlRes] = await Promise.all([
+                                          tgFetch(`/tg/santa/campaigns/${campaignId}`),
+                                          tgFetch(`/tg/santa/campaigns/${campaignId}/inbound/wishlist`),
+                                        ]);
+                                        if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
+                                        if (wlRes.ok) setSantaReceiverWishlist(await wlRes.json() as typeof santaReceiverWishlist);
+                                        setScreen('santa-receiver-wishlist');
+                                      } catch {
+                                        pushToast(t('toast_error_generic', locale), 'error');
+                                      } finally {
+                                        setSantaReceiverWishlistLoading(false);
+                                      }
+                                    }}
+                                    onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveSantaItem(item))}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  {/* Regular reservations grouped by owner */}
+                  {filteredReservations.length > 0 && (() => {
+                    const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: ReservationItem[] }> = {};
+                    for (const r of filteredReservations) {
+                      const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, ownerAvatarUrl: r.ownerAvatarUrl, items: [] });
+                      g.items.push(r);
+                    }
+                    let globalIdx = 0;
+                    return Object.entries(groups).map(([ownerId, group]) => (
+                      <div key={ownerId} style={{ marginBottom: 8, padding: '0 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName} size={32} accent={C.accent} />
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                           {group.items.map((item) => {
-                            const delay = si * 0.06; si++;
+                            const delay = globalIdx * 0.06;
+                            globalIdx++;
                             return (
-                              <ReservationCard
-                                key={item.id}
-                                item={item as unknown as ReservationItem}
-                                animDelay={delay}
-                                locale={locale}
-                                onTap={async () => {
-                                  setSantaReceiverWishlistLoading(true);
-                                  try {
-                                    const [detailRes, wlRes] = await Promise.all([
-                                      tgFetch(`/tg/santa/campaigns/${campaignId}`),
-                                      tgFetch(`/tg/santa/campaigns/${campaignId}/inbound/wishlist`),
-                                    ]);
-                                    if (detailRes.ok) setCurrentSantaCampaign(await detailRes.json() as SantaCampaignDetail);
-                                    if (wlRes.ok) setSantaReceiverWishlist(await wlRes.json() as typeof santaReceiverWishlist);
-                                    setScreen('santa-receiver-wishlist');
-                                  } catch {
-                                    pushToast(t('toast_error_generic', locale), 'error');
-                                  } finally {
-                                    setSantaReceiverWishlistLoading(false);
-                                  }
-                                }}
-                                onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveSantaItem(item))}
-                              />
+                              <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${delay}s both` }}>
+                                <div
+                                  onClick={() => {
+                                    setViewingItem({ ...item, reservedByDisplayName: null, reservedByActorHash: myActorHashRef.current } as GuestItem);
+                                    setHomeReturnTab('reservations');
+                                    setScreen('guest-item-detail');
+                                  }}
+                                  style={{
+                                    background: C.card, borderRadius: 14, padding: 14,
+                                    border: `1px solid ${C.border}`, cursor: 'pointer',
+                                    WebkitTapHighlightColor: 'transparent',
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                    <ItemThumb item={item} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, color: C.text, lineHeight: 1.3, paddingRight: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
+                                        {item.unreadComments > 0 && (
+                                          <span style={{ minWidth: 20, height: 20, borderRadius: 10, background: C.accent, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px', flexShrink: 0 }}>{item.unreadComments}</span>
+                                        )}
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                                        {item.meta?.purchased ? (
+                                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: C.accentSoft, color: C.accent, display: 'inline-flex', alignItems: 'center', gap: 3 }}>✓ {t('res_purchased', locale)}</span>
+                                        ) : (
+                                          <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('reservations_reserved', locale)}</span>
+                                        )}
+                                        {item.price != null && (
+                                          <span style={{ fontSize: 13, fontWeight: 600, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {/* Pro section: note, actions */}
+                                  {reservationPro && (
+                                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+                                      {item.meta?.note && (
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '6px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, marginBottom: 8 }}>
+                                          <span style={{ fontSize: 12, flexShrink: 0 }}>📝</span>
+                                          <span style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4 }}>{item.meta.note}</span>
+                                        </div>
+                                      )}
+                                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+                                        <button onClick={() => {
+                                          if (item.meta?.purchased) { setResPurchasedConfirmItem(item); }
+                                          else { setResPurchasedConfirmItem(item); }
+                                        }} style={{
+                                          display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                                          border: `1px solid ${item.meta?.purchased ? C.accent : C.borderLight}`,
+                                          background: item.meta?.purchased ? C.accentSoft : 'transparent',
+                                          color: item.meta?.purchased ? C.accent : C.textSec, cursor: 'pointer', fontFamily: font,
+                                        }}><span style={{ fontSize: 12 }}>{item.meta?.purchased ? '✓' : '☐'}</span> {t('res_mark_purchased', locale)}</button>
+                                        <button onClick={() => {
+                                          setResReminderSheetItem(item);
+                                        }} style={{
+                                          display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                                          border: `1px solid ${item.meta?.reminderAt ? 'rgba(251,191,36,0.3)' : C.borderLight}`,
+                                          background: item.meta?.reminderAt ? C.orangeSoft : 'transparent',
+                                          color: item.meta?.reminderAt ? C.orange : C.textSec, cursor: 'pointer', fontFamily: font,
+                                        }}><span style={{ fontSize: 12 }}>🔔</span> {item.meta?.reminderAt ? new Date(item.meta.reminderAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : t('res_reminder_btn', locale)}</button>
+                                        <button onClick={() => {
+                                          setResNoteText(item.meta?.note ?? '');
+                                          setResNoteSheetItem(item);
+                                        }} style={{
+                                          display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                                          border: `1px solid ${C.borderLight}`, background: 'transparent', color: C.textSec, cursor: 'pointer', fontFamily: font,
+                                        }}><span style={{ fontSize: 12 }}>📝</span> {t('res_note_btn', locale)}</button>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {/* Unreserve button */}
+                                  <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      onClick={() => setPendingUnreserveAction(() => () => handleUnreserveFromReservations(item))}
+                                      style={{
+                                        width: '100%', background: C.redSoft, border: `1px solid rgba(248,113,113,0.3)`,
+                                        borderRadius: 10, padding: '6px 14px', fontSize: 12,
+                                        color: C.red, cursor: 'pointer', fontFamily: font, fontWeight: 500, textAlign: 'center',
+                                      }}
+                                    >{t('reservations_unreserve', locale)}</button>
+                                  </div>
+                                </div>
+                              </div>
                             );
                           })}
                         </div>
                       </div>
+                    ));
+                  })()}
+                  {/* Inline upsell for non-Pro */}
+                  {!reservationPro && reservations.length > 0 && (
+                    <div onClick={() => setUpsellSheet({ context: 'reservation_pro' })} style={{
+                      margin: '8px 16px 16px', padding: 16, cursor: 'pointer',
+                      background: `linear-gradient(135deg, ${C.accentSoft} 0%, rgba(212,168,83,0.06) 100%)`,
+                      border: `1px solid rgba(124,106,255,0.15)`, borderRadius: 14, textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: 28, marginBottom: 8 }}>✨</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>{t('res_pro_upsell_title', locale)}</div>
+                      <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5, marginBottom: 12 }}>{t('res_pro_upsell_desc', locale)}</div>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: C.accent, color: '#fff', boxShadow: `0 4px 16px ${C.accentGlow}` }}>⭐ {t('res_pro_upsell_btn', locale)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* History tab */}
+              {resTab === 'history' && reservationPro && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {/* History filter chips */}
+                  <div style={{ display: 'flex', gap: 6, padding: '12px 16px 0', overflowX: 'auto' }}>
+                    {(['all', 'completed', 'unreserved', 'archived'] as ResHistoryFilter[]).map((f) => (
+                      <button key={f} onClick={() => setResHistoryFilter(f)} style={{
+                        padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+                        border: `1px solid ${resHistoryFilter === f ? C.accent : C.borderLight}`,
+                        background: resHistoryFilter === f ? C.accentSoft : C.surface,
+                        color: resHistoryFilter === f ? C.accent : C.textSec, cursor: 'pointer', fontFamily: font,
+                      }}>{f === 'all' ? t('res_filter_all', locale) : f === 'completed' ? t('res_filter_gifted', locale) : f === 'unreserved' ? t('res_filter_cancelled', locale) : t('res_filter_archived', locale)}</button>
                     ))}
                   </div>
-                );
-              })()}
-              {reservations.length > 0 && (() => {
-                const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: ReservationItem[] }> = {};
-                for (const r of reservations) {
-                  const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, ownerAvatarUrl: r.ownerAvatarUrl, items: [] });
-                  g.items.push(r);
-                }
-                let globalIdx = 0;
-                return Object.entries(groups).map(([ownerId, group]) => (
-                  <div key={ownerId} style={{ marginBottom: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                      <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName} size={32} accent={C.accent} />
-                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
+                  {resHistoryLoading && (
+                    <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                      <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {group.items.map((item) => {
-                        const delay = globalIdx * 0.06;
-                        globalIdx++;
-                        return (
-                          <ReservationCard
-                            key={item.id}
-                            item={item}
-                            animDelay={delay}
-                            locale={locale}
-                            onTap={() => {
-                              setViewingItem({
-                                ...item,
-                                reservedByDisplayName: null,
-                                reservedByActorHash: myActorHashRef.current,
-                              } as GuestItem);
-                              setHomeReturnTab('reservations');
-                              setScreen('guest-item-detail');
-                            }}
-                            onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveFromReservations(item))}
-                          />
-                        );
-                      })}
+                  )}
+                  {!resHistoryLoading && filteredResHistory.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                      <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('res_history_empty_title', locale)}</div>
+                      <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('res_history_empty_hint', locale)}</div>
                     </div>
-                  </div>
-                ));
-              })()}
+                  )}
+                  {/* History cards grouped by owner */}
+                  {filteredResHistory.length > 0 && (() => {
+                    const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: HistoryReservationItem[] }> = {};
+                    for (const r of filteredResHistory) {
+                      const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, ownerAvatarUrl: r.ownerAvatarUrl, items: [] });
+                      g.items.push(r);
+                    }
+                    let gi = 0;
+                    return Object.entries(groups).map(([ownerId, group]) => (
+                      <div key={ownerId} style={{ marginBottom: 8, padding: '0 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName} size={32} accent={C.accent} />
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {group.items.map((item) => {
+                            const delay = gi * 0.06; gi++;
+                            const badge = item.endReason === 'completed' ? { text: t('res_history_gifted', locale), bg: C.greenSoft, color: C.green }
+                              : item.endReason === 'unreserved' ? { text: t('res_history_unreserved', locale), bg: C.redSoft, color: C.red }
+                              : { text: t('res_history_archived', locale), bg: 'rgba(255,255,255,0.06)', color: C.textMuted };
+                            return (
+                              <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${delay}s both`, opacity: 0.8 }}>
+                                <div style={{ background: C.card, borderRadius: 14, padding: 14, border: `1px solid ${C.border}` }}>
+                                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                    <ItemThumb item={item} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, color: C.text, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: badge.bg, color: badge.color }}>{badge.text}</span>
+                                        {item.price != null && (
+                                          <span style={{ fontSize: 13, fontWeight: 600, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>
+                                        )}
+                                      </div>
+                                      {item.endedAt && (
+                                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
+                                          {new Date(item.endedAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+
+              {/* History upsell for free users */}
+              {resTab === 'history' && !reservationPro && (
+                <div style={{ textAlign: 'center', padding: '40px 24px' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('res_pro_upsell_history_title', locale)}</div>
+                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 24 }}>{t('res_pro_upsell_history_desc', locale)}</div>
+                  <button onClick={() => setUpsellSheet({ context: 'reservation_pro' })} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700,
+                    background: C.accent, color: '#fff', border: 'none', cursor: 'pointer', boxShadow: `0 4px 16px ${C.accentGlow}`,
+                  }}>⭐ {t('res_pro_upsell_btn', locale)}</button>
+                </div>
+              )}
             </div>
           )}
 
@@ -12520,6 +12918,138 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             >
               {unreservingConfirm ? '…' : t('unreserve_confirm_btn', locale)}
             </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── Reservation Pro: Note sheet ── */}
+      <BottomSheet isOpen={!!resNoteSheetItem} onClose={() => setResNoteSheetItem(null)} title={t('res_note_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: 13, color: C.textSec }}>{t('res_note_subtitle', locale)}</div>
+          <textarea
+            value={resNoteText}
+            onChange={(e) => setResNoteText(e.target.value)}
+            placeholder={t('res_note_placeholder', locale)}
+            rows={3}
+            style={{ ...inputStyle, resize: 'none', minHeight: 70 }}
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[t('res_note_tpl_split', locale), t('res_note_tpl_order', locale), t('res_note_tpl_bought', locale)].map((tpl) => (
+              <button key={tpl} onClick={() => setResNoteText((prev) => prev ? prev + ' ' + tpl : tpl)} style={{
+                padding: '6px 12px', borderRadius: 8, fontSize: 12, background: C.surface, color: C.textSec, border: `1px solid ${C.borderLight}`, cursor: 'pointer', fontFamily: font,
+              }}>{tpl}</button>
+            ))}
+          </div>
+          <button onClick={handleResNoteSave} disabled={resNoteSaving} style={{ ...btnPrimary, opacity: resNoteSaving ? 0.6 : 1 }}>
+            {resNoteSaving ? '…' : t('res_note_save', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Reservation Pro: Reminder sheet ── */}
+      <BottomSheet isOpen={!!resReminderSheetItem} onClose={() => setResReminderSheetItem(null)} title={t('res_reminder_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {resReminderSheetItem && (
+            <div style={{ fontSize: 13, color: C.textSec, marginBottom: 8 }}>{resReminderSheetItem.title} · {resReminderSheetItem.ownerName}</div>
+          )}
+          {(() => {
+            const now = new Date();
+            const presets = [
+              { label: t('res_reminder_3d', locale), desc: new Date(now.getTime() + 3 * 86400000).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }), date: new Date(now.getTime() + 3 * 86400000) },
+              { label: t('res_reminder_1w', locale), desc: new Date(now.getTime() + 7 * 86400000).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }), date: new Date(now.getTime() + 7 * 86400000) },
+              { label: t('res_reminder_month_end', locale), desc: (() => { const d = new Date(now.getFullYear(), now.getMonth() + 1, 0); return d.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }); })(), date: new Date(now.getFullYear(), now.getMonth() + 1, 0, 10, 0) },
+            ];
+            return presets.map((p) => (
+              <button key={p.label} onClick={() => { if (resReminderSheetItem) handleResReminderSet(resReminderSheetItem.id, p.date); }} disabled={resReminderSaving} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, background: C.card, border: `1px solid ${C.border}`, cursor: 'pointer', textAlign: 'left', fontFamily: font, width: '100%', opacity: resReminderSaving ? 0.6 : 1,
+              }}>
+                <span style={{ fontSize: 18 }}>⏰</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.label}</div>
+                  <div style={{ fontSize: 12, color: C.textSec }}>{p.desc}</div>
+                </div>
+              </button>
+            ));
+          })()}
+          {resReminderSheetItem?.meta?.reminderAt && (
+            <button onClick={() => { if (resReminderSheetItem) { handleResReminderRemove(resReminderSheetItem.id); setResReminderSheetItem(null); } }} style={{
+              marginTop: 4, padding: '10px 14px', borderRadius: 10, background: C.redSoft, border: 'none', color: C.red, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, textAlign: 'center', width: '100%',
+            }}>{t('res_reminder_remove', locale)} Удалить напоминание</button>
+          )}
+        </div>
+      </BottomSheet>
+
+      {/* ── Reservation Pro: Purchased confirmation ── */}
+      <BottomSheet isOpen={!!resPurchasedConfirmItem} onClose={() => setResPurchasedConfirmItem(null)} title="">
+        <div style={{ textAlign: 'center', padding: '8px 0 0' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🎁</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 6 }}>{t('res_purchased_confirm_title', locale)}</div>
+          <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 20, whiteSpace: 'pre-line' }}>{t('res_purchased_confirm_body', locale)}</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setResPurchasedConfirmItem(null)} style={{ ...btnSecondary, flex: 1 }}>{t('cancel', locale)}</button>
+            <button onClick={handleResPurchasedToggle} disabled={resPurchasedLoading} style={{ ...btnPrimary, flex: 2, opacity: resPurchasedLoading ? 0.6 : 1 }}>
+              {resPurchasedLoading ? '…' : (resPurchasedConfirmItem?.meta?.purchased ? t('res_mark_not_purchased', locale) : t('res_purchased_confirm_yes', locale))}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── Reservation Pro: Filters & Sort sheet ── */}
+      <BottomSheet isOpen={resFilterSheetOpen} onClose={() => setResFilterSheetOpen(false)} title={t('res_filter_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>{t('res_filter_sort_section', locale)}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {(['date', 'price_asc', 'price_desc', 'activity'] as ResSort[]).map((s) => (
+                <button key={s} onClick={() => setResSort(s)} style={{
+                  padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                  border: `1px solid ${resSort === s ? C.accent : C.borderLight}`,
+                  background: resSort === s ? C.accentSoft : C.card,
+                  color: resSort === s ? C.accent : C.textSec, cursor: 'pointer', fontFamily: font,
+                }}>{s === 'date' ? t('res_sort_date', locale) : s === 'price_asc' ? t('res_sort_price_asc', locale) : s === 'price_desc' ? t('res_sort_price_desc', locale) : t('res_sort_activity', locale)}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>{t('res_filter_status_section', locale)}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {(['all', 'not_purchased', 'purchased', 'with_comments'] as ResStatusFilter[]).map((f) => (
+                <button key={f} onClick={() => setResStatusFilter(f)} style={{
+                  padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                  border: `1px solid ${resStatusFilter === f ? C.accent : C.borderLight}`,
+                  background: resStatusFilter === f ? C.accentSoft : C.card,
+                  color: resStatusFilter === f ? C.accent : C.textSec, cursor: 'pointer', fontFamily: font,
+                }}>{f === 'all' ? t('res_filter_all', locale) : f === 'not_purchased' ? t('res_filter_not_purchased', locale) : f === 'purchased' ? t('res_filter_purchased', locale) : t('res_filter_with_comments', locale)}</button>
+              ))}
+            </div>
+          </div>
+          {resOwners.length > 1 && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>{t('res_filter_owner_section', locale)}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <button onClick={() => setResOwnerFilter(null)} style={{
+                  padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                  border: `1px solid ${resOwnerFilter === null ? C.accent : C.borderLight}`,
+                  background: resOwnerFilter === null ? C.accentSoft : C.card,
+                  color: resOwnerFilter === null ? C.accent : C.textSec, cursor: 'pointer', fontFamily: font,
+                }}>{t('res_filter_all', locale)}</button>
+                {resOwners.map(([ownerId, info]) => (
+                  <button key={ownerId} onClick={() => setResOwnerFilter(ownerId)} style={{
+                    padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6,
+                    border: `1px solid ${resOwnerFilter === ownerId ? C.accent : C.borderLight}`,
+                    background: resOwnerFilter === ownerId ? C.accentSoft : C.card,
+                    color: resOwnerFilter === ownerId ? C.accent : C.textSec, cursor: 'pointer', fontFamily: font,
+                  }}>
+                    <UserAvatar avatarUrl={info.avatarUrl} name={info.name} size={18} accent={C.accent} />
+                    {info.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => { setResSort('date'); setResStatusFilter('all'); setResOwnerFilter(null); }} style={{ ...btnSecondary, flex: 1 }}>{t('res_filter_reset', locale)}</button>
+            <button onClick={() => setResFilterSheetOpen(false)} style={{ ...btnPrimary, flex: 2 }}>{t('res_filter_apply', locale)}</button>
           </div>
         </div>
       </BottomSheet>

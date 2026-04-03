@@ -1382,6 +1382,18 @@ const PRO_PRICE_XTR = parseInt(process.env.PRO_PRICE_XTR ?? '100', 10);
 const PRO_SUBSCRIPTION_PERIOD = parseInt(process.env.PRO_SUBSCRIPTION_PERIOD ?? '2592000', 10);
 const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
 
+// ─── Reservation Pro — focus group gate ─────────────────────────────────────
+// Phase 1: only allow specific Telegram IDs. Later: open to all PRO users.
+const RESERVATION_PRO_BETA_IDS = (process.env.RESERVATION_PRO_BETA_IDS ?? '8747175307').split(',').filter(Boolean);
+
+function hasReservationPro(user: { telegramId?: string | null; godMode: boolean }, isPro: boolean): boolean {
+  if (user.godMode) return true;
+  if (user.telegramId && RESERVATION_PRO_BETA_IDS.includes(user.telegramId)) return true;
+  // Phase 2: uncomment to open to all PRO users
+  // if (isPro) return true;
+  return false;
+}
+
 // ─── Gift Notes (Поводы и идеи) — one-time unlock ────────────────────────────
 const GIFT_NOTES_PRICE_XTR = parseInt(process.env.GIFT_NOTES_PRICE_XTR ?? '19', 10);
 const GIFT_NOTES_SKU = 'gift_notes_unlock';
@@ -2244,6 +2256,8 @@ tgRouter.get(
     const locale = getRequestLocale(req);
     const user = await getOrCreateTgUser(req.tgUser!);
     const actorHash = tgActorHash(req.tgUser!.id);
+    const ent = await getUserEntitlement(user.id, user.godMode);
+    const resPro = hasReservationPro(user, ent.isPro);
 
     // 1. Items reserved by this user (only TG-identified reservations)
     const items = await prisma.item.findMany({
@@ -2252,6 +2266,7 @@ tgRouter.get(
         id: true, wishlistId: true, title: true, url: true, priceText: true,
         imageUrl: true, priority: true, status: true, description: true,
         sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+        createdAt: true, updatedAt: true,
         wishlist: {
           select: {
             owner: {
@@ -2311,16 +2326,208 @@ tgRouter.get(
       }),
     );
 
-    // 5. Map response
+    // 5. Batch fetch ReservationMeta for Pro users
+    const metaMap = new Map<string, { note: string | null; purchased: boolean; purchasedAt: string | null; reminderAt: string | null; reminderSent: boolean }>();
+    if (resPro && itemIds.length > 0) {
+      const metas = await prisma.reservationMeta.findMany({
+        where: { reserverUserId: user.id, itemId: { in: itemIds }, active: true },
+      });
+      for (const m of metas) {
+        metaMap.set(m.itemId, {
+          note: m.note,
+          purchased: m.purchased,
+          purchasedAt: m.purchasedAt?.toISOString() ?? null,
+          reminderAt: m.reminderAt?.toISOString() ?? null,
+          reminderSent: m.reminderSent,
+        });
+      }
+    }
+
+    // 6. Map response
     const reservations = items.map(item => ({
       ...mapTgItem(item),
       ownerName: ownerNames.get(item.wishlist.owner.id) ?? t('api_user_fallback', locale),
       ownerAvatarUrl: ownerAvatarUrls.get(item.wishlist.owner.id) ?? null,
       ownerId: item.wishlist.owner.id,
       unreadComments: unreadCounts[item.id] ?? 0,
+      reservedAt: item.createdAt.toISOString(),
+      ...(resPro ? { meta: metaMap.get(item.id) ?? null } : {}),
     }));
 
-    return res.json({ reservations });
+    return res.json({ reservations, reservationPro: resPro });
+  }),
+);
+
+// GET /tg/reservations/history — past reservations (completed, unreserved, archived)
+tgRouter.get(
+  '/reservations/history',
+  asyncHandler(async (req, res) => {
+    const locale = getRequestLocale(req);
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id, user.godMode);
+    if (!hasReservationPro(user, ent.isPro)) {
+      return res.status(402).json({ error: 'Pro feature', feature: 'reservation_history' });
+    }
+
+    const metas = await prisma.reservationMeta.findMany({
+      where: { reserverUserId: user.id, active: false },
+      orderBy: { endedAt: 'desc' },
+      take: 100,
+      include: {
+        item: {
+          select: {
+            id: true, title: true, url: true, priceText: true, imageUrl: true,
+            priority: true, status: true, description: true, currency: true,
+            sourceUrl: true, sourceDomain: true, importMethod: true,
+            wishlist: {
+              select: {
+                owner: {
+                  select: {
+                    id: true, firstName: true, telegramChatId: true,
+                    profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Resolve owner names
+    const uniqueOwners = new Map<string, typeof metas[0]['item']['wishlist']['owner']>();
+    for (const m of metas) {
+      const owner = m.item.wishlist.owner;
+      if (!uniqueOwners.has(owner.id)) uniqueOwners.set(owner.id, owner);
+    }
+    const ownerNames = new Map<string, string>();
+    const ownerAvatarUrls = new Map<string, string | null>();
+    await Promise.all(
+      [...uniqueOwners.entries()].map(async ([ownerId, owner]) => {
+        ownerNames.set(ownerId, await resolveUserFirstName(owner, locale));
+        const profile = owner.profile;
+        ownerAvatarUrls.set(ownerId, (profile?.avatarPublic !== false && profile?.avatarUrl) ? profile.avatarUrl : null);
+      }),
+    );
+
+    const history = metas.map(m => ({
+      ...mapTgItem(m.item as any),
+      ownerName: ownerNames.get(m.item.wishlist.owner.id) ?? t('api_user_fallback', locale),
+      ownerAvatarUrl: ownerAvatarUrls.get(m.item.wishlist.owner.id) ?? null,
+      ownerId: m.item.wishlist.owner.id,
+      endedAt: m.endedAt?.toISOString() ?? null,
+      endReason: m.endReason,
+      note: m.note,
+      purchased: m.purchased,
+    }));
+
+    return res.json({ history });
+  }),
+);
+
+// PATCH /tg/reservations/:itemId/meta — update private note / purchased flag
+tgRouter.patch(
+  '/reservations/:itemId/meta',
+  asyncHandler(async (req, res) => {
+    const itemId = req.params.itemId ?? '';
+    if (!itemId) return res.status(400).json({ error: 'Missing itemId' });
+
+    const parsed = z.object({
+      note: z.string().max(500).nullable().optional(),
+      purchased: z.boolean().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id, user.godMode);
+    if (!hasReservationPro(user, ent.isPro)) {
+      return res.status(402).json({ error: 'Pro feature', feature: 'reservation_meta' });
+    }
+
+    // Verify user actually has this item reserved
+    const item = await prisma.item.findUnique({ where: { id: itemId }, select: { reserverUserId: true, status: true } });
+    if (!item || item.reserverUserId !== user.id || item.status !== 'RESERVED') {
+      return res.status(404).json({ error: 'Active reservation not found' });
+    }
+
+    const data: Record<string, unknown> = {};
+    if (parsed.data.note !== undefined) data.note = parsed.data.note;
+    if (parsed.data.purchased !== undefined) {
+      data.purchased = parsed.data.purchased;
+      data.purchasedAt = parsed.data.purchased ? new Date() : null;
+    }
+
+    const meta = await prisma.reservationMeta.upsert({
+      where: { itemId_reserverUserId: { itemId, reserverUserId: user.id } },
+      create: { itemId, reserverUserId: user.id, ...data },
+      update: data,
+    });
+
+    return res.json({
+      meta: {
+        note: meta.note,
+        purchased: meta.purchased,
+        purchasedAt: meta.purchasedAt?.toISOString() ?? null,
+        reminderAt: meta.reminderAt?.toISOString() ?? null,
+        reminderSent: meta.reminderSent,
+      },
+    });
+  }),
+);
+
+// POST /tg/reservations/:itemId/reminder — set a reminder date
+tgRouter.post(
+  '/reservations/:itemId/reminder',
+  asyncHandler(async (req, res) => {
+    const itemId = req.params.itemId ?? '';
+    if (!itemId) return res.status(400).json({ error: 'Missing itemId' });
+
+    const parsed = z.object({
+      reminderAt: z.string().datetime(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getUserEntitlement(user.id, user.godMode);
+    if (!hasReservationPro(user, ent.isPro)) {
+      return res.status(402).json({ error: 'Pro feature', feature: 'reservation_reminder' });
+    }
+
+    const item = await prisma.item.findUnique({ where: { id: itemId }, select: { reserverUserId: true, status: true } });
+    if (!item || item.reserverUserId !== user.id || item.status !== 'RESERVED') {
+      return res.status(404).json({ error: 'Active reservation not found' });
+    }
+
+    const reminderAt = new Date(parsed.data.reminderAt);
+    if (reminderAt.getTime() <= Date.now()) {
+      return res.status(400).json({ error: 'Reminder must be in the future' });
+    }
+
+    const meta = await prisma.reservationMeta.upsert({
+      where: { itemId_reserverUserId: { itemId, reserverUserId: user.id } },
+      create: { itemId, reserverUserId: user.id, reminderAt, reminderSent: false },
+      update: { reminderAt, reminderSent: false },
+    });
+
+    return res.json({ reminderAt: meta.reminderAt?.toISOString() ?? null });
+  }),
+);
+
+// DELETE /tg/reservations/:itemId/reminder — remove a reminder
+tgRouter.delete(
+  '/reservations/:itemId/reminder',
+  asyncHandler(async (req, res) => {
+    const itemId = req.params.itemId ?? '';
+    if (!itemId) return res.status(400).json({ error: 'Missing itemId' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    await prisma.reservationMeta.updateMany({
+      where: { itemId, reserverUserId: user.id },
+      data: { reminderAt: null, reminderSent: false },
+    });
+
+    return res.json({ ok: true });
   }),
 );
 
@@ -3771,6 +3978,14 @@ tgRouter.post(
       data: { scheduledDeleteAt: ttl },
     });
 
+    // Mark ReservationMeta as completed (history)
+    if (item.reserverUserId) {
+      void prisma.reservationMeta.updateMany({
+        where: { itemId: id, reserverUserId: item.reserverUserId, active: true },
+        data: { active: false, endedAt: new Date(), endReason: 'completed' },
+      }).catch(() => {});
+    }
+
     // Notify reserver that item was completed
     if (item.reserverUserId) {
       const reserver = await prisma.user.findUnique({
@@ -3977,6 +4192,13 @@ tgRouter.post(
     // Cancel active hints when item is reserved
     void cancelItemHints(id);
 
+    // Ensure ReservationMeta exists (reactivate if re-reserving same item)
+    void prisma.reservationMeta.upsert({
+      where: { itemId_reserverUserId: { itemId: id, reserverUserId: user.id } },
+      create: { itemId: id, reserverUserId: user.id },
+      update: { active: true, endedAt: null, endReason: null, reminderSent: false },
+    }).catch(() => {});
+
     return res.json({ ok: true });
   }),
 );
@@ -4023,6 +4245,14 @@ tgRouter.post(
     if (result.kind === 'not_found') return res.status(404).json({ error: 'Item not found' });
     if (result.kind === 'conflict') return res.status(409).json({ error: 'Cannot unreserve' });
     if (result.kind === 'forbidden') return res.status(403).json({ error: 'Forbidden' });
+
+    // Mark ReservationMeta as inactive (history)
+    const unreserveUser = await getOrCreateTgUser(req.tgUser!);
+    void prisma.reservationMeta.updateMany({
+      where: { itemId: id, reserverUserId: unreserveUser.id, active: true },
+      data: { active: false, endedAt: new Date(), endReason: 'unreserved' },
+    }).catch(() => {});
+
     return res.json({ ok: true });
   }),
 );
@@ -4835,6 +5065,9 @@ tgRouter.get(
     const godModeAllowedIds = (process.env.GOD_MODE_TELEGRAM_IDS ?? '').split(',').filter(Boolean);
     const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
 
+    // Reservation Pro feature gate
+    const reservationPro = hasReservationPro(user, ent.isPro);
+
     // Summarize add-ons for frontend
     const extraWishlistSlots = ent.addOns.filter(a => a.addonType === 'wishlist_slot').reduce((s, a) => s + a.quantity, 0);
     const extraSubscriptionSlots = ent.addOns.filter(a => a.addonType === 'subscription_slot').reduce((s, a) => s + a.quantity, 0);
@@ -4871,6 +5104,7 @@ tgRouter.get(
         type: s.type,
         targetRequired: s.targetRequired,
       })),
+      reservationPro,
     });
   }),
 );
@@ -10879,6 +11113,59 @@ setInterval(async () => {
     console.error('[santa-deadlines] deadline-warning job failed:', err);
   }
 }, 60 * 60 * 1000);
+
+// ─── Reservation reminder cron (every 15 min) ──────────────────────────────
+setInterval(async () => {
+  try {
+    const now = new Date();
+    const due = await prisma.reservationMeta.findMany({
+      where: { reminderAt: { lte: now }, reminderSent: false, active: true },
+      take: 50,
+      include: {
+        item: {
+          select: {
+            id: true, title: true, priceText: true, currency: true,
+            wishlist: {
+              select: {
+                owner: {
+                  select: {
+                    firstName: true,
+                    profile: { select: { displayName: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (due.length === 0) return;
+
+    let sent = 0;
+    for (const meta of due) {
+      const reserver = await prisma.user.findUnique({
+        where: { id: meta.reserverUserId },
+        select: { telegramChatId: true },
+      });
+      if (reserver?.telegramChatId) {
+        const ownerName = meta.item.wishlist.owner.profile?.displayName ?? meta.item.wishlist.owner.firstName ?? '';
+        let text = `🔔 <b>Напоминание о бронировании</b>\n\n<b>${meta.item.title}</b>`;
+        if (meta.item.priceText) text += ` — ${meta.item.priceText}`;
+        text += `\nИз вишлиста <b>${ownerName}</b>`;
+        if (meta.note) text += `\n\n📝 ${meta.note}`;
+        await sendTgBotMessage(reserver.telegramChatId, text);
+        sent++;
+      }
+      await prisma.reservationMeta.update({
+        where: { id: meta.id },
+        data: { reminderSent: true },
+      });
+    }
+    if (sent > 0) console.log(`[reservation-reminders] sent ${sent} reminders`);
+  } catch (err) {
+    console.error('[reservation-reminders] job failed:', err);
+  }
+}, 15 * 60 * 1000); // every 15 minutes
 
 // ─── Santa seasonal broadcasts ───────────────────────────────────────────────
 

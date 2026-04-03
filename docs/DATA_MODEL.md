@@ -501,6 +501,30 @@ Join table linking items to tags. Composite primary key.
 
 ---
 
+### `ReservationMeta`
+Per-reservation metadata for PRO features: private notes, purchased flag, reminders, and history tracking. One record per (item, reserver) pair. Created on reserve, deactivated on unreserve/complete/archive.
+
+| Field            | Type     | Required | Default | Notes                                                               |
+|------------------|----------|----------|---------|---------------------------------------------------------------------|
+| `id`             | String   | Yes      | cuid    |                                                                     |
+| `itemId`         | String   | Yes      | —       | FK → `Item` (CASCADE delete)                                       |
+| `reserverUserId` | String   | Yes      | —       | Telegram user ID of the reserver (not a FK)                         |
+| `note`           | String   | No       | —       | Private note (max 500 chars). Visible only to the reserver          |
+| `purchased`      | Boolean  | Yes      | false   | Private "I already bought" flag                                     |
+| `purchasedAt`    | DateTime | No       | —       | When purchased flag was set                                         |
+| `reminderAt`     | DateTime | No       | —       | When to send a Telegram reminder                                    |
+| `reminderSent`   | Boolean  | Yes      | false   | Whether the reminder has been sent                                  |
+| `active`         | Boolean  | Yes      | true    | false = reservation ended (history)                                 |
+| `endedAt`        | DateTime | No       | —       | When the reservation ended                                          |
+| `endReason`      | String   | No       | —       | `'unreserved'` / `'completed'` / `'archived'`                      |
+| `createdAt`      | DateTime | Yes      | now     |                                                                     |
+| `updatedAt`      | DateTime | Yes      | auto    |                                                                     |
+
+**Unique constraint:** `(itemId, reserverUserId)`
+**Indexes:** `(reserverUserId, active)`, `(reminderAt, reminderSent)`
+
+---
+
 ### `ReservationEvent`
 Immutable append-only audit log of all reservation actions on an item. Records are never updated or deleted.
 

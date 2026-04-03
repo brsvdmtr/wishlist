@@ -41,11 +41,11 @@ Price and period are configurable via env vars: `PRO_PRICE_XTR` (default: 100), 
 
 ---
 
-## 2. PRO Benefits (Paywall — 8 items)
+## 2. PRO Benefits (Paywall — 13 items)
 
-These 8 items are shown on the paywall and in the "What you unlock with Pro" block.
+These 13 items are shown on the paywall and in the "What you unlock with Pro" block.
 They are rendered via **`getProBenefits(locale)`** in `apps/web/app/miniapp/MiniApp.tsx`.
-Text is sourced from `packages/shared/src/i18n.ts` keys `plan_pro_f1`–`plan_pro_f8` (titles) and `plan_pro_sub1`–`plan_pro_sub8` (subtitles).
+Text is sourced from `packages/shared/src/i18n.ts` keys `plan_pro_f1`–`plan_pro_f14` (titles) and `plan_pro_sub1`–`plan_pro_sub14` (subtitles).
 
 | # | Key | Title (RU) | Subtitle (RU) | Gate |
 |---|-----|-----------|---------------|------|
@@ -57,6 +57,11 @@ Text is sourced from `packages/shared/src/i18n.ts` keys `plan_pro_f1`–`plan_pr
 | 6 | `plan_pro_f6` | Намекнуть на подарок | Подскажи друзьям конкретную идею деликатно и быстро. | server (`features.includes('hints')` → 402) |
 | 7 | `plan_pro_f7` | До 5 подписок на вишлисты друзей | Следи за изменениями у друзей и получай обновления. | server (count >= plan.subscriptions → 402) |
 | 8 | `plan_pro_f8` | Расширенная приватность | Управляй видимостью, подписками и комментариями в своих вишлистах. | server (isPro check → 403) |
+| 10 | `plan_pro_f10` | История броней | Все прошлые и завершенные бронирования в одном месте. | server (hasReservationPro → 403) |
+| 11 | `plan_pro_f11` | Заметки к подаркам | Личные записки к забронированным желаниям — видишь только ты. | server (hasReservationPro → 403) |
+| 12 | `plan_pro_f12` | Напоминания о броне | Поставь напоминание, чтобы не забыть купить или вручить подарок. | server (hasReservationPro → 403) |
+| 13 | `plan_pro_f13` | Статус «Уже купил» | Отмечай купленные подарки и держи всё под контролем. | server (hasReservationPro → 403) |
+| 14 | `plan_pro_f14` | Фильтры и сортировка броней | Находи нужную бронь за секунду среди десятков подарков. | server (hasReservationPro → 403) |
 
 ---
 
@@ -85,6 +90,18 @@ All limits and feature gates are **enforced server-side**. The client performs p
 | `commentPolicy=SUBSCRIBERS` | `PATCH /tg/wishlists/:id` | `isPro` → 403 |
 | Notification settings (comments, subscriptions) | `PATCH /tg/me/settings` | `isPro` — silently ignored if FREE |
 | New wishlist position `bottom` | `PATCH /tg/me/settings` | `isPro` — silently ignored if FREE |
+
+### Reservation PRO — Beta-gated via `hasReservationPro()`
+
+Currently limited to focus-group users via `RESERVATION_PRO_BETA_IDS` env var. Phase 2 will open to all PRO users.
+
+| Feature | Endpoint | Check |
+|---------|----------|-------|
+| Reservation history | `GET /tg/reservations/history` | `hasReservationPro()` → 403 |
+| Private notes | `PATCH /tg/reservations/:itemId/meta` | `hasReservationPro()` → 403 |
+| Purchased flag | `PATCH /tg/reservations/:itemId/meta` | `hasReservationPro()` → 403 |
+| Reminders | `POST /tg/reservations/:itemId/reminder` | `hasReservationPro()` → 403 |
+| Filters & sort | Client-side | `reservationPro` flag from API |
 
 ### Client-only gate (no server enforcement)
 

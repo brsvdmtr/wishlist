@@ -138,7 +138,18 @@ All routes require `X-TG-INIT-DATA` (HMAC-validated). User is auto-upserted on e
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| GET | `/tg/reservations` | Auth user | Items reserved by the current user (status=RESERVED, reserverUserId=me). Includes `ownerName`, `ownerAvatarUrl`, `ownerId`, `unreadComments` per item |
+| GET | `/tg/reservations` | Auth user | Items reserved by the current user (status=RESERVED, reserverUserId=me). Includes `ownerName`, `ownerAvatarUrl`, `ownerId`, `unreadComments` per item. For Reservation-PRO users also includes `reservationMeta` (note, purchased, reminderAt) and `reservationPro: true` flag |
+
+### Reservations PRO (beta-gated)
+
+Access controlled by `hasReservationPro()` — currently limited to focus-group users via `RESERVATION_PRO_BETA_IDS` env var (default: `8747175307`). Will open to all PRO users in Phase 2.
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/reservations/history` | Reservation-PRO | Past reservations (active=false). Returns items with `endedAt`, `endReason` ('unreserved' / 'completed' / 'archived'), owner info. Grouped by owner on client. **403** if not Reservation-PRO |
+| PATCH | `/tg/reservations/:itemId/meta` | Reservation-PRO | Update private note and/or purchased flag. Body: `{ note?: string (max 500), purchased?: boolean }`. Upserts `ReservationMeta`. **403** if not Reservation-PRO |
+| POST | `/tg/reservations/:itemId/reminder` | Reservation-PRO | Set reminder. Body: `{ reminderAt: ISO8601 }`. Must be in the future. Upserts `ReservationMeta`. **403** if not Reservation-PRO. **400** if date is in the past |
+| DELETE | `/tg/reservations/:itemId/reminder` | Reservation-PRO | Remove reminder. Sets `reminderAt=null`, `reminderSent=false`. **403** if not Reservation-PRO |
 
 ### Comments (PRO-gated)
 
@@ -198,7 +209,7 @@ All routes require `X-TG-INIT-DATA` (HMAC-validated). User is auto-upserted on e
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| GET | `/tg/me/plan` | Auth user | Current plan, subscription, usage, add-ons, credits, SKU catalog. Includes `proSource`, `promoPro` |
+| GET | `/tg/me/plan` | Auth user | Current plan, subscription, usage, add-ons, credits, SKU catalog. Includes `proSource`, `promoPro`, `reservationPro` (boolean — Reservation PRO access flag) |
 | POST | `/tg/billing/pro/checkout` | Auth user | Create Telegram Stars invoice link (100 XTR/month). Returns `{ alreadySubscribed }` if active PRO. Creates `invoice_created` payment event |
 | POST | `/tg/billing/pro/sync` | Auth user | Re-query subscription state after payment. Does NOT activate (bot does). Returns `{ plan, subscription }` |
 | GET | `/tg/billing/history` | Auth user | Last 20 payment events |

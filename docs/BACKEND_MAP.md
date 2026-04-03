@@ -126,7 +126,16 @@ Separate from public routes; these are TG-authenticated endpoints for the Mini A
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/tg/reservations` | List items currently reserved by the authenticated user. Includes wishlist context. |
+| GET | `/tg/reservations` | List items currently reserved by the authenticated user. Includes wishlist context. For Reservation-PRO users, also includes `reservationMeta` and `reservationPro: true` flag. |
+
+**Reservations PRO (beta-gated)**
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/tg/reservations/history` | Past reservations (active=false) with item details, owner info, endedAt, endReason. Gated by `hasReservationPro()`. |
+| PATCH | `/tg/reservations/:itemId/meta` | Update private note (max 500) and/or purchased flag. Upserts `ReservationMeta`. Gated by `hasReservationPro()`. |
+| POST | `/tg/reservations/:itemId/reminder` | Set reminder date (must be future). Upserts `ReservationMeta`. Gated by `hasReservationPro()`. |
+| DELETE | `/tg/reservations/:itemId/reminder` | Remove reminder. Gated by `hasReservationPro()`. |
 
 **Comments**
 
@@ -368,6 +377,9 @@ Upserts a `UserProfile` row. On create, sets `defaultCurrency` based on locale (
 
 ### `getUserEntitlement(userId, godMode?)`
 Queries the `Subscription` table and `PromoRedemption` table for active PRO access. Returns `{ plan, isPro, proSource, subscription, promoPro }`. Resolution order: (1) paid subscription, (2) active promo redemption, (3) god mode, (4) FREE plan.
+
+### `hasReservationPro(user, isPro)`
+Determines if a user has access to Reservation PRO features (history, notes, purchased flag, reminders, filters). Currently beta-gated: returns true if user is godMode or their `telegramId` is in `RESERVATION_PRO_BETA_IDS` env var (default: `'8747175307'`). Phase 2 will also check `isPro`.
 
 ### `getEffectiveEntitlements(userId, godMode?)`
 Unified entitlement resolver. Combines base plan with add-on slots and credits. Returns effective limits for wishlists, subscriptions, per-wishlist item slots, seasonal decorations, hint/import credits, and Gift Notes access.
@@ -745,6 +757,9 @@ Notifies PENDING/BUYING givers 3-4 days before `drawAt`. Creates DEADLINE_WARNIN
 
 ### 11. Santa seasonal broadcasts
 Checks calendar milestones hourly. Triggers broadcasts on Nov 1 (PROMO: "Secret Santa opening soon") and Feb 1 (CLOSING_SOON: "closes Feb 15"). Deduplication via `SantaSeasonalBroadcastLog` table (unique constraint on year+type). Sends to all users with `telegramChatId`, batch of 25 with 1.2s pause.
+
+### 12. Reservation reminders
+Runs every 15 minutes (`setInterval(..., 15 * 60 * 1000)`). Finds `ReservationMeta` records where `reminderAt <= now`, `reminderSent = false`, `active = true`. For each, sends a Telegram notification to the reserver with item title, price, owner name, and the user's private note (if any). Marks `reminderSent = true` after sending. Processes up to 50 reminders per batch.
 
 ---
 

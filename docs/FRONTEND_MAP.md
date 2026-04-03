@@ -88,7 +88,7 @@ Navigation is done by calling `setScreen(...)` together with supporting state (`
 | 7 | `share` | Share screen: share token link, Telegram share button, copy link |
 | 8 | `guest-view` | Wishlist seen by a friend: items + reservation statuses. Filter/sort (price_asc, price_desc, priority_desc, recommended[PRO]). Budget filter. Subscribe button |
 | 9 | `guest-item-detail` | Single item seen by guest: reserve/unreserve button, comments (PRO), purchased button |
-| 10 | `my-reservations` | Items reserved by current user across all wishlists. Unread comment count badge per item |
+| 10 | `my-reservations` | Items reserved by current user across all wishlists. Unread comment count badge per item. **PRO layer**: Active/History segment, filters bar (unread, owner, sort), inline note/purchased/reminder controls per card, history tab with filter chips (All/Gifted/Cancelled/Archived). Non-PRO users see lock icons and upsell prompts |
 
 #### Settings & Profile (3)
 
@@ -161,7 +161,7 @@ type HomeTab = 'wishlists' | 'wishes' | 'reservations';
 |-----|---------|----------|
 | `wishlists` | User's wishlists with item counts, FREE/PRO `readOnly` badge, drag-to-reorder | `GET /tg/wishlists` |
 | `wishes` | Flat list of all items across all non-archived wishlists | `GET /tg/items` |
-| `reservations` | Items reserved by the current user | `GET /tg/reservations` |
+| `reservations` | Items reserved by the current user. PRO: Active/History tabs, filters, notes, reminders | `GET /tg/reservations`, `GET /tg/reservations/history` (PRO) |
 
 The `wishlists` tab also shows:
 - A drafts banner (if SYSTEM_DRAFTS has pending items) -- tapping navigates to the `drafts` screen
@@ -232,7 +232,8 @@ All buttons: `borderRadius: 14`, `fontSize: 15`, `fontWeight: 600`, `padding: '1
 type UpsellContext =
   | 'comments' | 'url_import' | 'hints'
   | 'wishlist_limit' | 'item_limit' | 'participant_limit'
-  | 'subscription_limit' | 'sort_recommended';
+  | 'subscription_limit' | 'sort_recommended'
+  | 'reservation_pro';
 ```
 
 Each context can trigger either a PRO upgrade sheet or an add-on purchase offer (when available).
@@ -251,7 +252,7 @@ Additional standalone add-ons: `seasonal_decoration`, `gift_notes_unlock`.
 
 ### getProBenefits(locale)
 
-Returns an array of 8 PRO feature items (icon + title + subtitle from i18n):
+Returns an array of 13 PRO feature items (icon + title + subtitle from i18n):
 
 | # | Icon | Feature |
 |---|------|---------|
@@ -263,6 +264,11 @@ Returns an array of 8 PRO feature items (icon + title + subtitle from i18n):
 | 6 | -- | Hint waves to friends |
 | 7 | -- | Advanced wishlist visibility (public profile / private) |
 | 8 | -- | Privacy controls (allowSubscriptions, commentPolicy) |
+| 10 | -- | Reservation history |
+| 11 | -- | Private notes on reservations |
+| 12 | -- | Reservation reminders |
+| 13 | -- | "Already bought" flag |
+| 14 | -- | Reservation filters & sort |
 
 ### getUpsellContent(locale)
 
@@ -278,6 +284,7 @@ Returns context-specific upsell sheet content:
 | `participant_limit` | true | -- |
 | `subscription_limit` | true | -- |
 | `sort_recommended` | true | -- |
+| `reservation_pro` | false | 5 (history, notes, reminders, purchased, filters) |
 
 ### ProUpsellSheet component
 
@@ -430,7 +437,7 @@ The main component has ~300 `useState` calls. Major categories:
 | Screen / navigation | `screen`, `screenHistory`, `previousScreen` | ~5 |
 | Wishlist data | `wishlists`, `currentWl`, `items`, `archiveItems`, `draftsItems` | ~15 |
 | Item editing | `editingItem`, `viewingItem`, `editForm*` fields | ~20 |
-| Guest/reservation | `guestWl`, `guestItems`, `reservations`, `reservingItem` | ~10 |
+| Guest/reservation | `guestWl`, `guestItems`, `reservations`, `reservingItem`, `reservationPro`, `resTab`, `resHistory`, `resSort`, `resStatusFilter`, `resOwnerFilter`, `resHistoryFilter` | ~25 |
 | Comments | `comments`, `commentText`, `commentRole` | ~5 |
 | PRO / billing | `upsellSheet`, `planLimits`, `billingLoading` | ~8 |
 | Onboarding v2 | `onboardingStatus`, `onboardingTryUrl`, `onboardingCatalog*` | ~15 |
