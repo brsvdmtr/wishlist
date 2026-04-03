@@ -2523,7 +2523,7 @@ tgRouter.post(
 
     // Sort and pick the nearest as reminderAt
     allDates.sort();
-    const nearestDate = new Date(allDates[0]);
+    const nearestDate = new Date(allDates[0]!);
 
     const meta = await prisma.reservationMeta.upsert({
       where: { itemId_reserverUserId: { itemId, reserverUserId: user.id } },
@@ -11200,7 +11200,7 @@ setInterval(async () => {
         // Set reminderAt to the next nearest date, keep cycling
         await prisma.reservationMeta.update({
           where: { id: meta.id },
-          data: { reminderAt: new Date(remaining[0]), reminderSent: false, reminderDates: remaining },
+          data: { reminderAt: new Date(remaining[0]!), reminderSent: false, reminderDates: remaining },
         });
       } else {
         // All reminders fired — mark as sent, clear dates
