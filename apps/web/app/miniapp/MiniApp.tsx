@@ -2991,6 +2991,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     try { return window.localStorage.getItem('changelog_seen_id') ?? ''; } catch { return ''; }
   });
   const [legalDocId, setLegalDocId] = useState<string | null>(null);
+  const [showReportProblemSheet, setShowReportProblemSheet] = useState(false);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const [showProfileVisibilitySheet, setShowProfileVisibilitySheet] = useState(false);
   const [showSubscribePolicySheet, setShowSubscribePolicySheet] = useState(false);
   const [showCommentsDefaultSheet, setShowCommentsDefaultSheet] = useState(false);
@@ -12246,7 +12248,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   setScreen('changelog');
                 }} />
                 <SettingsActionRow label={t('settings_report_problem', locale)} onClick={() => {
-                  try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
+                  setShowReportProblemSheet(true);
                 }} />
                 <SettingsActionRow label={t('settings_contact_support', locale)} onClick={async () => {
                   try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch { /* ok */ }
@@ -15194,6 +15196,79 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             disabled={editProfileSaving}
           >
             {editProfileSaving ? '\u2026' : t('save', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── REPORT PROBLEM BOTTOM SHEET ── */}
+      <BottomSheet isOpen={showReportProblemSheet} onClose={() => { if (!reportSubmitting) setShowReportProblemSheet(false); }}>
+        <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 56, height: 56, borderRadius: 18,
+            background: C.accentSoft, fontSize: 28, marginBottom: 16,
+          }}>
+            {'🛠'}
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
+            {t('report_title', locale)}
+          </div>
+          <div style={{ fontSize: 14, color: C.textSec, marginTop: 10, lineHeight: 1.5, padding: '0 4px' }}>
+            {t('report_body', locale)}
+          </div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 10, lineHeight: 1.45, padding: '0 4px' }}>
+            {t('report_hint', locale)}
+          </div>
+          <button
+            disabled={reportSubmitting}
+            style={{
+              ...btnPrimary, marginTop: 20, width: '100%', fontSize: 15, padding: '14px 24px',
+              opacity: reportSubmitting ? 0.6 : 1,
+            }}
+            onClick={async () => {
+              setReportSubmitting(true);
+              try {
+                const platform = window.Telegram?.WebApp?.platform || navigator.userAgent.slice(0, 50);
+                const res = await tgFetch('/tg/support/tickets', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    source: 'settings',
+                    screen: screen,
+                    locale: locale,
+                    platform: platform,
+                  }),
+                });
+                const data = await res.json();
+                setShowReportProblemSheet(false);
+                if (res.ok && data.ok) {
+                  pushToast(t('report_success', locale, { code: data.ticketCode }), 'success');
+                  // Open bot chat so user can describe the problem
+                  setTimeout(() => {
+                    try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
+                  }, 600);
+                } else if (res.status === 409 && data.ticketCode) {
+                  pushToast(t('report_already_open', locale, { code: data.ticketCode }), 'info');
+                  setTimeout(() => {
+                    try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
+                  }, 600);
+                } else {
+                  pushToast(t('report_error', locale), 'error');
+                }
+              } catch {
+                pushToast(t('report_error', locale), 'error');
+              } finally {
+                setReportSubmitting(false);
+              }
+            }}
+          >
+            {reportSubmitting ? '...' : t('report_submit', locale)}
+          </button>
+          <button
+            style={{ ...btnGhost, width: '100%', marginTop: 8, fontSize: 14 }}
+            onClick={() => setShowReportProblemSheet(false)}
+          >
+            {t('cancel', locale)}
           </button>
         </div>
       </BottomSheet>
