@@ -268,7 +268,7 @@ if (!token) {
   }
 
   // ─── Support: handle staff reply from support chat ────────────────────────
-  async function handleSupportReply(ctx: any, replyToMsgId: number, replyText: string): Promise<void> {
+  async function handleSupportReply(ctx: any, replyToMsgId: number, content: MsgContent): Promise<void> {
     // Find which ticket message was replied to
     const originalMsg = await prisma.supportMessage.findFirst({
       where: { telegramSupportMsgId: replyToMsgId },
@@ -292,10 +292,12 @@ if (!token) {
       data: {
         ticketId: ticket.id,
         authorRole: 'SUPPORT',
-        kind: 'TEXT',
-        text: replyText,
+        kind: content.kind,
+        text: content.text,
+        caption: content.caption,
         telegramSupportChatId: String(ctx.chat.id),
         telegramSupportMsgId: (ctx.message as any).message_id as number,
+        telegramFileId: content.fileId,
       },
     });
 
@@ -315,11 +317,33 @@ if (!token) {
     const userLocale = resolveEffectiveLocale(
       ticket.user.profile ? { languageMode: ticket.user.profile.languageMode as any, manualLanguage: ticket.user.profile.manualLanguage as any } : null,
     );
-    const msgToUser = `[${ticket.ticketCode}] ${t('support_reply_label', userLocale)}:\n${replyText}`;
+    const label = `[${ticket.ticketCode}] ${t('support_reply_label', userLocale)}`;
+
     try {
-      const sent = await bot.telegram.sendMessage(userChatId, msgToUser, {
-        reply_markup: { force_reply: true, selective: true },
-      });
+      let sent: { message_id: number };
+      const forceReply = { force_reply: true as const, selective: true };
+
+      if (content.kind === 'PHOTO' && content.fileId) {
+        const cap = [label, content.caption].filter(Boolean).join(':\n');
+        sent = await bot.telegram.sendPhoto(userChatId, content.fileId, {
+          caption: cap.slice(0, 1024), reply_markup: forceReply,
+        });
+      } else if (content.kind === 'VIDEO' && content.fileId) {
+        const cap = [label, content.caption].filter(Boolean).join(':\n');
+        sent = await bot.telegram.sendVideo(userChatId, content.fileId, {
+          caption: cap.slice(0, 1024), reply_markup: forceReply,
+        });
+      } else if (content.kind === 'DOCUMENT' && content.fileId) {
+        const cap = [label, content.caption].filter(Boolean).join(':\n');
+        sent = await bot.telegram.sendDocument(userChatId, content.fileId, {
+          caption: cap.slice(0, 1024), reply_markup: forceReply,
+        });
+      } else {
+        sent = await bot.telegram.sendMessage(userChatId, `${label}:\n${content.text || ''}`, {
+          reply_markup: forceReply,
+        });
+      }
+
       // Store delivery message ID so user can reply to continue the thread
       await prisma.supportMessage.update({
         where: { id: supportReplyRecord.id },
@@ -387,10 +411,10 @@ if (!token) {
       return;
     }
 
-    // Support staff reply (text only for now)
-    const replyText = text ?? (msg.caption as string | undefined);
-    if (!replyText) return;
-    await handleSupportReply(ctx, replyToMsgId, replyText);
+    // Support staff reply — extract full content (text, photo, video, document)
+    const content = extractMessageContent(msg);
+    if (content.kind === 'OTHER') return;
+    await handleSupportReply(ctx, replyToMsgId, content);
   }
 
   // Set the persistent menu button (bottom-left "Wishlist" button)
