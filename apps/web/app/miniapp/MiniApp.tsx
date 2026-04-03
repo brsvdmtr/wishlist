@@ -7246,7 +7246,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {homeTab === 'reservations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {/* Active/History segment */}
-              <div style={{ display: 'flex', margin: '14px 16px 0', background: C.surface, borderRadius: 10, padding: 3, gap: 2 }}>
+              <div style={{ display: 'flex', margin: '14px 0 0', background: C.surface, borderRadius: 10, padding: 3, gap: 2 }}>
                 <button onClick={() => setResTab('active')} style={{
                   flex: 1, padding: '7px 0', borderRadius: 8, fontSize: 13, fontWeight: 600, textAlign: 'center', border: 'none', cursor: 'pointer', fontFamily: font,
                   background: resTab === 'active' ? C.accent : 'transparent', color: resTab === 'active' ? '#fff' : C.textSec,
@@ -7269,7 +7269,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   {/* Filters bar */}
                   {reservationBeta && reservations.length > 0 && (
                     reservationPro ? (
-                    <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px 0', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '12px 0 0', gap: 8 }}>
                       <button onClick={() => {
                         if (resStatusFilter === 'with_comments') setResStatusFilter('all');
                         else setResStatusFilter('with_comments');
@@ -7331,7 +7331,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     }
                     let si = 0;
                     return (
-                      <div style={{ marginBottom: 4, padding: '0 16px' }}>
+                      <div style={{ marginBottom: 4 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
                           🎅 {t('santa_reservations_section_title', locale)}
                         </div>
@@ -7389,7 +7389,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     }
                     let globalIdx = 0;
                     return Object.entries(groups).map(([ownerId, group]) => (
-                      <div key={ownerId} style={{ marginBottom: 8, padding: '0 16px' }}>
+                      <div key={ownerId} style={{ marginBottom: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                           <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName} size={32} accent={C.accent} />
                           <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
@@ -7425,7 +7425,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                         {item.meta?.purchased ? (
                                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: C.accentSoft, color: C.accent, display: 'inline-flex', alignItems: 'center', gap: 3 }}>✓ {t('res_purchased', locale)}</span>
                                         ) : (
-                                          <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('reservations_reserved', locale)}</span>
+                                          <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>✓ {t('reservations_reserved', locale)}</span>
                                         )}
                                         {item.price != null && (
                                           <span style={{ fontSize: 13, fontWeight: 600, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>
@@ -7470,17 +7470,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                       </div>
                                     </div>
                                   )}
-                                  {/* Unreserve button */}
-                                  <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                      onClick={() => setPendingUnreserveAction(() => () => handleUnreserveFromReservations(item))}
-                                      style={{
-                                        width: '100%', background: C.redSoft, border: 'none',
-                                        borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600,
-                                        color: C.red, cursor: 'pointer', fontFamily: font, textAlign: 'center',
-                                      }}
-                                    >{t('reservations_unreserve', locale)}</button>
-                                  </div>
                                 </div>
                               </div>
                             );
@@ -7509,7 +7498,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {resTab === 'history' && reservationPro && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {/* History filter chips */}
-                  <div style={{ display: 'flex', gap: 6, padding: '12px 16px 0', overflowX: 'auto' }}>
+                  <div style={{ display: 'flex', gap: 6, padding: '12px 0 0', overflowX: 'auto' }}>
                     {(['all', 'completed', 'unreserved', 'archived'] as ResHistoryFilter[]).map((f) => (
                       <button key={f} onClick={() => setResHistoryFilter(f)} style={{
                         padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
@@ -7540,7 +7529,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     }
                     let gi = 0;
                     return Object.entries(groups).map(([ownerId, group]) => (
-                      <div key={ownerId} style={{ marginBottom: 8, padding: '0 16px' }}>
+                      <div key={ownerId} style={{ marginBottom: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                           <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName} size={32} accent={C.accent} />
                           <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
@@ -13070,10 +13059,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       value={resReminderCustomDate}
                       onChange={(e) => setResReminderCustomDate(e.target.value)}
                       min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
-                      style={{ ...inputStyle, marginBottom: 0, display: 'block', colorScheme: 'dark', color: resReminderCustomDate ? C.text : 'transparent' }}
+                      style={{
+                        width: '100%', padding: '8px 10px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                        border: `1px solid ${C.border}`, background: C.card, color: resReminderCustomDate ? C.text : 'transparent',
+                        fontFamily: font, outline: 'none', boxSizing: 'border-box' as const,
+                        display: 'block', colorScheme: 'dark',
+                      }}
                     />
                     {!resReminderCustomDate && (
-                      <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: C.textMuted, fontSize: 14, pointerEvents: 'none' }}>
+                      <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.textMuted, fontSize: 13, pointerEvents: 'none' }}>
                         {t('res_reminder_date_placeholder', locale)}
                       </span>
                     )}
@@ -13104,11 +13098,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               </>
             );
           })()}
-          {resReminderSheetItem?.meta?.reminderAt && (
-            <button onClick={() => { if (resReminderSheetItem) { handleResReminderRemove(resReminderSheetItem.id); setResReminderSheetItem(null); } }} style={{
-              marginTop: 6, padding: '8px 14px', borderRadius: 10, background: C.redSoft, border: 'none', color: C.red, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, textAlign: 'center', width: '100%',
-            }}>{t('res_reminder_remove', locale)}</button>
-          )}
         </div>
       </BottomSheet>
 
