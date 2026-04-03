@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
 import { initSentry, captureException } from './sentry';
 
@@ -916,7 +916,7 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
 });
 
 // Centralized PRO benefits config — single source of truth for all paywall/plan screens
-function getProBenefits(locale: Locale): Array<{ icon: string; title: string; subtitle: string }> {
+function getProBenefits(locale: Locale): Array<{ icon: string; title: string; subtitle: string; isNew?: boolean }> {
   return [
     { icon: '📋', title: t('plan_pro_f1', locale), subtitle: t('plan_pro_sub1', locale) },
     { icon: '🎁', title: t('plan_pro_f2', locale), subtitle: t('plan_pro_sub2', locale) },
@@ -928,11 +928,11 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
     { icon: '🛡', title: t('plan_pro_f8', locale), subtitle: t('plan_pro_sub8', locale) },
     { icon: '📅', title: t('plan_pro_f9', locale), subtitle: t('plan_pro_sub9', locale) },
     // Reservation Pro features
-    { icon: '📋', title: t('plan_pro_f10', locale), subtitle: t('plan_pro_sub10', locale) },
-    { icon: '📝', title: t('plan_pro_f11', locale), subtitle: t('plan_pro_sub11', locale) },
-    { icon: '🔔', title: t('plan_pro_f12', locale), subtitle: t('plan_pro_sub12', locale) },
-    { icon: '✓', title: t('plan_pro_f13', locale), subtitle: t('plan_pro_sub13', locale) },
-    { icon: '🔍', title: t('plan_pro_f14', locale), subtitle: t('plan_pro_sub14', locale) },
+    { icon: '📋', title: t('plan_pro_f10', locale), subtitle: t('plan_pro_sub10', locale), isNew: true },
+    { icon: '📝', title: t('plan_pro_f11', locale), subtitle: t('plan_pro_sub11', locale), isNew: true },
+    { icon: '🔔', title: t('plan_pro_f12', locale), subtitle: t('plan_pro_sub12', locale), isNew: true },
+    { icon: '✓', title: t('plan_pro_f13', locale), subtitle: t('plan_pro_sub13', locale), isNew: true },
+    { icon: '🔍', title: t('plan_pro_f14', locale), subtitle: t('plan_pro_sub14', locale), isNew: true },
   ];
 }
 
@@ -1918,12 +1918,29 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                   {t('plan_pro_block', locale)}
                 </div>
-                {getProBenefits(locale).map((b, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '3px 0', fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
-                    <span style={{ color: C.green, flexShrink: 0, fontWeight: 700, marginTop: 1 }}>✓</span>
-                    {b.title}
-                  </div>
-                ))}
+                {getProBenefits(locale).map((b, i, arr) => {
+                  const firstNew = b.isNew && (i === 0 || !arr[i - 1]?.isNew);
+                  return (
+                    <Fragment key={i}>
+                      {firstNew && (
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, marginTop: 8, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                          {t('plan_pro_res_section', locale)}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '3px 0', fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
+                        <span style={{ color: C.green, flexShrink: 0, fontWeight: 700, marginTop: 1 }}>✓</span>
+                        {b.title}
+                        {b.isNew && (
+                          <span style={{
+                            display: 'inline-block', padding: '1px 6px', borderRadius: 4,
+                            fontSize: 9, fontWeight: 800, background: C.accent, color: '#fff',
+                            marginLeft: 6, verticalAlign: 'middle', letterSpacing: 0.5,
+                          }}>NEW</span>
+                        )}
+                      </div>
+                    </Fragment>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -2285,6 +2302,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [reservationsCount, setReservationsCount] = useState(0);
   const [reservationsLoading, setReservationsLoading] = useState(false);
   const [reservationPro, setReservationPro] = useState(false);
+  const [reservationBeta, setReservationBeta] = useState(false);
   // Reservation Pro state
   type ResTab = 'active' | 'history';
   const [resTab, setResTab] = useState<ResTab>('active');
@@ -2303,6 +2321,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [resNoteSaving, setResNoteSaving] = useState(false);
   const [resReminderSheetItem, setResReminderSheetItem] = useState<ReservationItem | null>(null);
   const [resReminderSaving, setResReminderSaving] = useState(false);
+  type ResReminderPreset = '3d' | '1w' | 'eom' | 'custom';
+  const [resReminderSelected, setResReminderSelected] = useState<ResReminderPreset>('3d');
+  const [resReminderCustomDate, setResReminderCustomDate] = useState('');
   const [resPurchasedConfirmItem, setResPurchasedConfirmItem] = useState<ReservationItem | null>(null);
   const [resPurchasedLoading, setResPurchasedLoading] = useState(false);
   const [fromReservations, setFromReservations] = useState(false);
@@ -2897,6 +2918,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     if (json.godMode !== undefined) setGodMode(json.godMode);
     if (json.canGodMode !== undefined) setCanGodMode(json.canGodMode);
     if ((json as any).reservationPro !== undefined) setReservationPro((json as any).reservationPro);
+    if ((json as any).reservationBeta !== undefined) setReservationBeta((json as any).reservationBeta);
     setPlanLimits({ wishlists: json.plan.wishlists, items: json.plan.items });
     if (json.addOns) setAddOns(json.addOns);
     if (json.credits) setCredits(json.credits);
@@ -2920,9 +2942,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         tgFetch('/tg/santa/my-reservations'),
       ]);
       if (res.ok) {
-        const json = await res.json() as { reservations: ReservationItem[]; reservationPro?: boolean };
+        const json = await res.json() as { reservations: ReservationItem[]; reservationPro?: boolean; reservationBeta?: boolean };
         setReservations(json.reservations);
         if (json.reservationPro !== undefined) setReservationPro(json.reservationPro);
+        if (json.reservationBeta !== undefined) setReservationBeta(json.reservationBeta);
         const santaJson = santaRes.ok ? await santaRes.json() as { reservations: SantaReservationItem[] } : { reservations: [] };
         setSantaReservationItems(santaJson.reservations);
         setReservationsCount(json.reservations.length + santaJson.reservations.length);
@@ -7241,7 +7264,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {resTab === 'active' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {/* Filters bar */}
-                  {reservationPro && reservations.length > 0 && (
+                  {reservationBeta && reservations.length > 0 && (
+                    reservationPro ? (
                     <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px 0', gap: 8 }}>
                       <button onClick={() => {
                         if (resStatusFilter === 'with_comments') setResStatusFilter('all');
@@ -7254,23 +7278,27 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       }}><span style={{ fontSize: 13 }}>💬</span> {t('res_filter_unread', locale)}</button>
                       <button onClick={() => setResFilterSheetOpen(true)} style={{
                         display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-                        border: `1px solid ${(resOwnerFilter || resStatusFilter !== 'all' && resStatusFilter !== 'with_comments') ? C.accent : C.borderLight}`,
-                        background: C.surface, color: C.textSec, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap',
-                      }}>⚙ {t('res_filter_title', locale)}</button>
+                        border: `1px solid ${resOwnerFilter ? C.accent : C.borderLight}`,
+                        background: resOwnerFilter ? C.accentSoft : C.surface,
+                        color: resOwnerFilter ? C.accent : C.textSec, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap',
+                      }}><span style={{ fontSize: 13 }}>👤</span> {t('res_filter_owner', locale)}</button>
                       <button onClick={() => setResFilterSheetOpen(true)} style={{
                         marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600,
                         border: `1px solid ${C.borderLight}`, background: C.surface, color: C.textSec, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap',
                       }}>↕ {resSort === 'date' ? t('res_sort_date', locale) : resSort === 'price_asc' ? t('res_sort_price_asc', locale) : resSort === 'price_desc' ? t('res_sort_price_desc', locale) : t('res_sort_activity', locale)}</button>
                     </div>
-                  )}
-                  {/* Non-Pro filter hint */}
-                  {!reservationPro && reservations.length > 2 && (
+                    ) : (
                     <div style={{ display: 'flex', alignItems: 'center', padding: '10px 16px 0', gap: 8 }}>
                       <span onClick={() => setUpsellSheet({ context: 'reservation_pro' })} style={{
                         display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
                         border: `1px dashed ${C.borderLight}`, background: 'transparent', color: C.textMuted, cursor: 'pointer', fontFamily: font, opacity: 0.5,
-                      }}>⚙ {t('res_filter_title', locale)} 🔒</span>
+                      }}>{t('res_filter_filters', locale)} 🔒</span>
+                      <span onClick={() => setUpsellSheet({ context: 'reservation_pro' })} style={{
+                        display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        border: `1px dashed ${C.borderLight}`, background: 'transparent', color: C.textMuted, cursor: 'pointer', fontFamily: font, opacity: 0.5,
+                      }}>{t('res_filter_sort', locale)} 🔒</span>
                     </div>
+                    )
                   )}
 
                   {reservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
@@ -7454,7 +7482,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     ));
                   })()}
                   {/* Inline upsell for non-Pro */}
-                  {!reservationPro && reservations.length > 0 && (
+                  {reservationBeta && !reservationPro && reservations.length > 0 && (
                     <div onClick={() => setUpsellSheet({ context: 'reservation_pro' })} style={{
                       margin: '8px 16px 16px', padding: 16, cursor: 'pointer',
                       background: `linear-gradient(135deg, ${C.accentSoft} 0%, rgba(212,168,83,0.06) 100%)`,
@@ -9896,20 +9924,44 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       border: `1px solid ${C.accent}25`,
                     }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-                        {getProBenefits(locale).map((b, i) => (
-                          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                            <span style={{
-                              width: 22, height: 22, borderRadius: 11, flexShrink: 0, marginTop: 1,
-                              background: C.accentSoft, color: C.accent,
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 11, fontWeight: 800,
-                            }}>✓</span>
-                            <div>
-                              <div style={{ fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{b.title}</div>
-                              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 1, lineHeight: 1.4 }}>{b.subtitle}</div>
-                            </div>
-                          </div>
-                        ))}
+                        {getProBenefits(locale).map((b, i, arr) => {
+                          const firstNew = b.isNew && (i === 0 || !arr[i - 1]?.isNew);
+                          return (
+                            <Fragment key={i}>
+                              {firstNew && (
+                                <div style={{
+                                  fontSize: 11, fontWeight: 700, color: C.accent,
+                                  textTransform: 'uppercase', letterSpacing: 0.4,
+                                  paddingTop: 8, marginBottom: -2,
+                                  borderTop: `1px solid ${C.accent}20`,
+                                }}>
+                                  {t('plan_pro_res_section', locale)}
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                                <span style={{
+                                  width: 22, height: 22, borderRadius: 11, flexShrink: 0, marginTop: 1,
+                                  background: C.accentSoft, color: C.accent,
+                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 11, fontWeight: 800,
+                                }}>✓</span>
+                                <div>
+                                  <div style={{ fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>
+                                    {b.title}
+                                    {b.isNew && (
+                                      <span style={{
+                                        display: 'inline-block', padding: '1px 6px', borderRadius: 4,
+                                        fontSize: 9, fontWeight: 800, background: C.accent, color: '#fff',
+                                        marginLeft: 6, verticalAlign: 'middle', letterSpacing: 0.5,
+                                      }}>NEW</span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 1, lineHeight: 1.4 }}>{b.subtitle}</div>
+                                </div>
+                              </div>
+                            </Fragment>
+                          );
+                        })}
                       </div>
                       <div style={{ paddingTop: 14, borderTop: `1px solid ${C.accent}20`, marginBottom: 14 }}>
                         <span style={{ fontSize: 22, fontWeight: 800, color: C.text }}>100</span>
@@ -12955,26 +13007,69 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {(() => {
             const now = new Date();
             const presets = [
-              { label: t('res_reminder_3d', locale), desc: new Date(now.getTime() + 3 * 86400000).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }), date: new Date(now.getTime() + 3 * 86400000) },
-              { label: t('res_reminder_1w', locale), desc: new Date(now.getTime() + 7 * 86400000).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }), date: new Date(now.getTime() + 7 * 86400000) },
-              { label: t('res_reminder_month_end', locale), desc: (() => { const d = new Date(now.getFullYear(), now.getMonth() + 1, 0); return d.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }); })(), date: new Date(now.getFullYear(), now.getMonth() + 1, 0, 10, 0) },
+              { key: '3d', icon: '⏰', label: t('res_reminder_3d', locale), desc: new Date(now.getTime() + 3 * 86400000).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }), date: new Date(now.getTime() + 3 * 86400000) },
+              { key: '1w', icon: '📅', label: t('res_reminder_1w', locale), desc: new Date(now.getTime() + 7 * 86400000).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }), date: new Date(now.getTime() + 7 * 86400000) },
+              { key: 'eom', icon: '🎯', label: t('res_reminder_month_end', locale), desc: (() => { const d = new Date(now.getFullYear(), now.getMonth() + 1, 0); return d.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' }); })(), date: new Date(now.getFullYear(), now.getMonth() + 1, 0, 10, 0) },
+              { key: 'custom', icon: '✏️', label: t('res_reminder_custom', locale), desc: t('res_reminder_custom_desc', locale), date: null },
             ];
-            return presets.map((p) => (
-              <button key={p.label} onClick={() => { if (resReminderSheetItem) handleResReminderSet(resReminderSheetItem.id, p.date); }} disabled={resReminderSaving} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, background: C.card, border: `1px solid ${C.border}`, cursor: 'pointer', textAlign: 'left', fontFamily: font, width: '100%', opacity: resReminderSaving ? 0.6 : 1,
-              }}>
-                <span style={{ fontSize: 18 }}>⏰</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.label}</div>
-                  <div style={{ fontSize: 12, color: C.textSec }}>{p.desc}</div>
+            return (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                  {presets.map((p) => {
+                    const isSelected = resReminderSelected === p.key;
+                    return (
+                      <button key={p.key} onClick={() => setResReminderSelected(p.key as ResReminderPreset)} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10,
+                        background: isSelected ? C.accentSoft : C.card,
+                        border: `1px solid ${isSelected ? C.accent : C.border}`,
+                        cursor: 'pointer', textAlign: 'left', fontFamily: font, width: '100%',
+                      }}>
+                        <span style={{ fontSize: 18 }}>{p.icon}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.label}</div>
+                          <div style={{ fontSize: 12, color: C.textSec }}>{p.desc}</div>
+                        </div>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: '50%',
+                          border: `2px solid ${isSelected ? C.accent : C.borderLight}`,
+                          background: isSelected ? C.accent : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, color: '#fff',
+                        }}>{isSelected ? '✓' : ''}</div>
+                      </button>
+                    );
+                  })}
                 </div>
-              </button>
-            ));
+                {resReminderSelected === 'custom' && (
+                  <input
+                    type="date"
+                    value={resReminderCustomDate}
+                    onChange={(e) => setResReminderCustomDate(e.target.value)}
+                    min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
+                    style={{ ...inputStyle, marginBottom: 8 }}
+                  />
+                )}
+                <button onClick={() => {
+                  if (!resReminderSheetItem) return;
+                  const now2 = new Date();
+                  let date: Date | null = null;
+                  if (resReminderSelected === '3d') date = new Date(now2.getTime() + 3 * 86400000);
+                  else if (resReminderSelected === '1w') date = new Date(now2.getTime() + 7 * 86400000);
+                  else if (resReminderSelected === 'eom') date = new Date(now2.getFullYear(), now2.getMonth() + 1, 0, 10, 0);
+                  else if (resReminderSelected === 'custom' && resReminderCustomDate) date = new Date(resReminderCustomDate + 'T10:00:00');
+                  if (date) handleResReminderSet(resReminderSheetItem.id, date);
+                }} disabled={resReminderSaving || (resReminderSelected === 'custom' && !resReminderCustomDate)} style={{
+                  ...btnPrimary, opacity: (resReminderSaving || (resReminderSelected === 'custom' && !resReminderCustomDate)) ? 0.6 : 1,
+                }}>
+                  {resReminderSaving ? '…' : t('res_reminder_set_btn', locale)}
+                </button>
+              </>
+            );
           })()}
           {resReminderSheetItem?.meta?.reminderAt && (
             <button onClick={() => { if (resReminderSheetItem) { handleResReminderRemove(resReminderSheetItem.id); setResReminderSheetItem(null); } }} style={{
               marginTop: 4, padding: '10px 14px', borderRadius: 10, background: C.redSoft, border: 'none', color: C.red, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, textAlign: 'center', width: '100%',
-            }}>{t('res_reminder_remove', locale)} Удалить напоминание</button>
+            }}>{t('res_reminder_remove', locale)}</button>
           )}
         </div>
       </BottomSheet>

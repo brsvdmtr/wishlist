@@ -258,7 +258,10 @@ const ru: Dict = {
   res_reminder_custom: 'Выбрать дату',
   res_reminder_custom_desc: 'Укажите точную дату',
   res_reminder_set: 'Поставить напоминание',
+  res_reminder_set_btn: 'Поставить напоминание',
   res_reminder_remove: '✕',
+  res_filter_filters: 'Фильтры',
+  res_filter_sort: 'Сортировка',
   res_purchased_confirm_title: 'Отметить как купленное?',
   res_purchased_confirm_body: 'Это ваша личная пометка.\nВладелец вишлиста не увидит её.',
   res_purchased_confirm_yes: '✓ Да, куплено',
@@ -285,6 +288,7 @@ const ru: Dict = {
   plan_pro_sub13: 'Приватный трекер покупок',
   plan_pro_f14: 'Фильтры и сортировка',
   plan_pro_sub14: 'Удобное управление бронями',
+  plan_pro_res_section: 'Управление бронями',
 
   // ── Wishlist detail ───────────────────────────────────────────────────────
   wishes_count: '{{count}} желаний',
@@ -1784,7 +1788,10 @@ const en: Dict = {
   res_reminder_custom: 'Pick a date',
   res_reminder_custom_desc: 'Choose exact date',
   res_reminder_set: 'Set reminder',
+  res_reminder_set_btn: 'Set reminder',
   res_reminder_remove: '✕',
+  res_filter_filters: 'Filters',
+  res_filter_sort: 'Sort',
   res_purchased_confirm_title: 'Mark as purchased?',
   res_purchased_confirm_body: 'This is your private note.\nThe wishlist owner won\'t see it.',
   res_purchased_confirm_yes: '✓ Yes, purchased',
@@ -1810,6 +1817,7 @@ const en: Dict = {
   plan_pro_sub13: 'Private purchase tracker',
   plan_pro_f14: 'Filters & sorting',
   plan_pro_sub14: 'Easy reservation management',
+  plan_pro_res_section: 'Reservation management',
 
   // ── Wishlist detail ───────────────────────────────────────────────────────
   wishes_count: '{{count}} wishes',

@@ -1386,11 +1386,18 @@ const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
 // Phase 1: only allow specific Telegram IDs. Later: open to all PRO users.
 const RESERVATION_PRO_BETA_IDS = (process.env.RESERVATION_PRO_BETA_IDS ?? '8747175307').split(',').filter(Boolean);
 
-function hasReservationPro(user: { telegramId?: string | null; godMode: boolean }, isPro: boolean): boolean {
+/** User sees the new reservation UI (beta + pro/free states) */
+function isReservationBeta(user: { telegramId?: string | null; godMode: boolean }): boolean {
   if (user.godMode) return true;
   if (user.telegramId && RESERVATION_PRO_BETA_IDS.includes(user.telegramId)) return true;
-  // Phase 2: uncomment to open to all PRO users
-  // if (isPro) return true;
+  return false;
+}
+
+/** User has actual Pro reservation features (needs Pro subscription) */
+function hasReservationPro(user: { telegramId?: string | null; godMode: boolean }, isPro: boolean): boolean {
+  if (!isReservationBeta(user)) return false;
+  if (user.godMode) return true;
+  if (isPro) return true;
   return false;
 }
 
@@ -2354,7 +2361,7 @@ tgRouter.get(
       ...(resPro ? { meta: metaMap.get(item.id) ?? null } : {}),
     }));
 
-    return res.json({ reservations, reservationPro: resPro });
+    return res.json({ reservations, reservationPro: resPro, reservationBeta: isReservationBeta(user) });
   }),
 );
 
@@ -5067,6 +5074,7 @@ tgRouter.get(
 
     // Reservation Pro feature gate
     const reservationPro = hasReservationPro(user, ent.isPro);
+    const reservationBeta = isReservationBeta(user);
 
     // Summarize add-ons for frontend
     const extraWishlistSlots = ent.addOns.filter(a => a.addonType === 'wishlist_slot').reduce((s, a) => s + a.quantity, 0);
@@ -5105,6 +5113,7 @@ tgRouter.get(
         targetRequired: s.targetRequired,
       })),
       reservationPro,
+      reservationBeta,
     });
   }),
 );
@@ -11153,7 +11162,12 @@ setInterval(async () => {
         if (meta.item.priceText) text += ` — ${meta.item.priceText}`;
         text += `\nИз вишлиста <b>${ownerName}</b>`;
         if (meta.note) text += `\n\n📝 ${meta.note}`;
-        await sendTgBotMessage(reserver.telegramChatId, text);
+        await sendTgBotMessage(reserver.telegramChatId, text, {
+          inline_keyboard: [[
+            { text: '📱 Открыть', url: 'https://t.me/WishBoardBot/app' },
+            { text: '✓ Куплено', callback_data: `res_purchased:${meta.item.id}` },
+          ]],
+        });
         sent++;
       }
       await prisma.reservationMeta.update({

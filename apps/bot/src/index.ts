@@ -558,6 +558,58 @@ if (!token) {
     await sendSupportPrompt(ctx);
   });
 
+  // Inline button "Куплено" from reservation reminder notifications
+  bot.action(/^res_purchased:(.+)$/, async (ctx) => {
+    try {
+      const itemId = ctx.match[1]!;
+      const telegramId = String(ctx.from.id);
+
+      // Find the user by Telegram ID
+      const user = await prisma.user.findFirst({
+        where: { telegramId },
+        select: { id: true },
+      });
+      if (!user) {
+        await ctx.answerCbQuery('Пользователь не найден');
+        return;
+      }
+
+      // Verify the user has this item reserved
+      const item = await prisma.item.findUnique({
+        where: { id: itemId },
+        select: { reserverUserId: true, status: true, title: true },
+      });
+      if (!item || item.reserverUserId !== user.id || item.status !== 'RESERVED') {
+        await ctx.answerCbQuery('Бронирование не найдено');
+        return;
+      }
+
+      // Toggle purchased flag via reservationMeta
+      const existing = await prisma.reservationMeta.findUnique({
+        where: { itemId_reserverUserId: { itemId, reserverUserId: user.id } },
+        select: { purchased: true },
+      });
+      const newPurchased = !(existing?.purchased ?? false);
+
+      await prisma.reservationMeta.upsert({
+        where: { itemId_reserverUserId: { itemId, reserverUserId: user.id } },
+        create: { itemId, reserverUserId: user.id, purchased: newPurchased, purchasedAt: newPurchased ? new Date() : null },
+        update: { purchased: newPurchased, purchasedAt: newPurchased ? new Date() : null },
+      });
+
+      // Update inline keyboard to reflect new state
+      const newKeyboard = newPurchased
+        ? [[{ text: '📱 Открыть', url: 'https://t.me/WishBoardBot/app' }, { text: '✓ Куплено ✅', callback_data: `res_purchased:${itemId}` }]]
+        : [[{ text: '📱 Открыть', url: 'https://t.me/WishBoardBot/app' }, { text: '✓ Куплено', callback_data: `res_purchased:${itemId}` }]];
+
+      await ctx.editMessageReplyMarkup({ inline_keyboard: newKeyboard });
+      await ctx.answerCbQuery(newPurchased ? 'Отмечено как купленное' : 'Отметка снята');
+    } catch (err) {
+      logger.error({ err }, 'res_purchased callback failed');
+      await ctx.answerCbQuery('Произошла ошибка').catch(() => {});
+    }
+  });
+
   bot.command('paysupport', (ctx) => {
     const locale = getLocale(ctx);
     return ctx.reply(t('bot_paysupport', locale));
