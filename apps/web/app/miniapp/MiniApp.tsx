@@ -11959,54 +11959,89 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           SETTINGS
           ══════════════════════════════════════════════ */}
       {screen === 'settings' && (() => {
-        const SettingsSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+        const SDivider = () => (
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', marginLeft: 40 }} />
+        );
+
+        const SettingsSection = ({ title, children, first }: { title: string; children: React.ReactNode; first?: boolean }) => (
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>{title}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 10, marginTop: first ? 4 : 28, textTransform: 'uppercase' as const, letterSpacing: 1, paddingLeft: 4 }}>{title}</div>
             <div style={{
               background: santaSeason?.inSeason
                 ? `linear-gradient(to bottom, rgba(160,210,240,.09) 0%, transparent 10px), ${C.card}`
                 : C.card,
-              borderRadius: 16, padding: '4px 16px',
+              borderRadius: 20, padding: '4px 18px',
               ...(santaSeason?.inSeason ? { borderTop: '1px solid rgba(180,220,245,.18)' } : {}),
             }}>{children}</div>
           </div>
         );
 
-        const SettingsRow = ({ label, value, hint, onClick, proBadge }: { label: string; value: string; hint?: string; onClick?: () => void; proBadge?: boolean }) => (
-          <div onClick={onClick} style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}`, cursor: onClick ? 'pointer' : 'default' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 14, color: C.text }}>{label}</span>
+        const SettingsRow = ({ icon, label, value, hint, onClick, proBadge, disabled, valueSmall }: {
+          icon?: string; label: string; value: string; hint?: string; onClick?: () => void; proBadge?: boolean; disabled?: boolean; valueSmall?: boolean;
+        }) => (
+          <div onClick={disabled ? undefined : onClick} style={{
+            display: 'flex', alignItems: 'center', padding: '14px 0', gap: 12,
+            cursor: onClick && !disabled ? 'pointer' : 'default',
+            transition: 'opacity 0.15s',
+          }}>
+            {icon && (
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: disabled ? C.surface : C.accentSoft,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, flexShrink: 0, opacity: disabled ? 0.4 : 1,
+              }}>{icon}</div>
+            )}
+            <div style={{ flex: 1, minWidth: 0, opacity: disabled ? 0.4 : 1 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 15, fontWeight: 500, color: C.text, lineHeight: 1.3 }}>{label}</span>
                 {proBadge && <ProBadge />}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, paddingTop: 1 }}>
-                <span style={{ fontSize: 14, color: C.textMuted, textAlign: 'right' }}>{value}</span>
-                {onClick && <span style={{ fontSize: 18, color: C.textMuted, lineHeight: 1 }}>›</span>}
-              </div>
+              {hint && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{hint}</div>}
             </div>
-            {hint && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{hint}</div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, maxWidth: '45%' }}>
+              {disabled ? (
+                <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 500 }}>{t('settings_coming_soon', locale)}</span>
+              ) : (
+                <>
+                  {value && <span style={{ fontSize: valueSmall ? 12 : 14, color: C.textMuted, textAlign: 'right' as const, lineHeight: 1.3 }}>{value}</span>}
+                  {onClick && <span style={{ fontSize: 14, color: C.textMuted, fontWeight: 300 }}>{'›'}</span>}
+                </>
+              )}
+            </div>
           </div>
         );
 
-        const SettingsToggle = ({ label, value, disabled, proBadge, onChange }: {
-          label: string; value: boolean; disabled?: boolean; proBadge?: boolean; onChange: (v: boolean) => void;
+        const SettingsToggle = ({ icon, label, value, disabled, proBadge, onChange }: {
+          icon?: string; label: string; value: boolean; disabled?: boolean; proBadge?: boolean; onChange: (v: boolean) => void;
         }) => (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 14, color: disabled ? C.textMuted : C.text }}>{label}</span>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', gap: 12 }}>
+            {icon && (
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: C.accentSoft,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, flexShrink: 0,
+              }}>{icon}</div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 15, fontWeight: 500, color: disabled ? C.textMuted : C.text, lineHeight: 1.3 }}>{label}</span>
               {proBadge && <ProBadge />}
             </div>
             <button
               onClick={() => onChange(!value)}
               disabled={disabled && !proBadge}
               style={{
-                width: 50, height: 28, borderRadius: 14, border: 'none', cursor: disabled ? 'default' : 'pointer',
-                // When disabled: show actual value but muted (ON=muted accent, OFF=muted surface)
-                // so users can see the real effective state even when they can't edit it
+                width: 50, height: 28, borderRadius: 14,
+                border: value ? 'none' : `1px solid ${C.borderLight}`,
+                cursor: disabled ? 'default' : 'pointer',
                 background: value
                   ? (disabled ? C.accent + '99' : C.accent)
                   : C.surface,
-                position: 'relative', transition: 'background 0.2s',
+                position: 'relative',
+                transition: 'background 0.25s, box-shadow 0.25s',
+                flexShrink: 0,
+                boxShadow: value && !disabled ? `0 0 12px ${C.accentGlow}, 0 0 4px rgba(124,106,255,0.15)` : 'none',
               }}
             >
               <div style={{
@@ -12014,26 +12049,34 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 background: disabled ? 'rgba(255,255,255,0.7)' : '#fff',
                 position: 'absolute', top: 3,
                 left: value ? 25 : 3,
-                transition: 'left 0.2s',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
               }} />
             </button>
           </div>
         );
 
-        const SettingsActionRow = ({ label, color, onClick, dot }: { label: string; color?: string; onClick: () => void; dot?: boolean }) => (
+        const SettingsActionRow = ({ icon, label, color, onClick, dot }: { icon?: string; label: string; color?: string; onClick: () => void; dot?: boolean }) => (
           <div
             onClick={onClick}
             onPointerDown={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; }}
             onPointerUp={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
             onPointerLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', transition: 'opacity 0.12s' }}
+            style={{ display: 'flex', alignItems: 'center', padding: '14px 0', gap: 12, cursor: 'pointer', transition: 'opacity 0.12s' }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14, color: color || C.text }}>{label}</span>
-              {dot && <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.accent, flexShrink: 0 }} />}
+            {icon && (
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: color === C.red ? C.redSoft : C.accentSoft,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, flexShrink: 0,
+              }}>{icon}</div>
+            )}
+            <span style={{ fontSize: 15, fontWeight: 500, color: color || C.text, flex: 1 }}>{label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent, flexShrink: 0 }} />}
+              <span style={{ fontSize: 14, color: color || C.textMuted, fontWeight: 300 }}>{'\u203A'}</span>
             </div>
-            <span style={{ fontSize: 14, color: C.textMuted }}>{'\u203A'}</span>
           </div>
         );
 
@@ -12081,8 +12124,91 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               })()}
               {/* ── END DEBUG BLOCK ─────────────────────────────────────── */}
 
+              {/* ── PROFILE CARD ── */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(124,106,255,0.08), rgba(124,106,255,0.02))',
+                border: '1px solid rgba(124,106,255,0.15)',
+                borderRadius: 20, padding: 18, marginTop: 4,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{
+                    width: 48, height: 48, borderRadius: '50%',
+                    background: C.accentSoft, border: `2px solid ${C.accent}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 20, fontWeight: 700, color: C.accent, flexShrink: 0,
+                  }}>
+                    {(resolveOwnerName(profileData, tgUser))[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{resolveOwnerName(profileData, tgUser)}</span>
+                      {settingsData.isPro && (
+                        <span style={{
+                          background: `linear-gradient(135deg, ${C.accent}, #A78BFA)`,
+                          color: '#fff', fontSize: 10, fontWeight: 700,
+                          padding: '2px 8px', borderRadius: 6, letterSpacing: 0.5, lineHeight: '16px',
+                        }}>PRO</span>
+                      )}
+                    </div>
+                    {(profileData?.username || tgUser?.username) && (
+                      <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>
+                        @{profileData?.username || tgUser?.username}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {settingsData.supportId && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    marginTop: 16, paddingTop: 14,
+                    borderTop: '1px solid rgba(124,106,255,0.1)',
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <span style={{ fontSize: 11, color: C.textMuted, fontWeight: 500 }}>{t('support_id_label', locale)}</span>
+                      <span style={{ fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace", fontSize: 12, color: C.textSec, letterSpacing: 0.3 }}>
+                        {settingsData.supportId}
+                      </span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const id = settingsData.supportId!;
+                        try {
+                          if (typeof window !== 'undefined' && window.Telegram?.WebApp?.writeToClipboard) {
+                            window.Telegram.WebApp.writeToClipboard(id);
+                            pushToast(t('support_id_copied', locale), 'success');
+                            return;
+                          }
+                          await navigator.clipboard.writeText(id);
+                          pushToast(t('support_id_copied', locale), 'success');
+                        } catch {
+                          try {
+                            const ta = document.createElement('textarea');
+                            ta.value = id;
+                            ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+                            document.body.appendChild(ta);
+                            ta.focus(); ta.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(ta);
+                            pushToast(t('support_id_copied', locale), 'success');
+                          } catch {
+                            pushToast(t('support_id_copy_error', locale), 'error');
+                          }
+                        }
+                      }}
+                      style={{
+                        flexShrink: 0, background: C.accentSoft, color: C.accent, border: 'none',
+                        padding: '6px 14px', borderRadius: 10, fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer', fontFamily: font, transition: 'all 0.15s',
+                      }}
+                    >
+                      {t('support_id_copy', locale)}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* General */}
-              <SettingsSection title={t('settings_general', locale)}>
+              <SettingsSection title={t('settings_general', locale)} first>
                 {(() => {
                   const LANG_NATIVE: Record<string, string> = {
                     ru: 'Русский', en: 'English', 'zh-CN': '中文', hi: 'हिन्दी', es: 'Español', ar: 'العربية',
@@ -12092,6 +12218,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   const hint = isAuto ? t('settings_language_auto', locale) : undefined;
                   return (
                     <SettingsRow
+                      icon={'\u{1F310}'}
                       label={t('settings_language', locale)}
                       value={effectiveName}
                       hint={hint}
@@ -12099,15 +12226,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     />
                   );
                 })()}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
-                  <span style={{ fontSize: 14, color: C.text }}>{t('settings_default_currency', locale)}</span>
-                  <div style={{ display: 'flex', gap: 4, background: C.bg, borderRadius: 8, padding: 2 }}>
+                <SDivider />
+                <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', gap: 12 }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    background: C.accentSoft,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, flexShrink: 0,
+                  }}>{'\u{1F4B0}'}</div>
+                  <span style={{ fontSize: 15, fontWeight: 500, color: C.text, flex: 1 }}>{t('settings_default_currency', locale)}</span>
+                  <div style={{ display: 'flex', background: C.surface, borderRadius: 10, padding: 3, gap: 2 }}>
                     {(['RUB', 'USD'] as const).map(c => (
                       <button key={c} onClick={() => patchSettings({ defaultCurrency: c })} style={{
-                        padding: '6px 12px', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
+                        padding: '5px 14px', borderRadius: 8, border: 'none', fontSize: 14, fontWeight: 600,
                         cursor: 'pointer', fontFamily: font,
                         background: settingsData.defaultCurrency === c ? C.accent : 'transparent',
                         color: settingsData.defaultCurrency === c ? '#fff' : C.textMuted,
+                        boxShadow: settingsData.defaultCurrency === c ? '0 2px 8px rgba(124,106,255,0.3)' : 'none',
+                        transition: 'all 0.2s',
                       }}>
                         {c === 'RUB' ? '₽' : '$'}
                       </button>
@@ -12119,27 +12255,34 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {/* Notifications */}
               <SettingsSection title={t('settings_notifications_title', locale)}>
                 <SettingsToggle
+                  icon={'\u{1F4AC}'}
                   label={t('settings_notify_comments', locale)}
                   value={settingsData.notifications.comments}
                   disabled={!settingsData.isPro}
                   proBadge={!settingsData.isPro}
                   onChange={(v) => settingsData.isPro ? patchSettings({ notifications: { ...settingsData.notifications, comments: v } }) : showUpsell('comments')}
                 />
+                <SDivider />
                 <SettingsToggle
+                  icon={'\u{1F381}'}
                   label={t('settings_notify_reservations', locale)}
                   value={settingsData.notifications.reservations}
                   disabled={!settingsData.isPro}
                   proBadge={!settingsData.isPro}
                   onChange={(v) => settingsData.isPro ? patchSettings({ notifications: { ...settingsData.notifications, reservations: v } }) : showUpsell('comments')}
                 />
+                <SDivider />
                 <SettingsToggle
+                  icon={'\u{1F514}'}
                   label={t('settings_notify_subscriptions', locale)}
                   value={settingsData.notifications.subscriptions}
                   disabled={!settingsData.isPro}
                   proBadge={!settingsData.isPro}
                   onChange={(v) => settingsData.isPro ? patchSettings({ notifications: { ...settingsData.notifications, subscriptions: v } }) : showUpsell('comments')}
                 />
+                <SDivider />
                 <SettingsToggle
+                  icon={'\u{1F4E2}'}
                   label={t('settings_notify_marketing', locale)}
                   value={settingsData.notifications.marketing}
                   disabled={!settingsData.isPro}
@@ -12151,37 +12294,47 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               {/* Privacy */}
               <SettingsSection title={t('settings_privacy_title', locale)}>
                 <SettingsRow
+                  icon={'\u{1F441}'}
                   label={t('settings_profile_visibility', locale)}
                   value={settingsData.privacy.profileVisibility === 'ALL' ? t('privacy_value_all', locale) : settingsData.privacy.profileVisibility === 'NOBODY' ? t('privacy_value_nobody', locale) : settingsData.privacy.profileVisibility === 'LINK_ONLY' ? t('visibility_link_only', locale) : settingsData.privacy.profileVisibility}
                   onClick={() => setShowProfileVisibilitySheet(true)}
                 />
+                <SDivider />
                 <SettingsRow
+                  icon={'\u{1F465}'}
                   label={t('settings_subscribe_policy', locale)}
                   value={settingsData.privacy.subscribePolicy === 'ALL' ? t('privacy_value_all', locale) : settingsData.privacy.subscribePolicy === 'NOBODY' ? t('privacy_subs_nobody_new', locale) : settingsData.privacy.subscribePolicy === 'LINK_ONLY' ? t('subscribe_link_only', locale) : settingsData.privacy.subscribePolicy}
                   onClick={() => setShowSubscribePolicySheet(true)}
                 />
+                <SDivider />
                 <SettingsRow
+                  icon={'\u{1F4AD}'}
                   label={t('settings_allow_comments', locale)}
                   value={settingsData.privacy.commentsEnabled ? t('privacy_comments_anyone', locale) : t('privacy_comments_subs_only', locale)}
+                  valueSmall
                   proBadge={!settingsData.isPro}
                   onClick={settingsData.isPro ? () => setShowCommentsDefaultSheet(true) : () => showUpsell('comments')}
                 />
+                <SDivider />
                 <SettingsToggle
+                  icon={'\u{1F4A1}'}
                   label={t('settings_allow_hints', locale)}
                   value={settingsData.privacy.hintsEnabled}
                   onChange={(v) => patchSettings({ privacy: { ...settingsData.privacy, hintsEnabled: v } })}
                 />
-                <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 14, color: C.textMuted }}>{t('settings_reserved_visibility', locale)}</span>
-                    <span style={{ fontSize: 12, color: C.textMuted }}>{t('settings_coming_soon', locale)}</span>
-                  </div>
-                </div>
+                <SDivider />
+                <SettingsRow
+                  icon={'\u{1F512}'}
+                  label={t('settings_reserved_visibility', locale)}
+                  value=""
+                  disabled
+                />
               </SettingsSection>
 
-              {/* App Behavior */}
+              {/* Customization */}
               <SettingsSection title={t('settings_app_behavior_title', locale)}>
                 <SettingsToggle
+                  icon={'\u{1F4CC}'}
                   label={t('settings_wishlists_on_top', locale)}
                   value={settingsData.isPro && settingsData.appBehavior.newWishlistPosition === 'top'}
                   disabled={!settingsData.isPro}
@@ -12191,54 +12344,68 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     patchSettings({ appBehavior: { ...settingsData.appBehavior, newWishlistPosition: v ? 'top' : 'bottom' } });
                   }}
                 />
-                <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 14, color: C.textMuted }}>{t('settings_sorting_default', locale)}</span>
-                    <span style={{ fontSize: 12, color: C.textMuted }}>{t('settings_coming_soon', locale)}</span>
-                  </div>
-                </div>
+                <SDivider />
+                <SettingsRow
+                  icon={'\u{1F512}'}
+                  label={t('settings_sorting_default', locale)}
+                  value=""
+                  disabled
+                />
                 {/* Card display mode — only for canary + PRO users */}
                 {CARD_REDESIGN_ENABLED && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('settings_card_layout', locale)}</div>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {(['auto', 'showcase', 'compact'] as const).map(mode => {
-                        const isActive = cardDisplayMode === mode;
-                        const needsPro = mode !== 'auto' && planInfo.code !== 'PRO';
-                        const label = mode === 'auto' ? t('settings_card_auto', locale)
-                          : mode === 'showcase' ? t('settings_card_showcase', locale)
-                          : t('settings_card_compact', locale);
-                        return (
-                          <button
-                            key={mode}
-                            onClick={() => {
-                              if (needsPro) { showUpsell('wishlist_limit'); return; }
-                              // Optimistic update — instant UI feedback
-                              setCardDisplayMode(mode);
-                              patchSettings({ appBehavior: { ...settingsData?.appBehavior, cardDisplayMode: mode } });
-                            }}
-                            style={{
-                              flex: 1, padding: '8px 6px', borderRadius: 10, cursor: 'pointer',
-                              fontSize: 13, fontWeight: 600, fontFamily: font,
-                              background: isActive ? C.accentSoft : C.surface,
-                              color: isActive ? C.accent : needsPro ? C.textMuted : C.text,
-                              border: `1.5px solid ${isActive ? C.accent + '40' : C.borderLight}`,
-                              opacity: needsPro ? 0.5 : 1,
-                            }}
-                          >
-                            {label}{needsPro ? ' 👑' : ''}
-                          </button>
-                        );
-                      })}
+                  <>
+                    <SDivider />
+                    <div style={{ padding: '10px 0 6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 12 }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: '50%',
+                          background: C.accentSoft,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 14, flexShrink: 0,
+                        }}>{'\u{1F0CF}'}</div>
+                        <span style={{ fontSize: 15, fontWeight: 500, color: C.text }}>{t('settings_card_layout', locale)}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {(['auto', 'showcase', 'compact'] as const).map(mode => {
+                          const isActive = cardDisplayMode === mode;
+                          const needsPro = mode !== 'auto' && planInfo.code !== 'PRO';
+                          const modeIcon = mode === 'auto' ? '\u{1F4F1}' : mode === 'showcase' ? '\u{1F5BC}' : '\u{1F4CB}';
+                          const modeLabel = mode === 'auto' ? t('settings_card_auto', locale)
+                            : mode === 'showcase' ? t('settings_card_showcase', locale)
+                            : t('settings_card_compact', locale);
+                          return (
+                            <button
+                              key={mode}
+                              onClick={() => {
+                                if (needsPro) { showUpsell('wishlist_limit'); return; }
+                                setCardDisplayMode(mode);
+                                patchSettings({ appBehavior: { ...settingsData?.appBehavior, cardDisplayMode: mode } });
+                              }}
+                              style={{
+                                flex: 1, display: 'flex', flexDirection: 'column' as const, alignItems: 'center',
+                                gap: 5, padding: '12px 6px 10px', borderRadius: 14, cursor: 'pointer',
+                                fontFamily: font,
+                                background: isActive ? C.accentSoft : C.surface,
+                                border: `1px solid ${isActive ? 'rgba(124,106,255,0.35)' : C.borderLight}`,
+                                opacity: needsPro ? 0.5 : 1,
+                                transition: 'all 0.2s',
+                              }}
+                            >
+                              <span style={{ fontSize: 20, lineHeight: 1 }}>{modeIcon}</span>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: isActive ? C.accent : C.textSec }}>{modeLabel}{needsPro ? ' 👑' : ''}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8, lineHeight: 1.4, padding: '0 2px 4px' }}>{t('settings_card_auto_hint', locale)}</div>
                     </div>
-                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>{t('settings_card_auto_hint', locale)}</div>
-                  </div>
+                  </>
                 )}
               </SettingsSection>
 
-              {/* Support */}
+              {/* Support & Service */}
               <SettingsSection title={t('settings_support_title', locale)}>
-                <SettingsActionRow label={t('settings_changelog', locale)} dot={RELEASE_NOTES.length > 0 && changelogSeenId !== RELEASE_NOTES[0]!.id} onClick={() => {
+                <SettingsActionRow icon={'\u{1F4CB}'} label={t('settings_changelog', locale)} dot={RELEASE_NOTES.length > 0 && changelogSeenId !== RELEASE_NOTES[0]!.id} onClick={() => {
                   if (RELEASE_NOTES.length > 0) {
                     const latestId = RELEASE_NOTES[0]!.id;
                     setChangelogSeenId(latestId);
@@ -12247,10 +12414,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   setChangelogOpenId(null);
                   setScreen('changelog');
                 }} />
-                <SettingsActionRow label={t('settings_report_problem', locale)} onClick={() => {
+                <SDivider />
+                <SettingsActionRow icon={'\u{1F6E0}'} label={t('settings_report_problem', locale)} onClick={() => {
                   setShowReportProblemSheet(true);
                 }} />
-                <SettingsActionRow label={t('settings_contact_support', locale)} onClick={async () => {
+                <SDivider />
+                <SettingsActionRow icon={'\u{1F4AC}'} label={t('settings_contact_support', locale)} onClick={async () => {
                   try { tgRef.current?.WebApp?.HapticFeedback?.impactOccurred?.('light'); } catch { /* ok */ }
                   trackEvent('settings_support_contact_tap');
 
@@ -12311,74 +12480,35 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     trackEvent('settings_support_id_copy_failed');
                   }
                 }} />
-                <SettingsActionRow label={t('settings_faq', locale)} onClick={() => { setFaqOpenId(null); setScreen('faq'); }} />
-                <SettingsActionRow label={t('settings_legal', locale)} onClick={() => { setLegalDocId(null); setScreen('legal'); }} />
-                <SettingsActionRow label={t('settings_delete_account', locale)} color={C.red} onClick={() => setShowDeleteAccount(true)} />
+                <SDivider />
+                <SettingsActionRow icon={'\u{2753}'} label={t('settings_faq', locale)} onClick={() => { setFaqOpenId(null); setScreen('faq'); }} />
+                <SDivider />
+                <SettingsActionRow icon={'\u{1F4C4}'} label={t('settings_legal', locale)} onClick={() => { setLegalDocId(null); setScreen('legal'); }} />
               </SettingsSection>
 
-              {/* Support ID — owner-only, read-only copy block */}
-              {settingsData.supportId && (
-                <div style={{
-                  background: C.surface, borderRadius: 16, padding: '14px 16px',
-                  display: 'flex', flexDirection: 'column', gap: 8,
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-                      <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        {t('support_id_label', locale)}
-                      </span>
-                      <span style={{
-                        fontSize: 14, color: C.text, fontFamily: 'monospace',
-                        wordBreak: 'break-all', letterSpacing: '0.05em',
-                      }}>
-                        {settingsData.supportId}
-                      </span>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        const id = settingsData.supportId!;
-                        try {
-                          // Telegram Mini App clipboard API (preferred in TG environment)
-                          if (typeof window !== 'undefined' && window.Telegram?.WebApp?.writeToClipboard) {
-                            window.Telegram.WebApp.writeToClipboard(id);
-                            pushToast(t('support_id_copied', locale), 'success');
-                            return;
-                          }
-                          // Standard Clipboard API
-                          await navigator.clipboard.writeText(id);
-                          pushToast(t('support_id_copied', locale), 'success');
-                        } catch {
-                          // Fallback: execCommand (legacy browsers / restricted contexts)
-                          try {
-                            const ta = document.createElement('textarea');
-                            ta.value = id;
-                            ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
-                            document.body.appendChild(ta);
-                            ta.focus(); ta.select();
-                            document.execCommand('copy');
-                            document.body.removeChild(ta);
-                            pushToast(t('support_id_copied', locale), 'success');
-                          } catch {
-                            pushToast(t('support_id_copy_error', locale), 'error');
-                          }
-                        }
-                      }}
-                      style={{
-                        flexShrink: 0,
-                        padding: '8px 14px', borderRadius: 10, border: 'none',
-                        background: C.accent + '18', color: C.accent,
-                        fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {t('support_id_copy', locale)}
-                    </button>
-                  </div>
-                  <span style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>
-                    {t('support_id_hint', locale)}
-                  </span>
+              {/* Danger Zone */}
+              <div style={{
+                background: 'rgba(248,113,113,0.06)',
+                border: '1px solid rgba(248,113,113,0.12)',
+                borderRadius: 20, padding: '4px 18px', marginTop: 28,
+              }}>
+                <div
+                  onClick={() => setShowDeleteAccount(true)}
+                  onPointerDown={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; }}
+                  onPointerUp={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                  onPointerLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                  style={{ display: 'flex', alignItems: 'center', padding: '14px 0', gap: 12, cursor: 'pointer', transition: 'opacity 0.12s' }}
+                >
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    background: C.redSoft,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, flexShrink: 0,
+                  }}>{'\u{1F5D1}'}</div>
+                  <span style={{ fontSize: 15, fontWeight: 500, color: C.red, flex: 1 }}>{t('settings_delete_account', locale)}</span>
+                  <span style={{ fontSize: 14, color: C.red, fontWeight: 300 }}>{'\u203A'}</span>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
