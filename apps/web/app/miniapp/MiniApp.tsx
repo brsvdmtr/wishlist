@@ -433,7 +433,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -464,6 +464,43 @@ const inputStyle: React.CSSProperties = {
   // selection handles work even when ancestor touchmove handlers exist.
   WebkitUserSelect: 'text', userSelect: 'text', touchAction: 'auto',
 };
+
+// ═══════════════════════════════════════════════════════
+// RELEASE NOTES — update this array with each release
+// ═══════════════════════════════════════════════════════
+type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
+const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    id: '2026-04-03',
+    date: '03.04.2026',
+    items: [
+      { ru: 'Новый экран «Забронировано мной» с Pro-функциями', en: 'New "Reserved by me" screen with Pro features' },
+      { ru: 'Статус покупки, заметки и напоминания для бронирований', en: 'Purchase status, notes and reminders for reservations' },
+      { ru: 'История завершённых бронирований', en: 'History of completed reservations' },
+      { ru: 'Комментарии теперь сворачиваемые во всех карточках', en: 'Comments are now collapsible across all cards' },
+      { ru: 'Экран «Частые вопросы» в настройках', en: 'FAQ screen in settings' },
+      { ru: 'Покупка Pro-функций бронирования за 50 ⭐', en: 'One-time purchase of reservation Pro for 50 ⭐' },
+    ],
+  },
+  {
+    id: '2026-03-28',
+    date: '28.03.2026',
+    items: [
+      { ru: 'Календарь событий и подарочные заметки', en: 'Event calendar and gift notes' },
+      { ru: 'Публичный профиль с аватаром и описанием', en: 'Public profile with avatar and bio' },
+      { ru: 'Улучшенный импорт товаров по ссылке', en: 'Improved link import for items' },
+    ],
+  },
+  {
+    id: '2026-03-15',
+    date: '15.03.2026',
+    items: [
+      { ru: 'Подписки на чужие вишлисты', en: 'Subscriptions to others\' wishlists' },
+      { ru: 'Намёки на подарки для Pro-пользователей', en: 'Gift hints for Pro users' },
+      { ru: 'Улучшена производительность загрузки', en: 'Improved loading performance' },
+    ],
+  },
+];
 
 /** onFocus: adds a temp spacer so scrollTop has room, then scrolls textarea above keyboard.
  *  Telegram WebView doesn't shrink viewport when keyboard opens, AND the container
@@ -2328,6 +2365,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Track which screen the user came from before opening settings (for correct back navigation)
   const [settingsOriginScreen, setSettingsOriginScreen] = useState<Screen>('my-wishlists');
   const [faqOpenId, setFaqOpenId] = useState<number | null>(null);
+  const [changelogOpenId, setChangelogOpenId] = useState<string | null>(null);
+  const [changelogSeenId, setChangelogSeenId] = useState<string>(() => {
+    try { return window.localStorage.getItem('changelog_seen_id') ?? ''; } catch { return ''; }
+  });
   const [showProfileVisibilitySheet, setShowProfileVisibilitySheet] = useState(false);
   const [showSubscribePolicySheet, setShowSubscribePolicySheet] = useState(false);
   const [showCommentsDefaultSheet, setShowCommentsDefaultSheet] = useState(false);
@@ -4188,7 +4229,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('my-wishlists');
     } else if (screen === 'profile') {
       setScreen('my-wishlists');
-    } else if (screen === 'faq') {
+    } else if (screen === 'faq' || screen === 'changelog') {
       setScreen('settings');
     } else if (screen === 'settings') {
       // Return to the screen the user came from; fall back to my-wishlists if unknown
@@ -11353,7 +11394,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
         );
 
-        const SettingsActionRow = ({ label, color, onClick }: { label: string; color?: string; onClick: () => void }) => (
+        const SettingsActionRow = ({ label, color, onClick, dot }: { label: string; color?: string; onClick: () => void; dot?: boolean }) => (
           <div
             onClick={onClick}
             onPointerDown={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; }}
@@ -11361,7 +11402,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             onPointerLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', transition: 'opacity 0.12s' }}
           >
-            <span style={{ fontSize: 14, color: color || C.text }}>{label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, color: color || C.text }}>{label}</span>
+              {dot && <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.accent, flexShrink: 0 }} />}
+            </div>
             <span style={{ fontSize: 14, color: C.textMuted }}>{'\u203A'}</span>
           </div>
         );
@@ -11567,6 +11611,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
               {/* Support */}
               <SettingsSection title={t('settings_support_title', locale)}>
+                <SettingsActionRow label={t('settings_changelog', locale)} dot={RELEASE_NOTES.length > 0 && changelogSeenId !== RELEASE_NOTES[0]!.id} onClick={() => {
+                  if (RELEASE_NOTES.length > 0) {
+                    const latestId = RELEASE_NOTES[0]!.id;
+                    setChangelogSeenId(latestId);
+                    try { window.localStorage.setItem('changelog_seen_id', latestId); } catch { /* ok */ }
+                  }
+                  setChangelogOpenId(null);
+                  setScreen('changelog');
+                }} />
                 <SettingsActionRow label={t('settings_report_problem', locale)} onClick={() => {
                   try { window.Telegram?.WebApp?.openTelegramLink?.(`https://t.me/${botUsername}`); } catch { /* ok */ }
                 }} />
@@ -11795,6 +11848,75 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </div>
         );
       })()}
+
+      {/* ══════════════════════════════════════════════
+          CHANGELOG
+          ══════════════════════════════════════════════ */}
+      {screen === 'changelog' && (
+        <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 4px' }}>
+            {t('changelog_title', locale)}
+          </h1>
+          <p style={{ fontSize: 13, color: C.textMuted, margin: '0 0 20px', lineHeight: 1.4 }}>
+            {t('changelog_subtitle', locale)}
+          </p>
+
+          {RELEASE_NOTES.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('changelog_empty_title', locale)}</div>
+              <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('changelog_empty_hint', locale)}</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {RELEASE_NOTES.map((release) => {
+                const isOpen = changelogOpenId === release.id;
+                return (
+                  <div key={release.id} style={{ background: C.card, borderRadius: 14, overflow: 'hidden' }}>
+                    <div
+                      onClick={() => setChangelogOpenId(isOpen ? null : release.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '14px 16px', cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font }}>
+                          {release.date}
+                        </div>
+                        {!isOpen && (
+                          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                            {release.items.length} {locale === 'ru' ? (release.items.length === 1 ? 'изменение' : release.items.length < 5 ? 'изменения' : 'изменений') : (release.items.length === 1 ? 'change' : 'changes')}
+                          </div>
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: 18, color: C.textMuted, lineHeight: 1, flexShrink: 0,
+                        transform: isOpen ? 'rotate(90deg)' : 'none',
+                        transition: 'transform 0.2s ease',
+                      }}>›</span>
+                    </div>
+                    {isOpen && (
+                      <div style={{ padding: '0 16px 14px', animation: 'fadeIn 0.2s ease' }}>
+                        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {release.items.map((item, i) => (
+                            <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                              <span style={{ color: C.accent, fontSize: 8, marginTop: 6, flexShrink: 0 }}>●</span>
+                              <span style={{ fontSize: 14, color: C.textSec, lineHeight: 1.45 }}>
+                                {locale === 'ru' ? item.ru : item.en}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
 
