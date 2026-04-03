@@ -433,7 +433,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -2327,6 +2327,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   // Track which screen the user came from before opening settings (for correct back navigation)
   const [settingsOriginScreen, setSettingsOriginScreen] = useState<Screen>('my-wishlists');
+  const [faqOpenId, setFaqOpenId] = useState<number | null>(null);
   const [showProfileVisibilitySheet, setShowProfileVisibilitySheet] = useState(false);
   const [showSubscribePolicySheet, setShowSubscribePolicySheet] = useState(false);
   const [showCommentsDefaultSheet, setShowCommentsDefaultSheet] = useState(false);
@@ -4187,6 +4188,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('my-wishlists');
     } else if (screen === 'profile') {
       setScreen('my-wishlists');
+    } else if (screen === 'faq') {
+      setScreen('settings');
     } else if (screen === 'settings') {
       // Return to the screen the user came from; fall back to my-wishlists if unknown
       const origin = settingsOriginScreen && settingsOriginScreen !== 'settings' ? settingsOriginScreen : 'my-wishlists';
@@ -11628,7 +11631,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     trackEvent('settings_support_id_copy_failed');
                   }
                 }} />
-                <SettingsActionRow label={t('settings_faq', locale)} onClick={() => pushToast(t('settings_coming_soon', locale), 'success')} />
+                <SettingsActionRow label={t('settings_faq', locale)} onClick={() => { setFaqOpenId(null); setScreen('faq'); }} />
                 <SettingsActionRow label={t('settings_legal', locale)} onClick={() => pushToast(t('settings_coming_soon', locale), 'success')} />
                 <SettingsActionRow label={t('settings_delete_account', locale)} color={C.red} onClick={() => setShowDeleteAccount(true)} />
               </SettingsSection>
@@ -11699,6 +11702,97 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             </div>
           )}
         </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          FAQ
+          ══════════════════════════════════════════════ */}
+      {screen === 'faq' && (() => {
+        const FAQ_COUNT = 14;
+        const faqItems = Array.from({ length: FAQ_COUNT }, (_, i) => ({
+          id: i + 1,
+          q: t(`faq_q${i + 1}` as any, locale),
+          a: t(`faq_a${i + 1}` as any, locale),
+        }));
+
+        return (
+          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+            {/* Header */}
+            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 4px' }}>
+              {t('faq_title', locale)}
+            </h1>
+            <p style={{ fontSize: 13, color: C.textMuted, margin: '0 0 20px', lineHeight: 1.4 }}>
+              {t('faq_subtitle', locale)}
+            </p>
+
+            {/* Accordion */}
+            <div style={{ background: C.card, borderRadius: 16, overflow: 'hidden' }}>
+              {faqItems.map((item, idx) => {
+                const isOpen = faqOpenId === item.id;
+                return (
+                  <div key={item.id}>
+                    {idx > 0 && <div style={{ borderTop: `1px solid ${C.border}`, margin: '0 16px' }} />}
+                    <div
+                      onClick={() => setFaqOpenId(isOpen ? null : item.id)}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 12,
+                        padding: '14px 16px', cursor: 'pointer',
+                        transition: 'background 0.15s',
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.4 }}>
+                          {item.q}
+                        </div>
+                        {isOpen && (
+                          <div style={{
+                            fontSize: 13, color: C.textSec, lineHeight: 1.55, marginTop: 8,
+                            whiteSpace: 'pre-line',
+                            animation: 'fadeIn 0.2s ease',
+                          }}>
+                            {item.a}
+                          </div>
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: 18, color: C.textMuted, lineHeight: 1, flexShrink: 0,
+                        transform: isOpen ? 'rotate(90deg)' : 'none',
+                        transition: 'transform 0.2s ease',
+                        marginTop: 1,
+                      }}>›</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Support CTA */}
+            <div style={{
+              marginTop: 20, background: C.surface, borderRadius: 16,
+              padding: '20px 16px', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>
+                {t('faq_support_cta', locale)}
+              </div>
+              <button
+                onClick={() => {
+                  const supportUrl = 'https://t.me/Wish_Support';
+                  try {
+                    window.Telegram?.WebApp?.openTelegramLink?.(supportUrl);
+                  } catch {
+                    window.open(supportUrl, '_blank');
+                  }
+                }}
+                style={{
+                  ...btnPrimary, marginTop: 10,
+                  padding: '12px 24px', fontSize: 14,
+                }}
+              >
+                {t('faq_support_btn', locale)}
+              </button>
+            </div>
+          </div>
         );
       })()}
 
