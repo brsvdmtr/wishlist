@@ -5793,7 +5793,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   };
 
   // Filtered + sorted reservations (Pro)
-  const filteredReservations = React.useMemo(() => {
+  const filteredReservations = useMemo(() => {
     let list = [...reservations];
     // Status filter
     if (resStatusFilter === 'not_purchased') list = list.filter((r) => !r.meta?.purchased);
@@ -5808,12 +5808,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     return list;
   }, [reservations, resStatusFilter, resOwnerFilter, resSort]);
 
-  const filteredResHistory = React.useMemo(() => {
+  const filteredResHistory = useMemo(() => {
     if (resHistoryFilter === 'all') return resHistory;
     return resHistory.filter((r) => r.endReason === resHistoryFilter);
   }, [resHistory, resHistoryFilter]);
 
-  const resOwners = React.useMemo(() => {
+  const resOwners = useMemo(() => {
     const map = new Map<string, { name: string; avatarUrl: string | null }>();
     for (const r of reservations) {
       if (!map.has(r.ownerId)) map.set(r.ownerId, { name: r.ownerName, avatarUrl: r.ownerAvatarUrl });
