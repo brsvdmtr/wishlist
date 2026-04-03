@@ -433,7 +433,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -499,6 +499,617 @@ const RELEASE_NOTES: ReleaseNote[] = [
       { ru: 'Намёки на подарки для Pro-пользователей', en: 'Gift hints for Pro users' },
       { ru: 'Улучшена производительность загрузки', en: 'Improved loading performance' },
     ],
+  },
+];
+
+// ═══════════════════════════════════════════════════════
+// LEGAL DOCUMENTS — structured content per locale
+// ═══════════════════════════════════════════════════════
+type LegalDocDef = {
+  id: string;
+  icon: string;
+  version: string;
+  effectiveDate: string;
+  title: Record<string, string>;
+  body: Record<string, string>;
+};
+
+const LEGAL_DOCS: LegalDocDef[] = [
+  {
+    id: 'privacy',
+    icon: '🔒',
+    version: '1.0',
+    effectiveDate: '03.04.2026',
+    title: {
+      ru: 'Политика конфиденциальности',
+      en: 'Privacy Policy',
+      'zh-CN': '隐私政策',
+      hi: 'गोपनीयता नीति',
+      es: 'Política de privacidad',
+      ar: 'سياسة الخصوصية',
+    },
+    body: {
+      ru: [
+        'Настоящая Политика конфиденциальности определяет порядок обработки и защиты информации о пользователях сервиса WishBot, доступного через Telegram-бота, Telegram Mini App и связанные веб-страницы сервиса.',
+        'Используя сервис WishBot, пользователь подтверждает, что ознакомился с настоящей Политикой.',
+        '1. Общие положения',
+        '1.1. WishBot является цифровым сервисом для создания, хранения, управления и совместного использования вишлистов и связанных пользовательских данных.',
+        '1.2. Сервис администрируется физическим лицом.',
+        '1.3. По вопросам использования сервиса, обработки данных и поддержки пользователь может обратиться через:\nhttps://t.me/Wish_Support',
+        '2. Какие данные могут обрабатываться',
+        '2.1. В рамках работы сервиса могут обрабатываться следующие данные пользователя:\n• идентификаторы Telegram, включая Telegram user ID, username, display name;\n• данные профиля и настройки сервиса, включая язык интерфейса, настройки отображения и иные пользовательские предпочтения;\n• данные, которые пользователь самостоятельно добавляет в сервис, включая названия вишлистов, карточки желаний, ссылки, описания, комментарии, статусы и иные материалы;\n• технические данные взаимодействия с сервисом, включая дату и время запросов, сведения об ошибках, служебные журналы, IP-адрес веб-запросов, user-agent и сведения о сессии;\n• данные, связанные с доступом к платным функциям, включая факт оплаты, срок действия доступа, идентификаторы транзакций и статусы платежей;\n• сведения, которые пользователь сообщает при обращении в поддержку.',
+        '3. Цели обработки данных',
+        '3.1. Данные обрабатываются в следующих целях:\n• предоставление пользователю доступа к функциональности сервиса;\n• создание, хранение, отображение и синхронизация пользовательских вишлистов и связанных данных;\n• активация и предоставление платных функций сервиса;\n• обработка обращений в поддержку;\n• обеспечение безопасности сервиса, диагностика ошибок и предотвращение злоупотреблений;\n• исполнение требований применимого законодательства.',
+        '4. Передача данных третьим лицам',
+        '4.1. Данные могут передаваться третьим лицам только в объеме, необходимом для функционирования сервиса, включая:\n• Telegram как платформу взаимодействия пользователя с сервисом;\n• хостинг- и инфраструктурных провайдеров;\n• сервисы, используемые для технического обеспечения работы продукта, логирования, мониторинга и обработки цифровых покупок внутри Telegram.',
+        '4.2. Сервис не продает персональные данные пользователей третьим лицам.',
+        '5. Хранение данных',
+        '5.1. Данные обрабатываются в течение срока использования сервиса пользователем, а также в течение разумного срока после удаления аккаунта, если это необходимо для резервного копирования, предотвращения злоупотреблений, рассмотрения обращений, исполнения обязательств по уже совершенным покупкам либо соблюдения требований законодательства.',
+        '6. Права пользователя',
+        '6.1. Пользователь вправе:\n• запросить сведения об обработке своих данных;\n• запросить уточнение, обновление или удаление данных;\n• обратиться по вопросам конфиденциальности и обработки данных через https://t.me/Wish_Support.',
+        '7. Изменение Политики',
+        '7.1. Актуальная редакция Политики размещается в разделе «Юридическая информация» сервиса WishBot.',
+        '7.2. Продолжение использования сервиса после публикации новой редакции означает согласие пользователя с обновленной редакцией Политики, если иное не предусмотрено применимым законодательством.',
+      ].join('\n\n'),
+      en: [
+        'This Privacy Policy defines the procedures for processing and protecting information about users of the WishBot service, available through the Telegram bot, Telegram Mini App, and associated web pages.',
+        'By using the WishBot service, the user confirms that they have read this Policy.',
+        '1. General Provisions',
+        '1.1. WishBot is a digital service for creating, storing, managing, and sharing wishlists and related user data.',
+        '1.2. The service is administered by an individual.',
+        '1.3. For questions about the service, data processing, and support, the user may contact:\nhttps://t.me/Wish_Support',
+        '2. What Data May Be Processed',
+        '2.1. The following user data may be processed as part of the service:\n• Telegram identifiers, including Telegram user ID, username, display name;\n• profile data and service settings, including interface language, display preferences, and other user preferences;\n• data that the user independently adds to the service, including wishlist names, wish cards, links, descriptions, comments, statuses, and other materials;\n• technical interaction data, including request timestamps, error information, service logs, web request IP addresses, user-agent, and session information;\n• data related to paid feature access, including payment status, access duration, transaction identifiers, and payment statuses;\n• information that the user provides when contacting support.',
+        '3. Purposes of Data Processing',
+        '3.1. Data is processed for the following purposes:\n• providing the user with access to service functionality;\n• creating, storing, displaying, and synchronizing user wishlists and related data;\n• activating and providing paid service features;\n• processing support requests;\n• ensuring service security, error diagnostics, and abuse prevention;\n• compliance with applicable legislation.',
+        '4. Data Sharing with Third Parties',
+        '4.1. Data may be shared with third parties only to the extent necessary for the service to function, including:\n• Telegram as the platform through which the user interacts with the service;\n• hosting and infrastructure providers;\n• services used for technical support of the product, logging, monitoring, and processing digital purchases within Telegram.',
+        '4.2. The service does not sell users\' personal data to third parties.',
+        '5. Data Retention',
+        '5.1. Data is processed during the user\'s use of the service, as well as for a reasonable period after account deletion if necessary for backup, abuse prevention, processing requests, fulfilling obligations for completed purchases, or compliance with legal requirements.',
+        '6. User Rights',
+        '6.1. The user has the right to:\n• request information about the processing of their data;\n• request correction, update, or deletion of data;\n• contact support regarding privacy and data processing at https://t.me/Wish_Support.',
+        '7. Policy Changes',
+        '7.1. The current version of the Policy is available in the "Legal Information" section of the WishBot service.',
+        '7.2. Continued use of the service after publication of a new version constitutes the user\'s acceptance of the updated Policy, unless otherwise provided by applicable legislation.',
+      ].join('\n\n'),
+      'zh-CN': [
+        '本隐私政策规定了 WishBot 服务用户信息的处理和保护程序。WishBot 服务可通过 Telegram 机器人、Telegram Mini App 及相关网页访问。',
+        '使用 WishBot 服务即表示用户确认已阅读本政策。',
+        '1. 总则',
+        '1.1. WishBot 是一项用于创建、存储、管理和共享心愿单及相关用户数据的数字服务。',
+        '1.2. 本服务由个人管理运营。',
+        '1.3. 如有关于服务使用、数据处理和支持的问题，用户可通过以下方式联系：\nhttps://t.me/Wish_Support',
+        '2. 可能处理的数据',
+        '2.1. 在服务运行过程中，可能处理以下用户数据：\n• Telegram 标识符，包括 Telegram 用户 ID、用户名、显示名称；\n• 个人资料数据和服务设置，包括界面语言、显示偏好及其他用户偏好；\n• 用户自行添加到服务中的数据，包括心愿单名称、心愿卡片、链接、描述、评论、状态及其他内容；\n• 技术交互数据，包括请求时间戳、错误信息、服务日志、网络请求 IP 地址、user-agent 和会话信息；\n• 与付费功能访问相关的数据，包括付款状态、访问期限、交易标识符和付款状态；\n• 用户在联系支持时提供的信息。',
+        '3. 数据处理目的',
+        '3.1. 数据出于以下目的进行处理：\n• 向用户提供服务功能的访问权限；\n• 创建、存储、展示和同步用户心愿单及相关数据；\n• 激活和提供付费服务功能；\n• 处理支持请求；\n• 确保服务安全、错误诊断和防止滥用；\n• 遵守适用法律法规。',
+        '4. 向第三方传输数据',
+        '4.1. 数据仅在服务正常运行所必需的范围内向第三方传输，包括：\n• Telegram 作为用户与服务交互的平台；\n• 托管和基础设施提供商；\n• 用于产品技术支持、日志记录、监控和处理 Telegram 内数字购买的服务。',
+        '4.2. 本服务不会将用户个人数据出售给第三方。',
+        '5. 数据存储',
+        '5.1. 数据在用户使用服务期间进行处理，以及在账户删除后的合理期限内继续处理（如备份、防止滥用、处理申诉、履行已完成购买的义务或遵守法律要求所必需）。',
+        '6. 用户权利',
+        '6.1. 用户有权：\n• 请求了解其数据的处理情况；\n• 请求更正、更新或删除数据；\n• 通过 https://t.me/Wish_Support 就隐私和数据处理问题联系支持。',
+        '7. 政策变更',
+        '7.1. 本政策的最新版本可在 WishBot 服务的「法律信息」栏目中查阅。',
+        '7.2. 在新版本发布后继续使用服务即表示用户接受更新后的政策，除非适用法律另有规定。',
+      ].join('\n\n'),
+      hi: [
+        'यह गोपनीयता नीति WishBot सेवा के उपयोगकर्ताओं की जानकारी के प्रसंस्करण और सुरक्षा की प्रक्रिया को परिभाषित करती है। WishBot सेवा Telegram बॉट, Telegram Mini App और संबंधित वेब पृष्ठों के माध्यम से उपलब्ध है।',
+        'WishBot सेवा का उपयोग करके, उपयोगकर्ता पुष्टि करता है कि उसने इस नीति को पढ़ लिया है।',
+        '1. सामान्य प्रावधान',
+        '1.1. WishBot विशलिस्ट और संबंधित उपयोगकर्ता डेटा बनाने, संग्रहीत करने, प्रबंधित करने और साझा करने के लिए एक डिजिटल सेवा है।',
+        '1.2. सेवा एक व्यक्ति द्वारा प्रशासित है।',
+        '1.3. सेवा उपयोग, डेटा प्रसंस्करण और सहायता के बारे में प्रश्नों के लिए, उपयोगकर्ता संपर्क कर सकता है:\nhttps://t.me/Wish_Support',
+        '2. कौन सा डेटा संसाधित किया जा सकता है',
+        '2.1. सेवा के संचालन के दौरान निम्नलिखित उपयोगकर्ता डेटा संसाधित किया जा सकता है:\n• Telegram पहचानकर्ता, जिसमें Telegram user ID, username, display name शामिल हैं;\n• प्रोफ़ाइल डेटा और सेवा सेटिंग्स, जिसमें इंटरफ़ेस भाषा, प्रदर्शन प्राथमिकताएं और अन्य उपयोगकर्ता प्राथमिकताएं शामिल हैं;\n• उपयोगकर्ता द्वारा स्वतंत्र रूप से सेवा में जोड़ा गया डेटा, जिसमें विशलिस्ट नाम, विश कार्ड, लिंक, विवरण, टिप्पणियां, स्थिति और अन्य सामग्री शामिल हैं;\n• तकनीकी इंटरैक्शन डेटा, जिसमें अनुरोध समय, त्रुटि जानकारी, सेवा लॉग, IP पता, user-agent और सत्र जानकारी शामिल हैं;\n• सशुल्क सुविधा पहुंच से संबंधित डेटा, जिसमें भुगतान स्थिति, पहुंच अवधि, लेनदेन पहचानकर्ता और भुगतान स्थिति शामिल हैं;\n• उपयोगकर्ता द्वारा सहायता से संपर्क करते समय प्रदान की गई जानकारी।',
+        '3. डेटा प्रसंस्करण के उद्देश्य',
+        '3.1. डेटा निम्नलिखित उद्देश्यों के लिए संसाधित किया जाता है:\n• उपयोगकर्ता को सेवा कार्यक्षमता तक पहुंच प्रदान करना;\n• उपयोगकर्ता विशलिस्ट और संबंधित डेटा बनाना, संग्रहीत करना, प्रदर्शित करना और सिंक्रनाइज़ करना;\n• सशुल्क सेवा सुविधाओं को सक्रिय करना और प्रदान करना;\n• सहायता अनुरोधों का प्रसंस्करण;\n• सेवा सुरक्षा सुनिश्चित करना, त्रुटि निदान और दुरुपयोग रोकथाम;\n• लागू कानून का अनुपालन।',
+        '4. तीसरे पक्ष को डेटा हस्तांतरण',
+        '4.1. डेटा केवल सेवा के कार्य करने के लिए आवश्यक सीमा तक तीसरे पक्ष को हस्तांतरित किया जा सकता है, जिसमें शामिल हैं:\n• Telegram एक प्लेटफ़ॉर्म के रूप में;\n• होस्टिंग और बुनियादी ढांचा प्रदाता;\n• उत्पाद के तकनीकी समर्थन, लॉगिंग, निगरानी और Telegram के भीतर डिजिटल खरीद के प्रसंस्करण के लिए उपयोग की जाने वाली सेवाएं।',
+        '4.2. सेवा उपयोगकर्ताओं का व्यक्तिगत डेटा तीसरे पक्ष को नहीं बेचती।',
+        '5. डेटा भंडारण',
+        '5.1. उपयोगकर्ता द्वारा सेवा के उपयोग के दौरान डेटा संसाधित किया जाता है, साथ ही खाता हटाने के बाद उचित अवधि तक (यदि बैकअप, दुरुपयोग रोकथाम, अनुरोध प्रसंस्करण, पूर्ण खरीद के दायित्वों को पूरा करने या कानूनी आवश्यकताओं के अनुपालन के लिए आवश्यक हो)।',
+        '6. उपयोगकर्ता अधिकार',
+        '6.1. उपयोगकर्ता का अधिकार है:\n• अपने डेटा के प्रसंस्करण के बारे में जानकारी का अनुरोध करना;\n• डेटा में सुधार, अपडेट या हटाने का अनुरोध करना;\n• https://t.me/Wish_Support पर गोपनीयता और डेटा प्रसंस्करण के बारे में सहायता से संपर्क करना।',
+        '7. नीति में परिवर्तन',
+        '7.1. नीति का वर्तमान संस्करण WishBot सेवा के «कानूनी जानकारी» अनुभाग में उपलब्ध है।',
+        '7.2. नए संस्करण के प्रकाशन के बाद सेवा का निरंतर उपयोग अद्यतन नीति की उपयोगकर्ता की स्वीकृति को दर्शाता है, जब तक कि लागू कानून द्वारा अन्यथा प्रदान न किया गया हो।',
+      ].join('\n\n'),
+      es: [
+        'Esta Política de Privacidad define los procedimientos para el procesamiento y la protección de la información de los usuarios del servicio WishBot, disponible a través del bot de Telegram, Telegram Mini App y las páginas web asociadas.',
+        'Al utilizar el servicio WishBot, el usuario confirma que ha leído esta Política.',
+        '1. Disposiciones generales',
+        '1.1. WishBot es un servicio digital para crear, almacenar, gestionar y compartir listas de deseos y datos de usuario relacionados.',
+        '1.2. El servicio es administrado por una persona física.',
+        '1.3. Para consultas sobre el servicio, el procesamiento de datos y el soporte, el usuario puede contactar a:\nhttps://t.me/Wish_Support',
+        '2. Qué datos pueden ser procesados',
+        '2.1. Los siguientes datos del usuario pueden ser procesados como parte del servicio:\n• Identificadores de Telegram, incluyendo Telegram user ID, nombre de usuario, nombre visible;\n• datos del perfil y configuración del servicio, incluyendo idioma de interfaz, preferencias de visualización y otras preferencias del usuario;\n• datos que el usuario añade de forma independiente al servicio, incluyendo nombres de listas de deseos, tarjetas de deseos, enlaces, descripciones, comentarios, estados y otros materiales;\n• datos técnicos de interacción, incluyendo marcas de tiempo de solicitudes, información de errores, registros del servicio, direcciones IP, user-agent e información de sesión;\n• datos relacionados con el acceso a funciones de pago, incluyendo estado de pago, duración del acceso, identificadores de transacciones y estados de pago;\n• información que el usuario proporciona al contactar con soporte.',
+        '3. Propósitos del procesamiento de datos',
+        '3.1. Los datos se procesan con los siguientes propósitos:\n• proporcionar al usuario acceso a la funcionalidad del servicio;\n• crear, almacenar, mostrar y sincronizar las listas de deseos del usuario y datos relacionados;\n• activar y proporcionar funciones de pago del servicio;\n• procesar solicitudes de soporte;\n• garantizar la seguridad del servicio, diagnóstico de errores y prevención de abusos;\n• cumplimiento de la legislación aplicable.',
+        '4. Transmisión de datos a terceros',
+        '4.1. Los datos pueden compartirse con terceros solo en la medida necesaria para el funcionamiento del servicio, incluyendo:\n• Telegram como plataforma de interacción del usuario con el servicio;\n• proveedores de hosting e infraestructura;\n• servicios utilizados para el soporte técnico del producto, registro, monitoreo y procesamiento de compras digitales dentro de Telegram.',
+        '4.2. El servicio no vende datos personales de los usuarios a terceros.',
+        '5. Almacenamiento de datos',
+        '5.1. Los datos se procesan durante el uso del servicio por parte del usuario, así como durante un período razonable después de la eliminación de la cuenta si es necesario para copias de seguridad, prevención de abusos, procesamiento de solicitudes, cumplimiento de obligaciones por compras realizadas o cumplimiento de requisitos legales.',
+        '6. Derechos del usuario',
+        '6.1. El usuario tiene derecho a:\n• solicitar información sobre el procesamiento de sus datos;\n• solicitar la corrección, actualización o eliminación de datos;\n• contactar con soporte sobre privacidad y procesamiento de datos en https://t.me/Wish_Support.',
+        '7. Cambios en la Política',
+        '7.1. La versión actual de la Política está disponible en la sección «Información legal» del servicio WishBot.',
+        '7.2. El uso continuado del servicio después de la publicación de una nueva versión constituye la aceptación por parte del usuario de la Política actualizada, salvo que la legislación aplicable disponga lo contrario.',
+      ].join('\n\n'),
+      ar: [
+        'تحدد سياسة الخصوصية هذه إجراءات معالجة وحماية معلومات مستخدمي خدمة WishBot المتاحة عبر بوت Telegram وتطبيق Telegram Mini App وصفحات الويب المرتبطة.',
+        'باستخدام خدمة WishBot، يؤكد المستخدم أنه قد اطلع على هذه السياسة.',
+        '1. أحكام عامة',
+        '1.1. WishBot هي خدمة رقمية لإنشاء وتخزين وإدارة ومشاركة قوائم الأمنيات وبيانات المستخدم ذات الصلة.',
+        '1.2. يتم إدارة الخدمة بواسطة شخص طبيعي.',
+        '1.3. للاستفسارات حول الخدمة ومعالجة البيانات والدعم، يمكن للمستخدم التواصل عبر:\nhttps://t.me/Wish_Support',
+        '2. ما هي البيانات التي قد تتم معالجتها',
+        '2.1. قد تتم معالجة بيانات المستخدم التالية كجزء من الخدمة:\n• معرّفات Telegram، بما في ذلك معرّف مستخدم Telegram واسم المستخدم والاسم المعروض؛\n• بيانات الملف الشخصي وإعدادات الخدمة، بما في ذلك لغة الواجهة وتفضيلات العرض وتفضيلات المستخدم الأخرى؛\n• البيانات التي يضيفها المستخدم بشكل مستقل إلى الخدمة، بما في ذلك أسماء قوائم الأمنيات وبطاقات الأمنيات والروابط والأوصاف والتعليقات والحالات والمواد الأخرى؛\n• البيانات التقنية للتفاعل، بما في ذلك أوقات الطلبات ومعلومات الأخطاء وسجلات الخدمة وعناوين IP ومعلومات الجلسة؛\n• البيانات المتعلقة بالوصول إلى الميزات المدفوعة، بما في ذلك حالة الدفع ومدة الوصول ومعرّفات المعاملات وحالات الدفع؛\n• المعلومات التي يقدمها المستخدم عند الاتصال بالدعم.',
+        '3. أغراض معالجة البيانات',
+        '3.1. تتم معالجة البيانات للأغراض التالية:\n• توفير وصول المستخدم إلى وظائف الخدمة؛\n• إنشاء وتخزين وعرض ومزامنة قوائم أمنيات المستخدم والبيانات ذات الصلة؛\n• تفعيل وتوفير ميزات الخدمة المدفوعة؛\n• معالجة طلبات الدعم؛\n• ضمان أمان الخدمة وتشخيص الأخطاء ومنع إساءة الاستخدام؛\n• الامتثال للتشريعات المعمول بها.',
+        '4. مشاركة البيانات مع أطراف ثالثة',
+        '4.1. قد تتم مشاركة البيانات مع أطراف ثالثة فقط بالقدر اللازم لعمل الخدمة، بما في ذلك:\n• Telegram كمنصة تفاعل المستخدم مع الخدمة؛\n• مزودي الاستضافة والبنية التحتية؛\n• الخدمات المستخدمة للدعم التقني للمنتج والتسجيل والمراقبة ومعالجة المشتريات الرقمية داخل Telegram.',
+        '4.2. لا تبيع الخدمة البيانات الشخصية للمستخدمين لأطراف ثالثة.',
+        '5. تخزين البيانات',
+        '5.1. تتم معالجة البيانات خلال فترة استخدام المستخدم للخدمة، وكذلك لفترة معقولة بعد حذف الحساب إذا كان ذلك ضرورياً للنسخ الاحتياطي أو منع إساءة الاستخدام أو معالجة الطلبات أو الوفاء بالتزامات المشتريات المكتملة أو الامتثال للمتطلبات القانونية.',
+        '6. حقوق المستخدم',
+        '6.1. يحق للمستخدم:\n• طلب معلومات حول معالجة بياناته؛\n• طلب تصحيح أو تحديث أو حذف البيانات؛\n• الاتصال بالدعم بشأن الخصوصية ومعالجة البيانات عبر https://t.me/Wish_Support.',
+        '7. تغييرات السياسة',
+        '7.1. يتوفر الإصدار الحالي من السياسة في قسم «المعلومات القانونية» في خدمة WishBot.',
+        '7.2. يعتبر الاستمرار في استخدام الخدمة بعد نشر إصدار جديد بمثابة قبول المستخدم للسياسة المحدثة، ما لم ينص التشريع المعمول به على خلاف ذلك.',
+      ].join('\n\n'),
+    },
+  },
+  {
+    id: 'terms',
+    icon: '📄',
+    version: '1.0',
+    effectiveDate: '03.04.2026',
+    title: {
+      ru: 'Пользовательское соглашение',
+      en: 'Terms of Use',
+      'zh-CN': '使用条款',
+      hi: 'उपयोग की शर्तें',
+      es: 'Términos de uso',
+      ar: 'شروط الاستخدام',
+    },
+    body: {
+      ru: [
+        'Настоящее Пользовательское соглашение регулирует условия использования сервиса WishBot, доступного через Telegram-бота, Telegram Mini App и связанные веб-страницы.',
+        '1. Предмет Соглашения',
+        '1.1. Сервис WishBot предоставляет пользователю техническую возможность создавать, редактировать, хранить и совместно использовать вишлисты, а также использовать бесплатные и платные функции сервиса.',
+        '1.2. Используя сервис, пользователь принимает условия настоящего Соглашения.',
+        '2. Учетная запись и доступ',
+        '2.1. Доступ к основному функционалу сервиса осуществляется через Telegram.',
+        '2.2. Пользователь несет ответственность за использование своего аккаунта Telegram и за действия, совершаемые через него в сервисе.',
+        '2.3. Пользователь обязуется не использовать сервис в нарушение закона, прав третьих лиц или назначения сервиса.',
+        '3. Пользовательский контент',
+        '3.1. Пользователь самостоятельно определяет содержание вишлистов, карточек желаний, описаний, комментариев, ссылок и иных материалов, размещаемых в сервисе.',
+        '3.2. Пользователь не вправе размещать в сервисе незаконный, вредоносный, оскорбительный, мошеннический либо нарушающий права третьих лиц контент.',
+        '3.3. Пользователь несет ответственность за контент, который он размещает в сервисе.',
+        '4. Ограничения и меры защиты',
+        '4.1. В целях обеспечения безопасности и стабильной работы сервиса администратор вправе ограничить доступ к сервису полностью или частично при выявлении злоупотреблений, подозрительной активности, попыток нарушения работы сервиса или размещения недопустимого контента.',
+        '4.2. Такие меры могут применяться без предварительного уведомления, если это необходимо для защиты сервиса, пользователей или инфраструктуры.',
+        '5. Сторонние ссылки и товары',
+        '5.1. Сервис WishBot не является продавцом, производителем, поставщиком, маркетплейсом или платежным агентом в отношении товаров и услуг, ссылки на которые пользователи размещают в вишлистах.',
+        '5.2. Сервис не отвечает за содержание страниц сторонних сайтов, наличие и стоимость товаров, условия доставки, возвраты, гарантийное обслуживание, действия продавцов и иные обстоятельства, связанные с приобретением товаров и услуг у третьих лиц.',
+        '6. Доступность сервиса',
+        '6.1. Администратор прилагает разумные усилия для обеспечения стабильной работы сервиса, однако не гарантирует отсутствие технических сбоев, ошибок, временной недоступности, ограничений со стороны Telegram, сторонних интеграций, устройств пользователя, операторов связи или сетевой инфраструктуры.',
+        '6.2. Функциональность сервиса может изменяться, дополняться или ограничиваться в процессе развития продукта.',
+        '7. Платные функции',
+        '7.1. Отдельные функции сервиса могут предоставляться на платной основе.',
+        '7.2. Условия предоставления платных функций, включая Pro-доступ и цифровые покупки внутри Telegram, определяются отдельным документом «Условия Pro и покупок».',
+        '8. Изменение Соглашения',
+        '8.1. Актуальная редакция Соглашения размещается в разделе «Юридическая информация» сервиса WishBot.',
+        '8.2. Продолжение использования сервиса после публикации новой редакции означает принятие обновленного Соглашения, если иное не предусмотрено применимым законодательством.',
+      ].join('\n\n'),
+      en: [
+        'These Terms of Use govern the conditions for using the WishBot service, available through the Telegram bot, Telegram Mini App, and associated web pages.',
+        '1. Subject of the Agreement',
+        '1.1. The WishBot service provides the user with the technical ability to create, edit, store, and share wishlists, as well as to use free and paid features of the service.',
+        '1.2. By using the service, the user accepts the terms of this Agreement.',
+        '2. Account and Access',
+        '2.1. Access to the main functionality of the service is provided through Telegram.',
+        '2.2. The user is responsible for the use of their Telegram account and for actions performed through it in the service.',
+        '2.3. The user agrees not to use the service in violation of the law, third-party rights, or the intended purpose of the service.',
+        '3. User Content',
+        '3.1. The user independently determines the content of wishlists, wish cards, descriptions, comments, links, and other materials placed in the service.',
+        '3.2. The user may not place illegal, harmful, offensive, fraudulent, or rights-infringing content in the service.',
+        '3.3. The user is responsible for the content they place in the service.',
+        '4. Restrictions and Protective Measures',
+        '4.1. To ensure the security and stable operation of the service, the administrator may restrict access to the service in whole or in part upon detection of abuse, suspicious activity, attempts to disrupt the service, or placement of prohibited content.',
+        '4.2. Such measures may be applied without prior notice if necessary to protect the service, users, or infrastructure.',
+        '5. Third-Party Links and Products',
+        '5.1. The WishBot service is not a seller, manufacturer, supplier, marketplace, or payment agent with respect to goods and services linked by users in wishlists.',
+        '5.2. The service is not responsible for the content of third-party websites, availability and pricing of products, delivery terms, returns, warranty service, seller actions, or other circumstances related to the purchase of goods and services from third parties.',
+        '6. Service Availability',
+        '6.1. The administrator makes reasonable efforts to ensure stable service operation but does not guarantee the absence of technical failures, errors, temporary unavailability, Telegram restrictions, third-party integration issues, user device limitations, carrier restrictions, or network infrastructure issues.',
+        '6.2. Service functionality may change, be expanded, or be limited as the product evolves.',
+        '7. Paid Features',
+        '7.1. Certain service features may be provided on a paid basis.',
+        '7.2. The terms for paid features, including Pro access and digital purchases within Telegram, are defined in a separate document "Pro & Purchase Terms".',
+        '8. Changes to the Agreement',
+        '8.1. The current version of the Agreement is available in the "Legal Information" section of the WishBot service.',
+        '8.2. Continued use of the service after publication of a new version constitutes acceptance of the updated Agreement, unless otherwise provided by applicable legislation.',
+      ].join('\n\n'),
+      'zh-CN': [
+        '本使用条款规定了使用 WishBot 服务的条件。WishBot 服务可通过 Telegram 机器人、Telegram Mini App 及相关网页访问。',
+        '1. 协议主题',
+        '1.1. WishBot 服务为用户提供创建、编辑、存储和共享心愿单的技术能力，以及使用服务的免费和付费功能。',
+        '1.2. 使用本服务即表示用户接受本协议的条款。',
+        '2. 账户与访问',
+        '2.1. 服务的主要功能通过 Telegram 访问。',
+        '2.2. 用户对其 Telegram 账户的使用及通过该账户在服务中执行的操作负责。',
+        '2.3. 用户同意不违反法律、第三方权利或服务的预期用途来使用本服务。',
+        '3. 用户内容',
+        '3.1. 用户自主决定在服务中发布的心愿单、心愿卡片、描述、评论、链接及其他材料的内容。',
+        '3.2. 用户不得在服务中发布违法、有害、攻击性、欺诈性或侵犯第三方权利的内容。',
+        '3.3. 用户对其在服务中发布的内容负责。',
+        '4. 限制与保护措施',
+        '4.1. 为确保服务的安全和稳定运行，管理员可在发现滥用、可疑活动、破坏服务的企图或发布不当内容时，全部或部分限制对服务的访问。',
+        '4.2. 如有必要保护服务、用户或基础设施，此类措施可在不事先通知的情况下实施。',
+        '5. 第三方链接与商品',
+        '5.1. WishBot 服务不是用户在心愿单中链接的商品和服务的卖家、制造商、供应商、市场平台或支付代理。',
+        '5.2. 本服务不对第三方网站内容、商品可用性和价格、配送条件、退货、保修服务、卖家行为或与从第三方购买商品和服务相关的其他情况负责。',
+        '6. 服务可用性',
+        '6.1. 管理员尽合理努力确保服务稳定运行，但不保证不会出现技术故障、错误、暂时不可用、Telegram 限制、第三方集成问题、用户设备限制、运营商限制或网络基础设施问题。',
+        '6.2. 服务功能可能会随着产品发展而变化、扩展或受到限制。',
+        '7. 付费功能',
+        '7.1. 某些服务功能可能以付费方式提供。',
+        '7.2. 付费功能的条款，包括 Pro 访问和 Telegram 内的数字购买，由单独的「Pro 与购买条款」文档定义。',
+        '8. 协议变更',
+        '8.1. 本协议的最新版本可在 WishBot 服务的「法律信息」栏目中查阅。',
+        '8.2. 在新版本发布后继续使用服务即表示接受更新后的协议，除非适用法律另有规定。',
+      ].join('\n\n'),
+      hi: [
+        'यह उपयोग की शर्तें WishBot सेवा के उपयोग की शर्तों को नियंत्रित करती हैं। WishBot सेवा Telegram बॉट, Telegram Mini App और संबंधित वेब पृष्ठों के माध्यम से उपलब्ध है।',
+        '1. समझौते का विषय',
+        '1.1. WishBot सेवा उपयोगकर्ता को विशलिस्ट बनाने, संपादित करने, संग्रहीत करने और साझा करने की तकनीकी क्षमता प्रदान करती है, साथ ही सेवा की मुफ्त और सशुल्क सुविधाओं का उपयोग करने की सुविधा प्रदान करती है।',
+        '1.2. सेवा का उपयोग करके, उपयोगकर्ता इस समझौते की शर्तों को स्वीकार करता है।',
+        '2. खाता और पहुंच',
+        '2.1. सेवा की मुख्य कार्यक्षमता तक पहुंच Telegram के माध्यम से प्रदान की जाती है।',
+        '2.2. उपयोगकर्ता अपने Telegram खाते के उपयोग और सेवा में इसके माध्यम से किए गए कार्यों के लिए जिम्मेदार है।',
+        '2.3. उपयोगकर्ता कानून, तीसरे पक्ष के अधिकारों या सेवा के उद्देश्य के उल्लंघन में सेवा का उपयोग नहीं करने का वचन देता है।',
+        '3. उपयोगकर्ता सामग्री',
+        '3.1. उपयोगकर्ता स्वतंत्र रूप से सेवा में रखी गई विशलिस्ट, विश कार्ड, विवरण, टिप्पणियां, लिंक और अन्य सामग्री की सामग्री निर्धारित करता है।',
+        '3.2. उपयोगकर्ता सेवा में अवैध, हानिकारक, आपत्तिजनक, धोखाधड़ी वाली या तीसरे पक्ष के अधिकारों का उल्लंघन करने वाली सामग्री नहीं रख सकता।',
+        '3.3. उपयोगकर्ता अपनी सामग्री के लिए जिम्मेदार है।',
+        '4. प्रतिबंध और सुरक्षात्मक उपाय',
+        '4.1. सेवा की सुरक्षा और स्थिर संचालन सुनिश्चित करने के लिए, प्रशासक दुरुपयोग, संदिग्ध गतिविधि, सेवा को बाधित करने के प्रयास, या निषिद्ध सामग्री के पता चलने पर सेवा तक पहुंच को पूर्ण या आंशिक रूप से प्रतिबंधित कर सकता है।',
+        '4.2. सेवा, उपयोगकर्ताओं या बुनियादी ढांचे की सुरक्षा के लिए आवश्यक होने पर ऐसे उपाय बिना पूर्व सूचना के लागू किए जा सकते हैं।',
+        '5. तीसरे पक्ष के लिंक और उत्पाद',
+        '5.1. WishBot सेवा उपयोगकर्ताओं द्वारा विशलिस्ट में लिंक किए गए सामान और सेवाओं के संबंध में विक्रेता, निर्माता, आपूर्तिकर्ता, मार्केटप्लेस या भुगतान एजेंट नहीं है।',
+        '5.2. सेवा तीसरे पक्ष की वेबसाइटों की सामग्री, उत्पादों की उपलब्धता और मूल्य, डिलीवरी शर्तों, रिटर्न, वारंटी सेवा, विक्रेता कार्यों या तीसरे पक्ष से सामान और सेवाओं की खरीद से संबंधित अन्य परिस्थितियों के लिए जिम्मेदार नहीं है।',
+        '6. सेवा उपलब्धता',
+        '6.1. प्रशासक सेवा के स्थिर संचालन को सुनिश्चित करने के लिए उचित प्रयास करता है लेकिन तकनीकी विफलताओं, त्रुटियों, अस्थायी अनुपलब्धता, Telegram प्रतिबंधों, तीसरे पक्ष के एकीकरण मुद्दों, उपयोगकर्ता उपकरण सीमाओं या नेटवर्क बुनियादी ढांचे के मुद्दों की अनुपस्थिति की गारंटी नहीं देता।',
+        '6.2. उत्पाद के विकास के साथ सेवा कार्यक्षमता बदल सकती है, विस्तारित हो सकती है या सीमित हो सकती है।',
+        '7. सशुल्क सुविधाएं',
+        '7.1. कुछ सेवा सुविधाएं सशुल्क आधार पर प्रदान की जा सकती हैं।',
+        '7.2. Pro पहुंच और Telegram के भीतर डिजिटल खरीद सहित सशुल्क सुविधाओं की शर्तें अलग दस्तावेज़ «Pro और खरीद की शर्तें» में परिभाषित हैं।',
+        '8. समझौते में परिवर्तन',
+        '8.1. समझौते का वर्तमान संस्करण WishBot सेवा के «कानूनी जानकारी» अनुभाग में उपलब्ध है।',
+        '8.2. नए संस्करण के प्रकाशन के बाद सेवा का निरंतर उपयोग अद्यतन समझौते की स्वीकृति को दर्शाता है, जब तक कि लागू कानून द्वारा अन्यथा प्रदान न किया गया हो।',
+      ].join('\n\n'),
+      es: [
+        'Estos Términos de Uso regulan las condiciones de uso del servicio WishBot, disponible a través del bot de Telegram, Telegram Mini App y las páginas web asociadas.',
+        '1. Objeto del Acuerdo',
+        '1.1. El servicio WishBot proporciona al usuario la capacidad técnica de crear, editar, almacenar y compartir listas de deseos, así como de utilizar las funciones gratuitas y de pago del servicio.',
+        '1.2. Al utilizar el servicio, el usuario acepta los términos de este Acuerdo.',
+        '2. Cuenta y acceso',
+        '2.1. El acceso a la funcionalidad principal del servicio se realiza a través de Telegram.',
+        '2.2. El usuario es responsable del uso de su cuenta de Telegram y de las acciones realizadas a través de ella en el servicio.',
+        '2.3. El usuario se compromete a no utilizar el servicio en violación de la ley, los derechos de terceros o el propósito previsto del servicio.',
+        '3. Contenido del usuario',
+        '3.1. El usuario determina de forma independiente el contenido de las listas de deseos, tarjetas de deseos, descripciones, comentarios, enlaces y otros materiales colocados en el servicio.',
+        '3.2. El usuario no puede colocar en el servicio contenido ilegal, dañino, ofensivo, fraudulento o que infrinja los derechos de terceros.',
+        '3.3. El usuario es responsable del contenido que coloca en el servicio.',
+        '4. Restricciones y medidas de protección',
+        '4.1. Para garantizar la seguridad y el funcionamiento estable del servicio, el administrador puede restringir el acceso al servicio total o parcialmente ante la detección de abusos, actividad sospechosa, intentos de interrumpir el servicio o publicación de contenido prohibido.',
+        '4.2. Tales medidas pueden aplicarse sin previo aviso si es necesario para proteger el servicio, los usuarios o la infraestructura.',
+        '5. Enlaces y productos de terceros',
+        '5.1. El servicio WishBot no es vendedor, fabricante, proveedor, marketplace ni agente de pagos respecto a los bienes y servicios enlazados por los usuarios en las listas de deseos.',
+        '5.2. El servicio no es responsable del contenido de sitios web de terceros, la disponibilidad y los precios de los productos, las condiciones de entrega, las devoluciones, el servicio de garantía, las acciones de los vendedores u otras circunstancias relacionadas con la compra de bienes y servicios de terceros.',
+        '6. Disponibilidad del servicio',
+        '6.1. El administrador realiza esfuerzos razonables para garantizar el funcionamiento estable del servicio, pero no garantiza la ausencia de fallos técnicos, errores, indisponibilidad temporal, restricciones de Telegram, problemas de integración de terceros, limitaciones del dispositivo del usuario o problemas de infraestructura de red.',
+        '6.2. La funcionalidad del servicio puede cambiar, ampliarse o limitarse a medida que el producto evoluciona.',
+        '7. Funciones de pago',
+        '7.1. Ciertas funciones del servicio pueden ofrecerse de forma de pago.',
+        '7.2. Los términos de las funciones de pago, incluido el acceso Pro y las compras digitales dentro de Telegram, se definen en un documento separado «Términos de Pro y compras».',
+        '8. Cambios en el Acuerdo',
+        '8.1. La versión actual del Acuerdo está disponible en la sección «Información legal» del servicio WishBot.',
+        '8.2. El uso continuado del servicio después de la publicación de una nueva versión constituye la aceptación del Acuerdo actualizado, salvo que la legislación aplicable disponga lo contrario.',
+      ].join('\n\n'),
+      ar: [
+        'تحكم شروط الاستخدام هذه شروط استخدام خدمة WishBot المتاحة عبر بوت Telegram وتطبيق Telegram Mini App وصفحات الويب المرتبطة.',
+        '1. موضوع الاتفاقية',
+        '1.1. توفر خدمة WishBot للمستخدم القدرة التقنية على إنشاء وتحرير وتخزين ومشاركة قوائم الأمنيات، وكذلك استخدام الميزات المجانية والمدفوعة للخدمة.',
+        '1.2. باستخدام الخدمة، يقبل المستخدم شروط هذه الاتفاقية.',
+        '2. الحساب والوصول',
+        '2.1. يتم الوصول إلى الوظائف الرئيسية للخدمة عبر Telegram.',
+        '2.2. المستخدم مسؤول عن استخدام حسابه على Telegram وعن الإجراءات التي يتم تنفيذها من خلاله في الخدمة.',
+        '2.3. يتعهد المستخدم بعدم استخدام الخدمة بما يخالف القانون أو حقوق الأطراف الثالثة أو الغرض المقصود من الخدمة.',
+        '3. محتوى المستخدم',
+        '3.1. يحدد المستخدم بشكل مستقل محتوى قوائم الأمنيات وبطاقات الأمنيات والأوصاف والتعليقات والروابط والمواد الأخرى المنشورة في الخدمة.',
+        '3.2. لا يجوز للمستخدم نشر محتوى غير قانوني أو ضار أو مسيء أو احتيالي أو ينتهك حقوق الأطراف الثالثة في الخدمة.',
+        '3.3. المستخدم مسؤول عن المحتوى الذي ينشره في الخدمة.',
+        '4. القيود وتدابير الحماية',
+        '4.1. لضمان أمان واستقرار عمل الخدمة، يحق للمسؤول تقييد الوصول إلى الخدمة كلياً أو جزئياً عند اكتشاف إساءة استخدام أو نشاط مشبوه أو محاولات تعطيل الخدمة أو نشر محتوى محظور.',
+        '4.2. يمكن تطبيق هذه التدابير دون إشعار مسبق إذا كان ذلك ضرورياً لحماية الخدمة أو المستخدمين أو البنية التحتية.',
+        '5. روابط ومنتجات الأطراف الثالثة',
+        '5.1. خدمة WishBot ليست بائعاً أو مصنعاً أو مورداً أو سوقاً إلكترونياً أو وكيل دفع فيما يتعلق بالسلع والخدمات المرتبطة من قبل المستخدمين في قوائم الأمنيات.',
+        '5.2. الخدمة غير مسؤولة عن محتوى مواقع الأطراف الثالثة أو توفر المنتجات وأسعارها أو شروط التوصيل أو الإرجاع أو خدمة الضمان أو تصرفات البائعين أو أي ظروف أخرى تتعلق بشراء السلع والخدمات من أطراف ثالثة.',
+        '6. توفر الخدمة',
+        '6.1. يبذل المسؤول جهوداً معقولة لضمان استقرار عمل الخدمة، لكنه لا يضمن غياب الأعطال التقنية أو الأخطاء أو عدم التوفر المؤقت أو قيود Telegram أو مشاكل تكامل الأطراف الثالثة أو قيود أجهزة المستخدم أو مشاكل البنية التحتية للشبكة.',
+        '6.2. قد تتغير وظائف الخدمة أو تتوسع أو تُقيَّد مع تطور المنتج.',
+        '7. الميزات المدفوعة',
+        '7.1. قد يتم تقديم بعض ميزات الخدمة على أساس مدفوع.',
+        '7.2. شروط الميزات المدفوعة، بما في ذلك الوصول إلى Pro والمشتريات الرقمية داخل Telegram، محددة في مستند منفصل «شروط Pro وعمليات الشراء».',
+        '8. تغييرات الاتفاقية',
+        '8.1. يتوفر الإصدار الحالي من الاتفاقية في قسم «المعلومات القانونية» في خدمة WishBot.',
+        '8.2. يعتبر الاستمرار في استخدام الخدمة بعد نشر إصدار جديد بمثابة قبول للاتفاقية المحدثة، ما لم ينص التشريع المعمول به على خلاف ذلك.',
+      ].join('\n\n'),
+    },
+  },
+  {
+    id: 'pro-terms',
+    icon: '⭐',
+    version: '1.0',
+    effectiveDate: '03.04.2026',
+    title: {
+      ru: 'Условия Pro и покупок',
+      en: 'Pro & Purchase Terms',
+      'zh-CN': 'Pro 与购买条款',
+      hi: 'Pro और खरीद की शर्तें',
+      es: 'Términos de Pro y compras',
+      ar: 'شروط Pro وعمليات الشراء',
+    },
+    body: {
+      ru: [
+        'Настоящий документ регулирует порядок предоставления платных функций сервиса WishBot, включая Pro-доступ и иные цифровые покупки, оформляемые внутри Telegram.',
+        '1. Общие положения',
+        '1.1. Платные функции сервиса предоставляются пользователю в цифровой форме внутри Telegram.',
+        '1.2. Стоимость, состав функции, срок доступа и иные существенные условия указываются в интерфейсе сервиса до момента подтверждения покупки.',
+        '2. Предоставление доступа',
+        '2.1. Доступ к оплаченной функции считается предоставленным с момента успешного подтверждения оплаты внутри Telegram и активации соответствующего доступа в сервисе.',
+        '2.2. Если оплаченная функция не была предоставлена вследствие подтвержденной технической ошибки сервиса, пользователь вправе обратиться в поддержку.',
+        '3. Подписка и срок действия',
+        '3.1. Для отдельных функций может применяться модель ограниченного по сроку доступа, включая подписку.',
+        '3.2. Сведения о сроке действия доступа, продлении, окончании периода и доступных возможностях должны отображаться пользователю в интерфейсе сервиса.',
+        '4. Возвраты и спорные ситуации',
+        '4.1. По вопросам ошибочного списания, технических проблем с предоставлением функции и иным спорным ситуациям пользователь может обратиться через https://t.me/Wish_Support.',
+        '4.2. Возврат может быть произведен в случаях, когда оплаченная функция фактически не была предоставлена либо не могла быть использована по причине подтвержденной технической ошибки сервиса.',
+        '4.3. Само по себе удаление Telegram, ограничение доступа к Telegram, отсутствие интернет-соединения, ограничения устройства пользователя или иные внешние обстоятельства, не вызванные работой сервиса, не означают ненадлежащее предоставление цифровой функции.',
+        '5. Изменение платных функций',
+        '5.1. Администратор вправе изменять состав, параметры и стоимость платных функций в будущем.',
+        '5.2. Такие изменения не должны лишать пользователя уже оплаченного и активированного доступа на оплаченный период, если иное прямо не вытекает из характера соответствующей функции.',
+      ].join('\n\n'),
+      en: [
+        'This document governs the provision of paid features of the WishBot service, including Pro access and other digital purchases made within Telegram.',
+        '1. General Provisions',
+        '1.1. Paid features of the service are provided to the user in digital form within Telegram.',
+        '1.2. The price, feature composition, access duration, and other material terms are displayed in the service interface before the purchase is confirmed.',
+        '2. Access Provision',
+        '2.1. Access to a paid feature is considered provided from the moment of successful payment confirmation within Telegram and activation of the corresponding access in the service.',
+        '2.2. If a paid feature was not provided due to a confirmed technical error of the service, the user may contact support.',
+        '3. Subscription and Duration',
+        '3.1. A time-limited access model, including subscription, may apply to certain features.',
+        '3.2. Information about the access duration, renewal, period expiration, and available features shall be displayed to the user in the service interface.',
+        '4. Refunds and Disputes',
+        '4.1. For erroneous charges, technical issues with feature provision, and other disputes, the user may contact https://t.me/Wish_Support.',
+        '4.2. A refund may be issued when a paid feature was not actually provided or could not be used due to a confirmed technical error of the service.',
+        '4.3. Deletion of Telegram, restricted access to Telegram, lack of internet connection, user device limitations, or other external circumstances not caused by the service do not constitute improper provision of a digital feature.',
+        '5. Changes to Paid Features',
+        '5.1. The administrator may change the composition, parameters, and pricing of paid features in the future.',
+        '5.2. Such changes shall not deprive the user of already paid and activated access for the paid period, unless otherwise directly implied by the nature of the respective feature.',
+      ].join('\n\n'),
+      'zh-CN': [
+        '本文档规定了 WishBot 服务付费功能的提供方式，包括 Pro 访问权限和在 Telegram 内进行的其他数字购买。',
+        '1. 总则',
+        '1.1. 服务的付费功能以数字形式在 Telegram 内向用户提供。',
+        '1.2. 价格、功能组成、访问时长及其他重要条款在确认购买前显示在服务界面中。',
+        '2. 访问权限提供',
+        '2.1. 付费功能的访问权限自 Telegram 内成功确认付款并在服务中激活相应访问权限之时起视为已提供。',
+        '2.2. 如果付费功能因服务确认的技术错误而未被提供，用户可以联系支持。',
+        '3. 订阅与有效期',
+        '3.1. 某些功能可能采用限时访问模式，包括订阅。',
+        '3.2. 关于访问时长、续期、到期和可用功能的信息应在服务界面中向用户展示。',
+        '4. 退款与争议',
+        '4.1. 对于错误扣费、功能提供的技术问题及其他争议，用户可通过 https://t.me/Wish_Support 联系。',
+        '4.2. 当付费功能实际上未被提供或由于服务确认的技术错误而无法使用时，可以进行退款。',
+        '4.3. 删除 Telegram、Telegram 访问受限、缺乏互联网连接、用户设备限制或其他非服务原因造成的外部情况不构成数字功能的不当提供。',
+        '5. 付费功能变更',
+        '5.1. 管理员可在未来变更付费功能的组成、参数和定价。',
+        '5.2. 此类变更不应剥夺用户在已付费期间内已支付和激活的访问权限，除非相关功能的性质另有明确规定。',
+      ].join('\n\n'),
+      hi: [
+        'यह दस्तावेज़ WishBot सेवा की सशुल्क सुविधाओं के प्रावधानों को नियंत्रित करता है, जिसमें Pro पहुंच और Telegram के भीतर की गई अन्य डिजिटल खरीदारी शामिल हैं।',
+        '1. सामान्य प्रावधान',
+        '1.1. सेवा की सशुल्क सुविधाएं Telegram के भीतर डिजिटल रूप में उपयोगकर्ता को प्रदान की जाती हैं।',
+        '1.2. मूल्य, सुविधा संरचना, पहुंच अवधि और अन्य महत्वपूर्ण शर्तें खरीद की पुष्टि से पहले सेवा इंटरफ़ेस में प्रदर्शित की जाती हैं।',
+        '2. पहुंच प्रदान करना',
+        '2.1. Telegram के भीतर सफल भुगतान पुष्टि और सेवा में संबंधित पहुंच सक्रियण के क्षण से सशुल्क सुविधा तक पहुंच प्रदान की गई मानी जाती है।',
+        '2.2. यदि सेवा की पुष्टि की गई तकनीकी त्रुटि के कारण सशुल्क सुविधा प्रदान नहीं की गई थी, तो उपयोगकर्ता सहायता से संपर्क कर सकता है।',
+        '3. सदस्यता और अवधि',
+        '3.1. कुछ सुविधाओं के लिए सीमित समय पहुंच मॉडल लागू हो सकता है, जिसमें सदस्यता शामिल है।',
+        '3.2. पहुंच अवधि, नवीनीकरण, अवधि समाप्ति और उपलब्ध सुविधाओं के बारे में जानकारी सेवा इंटरफ़ेस में उपयोगकर्ता को प्रदर्शित की जानी चाहिए।',
+        '4. रिफंड और विवाद',
+        '4.1. गलत शुल्क, सुविधा प्रदान करने में तकनीकी समस्याओं और अन्य विवादों के लिए, उपयोगकर्ता https://t.me/Wish_Support के माध्यम से संपर्क कर सकता है।',
+        '4.2. रिफंड तब जारी किया जा सकता है जब सशुल्क सुविधा वास्तव में प्रदान नहीं की गई थी या सेवा की पुष्टि की गई तकनीकी त्रुटि के कारण उपयोग नहीं की जा सकी।',
+        '4.3. Telegram को हटाना, Telegram तक सीमित पहुंच, इंटरनेट कनेक्शन की कमी, उपयोगकर्ता उपकरण सीमाएं या सेवा के कारण न होने वाली अन्य बाहरी परिस्थितियां डिजिटल सुविधा के अनुचित प्रावधान का गठन नहीं करती हैं।',
+        '5. सशुल्क सुविधाओं में परिवर्तन',
+        '5.1. प्रशासक भविष्य में सशुल्क सुविधाओं की संरचना, मापदंडों और मूल्य निर्धारण को बदल सकता है।',
+        '5.2. ऐसे परिवर्तन उपयोगकर्ता को भुगतान अवधि के लिए पहले से भुगतान की गई और सक्रिय पहुंच से वंचित नहीं करेंगे, जब तक कि संबंधित सुविधा की प्रकृति से स्पष्ट रूप से अन्यथा निहित न हो।',
+      ].join('\n\n'),
+      es: [
+        'Este documento regula la prestación de funciones de pago del servicio WishBot, incluido el acceso Pro y otras compras digitales realizadas dentro de Telegram.',
+        '1. Disposiciones generales',
+        '1.1. Las funciones de pago del servicio se proporcionan al usuario en forma digital dentro de Telegram.',
+        '1.2. El precio, la composición de la función, la duración del acceso y otras condiciones materiales se muestran en la interfaz del servicio antes de confirmar la compra.',
+        '2. Provisión de acceso',
+        '2.1. El acceso a una función de pago se considera proporcionado desde el momento de la confirmación exitosa del pago dentro de Telegram y la activación del acceso correspondiente en el servicio.',
+        '2.2. Si una función de pago no fue proporcionada debido a un error técnico confirmado del servicio, el usuario puede contactar con soporte.',
+        '3. Suscripción y duración',
+        '3.1. Un modelo de acceso por tiempo limitado, incluida la suscripción, puede aplicarse a ciertas funciones.',
+        '3.2. La información sobre la duración del acceso, la renovación, la expiración del período y las funciones disponibles debe mostrarse al usuario en la interfaz del servicio.',
+        '4. Reembolsos y disputas',
+        '4.1. Para cargos erróneos, problemas técnicos con la provisión de funciones y otras disputas, el usuario puede contactar a https://t.me/Wish_Support.',
+        '4.2. Se puede emitir un reembolso cuando una función de pago no fue proporcionada realmente o no pudo utilizarse debido a un error técnico confirmado del servicio.',
+        '4.3. La eliminación de Telegram, el acceso restringido a Telegram, la falta de conexión a Internet, las limitaciones del dispositivo del usuario u otras circunstancias externas no causadas por el servicio no constituyen una provisión inadecuada de una función digital.',
+        '5. Cambios en las funciones de pago',
+        '5.1. El administrador puede cambiar la composición, los parámetros y los precios de las funciones de pago en el futuro.',
+        '5.2. Tales cambios no privarán al usuario del acceso ya pagado y activado durante el período pagado, a menos que la naturaleza de la función respectiva implique directamente lo contrario.',
+      ].join('\n\n'),
+      ar: [
+        'ينظم هذا المستند تقديم الميزات المدفوعة لخدمة WishBot، بما في ذلك الوصول إلى Pro والمشتريات الرقمية الأخرى التي تتم داخل Telegram.',
+        '1. أحكام عامة',
+        '1.1. يتم تقديم الميزات المدفوعة للخدمة للمستخدم في شكل رقمي داخل Telegram.',
+        '1.2. يتم عرض السعر وتكوين الميزة ومدة الوصول والشروط المادية الأخرى في واجهة الخدمة قبل تأكيد الشراء.',
+        '2. توفير الوصول',
+        '2.1. يُعتبر الوصول إلى الميزة المدفوعة مقدماً من لحظة التأكيد الناجح للدفع داخل Telegram وتفعيل الوصول المقابل في الخدمة.',
+        '2.2. إذا لم يتم تقديم الميزة المدفوعة بسبب خطأ تقني مؤكد في الخدمة، يمكن للمستخدم الاتصال بالدعم.',
+        '3. الاشتراك والمدة',
+        '3.1. قد ينطبق نموذج الوصول المحدود زمنياً، بما في ذلك الاشتراك، على بعض الميزات.',
+        '3.2. يجب عرض المعلومات المتعلقة بمدة الوصول والتجديد وانتهاء الفترة والميزات المتاحة للمستخدم في واجهة الخدمة.',
+        '4. المبالغ المستردة والنزاعات',
+        '4.1. بخصوص الرسوم الخاطئة والمشاكل التقنية في تقديم الميزات والنزاعات الأخرى، يمكن للمستخدم التواصل عبر https://t.me/Wish_Support.',
+        '4.2. يمكن إصدار استرداد عندما لم يتم تقديم الميزة المدفوعة فعلياً أو لم يمكن استخدامها بسبب خطأ تقني مؤكد في الخدمة.',
+        '4.3. حذف Telegram أو تقييد الوصول إلى Telegram أو عدم وجود اتصال بالإنترنت أو قيود جهاز المستخدم أو الظروف الخارجية الأخرى التي لم تسببها الخدمة لا تشكل تقديماً غير ملائم للميزة الرقمية.',
+        '5. تغييرات الميزات المدفوعة',
+        '5.1. يحق للمسؤول تغيير تكوين ومعايير وتسعير الميزات المدفوعة في المستقبل.',
+        '5.2. لن تحرم هذه التغييرات المستخدم من الوصول المدفوع والمفعّل بالفعل خلال الفترة المدفوعة، ما لم تقتضِ طبيعة الميزة المعنية خلاف ذلك صراحةً.',
+      ].join('\n\n'),
+    },
+  },
+  {
+    id: 'deletion',
+    icon: '🗑',
+    version: '1.0',
+    effectiveDate: '03.04.2026',
+    title: {
+      ru: 'Удаление аккаунта и данных',
+      en: 'Account and Data Deletion',
+      'zh-CN': '账户与数据删除',
+      hi: 'खाता और डेटा हटाना',
+      es: 'Eliminación de cuenta y datos',
+      ar: 'حذف الحساب والبيانات',
+    },
+    body: {
+      ru: [
+        '1. Право на удаление аккаунта',
+        '1.1. Пользователь вправе удалить аккаунт средствами интерфейса WishBot, если такая функция доступна в сервисе.',
+        '2. Последствия удаления',
+        '2.1. После удаления аккаунта доступ пользователя к сервису прекращается.',
+        '2.2. Связанные с аккаунтом данные подлежат удалению или обезличиванию в разумный срок, за исключением данных, которые:\n• необходимы для исполнения обязательств по уже совершенным покупкам;\n• могут временно храниться в резервных копиях;\n• необходимы для предотвращения мошенничества, злоупотреблений и рассмотрения обращений;\n• подлежат хранению в силу требований применимого законодательства.',
+        '3. Ограниченное остаточное хранение',
+        '3.1. После удаления аккаунта отдельные данные могут сохраняться в резервных копиях и служебных журналах в течение ограниченного периода, необходимого для обеспечения безопасности, целостности инфраструктуры и корректного завершения технических процессов.',
+        '4. Поддержка',
+        '4.1. По вопросам удаления аккаунта и связанных данных пользователь может обратиться через https://t.me/Wish_Support.',
+      ].join('\n\n'),
+      en: [
+        '1. Right to Delete Account',
+        '1.1. The user may delete their account through the WishBot interface if this feature is available in the service.',
+        '2. Consequences of Deletion',
+        '2.1. After account deletion, the user\'s access to the service is terminated.',
+        '2.2. Data associated with the account is subject to deletion or anonymization within a reasonable period, except for data that:\n• is necessary to fulfill obligations for completed purchases;\n• may be temporarily stored in backups;\n• is necessary to prevent fraud, abuse, and to process requests;\n• must be retained under applicable legislation.',
+        '3. Limited Residual Retention',
+        '3.1. After account deletion, certain data may remain in backups and service logs for a limited period necessary to ensure security, infrastructure integrity, and proper completion of technical processes.',
+        '4. Support',
+        '4.1. For questions about account and data deletion, the user may contact https://t.me/Wish_Support.',
+      ].join('\n\n'),
+      'zh-CN': [
+        '1. 删除账户的权利',
+        '1.1. 如果服务中提供此功能，用户可以通过 WishBot 界面删除其账户。',
+        '2. 删除的后果',
+        '2.1. 账户删除后，用户对服务的访问权限将被终止。',
+        '2.2. 与账户关联的数据将在合理期限内被删除或匿名化，以下数据除外：\n• 履行已完成购买义务所必需的数据；\n• 可能暂时存储在备份中的数据；\n• 防止欺诈、滥用和处理申诉所必需的数据；\n• 根据适用法律必须保留的数据。',
+        '3. 有限的残留保留',
+        '3.1. 账户删除后，某些数据可能会在备份和服务日志中保留有限时间，以确保安全性、基础设施完整性和技术流程的正常完成。',
+        '4. 支持',
+        '4.1. 如有关于账户和数据删除的问题，用户可通过 https://t.me/Wish_Support 联系。',
+      ].join('\n\n'),
+      hi: [
+        '1. खाता हटाने का अधिकार',
+        '1.1. यदि यह सुविधा सेवा में उपलब्ध है, तो उपयोगकर्ता WishBot इंटरफ़ेस के माध्यम से अपना खाता हटा सकता है।',
+        '2. हटाने के परिणाम',
+        '2.1. खाता हटाने के बाद, सेवा तक उपयोगकर्ता की पहुंच समाप्त हो जाती है।',
+        '2.2. खाते से संबंधित डेटा उचित अवधि के भीतर हटाने या गुमनाम करने के अधीन है, निम्नलिखित डेटा को छोड़कर:\n• पूर्ण खरीद के लिए दायित्वों को पूरा करने के लिए आवश्यक डेटा;\n• बैकअप में अस्थायी रूप से संग्रहीत डेटा;\n• धोखाधड़ी, दुरुपयोग रोकथाम और अनुरोध प्रसंस्करण के लिए आवश्यक डेटा;\n• लागू कानून के तहत बनाए रखा जाने वाला डेटा।',
+        '3. सीमित अवशिष्ट भंडारण',
+        '3.1. खाता हटाने के बाद, कुछ डेटा बैकअप और सेवा लॉग में सीमित अवधि के लिए रह सकता है जो सुरक्षा, बुनियादी ढांचे की अखंडता और तकनीकी प्रक्रियाओं के उचित समापन को सुनिश्चित करने के लिए आवश्यक है।',
+        '4. सहायता',
+        '4.1. खाता और डेटा हटाने के बारे में प्रश्नों के लिए, उपयोगकर्ता https://t.me/Wish_Support से संपर्क कर सकता है।',
+      ].join('\n\n'),
+      es: [
+        '1. Derecho a eliminar la cuenta',
+        '1.1. El usuario puede eliminar su cuenta a través de la interfaz de WishBot si esta función está disponible en el servicio.',
+        '2. Consecuencias de la eliminación',
+        '2.1. Después de la eliminación de la cuenta, el acceso del usuario al servicio se termina.',
+        '2.2. Los datos asociados con la cuenta están sujetos a eliminación o anonimización dentro de un período razonable, excepto los datos que:\n• son necesarios para cumplir obligaciones de compras realizadas;\n• pueden almacenarse temporalmente en copias de seguridad;\n• son necesarios para prevenir fraude, abuso y procesar solicitudes;\n• deben conservarse según la legislación aplicable.',
+        '3. Retención residual limitada',
+        '3.1. Después de la eliminación de la cuenta, ciertos datos pueden permanecer en copias de seguridad y registros del servicio durante un período limitado necesario para garantizar la seguridad, la integridad de la infraestructura y la finalización adecuada de los procesos técnicos.',
+        '4. Soporte',
+        '4.1. Para preguntas sobre la eliminación de cuenta y datos, el usuario puede contactar a https://t.me/Wish_Support.',
+      ].join('\n\n'),
+      ar: [
+        '1. حق حذف الحساب',
+        '1.1. يمكن للمستخدم حذف حسابه من خلال واجهة WishBot إذا كانت هذه الميزة متاحة في الخدمة.',
+        '2. عواقب الحذف',
+        '2.1. بعد حذف الحساب، يتم إنهاء وصول المستخدم إلى الخدمة.',
+        '2.2. تخضع البيانات المرتبطة بالحساب للحذف أو إخفاء الهوية خلال فترة معقولة، باستثناء البيانات التي:\n• ضرورية للوفاء بالتزامات المشتريات المكتملة؛\n• قد يتم تخزينها مؤقتاً في النسخ الاحتياطية؛\n• ضرورية لمنع الاحتيال وإساءة الاستخدام ومعالجة الطلبات؛\n• يجب الاحتفاظ بها بموجب التشريعات المعمول بها.',
+        '3. الاحتفاظ المتبقي المحدود',
+        '3.1. بعد حذف الحساب، قد تبقى بعض البيانات في النسخ الاحتياطية وسجلات الخدمة لفترة محدودة ضرورية لضمان الأمان وسلامة البنية التحتية والإتمام السليم للعمليات التقنية.',
+        '4. الدعم',
+        '4.1. للاستفسارات حول حذف الحساب والبيانات، يمكن للمستخدم التواصل عبر https://t.me/Wish_Support.',
+      ].join('\n\n'),
+    },
+  },
+  {
+    id: 'contacts',
+    icon: '💬',
+    version: '1.0',
+    effectiveDate: '03.04.2026',
+    title: {
+      ru: 'Контакты и поддержка',
+      en: 'Contacts & Support',
+      'zh-CN': '联系方式与支持',
+      hi: 'संपर्क और सहायता',
+      es: 'Contactos y soporte',
+      ar: 'جهات الاتصال والدعم',
+    },
+    body: {
+      ru: [
+        'По вопросам использования сервиса, оплаты, работы платных функций, конфиденциальности, удаления аккаунта и иным обращениям пользователь может связаться с поддержкой WishBot:',
+        'https://t.me/Wish_Support',
+        'Если обращение связано с технической проблемой, рекомендуется по возможности приложить:\n• краткое описание проблемы;\n• скриншот;\n• ID для поддержки, если он отображается в интерфейсе сервиса.',
+      ].join('\n\n'),
+      en: [
+        'For questions about using the service, payments, paid features, privacy, account deletion, and other inquiries, the user can contact WishBot support:',
+        'https://t.me/Wish_Support',
+        'If the inquiry is related to a technical issue, it is recommended to include if possible:\n• a brief description of the problem;\n• a screenshot;\n• a support ID, if displayed in the service interface.',
+      ].join('\n\n'),
+      'zh-CN': [
+        '如有关于服务使用、付款、付费功能、隐私、账户删除及其他问题的咨询，用户可以联系 WishBot 支持：',
+        'https://t.me/Wish_Support',
+        '如果咨询与技术问题有关，建议尽可能附上：\n• 问题的简要描述；\n• 截图；\n• 支持 ID（如果在服务界面中显示）。',
+      ].join('\n\n'),
+      hi: [
+        'सेवा उपयोग, भुगतान, सशुल्क सुविधाओं, गोपनीयता, खाता हटाने और अन्य पूछताछ के बारे में प्रश्नों के लिए, उपयोगकर्ता WishBot सहायता से संपर्क कर सकता है:',
+        'https://t.me/Wish_Support',
+        'यदि पूछताछ किसी तकनीकी समस्या से संबंधित है, तो यदि संभव हो तो निम्नलिखित संलग्न करने की सिफारिश की जाती है:\n• समस्या का संक्षिप्त विवरण;\n• स्क्रीनशॉट;\n• सहायता ID, यदि सेवा इंटरफ़ेस में प्रदर्शित होता है।',
+      ].join('\n\n'),
+      es: [
+        'Para preguntas sobre el uso del servicio, pagos, funciones de pago, privacidad, eliminación de cuenta y otras consultas, el usuario puede contactar con el soporte de WishBot:',
+        'https://t.me/Wish_Support',
+        'Si la consulta está relacionada con un problema técnico, se recomienda incluir si es posible:\n• una breve descripción del problema;\n• una captura de pantalla;\n• un ID de soporte, si se muestra en la interfaz del servicio.',
+      ].join('\n\n'),
+      ar: [
+        'للاستفسارات حول استخدام الخدمة والمدفوعات والميزات المدفوعة والخصوصية وحذف الحساب وغيرها من الاستفسارات، يمكن للمستخدم الاتصال بدعم WishBot:',
+        'https://t.me/Wish_Support',
+        'إذا كان الاستفسار متعلقاً بمشكلة تقنية، يُنصح بإرفاق ما يلي إن أمكن:\n• وصف موجز للمشكلة؛\n• لقطة شاشة؛\n• معرّف الدعم، إذا كان معروضاً في واجهة الخدمة.',
+      ].join('\n\n'),
+    },
   },
 ];
 
@@ -1728,35 +2339,38 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
 
   const isMine = (c: CommentDTO) => c.authorActorHash === myActorHash;
 
-  /* ── Collapsed: compact button ── */
+  /* ── Collapsed: secondary action row ── */
   if (!expanded) {
     return (
-      <button
+      <div
         onClick={() => setExpanded(true)}
         style={{
-          ...btnBase,
-          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          display: 'flex', alignItems: 'center', gap: 10,
           background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-          padding: '12px 16px', marginTop: 16, cursor: 'pointer',
-          justifyContent: 'flex-start',
+          padding: '12px 14px', marginTop: 10, cursor: 'pointer',
         }}
       >
-        <span style={{ fontSize: 15, lineHeight: 1 }}>💬</span>
-        <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('comments_title', locale)}</span>
+        <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>💬</span>
+        <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>
+          {t('comments_title', locale)}
+        </span>
         {comments.length > 0 && (
           <span style={{
-            fontSize: 11, fontWeight: 700, color: C.accent,
-            background: C.accentSoft, padding: '2px 8px', borderRadius: 8,
-          }}>{comments.length}</span>
+            fontSize: 11, fontWeight: 700, color: '#fff',
+            background: C.accent, padding: '2px 8px', borderRadius: 10,
+            lineHeight: '16px', flexShrink: 0,
+          }}>
+            {comments.length === 1 ? '1' : `${comments.length} ${t('comments_badge_new', locale)}`}
+          </span>
         )}
-        <span style={{ fontSize: 14, color: C.textMuted, marginLeft: 'auto' }}>›</span>
-      </button>
+        <span style={{ fontSize: 14, color: C.textMuted, flexShrink: 0 }}>›</span>
+      </div>
     );
   }
 
   /* ── Expanded: full thread with scroll ── */
   return (
-    <div style={{ marginTop: 16, background: C.surface, borderRadius: 14, overflow: 'hidden', animation: 'fadeIn 0.2s ease' }}>
+    <div style={{ marginTop: 10, background: C.surface, borderRadius: 14, overflow: 'hidden', animation: 'fadeIn 0.2s ease' }}>
       {/* Header — tap to collapse */}
       <div
         onClick={() => setExpanded(false)}
@@ -2369,6 +2983,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [changelogSeenId, setChangelogSeenId] = useState<string>(() => {
     try { return window.localStorage.getItem('changelog_seen_id') ?? ''; } catch { return ''; }
   });
+  const [legalDocId, setLegalDocId] = useState<string | null>(null);
   const [showProfileVisibilitySheet, setShowProfileVisibilitySheet] = useState(false);
   const [showSubscribePolicySheet, setShowSubscribePolicySheet] = useState(false);
   const [showCommentsDefaultSheet, setShowCommentsDefaultSheet] = useState(false);
@@ -4229,8 +4844,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('my-wishlists');
     } else if (screen === 'profile') {
       setScreen('my-wishlists');
-    } else if (screen === 'faq' || screen === 'changelog') {
+    } else if (screen === 'faq' || screen === 'changelog' || screen === 'legal') {
       setScreen('settings');
+    } else if (screen === 'legal-doc') {
+      setLegalDocId(null);
+      setScreen('legal');
     } else if (screen === 'settings') {
       // Return to the screen the user came from; fall back to my-wishlists if unknown
       const origin = settingsOriginScreen && settingsOriginScreen !== 'settings' ? settingsOriginScreen : 'my-wishlists';
@@ -9293,7 +9911,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
                 style={{
                   ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                  border: 'none', borderRadius: 12, marginTop: 16,
+                  border: 'none', borderRadius: 12, marginTop: 10,
                   padding: '14px 16px', fontSize: 15, fontWeight: 700,
                 }}
               >
@@ -11685,7 +12303,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   }
                 }} />
                 <SettingsActionRow label={t('settings_faq', locale)} onClick={() => { setFaqOpenId(null); setScreen('faq'); }} />
-                <SettingsActionRow label={t('settings_legal', locale)} onClick={() => pushToast(t('settings_coming_soon', locale), 'success')} />
+                <SettingsActionRow label={t('settings_legal', locale)} onClick={() => { setLegalDocId(null); setScreen('legal'); }} />
                 <SettingsActionRow label={t('settings_delete_account', locale)} color={C.red} onClick={() => setShowDeleteAccount(true)} />
               </SettingsSection>
 
@@ -11917,6 +12535,154 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           )}
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════
+          LEGAL HUB
+          ══════════════════════════════════════════════ */}
+      {screen === 'legal' && (
+        <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 4px' }}>
+            {t('legal_hub_title', locale)}
+          </h1>
+          <p style={{ fontSize: 13, color: C.textMuted, margin: '0 0 20px', lineHeight: 1.4 }}>
+            {t('legal_hub_subtitle', locale)}
+          </p>
+
+          <div style={{ background: C.card, borderRadius: 16, overflow: 'hidden' }}>
+            {LEGAL_DOCS.map((doc, idx) => (
+              <div key={doc.id}>
+                {idx > 0 && <div style={{ borderTop: `1px solid ${C.border}`, margin: '0 16px' }} />}
+                <div
+                  onClick={() => { setLegalDocId(doc.id); setScreen('legal-doc'); }}
+                  onPointerDown={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; }}
+                  onPointerUp={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                  onPointerLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '14px 16px', cursor: 'pointer',
+                    transition: 'opacity 0.12s',
+                  }}
+                >
+                  <span style={{ fontSize: 20, lineHeight: 1, flexShrink: 0 }}>{doc.icon}</span>
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: C.text }}>{doc.title[locale] ?? doc.title.en}</span>
+                  <span style={{ fontSize: 14, color: C.textMuted, flexShrink: 0 }}>{'\u203A'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          LEGAL DOC VIEWER
+          ══════════════════════════════════════════════ */}
+      {screen === 'legal-doc' && (() => {
+        const doc = LEGAL_DOCS.find(d => d.id === legalDocId);
+        if (!doc) return null;
+
+        const body = (doc.body[locale] ?? doc.body.en) || '';
+        const isRtl = locale === 'ar';
+        const showDisclaimer = locale !== 'ru';
+
+        /* Simple renderer: splits body by double-newline into blocks.
+           Lines starting with N. or N.N. → section heading (bold).
+           Lines starting with • → bullet point.
+           https:// URLs → tappable links.
+           Everything else → normal paragraph. */
+        const renderBody = (text: string) => {
+          const blocks = text.split('\n\n');
+          return blocks.map((block, bi) => {
+            const lines = block.split('\n');
+            return (
+              <div key={bi} style={{ marginBottom: 14 }}>
+                {lines.map((line, li) => {
+                  /* Section heading: "1. Title" or "2. Title" */
+                  if (/^\d+\.\s/.test(line) && !/^\d+\.\d+/.test(line)) {
+                    return (
+                      <div key={li} style={{ fontSize: 15, fontWeight: 700, color: C.text, marginTop: bi > 0 ? 4 : 0, lineHeight: 1.4 }}>
+                        {line}
+                      </div>
+                    );
+                  }
+                  /* Sub-section heading: "1.1. Text" */
+                  if (/^\d+\.\d+\.?\s/.test(line)) {
+                    return (
+                      <div key={li} style={{ fontSize: 14, color: C.textSec, lineHeight: 1.55 }}>
+                        {line}
+                      </div>
+                    );
+                  }
+                  /* Bullet item */
+                  if (line.startsWith('• ')) {
+                    return (
+                      <div key={li} style={{ display: 'flex', gap: 8, paddingLeft: 4 }}>
+                        <span style={{ color: C.textMuted, flexShrink: 0, lineHeight: 1.55 }}>•</span>
+                        <span style={{ fontSize: 14, color: C.textSec, lineHeight: 1.55 }}>{line.slice(2)}</span>
+                      </div>
+                    );
+                  }
+                  /* Line containing a URL — make tappable */
+                  if (/https:\/\/t\.me\//.test(line)) {
+                    const parts = line.split(/(https:\/\/t\.me\/\S+)/);
+                    return (
+                      <div key={li} style={{ fontSize: 14, color: C.textSec, lineHeight: 1.55 }}>
+                        {parts.map((part, pi) =>
+                          /^https:\/\/t\.me\//.test(part) ? (
+                            <span
+                              key={pi}
+                              onClick={() => {
+                                try { window.Telegram?.WebApp?.openTelegramLink?.(part); } catch { window.open(part, '_blank'); }
+                              }}
+                              style={{ color: C.accent, textDecoration: 'underline', cursor: 'pointer' }}
+                            >{part}</span>
+                          ) : <span key={pi}>{part}</span>
+                        )}
+                      </div>
+                    );
+                  }
+                  /* Normal text */
+                  return (
+                    <div key={li} style={{ fontSize: 14, color: C.textSec, lineHeight: 1.55 }}>
+                      {line}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          });
+        };
+
+        return (
+          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease', direction: isRtl ? 'rtl' : 'ltr' }}>
+            {/* Header */}
+            <h1 style={{ fontSize: 20, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 6px' }}>
+              {doc.title[locale] ?? doc.title.en}
+            </h1>
+            <div style={{ display: 'flex', gap: 12, fontSize: 12, color: C.textMuted, marginBottom: 20 }}>
+              <span>{t('legal_version', locale, { v: doc.version })}</span>
+              <span>·</span>
+              <span>{t('legal_effective', locale, { date: doc.effectiveDate })}</span>
+            </div>
+
+            {/* Body */}
+            <div style={{ background: C.card, borderRadius: 16, padding: '16px 16px 8px' }}>
+              {renderBody(body)}
+            </div>
+
+            {/* Locale priority disclaimer */}
+            {showDisclaimer && (
+              <div style={{
+                marginTop: 16, padding: '12px 14px',
+                background: C.surface, borderRadius: 12,
+                fontSize: 12, color: C.textMuted, lineHeight: 1.5,
+                textAlign: isRtl ? 'right' : 'left',
+              }}>
+                {t('legal_locale_disclaimer', locale)}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── GLOBAL OVERLAYS (not tied to any screen — BottomSheet is position:fixed) ── */}
 
