@@ -11965,7 +11965,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
         const SettingsSection = ({ title, children, first }: { title: string; children: React.ReactNode; first?: boolean }) => (
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 10, marginTop: first ? 4 : 28, textTransform: 'uppercase' as const, letterSpacing: 1, paddingLeft: 4 }}>{title}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, marginTop: first ? 4 : 18, textTransform: 'uppercase' as const, letterSpacing: 1, paddingLeft: 4 }}>{title}</div>
             <div style={{
               background: santaSeason?.inSeason
                 ? `linear-gradient(to bottom, rgba(160,210,240,.09) 0%, transparent 10px), ${C.card}`
@@ -12489,7 +12489,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div style={{
                 background: 'rgba(248,113,113,0.06)',
                 border: '1px solid rgba(248,113,113,0.12)',
-                borderRadius: 20, padding: '4px 18px', marginTop: 28,
+                borderRadius: 20, padding: '4px 18px', marginTop: 18,
               }}>
                 <div
                   onClick={() => setShowDeleteAccount(true)}
