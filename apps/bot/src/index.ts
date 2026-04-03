@@ -656,6 +656,7 @@ if (!token) {
           'import_pack_10', 'import_pack_25',
           'seasonal_decoration',
           'gift_notes_unlock',
+          'reservation_pro_unlock',
         ]);
         if (!skuCode || !KNOWN_SKUS.has(skuCode)) {
           await ctx.answerPreCheckoutQuery(false, 'Unknown SKU');
@@ -813,6 +814,7 @@ if (!token) {
           extra_items_15: 'item_slot_15',
           seasonal_decoration: 'seasonal_decoration',
           gift_notes_unlock: 'gift_notes_unlock',
+          reservation_pro_unlock: 'reservation_pro_unlock',
         };
         const SKU_CREDITS: Record<string, { key: 'hintCredits' | 'importCredits'; amount: number }> = {
           hints_pack_5:   { key: 'hintCredits',   amount: 5  },
@@ -827,6 +829,7 @@ if (!token) {
           import_pack_10: 39, import_pack_25: 79,
           seasonal_decoration: 29,
           gift_notes_unlock: 19,
+          reservation_pro_unlock: 50,
         };
 
         await prisma.$transaction(async (tx) => {

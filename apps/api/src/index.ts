@@ -1382,22 +1382,18 @@ const PRO_PRICE_XTR = parseInt(process.env.PRO_PRICE_XTR ?? '100', 10);
 const PRO_SUBSCRIPTION_PERIOD = parseInt(process.env.PRO_SUBSCRIPTION_PERIOD ?? '2592000', 10);
 const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
 
-// ─── Reservation Pro — focus group gate ─────────────────────────────────────
-// Phase 1: only allow specific Telegram IDs. Later: open to all PRO users.
-const RESERVATION_PRO_BETA_IDS = (process.env.RESERVATION_PRO_BETA_IDS ?? '8747175307').split(',').filter(Boolean);
+// ─── Reservation Pro — feature gate ─────────────────────────────────────────
 
-/** User sees the new reservation UI (beta + pro/free states) */
+/** User sees the new reservation UI — v2: open to all users */
 function isReservationBeta(user: { telegramId?: string | null; godMode: boolean }): boolean {
-  if (user.godMode) return true;
-  if (user.telegramId && RESERVATION_PRO_BETA_IDS.includes(user.telegramId)) return true;
-  return false;
+  return true; // v2: feature is open to all users
 }
 
-/** User has actual Pro reservation features (needs Pro subscription) */
-function hasReservationPro(user: { telegramId?: string | null; godMode: boolean }, isPro: boolean): boolean {
-  if (!isReservationBeta(user)) return false;
+/** User has actual Pro reservation features (Pro subscription OR one-time addon) */
+function hasReservationPro(user: { telegramId?: string | null; godMode: boolean }, isPro: boolean, addOns?: Array<{ addonType: string }>): boolean {
   if (user.godMode) return true;
   if (isPro) return true;
+  if (addOns?.some(a => a.addonType === 'reservation_pro_unlock')) return true;
   return false;
 }
 
@@ -1417,6 +1413,7 @@ const ONE_TIME_SKUS = {
   import_pack_25:          { code: 'import_pack_25',          price: 79, type: 'consumable' as const, addonType: null as string | null,                  creditKey: 'import' as 'hint' | 'import' | null, creditAmount: 25, targetRequired: false },
   seasonal_decoration:     { code: 'seasonal_decoration',     price: 29, type: 'cosmetic' as const,   addonType: 'seasonal_decoration' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0,  targetRequired: true  },
   gift_notes_unlock:       { code: 'gift_notes_unlock',       price: GIFT_NOTES_PRICE_XTR, type: 'permanent' as const, addonType: 'gift_notes_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: false },
+  reservation_pro_unlock:  { code: 'reservation_pro_unlock',  price: 50, type: 'permanent' as const, addonType: 'reservation_pro_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: false },
 } as const;
 
 type SkuCode = keyof typeof ONE_TIME_SKUS;
@@ -2263,8 +2260,8 @@ tgRouter.get(
     const locale = getRequestLocale(req);
     const user = await getOrCreateTgUser(req.tgUser!);
     const actorHash = tgActorHash(req.tgUser!.id);
-    const ent = await getUserEntitlement(user.id, user.godMode);
-    const resPro = hasReservationPro(user, ent.isPro);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    const resPro = hasReservationPro(user, ent.isPro, ent.addOns);
 
     // 1. Items reserved by this user (only TG-identified reservations)
     const items = await prisma.item.findMany({
@@ -2372,8 +2369,8 @@ tgRouter.get(
   asyncHandler(async (req, res) => {
     const locale = getRequestLocale(req);
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id, user.godMode);
-    if (!hasReservationPro(user, ent.isPro)) {
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    if (!hasReservationPro(user, ent.isPro, ent.addOns)) {
       return res.status(402).json({ error: 'Pro feature', feature: 'reservation_history' });
     }
 
@@ -2447,8 +2444,8 @@ tgRouter.patch(
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id, user.godMode);
-    if (!hasReservationPro(user, ent.isPro)) {
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    if (!hasReservationPro(user, ent.isPro, ent.addOns)) {
       return res.status(402).json({ error: 'Pro feature', feature: 'reservation_meta' });
     }
 
@@ -2498,8 +2495,8 @@ tgRouter.post(
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id, user.godMode);
-    if (!hasReservationPro(user, ent.isPro)) {
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    if (!hasReservationPro(user, ent.isPro, ent.addOns)) {
       return res.status(402).json({ error: 'Pro feature', feature: 'reservation_reminder' });
     }
 
@@ -5089,7 +5086,7 @@ tgRouter.get(
     const canGodMode = user.telegramId ? godModeAllowedIds.includes(user.telegramId) : false;
 
     // Reservation Pro feature gate
-    const reservationPro = hasReservationPro(user, ent.isPro);
+    const reservationPro = hasReservationPro(user, ent.isPro, ent.addOns);
     const reservationBeta = isReservationBeta(user);
 
     // Summarize add-ons for frontend
@@ -7085,6 +7082,10 @@ tgRouter.post(
     if (skuCode === 'gift_notes_unlock') {
       if (ent.hasGiftNotes) return res.json({ alreadyUnlocked: true });
     }
+    if (skuCode === 'reservation_pro_unlock') {
+      const hasIt = ent.addOns.some(a => a.addonType === 'reservation_pro_unlock');
+      if (hasIt || ent.isPro) return res.json({ alreadyUnlocked: true });
+    }
 
     const botToken = process.env.BOT_TOKEN;
     if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
@@ -7159,6 +7160,7 @@ tgRouter.post(
         hintCredits: ent.hintCredits,
         importCredits: ent.importCredits,
       },
+      reservationPro: hasReservationPro(user, ent.isPro, ent.addOns),
     });
   }),
 );

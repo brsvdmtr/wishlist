@@ -272,6 +272,11 @@ const ru: Dict = {
   res_pro_upsell_title: 'Управляйте бронями удобнее',
   res_pro_upsell_desc: 'История броней, заметки к подаркам, напоминания и умные фильтры',
   res_pro_upsell_btn: 'Попробовать Pro',
+  res_pro_buy_standalone: 'Купить за 50 ⭐',
+  res_detail_status_label: 'Статус покупки',
+  res_detail_note_label: 'Заметка',
+  res_detail_reminder_label: 'Напоминание',
+  res_detail_pro_locked: 'Функция Pro',
   res_pro_upsell_history_title: 'Откройте историю с Pro',
   res_pro_upsell_history_desc: 'Все прошлые брони в одном месте',
   res_pro_upsell_detail_title: 'Управляйте подарками удобнее',
@@ -797,6 +802,7 @@ const ru: Dict = {
   addon_activated_imports: 'Импорты добавлены! ✨',
   addon_activated_seasonal: 'Праздничный режим включён! 🎄',
   addon_activated_gift_notes: 'Календарь событий разблокирован! 📅',
+  addon_activated_reservation_pro: 'Менеджер бронирований разблокирован! 🎯',
   addon_syncing: 'Покупка прошла! Данные обновятся через пару секунд',
 
   // ── Bot add-on notification ─────────────────────────────────────────────
@@ -1092,6 +1098,8 @@ const ru: Dict = {
   addon_desc_import_pack_10: '10 импортов желаний по ссылке',
   addon_desc_import_pack_25: '25 импортов желаний по ссылке',
   addon_desc_seasonal_decoration: 'Праздничное оформление для одного вишлиста',
+  addon_title_reservation_pro_unlock: 'Менеджер бронирований',
+  addon_desc_reservation_pro_unlock: 'Заметки, напоминания, история и фильтры для бронирований. Одна покупка навсегда.',
 
   // ── Wishlist manage menu (new items) ──────────────────────────────────────
   wl_manage_privacy: 'Настроить приватность',
@@ -1803,6 +1811,11 @@ const en: Dict = {
   res_pro_upsell_title: 'Manage reservations better',
   res_pro_upsell_desc: 'History, gift notes, reminders and smart filters',
   res_pro_upsell_btn: 'Try Pro',
+  res_pro_buy_standalone: 'Buy for 50 ⭐',
+  res_detail_status_label: 'Purchase status',
+  res_detail_note_label: 'Note',
+  res_detail_reminder_label: 'Reminder',
+  res_detail_pro_locked: 'Pro feature',
   res_pro_upsell_history_title: 'Unlock history with Pro',
   res_pro_upsell_history_desc: 'All past reservations in one place',
   res_pro_upsell_detail_title: 'Manage gifts better',
@@ -2329,6 +2342,7 @@ const en: Dict = {
   addon_activated_imports: 'Imports added! ✨',
   addon_activated_seasonal: 'Festive mode on! 🎄',
   addon_activated_gift_notes: 'Event Calendar unlocked! 📅',
+  addon_activated_reservation_pro: 'Reservation Manager unlocked! 🎯',
   addon_syncing: 'Purchase successful! Data will update in a few seconds',
 
   // ── Bot add-on notification ──────────────────────────────────────────────
@@ -2621,6 +2635,8 @@ const en: Dict = {
   addon_desc_import_pack_10: '10 wish imports via link',
   addon_desc_import_pack_25: '25 wish imports via link',
   addon_desc_seasonal_decoration: 'Festive decoration for one wishlist',
+  addon_title_reservation_pro_unlock: 'Reservation Manager',
+  addon_desc_reservation_pro_unlock: 'Notes, reminders, history and filters for reservations. One-time purchase forever.',
 
   // ── Wishlist manage menu (new items) ──────────────────────────────────────
   wl_manage_privacy: 'Configure privacy',
@@ -3782,6 +3798,8 @@ const zhCN: Dict = {
   addon_desc_import_pack_10: '通过链接导入 10 个心愿',
   addon_desc_import_pack_25: '通过链接导入 25 个心愿',
   addon_desc_seasonal_decoration: '为一个心愿单添加节日装饰',
+  addon_title_reservation_pro_unlock: '预约管理器',
+  addon_desc_reservation_pro_unlock: '预约的备注、提醒、历史和筛选。一次购买永久有效。',
 
   // ── Wishlist manage menu ───────────────────────────────────────────────────
   wl_manage_privacy: '隐私设置',
@@ -4306,6 +4324,12 @@ const zhCN: Dict = {
   addon_gift_notes_desc: '场合、日期和礼物创意，永久有效。',
   addon_gift_notes_title: '活动日历',
   addon_title_gift_notes_unlock: '活动日历',
+  addon_activated_reservation_pro: '预约管理器已解锁！🎯',
+  res_pro_buy_standalone: '购买 50 ⭐',
+  res_detail_status_label: '购买状态',
+  res_detail_note_label: '备注',
+  res_detail_reminder_label: '提醒',
+  res_detail_pro_locked: 'Pro 功能',
   api_comment_archived: '存档中不允许评论',
   api_comment_cooldown: '请稍等再发下一条评论',
   api_comment_duplicate: '此评论已发送',
@@ -5215,6 +5239,8 @@ const hi: Dict = {
   addon_desc_import_pack_10: 'लिंक से 10 इच्छाएं इम्पोर्ट करें',
   addon_desc_import_pack_25: 'लिंक से 25 इच्छाएं इम्पोर्ट करें',
   addon_desc_seasonal_decoration: 'एक विशलिस्ट के लिए त्योहार सजावट',
+  addon_title_reservation_pro_unlock: 'रिज़र्वेशन मैनेजर',
+  addon_desc_reservation_pro_unlock: 'रिज़र्वेशन के लिए नोट्स, रिमाइंडर, इतिहास और फ़िल्टर। एकबारगी खरीदारी।',
 
   // ── Wishlist manage menu ───────────────────────────────────────────────────
   wl_manage_privacy: 'गोपनीयता सेटिंग',
@@ -5739,6 +5765,12 @@ const hi: Dict = {
   addon_gift_notes_desc: 'अवसर, तिथियाँ और उपहार विचार हमेशा के लिए।',
   addon_gift_notes_title: 'इवेंट कैलेंडर',
   addon_title_gift_notes_unlock: 'इवेंट कैलेंडर',
+  addon_activated_reservation_pro: 'रिज़र्वेशन मैनेजर अनलॉक! 🎯',
+  res_pro_buy_standalone: '50 ⭐ में खरीदें',
+  res_detail_status_label: 'खरीदारी की स्थिति',
+  res_detail_note_label: 'नोट',
+  res_detail_reminder_label: 'रिमाइंडर',
+  res_detail_pro_locked: 'Pro फ़ीचर',
   api_comment_archived: 'संग्रहीत में टिप्पणी की अनुमति नहीं',
   api_comment_cooldown: 'अगली टिप्पणी से पहले थोड़ा रुकें',
   api_comment_duplicate: 'यह टिप्पणी पहले ही भेजी जा चुकी है',
@@ -6648,6 +6680,8 @@ const es: Dict = {
   addon_desc_import_pack_10: '10 importaciones de deseos por enlace',
   addon_desc_import_pack_25: '25 importaciones de deseos por enlace',
   addon_desc_seasonal_decoration: 'Decoración festiva para una wishlist',
+  addon_title_reservation_pro_unlock: 'Gestor de reservas',
+  addon_desc_reservation_pro_unlock: 'Notas, recordatorios, historial y filtros para reservas. Compra única para siempre.',
 
   // ── Wishlist manage menu ───────────────────────────────────────────────────
   wl_manage_privacy: 'Configurar privacidad',
@@ -7172,6 +7206,12 @@ const es: Dict = {
   addon_gift_notes_desc: 'Ocasiones, fechas e ideas de regalos para siempre.',
   addon_gift_notes_title: 'Calendario de eventos',
   addon_title_gift_notes_unlock: 'Calendario de eventos',
+  addon_activated_reservation_pro: '¡Gestor de reservas desbloqueado! 🎯',
+  res_pro_buy_standalone: 'Comprar por 50 ⭐',
+  res_detail_status_label: 'Estado de compra',
+  res_detail_note_label: 'Nota',
+  res_detail_reminder_label: 'Recordatorio',
+  res_detail_pro_locked: 'Función Pro',
   api_comment_archived: 'No se permiten comentarios en archivados',
   api_comment_cooldown: 'Espera un momento antes del siguiente comentario',
   api_comment_duplicate: 'Este comentario ya fue enviado',
@@ -8081,6 +8121,8 @@ const ar: Dict = {
   addon_desc_import_pack_10: '10 استيرادات للأمنيات برابط',
   addon_desc_import_pack_25: '25 استيراداً للأمنيات برابط',
   addon_desc_seasonal_decoration: 'زخرفة احتفالية لقائمة واحدة',
+  addon_title_reservation_pro_unlock: 'مدير الحجوزات',
+  addon_desc_reservation_pro_unlock: 'ملاحظات وتذكيرات وسجل وفلاتر للحجوزات. شراء لمرة واحدة للأبد.',
 
   // ── Wishlist manage menu ───────────────────────────────────────────────────
   wl_manage_privacy: 'إعداد الخصوصية',
@@ -8605,6 +8647,12 @@ const ar: Dict = {
   addon_gift_notes_desc: 'مناسبات وتواريخ وأفكار هدايا للأبد.',
   addon_gift_notes_title: 'تقويم الأحداث',
   addon_title_gift_notes_unlock: 'تقويم الأحداث',
+  addon_activated_reservation_pro: 'تم فتح مدير الحجوزات! 🎯',
+  res_pro_buy_standalone: 'شراء بـ 50 ⭐',
+  res_detail_status_label: 'حالة الشراء',
+  res_detail_note_label: 'ملاحظة',
+  res_detail_reminder_label: 'تذكير',
+  res_detail_pro_locked: 'ميزة Pro',
   api_comment_archived: 'لا يُسمح بالتعليقات في الأرشيف',
   api_comment_cooldown: 'انتظر قليلاً قبل التعليق التالي',
   api_comment_duplicate: 'تم إرسال هذا التعليق بالفعل',
