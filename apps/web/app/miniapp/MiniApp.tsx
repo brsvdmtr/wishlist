@@ -8976,14 +8976,17 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
                         {t('reserved_by_me', locale)}
                       </span>
-                      <button onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
-                        style={{
-                          ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                          border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 14,
-                          padding: '12px 16px', fontSize: 14, fontWeight: 500,
-                        }}>
-                        {t('cancel_reservation', locale)}
-                      </button>
+                      {/* Unreserve button only when NOT from reservations tab (Pro sections handle it) */}
+                      {homeReturnTab !== 'reservations' && (
+                        <button onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
+                          style={{
+                            ...btnBase, width: '100%', background: C.redSoft, color: C.red,
+                            border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 14,
+                            padding: '12px 16px', fontSize: 14, fontWeight: 500,
+                          }}>
+                          {t('cancel_reservation', locale)}
+                        </button>
+                      )}
                     </>
                   )}
                   {viewingItem.status === 'reserved' && !(!!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current) && (
@@ -9105,20 +9108,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       </div>
                     )}
 
-                    {/* Separator */}
-                    <div style={{ borderTop: `1px solid ${C.border}`, margin: '20px 0 16px' }} />
-
-                    {/* Unreserve button */}
-                    <button
-                      onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
-                      style={{
-                        ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                        border: 'none', borderRadius: 12,
-                        padding: '14px 16px', fontSize: 15, fontWeight: 700,
-                      }}
-                    >
-                      {t('cancel_reservation', locale)}
-                    </button>
                   </div>
                 );
               } else {
@@ -9170,20 +9159,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       </div>
                     </div>
 
-                    {/* Separator */}
-                    <div style={{ borderTop: `1px solid ${C.border}`, margin: '0 0 16px' }} />
-
-                    {/* Unreserve button */}
-                    <button
-                      onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
-                      style={{
-                        ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                        border: 'none', borderRadius: 12,
-                        padding: '14px 16px', fontSize: 15, fontWeight: 700,
-                      }}
-                    >
-                      {t('cancel_reservation', locale)}
-                    </button>
                   </div>
                 );
               }
@@ -9208,6 +9183,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               <div style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', marginTop: 16, lineHeight: 1.5, padding: '0 16px' }}>
                 {t('after_reserve_hint', locale)}
               </div>
+            )}
+
+            {/* Unreserve button — at the very bottom, below comments */}
+            {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && homeReturnTab === 'reservations' && (
+              <button
+                onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
+                style={{
+                  ...btnBase, width: '100%', background: C.redSoft, color: C.red,
+                  border: 'none', borderRadius: 12, marginTop: 16,
+                  padding: '14px 16px', fontSize: 15, fontWeight: 700,
+                }}
+              >
+                {t('cancel_reservation', locale)}
+              </button>
             )}
           </div>
         </div>
