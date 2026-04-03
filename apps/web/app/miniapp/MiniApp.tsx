@@ -6712,9 +6712,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   hat={santaSeason?.inSeason ?? false}
                 />
               </button>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0, lineHeight: 1.2 }}>WishBoard</h1>
+                  <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0, lineHeight: 1.1 }}>WishBoard</h1>
                   {planInfo.code === 'PRO' && (
                     <span style={{
                       fontSize: 10, fontWeight: 800, letterSpacing: 0.6, padding: '3px 8px',
@@ -6725,7 +6725,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     }}>PRO</span>
                   )}
                 </div>
-                <p style={{ fontSize: 13, color: C.textMuted, margin: 0, lineHeight: 1.3 }}>
+                <p style={{ fontSize: 13, color: C.textMuted, margin: 0, lineHeight: 1.2 }}>
                   {tgUser ? t('greeting', locale, { name: tgUser.first_name }) : t('my_wishlists', locale)}
                 </p>
               </div>
@@ -7520,9 +7520,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
               {/* History tab */}
               {resTab === 'history' && reservationPro && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {/* History filter chips */}
-                  <div style={{ display: 'flex', gap: 6, padding: '12px 0 0', overflowX: 'auto' }}>
+                  <div style={{ display: 'flex', gap: 6, padding: '8px 0 0', overflowX: 'auto' }}>
                     {(['all', 'completed', 'unreserved', 'archived'] as ResHistoryFilter[]).map((f) => (
                       <button key={f} onClick={() => setResHistoryFilter(f)} style={{
                         padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
@@ -7551,35 +7551,42 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, ownerAvatarUrl: r.ownerAvatarUrl, items: [] });
                       g.items.push(r);
                     }
+                    const fmtHistDate = (iso: string) => {
+                      const d = new Date(iso);
+                      return d.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/ г\.?$/, '');
+                    };
                     let gi = 0;
                     return Object.entries(groups).map(([ownerId, group]) => (
-                      <div key={ownerId} style={{ marginBottom: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                          <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName} size={32} accent={C.accent} />
-                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
+                      <div key={ownerId} style={{ marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                          <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName} size={28} accent={C.accent} />
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {group.items.map((item) => {
                             const delay = gi * 0.06; gi++;
                             const badge = item.endReason === 'completed' ? { text: t('res_history_gifted', locale), bg: C.greenSoft, color: C.green }
                               : item.endReason === 'unreserved' ? { text: t('res_history_unreserved', locale), bg: C.redSoft, color: C.red }
                               : { text: t('res_history_archived', locale), bg: 'rgba(255,255,255,0.06)', color: C.textMuted };
+                            const eventDateKey = item.endReason === 'completed' ? 'res_history_gifted_on'
+                              : item.endReason === 'unreserved' ? 'res_history_unreserved_on'
+                              : 'res_history_archived_on';
                             return (
                               <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${delay}s both`, opacity: 0.8 }}>
-                                <div style={{ background: C.card, borderRadius: 14, padding: 14, border: `1px solid ${C.border}` }}>
-                                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                                <div style={{ background: C.card, borderRadius: 14, padding: '12px 14px', border: `1px solid ${C.border}` }}>
+                                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                                     <ItemThumb item={item} />
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, color: C.text, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
                                         <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: badge.bg, color: badge.color }}>{badge.text}</span>
                                         {item.price != null && (
-                                          <span style={{ fontSize: 13, fontWeight: 600, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>
+                                          <span style={{ fontSize: 13, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>
                                         )}
                                       </div>
                                       {item.endedAt && (
-                                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
-                                          {new Date(item.endedAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>
+                                          {t(eventDateKey, locale, { date: fmtHistDate(item.endedAt) })}
                                         </div>
                                       )}
                                     </div>
