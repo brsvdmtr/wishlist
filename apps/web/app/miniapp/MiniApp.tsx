@@ -2339,38 +2339,45 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
 
   const isMine = (c: CommentDTO) => c.authorActorHash === myActorHash;
 
-  /* ── Collapsed: secondary action row ── */
+  /* ── Collapsed: accent CTA button per mockup ── */
   if (!expanded) {
+    const badgeText = comments.length > 0
+      ? `${comments.length} ${locale === 'ru'
+          ? (comments.length % 10 === 1 && comments.length % 100 !== 11 ? 'новый' : 'новых')
+          : t('comments_badge_new', locale)}`
+      : null;
     return (
-      <div
+      <button
         onClick={() => setExpanded(true)}
         style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-          padding: '12px 14px', marginTop: 10, cursor: 'pointer',
+          ...btnBase,
+          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+          background: C.accent, color: '#fff', border: 'none', borderRadius: 14,
+          padding: '15px 18px', marginTop: 20, cursor: 'pointer',
+          justifyContent: 'flex-start',
+          boxShadow: '0 2px 12px rgba(124,106,255,0.25)',
         }}
       >
         <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>💬</span>
-        <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>
+        <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: '#fff', fontFamily: font, textAlign: 'left' }}>
           {t('comments_title', locale)}
         </span>
-        {comments.length > 0 && (
+        {badgeText && (
           <span style={{
-            fontSize: 11, fontWeight: 700, color: '#fff',
-            background: C.accent, padding: '2px 8px', borderRadius: 10,
-            lineHeight: '16px', flexShrink: 0,
+            fontSize: 12, fontWeight: 700, color: '#fff',
+            background: 'rgba(255,255,255,0.22)', padding: '3px 10px', borderRadius: 10,
+            lineHeight: '18px', flexShrink: 0, whiteSpace: 'nowrap',
           }}>
-            {comments.length === 1 ? '1' : `${comments.length} ${t('comments_badge_new', locale)}`}
+            {badgeText}
           </span>
         )}
-        <span style={{ fontSize: 14, color: C.textMuted, flexShrink: 0 }}>›</span>
-      </div>
+      </button>
     );
   }
 
   /* ── Expanded: full thread with scroll ── */
   return (
-    <div style={{ marginTop: 10, background: C.surface, borderRadius: 14, overflow: 'hidden', animation: 'fadeIn 0.2s ease' }}>
+    <div style={{ marginTop: 20, background: C.surface, borderRadius: 14, overflow: 'hidden', animation: 'fadeIn 0.2s ease' }}>
       {/* Header — tap to collapse */}
       <div
         onClick={() => setExpanded(false)}
@@ -9785,11 +9792,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     </div>
 
                     {/* Reminder section */}
-                    <div style={{ ...sectionLabel, marginTop: 18 }}>{t('res_detail_reminder_label', locale)}</div>
+                    <div style={{ ...sectionLabel, marginTop: 22 }}>{t('res_detail_reminder_label', locale)}</div>
                     {reminderDate ? (
                       <div style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: 12, borderRadius: 12,
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '14px 16px', borderRadius: 14,
                         background: C.orangeSoft, border: '1px solid rgba(251,191,36,0.2)',
                       }}>
                         <span style={{ fontSize: 20 }}>🔔</span>
@@ -9799,7 +9806,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                             {locale === 'ru' ? ' в ' : ' at '}
                             {reminderDate.toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' }).replace(/^0/, '')}
                           </div>
-                          <div style={{ fontSize: 12, color: C.textSec }}>
+                          <div style={{ fontSize: 12, color: C.textSec, marginTop: 2 }}>
                             {daysUntilReminder !== null && daysUntilReminder > 0
                               ? t('res_detail_reminder_in_days', locale, { n: daysUntilReminder })
                               : t('gn_today', locale)}
@@ -9807,7 +9814,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                         </div>
                         <span
                           onClick={(e) => { e.stopPropagation(); handleResReminderRemove(resItem.id); }}
-                          style={{ fontSize: 18, color: C.textSec, cursor: 'pointer', padding: '6px 8px', lineHeight: 1 }}
+                          style={{ fontSize: 18, color: C.textSec, cursor: 'pointer', padding: '8px 10px', lineHeight: 1 }}
                         >
                           ✕
                         </span>
@@ -9816,8 +9823,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                       <div
                         onClick={() => setResReminderSheetItem(resItem)}
                         style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          padding: 12, borderRadius: 12, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 12,
+                          padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
                           background: C.card, border: `1px solid ${C.border}`,
                         }}
                       >
@@ -9911,8 +9918,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
                 style={{
                   ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                  border: 'none', borderRadius: 12, marginTop: 10,
-                  padding: '14px 16px', fontSize: 15, fontWeight: 700,
+                  border: 'none', borderRadius: 14, marginTop: 16,
+                  padding: '15px 18px', fontSize: 15, fontWeight: 700,
                 }}
               >
                 {t('cancel_reservation', locale)}
