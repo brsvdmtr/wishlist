@@ -6642,7 +6642,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ══════════════════════════════════════════════ */}
       {screen === 'my-wishlists' && (
         <div
-          style={{ padding: isDesktop ? '32px 40px 120px' : '16px 20px 120px', minHeight: 'calc(100vh - 80px)' }}
+          style={{ padding: isDesktop ? '16px 40px 120px' : '8px 20px 120px', minHeight: 'calc(100vh - 80px)' }}
           onTouchStart={(e) => {
             if (reorderMode || itemReorderMode) return;
             const target = e.target as HTMLElement;
@@ -7324,7 +7324,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     </div>
                   )}
                   {!reservationsLoading && !santaReservationItemsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '48px 24px', minHeight: 300 }}>
                       <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
                       <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('reservations_empty_title', locale)}</div>
                       <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('reservations_empty_hint', locale)}</div>
@@ -9004,140 +9004,186 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && homeReturnTab === 'reservations' && (() => {
               const resItem = reservations.find(r => r.id === viewingItem.id);
               if (!resItem) return null;
+              const sectionLabel: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 };
 
               if (reservationPro) {
+                const reminderDate = resItem.meta?.reminderAt ? new Date(resItem.meta.reminderAt) : null;
+                const daysUntilReminder = reminderDate ? Math.max(0, Math.ceil((reminderDate.getTime() - Date.now()) / 86400000)) : null;
                 return (
-                  <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {/* Purchased toggle */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                    {/* Separator */}
+                    <div style={{ borderTop: `1px solid ${C.border}`, margin: '20px 0 16px' }} />
+
+                    {/* Status section */}
+                    <div style={sectionLabel}>{t('res_detail_status_label', locale)}</div>
                     <div
                       onClick={() => setResPurchasedConfirmItem(resItem)}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
-                        background: resItem.meta?.purchased ? C.accentSoft : C.card,
-                        border: `1px solid ${resItem.meta?.purchased ? C.accent : C.border}`,
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: 12, borderRadius: 12, cursor: 'pointer',
+                        background: C.accentSoft, border: '1px solid rgba(124,106,255,0.2)',
                       }}
                     >
-                      <span style={{ fontSize: 20 }}>{resItem.meta?.purchased ? '✅' : '☐'}</span>
+                      <span style={{ fontSize: 20 }}>✓</span>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('res_detail_status_label', locale)}</div>
-                        <div style={{ fontSize: 12, color: C.textSec }}>
-                          {resItem.meta?.purchased ? t('res_purchased', locale) : t('reservations_reserved', locale)}
-                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: C.accent }}>{t('res_mark_purchased', locale)}</div>
+                        <div style={{ fontSize: 12, color: C.textSec }}>{t('res_detail_purchased_subtitle', locale)}</div>
                       </div>
-                      <span style={{ fontSize: 12, color: C.accent, fontWeight: 600 }}>
-                        {resItem.meta?.purchased ? '✓' : ''}
-                      </span>
+                      {/* iOS-style toggle */}
+                      <div style={{
+                        width: 44, height: 26, borderRadius: 13, cursor: 'pointer', position: 'relative',
+                        background: resItem.meta?.purchased ? C.accent : C.surface,
+                        transition: 'background 0.2s',
+                      }}>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: 11, background: '#fff',
+                          position: 'absolute', top: 2,
+                          left: resItem.meta?.purchased ? 20 : 2,
+                          transition: 'left 0.2s',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                        }} />
+                      </div>
                     </div>
 
                     {/* Note section */}
-                    <div
-                      onClick={() => { setResNoteText(resItem.meta?.note ?? ''); setResNoteSheetItem(resItem); }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
-                        background: C.card, border: `1px solid ${C.border}`,
-                      }}
-                    >
-                      <span style={{ fontSize: 20 }}>📝</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('res_detail_note_label', locale)}</div>
-                        <div style={{ fontSize: 12, color: C.textSec, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {resItem.meta?.note || t('res_note_placeholder', locale)}
-                        </div>
+                    <div style={{ ...sectionLabel, marginTop: 18 }}>{t('res_detail_note_label', locale)}</div>
+                    <div style={{
+                      background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12,
+                    }}>
+                      <div style={{ fontSize: 14, color: resItem.meta?.note ? C.text : C.textMuted, lineHeight: 1.5, marginBottom: 6 }}>
+                        {resItem.meta?.note || t('res_detail_note_empty', locale)}
                       </div>
-                      <span style={{ fontSize: 14, color: C.textMuted }}>›</span>
+                      <div style={{ textAlign: 'right' }}>
+                        <span
+                          onClick={() => { setResNoteText(resItem.meta?.note ?? ''); setResNoteSheetItem(resItem); }}
+                          style={{ fontSize: 12, color: C.accent, cursor: 'pointer' }}
+                        >
+                          {t('res_detail_note_edit', locale)}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Reminder section */}
-                    <div
-                      onClick={() => setResReminderSheetItem(resItem)}
+                    <div style={{ ...sectionLabel, marginTop: 18 }}>{t('res_detail_reminder_label', locale)}</div>
+                    {reminderDate ? (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: 12, borderRadius: 12,
+                        background: C.orangeSoft, border: '1px solid rgba(251,191,36,0.2)',
+                      }}>
+                        <span style={{ fontSize: 20 }}>🔔</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.orange }}>
+                            {reminderDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })}
+                            {reminderDate.toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'en-US', { hour: '2-digit', minute: '2-digit' }).replace(/^0/, '')}
+                          </div>
+                          <div style={{ fontSize: 12, color: C.textSec }}>
+                            {daysUntilReminder !== null && daysUntilReminder > 0
+                              ? t('res_detail_reminder_in_days', locale, { n: daysUntilReminder })
+                              : t('gn_today', locale)}
+                          </div>
+                        </div>
+                        <span
+                          onClick={(e) => { e.stopPropagation(); handleResReminderRemove(resItem.id); }}
+                          style={{ fontSize: 12, color: C.textSec, cursor: 'pointer', padding: 4 }}
+                        >
+                          ✕
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => setResReminderSheetItem(resItem)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: 12, borderRadius: 12, cursor: 'pointer',
+                          background: C.card, border: `1px solid ${C.border}`,
+                        }}
+                      >
+                        <span style={{ fontSize: 20 }}>🔔</span>
+                        <div style={{ flex: 1, fontSize: 14, color: C.textSec }}>{t('res_reminder_btn', locale)}</div>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>›</span>
+                      </div>
+                    )}
+
+                    {/* Separator */}
+                    <div style={{ borderTop: `1px solid ${C.border}`, margin: '20px 0 16px' }} />
+
+                    {/* Unreserve button */}
+                    <button
+                      onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
-                        background: resItem.meta?.reminderAt ? C.orangeSoft : C.card,
-                        border: `1px solid ${resItem.meta?.reminderAt ? 'rgba(251,191,36,0.3)' : C.border}`,
+                        ...btnBase, width: '100%', background: C.redSoft, color: C.red,
+                        border: 'none', borderRadius: 12,
+                        padding: '14px 16px', fontSize: 15, fontWeight: 700,
                       }}
                     >
-                      <span style={{ fontSize: 20 }}>🔔</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('res_detail_reminder_label', locale)}</div>
-                        <div style={{ fontSize: 12, color: resItem.meta?.reminderAt ? C.orange : C.textSec }}>
-                          {resItem.meta?.reminderAt
-                            ? new Date(resItem.meta.reminderAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' })
-                            : t('res_reminder_btn', locale)}
-                        </div>
-                      </div>
-                      <span style={{ fontSize: 14, color: C.textMuted }}>›</span>
-                    </div>
+                      {t('cancel_reservation', locale)}
+                    </button>
                   </div>
                 );
               } else {
                 return (
-                  <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {/* Locked: Purchased toggle */}
-                    <div
-                      onClick={() => setUpsellSheet({ context: 'reservation_pro' })}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
-                        background: C.card, border: `1px dashed ${C.borderLight}`, opacity: 0.6,
-                      }}
-                    >
-                      <span style={{ fontSize: 20 }}>☐</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: C.textSec }}>{t('res_detail_status_label', locale)}</div>
-                        <div style={{ fontSize: 12, color: C.textMuted }}>{t('res_detail_pro_locked', locale)}</div>
-                      </div>
-                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: C.accent, color: '#fff', fontWeight: 700 }}>PRO</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                    {/* Separator */}
+                    <div style={{ borderTop: `1px solid ${C.border}`, margin: '20px 0 16px' }} />
+
+                    {/* Locked items */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 0 16px' }}>
+                      {[
+                        { icon: '📝', label: t('res_detail_note_label', locale) },
+                        { icon: '✓', label: t('res_mark_purchased', locale) },
+                        { icon: '🔔', label: t('res_detail_reminder_label', locale) },
+                      ].map((item, i) => (
+                        <div
+                          key={i}
+                          onClick={() => setUpsellSheet({ context: 'reservation_pro' })}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: 12, borderRadius: 12, cursor: 'pointer',
+                            border: `1px dashed ${C.borderLight}`, opacity: 0.6,
+                            background: 'rgba(255,255,255,0.02)',
+                          }}
+                        >
+                          <span style={{ fontSize: 18 }}>{item.icon}</span>
+                          <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.textSec }}>{item.label}</div>
+                          <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: C.accentSoft, color: C.accent, fontWeight: 700 }}>PRO</span>
+                        </div>
+                      ))}
                     </div>
 
-                    {/* Locked: Note */}
+                    {/* Inline upsell */}
                     <div
                       onClick={() => setUpsellSheet({ context: 'reservation_pro' })}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
-                        background: C.card, border: `1px dashed ${C.borderLight}`, opacity: 0.6,
-                      }}
-                    >
-                      <span style={{ fontSize: 20 }}>📝</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: C.textSec }}>{t('res_detail_note_label', locale)}</div>
-                        <div style={{ fontSize: 12, color: C.textMuted }}>{t('res_detail_pro_locked', locale)}</div>
-                      </div>
-                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: C.accent, color: '#fff', fontWeight: 700 }}>PRO</span>
-                    </div>
-
-                    {/* Locked: Reminder */}
-                    <div
-                      onClick={() => setUpsellSheet({ context: 'reservation_pro' })}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
-                        background: C.card, border: `1px dashed ${C.borderLight}`, opacity: 0.6,
-                      }}
-                    >
-                      <span style={{ fontSize: 20 }}>🔔</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: C.textSec }}>{t('res_detail_reminder_label', locale)}</div>
-                        <div style={{ fontSize: 12, color: C.textMuted }}>{t('res_detail_pro_locked', locale)}</div>
-                      </div>
-                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: C.accent, color: '#fff', fontWeight: 700 }}>PRO</span>
-                    </div>
-
-                    {/* Small upsell */}
-                    <div
-                      onClick={() => setUpsellSheet({ context: 'reservation_pro' })}
-                      style={{
-                        padding: '12px 16px', borderRadius: 12, cursor: 'pointer', textAlign: 'center',
+                        margin: '0 0 16px', padding: '12px 16px', borderRadius: 12, cursor: 'pointer', textAlign: 'center',
                         background: `linear-gradient(135deg, ${C.accentSoft} 0%, rgba(212,168,83,0.06) 100%)`,
                         border: `1px solid rgba(124,106,255,0.15)`,
                       }}
                     >
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{t('res_pro_upsell_detail_title', locale)}</div>
-                      <div style={{ fontSize: 11, color: C.textSec, marginTop: 2 }}>{t('res_pro_upsell_detail_desc', locale)}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t('res_pro_upsell_detail_title', locale)}</div>
+                      <div style={{ fontSize: 12, color: C.textSec, marginTop: 2 }}>{t('res_pro_upsell_detail_desc', locale)}</div>
+                      <div style={{
+                        display: 'inline-block', marginTop: 8, fontSize: 12, padding: '8px 16px',
+                        borderRadius: 10, background: C.accent, color: '#fff', fontWeight: 700, cursor: 'pointer',
+                      }}>
+                        ⭐ Pro
+                      </div>
                     </div>
+
+                    {/* Separator */}
+                    <div style={{ borderTop: `1px solid ${C.border}`, margin: '0 0 16px' }} />
+
+                    {/* Unreserve button */}
+                    <button
+                      onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
+                      style={{
+                        ...btnBase, width: '100%', background: C.redSoft, color: C.red,
+                        border: 'none', borderRadius: 12,
+                        padding: '14px 16px', fontSize: 15, fontWeight: 700,
+                      }}
+                    >
+                      {t('cancel_reservation', locale)}
+                    </button>
                   </div>
                 );
               }
@@ -10141,7 +10187,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
                   {/* One-time upgrades block — shown when availableSkus populated */}
                   {availableSkus.length > 0 && (() => {
-                    const planScreenSkus = ['extra_wishlist_slot', 'extra_items_5', 'extra_items_15', 'extra_subscription_slot', 'gift_notes_unlock']
+                    const planScreenSkus = ['extra_wishlist_slot', 'extra_items_5', 'extra_items_15', 'extra_subscription_slot', 'gift_notes_unlock', 'reservation_pro_unlock']
                       .map(code => availableSkus.find(s => s.code === code))
                       .filter((s): s is SkuInfo => s !== undefined);
                     if (planScreenSkus.length === 0) return null;
@@ -11893,7 +11939,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div>
                 <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: 0 }}>{t('gn_title', locale)}</h1>
-                <div style={{ fontSize: 13, color: C.textSec, marginTop: 2, fontFamily: font }}>{gnOccasions.length} {t('gn_events_count', locale, { count: gnOccasions.length })}{totalIdeas > 0 ? ` · ${totalIdeas} ${t('gn_ideas_count_label', locale, { count: totalIdeas })}` : ''}</div>
+                <div style={{ fontSize: 13, color: C.textSec, marginTop: 2, fontFamily: font }}>{gnOccasions.length} {t('gn_events_count', locale)}{totalIdeas > 0 ? ` · ${totalIdeas} ${t('gn_ideas_count_label', locale)}` : ''}</div>
               </div>
             </div>
 
@@ -11981,12 +12027,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 {o.daysUntil != null && (
                   <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: 'center' as const }}>
                     <div style={{ fontSize: 20, fontWeight: 800, color: o.daysUntil <= 7 ? '#FBBF24' : C.text, fontFamily: font }}>{o.daysUntil}</div>
-                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{t('gn_days_left', locale)}</div>
+                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{t('gn_days_left_label', locale)}</div>
                   </div>
                 )}
                 <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: 'center' as const }}>
                   <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font }}>{ideas.length}</div>
-                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{t('gn_ideas_count_label', locale, { count: ideas.length })}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{t('gn_ideas_count_label', locale)}</div>
                 </div>
                 {o.recurrence && o.recurrence !== 'NONE' && (
                   <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: 'center' as const }}>
