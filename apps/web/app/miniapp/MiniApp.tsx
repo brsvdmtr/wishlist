@@ -1678,6 +1678,9 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
   onSendComment: () => void;
   isArchive?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   if (!commentRole) return null;
 
   const canDelete = (c: CommentDTO) => {
@@ -1688,90 +1691,131 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
 
   const isMine = (c: CommentDTO) => c.authorActorHash === myActorHash;
 
+  /* ── Collapsed: compact button ── */
+  if (!expanded) {
+    return (
+      <button
+        onClick={() => setExpanded(true)}
+        style={{
+          ...btnBase,
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+          padding: '12px 16px', marginTop: 16, cursor: 'pointer',
+          justifyContent: 'flex-start',
+        }}
+      >
+        <span style={{ fontSize: 15, lineHeight: 1 }}>💬</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('comments_title', locale)}</span>
+        {comments.length > 0 && (
+          <span style={{
+            fontSize: 11, fontWeight: 700, color: C.accent,
+            background: C.accentSoft, padding: '2px 8px', borderRadius: 8,
+          }}>{comments.length}</span>
+        )}
+        <span style={{ fontSize: 14, color: C.textMuted, marginLeft: 'auto' }}>›</span>
+      </button>
+    );
+  }
+
+  /* ── Expanded: full thread with scroll ── */
   return (
-    <div style={{ marginTop: 20, padding: 14, background: C.surface, borderRadius: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+    <div style={{ marginTop: 16, background: C.surface, borderRadius: 14, overflow: 'hidden', animation: 'fadeIn 0.2s ease' }}>
+      {/* Header — tap to collapse */}
+      <div
+        onClick={() => setExpanded(false)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '12px 14px 6px', cursor: 'pointer',
+        }}
+      >
+        <span style={{ fontSize: 15, lineHeight: 1 }}>💬</span>
         <span style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font }}>{t('comments_title', locale)}</span>
         <span style={{ fontSize: 11, color: C.textMuted, background: C.bg, padding: '2px 8px', borderRadius: 8 }}>{comments.length}</span>
+        <span style={{ fontSize: 12, color: C.textMuted, marginLeft: 'auto', transform: 'rotate(90deg)', display: 'inline-block' }}>›</span>
       </div>
-      <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 10, lineHeight: 1.4 }}>
+
+      <div style={{ fontSize: 11, color: C.textMuted, padding: '0 14px', marginBottom: 10, lineHeight: 1.4 }}>
         {t('comments_subtitle', locale)}
       </div>
 
       {isArchive && (
-        <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 14px', borderRadius: 12, marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 14px', borderRadius: 12, margin: '0 14px 10px' }}>
           {t('comments_archive_warning', locale)}
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {comments.length === 0 && (
-          <div style={{ textAlign: 'center', fontSize: 13, color: C.textMuted, padding: '12px 0 8px' }}>
-            {t('comments_empty', locale)}
-          </div>
-        )}
-        {comments.map(c => (
-          c.type === 'SYSTEM' ? (
-            <div key={c.id} style={{
-              textAlign: 'center', fontSize: 12, color: C.textMuted,
-              padding: '8px 14px', background: C.bg, borderRadius: 12, margin: '6px 0',
-            }}>
-              {c.text} · {new Date(c.createdAt).toLocaleString(toIntlLocale(locale), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+      {/* Messages — scrollable */}
+      <div ref={scrollRef} style={{ maxHeight: 340, overflowY: 'auto', padding: '0 14px', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {comments.length === 0 && (
+            <div style={{ textAlign: 'center', fontSize: 13, color: C.textMuted, padding: '12px 0 8px' }}>
+              {t('comments_empty', locale)}
             </div>
-          ) : (
-            <div key={c.id} style={{
-              alignSelf: isMine(c) ? 'flex-end' : 'flex-start',
-              maxWidth: '75%',
-            }}>
-              {!isMine(c) && (
-                <div style={{ fontSize: 12, color: C.accent, marginBottom: 3, fontWeight: 600, fontFamily: font }}>
-                  {c.authorDisplayName ?? t('comments_anon', locale)}
-                </div>
-              )}
-              {isMine(c) && (
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 3, fontWeight: 500, fontFamily: font, textAlign: 'right' }}>
-                  {t('comments_me', locale)}
-                </div>
-              )}
-              <div style={{
-                padding: '12px 16px', borderRadius: 18,
-                background: isMine(c) ? C.accent : C.card,
-                color: isMine(c) ? '#fff' : C.text,
-                fontSize: 15, lineHeight: 1.45,
-                border: isMine(c) ? 'none' : `1px solid ${C.border}`,
+          )}
+          {comments.map(c => (
+            c.type === 'SYSTEM' ? (
+              <div key={c.id} style={{
+                textAlign: 'center', fontSize: 11, color: C.textMuted,
+                padding: '5px 12px', background: C.bg, borderRadius: 10, margin: '3px 0',
+                lineHeight: 1.4,
               }}>
-                {c.text}
+                {c.text} · {new Date(c.createdAt).toLocaleString(toIntlLocale(locale), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </div>
+            ) : (
+              <div key={c.id} style={{
+                alignSelf: isMine(c) ? 'flex-end' : 'flex-start',
+                maxWidth: '75%',
+              }}>
+                {!isMine(c) && (
+                  <div style={{ fontSize: 12, color: C.accent, marginBottom: 2, fontWeight: 600, fontFamily: font }}>
+                    {c.authorDisplayName ?? t('comments_anon', locale)}
+                  </div>
+                )}
+                {isMine(c) && (
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 2, fontWeight: 500, fontFamily: font, textAlign: 'right' }}>
+                    {t('comments_me', locale)}
+                  </div>
+                )}
                 <div style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  marginTop: 6, gap: 8,
+                  padding: '10px 14px', borderRadius: 16,
+                  background: isMine(c) ? C.accent : C.card,
+                  color: isMine(c) ? '#fff' : C.text,
+                  fontSize: 14, lineHeight: 1.4,
+                  border: isMine(c) ? 'none' : `1px solid ${C.border}`,
                 }}>
-                  <span style={{
-                    fontSize: 11,
-                    color: isMine(c) ? 'rgba(255,255,255,0.45)' : C.textMuted,
+                  {c.text}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    marginTop: 4, gap: 8,
                   }}>
-                    {new Date(c.createdAt).toLocaleTimeString(toIntlLocale(locale), { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  {canDelete(c) && !isArchive && (
-                    <button
-                      onClick={() => void onDeleteComment(c.id)}
-                      style={{
-                        background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer',
-                        fontSize: 12, color: isMine(c) ? 'rgba(255,255,255,0.35)' : C.textMuted,
-                      }}
-                    >
-                      ✕
-                    </button>
-                  )}
+                    <span style={{
+                      fontSize: 11,
+                      color: isMine(c) ? 'rgba(255,255,255,0.45)' : C.textMuted,
+                    }}>
+                      {new Date(c.createdAt).toLocaleTimeString(toIntlLocale(locale), { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {canDelete(c) && !isArchive && (
+                      <button
+                        onClick={() => void onDeleteComment(c.id)}
+                        style={{
+                          background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer',
+                          fontSize: 12, color: isMine(c) ? 'rgba(255,255,255,0.35)' : C.textMuted,
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        ))}
+            )
+          ))}
+        </div>
       </div>
 
-      {/* Composer — compact */}
+      {/* Composer */}
       {!isArchive && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 8, padding: '10px 14px 14px', alignItems: 'flex-end' }}>
           <div style={{ flex: 1, position: 'relative' }}>
             <textarea
               style={{
@@ -2329,7 +2373,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [resReminderCustomDate, setResReminderCustomDate] = useState('');
   const [resPurchasedConfirmItem, setResPurchasedConfirmItem] = useState<ReservationItem | null>(null);
   const [resPurchasedLoading, setResPurchasedLoading] = useState(false);
-  const [resCommentsExpanded, setResCommentsExpanded] = useState(false);
   const [fromReservations, setFromReservations] = useState(false);
   const [santaDetailContext, setSantaDetailContext] = useState<{
     source: 'reservation' | 'receiver-wishlist';
@@ -2359,12 +2402,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // Item detail view (for both owner and guest)
   const [viewingItem, setViewingItem] = useState<(Item | GuestItem) | null>(null);
   const [pendingEditItem, setPendingEditItem] = useState<Item | null>(null);
-  const viewingItemIdRef = useRef<string | null>(null);
-  if (viewingItem?.id !== viewingItemIdRef.current) {
-    viewingItemIdRef.current = viewingItem?.id ?? null;
-    if (resCommentsExpanded) setResCommentsExpanded(false);
-  }
-
   // UI state
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loading, setLoading] = useState(false);
@@ -8439,6 +8476,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {/* Comments */}
             {planInfo.code === 'PRO' ? (
               <CommentsThread
+                key={`owner-${viewingItem.id}`}
                 commentRole={commentRole} comments={comments} commentText={commentText}
                 setCommentText={setCommentText} commentSending={commentSending}
                 myActorHash={myActorHashRef.current} onDeleteComment={handleDeleteComment}
@@ -8637,6 +8675,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             {/* Comments — full for PRO, locked placeholder for FREE */}
             {planInfo.code === 'PRO' ? (
               <CommentsThread
+                key={`guest-${viewingItem.id}`}
                 commentRole={commentRole}
                 comments={comments}
                 commentText={commentText}
@@ -9182,48 +9221,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               }
             })()}
 
-            {/* Separator before comments */}
-            {commentRole && (
-              <div style={{ borderTop: `1px solid ${C.border}`, margin: '20px 0 0' }} />
-            )}
-
-            {/* Comments — collapsible expand button */}
-            {commentRole && !resCommentsExpanded && (
-              <button
-                onClick={() => setResCommentsExpanded(true)}
-                style={{
-                  ...btnBase, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-                  padding: '12px 16px', marginTop: 16, cursor: 'pointer',
-                }}
-              >
-                <span style={{ fontSize: 15 }}>💬</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('comments_title', locale)}</span>
-                {comments.length > 0 && (
-                  <span style={{
-                    fontSize: 11, fontWeight: 700, color: C.accent,
-                    background: C.accentSoft, padding: '2px 8px', borderRadius: 8,
-                  }}>{comments.length}</span>
-                )}
-                <span style={{ fontSize: 14, color: C.textMuted, marginLeft: 'auto' }}>›</span>
-              </button>
-            )}
-
-            {/* Comments — expanded thread */}
-            {resCommentsExpanded && (
-              <CommentsThread
-                commentRole={commentRole}
-                comments={comments}
-                commentText={commentText}
-                setCommentText={setCommentText}
-                commentSending={commentSending}
-                myActorHash={myActorHashRef.current}
-                onDeleteComment={handleDeleteComment}
-                onSendComment={handleSendComment}
-                isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
-                locale={locale}
-              />
-            )}
+            {/* Comments — collapsible accordion */}
+            <CommentsThread
+              key={`res-${viewingItem.id}`}
+              commentRole={commentRole}
+              comments={comments}
+              commentText={commentText}
+              setCommentText={setCommentText}
+              commentSending={commentSending}
+              myActorHash={myActorHashRef.current}
+              onDeleteComment={handleDeleteComment}
+              onSendComment={handleSendComment}
+              isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
+              locale={locale}
+            />
 
             {/* Hint for third parties */}
             {viewingItem.status === 'available' && !commentRole && (
