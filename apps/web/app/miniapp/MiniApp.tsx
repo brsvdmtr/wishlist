@@ -12131,14 +12131,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                 borderRadius: 20, padding: 18, marginTop: 4,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{
-                    width: 48, height: 48, borderRadius: '50%',
-                    background: C.accentSoft, border: `2px solid ${C.accent}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 20, fontWeight: 700, color: C.accent, flexShrink: 0,
-                  }}>
-                    {(resolveOwnerName(profileData, tgUser))[0]?.toUpperCase() || '?'}
-                  </div>
+                  <UserAvatar
+                    avatarUrl={profileData?.avatarUrl}
+                    name={resolveOwnerName(profileData, tgUser)}
+                    size={48}
+                    accent={C.accent}
+                    border={`2px solid ${C.accent}`}
+                  />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{resolveOwnerName(profileData, tgUser)}</span>
