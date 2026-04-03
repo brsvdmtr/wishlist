@@ -1293,6 +1293,7 @@ model ReservationMeta {
   purchasedAt     DateTime?
   reminderAt      DateTime?
   reminderSent    Boolean   @default(false)
+  reminderDates   Json?     // string[] of all scheduled reminder ISO dates
   // History tracking — when the reservation ends, these fields get populated
   active          Boolean   @default(true)
   endedAt         DateTime?

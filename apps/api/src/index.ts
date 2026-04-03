@@ -2334,7 +2334,7 @@ tgRouter.get(
     );
 
     // 5. Batch fetch ReservationMeta for Pro users
-    const metaMap = new Map<string, { note: string | null; purchased: boolean; purchasedAt: string | null; reminderAt: string | null; reminderSent: boolean }>();
+    const metaMap = new Map<string, { note: string | null; purchased: boolean; purchasedAt: string | null; reminderAt: string | null; reminderSent: boolean; reminderDates: string[] | null }>();
     if (resPro && itemIds.length > 0) {
       const metas = await prisma.reservationMeta.findMany({
         where: { reserverUserId: user.id, itemId: { in: itemIds }, active: true },
@@ -2346,6 +2346,7 @@ tgRouter.get(
           purchasedAt: m.purchasedAt?.toISOString() ?? null,
           reminderAt: m.reminderAt?.toISOString() ?? null,
           reminderSent: m.reminderSent,
+          reminderDates: (m.reminderDates as string[] | null) ?? null,
         });
       }
     }
@@ -2482,15 +2483,17 @@ tgRouter.patch(
   }),
 );
 
-// POST /tg/reservations/:itemId/reminder — set a reminder date
+// POST /tg/reservations/:itemId/reminder — set reminder dates (supports multiple)
 tgRouter.post(
   '/reservations/:itemId/reminder',
   asyncHandler(async (req, res) => {
     const itemId = req.params.itemId ?? '';
     if (!itemId) return res.status(400).json({ error: 'Missing itemId' });
 
+    // Accept both legacy single `reminderAt` and new `reminderDates` array
     const parsed = z.object({
-      reminderAt: z.string().datetime(),
+      reminderAt: z.string().datetime().optional(),
+      reminderDates: z.array(z.string().datetime()).optional(),
     }).safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
 
@@ -2505,18 +2508,31 @@ tgRouter.post(
       return res.status(404).json({ error: 'Active reservation not found' });
     }
 
-    const reminderAt = new Date(parsed.data.reminderAt);
-    if (reminderAt.getTime() <= Date.now()) {
-      return res.status(400).json({ error: 'Reminder must be in the future' });
+    // Build the list of dates
+    const now = Date.now();
+    let allDates: string[] = [];
+    if (parsed.data.reminderDates && parsed.data.reminderDates.length > 0) {
+      allDates = parsed.data.reminderDates.filter(d => new Date(d).getTime() > now);
+    } else if (parsed.data.reminderAt) {
+      const dt = new Date(parsed.data.reminderAt);
+      if (dt.getTime() > now) allDates = [dt.toISOString()];
     }
+    if (allDates.length === 0) {
+      return res.status(400).json({ error: 'At least one reminder must be in the future' });
+    }
+
+    // Sort and pick the nearest as reminderAt
+    allDates.sort();
+    const nearestDate = new Date(allDates[0]);
 
     const meta = await prisma.reservationMeta.upsert({
       where: { itemId_reserverUserId: { itemId, reserverUserId: user.id } },
-      create: { itemId, reserverUserId: user.id, reminderAt, reminderSent: false },
-      update: { reminderAt, reminderSent: false },
+      create: { itemId, reserverUserId: user.id, reminderAt: nearestDate, reminderSent: false, reminderDates: allDates },
+      update: { reminderAt: nearestDate, reminderSent: false, reminderDates: allDates },
     });
 
-    return res.json({ reminderAt: meta.reminderAt?.toISOString() ?? null });
+    const storedDates = (meta.reminderDates as string[] | null) ?? null;
+    return res.json({ reminderAt: meta.reminderAt?.toISOString() ?? null, reminderDates: storedDates });
   }),
 );
 
@@ -2531,7 +2547,7 @@ tgRouter.delete(
 
     await prisma.reservationMeta.updateMany({
       where: { itemId, reserverUserId: user.id },
-      data: { reminderAt: null, reminderSent: false },
+      data: { reminderAt: null, reminderSent: false, reminderDates: [] },
     });
 
     return res.json({ ok: true });
@@ -11170,10 +11186,29 @@ setInterval(async () => {
         });
         sent++;
       }
-      await prisma.reservationMeta.update({
-        where: { id: meta.id },
-        data: { reminderSent: true },
+
+      // Cycle to the next reminder date if there are more scheduled
+      const allDates = (meta.reminderDates as string[] | null) ?? [];
+      const firedTs = meta.reminderAt?.getTime() ?? 0;
+      const remaining = allDates.filter(d => {
+        const ts = new Date(d).getTime();
+        return ts !== firedTs && ts > now.getTime();
       });
+      remaining.sort();
+
+      if (remaining.length > 0) {
+        // Set reminderAt to the next nearest date, keep cycling
+        await prisma.reservationMeta.update({
+          where: { id: meta.id },
+          data: { reminderAt: new Date(remaining[0]), reminderSent: false, reminderDates: remaining },
+        });
+      } else {
+        // All reminders fired — mark as sent, clear dates
+        await prisma.reservationMeta.update({
+          where: { id: meta.id },
+          data: { reminderSent: true, reminderDates: [] },
+        });
+      }
     }
     if (sent > 0) console.log(`[reservation-reminders] sent ${sent} reminders`);
   } catch (err) {

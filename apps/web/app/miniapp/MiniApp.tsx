@@ -257,6 +257,7 @@ type ReservationMeta = {
   purchasedAt: string | null;
   reminderAt: string | null;
   reminderSent: boolean;
+  reminderDates: string[] | null;
 };
 
 type ReservationItem = Item & {
@@ -1368,7 +1369,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
           {isGuest && isReservedByMe && (
             <>
               <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(52,211,153,0.1)' }}>
-                ✅ {t('reserved_by_me', locale)}
+                {t('reserved_by_me', locale)}
               </span>
               {onUnreserve && <span onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ fontSize: 10, color: '#555', cursor: 'pointer' }}>{t('cancel', locale)}</span>}
             </>
@@ -1544,7 +1545,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
                 background: 'linear-gradient(135deg, rgba(52,211,153,0.15), rgba(52,211,153,0.08))',
                 color: '#6ee7b7', border: '1px solid rgba(52,211,153,0.2)',
               }}>
-                ✅ {t('reserved_by_me', locale)}
+                {t('reserved_by_me', locale)}
               </span>
               {onUnreserve && <span onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ fontSize: 12, color: '#555', cursor: 'pointer' }}>{t('cancel', locale)}</span>}
             </>
@@ -5784,18 +5785,20 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     }
   };
 
-  const handleResReminderSet = async (itemId: string, reminderAt: Date) => {
+  const handleResReminderSet = async (itemId: string, dates: Date[]) => {
+    if (dates.length === 0) return;
     setResReminderSaving(true);
     try {
+      const reminderDates = dates.map(d => d.toISOString()).sort();
       const res = await tgFetch(`/tg/reservations/${itemId}/reminder`, {
         method: 'POST',
-        body: JSON.stringify({ reminderAt: reminderAt.toISOString() }),
+        body: JSON.stringify({ reminderDates }),
       });
       if (res.ok) {
-        const json = await res.json() as { reminderAt: string | null };
+        const json = await res.json() as { reminderAt: string | null; reminderDates: string[] | null };
         setReservations((prev) => prev.map((r) => r.id === itemId ? {
           ...r,
-          meta: { ...(r.meta ?? { note: null, purchased: false, purchasedAt: null, reminderAt: null, reminderSent: false }), reminderAt: json.reminderAt, reminderSent: false },
+          meta: { ...(r.meta ?? { note: null, purchased: false, purchasedAt: null, reminderAt: null, reminderSent: false, reminderDates: null }), reminderAt: json.reminderAt, reminderDates: json.reminderDates, reminderSent: false },
         } : r));
         setResReminderSheetItem(null);
         pushToast(t('res_reminder_set', locale), 'success');
@@ -5810,7 +5813,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       await tgFetch(`/tg/reservations/${itemId}/reminder`, { method: 'DELETE' });
       setReservations((prev) => prev.map((r) => r.id === itemId ? {
         ...r,
-        meta: r.meta ? { ...r.meta, reminderAt: null, reminderSent: false } : r.meta,
+        meta: r.meta ? { ...r.meta, reminderAt: null, reminderSent: false, reminderDates: null } : r.meta,
       } : r));
     } catch { /* silent */ }
   };
@@ -13007,7 +13010,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       <BottomSheet isOpen={!!resReminderSheetItem} onClose={() => setResReminderSheetItem(null)} title={t('res_reminder_title', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {resReminderSheetItem && (
-            <div style={{ fontSize: 13, color: C.textSec, marginBottom: 16 }}>{resReminderSheetItem.title} · {resReminderSheetItem.ownerName}</div>
+            <div style={{ fontSize: 12, color: C.textSec, marginBottom: 10 }}>{resReminderSheetItem.title} · {resReminderSheetItem.ownerName}</div>
           )}
           {(() => {
             const now = new Date();
@@ -13022,7 +13025,6 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               setResReminderSelected((prev) => {
                 const next = new Set(prev);
                 if (key === 'custom') {
-                  // custom is exclusive — deselect all others
                   if (next.has('custom')) { next.delete('custom'); setResReminderCustomDate(''); }
                   else { next.clear(); next.add('custom'); }
                 } else {
@@ -13035,64 +13037,65 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             const hasSelection = resReminderSelected.size > 0 && !(resReminderSelected.has('custom') && !resReminderCustomDate);
             return (
               <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
                   {presets.map((p) => {
                     const isSelected = resReminderSelected.has(p.key);
                     return (
                       <button key={p.key} onClick={() => togglePreset(p.key)} style={{
-                        display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10,
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10,
                         background: isSelected ? C.accentSoft : C.card,
                         border: `1px solid ${isSelected ? C.accent : C.border}`,
                         cursor: 'pointer', textAlign: 'left', fontFamily: font, width: '100%',
                       }}>
-                        <span style={{ fontSize: 18 }}>{p.icon}</span>
+                        <span style={{ fontSize: 16 }}>{p.icon}</span>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{p.label}</div>
-                          <div style={{ fontSize: 12, color: C.textSec }}>{p.desc}</div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{p.label}</div>
+                          <div style={{ fontSize: 11, color: C.textSec }}>{p.desc}</div>
                         </div>
                         <div style={{
-                          width: 22, height: 22, borderRadius: '50%',
+                          width: 18, height: 18, borderRadius: '50%',
                           border: `2px solid ${isSelected ? C.accent : C.borderLight}`,
                           background: isSelected ? C.accent : 'transparent',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 12, color: '#fff',
+                          fontSize: 10, color: '#fff',
                         }}>{isSelected ? '✓' : ''}</div>
                       </button>
                     );
                   })}
                 </div>
                 {resReminderSelected.has('custom') && (
-                  <div style={{ marginBottom: 12 }}>
+                  <div style={{ position: 'relative', marginBottom: 10 }}>
                     <input
                       type="date"
                       value={resReminderCustomDate}
                       onChange={(e) => setResReminderCustomDate(e.target.value)}
                       min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
-                      style={{ ...inputStyle, marginBottom: 0 }}
+                      style={{ ...inputStyle, marginBottom: 0, display: 'block', colorScheme: 'dark', color: resReminderCustomDate ? C.text : 'transparent' }}
                     />
+                    {!resReminderCustomDate && (
+                      <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: C.textMuted, fontSize: 14, pointerEvents: 'none' }}>
+                        {t('res_reminder_date_placeholder', locale)}
+                      </span>
+                    )}
                     {resReminderCustomDate && (
                       <button onClick={() => { setResReminderCustomDate(''); setResReminderSelected(new Set()); }} style={{
-                        marginTop: 6, fontSize: 12, color: C.textSec, background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, textDecoration: 'underline',
+                        marginTop: 4, fontSize: 11, color: C.textSec, background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, textDecoration: 'underline',
                       }}>{t('res_filter_reset', locale)}</button>
                     )}
                   </div>
                 )}
                 <button onClick={() => {
                   if (!resReminderSheetItem || !hasSelection) return;
-                  // Use the latest selected preset (or custom date)
                   const now2 = new Date();
-                  let date: Date | null = null;
+                  const allDates: Date[] = [];
                   if (resReminderSelected.has('custom') && resReminderCustomDate) {
-                    date = new Date(resReminderCustomDate + 'T10:00:00');
+                    allDates.push(new Date(resReminderCustomDate + 'T10:00:00'));
                   } else {
-                    // Pick the latest date among selected presets
-                    const dates: Date[] = [];
-                    if (resReminderSelected.has('3d')) dates.push(new Date(now2.getTime() + 3 * 86400000));
-                    if (resReminderSelected.has('1w')) dates.push(new Date(now2.getTime() + 7 * 86400000));
-                    if (resReminderSelected.has('eom')) dates.push(new Date(now2.getFullYear(), now2.getMonth() + 1, 0, 10, 0));
-                    if (dates.length > 0) date = dates.reduce((a, b) => a > b ? a : b);
+                    if (resReminderSelected.has('3d')) allDates.push(new Date(now2.getTime() + 3 * 86400000));
+                    if (resReminderSelected.has('1w')) allDates.push(new Date(now2.getTime() + 7 * 86400000));
+                    if (resReminderSelected.has('eom')) allDates.push(new Date(now2.getFullYear(), now2.getMonth() + 1, 0, 10, 0));
                   }
-                  if (date) handleResReminderSet(resReminderSheetItem.id, date);
+                  if (allDates.length > 0) handleResReminderSet(resReminderSheetItem.id, allDates);
                 }} disabled={resReminderSaving || !hasSelection} style={{
                   ...btnPrimary, opacity: (resReminderSaving || !hasSelection) ? 0.6 : 1,
                 }}>
@@ -13103,7 +13106,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           })()}
           {resReminderSheetItem?.meta?.reminderAt && (
             <button onClick={() => { if (resReminderSheetItem) { handleResReminderRemove(resReminderSheetItem.id); setResReminderSheetItem(null); } }} style={{
-              marginTop: 8, padding: '10px 14px', borderRadius: 10, background: C.redSoft, border: 'none', color: C.red, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, textAlign: 'center', width: '100%',
+              marginTop: 6, padding: '8px 14px', borderRadius: 10, background: C.redSoft, border: 'none', color: C.red, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, textAlign: 'center', width: '100%',
             }}>{t('res_reminder_remove', locale)}</button>
           )}
         </div>
