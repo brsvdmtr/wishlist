@@ -11718,7 +11718,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                   <div style={{ marginTop: 16 }}>
                                     {/* Period selector */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: 1 }}>Acquisition</div>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: 1 }}>Привлечение</div>
                                       <div style={{ display: 'flex', gap: 2, background: C.bg, borderRadius: 6, padding: 2 }}>
                                         {(['24h', '7d', '30d'] as const).map(pd => (
                                           <button key={pd} onClick={() => { setAcqPeriod(pd); loadGodStats(undefined, pd); }} style={{
@@ -11730,24 +11730,24 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                       </div>
                                     </div>
                                     <div style={{ background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                      <DeltaRow label="/start" cur={c.botStarts} prev={p.botStarts} />
-                                      <DeltaRow label="Miniapp opens" cur={c.miniappOpens} prev={p.miniappOpens} />
-                                      <DeltaRow label="New users" cur={c.newUsers} prev={p.newUsers} />
-                                      <DeltaRow label="First wishlist" cur={c.firstWishlist} prev={p.firstWishlist} />
-                                      <DeltaRow label="First wish" cur={c.firstWish} prev={p.firstWish} />
-                                      <DeltaRow label="Owners shared" cur={c.ownersShared} prev={p.ownersShared} />
-                                      <DeltaRow label="Guest opens" cur={c.guestOpens} prev={p.guestOpens} />
+                                      <DeltaRow label="Запустили /start" cur={c.botStarts} prev={p.botStarts} />
+                                      <DeltaRow label="Открыли miniapp" cur={c.miniappOpens} prev={p.miniappOpens} />
+                                      <DeltaRow label="Новых пользователей" cur={c.newUsers} prev={p.newUsers} />
+                                      <DeltaRow label="Первый вишлист" cur={c.firstWishlist} prev={p.firstWishlist} />
+                                      <DeltaRow label="Первое желание" cur={c.firstWish} prev={p.firstWish} />
+                                      <DeltaRow label="Поделились ссылкой" cur={c.ownersShared} prev={p.ownersShared} />
+                                      <DeltaRow label="Гостевые просмотры" cur={c.guestOpens} prev={p.guestOpens} />
                                     </div>
 
                                     {/* Conversions */}
                                     <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Conversions</div>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Конверсии</div>
                                       {[
                                         { label: '/start \u2192 miniapp', val: acq.conversions.startToFirstOpen },
-                                        { label: 'open \u2192 new user', val: acq.conversions.firstOpenToNewUser },
-                                        { label: 'new \u2192 wishlist', val: acq.conversions.newUserToWishlist },
-                                        { label: 'new \u2192 wish', val: acq.conversions.newUserToWish },
-                                        { label: 'share \u2192 guest open', val: acq.conversions.guestOpenToShare },
+                                        { label: 'Открытие \u2192 регистрация', val: acq.conversions.firstOpenToNewUser },
+                                        { label: 'Новый \u2192 вишлист', val: acq.conversions.newUserToWishlist },
+                                        { label: 'Новый \u2192 желание', val: acq.conversions.newUserToWish },
+                                        { label: 'Шеринг \u2192 гостевой просмотр', val: acq.conversions.guestOpenToShare },
                                       ].map(({ label, val }) => (
                                         <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
                                           <span style={{ fontSize: 12, color: C.textSec }}>{label}</span>
@@ -11758,13 +11758,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
                                     {/* Share Funnel (all-time) */}
                                     <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Share Funnel (all-time)</div>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Воронка шеринга (всё время)</div>
                                       {[
-                                        { label: 'Owners shared', val: acq.shareFunnel.ownersShared },
-                                        { label: 'Total link opens', val: acq.shareFunnel.shareLinksGenerated },
-                                        { label: 'Wishlists with opens', val: acq.shareFunnel.wishlistsWithOpens },
-                                        { label: 'Users reached via link', val: acq.shareFunnel.usersReachedViaLink },
-                                        { label: 'Users with reservation', val: acq.shareFunnel.usersWithReservation },
+                                        { label: 'Поделились ссылкой', val: acq.shareFunnel.ownersShared },
+                                        { label: 'Переходов по ссылке', val: acq.shareFunnel.shareLinksGenerated },
+                                        { label: 'Вишлистов с переходами', val: acq.shareFunnel.wishlistsWithOpens },
+                                        { label: 'Пользователей по ссылке', val: acq.shareFunnel.usersReachedViaLink },
+                                        { label: 'Забронировали подарок', val: acq.shareFunnel.usersWithReservation },
                                       ].map(({ label, val }) => (
                                         <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
                                           <span style={{ fontSize: 12, color: C.textSec }}>{label}</span>
