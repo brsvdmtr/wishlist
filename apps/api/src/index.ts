@@ -6569,6 +6569,79 @@ tgRouter.get(
       });
     }
 
+    // ── Acquisition / Growth Diagnostics ──────────────────────────────────────
+    const acqPeriod = (req.query.period as string) || '7d';
+    const periodMs = acqPeriod === '24h' ? 86_400_000 : acqPeriod === '30d' ? 30 * 86_400_000 : 7 * 86_400_000;
+    const acqCut = new Date(now.getTime() - periodMs);
+    const acqCutPrev = new Date(now.getTime() - 2 * periodMs);
+
+    const [
+      botStartsCur, botStartsPrev,
+      miniappOpensCur, miniappOpensPrev,
+      newUsersCur, newUsersPrev,
+      guestEventsCur, guestEventsPrev,
+      firstWlCur, firstWlPrev,
+      firstWishCur, firstWishPrev,
+      ownersSharedCur, ownersSharedPrev,
+      shareGenCur, shareGenPrev,
+    ] = await Promise.all([
+      // Bot /start — current
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "userId")::int AS count FROM "AnalyticsEvent" WHERE event = 'bot.start_received' AND "createdAt" >= ${acqCut}`,
+      // Bot /start — previous
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "userId")::int AS count FROM "AnalyticsEvent" WHERE event = 'bot.start_received' AND "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut}`,
+      // Miniapp opens — current
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "userId")::int AS count FROM "AnalyticsEvent" WHERE event = 'miniapp.bootstrap_succeeded' AND "createdAt" >= ${acqCut}`,
+      // Miniapp opens — previous
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "userId")::int AS count FROM "AnalyticsEvent" WHERE event = 'miniapp.bootstrap_succeeded' AND "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut}`,
+      // New users — current
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "User" WHERE "createdAt" >= ${acqCut}`,
+      // New users — previous
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "User" WHERE "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut}`,
+      // Guest wishlist opens — current
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'guest.view_opened' AND "createdAt" >= ${acqCut}`,
+      // Guest wishlist opens — previous
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'guest.view_opened' AND "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut}`,
+      // First regular wishlist — current
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'first_regular_wishlist_created' AND "createdAt" >= ${acqCut}`,
+      // First regular wishlist — previous
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'first_regular_wishlist_created' AND "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut}`,
+      // First item — current
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'first_item_created' AND "createdAt" >= ${acqCut}`,
+      // First item — previous
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'first_item_created' AND "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut}`,
+      // Owners who generated share token — current (approx: wishlists with shareToken created in period)
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist" WHERE "shareToken" IS NOT NULL AND type = 'REGULAR' AND "updatedAt" >= ${acqCut}`,
+      // Owners who generated share token — previous
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist" WHERE "shareToken" IS NOT NULL AND type = 'REGULAR' AND "updatedAt" >= ${acqCutPrev} AND "updatedAt" < ${acqCut}`,
+      // Share links generated — current
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "Wishlist" WHERE "shareToken" IS NOT NULL AND type = 'REGULAR' AND "updatedAt" >= ${acqCut}`,
+      // Share links generated — previous
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "Wishlist" WHERE "shareToken" IS NOT NULL AND type = 'REGULAR' AND "updatedAt" >= ${acqCutPrev} AND "updatedAt" < ${acqCut}`,
+    ]);
+
+    const acqCur = {
+      botStarts: n(botStartsCur[0]),
+      miniappOpens: n(miniappOpensCur[0]),
+      newUsers: n(newUsersCur[0]),
+      guestOpens: n(guestEventsCur[0]),
+      firstWishlist: n(firstWlCur[0]),
+      firstWish: n(firstWishCur[0]),
+      ownersShared: n(ownersSharedCur[0]),
+      shareLinksGenerated: n(shareGenCur[0]),
+    };
+    const acqPrev = {
+      botStarts: n(botStartsPrev[0]),
+      miniappOpens: n(miniappOpensPrev[0]),
+      newUsers: n(newUsersPrev[0]),
+      guestOpens: n(guestEventsPrev[0]),
+      firstWishlist: n(firstWlPrev[0]),
+      firstWish: n(firstWishPrev[0]),
+      ownersShared: n(ownersSharedPrev[0]),
+      shareLinksGenerated: n(shareGenPrev[0]),
+    };
+
+    const pct = (num: number, den: number) => den > 0 ? Math.round((num / den) * 1000) / 10 : null;
+
     return res.json({
       overview: {
         totalUsers,
@@ -6705,6 +6778,26 @@ tgRouter.get(
         scope: localeScope,
         total: segTotal,
         segments,
+      },
+      acquisition: {
+        period: acqPeriod,
+        current: acqCur,
+        previous: acqPrev,
+        conversions: {
+          startToFirstOpen: pct(acqCur.miniappOpens, acqCur.botStarts),
+          firstOpenToNewUser: pct(acqCur.newUsers, acqCur.miniappOpens),
+          ownerShareRate: pct(acqCur.ownersShared, acqCur.newUsers || totalUsers),
+          newUserToWishlist: pct(acqCur.firstWishlist, acqCur.newUsers),
+          newUserToWish: pct(acqCur.firstWish, acqCur.newUsers),
+          guestOpenToShare: pct(acqCur.guestOpens, acqCur.shareLinksGenerated),
+        },
+        shareFunnel: {
+          ownersShared: n(withShareRows[0]),
+          shareLinksGenerated: n(sharedLinkOpensRows[0]),
+          wishlistsWithOpens: n(wishlistsWithLinkOpenRows[0]),
+          usersReachedViaLink: n(usersWithLinkOpenRows[0]),
+          usersWithReservation: n(withReservationRows[0]),
+        },
       },
       generatedAt: now.toISOString(),
     });

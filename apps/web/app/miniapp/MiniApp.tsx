@@ -430,6 +430,32 @@ type GodStats = {
     total: number;
     segments: { segmentKey: string; segmentLabel: string; usersCount: number; sharePercent: number }[];
   };
+  acquisition?: {
+    period: string;
+    current: {
+      botStarts: number; miniappOpens: number; newUsers: number;
+      guestOpens: number; firstWishlist: number; firstWish: number;
+      ownersShared: number; shareLinksGenerated: number;
+    };
+    previous: {
+      botStarts: number; miniappOpens: number; newUsers: number;
+      guestOpens: number; firstWishlist: number; firstWish: number;
+      ownersShared: number; shareLinksGenerated: number;
+    };
+    conversions: {
+      startToFirstOpen: number | null;
+      firstOpenToNewUser: number | null;
+      ownerShareRate: number | null;
+      newUserToWishlist: number | null;
+      newUserToWish: number | null;
+      guestOpenToShare: number | null;
+    };
+    shareFunnel: {
+      ownersShared: number; shareLinksGenerated: number;
+      wishlistsWithOpens: number; usersReachedViaLink: number;
+      usersWithReservation: number;
+    };
+  };
   generatedAt: string;
 };
 
@@ -2931,6 +2957,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [retentionLoading, setRetentionLoading] = useState(false);
   const [retentionPeriod, setRetentionPeriod] = useState(30);
   const [localeSegmentScope, setLocaleSegmentScope] = useState<'active30d' | 'new7d' | 'all'>('active30d');
+  const [acqPeriod, setAcqPeriod] = useState<'24h' | '7d' | '30d'>('7d');
   const godStatsRefreshIdRef = useRef(0);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -3586,13 +3613,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } catch {}
   }, [tgFetch]);
 
-  const loadGodStats = useCallback(async (scope?: string) => {
+  const loadGodStats = useCallback(async (scope?: string, periodOverride?: string) => {
     // Race condition guard: only apply state from the latest request
     const myId = ++godStatsRefreshIdRef.current;
     setGodStatsLoading(true);
     setGodStatsError(false);
     try {
-      const qs = scope ? `?localeScope=${scope}` : '';
+      const qs = `?localeScope=${scope || 'active30d'}&period=${periodOverride || acqPeriod}`;
       const r = await tgFetch(`/tg/me/god-stats${qs}`);
       if (myId !== godStatsRefreshIdRef.current) return; // stale response — discard
       if (r.ok) {
@@ -3608,7 +3635,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } finally {
       if (myId === godStatsRefreshIdRef.current) setGodStatsLoading(false);
     }
-  }, [tgFetch]);
+  }, [tgFetch, acqPeriod]);
 
   // --- Owner API calls
   const loadWishlists = useCallback(async () => {
@@ -11658,6 +11685,96 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                   );
                                 })}
                               </div>
+
+                              {/* ── ACQUISITION / GROWTH ── */}
+                              {godStats.acquisition && (() => {
+                                const acq = godStats.acquisition;
+                                const c = acq.current;
+                                const p = acq.previous;
+
+                                const delta = (cur: number, prev: number) => {
+                                  if (prev === 0 && cur === 0) return { abs: 0, pct: 0, label: '—' };
+                                  if (prev === 0) return { abs: cur, pct: 100, label: `+${cur}` };
+                                  const d = cur - prev;
+                                  const pctVal = Math.round((d / prev) * 100);
+                                  return { abs: d, pct: pctVal, label: `${d >= 0 ? '+' : ''}${d} (${pctVal >= 0 ? '+' : ''}${pctVal}%)` };
+                                };
+
+                                const DeltaRow = ({ label, cur, prev }: { label: string; cur: number; prev: number }) => {
+                                  const d = delta(cur, prev);
+                                  const color = d.abs > 0 ? C.green : d.abs < 0 ? (d.pct <= -30 ? C.red : C.orange) : C.textMuted;
+                                  return (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
+                                      <span style={{ fontSize: 12, color: C.textSec }}>{label}</span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{cur}</span>
+                                        <span style={{ fontSize: 11, color, fontWeight: 600, minWidth: 70, textAlign: 'right' }}>{d.label}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                };
+
+                                return (
+                                  <div style={{ marginTop: 16 }}>
+                                    {/* Period selector */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: 1 }}>Acquisition</div>
+                                      <div style={{ display: 'flex', gap: 2, background: C.bg, borderRadius: 6, padding: 2 }}>
+                                        {(['24h', '7d', '30d'] as const).map(pd => (
+                                          <button key={pd} onClick={() => { setAcqPeriod(pd); loadGodStats(undefined, pd); }} style={{
+                                            padding: '3px 10px', borderRadius: 4, border: 'none', fontSize: 11, fontWeight: 600,
+                                            cursor: 'pointer', background: acqPeriod === pd ? C.accent : 'transparent',
+                                            color: acqPeriod === pd ? '#fff' : C.textMuted,
+                                          }}>{pd}</button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div style={{ background: C.card, borderRadius: 12, padding: '10px 12px' }}>
+                                      <DeltaRow label="/start" cur={c.botStarts} prev={p.botStarts} />
+                                      <DeltaRow label="Miniapp opens" cur={c.miniappOpens} prev={p.miniappOpens} />
+                                      <DeltaRow label="New users" cur={c.newUsers} prev={p.newUsers} />
+                                      <DeltaRow label="First wishlist" cur={c.firstWishlist} prev={p.firstWishlist} />
+                                      <DeltaRow label="First wish" cur={c.firstWish} prev={p.firstWish} />
+                                      <DeltaRow label="Owners shared" cur={c.ownersShared} prev={p.ownersShared} />
+                                      <DeltaRow label="Guest opens" cur={c.guestOpens} prev={p.guestOpens} />
+                                    </div>
+
+                                    {/* Conversions */}
+                                    <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Conversions</div>
+                                      {[
+                                        { label: '/start \u2192 miniapp', val: acq.conversions.startToFirstOpen },
+                                        { label: 'open \u2192 new user', val: acq.conversions.firstOpenToNewUser },
+                                        { label: 'new \u2192 wishlist', val: acq.conversions.newUserToWishlist },
+                                        { label: 'new \u2192 wish', val: acq.conversions.newUserToWish },
+                                        { label: 'share \u2192 guest open', val: acq.conversions.guestOpenToShare },
+                                      ].map(({ label, val }) => (
+                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
+                                          <span style={{ fontSize: 12, color: C.textSec }}>{label}</span>
+                                          <span style={{ fontSize: 12, fontWeight: 600, color: val != null ? C.text : C.textMuted }}>{val != null ? `${val}%` : '\u2014'}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {/* Share Funnel (all-time) */}
+                                    <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Share Funnel (all-time)</div>
+                                      {[
+                                        { label: 'Owners shared', val: acq.shareFunnel.ownersShared },
+                                        { label: 'Total link opens', val: acq.shareFunnel.shareLinksGenerated },
+                                        { label: 'Wishlists with opens', val: acq.shareFunnel.wishlistsWithOpens },
+                                        { label: 'Users reached via link', val: acq.shareFunnel.usersReachedViaLink },
+                                        { label: 'Users with reservation', val: acq.shareFunnel.usersWithReservation },
+                                      ].map(({ label, val }) => (
+                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
+                                          <span style={{ fontSize: 12, color: C.textSec }}>{label}</span>
+                                          <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{val}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
 
                               {/* ── Детали (expandable) ── */}
                               <div style={{ marginBottom: 8 }}>
