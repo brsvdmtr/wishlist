@@ -6578,8 +6578,10 @@ tgRouter.get(
     const testIds = testUsers.map(u => u.id);
     const testTgIds = testUsers.map(u => u.telegramId).filter(Boolean) as string[];
     // SQL exclusion fragments (bot events use telegramId as userId; API events use internal id)
-    const xTg = testTgIds.length > 0 ? Prisma.sql`AND "userId" NOT IN (${Prisma.join(testTgIds)})` : Prisma.sql``;
-    const xId = testIds.length > 0 ? Prisma.sql`AND "userId" NOT IN (${Prisma.join(testIds)})` : Prisma.sql``;
+    // NULL-safe: "userId" can be NULL for anonymous events (e.g. guest.view_opened).
+    // Plain NOT IN excludes NULLs (SQL: NULL NOT IN (...) → UNKNOWN → row excluded).
+    const xTg = testTgIds.length > 0 ? Prisma.sql`AND ("userId" IS NULL OR "userId" NOT IN (${Prisma.join(testTgIds)}))` : Prisma.sql``;
+    const xId = testIds.length > 0 ? Prisma.sql`AND ("userId" IS NULL OR "userId" NOT IN (${Prisma.join(testIds)}))` : Prisma.sql``;
     const xUser = testIds.length > 0 ? Prisma.sql`AND id NOT IN (${Prisma.join(testIds)})` : Prisma.sql``;
     const xOwner = testIds.length > 0 ? Prisma.sql`AND "ownerId" NOT IN (${Prisma.join(testIds)})` : Prisma.sql``;
     const xWOwner = testIds.length > 0 ? Prisma.sql`AND w."ownerId" NOT IN (${Prisma.join(testIds)})` : Prisma.sql``;
@@ -6725,28 +6727,34 @@ tgRouter.get(
     const miniappSince = (miniappFirstEvent as DateRow[])[0]?.first_event ?? null;
     const guestSince = (guestFirstEvent as DateRow[])[0]?.first_event ?? null;
 
+    // Calculate how many days of event data are available within the period
+    const periodDays = acqPeriod === '24h' ? 1 : acqPeriod === '30d' ? 30 : 7;
+    const covDays = (since: Date | null) => {
+      if (!since || since <= acqCut) return periodDays; // full coverage
+      const ms = now.getTime() - since.getTime();
+      return Math.max(0, Math.round(ms / 86_400_000 * 10) / 10);
+    };
+
     const eventCoverage = {
       botStartsFrom: botStartsSince?.toISOString() ?? null,
+      botStartsDays: covDays(botStartsSince),
       miniappOpensFrom: miniappSince?.toISOString() ?? null,
+      miniappOpensDays: covDays(miniappSince),
       guestEventsFrom: guestSince?.toISOString() ?? null,
+      guestEventsDays: covDays(guestSince),
+      periodDays,
     };
 
     // Build data completeness warnings
     const dataWarnings: string[] = [];
     if (botStartsSince && botStartsSince > acqCut) {
-      dataWarnings.push(`Трекинг /start начался ${botStartsSince.toISOString().slice(0, 10)}, данные за период неполные`);
-    }
-    if (miniappSince && miniappSince > acqCut) {
-      dataWarnings.push(`Трекинг miniapp opens начался ${miniappSince.toISOString().slice(0, 10)}, данные неполные`);
-    }
-    if (guestSince && guestSince > acqCut) {
-      dataWarnings.push(`Трекинг guest events начался ${guestSince.toISOString().slice(0, 10)}, данные неполные`);
+      dataWarnings.push(`Трекинг событий начался ${botStartsSince.toISOString().slice(0, 10)} — покрывает ${covDays(botStartsSince)}д из ${periodDays}д`);
     }
     // Sanity check: if new_users >> miniapp_opens, something is wrong with event coverage
     if (acqCur.newUsers > 0 && acqCur.miniappOpens > 0 && acqCur.newUsers > acqCur.miniappOpens * 3) {
-      dataWarnings.push(`Аномалия: новых (${acqCur.newUsers}) >> miniapp opens (${acqCur.miniappOpens})`);
+      dataWarnings.push(`Новых (${acqCur.newUsers}) >> miniapp opens (${acqCur.miniappOpens}) — события покрывают не весь период`);
     }
-    const dataNote = dataWarnings.length > 0 ? dataWarnings.join('; ') : null;
+    const dataNote = dataWarnings.length > 0 ? dataWarnings.join('. ') : null;
 
     // Auto-diagnosis: detect significant drops/spikes
     const diagMetrics = [
@@ -6917,7 +6925,7 @@ tgRouter.get(
         sources: [
           { key: 'deep_link', label: 'По ссылке / инвайту', newUsers: srcBuckets.deep_link.length, withWishlist: srcWlDeep, withWish: srcWishDeep },
           { key: 'direct', label: 'Прямой /start', newUsers: srcBuckets.direct.length, withWishlist: srcWlDirect, withWish: srcWishDirect },
-          { key: 'unknown', label: 'Неизвестно', newUsers: srcBuckets.unknown.length, withWishlist: srcWlUnknown, withWish: srcWishUnknown },
+          { key: 'unknown', label: botStartsSince && botStartsSince > acqCut ? `Без атрибуции (до ${botStartsSince.toISOString().slice(0, 10)})` : 'Неизвестно', newUsers: srcBuckets.unknown.length, withWishlist: srcWlUnknown, withWish: srcWishUnknown },
         ].filter(s => s.newUsers > 0),
         conversions: {
           startToOpen: pct(acqCur.miniappOpens, acqCur.botStarts),      // both event-based, same coverage
