@@ -474,7 +474,8 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall';
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall'
+| 'first-share-prompt';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -3035,6 +3036,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   // Track which screen the user came from before opening settings (for correct back navigation)
   const [settingsOriginScreen, setSettingsOriginScreen] = useState<Screen>('my-wishlists');
+  const [firstSharePromptData, setFirstSharePromptData] = useState<{ wishlistId: string; wishlistTitle: string } | null>(null);
+  const firstSharePromptShownRef = useRef(false);
   const [faqOpenId, setFaqOpenId] = useState<number | null>(null);
   const [changelogOpenId, setChangelogOpenId] = useState<string | null>(null);
   const [changelogSeenId, setChangelogSeenId] = useState<string>(() => {
@@ -5033,6 +5036,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('gift-notes');
     } else if (screen === 'share') {
       setScreen('wishlist-detail');
+    } else if (screen === 'first-share-prompt') {
+      trackEvent('first_share_prompt_dismissed', { wishlistId: firstSharePromptData?.wishlistId, entry: 'first_regular_wish' });
+      setScreen('wishlist-detail');
     } else if (screen === 'archive') {
       if (archiveSelectMode) {
         setArchiveSelectMode(false);
@@ -5043,7 +5049,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setScreen('wishlist-detail');
       }
     }
-  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected]);
+  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData]);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -6096,7 +6102,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           return;
         }
         if (!res.ok) { pushToast(t('toast_add_error', locale), 'error'); return; }
-        const json = await res.json() as { item: Item };
+        const json = await res.json() as { item: Item; showFirstSharePrompt?: boolean; promptData?: { wishlistId: string; wishlistTitle: string } };
 
         if (itemPhotoFile) {
           setPhotoUploading(true);
@@ -6108,6 +6114,13 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setWishlists((prev) => prev.map((wl) => wl.id === currentWl!.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
         await loadItems(currentWl!.id);
         pushToast(t('item_added', locale), 'success');
+
+        // First Share Prompt: navigate to prompt if this was the first real regular wish
+        if (json.showFirstSharePrompt && json.promptData) {
+          setFirstSharePromptData(json.promptData);
+          firstSharePromptShownRef.current = false;
+          setScreen('first-share-prompt');
+        }
       }
       blurActiveField();
       setShowItemForm(false);
@@ -18942,6 +18955,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'onboarding-create-wishlist' && onboardingVariant === 'v2_try' && renderOnboardingCreateWishlist()}
       {screen === 'onboarding-share' && onboardingVariant === 'v2_try' && renderOnboardingShare()}
 
+      {/* ── FIRST SHARE PROMPT ── */}
+      {screen === 'first-share-prompt' && firstSharePromptData && (
+        <FirstSharePromptScreen
+          data={firstSharePromptData}
+          shownRef={firstSharePromptShownRef}
+          locale={locale}
+          tgUser={tgUser}
+          tgFetch={tgFetch}
+          buildTgDeepLink={buildTgDeepLink}
+          trackEvent={trackEvent}
+          onSkip={() => {
+            trackEvent('first_share_prompt_skip', { wishlistId: firstSharePromptData.wishlistId, entry: 'first_regular_wish' });
+            setScreen('wishlist-detail');
+          }}
+        />
+      )}
+
       {/* ── PUBLIC PROFILE SCREEN ── */}
       {screen === 'public-profile' && (() => {
         const pp = publicProfileData;
@@ -19062,6 +19092,150 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 // ─────────────────────────────────────────────────
 // SHARE SCREEN (extracted to keep main component tidy)
 // ─────────────────────────────────────────────────
+
+function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, buildTgDeepLink, trackEvent, onSkip }: {
+  data: { wishlistId: string; wishlistTitle: string };
+  shownRef: React.MutableRefObject<boolean>;
+  locale: Locale;
+  tgUser: TgUser | null;
+  tgFetch: (path: string, opts?: RequestInit) => Promise<Response>;
+  buildTgDeepLink: (payload?: string) => string | null;
+  trackEvent: (event: string, props?: Record<string, unknown>) => void;
+  onSkip: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [tokenLoading, setTokenLoading] = useState(true);
+
+  useEffect(() => {
+    if (!shownRef.current) {
+      shownRef.current = true;
+      trackEvent('first_share_prompt_shown', { wishlistId: data.wishlistId, entry: 'first_regular_wish' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await tgFetch(`/tg/wishlists/${data.wishlistId}/share-token`, { method: 'POST' });
+        if (!cancelled && r.ok) {
+          const d = await r.json() as { shareToken: string };
+          setShareToken(d.shareToken);
+        }
+      } catch { /* fall back to slug */ }
+      finally { if (!cancelled) setTokenLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.wishlistId]);
+
+  const shareLink = buildTgDeepLink(shareToken ?? undefined);
+  const disabled = tokenLoading || !shareLink;
+
+  const copy = async () => {
+    if (!shareLink) return;
+    trackEvent('first_share_prompt_copy_link', { wishlistId: data.wishlistId, entry: 'first_regular_wish' });
+    try {
+      await navigator.clipboard.writeText(shareLink);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = shareLink;
+      ta.style.cssText = 'position:fixed;left:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand('copy'); } catch { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareTg = () => {
+    if (!shareLink) return;
+    trackEvent('first_share_prompt_share_telegram', { wishlistId: data.wishlistId, entry: 'first_regular_wish' });
+    const ownerName = tgUser?.first_name ?? '';
+    const intro = ownerName ? `${t('share_intro', locale, { name: ownerName })}\n\n` : '';
+    const shareText = `${intro}\u{1f381} ${data.wishlistTitle}\n${t('share_cta', locale)}`;
+    const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
+    try {
+      window.Telegram?.WebApp.openTelegramLink(tgShareUrl);
+    } catch {
+      window.open(tgShareUrl, '_blank');
+    }
+  };
+
+  const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
+  const C_fsp = { accent: '#7C6AFF', text: '#F4F4F6', textSec: '#9CA3AF', textMuted: '#6B7280', bg: '#1B1B1F', surface: '#26262C', border: 'rgba(255,255,255,0.06)', accentSoft: 'rgba(124,106,255,0.12)', green: '#34D399' };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: C_fsp.bg, zIndex: 100,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      padding: '24px 20px', fontFamily: font, color: C_fsp.text,
+    }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>{'\u{1f381}'}</div>
+      <h1 style={{ fontSize: 22, fontWeight: 700, textAlign: 'center', margin: '0 0 8px' }}>
+        {t('first_share_prompt_title', locale)}
+      </h1>
+      <p style={{ fontSize: 15, color: C_fsp.textSec, textAlign: 'center', margin: '0 0 32px', lineHeight: 1.5, maxWidth: 320 }}>
+        {t('first_share_prompt_subtitle', locale)}
+      </p>
+
+      <div style={{
+        background: C_fsp.surface, borderRadius: 16, padding: '16px 20px', width: '100%', maxWidth: 340,
+        marginBottom: 32, border: `1px solid ${C_fsp.border}`,
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>{data.wishlistTitle}</div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 340 }}>
+        <button
+          onClick={shareTg}
+          disabled={disabled}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none',
+            fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+            transition: 'all 0.15s', width: '100%',
+            background: C_fsp.accent, color: '#fff',
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          {'\u2708\uFE0F ' + t('first_share_prompt_share_tg', locale)}
+        </button>
+        <button
+          onClick={copy}
+          disabled={disabled}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none',
+            fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+            transition: 'all 0.15s', width: '100%',
+            background: C_fsp.accentSoft, color: C_fsp.accent,
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          {copied ? ('\u2705 ' + t('share_copied', locale)) : ('\u{1f4cb} ' + t('first_share_prompt_copy_link', locale))}
+        </button>
+        <button
+          onClick={onSkip}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            padding: '10px 16px', borderRadius: 14, border: 'none',
+            fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+            transition: 'all 0.15s', width: '100%',
+            background: 'transparent', color: C_fsp.textMuted, marginTop: 8,
+          }}
+        >
+          {t('first_share_prompt_later', locale)}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, onCopied, buildTgDeepLink, isPro, locale, tgFetch }: {
   wishlist: Wishlist;

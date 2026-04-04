@@ -1,0 +1,1 @@
+ALTER TABLE "UserProfile" ADD COLUMN "firstWishSharePromptShown" BOOLEAN NOT NULL DEFAULT FALSE;

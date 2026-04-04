@@ -1603,6 +1603,7 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
     event.startsWith('onboarding_') ||
     event.startsWith('demo_item_') ||
     event.startsWith('gift_') ||
+    event.startsWith('first_share_prompt_') ||
     event.startsWith('error:');
   if (shouldPersist && userId) {
     prisma.analyticsEvent
@@ -3296,7 +3297,7 @@ tgRouter.post(
 
     const user = await getOrCreateTgUser(req.tgUser!);
     const ent = await getEffectiveEntitlements(user.id);
-    const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true, type: true } });
+    const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true, type: true, title: true } });
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
@@ -3342,6 +3343,26 @@ tgRouter.post(
       platform: 'miniapp', isFirstItem: totalUserItems === 1,
     });
     if (totalUserItems === 1) trackEvent('first_item_created', user.id, { itemId: item.id, wishlistType: wishlist.type, source: 'manual', platform: 'miniapp' });
+
+    // First Share Prompt: is this the user's first real item in a REGULAR wishlist?
+    let showFirstSharePrompt = false;
+    if (wishlist.type === 'REGULAR') {
+      const prevRealItems = await prisma.item.count({
+        where: {
+          wishlist: { ownerId: user.id, type: 'REGULAR' },
+          isDemo: false,
+          status: { not: 'DELETED' },
+          id: { not: item.id },
+        },
+      });
+      if (prevRealItems === 0) {
+        const updated = await prisma.userProfile.updateMany({
+          where: { userId: user.id, firstWishSharePromptShown: false },
+          data: { firstWishSharePromptShown: true },
+        });
+        showFirstSharePrompt = updated.count > 0;
+      }
+    }
 
     trackAnalyticsEvent({
       event: 'wish.created',
@@ -3398,7 +3419,13 @@ tgRouter.post(
       await completeOnboarding(user.id, reason);
     })();
 
-    return res.status(201).json({ item: mapTgItem(item) });
+    return res.status(201).json({
+      item: mapTgItem(item),
+      ...(showFirstSharePrompt && {
+        showFirstSharePrompt: true,
+        promptData: { wishlistId, wishlistTitle: wishlist.title },
+      }),
+    });
   }),
 );
 

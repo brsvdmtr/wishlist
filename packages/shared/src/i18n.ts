@@ -710,6 +710,13 @@ const ru: Dict = {
   share_cta: 'Посмотри, что можно подарить 👇',
   share_text: '🎁 {{title}}\nПосмотри, что можно подарить 👇',
 
+  // ── First Share Prompt ────────────────────────────────────────────────────
+  first_share_prompt_title: 'Первое желание сохранено!',
+  first_share_prompt_subtitle: 'Теперь можно отправить вишлист друзьям, чтобы они знали, что тебе подарить',
+  first_share_prompt_share_tg: 'Поделиться в Telegram',
+  first_share_prompt_copy_link: 'Скопировать ссылку',
+  first_share_prompt_later: 'Позже',
+
   // ── Price filters ─────────────────────────────────────────────────────────
   filter_all: 'Все',
   filter_under_3k: 'До 3 000 ₽',
@@ -2311,6 +2318,13 @@ const en: Dict = {
   share_intro: '{{name}} is sharing their wishlist:',
   share_cta: 'See what you can gift 👇',
   share_text: '🎁 {{title}}\nSee what you can gift 👇',
+
+  // ── First Share Prompt ────────────────────────────────────────────────────
+  first_share_prompt_title: 'Your first wish is saved!',
+  first_share_prompt_subtitle: 'Send your wishlist to friends so they know what to gift you',
+  first_share_prompt_share_tg: 'Share in Telegram',
+  first_share_prompt_copy_link: 'Copy link',
+  first_share_prompt_later: 'Later',
 
   // ── Price filters ─────────────────────────────────────────────────────────
   filter_all: 'All',

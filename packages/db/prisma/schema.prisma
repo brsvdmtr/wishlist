@@ -391,6 +391,9 @@ model UserProfile {
   newWishlistPosition String  @default("bottom")
   cardDisplayMode     String  @default("auto")  // auto | showcase | compact
 
+  // Growth prompts
+  firstWishSharePromptShown Boolean @default(false)
+
   // Support
   supportId String? @unique
 
