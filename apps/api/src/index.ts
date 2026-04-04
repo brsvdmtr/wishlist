@@ -6937,8 +6937,8 @@ tgRouter.get(
           newToWishlist: pct(acqCur.firstWishlist, acqCur.newUsers),     // both entity-derived
           newToWish: pct(acqCur.firstWish, acqCur.newUsers),            // both entity-derived
           wishlistToShare: pct(acqCur.ownersShared, withWishlist || 1), // both entity-derived
-          shareToGuestOpen: safePct(acqCur.guestUsersUnique, acqCur.shareLinksGenerated), // mixed: event/entity
-          guestToReserve: safePct(acqCur.reservers, acqCur.guestUsersUnique),             // mixed: entity/event
+          shareToGuestOpen: pct(acqCur.guestOpens, acqCur.shareLinksGenerated), // share links → guest views; can be >100% (one link opened multiple times)
+          guestToReserve: acqCur.guestOpens > 0 ? safePct(acqCur.reservers, acqCur.guestOpens) : null, // guest views → reservation
         },
         eventCoverage,
         dataNote,

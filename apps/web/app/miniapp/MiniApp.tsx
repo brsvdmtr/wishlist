@@ -11869,8 +11869,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                         {anyEventIncomplete && <div style={{ position: 'absolute', top: 8, right: 10, fontSize: 8, fontWeight: 700, color: '#FBBF24', background: 'rgba(251,191,36,0.12)', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: 0.5 }}>partial</div>}
                                         <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Конверсии (события)</div>
                                         <CRow label={'/start \u2192 miniapp'} val={acq.conversions.startToOpen} />
-                                        <CRow label={'Шеринг \u2192 гостевой'} val={acq.conversions.shareToGuestOpen} />
-                                        <CRow label={'Гость \u2192 бронь'} val={acq.conversions.guestToReserve} />
+                                        <CRow label={'Ссылка \u2192 просмотр'} val={acq.conversions.shareToGuestOpen} />
+                                        <CRow label={'Просмотр \u2192 бронь'} val={acq.conversions.guestToReserve} />
                                       </div>
                                     )}
 
