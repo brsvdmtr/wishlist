@@ -5038,6 +5038,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setScreen('wishlist-detail');
     } else if (screen === 'first-share-prompt') {
       trackEvent('first_share_prompt_dismissed', { wishlistId: firstSharePromptData?.wishlistId, entry: 'first_regular_wish' });
+      setFirstSharePromptData(null);
       setScreen('wishlist-detail');
     } else if (screen === 'archive') {
       if (archiveSelectMode) {
@@ -18967,6 +18968,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           trackEvent={trackEvent}
           onSkip={() => {
             trackEvent('first_share_prompt_skip', { wishlistId: firstSharePromptData.wishlistId, entry: 'first_regular_wish' });
+            setFirstSharePromptData(null);
             setScreen('wishlist-detail');
           }}
         />
