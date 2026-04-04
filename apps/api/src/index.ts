@@ -6582,6 +6582,7 @@ tgRouter.get(
     const xId = testIds.length > 0 ? Prisma.sql`AND "userId" NOT IN (${Prisma.join(testIds)})` : Prisma.sql``;
     const xUser = testIds.length > 0 ? Prisma.sql`AND id NOT IN (${Prisma.join(testIds)})` : Prisma.sql``;
     const xOwner = testIds.length > 0 ? Prisma.sql`AND "ownerId" NOT IN (${Prisma.join(testIds)})` : Prisma.sql``;
+    const xWOwner = testIds.length > 0 ? Prisma.sql`AND w."ownerId" NOT IN (${Prisma.join(testIds)})` : Prisma.sql``;
 
     const acqPeriod = (req.query.period as string) || '7d';
     const periodMs = acqPeriod === '24h' ? 86_400_000 : acqPeriod === '30d' ? 30 * 86_400_000 : 7 * 86_400_000;
@@ -6601,6 +6602,7 @@ tgRouter.get(
       shareGenCur, shareGenPrev,
       reserversCur, reserversPrev,
       totalResCur, totalResPrev,
+      botStartsFirstEvent, miniappFirstEvent, guestFirstEvent,
       newUsersListCur,
     ] = await Promise.all([
       // /start unique (bot events: userId=telegramId)
@@ -6618,24 +6620,28 @@ tgRouter.get(
       // Guest opens (unique users)
       prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "userId")::int AS count FROM "AnalyticsEvent" WHERE event = 'guest.view_opened' AND "createdAt" >= ${acqCut} AND "userId" IS NOT NULL ${xId}`,
       prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "userId")::int AS count FROM "AnalyticsEvent" WHERE event = 'guest.view_opened' AND "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut} AND "userId" IS NOT NULL ${xId}`,
-      // First regular wishlist
-      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'first_regular_wishlist_created' AND "createdAt" >= ${acqCut} ${xId}`,
-      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'first_regular_wishlist_created' AND "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut} ${xId}`,
-      // First item
-      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'first_item_created' AND "createdAt" >= ${acqCut} ${xId}`,
-      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'first_item_created' AND "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut} ${xId}`,
+      // First regular wishlist (entity-derived: users whose earliest REGULAR wishlist was created in period)
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM (SELECT "ownerId" FROM "Wishlist" WHERE type = 'REGULAR' ${xOwner} GROUP BY "ownerId" HAVING MIN("createdAt") >= ${acqCut}) _`,
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM (SELECT "ownerId" FROM "Wishlist" WHERE type = 'REGULAR' ${xOwner} GROUP BY "ownerId" HAVING MIN("createdAt") >= ${acqCutPrev} AND MIN("createdAt") < ${acqCut}) _`,
+      // First item in regular wishlist (entity-derived: users whose earliest item was created in period)
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM (SELECT w."ownerId" FROM "Item" i JOIN "Wishlist" w ON i."wishlistId" = w.id WHERE i.status != 'DELETED' AND w.type = 'REGULAR' ${xWOwner} GROUP BY w."ownerId" HAVING MIN(i."createdAt") >= ${acqCut}) _`,
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM (SELECT w."ownerId" FROM "Item" i JOIN "Wishlist" w ON i."wishlistId" = w.id WHERE i.status != 'DELETED' AND w.type = 'REGULAR' ${xWOwner} GROUP BY w."ownerId" HAVING MIN(i."createdAt") >= ${acqCutPrev} AND MIN(i."createdAt") < ${acqCut}) _`,
       // Owners shared
       prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist" WHERE "shareToken" IS NOT NULL AND type = 'REGULAR' AND "updatedAt" >= ${acqCut} ${xOwner}`,
       prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist" WHERE "shareToken" IS NOT NULL AND type = 'REGULAR' AND "updatedAt" >= ${acqCutPrev} AND "updatedAt" < ${acqCut} ${xOwner}`,
       // Share links generated
       prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "Wishlist" WHERE "shareToken" IS NOT NULL AND type = 'REGULAR' AND "updatedAt" >= ${acqCut} ${xOwner}`,
       prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "Wishlist" WHERE "shareToken" IS NOT NULL AND type = 'REGULAR' AND "updatedAt" >= ${acqCutPrev} AND "updatedAt" < ${acqCut} ${xOwner}`,
-      // Unique reservers
-      prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "userId")::int AS count FROM "AnalyticsEvent" WHERE event = 'reservation.succeeded' AND "createdAt" >= ${acqCut} AND "userId" IS NOT NULL ${xId}`,
-      prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "userId")::int AS count FROM "AnalyticsEvent" WHERE event = 'reservation.succeeded' AND "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut} AND "userId" IS NOT NULL ${xId}`,
-      // Total reservations
-      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'reservation.succeeded' AND "createdAt" >= ${acqCut} ${xId}`,
-      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "AnalyticsEvent" WHERE event = 'reservation.succeeded' AND "createdAt" >= ${acqCutPrev} AND "createdAt" < ${acqCut} ${xId}`,
+      // Unique reservers (entity-derived from ReservationEvent table, exclude test-user wishlists)
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT re."actorHash")::int AS count FROM "ReservationEvent" re JOIN "Item" i ON re."itemId" = i.id JOIN "Wishlist" w ON i."wishlistId" = w.id WHERE re.type = 'RESERVED' AND re."createdAt" >= ${acqCut} ${xWOwner}`,
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT re."actorHash")::int AS count FROM "ReservationEvent" re JOIN "Item" i ON re."itemId" = i.id JOIN "Wishlist" w ON i."wishlistId" = w.id WHERE re.type = 'RESERVED' AND re."createdAt" >= ${acqCutPrev} AND re."createdAt" < ${acqCut} ${xWOwner}`,
+      // Total reservations (entity-derived from ReservationEvent table)
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "ReservationEvent" re JOIN "Item" i ON re."itemId" = i.id JOIN "Wishlist" w ON i."wishlistId" = w.id WHERE re.type = 'RESERVED' AND re."createdAt" >= ${acqCut} ${xWOwner}`,
+      prisma.$queryRaw<CountRow[]>`SELECT COUNT(*)::int AS count FROM "ReservationEvent" re JOIN "Item" i ON re."itemId" = i.id JOIN "Wishlist" w ON i."wishlistId" = w.id WHERE re.type = 'RESERVED' AND re."createdAt" >= ${acqCutPrev} AND re."createdAt" < ${acqCut} ${xWOwner}`,
+      // Event coverage detection (earliest event per type — for data completeness warnings)
+      prisma.$queryRaw<{ first_event: Date | null }[]>`SELECT MIN("createdAt") AS first_event FROM "AnalyticsEvent" WHERE event = 'bot.start_received'`,
+      prisma.$queryRaw<{ first_event: Date | null }[]>`SELECT MIN("createdAt") AS first_event FROM "AnalyticsEvent" WHERE event = 'miniapp.bootstrap_succeeded'`,
+      prisma.$queryRaw<{ first_event: Date | null }[]>`SELECT MIN("createdAt") AS first_event FROM "AnalyticsEvent" WHERE event = 'guest.view_opened'`,
       // New users list for source bucket classification
       prisma.user.findMany({
         where: { createdAt: { gte: acqCut }, ...(testIds.length > 0 ? { id: { notIn: testIds } } : {}) },
@@ -6665,14 +6671,21 @@ tgRouter.get(
       }
     }
 
-    // Phase 3: Per-source first_wishlist/first_wish counts (parallel)
+    // Phase 3: Per-source first_wishlist/first_wish counts (entity-derived, parallel)
+    // Since all users in source buckets were created in the period, any wishlist/item they have is their first.
+    const srcCount = async (ids: string[], table: 'wishlist' | 'item'): Promise<number> => {
+      if (ids.length === 0) return 0;
+      if (table === 'wishlist') {
+        const r = await prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT "ownerId")::int AS count FROM "Wishlist" WHERE type = 'REGULAR' AND "ownerId" IN (${Prisma.join(ids)})`;
+        return n(r[0]);
+      }
+      const r = await prisma.$queryRaw<CountRow[]>`SELECT COUNT(DISTINCT w."ownerId")::int AS count FROM "Item" i JOIN "Wishlist" w ON i."wishlistId" = w.id WHERE i.status != 'DELETED' AND w.type = 'REGULAR' AND w."ownerId" IN (${Prisma.join(ids)})`;
+      return n(r[0]);
+    };
     const [srcWlDeep, srcWishDeep, srcWlDirect, srcWishDirect, srcWlUnknown, srcWishUnknown] = await Promise.all([
-      srcBuckets.deep_link.length > 0 ? prisma.analyticsEvent.count({ where: { event: 'first_regular_wishlist_created', userId: { in: srcBuckets.deep_link } } }) : 0,
-      srcBuckets.deep_link.length > 0 ? prisma.analyticsEvent.count({ where: { event: 'first_item_created', userId: { in: srcBuckets.deep_link } } }) : 0,
-      srcBuckets.direct.length > 0 ? prisma.analyticsEvent.count({ where: { event: 'first_regular_wishlist_created', userId: { in: srcBuckets.direct } } }) : 0,
-      srcBuckets.direct.length > 0 ? prisma.analyticsEvent.count({ where: { event: 'first_item_created', userId: { in: srcBuckets.direct } } }) : 0,
-      srcBuckets.unknown.length > 0 ? prisma.analyticsEvent.count({ where: { event: 'first_regular_wishlist_created', userId: { in: srcBuckets.unknown } } }) : 0,
-      srcBuckets.unknown.length > 0 ? prisma.analyticsEvent.count({ where: { event: 'first_item_created', userId: { in: srcBuckets.unknown } } }) : 0,
+      srcCount(srcBuckets.deep_link, 'wishlist'), srcCount(srcBuckets.deep_link, 'item'),
+      srcCount(srcBuckets.direct, 'wishlist'), srcCount(srcBuckets.direct, 'item'),
+      srcCount(srcBuckets.unknown, 'wishlist'), srcCount(srcBuckets.unknown, 'item'),
     ]);
 
     const acqCur = {
@@ -6703,6 +6716,37 @@ tgRouter.get(
     };
 
     const pct = (num: number, den: number) => den > 0 ? Math.round((num / den) * 1000) / 10 : null;
+    // Safe pct: returns null for absurd conversions (>100%) — indicates data source mismatch
+    const safePct = (num: number, den: number) => { const v = pct(num, den); return v !== null && v > 100 ? null : v; };
+
+    // ── Event coverage detection ─────────────────────────────────────────────
+    type DateRow = { first_event: Date | null };
+    const botStartsSince = (botStartsFirstEvent as DateRow[])[0]?.first_event ?? null;
+    const miniappSince = (miniappFirstEvent as DateRow[])[0]?.first_event ?? null;
+    const guestSince = (guestFirstEvent as DateRow[])[0]?.first_event ?? null;
+
+    const eventCoverage = {
+      botStartsFrom: botStartsSince?.toISOString() ?? null,
+      miniappOpensFrom: miniappSince?.toISOString() ?? null,
+      guestEventsFrom: guestSince?.toISOString() ?? null,
+    };
+
+    // Build data completeness warnings
+    const dataWarnings: string[] = [];
+    if (botStartsSince && botStartsSince > acqCut) {
+      dataWarnings.push(`Трекинг /start начался ${botStartsSince.toISOString().slice(0, 10)}, данные за период неполные`);
+    }
+    if (miniappSince && miniappSince > acqCut) {
+      dataWarnings.push(`Трекинг miniapp opens начался ${miniappSince.toISOString().slice(0, 10)}, данные неполные`);
+    }
+    if (guestSince && guestSince > acqCut) {
+      dataWarnings.push(`Трекинг guest events начался ${guestSince.toISOString().slice(0, 10)}, данные неполные`);
+    }
+    // Sanity check: if new_users >> miniapp_opens, something is wrong with event coverage
+    if (acqCur.newUsers > 0 && acqCur.miniappOpens > 0 && acqCur.newUsers > acqCur.miniappOpens * 3) {
+      dataWarnings.push(`Аномалия: новых (${acqCur.newUsers}) >> miniapp opens (${acqCur.miniappOpens})`);
+    }
+    const dataNote = dataWarnings.length > 0 ? dataWarnings.join('; ') : null;
 
     // Auto-diagnosis: detect significant drops/spikes
     const diagMetrics = [
@@ -6853,7 +6897,7 @@ tgRouter.get(
         usersWithLinkOpenDef: 'users whose wishlist was opened ≥1 time via shared link',
         sharedLinkOpensDef: 'total times a guest opened a shared link (fire-and-forget increment)',
         wishlistsWithLinkOpenDef: 'distinct wishlists with shareOpenCount > 0',
-        reservationDef: 'users whose wishlist items received ≥1 RESERVED event',
+        reservationDef: 'users whose wishlist items received ≥1 RESERVED event (entity-derived from ReservationEvent table)',
         proLimits24hDef: 'feature gate hits in the last 24h — persisted on each hit via trackEvent',
         errors24hDef: '4xx/5xx responses on /tg/* routes (excludes 401); grouped by method+status+route pattern',
         onboardingDef: 'hello_activation started by variant + completed count; source: AnalyticsEvent; window: last 30d',
@@ -6871,18 +6915,20 @@ tgRouter.get(
         current: acqCur,
         previous: acqPrev,
         sources: [
-          { key: 'deep_link', label: 'По ссылке / инвайту', newUsers: srcBuckets.deep_link.length, withWishlist: srcWlDeep as number, withWish: srcWishDeep as number },
-          { key: 'direct', label: 'Прямой /start', newUsers: srcBuckets.direct.length, withWishlist: srcWlDirect as number, withWish: srcWishDirect as number },
-          { key: 'unknown', label: 'Неизвестно', newUsers: srcBuckets.unknown.length, withWishlist: srcWlUnknown as number, withWish: srcWishUnknown as number },
+          { key: 'deep_link', label: 'По ссылке / инвайту', newUsers: srcBuckets.deep_link.length, withWishlist: srcWlDeep, withWish: srcWishDeep },
+          { key: 'direct', label: 'Прямой /start', newUsers: srcBuckets.direct.length, withWishlist: srcWlDirect, withWish: srcWishDirect },
+          { key: 'unknown', label: 'Неизвестно', newUsers: srcBuckets.unknown.length, withWishlist: srcWlUnknown, withWish: srcWishUnknown },
         ].filter(s => s.newUsers > 0),
         conversions: {
-          startToOpen: pct(acqCur.miniappOpens, acqCur.botStarts),
-          newToWishlist: pct(acqCur.firstWishlist, acqCur.newUsers),
-          newToWish: pct(acqCur.firstWish, acqCur.newUsers),
-          wishlistToShare: pct(acqCur.ownersShared, withWishlist || 1),
-          shareToGuestOpen: pct(acqCur.guestUsersUnique, acqCur.shareLinksGenerated),
-          guestToReserve: pct(acqCur.reservers, acqCur.guestUsersUnique),
+          startToOpen: pct(acqCur.miniappOpens, acqCur.botStarts),      // both event-based, same coverage
+          newToWishlist: pct(acqCur.firstWishlist, acqCur.newUsers),     // both entity-derived
+          newToWish: pct(acqCur.firstWish, acqCur.newUsers),            // both entity-derived
+          wishlistToShare: pct(acqCur.ownersShared, withWishlist || 1), // both entity-derived
+          shareToGuestOpen: safePct(acqCur.guestUsersUnique, acqCur.shareLinksGenerated), // mixed: event/entity
+          guestToReserve: safePct(acqCur.reservers, acqCur.guestUsersUnique),             // mixed: entity/event
         },
+        eventCoverage,
+        dataNote,
         diagnosis: { alerts: diagAlerts },
       },
       generatedAt: now.toISOString(),

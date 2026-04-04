@@ -456,6 +456,12 @@ type GodStats = {
       shareToGuestOpen: number | null;
       guestToReserve: number | null;
     };
+    eventCoverage?: {
+      botStartsFrom: string | null;
+      miniappOpensFrom: string | null;
+      guestEventsFrom: string | null;
+    };
+    dataNote?: string | null;
     diagnosis: {
       alerts: { label: string; cur: number; prev: number; deltaPct: number }[];
     };
@@ -11696,6 +11702,15 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                 const c = acq.current;
                                 const p = acq.previous;
 
+                                // Detect if event-based metrics have incomplete coverage for current period
+                                const periodMs = acqPeriod === '24h' ? 86_400_000 : acqPeriod === '30d' ? 30 * 86_400_000 : 7 * 86_400_000;
+                                const periodStart = new Date(Date.now() - periodMs);
+                                const evCov = acq.eventCoverage;
+                                const botIncomplete = evCov?.botStartsFrom ? new Date(evCov.botStartsFrom) > periodStart : false;
+                                const miniIncomplete = evCov?.miniappOpensFrom ? new Date(evCov.miniappOpensFrom) > periodStart : false;
+                                const guestIncomplete = evCov?.guestEventsFrom ? new Date(evCov.guestEventsFrom) > periodStart : false;
+                                const warn = (incomplete: boolean) => incomplete ? ' ⚡' : '';
+
                                 const delta = (cur: number, prev: number) => {
                                   if (prev === 0 && cur === 0) return { abs: 0, pct: 0, label: '—' };
                                   if (prev === 0) return { abs: cur, pct: 100, label: `+${cur}` };
@@ -11744,6 +11759,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                       </div>
                                     </div>
 
+                                    {/* Data completeness warning */}
+                                    {acq.dataNote && (
+                                      <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: '#FBBF24', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{'\u26A1'} Неполные данные</div>
+                                        <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.4 }}>{acq.dataNote}</div>
+                                        {(botIncomplete || miniIncomplete || guestIncomplete) && (
+                                          <div style={{ fontSize: 9, color: C.textMuted, marginTop: 4, opacity: 0.7 }}>
+                                            Метрики с {'\u26A1'} основаны на событиях с неполным покрытием периода
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
                                     {/* Diagnosis alerts */}
                                     {acq.diagnosis.alerts.length > 0 && (
                                       <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
@@ -11759,14 +11787,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                     {/* Growth metrics */}
                                     <div style={{ background: C.card, borderRadius: 12, padding: '10px 12px' }}>
                                       <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Рост</div>
-                                      <DRow label="Запустили /start" cur={c.botStarts} prev={p.botStarts} />
-                                      <DRow label="Открыли miniapp" cur={c.miniappOpens} prev={p.miniappOpens} />
+                                      <DRow label={`Запустили /start${warn(botIncomplete)}`} cur={c.botStarts} prev={p.botStarts} />
+                                      <DRow label={`Открыли miniapp${warn(miniIncomplete)}`} cur={c.miniappOpens} prev={p.miniappOpens} />
                                       <DRow label="Новых пользователей" cur={c.newUsers} prev={p.newUsers} />
                                       <DRow label="Первый вишлист" cur={c.firstWishlist} prev={p.firstWishlist} />
                                       <DRow label="Первое желание" cur={c.firstWish} prev={p.firstWish} />
                                       <DRow label="Поделились ссылкой" cur={c.ownersShared} prev={p.ownersShared} />
-                                      <DRow label="Гостевые просмотры" cur={c.guestOpens} prev={p.guestOpens} />
-                                      <DRow label="Уникальных гостей" cur={c.guestUsersUnique} prev={p.guestUsersUnique} dim />
+                                      <DRow label={`Гостевые просмотры${warn(guestIncomplete)}`} cur={c.guestOpens} prev={p.guestOpens} />
+                                      <DRow label={`Уникальных гостей${warn(guestIncomplete)}`} cur={c.guestUsersUnique} prev={p.guestUsersUnique} dim />
                                       <DRow label="Забронировали" cur={c.reservers} prev={p.reservers} />
                                       <DRow label="Всего броней" cur={c.totalReservations} prev={p.totalReservations} dim />
                                     </div>
@@ -11796,12 +11824,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                     {/* Conversions */}
                                     <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
                                       <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Конверсии</div>
-                                      <CRow label="/start \u2192 miniapp" val={acq.conversions.startToOpen} />
+                                      <CRow label={`/start \u2192 miniapp${(botIncomplete || miniIncomplete) ? ' \u26A1' : ''}`} val={acq.conversions.startToOpen} />
                                       <CRow label="Новый \u2192 вишлист" val={acq.conversions.newToWishlist} />
                                       <CRow label="Новый \u2192 желание" val={acq.conversions.newToWish} />
                                       <CRow label="Вишлист \u2192 шеринг" val={acq.conversions.wishlistToShare} />
-                                      <CRow label="Шеринг \u2192 гостевой" val={acq.conversions.shareToGuestOpen} />
-                                      <CRow label="Гость \u2192 бронь" val={acq.conversions.guestToReserve} />
+                                      <CRow label={`Шеринг \u2192 гостевой${guestIncomplete ? ' \u26A1' : ''}`} val={acq.conversions.shareToGuestOpen} />
+                                      <CRow label={`Гость \u2192 бронь${guestIncomplete ? ' \u26A1' : ''}`} val={acq.conversions.guestToReserve} />
                                     </div>
 
                                     {/* Share funnel (period-based) */}
@@ -11809,7 +11837,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                       <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Воронка шеринга</div>
                                       <DRow label="Поделились" cur={c.ownersShared} prev={p.ownersShared} />
                                       <DRow label="Ссылок создано" cur={c.shareLinksGenerated} prev={p.shareLinksGenerated} />
-                                      <DRow label="Уникальных гостей" cur={c.guestUsersUnique} prev={p.guestUsersUnique} />
+                                      <DRow label={`Уникальных гостей${warn(guestIncomplete)}`} cur={c.guestUsersUnique} prev={p.guestUsersUnique} />
                                       <DRow label="Забронировали" cur={c.reservers} prev={p.reservers} />
                                       <DRow label="Всего броней" cur={c.totalReservations} prev={p.totalReservations} />
                                     </div>
