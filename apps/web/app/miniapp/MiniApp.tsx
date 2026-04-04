@@ -18800,7 +18800,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {([
               { icon: '✨', title: t('onboarding_feature_any_item', locale), desc: t('onboarding_feature_any_item_desc', locale) },
-              { icon: '🔗', title: t('onboarding_feature_share_no_signup', locale), desc: t('onboarding_feature_share_no_signup_desc', locale) },
+              { icon: '🔗', title: t('onboarding_feature_no_signup', locale), desc: t('onboarding_feature_no_signup_desc', locale) },
               { icon: '🎁', title: t('onboarding_feature_no_spoilers', locale), desc: t('onboarding_feature_no_spoilers_desc', locale) },
             ] as { icon: string; title: string; desc: string }[]).map((f, i) => (
               <div key={i} style={{
