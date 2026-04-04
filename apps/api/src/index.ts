@@ -11145,22 +11145,32 @@ setInterval(async () => {
         }
       }
 
-      // Create touch record
-      const touch = await prisma.lifecycleTouch.create({
-        data: {
-          userId: candidate.id,
-          segment,
-          episodeKey,
-          touchNumber: nextTouchNumber,
-          scheduledFor: new Date(),
-          targetAction,
-          offerCode: actuallyOfferPromo ? LIFECYCLE_PROMO_CODE : null,
-          messageKind: actuallyOfferPromo ? 'promo_offer' : (segment === 'S1' || segment === 'S2' ? 'activation' : 'winback'),
-          deepLinkPayload: segment === 'S1' ? 'create_wishlist' : undefined,
+      // Create touch record (upsert to avoid noisy duplicate-key errors in PG logs)
+      const touchData = {
+        userId: candidate.id,
+        segment,
+        episodeKey,
+        touchNumber: nextTouchNumber,
+        scheduledFor: new Date(),
+        targetAction,
+        offerCode: actuallyOfferPromo ? LIFECYCLE_PROMO_CODE : null,
+        messageKind: actuallyOfferPromo ? 'promo_offer' : (segment === 'S1' || segment === 'S2' ? 'activation' : 'winback'),
+        deepLinkPayload: segment === 'S1' ? 'create_wishlist' : undefined,
+      };
+      const touch = await prisma.lifecycleTouch.upsert({
+        where: {
+          userId_episodeKey_touchNumber: {
+            userId: candidate.id,
+            episodeKey,
+            touchNumber: nextTouchNumber,
+          },
         },
-      }).catch(() => null); // skip on unique constraint (already created this touch)
+        create: touchData,
+        update: {},  // already exists — skip, don't overwrite
+      });
 
-      if (!touch) continue;
+      // If already sent, skip sending again
+      if (touch.sentAt) continue;
 
       // Send DM
       const msgText = t(template.i18nKey, locale);
