@@ -531,6 +531,7 @@ if (!token) {
         props: {
           telegramId: ctx.from.id,
           hasStartParam: !!ctx.startPayload,
+          startParam: ctx.startPayload || null,
         },
       },
     }).catch(() => {});

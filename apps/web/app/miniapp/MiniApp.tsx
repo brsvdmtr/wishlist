@@ -432,28 +432,32 @@ type GodStats = {
   };
   acquisition?: {
     period: string;
+    excludedTestUsers: number;
     current: {
       botStarts: number; miniappOpens: number; newUsers: number;
-      guestOpens: number; firstWishlist: number; firstWish: number;
+      guestOpens: number; guestUsersUnique: number;
+      firstWishlist: number; firstWish: number;
       ownersShared: number; shareLinksGenerated: number;
+      reservers: number; totalReservations: number;
     };
     previous: {
       botStarts: number; miniappOpens: number; newUsers: number;
-      guestOpens: number; firstWishlist: number; firstWish: number;
+      guestOpens: number; guestUsersUnique: number;
+      firstWishlist: number; firstWish: number;
       ownersShared: number; shareLinksGenerated: number;
+      reservers: number; totalReservations: number;
     };
+    sources: { key: string; label: string; newUsers: number; withWishlist: number; withWish: number }[];
     conversions: {
-      startToFirstOpen: number | null;
-      firstOpenToNewUser: number | null;
-      ownerShareRate: number | null;
-      newUserToWishlist: number | null;
-      newUserToWish: number | null;
-      guestOpenToShare: number | null;
+      startToOpen: number | null;
+      newToWishlist: number | null;
+      newToWish: number | null;
+      wishlistToShare: number | null;
+      shareToGuestOpen: number | null;
+      guestToReserve: number | null;
     };
-    shareFunnel: {
-      ownersShared: number; shareLinksGenerated: number;
-      wishlistsWithOpens: number; usersReachedViaLink: number;
-      usersWithReservation: number;
+    diagnosis: {
+      alerts: { label: string; cur: number; prev: number; deltaPct: number }[];
     };
   };
   generatedAt: string;
@@ -11686,7 +11690,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                 })}
                               </div>
 
-                              {/* ── ACQUISITION / GROWTH ── */}
+                              {/* ── ПРИВЛЕЧЕНИЕ / ACQUISITION v2 ── */}
                               {godStats.acquisition && (() => {
                                 const acq = godStats.acquisition;
                                 const c = acq.current;
@@ -11700,12 +11704,12 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                   return { abs: d, pct: pctVal, label: `${d >= 0 ? '+' : ''}${d} (${pctVal >= 0 ? '+' : ''}${pctVal}%)` };
                                 };
 
-                                const DeltaRow = ({ label, cur, prev }: { label: string; cur: number; prev: number }) => {
+                                const DRow = ({ label, cur, prev, dim }: { label: string; cur: number; prev: number; dim?: boolean }) => {
                                   const d = delta(cur, prev);
                                   const color = d.abs > 0 ? C.green : d.abs < 0 ? (d.pct <= -30 ? C.red : C.orange) : C.textMuted;
                                   return (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
-                                      <span style={{ fontSize: 12, color: C.textSec }}>{label}</span>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
+                                      <span style={{ fontSize: 12, color: dim ? C.textMuted : C.textSec }}>{label}</span>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                         <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{cur}</span>
                                         <span style={{ fontSize: 11, color, fontWeight: 600, minWidth: 70, textAlign: 'right' }}>{d.label}</span>
@@ -11714,11 +11718,21 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                   );
                                 };
 
+                                const CRow = ({ label, val }: { label: string; val: number | null }) => (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
+                                    <span style={{ fontSize: 12, color: C.textSec }}>{label}</span>
+                                    <span style={{ fontSize: 12, fontWeight: 600, color: val != null ? (val >= 30 ? C.green : val <= 5 ? C.orange : C.text) : C.textMuted }}>{val != null ? `${val}%` : '\u2014'}</span>
+                                  </div>
+                                );
+
                                 return (
                                   <div style={{ marginTop: 16 }}>
-                                    {/* Period selector */}
+                                    {/* Header + period selector */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: 1 }}>Привлечение</div>
+                                      <div>
+                                        <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: 1 }}>Привлечение</div>
+                                        {acq.excludedTestUsers > 0 && <div style={{ fontSize: 9, color: C.textMuted }}>без тестовых ({acq.excludedTestUsers})</div>}
+                                      </div>
                                       <div style={{ display: 'flex', gap: 2, background: C.bg, borderRadius: 6, padding: 2 }}>
                                         {(['24h', '7d', '30d'] as const).map(pd => (
                                           <button key={pd} onClick={() => { setAcqPeriod(pd); loadGodStats(undefined, pd); }} style={{
@@ -11729,48 +11743,75 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                         ))}
                                       </div>
                                     </div>
+
+                                    {/* Diagnosis alerts */}
+                                    {acq.diagnosis.alerts.length > 0 && (
+                                      <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.red, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{'\u26A0'} Диагностика</div>
+                                        {acq.diagnosis.alerts.map((a, i) => (
+                                          <div key={i} style={{ fontSize: 11, color: a.deltaPct < 0 ? C.red : C.green, padding: '2px 0' }}>
+                                            {a.label}: {a.prev} {'\u2192'} {a.cur} <span style={{ opacity: 0.7 }}>({a.deltaPct >= 0 ? '+' : ''}{a.deltaPct}%)</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Growth metrics */}
                                     <div style={{ background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                      <DeltaRow label="Запустили /start" cur={c.botStarts} prev={p.botStarts} />
-                                      <DeltaRow label="Открыли miniapp" cur={c.miniappOpens} prev={p.miniappOpens} />
-                                      <DeltaRow label="Новых пользователей" cur={c.newUsers} prev={p.newUsers} />
-                                      <DeltaRow label="Первый вишлист" cur={c.firstWishlist} prev={p.firstWishlist} />
-                                      <DeltaRow label="Первое желание" cur={c.firstWish} prev={p.firstWish} />
-                                      <DeltaRow label="Поделились ссылкой" cur={c.ownersShared} prev={p.ownersShared} />
-                                      <DeltaRow label="Гостевые просмотры" cur={c.guestOpens} prev={p.guestOpens} />
+                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Рост</div>
+                                      <DRow label="Запустили /start" cur={c.botStarts} prev={p.botStarts} />
+                                      <DRow label="Открыли miniapp" cur={c.miniappOpens} prev={p.miniappOpens} />
+                                      <DRow label="Новых пользователей" cur={c.newUsers} prev={p.newUsers} />
+                                      <DRow label="Первый вишлист" cur={c.firstWishlist} prev={p.firstWishlist} />
+                                      <DRow label="Первое желание" cur={c.firstWish} prev={p.firstWish} />
+                                      <DRow label="Поделились ссылкой" cur={c.ownersShared} prev={p.ownersShared} />
+                                      <DRow label="Гостевые просмотры" cur={c.guestOpens} prev={p.guestOpens} />
+                                      <DRow label="Уникальных гостей" cur={c.guestUsersUnique} prev={p.guestUsersUnique} dim />
+                                      <DRow label="Забронировали" cur={c.reservers} prev={p.reservers} />
+                                      <DRow label="Всего броней" cur={c.totalReservations} prev={p.totalReservations} dim />
                                     </div>
+
+                                    {/* Sources */}
+                                    {acq.sources.length > 0 && (
+                                      <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Источники новых</div>
+                                        {/* Header */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 0 4px', borderBottom: `1px solid ${C.border}` }}>
+                                          <span style={{ fontSize: 10, color: C.textMuted, flex: 1 }}>Источник</span>
+                                          <span style={{ fontSize: 10, color: C.textMuted, width: 40, textAlign: 'right' }}>Нов.</span>
+                                          <span style={{ fontSize: 10, color: C.textMuted, width: 35, textAlign: 'right' }}>Вишл.</span>
+                                          <span style={{ fontSize: 10, color: C.textMuted, width: 35, textAlign: 'right' }}>Жел.</span>
+                                        </div>
+                                        {acq.sources.map(s => (
+                                          <div key={s.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
+                                            <span style={{ fontSize: 11, color: C.textSec, flex: 1 }}>{s.label}</span>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: C.text, width: 40, textAlign: 'right' }}>{s.newUsers}</span>
+                                            <span style={{ fontSize: 11, color: C.textMuted, width: 35, textAlign: 'right' }}>{s.withWishlist}</span>
+                                            <span style={{ fontSize: 11, color: C.textMuted, width: 35, textAlign: 'right' }}>{s.withWish}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
 
                                     {/* Conversions */}
                                     <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Конверсии</div>
-                                      {[
-                                        { label: '/start \u2192 miniapp', val: acq.conversions.startToFirstOpen },
-                                        { label: 'Открытие \u2192 регистрация', val: acq.conversions.firstOpenToNewUser },
-                                        { label: 'Новый \u2192 вишлист', val: acq.conversions.newUserToWishlist },
-                                        { label: 'Новый \u2192 желание', val: acq.conversions.newUserToWish },
-                                        { label: 'Шеринг \u2192 гостевой просмотр', val: acq.conversions.guestOpenToShare },
-                                      ].map(({ label, val }) => (
-                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
-                                          <span style={{ fontSize: 12, color: C.textSec }}>{label}</span>
-                                          <span style={{ fontSize: 12, fontWeight: 600, color: val != null ? C.text : C.textMuted }}>{val != null ? `${val}%` : '\u2014'}</span>
-                                        </div>
-                                      ))}
+                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Конверсии</div>
+                                      <CRow label="/start \u2192 miniapp" val={acq.conversions.startToOpen} />
+                                      <CRow label="Новый \u2192 вишлист" val={acq.conversions.newToWishlist} />
+                                      <CRow label="Новый \u2192 желание" val={acq.conversions.newToWish} />
+                                      <CRow label="Вишлист \u2192 шеринг" val={acq.conversions.wishlistToShare} />
+                                      <CRow label="Шеринг \u2192 гостевой" val={acq.conversions.shareToGuestOpen} />
+                                      <CRow label="Гость \u2192 бронь" val={acq.conversions.guestToReserve} />
                                     </div>
 
-                                    {/* Share Funnel (all-time) */}
+                                    {/* Share funnel (period-based) */}
                                     <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                      <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Воронка шеринга (всё время)</div>
-                                      {[
-                                        { label: 'Поделились ссылкой', val: acq.shareFunnel.ownersShared },
-                                        { label: 'Переходов по ссылке', val: acq.shareFunnel.shareLinksGenerated },
-                                        { label: 'Вишлистов с переходами', val: acq.shareFunnel.wishlistsWithOpens },
-                                        { label: 'Пользователей по ссылке', val: acq.shareFunnel.usersReachedViaLink },
-                                        { label: 'Забронировали подарок', val: acq.shareFunnel.usersWithReservation },
-                                      ].map(({ label, val }) => (
-                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
-                                          <span style={{ fontSize: 12, color: C.textSec }}>{label}</span>
-                                          <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{val}</span>
-                                        </div>
-                                      ))}
+                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Воронка шеринга</div>
+                                      <DRow label="Поделились" cur={c.ownersShared} prev={p.ownersShared} />
+                                      <DRow label="Ссылок создано" cur={c.shareLinksGenerated} prev={p.shareLinksGenerated} />
+                                      <DRow label="Уникальных гостей" cur={c.guestUsersUnique} prev={p.guestUsersUnique} />
+                                      <DRow label="Забронировали" cur={c.reservers} prev={p.reservers} />
+                                      <DRow label="Всего броней" cur={c.totalReservations} prev={p.totalReservations} />
                                     </div>
                                   </div>
                                 );
