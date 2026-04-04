@@ -467,7 +467,8 @@ type GodStats = {
     };
     dataNote?: string | null;
     diagnosis: {
-      alerts: { label: string; cur: number; prev: number; deltaPct: number }[];
+      dbAlerts: { label: string; cur: number; prev: number; deltaPct: number }[];
+      eventAlerts: { label: string; cur: number; prev: number; deltaPct: number }[];
     };
   };
   generatedAt: string;
@@ -11780,12 +11781,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                       </div>
                                     )}
 
-                                    {/* Diagnosis alerts */}
-                                    {acq.diagnosis.alerts.length > 0 && (
+                                    {/* Diagnosis alerts — split by data source */}
+                                    {acq.diagnosis.dbAlerts.length > 0 && (
                                       <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.red, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{'\u26A0'} Диагностика</div>
-                                        {acq.diagnosis.alerts.map((a, i) => (
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.red, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{'\u26A0'} Диагностика (БД)</div>
+                                        {acq.diagnosis.dbAlerts.map((a, i) => (
                                           <div key={i} style={{ fontSize: 11, color: a.deltaPct < 0 ? C.red : C.green, padding: '2px 0' }}>
+                                            {a.label}: {a.prev} {'\u2192'} {a.cur} <span style={{ opacity: 0.7 }}>({a.deltaPct >= 0 ? '+' : ''}{a.deltaPct}%)</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {acq.diagnosis.eventAlerts.length > 0 && (
+                                      <div style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.15)', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: '#FBBF24', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{'\u26A0'} Диагностика (события{anyEventIncomplete ? ', partial' : ''})</div>
+                                        {acq.diagnosis.eventAlerts.map((a, i) => (
+                                          <div key={i} style={{ fontSize: 11, color: a.deltaPct < 0 ? '#FBBF24' : C.green, padding: '2px 0' }}>
                                             {a.label}: {a.prev} {'\u2192'} {a.cur} <span style={{ opacity: 0.7 }}>({a.deltaPct >= 0 ? '+' : ''}{a.deltaPct}%)</span>
                                           </div>
                                         ))}
@@ -11804,14 +11815,22 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                     </div>
 
                                     {/* Event-based metrics — may have incomplete coverage */}
-                                    <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px', opacity: anyEventIncomplete ? 0.75 : 1 }}>
+                                    <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px', opacity: anyEventIncomplete ? 0.75 : 1, position: 'relative' }}>
+                                      {anyEventIncomplete && <div style={{ position: 'absolute', top: 8, right: 10, fontSize: 8, fontWeight: 700, color: '#FBBF24', background: 'rgba(251,191,36,0.12)', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: 0.5 }}>partial</div>}
                                       <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
                                         Трекинг событий{anyEventIncomplete ? <span style={{ fontWeight: 400, textTransform: 'none' }}> — неполное покрытие</span> : ''}
                                       </div>
                                       <DRow label={`/start${botCov}`} cur={c.botStarts} prev={p.botStarts} dim={botIncomplete} />
                                       <DRow label={`Miniapp opens${miniCov}`} cur={c.miniappOpens} prev={p.miniappOpens} dim={miniIncomplete} />
                                       <DRow label={`Гостевые просмотры${guestCov}`} cur={c.guestOpens} prev={p.guestOpens} dim={guestIncomplete} />
-                                      <DRow label={`Уникальных гостей${guestCov}`} cur={c.guestUsersUnique} prev={p.guestUsersUnique} dim />
+                                      {c.guestUsersUnique > 0 ? (
+                                        <DRow label={`Уникальных гостей${guestCov}`} cur={c.guestUsersUnique} prev={p.guestUsersUnique} dim />
+                                      ) : c.guestOpens > 0 ? (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
+                                          <span style={{ fontSize: 12, color: C.textMuted }}>Уникальных гостей</span>
+                                          <span style={{ fontSize: 11, color: C.textMuted, fontStyle: 'italic' }}>{'н/д (анонимные)'}</span>
+                                        </div>
+                                      ) : null}
                                     </div>
 
                                     {/* Sources */}
@@ -11839,18 +11858,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                     {/* Conversions — entity-based (reliable) */}
                                     <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
                                       <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Конверсии (из БД)</div>
-                                      <CRow label="Новый \u2192 вишлист" val={acq.conversions.newToWishlist} />
-                                      <CRow label="Новый \u2192 желание" val={acq.conversions.newToWish} />
-                                      <CRow label="Вишлист \u2192 шеринг" val={acq.conversions.wishlistToShare} />
+                                      <CRow label={'Новый \u2192 вишлист'} val={acq.conversions.newToWishlist} />
+                                      <CRow label={'Новый \u2192 желание'} val={acq.conversions.newToWish} />
+                                      <CRow label={'Вишлист \u2192 шеринг'} val={acq.conversions.wishlistToShare} />
                                     </div>
 
                                     {/* Conversions — event-based (may be incomplete) */}
                                     {(acq.conversions.startToOpen != null || acq.conversions.shareToGuestOpen != null || acq.conversions.guestToReserve != null) && (
-                                      <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px', opacity: anyEventIncomplete ? 0.7 : 1 }}>
+                                      <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px', opacity: anyEventIncomplete ? 0.7 : 1, position: 'relative' }}>
+                                        {anyEventIncomplete && <div style={{ position: 'absolute', top: 8, right: 10, fontSize: 8, fontWeight: 700, color: '#FBBF24', background: 'rgba(251,191,36,0.12)', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: 0.5 }}>partial</div>}
                                         <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Конверсии (события)</div>
-                                        <CRow label="/start \u2192 miniapp" val={acq.conversions.startToOpen} />
-                                        <CRow label="Шеринг \u2192 гостевой" val={acq.conversions.shareToGuestOpen} />
-                                        <CRow label="Гость \u2192 бронь" val={acq.conversions.guestToReserve} />
+                                        <CRow label={'/start \u2192 miniapp'} val={acq.conversions.startToOpen} />
+                                        <CRow label={'Шеринг \u2192 гостевой'} val={acq.conversions.shareToGuestOpen} />
+                                        <CRow label={'Гость \u2192 бронь'} val={acq.conversions.guestToReserve} />
                                       </div>
                                     )}
 

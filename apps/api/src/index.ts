@@ -6756,29 +6756,34 @@ tgRouter.get(
     }
     const dataNote = dataWarnings.length > 0 ? dataWarnings.join('. ') : null;
 
-    // Auto-diagnosis: detect significant drops/spikes
-    const diagMetrics = [
-      { key: 'botStarts' as const, label: '/start' },
-      { key: 'miniappOpens' as const, label: 'Открытия miniapp' },
-      { key: 'newUsers' as const, label: 'Новые пользователи' },
-      { key: 'firstWishlist' as const, label: 'Первый вишлист' },
-      { key: 'firstWish' as const, label: 'Первое желание' },
-      { key: 'ownersShared' as const, label: 'Поделились' },
-      { key: 'guestOpens' as const, label: 'Гостевые просмотры' },
-      { key: 'reservers' as const, label: 'Забронировали' },
-    ];
-    const diagAlerts: { label: string; cur: number; prev: number; deltaPct: number }[] = [];
-    for (const m of diagMetrics) {
-      const cur = acqCur[m.key];
-      const prev = acqPrev[m.key];
-      if (prev > 0) {
-        const dp = Math.round(((cur - prev) / prev) * 100);
-        if (dp <= -30 || dp >= 50) diagAlerts.push({ label: m.label, cur, prev, deltaPct: dp });
-      } else if (prev === 0 && cur > 0) {
-        diagAlerts.push({ label: m.label, cur, prev, deltaPct: 100 });
+    // Auto-diagnosis: detect significant drops/spikes — split by data source
+    type DiagAlert = { label: string; cur: number; prev: number; deltaPct: number };
+    const buildAlerts = (metrics: { key: keyof typeof acqCur; label: string }[]): DiagAlert[] => {
+      const alerts: DiagAlert[] = [];
+      for (const m of metrics) {
+        const cur = acqCur[m.key];
+        const prev = acqPrev[m.key];
+        if (prev > 0) {
+          const dp = Math.round(((cur - prev) / prev) * 100);
+          if (dp <= -30 || dp >= 50) alerts.push({ label: m.label, cur, prev, deltaPct: dp });
+        } else if (prev === 0 && cur > 0) {
+          alerts.push({ label: m.label, cur, prev, deltaPct: 100 });
+        }
       }
-    }
-    diagAlerts.sort((a, b) => a.deltaPct - b.deltaPct);
+      return alerts.sort((a, b) => a.deltaPct - b.deltaPct);
+    };
+    const dbAlerts = buildAlerts([
+      { key: 'newUsers', label: 'Новые пользователи' },
+      { key: 'firstWishlist', label: 'Первый вишлист' },
+      { key: 'firstWish', label: 'Первое желание' },
+      { key: 'ownersShared', label: 'Поделились' },
+      { key: 'reservers', label: 'Забронировали' },
+    ]);
+    const eventAlerts = buildAlerts([
+      { key: 'botStarts', label: '/start' },
+      { key: 'miniappOpens', label: 'Открытия miniapp' },
+      { key: 'guestOpens', label: 'Гостевые просмотры' },
+    ]);
 
     return res.json({
       overview: {
@@ -6937,7 +6942,7 @@ tgRouter.get(
         },
         eventCoverage,
         dataNote,
-        diagnosis: { alerts: diagAlerts },
+        diagnosis: { dbAlerts, eventAlerts },
       },
       generatedAt: now.toISOString(),
     });
