@@ -2855,6 +2855,8 @@ const SERVICE_START_PARAMS = new Set([
   'create_wishlist',
   'add_first_wish',
   'add_more_wishes',
+  'add_first_wish_promo',
+  'add_more_wishes_promo',
   'add_item',
   'open_drafts',
   'open_profile',
@@ -3023,6 +3025,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [onboardingManualError, setOnboardingManualError] = useState<string | null>(null);
   const [onboardingWlTitle, setOnboardingWlTitle] = useState('');
   const [onboardingCreatedWl, setOnboardingCreatedWl] = useState<{ id: string; slug: string; title: string } | null>(null);
+
+  // Promo win-back: tracks if user entered via a promo deeplink and qualifies for reward
+  const [promoWinbackEntry, setPromoWinbackEntry] = useState<'S2' | 'S3' | null>(null);
+  const [showPromoReward, setShowPromoReward] = useState<{ segment: 'S2' | 'S3'; promoCode: string } | null>(null);
+  const [promoRewardActivating, setPromoRewardActivating] = useState(false);
+  const promoWinbackCheckedRef = useRef(false);
 
   const [godMode, setGodMode] = useState(false);
   const [canGodMode, setCanGodMode] = useState(false);
@@ -5515,8 +5523,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             if (startParam === 'create_wishlist') {
               const redirected = await checkOnboarding();
               if (!redirected) bootSetScreen('my-wishlists');
-            } else if (startParam === 'add_first_wish' || startParam === 'add_more_wishes') {
+            } else if (startParam === 'add_first_wish' || startParam === 'add_more_wishes'
+              || startParam === 'add_first_wish_promo' || startParam === 'add_more_wishes_promo') {
               // Win-back S2/S3: navigate to first regular wishlist and open add-item form
+              // Promo variant: track promo entry for reward after target-step completion
+              if (startParam.endsWith('_promo')) {
+                const promoSeg = startParam.startsWith('add_first_wish') ? 'S2' : 'S3';
+                setPromoWinbackEntry(promoSeg as 'S2' | 'S3');
+                promoWinbackCheckedRef.current = false;
+                trackEvent('promo_winback_deeplink_landed', { segment: promoSeg, deeplink: startParam });
+              }
               const wls = wishlists;
               const firstRegular = wls.find(w => w.id !== draftsWishlistId && !w.readOnly);
               if (firstRegular) {
@@ -6284,6 +6300,22 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // Ready Share Prompt: show bottom sheet when wishlist has ≥2 real items (first-share wins)
         if (!json.showFirstSharePrompt && json.showReadySharePrompt && json.readySharePromptData) {
           setReadySharePromptData(json.readySharePromptData);
+        }
+
+        // Promo win-back: check if completing this item qualifies for promo reward
+        if (promoWinbackEntry && !promoWinbackCheckedRef.current) {
+          // Debounce: only check once after a successful item creation during this promo session
+          try {
+            const promoRes = await tgFetch('/tg/promo/winback-check');
+            if (promoRes.ok) {
+              const promoJson = await promoRes.json() as { eligible: boolean; segment?: string; promoCode?: string };
+              if (promoJson.eligible && promoJson.promoCode) {
+                promoWinbackCheckedRef.current = true;
+                trackEvent('promo_winback_target_completed', { segment: promoJson.segment, promoCode: promoJson.promoCode });
+                setShowPromoReward({ segment: promoJson.segment as 'S2' | 'S3', promoCode: promoJson.promoCode });
+              }
+            }
+          } catch { /* best-effort */ }
         }
       }
       blurActiveField();
@@ -12773,6 +12805,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 </div>
                                 {r.deepLink && kpi('Deeplink', `startapp=${r.deepLink}`, '#555')}
                                 {kpi('Макс. волн', `${r.maxWaves ?? 3}`, C.textMuted)}
+                                {r.promoPolicy && kpi('Промо-политика', r.promoPolicy, '#7C6AFF')}
                                 {kpi('Отправлено', r.sent, C.text)}
                                 {kpi('Доставлено', r.delivered, C.text)}
                                 {kpi('Возврат 72ч', r.returned72h, '#FBBF24')}
@@ -12784,7 +12817,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 {(r.promoDelivered > 0 || r.promoRedeemed > 0) && <>
                                   <div style={{ marginTop: 3, paddingTop: 3, borderTop: `1px solid ${C.border}` }}>
                                     {kpi('Промо доставлено', r.promoDelivered, C.text)}
+                                    {kpi('Промо целевой шаг', r.promoTargetCompleted ?? 0, '#7C6AFF', r.promoTargetRate ?? '—')}
                                     {kpi('Промо активировано', r.promoRedeemed, '#34D399')}
+                                    {r.nonPromoTargetCompleted != null && kpi('Без промо цел. шаг', r.nonPromoTargetCompleted, C.textMuted, r.nonPromoTargetRate ?? '—')}
                                   </div>
                                 </>}
                               </div>
@@ -19516,6 +19551,106 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       )}
 
       {/* ── PUBLIC PROFILE SCREEN ── */}
+      {/* ── PROMO WIN-BACK REWARD MODAL ── */}
+      {showPromoReward && (() => {
+        const pr = showPromoReward;
+        const titleKey = pr.segment === 'S3' ? 'wb_promo_s3_title' : 'wb_promo_s2_title';
+        const bodyKey = pr.segment === 'S3' ? 'wb_promo_s3_body' : 'wb_promo_s2_body';
+        const handleActivate = async () => {
+          setPromoRewardActivating(true);
+          try {
+            const res = await tgFetch('/tg/promo/apply', {
+              method: 'POST',
+              body: JSON.stringify({ code: pr.promoCode, source: 'winback' }),
+            });
+            if (res.ok) {
+              const json = await res.json() as { status: string; expiresAt?: string };
+              trackEvent('promo_winback_redeemed', { segment: pr.segment, promoCode: pr.promoCode, status: json.status });
+              pushToast(t('promo_success', locale).replace('{{date}}', json.expiresAt ? new Date(json.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined) : ''), 'success');
+              setShowPromoReward(null);
+              setPromoWinbackEntry(null);
+            } else {
+              const errJson = await res.json().catch(() => ({ error: 'unknown' })) as { error: string };
+              if (errJson.error === 'already_used' || errJson.error === 'already_active') {
+                pushToast(t('promo_already_used', locale), 'info');
+              } else {
+                pushToast(t('promo_error', locale), 'error');
+              }
+              setShowPromoReward(null);
+            }
+          } catch {
+            pushToast(t('promo_error', locale), 'error');
+          } finally {
+            setPromoRewardActivating(false);
+          }
+        };
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24, fontFamily: font,
+          }}>
+            <div style={{
+              background: C.card, borderRadius: 24, padding: '32px 24px',
+              maxWidth: 340, width: '100%', textAlign: 'center',
+              boxShadow: '0 8px 40px rgba(0,0,0,0.4)',
+            }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🏆</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8, lineHeight: 1.3 }}>
+                {t(titleKey, locale)}
+              </div>
+              <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 20, lineHeight: 1.5 }}>
+                {t(bodyKey, locale)}
+              </div>
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(124,106,255,0.15), rgba(52,211,153,0.15))',
+                border: '2px dashed rgba(124,106,255,0.4)',
+                borderRadius: 14, padding: '14px 20px', marginBottom: 24,
+              }}>
+                <div style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
+                  {locale === 'ru' ? 'Промокод' : 'Promo code'}
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#7C6AFF', letterSpacing: 2 }}>
+                  {pr.promoCode}
+                </div>
+                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
+                  {locale === 'ru' ? '30 дней Pro бесплатно' : '30 days of Pro free'}
+                </div>
+              </div>
+              <button
+                onClick={() => void handleActivate()}
+                disabled={promoRewardActivating}
+                style={{
+                  width: '100%', padding: '14px 0', borderRadius: 14,
+                  background: 'linear-gradient(135deg, #7C6AFF 0%, #34D399 100%)',
+                  border: 'none', color: '#fff', fontSize: 16, fontWeight: 700,
+                  cursor: promoRewardActivating ? 'wait' : 'pointer',
+                  fontFamily: font, opacity: promoRewardActivating ? 0.7 : 1,
+                  marginBottom: 10,
+                }}
+              >
+                {promoRewardActivating
+                  ? (locale === 'ru' ? 'Активируем…' : 'Activating…')
+                  : t('wb_promo_activate', locale)}
+              </button>
+              <button
+                onClick={() => {
+                  trackEvent('promo_winback_later', { segment: pr.segment });
+                  setShowPromoReward(null);
+                }}
+                style={{
+                  background: 'none', border: 'none', color: C.textMuted,
+                  fontSize: 14, cursor: 'pointer', fontFamily: font, padding: '8px 0',
+                }}
+              >
+                {t('wb_promo_later', locale)}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {screen === 'public-profile' && (() => {
         const pp = publicProfileData;
         const isOwn = pp?.profile?.username && profileData?.username && pp.profile.username.toLowerCase() === profileData.username.toLowerCase();

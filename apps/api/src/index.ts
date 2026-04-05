@@ -2117,7 +2117,11 @@ tgRouter.use((req, res, next) => {
  * Attribution: when a user visits, mark their most recent lifecycle touch as "returned".
  * Fire-and-forget, best-effort. Also checks if target action completed.
  */
-async function attributeLifecycleReturn(userId: string): Promise<void> {
+async function attributeLifecycleReturn(userId: string): Promise<{
+  touch: { id: string; segment: string; offerCode: string | null; targetCompletedAt: Date | null } | null;
+  justCompleted: boolean;
+}> {
+  const empty = { touch: null, justCompleted: false };
   try {
     // Find latest sent touch without returnedAt, within 7 days
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -2125,7 +2129,7 @@ async function attributeLifecycleReturn(userId: string): Promise<void> {
       where: { userId, sentAt: { gte: sevenDaysAgo }, delivered: true, returnedAt: null, stoppedAt: null },
       orderBy: { sentAt: 'desc' },
     });
-    if (!touch || !touch.sentAt) return;
+    if (!touch || !touch.sentAt) return empty;
     const now = new Date();
     // Mark return
     await prisma.lifecycleTouch.update({
@@ -2133,6 +2137,7 @@ async function attributeLifecycleReturn(userId: string): Promise<void> {
       data: { returnedAt: now },
     });
     // Check target completion
+    let justCompleted = false;
     if (!touch.targetCompletedAt) {
       let completed = false;
       let completedType: string | null = null;
@@ -2142,7 +2147,13 @@ async function attributeLifecycleReturn(userId: string): Promise<void> {
       } else if (touch.segment === 'S2') {
         const items = await prisma.item.count({ where: { wishlist: { ownerId: userId, type: 'REGULAR' }, status: { in: ['AVAILABLE', 'RESERVED'] } } });
         if (items > 0) { completed = true; completedType = 'added_item'; }
-      } else if (touch.segment === 'S3' || touch.segment === 'S4') {
+      } else if (touch.segment === 'S3') {
+        // S3 target: added 2+ more wishes since touch was sent (indicates real effort toward share-ready state)
+        const newItemsSinceTouch = await prisma.item.count({
+          where: { wishlist: { ownerId: userId, type: 'REGULAR' }, createdAt: { gte: touch.sentAt }, status: { not: 'DELETED' } },
+        });
+        if (newItemsSinceTouch >= 2) { completed = true; completedType = 'added_more_wishes'; }
+      } else if (touch.segment === 'S4') {
         // Check if user has been active (updated anything since touch was sent)
         const activity = await prisma.item.count({
           where: { wishlist: { ownerId: userId, type: 'REGULAR' }, updatedAt: { gte: touch.sentAt } },
@@ -2154,9 +2165,11 @@ async function attributeLifecycleReturn(userId: string): Promise<void> {
           where: { id: touch.id },
           data: { targetCompletedAt: now, targetCompletedType: completedType },
         });
+        justCompleted = true;
       }
     }
-  } catch { /* best-effort */ }
+    return { touch: { id: touch.id, segment: touch.segment, offerCode: touch.offerCode, targetCompletedAt: touch.targetCompletedAt ?? (justCompleted ? new Date() : null) }, justCompleted };
+  } catch { return empty; }
 }
 
 // GET /tg/wishlists — my wishlists
@@ -5259,9 +5272,10 @@ tgRouter.post(
       // WISHPRO is not a public code; only users offered by lifecycle or god mode can redeem
       const isGodMode = user.godMode || false;
       if (!isGodMode) {
-        // Check if user was offered this promo via onboarding (v2 flow) — allow onboarding promo
-        const isOnboardingPromo = (req.body as any)?.source === 'onboarding';
-        if (!isOnboardingPromo) {
+        // Allow: onboarding promo, winback reward (after target-step completion)
+        const source = (req.body as any)?.source;
+        const isSystemPromo = source === 'onboarding' || source === 'winback';
+        if (!isSystemPromo) {
           return res.status(403).json({ error: 'not_eligible', message: 'This code can only be used when offered by the system.' });
         }
       }
@@ -5329,6 +5343,14 @@ tgRouter.post(
       // Clear degradation state if any
       await prisma.degradationState.deleteMany({ where: { userId: user.id } }).catch(() => {});
 
+      // Attribution: mark promoRedeemedAt on the lifecycle touch that offered this promo
+      if (code === LIFECYCLE_PROMO_CODE) {
+        prisma.lifecycleTouch.updateMany({
+          where: { userId: user.id, offerCode: LIFECYCLE_PROMO_CODE, promoRedeemedAt: null },
+          data: { promoRedeemedAt: now },
+        }).catch(() => {});
+      }
+
       trackEvent('promo_activated', user.id, { campaignCode: code, expiresAt: expiresAt.toISOString() });
 
       return res.status(201).json({
@@ -5341,6 +5363,75 @@ tgRouter.post(
       logger.error({ err }, 'promo activation error');
       return res.status(500).json({ error: 'activation_failed' });
     }
+  }),
+);
+
+// GET /tg/promo/winback-check — check if user qualifies for promo reward after completing target step
+// Called by frontend after item creation/update when user entered via promo deeplink.
+// Returns { eligible: true, segment, promoCode } if conditions met, { eligible: false } otherwise.
+tgRouter.get(
+  '/promo/winback-check',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    // Find the latest promo-bearing lifecycle touch delivered in last 7 days
+    const touch = await prisma.lifecycleTouch.findFirst({
+      where: {
+        userId: user.id,
+        offerCode: LIFECYCLE_PROMO_CODE,
+        delivered: true,
+        sentAt: { gte: sevenDaysAgo },
+        stoppedAt: null,
+      },
+      orderBy: { sentAt: 'desc' },
+    });
+    if (!touch || !touch.sentAt) return res.json({ eligible: false });
+
+    // Check target step completion
+    let completed = false;
+    if (touch.segment === 'S2') {
+      const items = await prisma.item.count({
+        where: { wishlist: { ownerId: user.id, type: 'REGULAR' }, status: { in: ['AVAILABLE', 'RESERVED'] } },
+      });
+      completed = items > 0;
+    } else if (touch.segment === 'S3') {
+      // S3: added 2+ new items since touch was sent
+      const newItems = await prisma.item.count({
+        where: { wishlist: { ownerId: user.id, type: 'REGULAR' }, createdAt: { gte: touch.sentAt }, status: { not: 'DELETED' } },
+      });
+      completed = newItems >= 2;
+    }
+
+    if (!completed) return res.json({ eligible: false });
+
+    // Check if user already has active promo or is already PRO
+    const ent = await getUserEntitlement(user.id);
+    if (ent.isPro) return res.json({ eligible: false, reason: 'already_pro' });
+
+    const existingPromo = await prisma.promoRedemption.findFirst({
+      where: { userId: user.id, status: { in: ['ACTIVE', 'EXPIRED', 'ACCEPTED_FOR_PAID'] } },
+    });
+    if (existingPromo) return res.json({ eligible: false, reason: 'already_used' });
+
+    // Mark target completed if not already
+    if (!touch.targetCompletedAt) {
+      await prisma.lifecycleTouch.update({
+        where: { id: touch.id },
+        data: {
+          targetCompletedAt: new Date(),
+          targetCompletedType: touch.segment === 'S2' ? 'added_item' : 'added_more_wishes',
+        },
+      }).catch(() => {});
+    }
+
+    trackEvent('promo_winback_eligible', user.id, { segment: touch.segment, touchNumber: touch.touchNumber });
+
+    return res.json({
+      eligible: true,
+      segment: touch.segment,
+      promoCode: LIFECYCLE_PROMO_CODE,
+    });
   }),
 );
 
@@ -7271,11 +7362,11 @@ tgRouter.get(
     const pct = (num: number, den: number) => den > 0 ? `${Math.round(num / den * 100)}%` : '—';
 
     // Segment metadata (target steps, deeplinks, wave policy)
-    const SEGMENT_TARGETS: Record<string, { targetAction: string; deepLink: string | null; maxWaves: number }> = {
-      S1: { targetAction: 'create_wishlist', deepLink: 'create_wishlist', maxWaves: 2 },
-      S2: { targetAction: 'add_item', deepLink: 'add_first_wish', maxWaves: 3 },
-      S3: { targetAction: 'add_more_wishes', deepLink: 'add_more_wishes', maxWaves: 2 },
-      S4: { targetAction: 'return_visit', deepLink: null, maxWaves: 3 },
+    const SEGMENT_TARGETS: Record<string, { targetAction: string; deepLink: string | null; maxWaves: number; promoPolicy: string }> = {
+      S1: { targetAction: 'create_wishlist', deepLink: 'create_wishlist', maxWaves: 2, promoPolicy: 'нет' },
+      S2: { targetAction: 'add_item', deepLink: 'add_first_wish', maxWaves: 3, promoPolicy: 'волна 2 (за 1й wish)' },
+      S3: { targetAction: 'add_more_wishes', deepLink: 'add_more_wishes', maxWaves: 2, promoPolicy: 'волны 1-2 (основной)' },
+      S4: { targetAction: 'return_visit', deepLink: null, maxWaves: 3, promoPolicy: 'волны 2-3' },
     };
 
     // By segment
@@ -7285,12 +7376,17 @@ tgRouter.get(
       const del = st.filter(t => t.delivered);
       const ret72 = st.filter(t => within(t.returnedAt, t.sentAt, 72 * H)).length;
       const tgt7d = st.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length;
-      const meta = SEGMENT_TARGETS[seg] ?? { targetAction: '—', deepLink: null, maxWaves: 3 };
+      const meta = SEGMENT_TARGETS[seg] ?? { targetAction: '—', deepLink: null, maxWaves: 3, promoPolicy: '—' };
+      // Promo-driven target completion: touches that had promo AND completed target
+      const promoTargetCompleted = st.filter(t => t.offerCode && within(t.targetCompletedAt, t.sentAt, 7 * D)).length;
+      const nonPromoTouches = st.filter(t => !t.offerCode && t.delivered);
+      const nonPromoTarget = nonPromoTouches.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length;
       return {
         segment: seg,
         targetAction: meta.targetAction,
         deepLink: meta.deepLink,
         maxWaves: meta.maxWaves,
+        promoPolicy: meta.promoPolicy,
         sent: st.length,
         delivered: del.length,
         returned72h: ret72,
@@ -7300,6 +7396,10 @@ tgRouter.get(
         promoAssigned: st.filter(t => t.offerCode).length,
         promoDelivered: st.filter(t => t.offerCode && t.delivered).length,
         promoRedeemed: st.filter(t => t.promoRedeemedAt).length,
+        promoTargetCompleted,
+        promoTargetRate: pct(promoTargetCompleted, st.filter(t => t.offerCode && t.delivered).length),
+        nonPromoTargetCompleted: nonPromoTarget,
+        nonPromoTargetRate: pct(nonPromoTarget, nonPromoTouches.length),
       };
     });
 
@@ -11557,6 +11657,11 @@ async function shouldStopLifecycle(userId: string, segment: string): Promise<str
 }
 
 // Lifecycle message templates per segment+touch — i18n keys from shared dictionaries
+// Promo policy:
+//   S1 — NO promo (user hasn't understood product value yet)
+//   S2 — promo on wave 2 only, tied to first-wish completion
+//   S3 — promo on waves 1+2 (primary promo segment), tied to add-more-wishes completion
+//   S4 — promo on waves 2+3 (power user re-engagement)
 const LIFECYCLE_MESSAGES: Record<string, Record<number, { i18nKey: string; hasPromo: boolean }>> = {
   S1: {
     1: { i18nKey: 'wb_s1_t1', hasPromo: false },
@@ -11565,12 +11670,12 @@ const LIFECYCLE_MESSAGES: Record<string, Record<number, { i18nKey: string; hasPr
   },
   S2: {
     1: { i18nKey: 'wb_s2_t1', hasPromo: false },
-    2: { i18nKey: 'wb_s2_t2', hasPromo: false },
+    2: { i18nKey: 'wb_s2_t2_promo', hasPromo: true },
     3: { i18nKey: 'wb_s2_t3', hasPromo: false },
   },
   S3: {
-    1: { i18nKey: 'wb_s3_t1', hasPromo: false },
-    2: { i18nKey: 'wb_s3_t2', hasPromo: false },
+    1: { i18nKey: 'wb_s3_t1_promo', hasPromo: true },
+    2: { i18nKey: 'wb_s3_t2_promo', hasPromo: true },
     3: { i18nKey: 'wb_s3_t3_promo', hasPromo: true },
   },
   S4: {
@@ -11691,6 +11796,13 @@ setInterval(async () => {
         }
       }
 
+      // Build deeplink payload — promo entries get _promo suffix so frontend can track promo context
+      let deepLink: string | undefined;
+      if (segment === 'S1') deepLink = 'create_wishlist';
+      else if (segment === 'S2') deepLink = actuallyOfferPromo ? 'add_first_wish_promo' : 'add_first_wish';
+      else if (segment === 'S3') deepLink = actuallyOfferPromo ? 'add_more_wishes_promo' : 'add_more_wishes';
+      // S4: no deeplink (power user, goes to home)
+
       // Create touch record (upsert to avoid noisy duplicate-key errors in PG logs)
       const touchData = {
         userId: candidate.id,
@@ -11701,7 +11813,7 @@ setInterval(async () => {
         targetAction,
         offerCode: actuallyOfferPromo ? LIFECYCLE_PROMO_CODE : null,
         messageKind: actuallyOfferPromo ? 'promo_offer' : (segment === 'S1' || segment === 'S2' ? 'activation' : 'winback'),
-        deepLinkPayload: segment === 'S1' ? 'create_wishlist' : segment === 'S2' ? 'add_first_wish' : segment === 'S3' ? 'add_more_wishes' : undefined,
+        deepLinkPayload: deepLink,
       };
       const touch = await prisma.lifecycleTouch.upsert({
         where: {
