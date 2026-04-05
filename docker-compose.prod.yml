@@ -40,6 +40,7 @@ services:
       ONBOARDING_V2_ROLLOUT: ${ONBOARDING_V2_ROLLOUT:-ab50}
       MARKETPLACE_PARSER_DISABLED: ${MARKETPLACE_PARSER_DISABLED:-}
       SUPPORT_CHAT_ID: ${SUPPORT_CHAT_ID:-}
+      MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
     volumes:
       - wishlist_uploads:/data/uploads
     depends_on:
