@@ -2853,6 +2853,8 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
 // as public share tokens or wishlist slugs. They route to authenticated flows.
 const SERVICE_START_PARAMS = new Set([
   'create_wishlist',
+  'add_first_wish',
+  'add_more_wishes',
   'add_item',
   'open_drafts',
   'open_profile',
@@ -5513,6 +5515,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             if (startParam === 'create_wishlist') {
               const redirected = await checkOnboarding();
               if (!redirected) bootSetScreen('my-wishlists');
+            } else if (startParam === 'add_first_wish' || startParam === 'add_more_wishes') {
+              // Win-back S2/S3: navigate to first regular wishlist and open add-item form
+              const wls = wishlists;
+              const firstRegular = wls.find(w => w.id !== draftsWishlistId && !w.readOnly);
+              if (firstRegular) {
+                setCurrentWl(firstRegular);
+                bootSetScreen('wishlist-detail');
+                void loadItems(firstRegular.id);
+                setTimeout(() => { resetItemForm(); setShowItemForm(true); }, 500);
+              } else {
+                bootSetScreen('my-wishlists');
+              }
             } else {
               bootSetScreen('my-wishlists');
             }
@@ -12456,7 +12470,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                         <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
                                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                                             <div style={{ fontSize: 10, fontWeight: 700, color: '#5B8DEF', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                                              🌐 Языковые сегменты
+                                              🌐 Рыночные сегменты
                                             </div>
                                             <div style={{ display: 'flex', gap: 4 }}>
                                               {(['active30d', 'new7d', 'all'] as const).map(s => (
@@ -12542,7 +12556,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                       return (
                                         <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
                                           <div style={{ fontSize: 10, fontWeight: 700, color: '#34C759', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                            📦 По��держка импорта
+                                            📦 Поддержка импорта
                                           </div>
                                           {([
                                             ['Импорт доступен (RU)', is.supported.total, is.supported.new7d, '#34C759'],
@@ -12729,20 +12743,44 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               </div>
                             </>)}
 
+                            {/* ── Политика волн ── */}
+                            {retentionStats.wavePolicy && (() => {
+                              const wp = retentionStats.wavePolicy as Record<string, number>;
+                              const targetLabels: Record<string, string> = { S1: 'create_wishlist', S2: 'add_first_wish', S3: 'add_more_wishes', S4: 'return_visit' };
+                              return (<>
+                                {sectionTitle('Политика волн')}
+                                {card(
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 4, fontSize: 10, textAlign: 'center' }}>
+                                    {['S1', 'S2', 'S3', 'S4'].map(seg => (
+                                      <div key={seg}>
+                                        <div style={{ fontWeight: 700, color: '#34D399', marginBottom: 2 }}>{seg}</div>
+                                        <div style={{ color: C.text }}>{wp[seg]} волн</div>
+                                        <div style={{ color: C.textMuted, fontSize: 8, marginTop: 1 }}>{targetLabels[seg]}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </>);
+                            })()}
+
                             {/* ── По сегментам ── */}
                             {sectionTitle('По сегментам')}
                             {(retentionStats.bySegment as any[]).filter((r: any) => r.sent > 0).map((r: any) => (
                               <div key={r.segment} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                                   <span style={{ fontSize: 12, fontWeight: 700, color: '#34D399' }}>{segNames[r.segment] || r.segment}</span>
-                                  <span style={{ fontSize: 9, color: C.textMuted, background: C.bg, padding: '2px 6px', borderRadius: 4 }}>{segTarget[r.segment] || '—'}</span>
+                                  <span style={{ fontSize: 9, color: C.textMuted, background: C.bg, padding: '2px 6px', borderRadius: 4 }}>{r.targetAction || segTarget[r.segment] || '—'}</span>
                                 </div>
+                                {r.deepLink && kpi('Deeplink', `startapp=${r.deepLink}`, '#555')}
+                                {kpi('Макс. волн', `${r.maxWaves ?? 3}`, C.textMuted)}
                                 {kpi('Отправлено', r.sent, C.text)}
                                 {kpi('Доставлено', r.delivered, C.text)}
                                 {kpi('Возврат 72ч', r.returned72h, '#FBBF24')}
-                                {kpi('Действие 7д', r.targetCompleted7d, '#7C6AFF')}
-                                {kpi('Конв. возврата', r.returnRate72h, '#34D399')}
-                                {kpi('Конв. действия', r.targetRate7d ?? '—', '#7C6AFF')}
+                                {kpi('Целевой шаг 7д', r.targetCompleted7d, '#7C6AFF', r.targetAction)}
+                                <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
+                                  {kpi('Конв. возврата', r.returnRate72h, '#34D399', 'ret72h / delivered')}
+                                  {kpi('Конв. целевого шага', r.targetRate7d ?? '—', '#7C6AFF', 'target / delivered')}
+                                </div>
                                 {(r.promoDelivered > 0 || r.promoRedeemed > 0) && <>
                                   <div style={{ marginTop: 3, paddingTop: 3, borderTop: `1px solid ${C.border}` }}>
                                     {kpi('Промо доставлено', r.promoDelivered, C.text)}
@@ -12752,16 +12790,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               </div>
                             ))}
 
-                            {/* ── По сообщениям (волны) ── */}
+                            {/* ── По волнам (target-step conversion) ── */}
                             {(retentionStats.byTouch as any[]).length > 0 && (<>
-                              {sectionTitle('По волнам (touch)')}
+                              {sectionTitle('По волнам (target-step conversion)')}
                               {(retentionStats.byTouch as any[]).map((r: any) => (
-                                <div key={`${r.segment}-${r.touchNumber}`} style={{ background: C.surface, borderRadius: 8, padding: '8px 12px', marginBottom: 4 }}>
-                                  <div style={{ fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 3 }}>{touchLabel(r.segment, r.touchNumber)}</div>
-                                  <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.6 }}>
-                                    {r.sent} отпр · {r.delivered} дост · <span style={{ color: '#FBBF24' }}>{r.returned72h} верн.</span> · <span style={{ color: '#7C6AFF' }}>{r.targetCompleted7d} дейст.</span>
-                                    {r.promoDelivered > 0 && <> · <span style={{ color: C.text }}>{r.promoDelivered} промо</span></>}
-                                    {r.promoRedeemed > 0 && <> · <span style={{ color: '#34D399' }}>{r.promoRedeemed} актив.</span></>}
+                                <div key={`${r.segment}-${r.touchNumber}`} style={{ background: C.surface, borderRadius: 8, padding: '8px 12px', marginBottom: 4, ...(r.disabled ? { opacity: 0.4 } : {}) }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: C.text }}>{touchLabel(r.segment, r.touchNumber)}{r.disabled ? ' 🚫' : ''}</span>
+                                    <span style={{ fontSize: 8, color: '#555', background: C.bg, padding: '1px 5px', borderRadius: 3 }}>{r.targetAction || '—'}</span>
+                                  </div>
+                                  <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.8 }}>
+                                    {kpi('Отправлено → доставлено', `${r.sent} → ${r.delivered}`, C.text)}
+                                    {kpi('Возврат 72ч', `${r.returned72h}`, '#FBBF24', r.returnRate72h)}
+                                    {kpi('Целевой шаг 7д', `${r.targetCompleted7d}`, '#7C6AFF', r.targetRate7d)}
+                                    {r.promoDelivered > 0 && kpi('Промо', `${r.promoDelivered} дост / ${r.promoRedeemed} актив`, '#34D399')}
                                   </div>
                                 </div>
                               ))}

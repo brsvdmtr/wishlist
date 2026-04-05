@@ -6620,7 +6620,9 @@ tgRouter.get(
       proByType[row.event] = Number(row.count);
     }
 
-    // ── Locale segments ──────────────────────────────────────────────────────
+    // ── Market segments (by bucket) ──────────────────────────────────────────
+    const BUCKET_ORDER: MarketBucket[] = ['ru', 'en', 'ar', 'hi', 'zh-CN', 'es', 'other_known', 'unknown'];
+
     const localeScope = (req.query.localeScope as string) || 'active30d';
     const localeScopeFilter =
       localeScope === 'new7d'
@@ -6634,81 +6636,32 @@ tgRouter.get(
              )`
           : ''; // 'all' — no filter
 
-    // normalizeLocale() equivalent in SQL: map raw Telegram language_code → canonical locale.
-    // Reads UserProfile.language which stores the RAW Telegram language_code (not effective locale).
-    // Replicates packages/shared/src/i18n.ts normalizeLocale() but defaults to 'other' (not 'en')
-    // so unknown/null languages don't inflate the English segment.
-    // Fallback chain for NULL language: defaultCurrency='RUB' → 'ru' (set at registration from
-    // Telegram locale), otherwise 'other'. This covers users who registered before the language
-    // persistence middleware was deployed.
-    const normalizeSql = `
-      CASE
-        WHEN p."languageMode" = 'manual' AND p."manualLanguage" IS NOT NULL THEN p."manualLanguage"
-        WHEN p.language IS NOT NULL THEN
-          CASE
-            WHEN LOWER(p.language) LIKE 'ru%' THEN 'ru'
-            WHEN LOWER(p.language) LIKE 'en%' THEN 'en'
-            WHEN LOWER(p.language) LIKE 'zh%' THEN 'zh-CN'
-            WHEN LOWER(p.language) LIKE 'hi%' THEN 'hi'
-            WHEN LOWER(p.language) LIKE 'es%' THEN 'es'
-            WHEN LOWER(p.language) LIKE 'ar%' THEN 'ar'
-            ELSE 'other'
-          END
-        WHEN p."defaultCurrency" = 'RUB' THEN 'ru'
-        ELSE 'other'
-      END`;
-
-    type SegRow = { locale: string; count: number };
+    type SegRow = { bucket: string; count: number };
     const localeSegmentRows = await prisma.$queryRawUnsafe<SegRow[]>(`
-      SELECT ${normalizeSql} AS locale, COUNT(*)::int AS count
+      SELECT COALESCE(p."marketBucket", 'unknown') AS bucket, COUNT(*)::int AS count
       FROM "User" u
       LEFT JOIN "UserProfile" p ON p."userId" = u.id
       WHERE 1=1 ${localeScopeFilter}
-      GROUP BY locale
+      GROUP BY bucket
       ORDER BY count DESC`,
     );
 
-    const CANONICAL_LOCALES = ['ru', 'en', 'zh-CN', 'hi', 'es', 'ar'] as const;
-    const segmentLabels: Record<string, string> = {
-      ru: 'Русскоязычный рынок',
-      en: 'Англоязычный рынок',
-      'zh-CN': 'Китайский рынок',
-      hi: 'Индийский рынок',
-      es: 'Испаноязычный рынок',
-      ar: 'Арабский рынок',
-      other: 'Other / Unknown',
-    };
-
     let segTotal = 0;
-    const canonicalCounts: Record<string, number> = {};
-    let otherCount = 0;
+    const bucketCounts: Record<string, number> = {};
     for (const row of localeSegmentRows) {
       const cnt = Number(row.count);
       segTotal += cnt;
-      if ((CANONICAL_LOCALES as readonly string[]).includes(row.locale)) {
-        canonicalCounts[row.locale] = (canonicalCounts[row.locale] ?? 0) + cnt;
-      } else {
-        otherCount += cnt;
-      }
+      bucketCounts[row.bucket] = (bucketCounts[row.bucket] ?? 0) + cnt;
     }
 
-    const segments: { segmentKey: string; segmentLabel: string; usersCount: number; sharePercent: number }[] = CANONICAL_LOCALES
-      .map(loc => ({
-        segmentKey: loc as string,
-        segmentLabel: segmentLabels[loc] ?? loc,
-        usersCount: canonicalCounts[loc] ?? 0,
-        sharePercent: segTotal > 0 ? Math.round(((canonicalCounts[loc] ?? 0) / segTotal) * 1000) / 10 : 0,
+    const segments: { segmentKey: string; segmentLabel: string; usersCount: number; sharePercent: number }[] = BUCKET_ORDER
+      .map(b => ({
+        segmentKey: b,
+        segmentLabel: MARKET_BUCKET_LABELS[b],
+        usersCount: bucketCounts[b] ?? 0,
+        sharePercent: segTotal > 0 ? Math.round(((bucketCounts[b] ?? 0) / segTotal) * 1000) / 10 : 0,
       }))
       .filter(s => s.usersCount > 0);
-
-    if (otherCount > 0) {
-      segments.push({
-        segmentKey: 'other',
-        segmentLabel: segmentLabels['other'] ?? 'Other / Unknown',
-        usersCount: otherCount,
-        sharePercent: segTotal > 0 ? Math.round((otherCount / segTotal) * 1000) / 10 : 0,
-      });
-    }
 
     // ── Market bucket distribution ──────────────────────────────────────────────
     // Uses the persisted marketBucket column for fast aggregation.
@@ -6738,7 +6691,6 @@ tgRouter.get(
       GROUP BY bucket
       ORDER BY total DESC`;
 
-    const BUCKET_ORDER: MarketBucket[] = ['ru', 'en', 'ar', 'hi', 'zh-CN', 'es', 'other_known', 'unknown'];
     const marketBuckets = BUCKET_ORDER.map(b => {
       const row = marketBucketRows.find(r => r.bucket === b);
       return {
@@ -7318,6 +7270,14 @@ tgRouter.get(
     // Conversion rates
     const pct = (num: number, den: number) => den > 0 ? `${Math.round(num / den * 100)}%` : '—';
 
+    // Segment metadata (target steps, deeplinks, wave policy)
+    const SEGMENT_TARGETS: Record<string, { targetAction: string; deepLink: string | null; maxWaves: number }> = {
+      S1: { targetAction: 'create_wishlist', deepLink: 'create_wishlist', maxWaves: 2 },
+      S2: { targetAction: 'add_item', deepLink: 'add_first_wish', maxWaves: 3 },
+      S3: { targetAction: 'add_more_wishes', deepLink: 'add_more_wishes', maxWaves: 2 },
+      S4: { targetAction: 'return_visit', deepLink: null, maxWaves: 3 },
+    };
+
     // By segment
     const segments = ['S1', 'S2', 'S3', 'S4'] as const;
     const bySegment = segments.map(seg => {
@@ -7325,8 +7285,12 @@ tgRouter.get(
       const del = st.filter(t => t.delivered);
       const ret72 = st.filter(t => within(t.returnedAt, t.sentAt, 72 * H)).length;
       const tgt7d = st.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length;
+      const meta = SEGMENT_TARGETS[seg] ?? { targetAction: '—', deepLink: null, maxWaves: 3 };
       return {
         segment: seg,
+        targetAction: meta.targetAction,
+        deepLink: meta.deepLink,
+        maxWaves: meta.maxWaves,
         sent: st.length,
         delivered: del.length,
         returned72h: ret72,
@@ -7344,11 +7308,19 @@ tgRouter.get(
       [1, 2, 3].map(tn => {
         const st = touches.filter(t => t.segment === seg && t.touchNumber === tn);
         const del = st.filter(t => t.delivered);
+        const ret72 = st.filter(t => within(t.returnedAt, t.sentAt, 72 * H)).length;
+        const tgt7d = st.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length;
+        const meta = SEGMENT_TARGETS[seg] ?? { targetAction: '—', deepLink: null, maxWaves: 3 };
         return {
           segment: seg, touchNumber: tn,
+          targetAction: meta.targetAction,
+          deepLink: meta.deepLink,
+          disabled: tn > meta.maxWaves,
           sent: st.length, delivered: del.length,
-          returned72h: st.filter(t => within(t.returnedAt, t.sentAt, 72 * H)).length,
-          targetCompleted7d: st.filter(t => within(t.targetCompletedAt, t.sentAt, 7 * D)).length,
+          returned72h: ret72,
+          targetCompleted7d: tgt7d,
+          returnRate72h: pct(ret72, del.length),
+          targetRate7d: pct(tgt7d, del.length),
           promoDelivered: st.filter(t => t.offerCode && t.delivered).length,
           promoRedeemed: st.filter(t => t.promoRedeemedAt).length,
         };
@@ -7365,6 +7337,7 @@ tgRouter.get(
         promoAssigned, promoDelivered, promoRedeemed,
         activeGrants, expiredGrants,
       },
+      wavePolicy: { S1: 2, S2: 3, S3: 2, S4: 3 },
       bySegment,
       byTouch,
       debug: {
@@ -11528,7 +11501,7 @@ async function classifyLifecycleSegment(userId: string): Promise<{
   }
   // S3: has items, gone 5+ days
   if (totalItems > 0 && daysSinceUpdate >= 5) {
-    return { segment: 'S3', targetAction: 'return_visit' };
+    return { segment: 'S3', targetAction: 'add_more_wishes' };
   }
 
   return null; // not in churn
@@ -11615,6 +11588,9 @@ const SEGMENT_CADENCE: Record<string, number[]> = {
   S4: [7, 21, 45],
 };
 
+// Max waves (touches) per episode per segment
+const MAX_WAVES: Record<string, number> = { S1: 2, S2: 3, S3: 2, S4: 3 };
+
 setInterval(async () => {
   if (!BOT_TOKEN_FOR_DM) return;
   try {
@@ -11658,7 +11634,7 @@ setInterval(async () => {
       if (!caps.canSend) continue;
 
       const nextTouchNumber = caps.currentEpisodeTouches + 1;
-      if (nextTouchNumber > 3) continue; // max 3 touches per episode
+      if (nextTouchNumber > (MAX_WAVES[segment] ?? 3)) continue;
 
       // Check cadence timing
       const daysSinceUpdate = (Date.now() - candidate.updatedAt.getTime()) / (1000 * 60 * 60 * 24);
@@ -11725,7 +11701,7 @@ setInterval(async () => {
         targetAction,
         offerCode: actuallyOfferPromo ? LIFECYCLE_PROMO_CODE : null,
         messageKind: actuallyOfferPromo ? 'promo_offer' : (segment === 'S1' || segment === 'S2' ? 'activation' : 'winback'),
-        deepLinkPayload: segment === 'S1' ? 'create_wishlist' : undefined,
+        deepLinkPayload: segment === 'S1' ? 'create_wishlist' : segment === 'S2' ? 'add_first_wish' : segment === 'S3' ? 'add_more_wishes' : undefined,
       };
       const touch = await prisma.lifecycleTouch.upsert({
         where: {
