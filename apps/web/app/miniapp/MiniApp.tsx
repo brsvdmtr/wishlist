@@ -2956,6 +2956,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [onboardingTryLoading, setOnboardingTryLoading] = useState(false);
   const [onboardingTryError, setOnboardingTryError] = useState<string | null>(null);
   const [onboardingTryUrl, setOnboardingTryUrl] = useState('');
+  const [onboardingShowImportInput, setOnboardingShowImportInput] = useState(false);
   const [onboardingWlTitle, setOnboardingWlTitle] = useState('');
   const [onboardingCreatedWl, setOnboardingCreatedWl] = useState<{ id: string; slug: string; title: string } | null>(null);
 
@@ -3918,14 +3919,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };
+        if (res.status === 400) {
+          trackEvent('onboarding_try_import_400');
+          setOnboardingTryError(err.error || t('onboarding_recovery_title', locale));
+          return; // inline error + fallback buttons shown in UI
+        }
+        if (res.status === 429) {
+          trackEvent('onboarding_try_import_429');
+          setOnboardingTryError(t('api_import_rate_limit', locale));
+          return; // inline error + fallback buttons shown in UI
+        }
         setOnboardingTryError(err.error || t('onboarding_recovery_title', locale));
-        if (res.status === 400) return; // invalid URL — inline error, stay on try
-        if (res.status === 429) { setOnboardingTryError(t('api_import_rate_limit', locale)); return; }
         return;
       }
       const json = await res.json() as { item: Item; parseStatus: string; wishlistId: string };
       setOnboardingTryResult({ item: json.item, parseStatus: json.parseStatus });
       if (json.parseStatus === 'failed') {
+        trackEvent('onboarding_try_import_parse_failed');
         setScreen('onboarding-recovery');
       } else {
         setScreen('onboarding-success');
@@ -5006,6 +5016,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     } else if (screen === 'onboarding-demo' || screen === 'onboarding-complete') {
       setScreen('my-wishlists');
     } else if (screen === 'onboarding-try') {
+      setOnboardingShowImportInput(false);
+      setOnboardingTryError(null);
       setScreen('onboarding-entry');
     } else if (screen === 'onboarding-success') {
       setScreen('onboarding-try');
@@ -6758,7 +6770,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   // ── Onboarding v2: render helpers ──
 
   function renderOnboardingTry() {
-    const catalog = getCatalogForSegment(onboardingMarketSegment);
+    // Path chooser screen: catalog (primary) → manual (secondary) → import link (tertiary)
+    // Import URL input is hidden by default and revealed only after explicit user choice.
     return (
       <div data-overlay-scroll style={{
         position: 'fixed', inset: 0, zIndex: 100,
@@ -6775,99 +6788,152 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           </button>
         </div>
 
-        <div style={{ textAlign: 'center', fontSize: 44, margin: '16px 0 12px' }}>✨</div>
+        {/* Header */}
+        <div style={{ textAlign: 'center', fontSize: 42, margin: '14px 0 10px' }}>✨</div>
         <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.25 }}>
-          {t('onboarding_try_title_v2', locale)}
+          {t('onboarding_path_title', locale)}
         </div>
         <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 8, lineHeight: 1.45 }}>
-          {t('onboarding_try_subtitle_v2', locale)}
-        </div>
-        <div style={{
-          display: 'inline-block', margin: '12px auto 0', padding: '6px 14px',
-          background: 'rgba(124,106,255,0.1)', border: '1px solid rgba(124,106,255,0.2)',
-          borderRadius: 20, fontSize: 13, color: '#A78BFA', fontWeight: 500, textAlign: 'center',
-        }}>
-          {t('onboarding_try_trial_badge', locale)}
+          {t('onboarding_path_subtitle', locale)}
         </div>
 
-        <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* URL input */}
-          <div style={{
-            background: 'rgba(255,255,255,0.06)', border: `1.5px solid ${onboardingTryError ? 'rgba(248,113,113,0.5)' : 'rgba(124,106,255,0.35)'}`,
-            borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
-          }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(124,106,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🔗</div>
-            <input
-              value={onboardingTryUrl}
-              onChange={(e) => { setOnboardingTryUrl(e.target.value); setOnboardingTryError(null); }}
-              placeholder={t('onboarding_try_url_placeholder', locale)}
-              style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 14, fontFamily: font }}
-            />
-            <button
-              onClick={() => { if (onboardingTryUrl.trim()) void tryImportUrl(onboardingTryUrl); }}
-              disabled={onboardingTryLoading || !onboardingTryUrl.trim()}
-              style={{
-                background: 'rgba(124,106,255,0.2)', border: '1px solid rgba(124,106,255,0.4)', color: '#A78BFA',
-                fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: font,
-                opacity: (onboardingTryLoading || !onboardingTryUrl.trim()) ? 0.5 : 1, whiteSpace: 'nowrap',
-              }}>
-              {onboardingTryLoading ? '…' : t('onboarding_try_paste_btn', locale)}
-            </button>
-          </div>
+        <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-          {onboardingTryError && (
-            <div style={{ fontSize: 13, color: C.red, textAlign: 'center' }}>{onboardingTryError}</div>
-          )}
-
-          <div style={{ textAlign: 'center', fontSize: 13, color: 'rgba(255,255,255,0.3)', lineHeight: 1.5 }}>
-            {locale === 'ru' ? t('onboarding_try_url_hint', 'ru') : t('onboarding_try_url_hint', locale)}
-          </div>
-
-          {onboardingTryResult && (
-            <div style={{ textAlign: 'center', fontSize: 13, color: '#34D399', fontWeight: 600, marginTop: 4 }}>
-              {t('onboarding_try_added_count', locale, { count: '1' })}
-            </div>
-          )}
-
-          {/* Divider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: 1 }}>{t('onboarding_try_or', locale)}</span>
-            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-          </div>
-
-          {/* Manual */}
+          {/* ── 1. CATALOG — PRIMARY ── */}
           <button onClick={() => {
-            trackEvent('onboarding_try_manual');
-            // TODO: open create-wish with fromOnboarding flag
-            // For now, skip to catalog as placeholder
-            void updateOnboardingStep('onboarding-catalog');
+            trackEvent('onboarding_path_catalog_started');
+            void updateOnboardingStep('onboarding-catalog', 'catalog');
             setScreen('onboarding-catalog');
-          }}
-            style={{
-              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14,
-              padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left', fontFamily: font, width: '100%',
-            }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(52,211,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>✏️</div>
+          }} style={{
+            background: 'linear-gradient(135deg, rgba(124,106,255,0.18), rgba(168,85,247,0.12))',
+            border: '1.5px solid rgba(124,106,255,0.5)', borderRadius: 18,
+            padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14,
+            cursor: 'pointer', textAlign: 'left', fontFamily: font, width: '100%', position: 'relative',
+            boxShadow: '0 4px 20px rgba(124,106,255,0.15)',
+          }}>
+            {/* Recommended badge */}
+            <div style={{
+              position: 'absolute', top: -10, right: 14,
+              background: 'linear-gradient(135deg, #7c6aff, #a855f7)',
+              color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px',
+              borderRadius: 10, letterSpacing: 0.3,
+            }}>{t('onboarding_path_catalog_badge', locale)}</div>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(124,106,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>🎁</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>{t('onboarding_try_manual_title', locale)}</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{t('onboarding_try_manual_desc', locale)}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{t('onboarding_path_catalog_title', locale)}</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>{t('onboarding_path_catalog_desc', locale)}</div>
             </div>
-            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 16 }}>›</span>
+            <span style={{ color: '#A78BFA', fontSize: 20 }}>›</span>
           </button>
+
+          {/* ── 2. MANUAL — SECONDARY ── */}
+          <button onClick={() => {
+            trackEvent('onboarding_path_manual_started');
+            void updateOnboardingStep('onboarding-catalog', 'manual');
+            setScreen('onboarding-catalog');
+          }} style={{
+            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 18, padding: '16px 20px', display: 'flex', alignItems: 'center',
+            gap: 14, cursor: 'pointer', textAlign: 'left', fontFamily: font, width: '100%',
+          }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(52,211,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>✏️</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{t('onboarding_try_manual_title', locale)}</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 3 }}>{t('onboarding_try_manual_desc', locale)}</div>
+            </div>
+            <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 18 }}>›</span>
+          </button>
+
+          {/* ── 3. IMPORT — TERTIARY (progressive disclosure) ── */}
+          {!onboardingShowImportInput ? (
+            <button onClick={() => {
+              trackEvent('onboarding_path_try_import_started');
+              setOnboardingShowImportInput(true);
+              setOnboardingTryError(null);
+            }} style={{
+              background: 'transparent', border: 'none', padding: '10px 0 2px',
+              color: 'rgba(255,255,255,0.3)', fontSize: 13, fontWeight: 400,
+              cursor: 'pointer', fontFamily: font, textAlign: 'center', width: '100%',
+            }}>
+              🔗 {t('onboarding_path_import_link', locale)}
+            </button>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
+              {/* URL input */}
+              <div style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: `1.5px solid ${onboardingTryError ? 'rgba(248,113,113,0.5)' : 'rgba(124,106,255,0.35)'}`,
+                borderRadius: 14, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(124,106,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🔗</div>
+                <input
+                  value={onboardingTryUrl}
+                  onChange={(e) => { setOnboardingTryUrl(e.target.value); setOnboardingTryError(null); }}
+                  placeholder={t('onboarding_try_url_placeholder', locale)}
+                  // eslint-disable-next-line jsx-a11y/no-autofocus
+                  autoFocus
+                  style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 14, fontFamily: font }}
+                />
+                <button
+                  onClick={() => { if (onboardingTryUrl.trim()) void tryImportUrl(onboardingTryUrl); }}
+                  disabled={onboardingTryLoading || !onboardingTryUrl.trim()}
+                  style={{
+                    background: 'rgba(124,106,255,0.2)', border: '1px solid rgba(124,106,255,0.4)', color: '#A78BFA',
+                    fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontFamily: font,
+                    opacity: (onboardingTryLoading || !onboardingTryUrl.trim()) ? 0.5 : 1, whiteSpace: 'nowrap',
+                  }}>
+                  {onboardingTryLoading ? '…' : t('onboarding_try_paste_btn', locale)}
+                </button>
+              </div>
+
+              {/* Helper: works for some stores */}
+              {!onboardingTryError && (
+                <div style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.25)', lineHeight: 1.5 }}>
+                  {t('onboarding_path_import_hint', locale)}
+                </div>
+              )}
+
+              {/* Error + inline fallback buttons (400 / 429 / network) */}
+              {onboardingTryError && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 13, color: '#F87171', textAlign: 'center', lineHeight: 1.4 }}>{onboardingTryError}</div>
+                  <button onClick={() => {
+                    trackEvent('onboarding_try_import_fallback_to_manual', { entry: 'inline_error' });
+                    setOnboardingShowImportInput(false);
+                    void updateOnboardingStep('onboarding-catalog', 'manual');
+                    setScreen('onboarding-catalog');
+                  }} style={{
+                    width: '100%', padding: '13px 0', borderRadius: 14,
+                    background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+                    color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: font,
+                  }}>
+                    ✏️ {t('onboarding_recovery_manual', locale)}
+                  </button>
+                  <button onClick={() => {
+                    trackEvent('onboarding_try_import_fallback_to_catalog', { entry: 'inline_error' });
+                    setOnboardingShowImportInput(false);
+                    void updateOnboardingStep('onboarding-catalog');
+                    setScreen('onboarding-catalog');
+                  }} style={{
+                    background: 'transparent', border: 'none',
+                    color: 'rgba(255,255,255,0.35)', fontSize: 13, fontWeight: 500,
+                    padding: '6px 0', cursor: 'pointer', fontFamily: font, textAlign: 'center', width: '100%',
+                  }}>
+                    {t('onboarding_recovery_catalog', locale)}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Dots */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
+        {/* Step indicator dots */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 28 }}>
           {[0,1,2,3,4,5].map(i => (
             <div key={i} style={{ width: i === 1 ? 24 : 8, height: 8, borderRadius: i === 1 ? 4 : '50%', background: i === 1 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
           ))}
         </div>
-
-        <button onClick={() => { trackEvent('onboarding_try_skipped'); void updateOnboardingStep('onboarding-catalog'); setScreen('onboarding-catalog'); }}
-          style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.35)', fontSize: 14, fontWeight: 500, padding: '12px 0', cursor: 'pointer', fontFamily: font, marginTop: 8, textAlign: 'center' }}>
-          {t('onboarding_try_skip', locale)}
-        </button>
       </div>
     );
   }
@@ -6948,6 +7014,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   }
 
   function renderOnboardingRecovery() {
+    // Parse fail fallback: manual (primary) → catalog (secondary) → retry (tertiary)
     return (
       <div style={{
         position: 'fixed', inset: 0, zIndex: 100,
@@ -6955,7 +7022,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         fontFamily: font, padding: '32px 24px calc(32px + env(safe-area-inset-bottom, 0px))',
       }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
         <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', textAlign: 'center', marginBottom: 8 }}>
           {t('onboarding_recovery_title', locale)}
         </div>
@@ -6964,28 +7031,43 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         </div>
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <button onClick={() => { setOnboardingTryUrl(''); setOnboardingTryError(null); setScreen('onboarding-try'); }}
-            style={{
-              width: '100%', padding: '16px 0', borderRadius: 16, border: 'none',
-              background: 'linear-gradient(135deg, #7c6aff, #a855f7)', color: '#fff', fontSize: 16, fontWeight: 700,
-              cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgba(124,106,255,0.4)',
-            }}>
+          {/* PRIMARY: Add manually */}
+          <button onClick={() => {
+            trackEvent('onboarding_recovery_manual');
+            trackEvent('onboarding_try_import_fallback_to_manual', { entry: 'recovery_screen' });
+            void updateOnboardingStep('onboarding-catalog', 'manual');
+            setScreen('onboarding-catalog');
+          }} style={{
+            width: '100%', padding: '16px 0', borderRadius: 16, border: 'none',
+            background: 'linear-gradient(135deg, #7c6aff, #a855f7)', color: '#fff', fontSize: 16, fontWeight: 700,
+            cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgba(124,106,255,0.4)',
+          }}>
+            ✏️ {t('onboarding_recovery_manual', locale)}
+          </button>
+          {/* SECONDARY: Choose from catalog */}
+          <button onClick={() => {
+            trackEvent('onboarding_recovery_catalog');
+            trackEvent('onboarding_try_import_fallback_to_catalog', { entry: 'recovery_screen' });
+            void updateOnboardingStep('onboarding-catalog');
+            setScreen('onboarding-catalog');
+          }} style={{
+            width: '100%', padding: '14px 0', borderRadius: 16, background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: 600,
+            cursor: 'pointer', fontFamily: font,
+          }}>
+            🎁 {t('onboarding_recovery_catalog', locale)}
+          </button>
+          {/* TERTIARY: Retry with another link */}
+          <button onClick={() => {
+            setOnboardingShowImportInput(true);
+            setOnboardingTryUrl('');
+            setOnboardingTryError(null);
+            setScreen('onboarding-try');
+          }} style={{
+            width: '100%', padding: '12px 0', background: 'transparent', border: 'none',
+            color: 'rgba(255,255,255,0.3)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: font,
+          }}>
             {t('onboarding_recovery_retry', locale)}
-          </button>
-          <button onClick={() => { trackEvent('onboarding_recovery_manual'); void updateOnboardingStep('onboarding-catalog'); setScreen('onboarding-catalog'); }}
-            style={{
-              width: '100%', padding: '14px 0', borderRadius: 16, background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: 600,
-              cursor: 'pointer', fontFamily: font,
-            }}>
-            {t('onboarding_recovery_manual', locale)}
-          </button>
-          <button onClick={() => { trackEvent('onboarding_recovery_catalog'); void updateOnboardingStep('onboarding-catalog'); setScreen('onboarding-catalog'); }}
-            style={{
-              width: '100%', padding: '12px 0', background: 'transparent', border: 'none',
-              color: 'rgba(255,255,255,0.35)', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: font,
-            }}>
-            {t('onboarding_recovery_catalog', locale)}
           </button>
         </div>
       </div>

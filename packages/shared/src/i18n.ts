@@ -1621,6 +1621,14 @@ const ru: Dict = {
   onboarding_try_trial_badge: '✨ Бесплатно в рамках онбординга',
   onboarding_try_trial_limit: 'Лимит пробных добавлений исчерпан. Создай вишлист и продолжай!',
   onboarding_try_added_count: 'Добавлено: {{count}}',
+  // ── Onboarding v2: Path chooser screen (hierarchy fix) ──
+  onboarding_path_title: 'С чего начнём?',
+  onboarding_path_subtitle: 'Выбери удобный способ добавить первое желание',
+  onboarding_path_catalog_title: 'Выбрать из готовых идей',
+  onboarding_path_catalog_desc: 'Более 30 идей на любой вкус',
+  onboarding_path_catalog_badge: 'Рекомендуем',
+  onboarding_path_import_link: 'Уже есть ссылка? Попробуем добавить автоматически',
+  onboarding_path_import_hint: 'Работает не для всех магазинов',
   // ── Onboarding v2: Catalog item names ──
   catalog_airpods: 'AirPods Pro',
   catalog_sneakers: 'Кроссовки Nike',
@@ -3236,6 +3244,14 @@ const en: Dict = {
   onboarding_try_trial_badge: '✨ Free during onboarding',
   onboarding_try_trial_limit: 'Trial import limit reached. Create a wishlist and continue!',
   onboarding_try_added_count: 'Added: {{count}}',
+  // ── Onboarding v2: Path chooser screen (hierarchy fix) ──
+  onboarding_path_title: 'How would you like to start?',
+  onboarding_path_subtitle: 'Choose how to add your first wish',
+  onboarding_path_catalog_title: 'Choose from ready ideas',
+  onboarding_path_catalog_desc: '30+ ideas for every taste',
+  onboarding_path_catalog_badge: 'Recommended',
+  onboarding_path_import_link: 'Already have a link? We can try to add it automatically',
+  onboarding_path_import_hint: 'Works only for some supported stores',
   // ── Onboarding v2: Catalog item names ──
   catalog_airpods: 'AirPods Pro',
   catalog_sneakers: 'Nike Sneakers',
