@@ -3048,6 +3048,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [retentionPeriod, setRetentionPeriod] = useState(30);
   const [localeSegmentScope, setLocaleSegmentScope] = useState<'active30d' | 'new7d' | 'all'>('active30d');
   const [acqPeriod, setAcqPeriod] = useState<'24h' | '7d' | '30d'>('7d');
+  const [activationTab, setActivationTab] = useState<'funnel' | 'onboarding' | 'acq'>('funnel');
   const godStatsRefreshIdRef = useRef(0);
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -11976,697 +11977,500 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     </div>
                   )}
 
-                  {/* ─── Analytics block — only when godMode active ─── */}
+                  {/* ─── God Mode Dashboard ─── */}
                   {godMode && (() => {
-                    const pct = (n: number, total: number) =>
-                      total > 0 ? Math.round((n / total) * 100) : 0;
-
-                    const fmt1 = (n: number) =>
-                      n === 0 ? '—' : Number.isFinite(n) ? n.toFixed(1) : '—';
-
-                    const relativeTime = (d: Date | null): string => {
+                    const pct = (n: number, d: number) => d > 0 ? Math.round(n / d * 100) : 0;
+                    const fmt1 = (n: number) => n === 0 ? '—' : Number.isFinite(n) ? n.toFixed(1) : '—';
+                    const relativeTime = (d: Date | null) => {
                       if (!d) return '';
                       const sec = Math.round((Date.now() - d.getTime()) / 1000);
                       if (sec < 10) return 'только что';
                       if (sec < 60) return `${sec} сек назад`;
                       const min = Math.round(sec / 60);
-                      if (min < 60) return `${min} мин назад`;
-                      return d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+                      return min < 60 ? `${min} мин назад` : d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
                     };
-
-                    // Funnel = уникальные пользователи
-                    const funnelSteps = godStats ? [
-                      { label: 'Все пользователи',                    value: godStats.funnel.totalUsers },
-                      { label: 'Есть любой вишлист (вкл. черновики)', value: godStats.funnel.usersWithAnyWishlist ?? godStats.funnel.usersWithWishlist },
-                      { label: 'Создали обычный вишлист',             value: godStats.funnel.usersWithWishlist },
-                      { label: 'Добавили желание (обычн. вишлист)',   value: godStats.funnel.usersWithItem },
-                      { label: 'Добавили желание (вкл. черновики)',   value: godStats.funnel.usersWithItemInAny ?? godStats.funnel.usersWithItem },
-                      { label: 'Перешли хотя бы по одной ссылке',    value: godStats.funnel.usersWithLinkOpen ?? godStats.funnel.usersWhoInitiatedShare },
-                      { label: 'Забронировали хотя бы один подарок', value: godStats.funnel.usersWithReservation },
-                    ] : [];
-
+                    const safeDelta = (cur: number, prev: number): { str: string; color: string } => {
+                      if (prev === 0 && cur === 0) return { str: '—', color: C.textMuted };
+                      if (prev === 0) return { str: `+${cur}`, color: C.green };
+                      const d = cur - prev;
+                      const p = Math.round((d / prev) * 100);
+                      const pStr = prev >= 10 ? ` (${p >= 0 ? '+' : ''}${p}%)` : '';
+                      return { str: `${d >= 0 ? '+' : ''}${d}${pStr}`, color: d > 0 ? C.green : d < 0 ? (p <= -30 ? C.red : C.orange) : C.textMuted };
+                    };
+                    const loadRetention = async (period: number) => {
+                      setRetentionLoading(true);
+                      try { const r = await tgFetch(`/tg/me/retention-stats?period=${period}`); if (r.ok) setRetentionStats(await r.json()); } catch {}
+                      setRetentionLoading(false);
+                    };
                     return (
                       <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-                        {/* Header row */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: '#ff9900', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                            📊 Аналитика
-                          </div>
-                          <button
-                            onClick={() => void loadGodStats()}
-                            disabled={godStatsLoading}
-                            style={{
-                              background: 'none', border: 'none', cursor: godStatsLoading ? 'wait' : 'pointer',
-                              fontSize: 11, color: C.textMuted, padding: '2px 6px', borderRadius: 6,
-                              opacity: godStatsLoading ? 0.4 : 1, fontFamily: font,
-                              display: 'flex', alignItems: 'center', gap: 4,
-                            }}
-                          >
+                        {/* ── Header ── */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#ff9900', letterSpacing: '0.06em', textTransform: 'uppercase' }}>📊 Дашборд</div>
+                          <button onClick={() => void loadGodStats()} disabled={godStatsLoading} style={{ background: 'none', border: 'none', cursor: godStatsLoading ? 'wait' : 'pointer', fontSize: 11, color: C.textMuted, padding: '2px 6px', borderRadius: 6, opacity: godStatsLoading ? 0.4 : 1, fontFamily: font, display: 'flex', alignItems: 'center', gap: 4 }}>
                             <span style={{ display: 'inline-block', animation: godStatsLoading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
                             {godStatsLoading ? 'Загружаю…' : 'Обновить'}
                           </button>
                         </div>
-
-                        {/* Error — non-destructive: shown above existing data */}
                         {godStatsError && !godStatsLoading && (
-                          <div style={{ fontSize: 11, color: C.red, padding: '4px 0 6px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            ⚠ Ошибка обновления{godStats ? ' — показаны старые данные' : ''}
-                          </div>
+                          <div style={{ fontSize: 11, color: C.red, padding: '4px 0 6px', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Ошибка{godStats ? ' — старые данные' : ''}</div>
                         )}
-
-                        {/* First load spinner — only when no data yet */}
                         {godStatsLoading && !godStats && (
-                          <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', padding: '8px 0' }}>
-                            Загружаю…
-                          </div>
+                          <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', padding: '8px 0' }}>Загружаю…</div>
                         )}
-
                         {godStats && (() => {
                           const o = godStats.overview;
-                          const e = godStats.engagement;
-                          const pro = godStats.proLimits24h;
-                          const overviewRows: [string, string | number, string, string | number][] = [
-                            ['Пользователей', o.totalUsers,        'Новых 24ч',     o.newUsers24h],
-                            ['Новых 7д',      o.newUsers7d,        'Активных 7д',   o.activeUsers7d],
-                            ['Активных 30д',  o.activeUsers30d,    'PRO',           o.proUsers],
-                            ['Вишлистов',     o.totalWishlists,    'Желаний',       o.totalItems],
-                            ['Броней',        o.totalReservations, 'PRO %',         `${pct(o.proUsers, o.totalUsers)}%`],
-                          ];
-                          const avgItemsPerWl = fmt1(o.totalWishlists > 0 ? o.totalItems / o.totalWishlists : 0);
-                          const avgWlPerUser  = fmt1(godStats.funnel.usersWithWishlist > 0 ? o.totalWishlists / godStats.funnel.usersWithWishlist : 0);
-
+                          const acq = godStats.acquisition;
+                          const divider = <div style={{ height: 1, background: C.border, margin: '10px 0' }} />;
+                          const sHdr = (icon: string, label: string, color: string) => (
+                            <div style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>{icon} {label}</div>
+                          );
                           return (
                             <>
-                              {/* ── Обзор ── */}
-                              <div style={{ marginBottom: 10 }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                  Обзор
-                                </div>
-                                {overviewRows.map(([lA, vA, lB, vB], i) => (
-                                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', marginBottom: 4 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingRight: 10 }}>
-                                      <span style={{ fontSize: 12, color: C.textMuted }}>{lA}</span>
-                                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{vA}</span>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: 10, borderLeft: `1px solid ${C.border}` }}>
-                                      <span style={{ fontSize: 12, color: C.textMuted }}>{lB}</span>
-                                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{vB}</span>
-                                    </div>
+                              {/* ═══ A. ОБЗОР ═══ */}
+                              {sHdr('◉', 'Обзор', '#FF9500')}
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '5px 4px', marginBottom: 6 }}>
+                                {([
+                                  ['Польз.', o.totalUsers],
+                                  ['Новых 24ч', o.newUsers24h],
+                                  ['Новых 7д', o.newUsers7d],
+                                  ['Актив. 7д', o.activeUsers7d],
+                                  ['Актив. 30д', o.activeUsers30d],
+                                  ['PRO', `${o.proUsers} (${pct(o.proUsers, o.totalUsers)}%)`],
+                                  ['Вишлистов', o.totalWishlists],
+                                  ['Желаний', o.totalItems],
+                                  ['Броней', o.totalReservations],
+                                ] as [string, string | number][]).map(([label, value]) => (
+                                  <div key={label} style={{ background: C.surface, borderRadius: 8, padding: '5px 8px' }}>
+                                    <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 1 }}>{label}</div>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>{value}</div>
                                   </div>
                                 ))}
-                                <div style={{ fontSize: 10, color: C.textMuted, marginTop: 5, lineHeight: 1.6 }}>
-                                  желаний/вишлист <span style={{ color: C.textSec, fontWeight: 600 }}>{avgItemsPerWl}</span>
-                                  {' · '}
-                                  вишлистов/польз. <span style={{ color: C.textSec, fontWeight: 600 }}>{avgWlPerUser}</span>
-                                </div>
+                              </div>
+                              <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 4, lineHeight: 1.5 }}>
+                                жел./вишл. <span style={{ color: C.textSec, fontWeight: 600 }}>{fmt1(o.totalWishlists > 0 ? o.totalItems / o.totalWishlists : 0)}</span>
+                                {' · '}
+                                вишл./польз. <span style={{ color: C.textSec, fontWeight: 600 }}>{fmt1(godStats.funnel.usersWithWishlist > 0 ? o.totalWishlists / godStats.funnel.usersWithWishlist : 0)}</span>
                               </div>
 
-                              {/* ── Воронка · уникальные пользователи ── */}
-                              <div style={{ marginBottom: 10 }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                  Воронка · % от всех пользователей
-                                </div>
-                                {funnelSteps.map((step, i) => {
-                                  const p = pct(step.value, godStats.funnel.totalUsers);
-                                  const isFirst = i === 0;
-                                  return (
-                                    <div key={i} style={{ marginBottom: 6 }}>
-                                      {/* label on its own line, value right-aligned — prevents overlap on long RU text */}
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2, gap: 8 }}>
-                                        <span style={{ fontSize: 10, color: C.textSec, lineHeight: 1.4, flex: 1 }}>{step.label}</span>
-                                        <span style={{ fontSize: 11, color: C.text, fontVariantNumeric: 'tabular-nums', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                                          {step.value}
-                                          {!isFirst && <span style={{ color: C.textMuted, marginLeft: 4 }}>{p}%</span>}
-                                        </span>
-                                      </div>
-                                      <div style={{ height: 4, borderRadius: 2, background: C.border, overflow: 'hidden' }}>
-                                        <div style={{
-                                          height: '100%', borderRadius: 2,
-                                          width: `${isFirst ? 100 : p}%`,
-                                          background: isFirst ? '#ff9900' : C.accent,
-                                          transition: 'width 0.4s ease',
-                                        }} />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                              {divider}
+
+                              {/* ═══ B. АКТИВАЦИЯ ═══ */}
+                              {sHdr('⚡', 'Активация', '#5B8DEF')}
+                              <div style={{ display: 'flex', gap: 2, marginBottom: 10, background: C.bg, borderRadius: 8, padding: 2 }}>
+                                {(['funnel', 'onboarding', 'acq'] as const).map((tab) => (
+                                  <button key={tab} onClick={() => setActivationTab(tab)} style={{
+                                    flex: 1, padding: '4px 0', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                                    background: activationTab === tab ? '#5B8DEF' : 'transparent',
+                                    color: activationTab === tab ? '#fff' : C.textMuted, fontFamily: font,
+                                  }}>
+                                    {tab === 'funnel' ? 'Воронка' : tab === 'onboarding' ? 'Онбординг' : 'Привлечение'}
+                                  </button>
+                                ))}
                               </div>
-
-                              {/* ── ПРИВЛЕЧЕНИЕ / ACQUISITION v2 ── */}
-                              {godStats.acquisition && (() => {
-                                const acq = godStats.acquisition;
-                                const c = acq.current;
-                                const p = acq.previous;
-
-                                // Detect if event-based metrics have incomplete coverage for current period
-                                const evCov = acq.eventCoverage;
-                                const pDays = evCov?.periodDays ?? (acqPeriod === '24h' ? 1 : acqPeriod === '30d' ? 30 : 7);
-                                const botIncomplete = evCov ? evCov.botStartsDays < pDays : false;
-                                const miniIncomplete = evCov ? evCov.miniappOpensDays < pDays : false;
-                                const guestIncomplete = evCov ? evCov.guestEventsDays < pDays : false;
-                                const anyEventIncomplete = botIncomplete || miniIncomplete || guestIncomplete;
-                                // Show coverage like "(2д из 7д)" for incomplete event metrics
-                                const covLabel = (days: number) => days < pDays ? ` (${days}д/${pDays}д)` : '';
-                                const botCov = evCov ? covLabel(evCov.botStartsDays) : '';
-                                const miniCov = evCov ? covLabel(evCov.miniappOpensDays) : '';
-                                const guestCov = evCov ? covLabel(evCov.guestEventsDays) : '';
-
-                                const delta = (cur: number, prev: number) => {
-                                  if (prev === 0 && cur === 0) return { abs: 0, pct: 0, label: '—' };
-                                  if (prev === 0) return { abs: cur, pct: 100, label: `+${cur}` };
-                                  const d = cur - prev;
-                                  const pctVal = Math.round((d / prev) * 100);
-                                  return { abs: d, pct: pctVal, label: `${d >= 0 ? '+' : ''}${d} (${pctVal >= 0 ? '+' : ''}${pctVal}%)` };
-                                };
-
-                                const DRow = ({ label, cur, prev, dim }: { label: string; cur: number; prev: number; dim?: boolean }) => {
-                                  const d = delta(cur, prev);
-                                  const color = d.abs > 0 ? C.green : d.abs < 0 ? (d.pct <= -30 ? C.red : C.orange) : C.textMuted;
-                                  return (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
-                                      <span style={{ fontSize: 12, color: dim ? C.textMuted : C.textSec }}>{label}</span>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{cur}</span>
-                                        <span style={{ fontSize: 11, color, fontWeight: 600, minWidth: 70, textAlign: 'right' }}>{d.label}</span>
-                                      </div>
+                              {activationTab === 'funnel' && (() => {
+                                const steps = [
+                                  { label: 'Любой вишлист', value: godStats.funnel.usersWithAnyWishlist ?? godStats.funnel.usersWithWishlist },
+                                  { label: 'Обычный вишлист', value: godStats.funnel.usersWithWishlist },
+                                  { label: 'Добавили желание', value: godStats.funnel.usersWithItem },
+                                  { label: 'Перешли по ссылке', value: godStats.funnel.usersWithLinkOpen ?? godStats.funnel.usersWhoInitiatedShare },
+                                  { label: 'Забронировали', value: godStats.funnel.usersWithReservation },
+                                ];
+                                const total = godStats.funnel.totalUsers;
+                                return (
+                                  <div style={{ marginBottom: 4 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                      <span style={{ fontSize: 10, color: C.textMuted }}>Всего пользователей</span>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: '#FF9500', fontVariantNumeric: 'tabular-nums' }}>{total}</span>
                                     </div>
-                                  );
-                                };
-
-                                const CRow = ({ label, val }: { label: string; val: number | null }) => (
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
-                                    <span style={{ fontSize: 12, color: C.textSec }}>{label}</span>
-                                    <span style={{ fontSize: 12, fontWeight: 600, color: val != null ? (val >= 30 ? C.green : val <= 5 ? C.orange : C.text) : C.textMuted }}>{val != null ? `${val}%` : '\u2014'}</span>
+                                    {steps.map((step, i) => {
+                                      const p = pct(step.value, total);
+                                      return (
+                                        <div key={i} style={{ marginBottom: 5 }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                            <span style={{ fontSize: 11, color: C.textSec }}>{step.label}</span>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+                                              {step.value} <span style={{ color: C.textMuted, fontWeight: 400, fontSize: 10 }}>{p}%</span>
+                                            </span>
+                                          </div>
+                                          <div style={{ height: 3, borderRadius: 2, background: C.border, overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', borderRadius: 2, width: `${p}%`, background: '#5B8DEF', transition: 'width 0.4s ease' }} />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 );
-
+                              })()}
+                              {activationTab === 'onboarding' && (() => {
+                                const ab = godStats.onboardingAB;
+                                if (!ab) return <div style={{ fontSize: 11, color: C.textMuted, padding: '8px 0' }}>Нет данных онбординга</div>;
+                                const v2s = ab.started['v2_try'] ?? 0;
+                                const v2c = ab.completed['v2_try'] ?? 0;
+                                const v2wl = ab.firstWishlist['v2_try'] ?? 0;
+                                const v2item = ab.firstItem['v2_try'] ?? 0;
+                                const convRate = ab.conversionRates?.['v2_try']?.startToComplete ?? '—';
                                 return (
-                                  <div style={{ marginTop: 16 }}>
-                                    {/* Header + period selector */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                      <div>
-                                        <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: 1 }}>Привлечение</div>
-                                        {acq.excludedTestUsers > 0 && <div style={{ fontSize: 9, color: C.textMuted }}>без тестовых ({acq.excludedTestUsers})</div>}
-                                      </div>
-                                      <div style={{ display: 'flex', gap: 2, background: C.bg, borderRadius: 6, padding: 2 }}>
-                                        {(['24h', '7d', '30d'] as const).map(pd => (
-                                          <button key={pd} onClick={() => { setAcqPeriod(pd); loadGodStats(undefined, pd); }} style={{
-                                            padding: '3px 10px', borderRadius: 4, border: 'none', fontSize: 11, fontWeight: 600,
-                                            cursor: 'pointer', background: acqPeriod === pd ? C.accent : 'transparent',
-                                            color: acqPeriod === pd ? '#fff' : C.textMuted,
-                                          }}>{pd}</button>
-                                        ))}
-                                      </div>
-                                    </div>
-
-                                    {/* Data completeness warning */}
-                                    {acq.dataNote && (
-                                      <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: '#FBBF24', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{'\u26A1'} Неполные данные</div>
-                                        <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.4 }}>{acq.dataNote}</div>
-                                        {anyEventIncomplete && (
-                                          <div style={{ fontSize: 9, color: C.textMuted, marginTop: 4, opacity: 0.7 }}>
-                                            Блок «Трекинг событий» выделен отдельно, данные из БД полные
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {/* Diagnosis alerts — split by data source */}
-                                    {acq.diagnosis.dbAlerts.length > 0 && (
-                                      <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.red, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{'\u26A0'} Диагностика (БД)</div>
-                                        {acq.diagnosis.dbAlerts.map((a, i) => (
-                                          <div key={i} style={{ fontSize: 11, color: a.deltaPct < 0 ? C.red : C.green, padding: '2px 0' }}>
-                                            {a.label}: {a.prev} {'\u2192'} {a.cur} <span style={{ opacity: 0.7 }}>({a.deltaPct >= 0 ? '+' : ''}{a.deltaPct}%)</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                    {acq.diagnosis.eventAlerts.length > 0 && (
-                                      <div style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.15)', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: '#FBBF24', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{'\u26A0'} Диагностика (события{anyEventIncomplete ? ', partial' : ''})</div>
-                                        {acq.diagnosis.eventAlerts.map((a, i) => (
-                                          <div key={i} style={{ fontSize: 11, color: a.deltaPct < 0 ? '#FBBF24' : C.green, padding: '2px 0' }}>
-                                            {a.label}: {a.prev} {'\u2192'} {a.cur} <span style={{ opacity: 0.7 }}>({a.deltaPct >= 0 ? '+' : ''}{a.deltaPct}%)</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-
-                                    {/* Growth metrics — entity-derived (full data) */}
-                                    <div style={{ background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Рост (из БД)</div>
-                                      <DRow label="Новых пользователей" cur={c.newUsers} prev={p.newUsers} />
-                                      <DRow label="Первый вишлист" cur={c.firstWishlist} prev={p.firstWishlist} />
-                                      <DRow label="Первое желание" cur={c.firstWish} prev={p.firstWish} />
-                                      <DRow label="Поделились ссылкой" cur={c.ownersShared} prev={p.ownersShared} />
-                                      <DRow label="Забронировали" cur={c.reservers} prev={p.reservers} />
-                                      <DRow label="Всего броней" cur={c.totalReservations} prev={p.totalReservations} dim />
-                                    </div>
-
-                                    {/* Event-based metrics — may have incomplete coverage */}
-                                    <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px', opacity: anyEventIncomplete ? 0.75 : 1, position: 'relative' }}>
-                                      {anyEventIncomplete && <div style={{ position: 'absolute', top: 8, right: 10, fontSize: 8, fontWeight: 700, color: '#FBBF24', background: 'rgba(251,191,36,0.12)', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: 0.5 }}>partial</div>}
-                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
-                                        Трекинг событий{anyEventIncomplete ? <span style={{ fontWeight: 400, textTransform: 'none' }}> — неполное покрытие</span> : ''}
-                                      </div>
-                                      <DRow label={`/start${botCov}`} cur={c.botStarts} prev={p.botStarts} dim={botIncomplete} />
-                                      <DRow label={`Miniapp opens${miniCov}`} cur={c.miniappOpens} prev={p.miniappOpens} dim={miniIncomplete} />
-                                      <DRow label={`Гостевые просмотры${guestCov}`} cur={c.guestOpens} prev={p.guestOpens} dim={guestIncomplete} />
-                                      {c.guestUsersUnique > 0 ? (
-                                        <DRow label={`Уникальных гостей${guestCov}`} cur={c.guestUsersUnique} prev={p.guestUsersUnique} dim />
-                                      ) : c.guestOpens > 0 ? (
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
-                                          <span style={{ fontSize: 12, color: C.textMuted }}>Уникальных гостей</span>
-                                          <span style={{ fontSize: 11, color: C.textMuted, fontStyle: 'italic' }}>{'н/д (анонимные)'}</span>
+                                  <div style={{ marginBottom: 4 }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', marginBottom: 6 }}>
+                                      {([['Начали', v2s], ['Завершили', v2c], ['1й вишлист', v2wl], ['1й item', v2item]] as [string, number][]).map(([label, val]) => (
+                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
+                                          <span style={{ fontSize: 11, color: C.textMuted }}>{label}</span>
+                                          <span style={{ fontSize: 12, fontWeight: 700, color: '#7C6AFF', fontVariantNumeric: 'tabular-nums' }}>{val}</span>
                                         </div>
-                                      ) : null}
+                                      ))}
                                     </div>
-
-                                    {/* Sources */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}`, marginBottom: 6 }}>
+                                      <span style={{ fontSize: 11, color: C.textMuted }}>Конв. start→complete</span>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: v2s > 0 ? (v2c / v2s >= 0.5 ? C.green : v2c / v2s >= 0.2 ? C.orange : C.red) : C.textMuted }}>{convRate}</span>
+                                    </div>
+                                    {Object.keys(ab.v2AcquisitionPaths).length > 0 && (
+                                      <>
+                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Пути</div>
+                                        {Object.entries(ab.v2AcquisitionPaths).map(([path, count]) => (
+                                          <div key={path} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
+                                            <span style={{ fontSize: 11, color: C.textSec }}>{path}</span>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+                                          </div>
+                                        ))}
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                              {activationTab === 'acq' && (() => {
+                                if (!acq) return <div style={{ fontSize: 11, color: C.textMuted, padding: '8px 0' }}>Нет данных привлечения</div>;
+                                const c = acq.current; const p = acq.previous;
+                                const evCov = acq.eventCoverage;
+                                const pDays = evCov?.periodDays ?? (acqPeriod === '24h' ? 1 : acqPeriod === '30d' ? 30 : 7);
+                                const anyEventIncomplete = evCov ? (evCov.botStartsDays < pDays || evCov.miniappOpensDays < pDays || evCov.guestEventsDays < pDays) : false;
+                                return (
+                                  <div style={{ marginBottom: 4 }}>
+                                    <div style={{ display: 'flex', gap: 2, marginBottom: 8, background: C.bg, borderRadius: 6, padding: 2 }}>
+                                      {(['24h', '7d', '30d'] as const).map(pd => (
+                                        <button key={pd} onClick={() => { setAcqPeriod(pd); loadGodStats(undefined, pd); }} style={{
+                                          flex: 1, padding: '3px 0', borderRadius: 4, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                                          background: acqPeriod === pd ? C.accent : 'transparent',
+                                          color: acqPeriod === pd ? '#fff' : C.textMuted, fontFamily: font,
+                                        }}>{pd}</button>
+                                      ))}
+                                    </div>
+                                    {acq.excludedTestUsers > 0 && <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 4 }}>без тестовых ({acq.excludedTestUsers})</div>}
+                                    <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Рост (БД)</div>
+                                    {([
+                                      ['Новых пользователей', c.newUsers, p.newUsers],
+                                      ['Первый вишлист', c.firstWishlist, p.firstWishlist],
+                                      ['Первое желание', c.firstWish, p.firstWish],
+                                      ['Поделились', c.ownersShared, p.ownersShared],
+                                      ['Забронировали', c.reservers, p.reservers],
+                                    ] as [string, number, number][]).map(([label, cur, prev]) => {
+                                      const d = safeDelta(cur, prev);
+                                      return (
+                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
+                                          <span style={{ fontSize: 11, color: C.textSec }}>{label}</span>
+                                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{cur}</span>
+                                            <span style={{ fontSize: 10, color: d.color, minWidth: 50, textAlign: 'right' }}>{d.str}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                    {acq.conversions.newToWishlist != null && (
+                                      <div style={{ marginTop: 6 }}>
+                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Конверсии (БД)</div>
+                                        {([
+                                          ['Новый → вишлист', acq.conversions.newToWishlist],
+                                          ['Новый → желание', acq.conversions.newToWish],
+                                          ['Вишлист → шеринг', acq.conversions.wishlistToShare],
+                                        ] as [string, number | null][]).filter(([, v]) => v != null).map(([label, val]) => (
+                                          <div key={label as string} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
+                                            <span style={{ fontSize: 11, color: C.textSec }}>{label as string}</span>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: (val as number) >= 30 ? C.green : (val as number) <= 5 ? C.orange : C.text }}>{val as number}%</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                     {acq.sources.length > 0 && (
-                                      <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Источники новых</div>
-                                        {/* Header */}
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 0 4px', borderBottom: `1px solid ${C.border}` }}>
-                                          <span style={{ fontSize: 10, color: C.textMuted, flex: 1 }}>Источник</span>
-                                          <span style={{ fontSize: 10, color: C.textMuted, width: 40, textAlign: 'right' }}>Нов.</span>
-                                          <span style={{ fontSize: 10, color: C.textMuted, width: 35, textAlign: 'right' }}>Вишл.</span>
-                                          <span style={{ fontSize: 10, color: C.textMuted, width: 35, textAlign: 'right' }}>Жел.</span>
-                                        </div>
+                                      <div style={{ marginTop: 6 }}>
+                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Источники нов.</div>
                                         {acq.sources.map(s => (
-                                          <div key={s.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
+                                          <div key={s.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
                                             <span style={{ fontSize: 11, color: C.textSec, flex: 1 }}>{s.label}</span>
-                                            <span style={{ fontSize: 12, fontWeight: 600, color: C.text, width: 40, textAlign: 'right' }}>{s.newUsers}</span>
-                                            <span style={{ fontSize: 11, color: C.textMuted, width: 35, textAlign: 'right' }}>{s.withWishlist}</span>
-                                            <span style={{ fontSize: 11, color: C.textMuted, width: 35, textAlign: 'right' }}>{s.withWish}</span>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: C.text, width: 30, textAlign: 'right' }}>{s.newUsers}</span>
+                                            <span style={{ fontSize: 10, color: C.textMuted, width: 28, textAlign: 'right' }}>{s.withWishlist}</span>
+                                            <span style={{ fontSize: 10, color: C.textMuted, width: 26, textAlign: 'right' }}>{s.withWish}</span>
                                           </div>
                                         ))}
                                       </div>
                                     )}
-
-                                    {/* External Source Breakdown (all-time, from tagged links) */}
-                                    {godStats.sourceBreakdown && godStats.sourceBreakdown.length > 0 && (
-                                      <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
-                                          Внешние источники <span style={{ fontSize: 9, fontWeight: 400, textTransform: 'none', opacity: 0.7 }}>all-time</span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 0 4px', borderBottom: `1px solid ${C.border}` }}>
-                                          <span style={{ fontSize: 10, color: C.textMuted, flex: 1 }}>Источник</span>
-                                          <span style={{ fontSize: 10, color: C.textMuted, width: 50, textAlign: 'right' }}>Всего</span>
-                                        </div>
-                                        {godStats.sourceBreakdown.map(s => (
-                                          <div key={s.source} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
-                                            <span style={{ fontSize: 11, color: C.textSec, flex: 1 }}>{s.source}</span>
-                                            <span style={{ fontSize: 12, fontWeight: 600, color: C.text, width: 50, textAlign: 'right' }}>{s.count}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-
-                                    {/* Conversions — entity-based (reliable) */}
-                                    <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Конверсии (из БД)</div>
-                                      <CRow label={'Новый \u2192 вишлист'} val={acq.conversions.newToWishlist} />
-                                      <CRow label={'Новый \u2192 желание'} val={acq.conversions.newToWish} />
-                                      <CRow label={'Вишлист \u2192 шеринг'} val={acq.conversions.wishlistToShare} />
-                                    </div>
-
-                                    {/* Conversions — event-based (may be incomplete) */}
-                                    {(acq.conversions.startToOpen != null || acq.conversions.shareToGuestOpen != null || acq.conversions.guestToReserve != null) && (
-                                      <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px', opacity: anyEventIncomplete ? 0.7 : 1, position: 'relative' }}>
-                                        {anyEventIncomplete && <div style={{ position: 'absolute', top: 8, right: 10, fontSize: 8, fontWeight: 700, color: '#FBBF24', background: 'rgba(251,191,36,0.12)', borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: 0.5 }}>partial</div>}
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Конверсии (события)</div>
-                                        <CRow label={'/start \u2192 miniapp'} val={acq.conversions.startToOpen} />
-                                        <CRow label={'Ссылка \u2192 просмотр'} val={acq.conversions.shareToGuestOpen} />
-                                        <CRow label={'Просмотр \u2192 бронь'} val={acq.conversions.guestToReserve} />
-                                      </div>
-                                    )}
-
-                                    {/* Share funnel (period-based) */}
-                                    <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
-                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Воронка шеринга</div>
-                                      <DRow label="Поделились" cur={c.ownersShared} prev={p.ownersShared} />
-                                      <DRow label="Ссылок создано" cur={c.shareLinksGenerated} prev={p.shareLinksGenerated} />
-                                      <DRow label={`Гостевые просмотры${guestCov}`} cur={c.guestOpens} prev={p.guestOpens} dim={guestIncomplete} />
-                                      <DRow label="Забронировали" cur={c.reservers} prev={p.reservers} />
-                                      <DRow label="Всего броней" cur={c.totalReservations} prev={p.totalReservations} />
-                                    </div>
+                                    {anyEventIncomplete && <div style={{ marginTop: 6, fontSize: 9, color: '#FBBF24', background: 'rgba(251,191,36,0.06)', borderRadius: 6, padding: '3px 8px' }}>⚡ Часть событий: неполное покрытие</div>}
                                   </div>
                                 );
                               })()}
 
-                              {/* ── Детали (expandable) ── */}
-                              <div style={{ marginBottom: 8 }}>
-                                <button
-                                  onClick={() => setGodStatsDetailsOpen(v => !v)}
-                                  style={{
-                                    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                                    fontSize: 10, fontWeight: 700, color: C.textMuted,
-                                    letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: font,
-                                    display: 'flex', alignItems: 'center', gap: 4,
-                                  }}
-                                >
-                                  {godStatsDetailsOpen ? '▾' : '▸'} Детали
-                                </button>
-                                {godStatsDetailsOpen && (
-                                  <div style={{ marginTop: 6 }}>
-                                    {/* Engagement totals */}
-                                    {([
-                                      ['Комментариев', e.totalComments],
-                                      ['Подписок',     e.totalWishlistSubs],
-                                    ] as [string, number][]).map(([lbl, val]) => (
-                                      <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                                        <span style={{ fontSize: 11, color: C.textMuted }}>{lbl}</span>
-                                        <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
-                                      </div>
-                                    ))}
+                              {divider}
 
-                                    {/* Шаринг */}
-                                    <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>
-                                        Шаринг
-                                      </div>
+                              {/* ═══ C. SOCIAL LOOP ═══ */}
+                              {sHdr('↗', 'Social loop', '#34C759')}
+                              {acq ? (() => {
+                                const c = acq.current; const p = acq.previous;
+                                const evCov = acq.eventCoverage;
+                                const pDays = evCov?.periodDays ?? (acqPeriod === '24h' ? 1 : acqPeriod === '30d' ? 30 : 7);
+                                const guestIncomplete = evCov ? evCov.guestEventsDays < pDays : false;
+                                return (
+                                  <>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 4, marginBottom: 8 }}>
                                       {([
-                                        ['Перешли по ссылке на вишлист', godStats.funnel.usersWithLinkOpen ?? godStats.funnel.usersWhoInitiatedShare],
-                                        ['Переходов по ссылке',          godStats.funnel.sharedLinkOpens],
-                                        ['Открыли чужой вишлист',        godStats.funnel.wishlistsWithLinkOpen],
-                                      ] as [string, number][]).map(([lbl, val]) => (
-                                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                                          <span style={{ fontSize: 11, color: C.textMuted }}>{lbl}</span>
-                                          <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
-                                        </div>
-                                      ))}
+                                        ['Поделились', c.ownersShared, p.ownersShared],
+                                        ['Ссылок', c.shareLinksGenerated, p.shareLinksGenerated],
+                                        ['Гостевых', c.guestOpens, p.guestOpens],
+                                        ['Броней', c.reservers, p.reservers],
+                                      ] as [string, number, number][]).map(([label, cur, prev]) => {
+                                        const d = safeDelta(cur, prev);
+                                        return (
+                                          <div key={label} style={{ background: C.surface, borderRadius: 8, padding: '5px 7px' }}>
+                                            <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 1 }}>{label}</div>
+                                            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>{cur}</div>
+                                            <div style={{ fontSize: 9, color: d.color }}>{d.str}</div>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
-
-                                    {/* Ошибки за 24ч */}
-                                    {godStats.errors24h && (() => {
-                                      const errs = godStats.errors24h!;
-                                      return (
-                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                          <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>
-                                            Ошибки за 24 часа
-                                          </div>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                                            <span style={{ fontSize: 11, color: C.textMuted }}>Всего ошибок</span>
-                                            <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{errs.total}</span>
-                                          </div>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: errs.total > 0 ? 5 : 0 }}>
-                                            <span style={{ fontSize: 11, color: C.textMuted }}>Пользователей затронуто</span>
-                                            <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{errs.affectedUsers}</span>
-                                          </div>
-                                          {errs.total === 0 ? (
-                                            <div style={{ fontSize: 10, color: C.textMuted, marginTop: 3 }}>Ошибок за последние 24 часа не было</div>
-                                          ) : (
-                                            errs.top.map((err, i) => (
-                                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                                                <span style={{ fontSize: 10, color: C.textMuted, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                  {err.method} {err.route} · {err.status}
-                                                </span>
-                                                <span style={{ fontSize: 10, color: C.textSec, fontVariantNumeric: 'tabular-nums', flexShrink: 0, marginLeft: 6 }}>{err.count}</span>
-                                              </div>
-                                            ))
-                                          )}
+                                    {acq.conversions.wishlistToShare != null && (
+                                      <>
+                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Конверсии (БД)</div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
+                                          <span style={{ fontSize: 11, color: C.textSec }}>Вишлист → шеринг</span>
+                                          <span style={{ fontSize: 12, fontWeight: 600, color: acq.conversions.wishlistToShare >= 30 ? C.green : acq.conversions.wishlistToShare <= 5 ? C.orange : C.text }}>{acq.conversions.wishlistToShare}%</span>
                                         </div>
-                                      );
-                                    })()}
-
-                                    {/* PRO ограничения за 24ч */}
-                                    {pro && (
-                                      <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>
-                                          Ограничения PRO за 24 часа
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                                          <span style={{ fontSize: 11, color: C.textMuted }}>Срабатываний ограничений</span>
-                                          <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{pro.totalHits}</span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                                          <span style={{ fontSize: 11, color: C.textMuted }}>Столкнулись с ограничениями</span>
-                                          <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{pro.uniqueUsers}</span>
-                                        </div>
-                                        {([
-                                          ['Импорт по ссылке недоступен', pro.byType.urlImport],
-                                          ['Подсказки недоступны',        pro.byType.hints],
-                                          ['Комментарии недоступны',      pro.byType.comments],
-                                          ['Лимит по вишлистам',          pro.byType.wishlistLimit],
-                                          ['Лимит по желаниям',           pro.byType.itemLimit],
-                                        ] as [string, number][]).filter(([, v]) => v > 0).map(([lbl, val]) => (
-                                          <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                                            <span style={{ fontSize: 10, color: C.textMuted }}>↳ {lbl}</span>
-                                            <span style={{ fontSize: 10, color: C.textSec, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
+                                      </>
+                                    )}
+                                    {(acq.conversions.shareToGuestOpen != null || acq.conversions.guestToReserve != null) && (
+                                      <div style={{ marginTop: 6, opacity: 0.8, position: 'relative' }}>
+                                        <div style={{ position: 'absolute', top: 0, right: 0, fontSize: 7, fontWeight: 700, color: '#FBBF24', background: 'rgba(251,191,36,0.12)', borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase' }}>partial</div>
+                                        <div style={{ fontSize: 9, color: '#FBBF24', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>События{guestIncomplete ? ' — неполные' : ''}</div>
+                                        {acq.conversions.shareToGuestOpen != null && (
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
+                                            <span style={{ fontSize: 11, color: C.textMuted }}>Ссылка → просмотр</span>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: C.textMuted }}>{acq.conversions.shareToGuestOpen}%</span>
                                           </div>
-                                        ))}
+                                        )}
+                                        {acq.conversions.guestToReserve != null && (
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
+                                            <span style={{ fontSize: 11, color: C.textMuted }}>Просмотр → бронь</span>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: C.textMuted }}>{acq.conversions.guestToReserve}%</span>
+                                          </div>
+                                        )}
                                       </div>
                                     )}
+                                  </>
+                                );
+                              })() : <div style={{ fontSize: 11, color: C.textMuted }}>—</div>}
 
-                                    {/* Онбординг hello_activation (30д) */}
-                                    {godStats.onboarding?.hello_activation && (() => {
-                                      const ob = godStats.onboarding.hello_activation;
-                                      return (
-                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                          <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>
-                                            Онбординг hello_activation (30д)
-                                          </div>
-                                          {([
-                                            ['Запустили (wildberries)',    ob.wildberries],
-                                            ['Запустили (goldapple)',      ob.goldapple],
-                                            ['Запустили (ozon)',           ob.ozon],
-                                            ['Запустили (yandex_market)', ob.yandex_market],
-                                            ['Завершили онбординг',        ob.completed],
-                                          ] as [string, number][]).map(([lbl, val]) => (
-                                            <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                                              <span style={{ fontSize: 11, color: C.textMuted }}>{lbl}</span>
-                                              <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
-                                            </div>
-                                          ))}
+                              {divider}
+
+                              {/* ═══ D. СЕГМЕНТЫ ═══ */}
+                              {sHdr('🌍', 'Сегменты', '#AF52DE')}
+                              {godStats.marketBuckets && godStats.marketBuckets.length > 0 ? (() => {
+                                const buckets = godStats.marketBuckets!;
+                                const bucketTotal = buckets.reduce((s, b) => s + b.total, 0);
+                                const maxBucket = Math.max(...buckets.map(b => b.total), 1);
+                                const bucketColors: Record<string, string> = {
+                                  ru: '#5B8DEF', en: '#34C759', ar: '#30D5C8', hi: '#FFB340',
+                                  'zh-CN': '#FF6B6B', es: '#AF52DE', other_known: '#8E8E93', unknown: '#444',
+                                };
+                                return (
+                                  <>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 0 3px', borderBottom: `1px solid ${C.border}`, marginBottom: 2 }}>
+                                      <span style={{ fontSize: 9, color: C.textMuted, flex: 1 }}>Рынок</span>
+                                      <span style={{ fontSize: 9, color: C.textMuted, width: 40, textAlign: 'right' }}>Всего</span>
+                                      <span style={{ fontSize: 9, color: C.textMuted, width: 32, textAlign: 'right' }}>7д</span>
+                                      <span style={{ fontSize: 9, color: C.textMuted, width: 28, textAlign: 'right' }}>%</span>
+                                    </div>
+                                    {buckets.map(b => (
+                                      <div key={b.bucket}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
+                                          <span style={{ fontSize: 10, color: C.text, flex: 1 }}>{b.label}</span>
+                                          <span style={{ fontSize: 10, fontWeight: 700, color: C.text, width: 40, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.total}</span>
+                                          <span style={{ fontSize: 9, color: C.textMuted, width: 32, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.new7d > 0 ? `+${b.new7d}` : '—'}</span>
+                                          <span style={{ fontSize: 9, color: C.textMuted, width: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucketTotal > 0 ? (b.total / bucketTotal * 100).toFixed(0) : 0}%</span>
                                         </div>
-                                      );
-                                    })()}
-
-                                    {/* ── Onboarding metrics (v2 only) ── */}
-                                    {godStats.onboardingAB && (() => {
-                                      const ab = godStats.onboardingAB!;
-                                      const v2s = ab.started['v2_try'] ?? 0;
-                                      const v2c = ab.completed['v2_try'] ?? 0;
-                                      const v2wl = ab.firstWishlist['v2_try'] ?? 0;
-                                      const v2item = ab.firstItem['v2_try'] ?? 0;
-                                      return (
-                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                          <div style={{ fontSize: 10, fontWeight: 700, color: '#7C6AFF', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                            📊 Onboarding (v2)
-                                          </div>
-                                          {([
-                                            ['Начали', v2s],
-                                            ['Завершили', v2c],
-                                            ['1й вишлист', v2wl],
-                                            ['1й item', v2item],
-                                          ] as [string, number][]).map(([lbl, val]) => (
-                                            <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                                              <span style={{ fontSize: 11, color: C.textMuted, flex: 1 }}>{lbl}</span>
-                                              <span style={{ fontSize: 11, fontWeight: 700, color: '#7C6AFF', fontVariantNumeric: 'tabular-nums' }}>{val}</span>
-                                            </div>
-                                          ))}
-                                          {/* Conversion rate */}
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
-                                            <span style={{ fontSize: 10, color: C.textMuted }}>Конверсия start→complete</span>
-                                            <span style={{ fontSize: 10, fontWeight: 700, color: '#7C6AFF' }}>{ab.conversionRates?.['v2_try']?.startToComplete ?? '—'}</span>
-                                          </div>
-                                          {/* v2 acquisition paths */}
-                                          {Object.keys(ab.v2AcquisitionPaths).length > 0 && (
-                                            <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
-                                              <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 2 }}>Пути:</div>
-                                              {Object.entries(ab.v2AcquisitionPaths).map(([path, count]) => (
-                                                <div key={path} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                  <span style={{ fontSize: 10, color: C.textMuted }}>{path}</span>
-                                                  <span style={{ fontSize: 10, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          )}
+                                        <div style={{ height: 2, borderRadius: 1, background: C.border, overflow: 'hidden', marginBottom: 1 }}>
+                                          <div style={{ height: '100%', borderRadius: 1, width: `${(b.total / maxBucket) * 100}%`, background: bucketColors[b.bucket] ?? '#8E8E93' }} />
                                         </div>
-                                      );
-                                    })()}
-
-                                    {/* ── Locale Segments ── */}
-                                    {godStats?.localeSegments && (() => {
-                                      const ls = godStats.localeSegments;
-                                      const scopeLabels: Record<string, string> = { active30d: 'Активные 30д', new7d: 'Новые 7д', all: 'Все' };
-                                      const maxCount = Math.max(...ls.segments.map(s => s.usersCount), 1);
-                                      const segColors: Record<string, string> = {
-                                        ru: '#5B8DEF', en: '#34C759', 'zh-CN': '#FF6B6B', hi: '#FFB340',
-                                        es: '#AF52DE', ar: '#30D5C8', other: '#8E8E93',
-                                      };
-                                      return (
-                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                            <div style={{ fontSize: 10, fontWeight: 700, color: '#5B8DEF', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                                              🌐 Рыночные сегменты
-                                            </div>
-                                            <div style={{ display: 'flex', gap: 4 }}>
-                                              {(['active30d', 'new7d', 'all'] as const).map(s => (
-                                                <button key={s} onClick={() => { setLocaleSegmentScope(s); void loadGodStats(s); }}
-                                                  style={{
-                                                    background: localeSegmentScope === s ? '#5B8DEF' : 'transparent',
-                                                    color: localeSegmentScope === s ? '#fff' : C.textMuted,
-                                                    border: `1px solid ${localeSegmentScope === s ? '#5B8DEF' : C.border}`,
-                                                    borderRadius: 4, padding: '1px 6px', fontSize: 9, cursor: 'pointer', fontFamily: font,
-                                                  }}>{scopeLabels[s]}</button>
-                                              ))}
-                                            </div>
-                                          </div>
-                                          <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 6 }}>
-                                            Всего: <span style={{ fontWeight: 700, color: C.text }}>{ls.total}</span>
-                                          </div>
-                                          {ls.segments.map(seg => (
-                                            <div key={seg.segmentKey} style={{ marginBottom: 4 }}>
-                                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 1 }}>
-                                                <span style={{ fontSize: 10, color: C.text }}>{seg.segmentLabel}</span>
-                                                <span style={{ fontSize: 10, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
-                                                  {seg.usersCount} <span style={{ color: C.textMuted, fontWeight: 400 }}>({seg.sharePercent}%)</span>
-                                                </span>
-                                              </div>
-                                              <div style={{ height: 4, borderRadius: 2, background: C.border, overflow: 'hidden' }}>
-                                                <div style={{
-                                                  height: '100%', borderRadius: 2,
-                                                  width: `${(seg.usersCount / maxCount) * 100}%`,
-                                                  background: segColors[seg.segmentKey] ?? segColors['other'],
-                                                }} />
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      );
-                                    })()}
-
-                                    {/* ── Распределение по рынкам ── */}
-                                    {godStats?.marketBuckets && godStats.marketBuckets.length > 0 && (() => {
-                                      const buckets = godStats.marketBuckets!;
-                                      const maxBucket = Math.max(...buckets.map(b => b.total), 1);
-                                      const bucketTotal = buckets.reduce((s, b) => s + b.total, 0);
-                                      const bucketColors: Record<string, string> = {
-                                        ru: '#5B8DEF', en: '#34C759', ar: '#30D5C8', hi: '#FFB340',
-                                        'zh-CN': '#FF6B6B', es: '#AF52DE', other_known: '#8E8E93', unknown: '#555',
-                                      };
-                                      return (
-                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                          <div style={{ fontSize: 10, fontWeight: 700, color: '#FF9500', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                            🌍 Распределение по рынкам
-                                          </div>
-                                          <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 6 }}>
-                                            Всего: <span style={{ fontWeight: 700, color: C.text }}>{bucketTotal}</span>
-                                          </div>
-                                          {/* Header */}
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 0 4px', borderBottom: `1px solid ${C.border}` }}>
-                                            <span style={{ fontSize: 9, color: C.textMuted, flex: 1 }}>Рынок</span>
-                                            <span style={{ fontSize: 9, color: C.textMuted, width: 45, textAlign: 'right' }}>Всего</span>
-                                            <span style={{ fontSize: 9, color: C.textMuted, width: 40, textAlign: 'right' }}>7д</span>
-                                            <span style={{ fontSize: 9, color: C.textMuted, width: 35, textAlign: 'right' }}>%</span>
-                                          </div>
-                                          {buckets.map(b => (
-                                            <div key={b.bucket}>
-                                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-                                                <span style={{ fontSize: 10, color: C.text, flex: 1 }}>{b.label}</span>
-                                                <span style={{ fontSize: 10, fontWeight: 700, color: C.text, width: 45, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.total}</span>
-                                                <span style={{ fontSize: 10, color: C.textMuted, width: 40, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.new7d > 0 ? `+${b.new7d}` : '—'}</span>
-                                                <span style={{ fontSize: 10, color: C.textMuted, width: 35, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucketTotal > 0 ? `${(b.total / bucketTotal * 100).toFixed(1)}` : '0'}</span>
-                                              </div>
-                                              <div style={{ height: 3, borderRadius: 2, background: C.border, overflow: 'hidden', marginBottom: 2 }}>
-                                                <div style={{ height: '100%', borderRadius: 2, width: `${(b.total / maxBucket) * 100}%`, background: bucketColors[b.bucket] ?? '#8E8E93' }} />
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      );
-                                    })()}
-
-                                    {/* ── Поддержка импорта ── */}
-                                    {godStats?.importSplit && (() => {
+                                      </div>
+                                    ))}
+                                    {godStats.importSplit && (() => {
                                       const is = godStats.importSplit!;
                                       const total = is.supported.total + is.unsupported.total;
                                       return (
                                         <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                          <div style={{ fontSize: 10, fontWeight: 700, color: '#34C759', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                            📦 Поддержка импорта
+                                          <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Импорт</div>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                                            <span style={{ fontSize: 10, color: '#34C759' }}>Доступен (RU)</span>
+                                            <span style={{ fontSize: 10, fontWeight: 700, color: '#34C759', fontVariantNumeric: 'tabular-nums' }}>{is.supported.total} <span style={{ fontSize: 9, fontWeight: 400, color: C.textMuted }}>({total > 0 ? (is.supported.total / total * 100).toFixed(0) : 0}%)</span></span>
                                           </div>
-                                          {([
-                                            ['Импорт доступен (RU)', is.supported.total, is.supported.new7d, '#34C759'],
-                                            ['Импорт недоступен', is.unsupported.total, is.unsupported.new7d, '#FF6B6B'],
-                                          ] as [string, number, number, string][]).map(([label, tot, n7, color]) => (
-                                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
-                                              <span style={{ fontSize: 10, color: C.text, flex: 1 }}>{label}</span>
-                                              <span style={{ fontSize: 10, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', width: 50, textAlign: 'right' }}>
-                                                {tot} <span style={{ color: C.textMuted, fontWeight: 400, fontSize: 9 }}>({total > 0 ? (tot / total * 100).toFixed(0) : 0}%)</span>
-                                              </span>
-                                              <span style={{ fontSize: 9, color: C.textMuted, width: 35, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{n7 > 0 ? `+${n7}` : ''}</span>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ fontSize: 10, color: C.textMuted }}>Недоступен</span>
+                                            <span style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>{is.unsupported.total}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+                                    {godStats.bucketFunnel && godStats.bucketFunnel.length > 0 && (
+                                      <div style={{ marginTop: 6 }}>
+                                        <button onClick={() => setGodStatsDetailsOpen(v => !v)} style={{
+                                          background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', fontFamily: font,
+                                          fontSize: 10, fontWeight: 600, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 3,
+                                        }}>
+                                          {godStatsDetailsOpen ? '▾' : '▸'} Конверсия по рынкам <span style={{ fontWeight: 400, fontSize: 9, opacity: 0.7 }}>7д</span>
+                                        </button>
+                                        {godStatsDetailsOpen && (() => {
+                                          const bf = godStats.bucketFunnel!;
+                                          return (
+                                            <div style={{ marginTop: 4 }}>
+                                              <div style={{ display: 'flex', padding: '0 0 3px', borderBottom: `1px solid ${C.border}`, gap: 2 }}>
+                                                <span style={{ fontSize: 8, color: C.textMuted, flex: 1 }}>Рынок</span>
+                                                <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Нов.</span>
+                                                <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Вишл.</span>
+                                                <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Жел.</span>
+                                                <span style={{ fontSize: 8, color: C.textMuted, width: 24, textAlign: 'right' }}>Онб.</span>
+                                                <span style={{ fontSize: 8, color: C.textMuted, width: 20, textAlign: 'right' }}>Имп.</span>
+                                              </div>
+                                              {bf.map(b => (
+                                                <div key={b.bucket} style={{ display: 'flex', padding: '3px 0', borderBottom: `1px solid ${C.border}`, gap: 2, alignItems: 'center' }}>
+                                                  <span style={{ fontSize: 9, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.label}</span>
+                                                  <span style={{ fontSize: 9, fontWeight: 600, color: C.text, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.newUsers}</span>
+                                                  <span style={{ fontSize: 9, color: C.textMuted, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.firstWishlist}</span>
+                                                  <span style={{ fontSize: 9, color: C.textMuted, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.firstItem}</span>
+                                                  <span style={{ fontSize: 9, color: C.textMuted, width: 24, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.onbStarted}</span>
+                                                  <span style={{ fontSize: 9, color: b.importFails > 0 ? '#FF6B6B' : C.textMuted, width: 20, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.importAttempts > 0 ? `${b.importAttempts}` : '—'}</span>
+                                                </div>
+                                              ))}
+                                              <div style={{ marginTop: 4, fontSize: 9, color: C.textMuted, lineHeight: 1.6, display: 'flex', flexWrap: 'wrap', gap: '0 10px' }}>
+                                                {bf.filter(b => b.newUsers >= 5).map(b => (
+                                                  <span key={b.bucket}>
+                                                    {b.label}: <span style={{ fontWeight: 700, color: b.newUsers > 0 ? (b.firstWishlist / b.newUsers >= 0.3 ? '#34C759' : b.firstWishlist / b.newUsers >= 0.1 ? '#FFB340' : '#FF6B6B') : C.textMuted }}>
+                                                      {b.newUsers > 0 ? `${(b.firstWishlist / b.newUsers * 100).toFixed(0)}%` : '—'}
+                                                    </span>
+                                                  </span>
+                                                ))}
+                                              </div>
                                             </div>
-                                          ))}
-                                        </div>
-                                      );
-                                    })()}
+                                          );
+                                        })()}
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })() : <div style={{ fontSize: 11, color: C.textMuted }}>—</div>}
 
-                                    {/* ── Конверсия по рынкам (7д, новые юзеры) ── */}
-                                    {godStats?.bucketFunnel && godStats.bucketFunnel.length > 0 && (() => {
-                                      const bf = godStats.bucketFunnel!;
-                                      return (
-                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                          <div style={{ fontSize: 10, fontWeight: 700, color: '#AF52DE', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
-                                            📈 Конверсия по рынкам <span style={{ fontSize: 9, fontWeight: 400, textTransform: 'none', opacity: 0.7 }}>7д, новые</span>
-                                          </div>
-                                          {/* Header */}
-                                          <div style={{ display: 'flex', padding: '0 0 4px', borderBottom: `1px solid ${C.border}`, gap: 2 }}>
-                                            <span style={{ fontSize: 8, color: C.textMuted, flex: 1 }}>Рынок</span>
-                                            <span style={{ fontSize: 8, color: C.textMuted, width: 30, textAlign: 'right' }}>Нов.</span>
-                                            <span style={{ fontSize: 8, color: C.textMuted, width: 30, textAlign: 'right' }}>Вишл.</span>
-                                            <span style={{ fontSize: 8, color: C.textMuted, width: 30, textAlign: 'right' }}>Жел.</span>
-                                            <span style={{ fontSize: 8, color: C.textMuted, width: 28, textAlign: 'right' }}>Онб.</span>
-                                            <span style={{ fontSize: 8, color: C.textMuted, width: 28, textAlign: 'right' }}>Зав.</span>
-                                            <span style={{ fontSize: 8, color: C.textMuted, width: 25, textAlign: 'right' }}>Имп.</span>
-                                          </div>
-                                          {bf.map(b => {
-                                            const convWl = b.newUsers > 0 ? (b.firstWishlist / b.newUsers * 100).toFixed(0) : '—';
-                                            return (
-                                              <div key={b.bucket} style={{ display: 'flex', padding: '4px 0', borderBottom: `1px solid ${C.border}`, gap: 2, alignItems: 'center' }}>
-                                                <span style={{ fontSize: 9, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.label}</span>
-                                                <span style={{ fontSize: 10, fontWeight: 600, color: C.text, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.newUsers}</span>
-                                                <span style={{ fontSize: 10, color: C.textMuted, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.firstWishlist}</span>
-                                                <span style={{ fontSize: 10, color: C.textMuted, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.firstItem}</span>
-                                                <span style={{ fontSize: 10, color: C.textMuted, width: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.onbStarted}</span>
-                                                <span style={{ fontSize: 10, color: C.textMuted, width: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.onbCompleted}</span>
-                                                <span style={{ fontSize: 10, color: b.importFails > 0 ? '#FF6B6B' : C.textMuted, width: 25, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                                                  {b.importAttempts > 0 ? `${b.importAttempts}` : '—'}
-                                                </span>
-                                              </div>
-                                            );
-                                          })}
-                                          {/* Conversion summary row */}
-                                          <div style={{ marginTop: 6, fontSize: 9, color: C.textMuted, lineHeight: 1.5 }}>
-                                            {bf.filter(b => b.newUsers >= 3).map(b => (
-                                              <div key={b.bucket}>
-                                                {b.label}: нов.{'\u2192'}вишл. <span style={{ fontWeight: 700, color: b.newUsers > 0 ? (b.firstWishlist / b.newUsers >= 0.3 ? '#34C759' : b.firstWishlist / b.newUsers >= 0.1 ? '#FFB340' : '#FF6B6B') : C.textMuted }}>{b.newUsers > 0 ? `${(b.firstWishlist / b.newUsers * 100).toFixed(0)}%` : '—'}</span>
-                                                {b.importAttempts > 0 && <>, имп.ошибки: <span style={{ fontWeight: 700, color: b.importFails > 0 ? '#FF6B6B' : '#34C759' }}>{b.importFails}/{b.importAttempts}</span></>}
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
+                              {divider}
 
-                                    {/* Пояснения */}
-                                    <div style={{ fontSize: 10, color: C.textMuted, marginTop: 8, lineHeight: 1.6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                      <div>Активность = создали или обновили вишлист или желание</div>
-                                      <div>Переход по ссылке = открыли вишлист, которым поделились</div>
-                                      <div>Забронировали = создали бронь в чужом вишлисте</div>
-                                    </div>
+                              {/* ═══ E. RETENTION / WIN-BACK ═══ */}
+                              <button
+                                onClick={async () => {
+                                  if (retentionOpen) { setRetentionOpen(false); return; }
+                                  setRetentionOpen(true);
+                                  await loadRetention(retentionPeriod);
+                                }}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', padding: 0, textAlign: 'left' }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: retentionOpen ? 10 : 0 }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: '#34D399', letterSpacing: '0.07em', textTransform: 'uppercase' }}>↺ Retention & Win-back</span>
+                                  <span style={{ fontSize: 14, color: C.textMuted }}>{retentionOpen ? '▾' : '▸'}</span>
+                                </div>
+                              </button>
+                              {retentionOpen && retentionLoading && (
+                                <div style={{ fontSize: 12, color: C.textMuted, marginTop: 6 }}>Загрузка…</div>
+                              )}
+                              {retentionOpen && retentionStats && (() => {
+                                const rv = retentionStats;
+                                const o = rv.overview;
+                                const dbg = rv.debug;
+                                const segNames: Record<string, string> = { S1: 'S1 · Нет вишлиста', S2: 'S2 · Нет желаний', S3: 'S3 · Нет шеринга', S4: 'S4 · Давно неактивен' };
+                                const kpi = (label: string, value: number | string, color: string, hint?: string) => (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                                    <span style={{ fontSize: 11, color: C.textMuted }}>{label}{hint ? <span style={{ fontSize: 9, color: '#555', marginLeft: 4 }}>({hint})</span> : null}</span>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
                                   </div>
-                                )}
-                              </div>
+                                );
+                                return (
+                                  <div style={{ marginTop: 8 }}>
+                                    <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                                      {[7, 30, 90].map(d => (
+                                        <button key={d} onClick={() => { setRetentionPeriod(d); void loadRetention(d); }} style={{
+                                          fontSize: 11, padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                                          background: retentionPeriod === d ? '#34D399' : C.surface,
+                                          color: retentionPeriod === d ? '#000' : C.textMuted, fontWeight: 600,
+                                        }}>{d} дн.</button>
+                                      ))}
+                                    </div>
+                                    <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
+                                        {kpi('Отправлено', o.sent, C.text)}
+                                        {kpi('Доставлено', o.delivered, C.text)}
+                                        {kpi('Возврат 72ч', o.returned72h, '#FBBF24', o.returnRate72h)}
+                                        {kpi('Цел. шаг 7д', o.targetCompleted7d, '#7C6AFF', o.targetRate7d ?? '—')}
+                                        {kpi('Промо активировано', o.promoRedeemed, '#34D399')}
+                                        {kpi('PRO-доступов', o.activeGrants, '#34D399')}
+                                      </div>
+                                    </div>
+                                    {(rv.bySegment as any[]).filter((s: any) => s.sent > 0).map((s: any) => (
+                                      <div key={s.segment} style={{ background: C.surface, borderRadius: 10, padding: '8px 12px', marginBottom: 6 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                          <span style={{ fontSize: 11, fontWeight: 700, color: '#34D399' }}>{segNames[s.segment] || s.segment}</span>
+                                          <span style={{ fontSize: 9, color: C.textMuted }}>{s.targetAction || '—'}</span>
+                                        </div>
+                                        {s.promoPolicy && kpi('Промо', s.promoPolicy, '#7C6AFF')}
+                                        <div style={{ display: 'flex', gap: 12 }}>
+                                          <div style={{ flex: 1 }}>
+                                            {kpi('Отправлено', s.sent, C.text)}
+                                            {kpi('Возврат 72ч', s.returned72h, '#FBBF24', s.returnRate72h)}
+                                          </div>
+                                          <div style={{ flex: 1 }}>
+                                            {kpi('Доставлено', s.delivered, C.text)}
+                                            {kpi('Цел. шаг 7д', s.targetCompleted7d, '#7C6AFF', s.targetRate7d ?? '—')}
+                                          </div>
+                                        </div>
+                                        {(s.promoDelivered > 0 || s.promoRedeemed > 0) && (
+                                          <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
+                                            {kpi('Промо доставлено', s.promoDelivered, C.text)}
+                                            {kpi('Промо → цел. шаг', s.promoTargetCompleted ?? 0, '#7C6AFF', s.promoTargetRate ?? '—')}
+                                            {kpi('Промо активировано', s.promoRedeemed, '#34D399')}
+                                            {s.nonPromoTargetCompleted != null && kpi('Без промо → цел. шаг', s.nonPromoTargetCompleted, C.textMuted, s.nonPromoTargetRate ?? '—')}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                    {(rv.byTouch as any[]).length > 0 && (
+                                      <div style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `1px dashed ${C.border}`, marginBottom: 6 }}>
+                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>По волнам</div>
+                                        {(rv.byTouch as any[]).map((t: any) => (
+                                          <div key={`${t.segment}-${t.touchNumber}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}`, ...(t.disabled ? { opacity: 0.4 } : {}) }}>
+                                            <span style={{ fontSize: 10, color: C.textSec }}>{t.segment} · В{t.touchNumber}{t.disabled ? ' 🚫' : ''}</span>
+                                            <span style={{ fontSize: 10, color: C.textMuted }}>
+                                              {t.sent}→{t.delivered} · <span style={{ color: '#FBBF24' }}>{t.returnRate72h}</span> · <span style={{ color: '#7C6AFF' }}>{t.targetRate7d}</span>
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {dbg && (
+                                      <div style={{ padding: '5px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `1px dashed ${C.border}` }}>
+                                        <div style={{ fontSize: 9, color: '#555' }}>
+                                          🔍 Touches: {dbg.totalTouchesInPeriod} · Excl.: {dbg.excludedTestUsers}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
 
                               {/* Timestamp */}
-                              <div style={{ fontSize: 10, color: C.textMuted, textAlign: 'right', lineHeight: 1.4 }}>
+                              <div style={{ fontSize: 9, color: C.textMuted, textAlign: 'right', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
                                 {godStatsRefreshedAt
-                                  ? <>Обновлено {relativeTime(godStatsRefreshedAt)} · {godStatsRefreshedAt.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</>
+                                  ? <>↻ {relativeTime(godStatsRefreshedAt)} · {godStatsRefreshedAt.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</>
                                   : new Date(godStats.generatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
                                 }
                               </div>
@@ -12674,191 +12478,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           );
                         })()}
                       </div>
-                    );
-                  })()}
-
-                  {/* ─── Retention / Win-back metrics (rewritten for clarity) ─── */}
-                  {godMode && (() => {
-                    const segNames: Record<string, string> = { S1: t('ret_seg_s1', locale), S2: t('ret_seg_s2', locale), S3: t('ret_seg_s3', locale), S4: t('ret_seg_s4', locale) };
-                    const segTarget: Record<string, string> = { S1: t('ret_seg_target_s1', locale), S2: t('ret_seg_target_s2', locale), S3: t('ret_seg_target_s3', locale), S4: t('ret_seg_target_s4', locale) };
-                    const touchLabel = (seg: string, tn: number) => `${seg} · ${tn === 1 ? t('ret_wave_1', locale) : tn === 2 ? t('ret_wave_2', locale) : t('ret_wave_3', locale)}`;
-                    const loadRetention = async (period: number) => {
-                      setRetentionLoading(true);
-                      try { const r = await tgFetch(`/tg/me/retention-stats?period=${period}`); if (r.ok) setRetentionStats(await r.json()); } catch {}
-                      setRetentionLoading(false);
-                    };
-                    return (
-                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-                      <button
-                        onClick={async () => {
-                          if (retentionOpen) { setRetentionOpen(false); return; }
-                          setRetentionOpen(true);
-                          await loadRetention(retentionPeriod);
-                        }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', padding: 0, textAlign: 'left' }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#34D399', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                            📊 Retention & Win-back
-                          </span>
-                          <span style={{ fontSize: 14, color: C.textMuted }}>{retentionOpen ? '▾' : '▸'}</span>
-                        </div>
-                      </button>
-
-                      {retentionOpen && retentionLoading && (
-                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>Загрузка…</div>
-                      )}
-
-                      {retentionOpen && retentionStats && (() => {
-                        const o = retentionStats.overview;
-                        const dbg = retentionStats.debug;
-                        const kpi = (label: string, value: number | string, color: string, hint?: string) => (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
-                            <span style={{ fontSize: 11, color: C.textMuted }}>{label}{hint ? <span style={{ fontSize: 9, color: '#555', marginLeft: 4 }}>({hint})</span> : null}</span>
-                            <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
-                          </div>
-                        );
-                        const sectionTitle = (text: string) => (
-                          <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5, marginTop: 10 }}>{text}</div>
-                        );
-                        const card = (children: React.ReactNode) => (
-                          <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>{children}</div>
-                        );
-
-                        return (
-                          <div style={{ marginTop: 8 }}>
-                            {/* Period selector */}
-                            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                              {[7, 30, 90].map(d => (
-                                <button key={d}
-                                  style={{
-                                    fontSize: 11, padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                                    background: retentionPeriod === d ? '#34D399' : C.surface,
-                                    color: retentionPeriod === d ? '#000' : C.textMuted, fontWeight: 600,
-                                  }}
-                                  onClick={() => { setRetentionPeriod(d); void loadRetention(d); }}
-                                >{d} дн.</button>
-                              ))}
-                            </div>
-
-                            {/* ── Коммуникации ── */}
-                            {sectionTitle('Коммуникации')}
-                            {card(<>
-                              {kpi('Отправлено сообщений', o.sent, C.text)}
-                              {kpi('Доставлено', o.delivered, C.text)}
-                              {kpi('Охвачено пользователей', o.uniqueUsers, C.text)}
-                              {kpi('Доставляемость', o.delivered > 0 && o.sent > 0 ? `${Math.round(o.delivered / o.sent * 100)}%` : '—', C.text)}
-                            </>)}
-
-                            {/* ── Возврат пользователей ── */}
-                            {sectionTitle('Возврат пользователей')}
-                            {card(<>
-                              {kpi('Вернулись за 24ч', o.returned24h, '#FBBF24', 'от отправки')}
-                              {kpi('Вернулись за 72ч', o.returned72h, '#34D399', 'primary')}
-                              {kpi('Вернулись за 7д', o.returned7d, '#34D399')}
-                              {kpi('Целевое действие за 7д', o.targetCompleted7d, '#7C6AFF')}
-                              <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
-                                {kpi('Конверсия возврата 72ч', o.returnRate72h, '#34D399', 'ret72h / delivered')}
-                                {kpi('Конверсия в действие 7д', o.targetRate7d ?? '—', '#7C6AFF', 'target / delivered')}
-                              </div>
-                            </>)}
-
-                            {/* ── Промо (WISHPRO) ── */}
-                            {sectionTitle('Промо (WISHPRO)')}
-                            {card(<>
-                              {kpi('Назначено в touch', o.promoAssigned, C.text, 'touch + offerCode')}
-                              {kpi('Доставлено с промо', o.promoDelivered, C.text, 'delivered + offerCode')}
-                              {kpi('Активировано', o.promoRedeemed, '#34D399', 'redeemed after touch')}
-                              <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
-                                {kpi('PRO-доступы активны', o.activeGrants, '#34D399')}
-                                {kpi('PRO-доступы истекли', o.expiredGrants, C.textMuted)}
-                              </div>
-                            </>)}
-
-                            {/* ── Политика волн ── */}
-                            {retentionStats.wavePolicy && (() => {
-                              const wp = retentionStats.wavePolicy as Record<string, number>;
-                              const targetLabels: Record<string, string> = { S1: 'create_wishlist', S2: 'add_first_wish', S3: 'add_more_wishes', S4: 'return_visit' };
-                              return (<>
-                                {sectionTitle('Политика волн')}
-                                {card(
-                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 4, fontSize: 10, textAlign: 'center' }}>
-                                    {['S1', 'S2', 'S3', 'S4'].map(seg => (
-                                      <div key={seg}>
-                                        <div style={{ fontWeight: 700, color: '#34D399', marginBottom: 2 }}>{seg}</div>
-                                        <div style={{ color: C.text }}>{wp[seg]} волн</div>
-                                        <div style={{ color: C.textMuted, fontSize: 8, marginTop: 1 }}>{targetLabels[seg]}</div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </>);
-                            })()}
-
-                            {/* ── По сегментам ── */}
-                            {sectionTitle('По сегментам')}
-                            {(retentionStats.bySegment as any[]).filter((r: any) => r.sent > 0).map((r: any) => (
-                              <div key={r.segment} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#34D399' }}>{segNames[r.segment] || r.segment}</span>
-                                  <span style={{ fontSize: 9, color: C.textMuted, background: C.bg, padding: '2px 6px', borderRadius: 4 }}>{r.targetAction || segTarget[r.segment] || '—'}</span>
-                                </div>
-                                {r.deepLink && kpi('Deeplink', `startapp=${r.deepLink}`, '#555')}
-                                {kpi('Макс. волн', `${r.maxWaves ?? 3}`, C.textMuted)}
-                                {r.promoPolicy && kpi('Промо-политика', r.promoPolicy, '#7C6AFF')}
-                                {kpi('Отправлено', r.sent, C.text)}
-                                {kpi('Доставлено', r.delivered, C.text)}
-                                {kpi('Возврат 72ч', r.returned72h, '#FBBF24')}
-                                {kpi('Целевой шаг 7д', r.targetCompleted7d, '#7C6AFF', r.targetAction)}
-                                <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
-                                  {kpi('Конв. возврата', r.returnRate72h, '#34D399', 'ret72h / delivered')}
-                                  {kpi('Конв. целевого шага', r.targetRate7d ?? '—', '#7C6AFF', 'target / delivered')}
-                                </div>
-                                {(r.promoDelivered > 0 || r.promoRedeemed > 0) && <>
-                                  <div style={{ marginTop: 3, paddingTop: 3, borderTop: `1px solid ${C.border}` }}>
-                                    {kpi('Промо доставлено', r.promoDelivered, C.text)}
-                                    {kpi('Промо целевой шаг', r.promoTargetCompleted ?? 0, '#7C6AFF', r.promoTargetRate ?? '—')}
-                                    {kpi('Промо активировано', r.promoRedeemed, '#34D399')}
-                                    {r.nonPromoTargetCompleted != null && kpi('Без промо цел. шаг', r.nonPromoTargetCompleted, C.textMuted, r.nonPromoTargetRate ?? '—')}
-                                  </div>
-                                </>}
-                              </div>
-                            ))}
-
-                            {/* ── По волнам (target-step conversion) ── */}
-                            {(retentionStats.byTouch as any[]).length > 0 && (<>
-                              {sectionTitle('По волнам (target-step conversion)')}
-                              {(retentionStats.byTouch as any[]).map((r: any) => (
-                                <div key={`${r.segment}-${r.touchNumber}`} style={{ background: C.surface, borderRadius: 8, padding: '8px 12px', marginBottom: 4, ...(r.disabled ? { opacity: 0.4 } : {}) }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: C.text }}>{touchLabel(r.segment, r.touchNumber)}{r.disabled ? ' 🚫' : ''}</span>
-                                    <span style={{ fontSize: 8, color: '#555', background: C.bg, padding: '1px 5px', borderRadius: 3 }}>{r.targetAction || '—'}</span>
-                                  </div>
-                                  <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.8 }}>
-                                    {kpi('Отправлено → доставлено', `${r.sent} → ${r.delivered}`, C.text)}
-                                    {kpi('Возврат 72ч', `${r.returned72h}`, '#FBBF24', r.returnRate72h)}
-                                    {kpi('Целевой шаг 7д', `${r.targetCompleted7d}`, '#7C6AFF', r.targetRate7d)}
-                                    {r.promoDelivered > 0 && kpi('Промо', `${r.promoDelivered} дост / ${r.promoRedeemed} актив`, '#34D399')}
-                                  </div>
-                                </div>
-                              ))}
-                            </>)}
-
-                            {/* ── Debug / dev info ── */}
-                            {dbg && (
-                              <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `1px dashed ${C.border}` }}>
-                                <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 3 }}>🔍 Debug</div>
-                                <div style={{ fontSize: 9, color: '#555', lineHeight: 1.6 }}>
-                                  Всего touches за период: {dbg.totalTouchesInPeriod}<br />
-                                  Исключено (test/godMode): {dbg.excludedTestUsers}<br />
-                                  Test user IDs: {dbg.testUserIds?.join(', ') || '—'}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
                     );
                   })()}
                 </div>
