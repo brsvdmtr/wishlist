@@ -765,6 +765,7 @@ if (!token) {
         }
         const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
         if (!user) {
+          logger.warn({ telegramId, reason: 'addon_user_not_found' }, 'pre_checkout rejected');
           await ctx.answerPreCheckoutQuery(false, 'User not found');
           return;
         }
