@@ -1,0 +1,25 @@
+# Secrets — never bake into images
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+
+# Dependencies (installed inside container)
+node_modules
+
+# Build artifacts (rebuilt inside container)
+dist
+.next
+out
+.turbo
+coverage
+
+# Dev / CI files
+.claude
+.vscode
+mockups
+*.log
+.DS_Store

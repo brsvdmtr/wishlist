@@ -68,13 +68,9 @@ cleanup_maintenance() {
   if $MAINTENANCE_ENABLED; then
     warn "Unexpected exit — disabling maintenance mode"
     "$PROJECT_DIR/ops/maintenance/off.sh" 2>/dev/null || true
-    # Also patch running api container if it exists
-    local cid
-    cid=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null | head -1 || true)
-    if [ -n "$cid" ]; then
-      docker exec "$cid" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || true
-      docker compose -f "$COMPOSE_FILE" restart api 2>/dev/null || true
-    fi
+    # Recreate api so it picks up MAINTENANCE_MODE=false from host .env.
+    # Must use `up -d` (not `restart`) — restart reuses the old env vars.
+    docker compose -f "$COMPOSE_FILE" up -d api 2>/dev/null || true
   fi
 }
 trap cleanup_maintenance EXIT
@@ -159,13 +155,10 @@ if $NEEDS_MAINTENANCE; then
   # Verify API env var
   API_MAINT=$(docker compose -f "$COMPOSE_FILE" exec -T api printenv MAINTENANCE_MODE 2>/dev/null || true)
   if [ "$API_MAINT" = "true" ]; then
-    warn "Container MAINTENANCE_MODE still true — forcing env patch"
-    CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null | head -1 || true)
-    if [ -n "$CONTAINER" ]; then
-      docker exec "$CONTAINER" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || true
-      docker compose -f "$COMPOSE_FILE" restart api
-      sleep 8
-    fi
+    warn "Container MAINTENANCE_MODE still true — forcing recreate"
+    # Must use `up -d` (not `restart`) — restart reuses the old env vars.
+    docker compose -f "$COMPOSE_FILE" up -d api
+    sleep 8
   fi
 
   RS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || true)
