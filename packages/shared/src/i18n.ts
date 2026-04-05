@@ -105,6 +105,68 @@ export function resolveMarketSegment(locale: Locale): MarketSegment {
   return locale === 'ru' ? 'ru' : 'global';
 }
 
+// ─── Market buckets (fine-grained segmentation) ─────────────────────────────
+
+/**
+ * Market bucket — fine-grained segmentation of users by raw Telegram language_code.
+ *
+ * Key distinction from `normalizeLocale()`:
+ * - normalizeLocale defaults unknown languages to 'en' for UI display
+ * - deriveMarketBucket correctly assigns them to 'other_known' or 'unknown'
+ *   so analytics are not inflated by mapping unknown → English
+ */
+export type MarketBucket = 'ru' | 'ar' | 'en' | 'hi' | 'zh-CN' | 'es' | 'other_known' | 'unknown';
+
+// BCP-47 prefixes for well-known languages that map to 'other_known' bucket.
+// These are languages we recognise but don't have dedicated UI localisation for.
+const OTHER_KNOWN_PREFIXES = [
+  'de', 'fr', 'it', 'ja', 'ko', 'nl', 'pl', 'pt', 'sv', 'tr', 'uk', 'vi',
+  'th', 'id', 'ms', 'ro', 'cs', 'el', 'hu', 'fi', 'da', 'no', 'he', 'fa',
+  'bn', 'ta', 'te', 'ml', 'mr', 'kn', 'gu', 'ur', 'sw', 'tl', 'ca', 'hr',
+  'sk', 'bg', 'sr', 'lt', 'lv', 'et', 'sl',
+];
+
+/**
+ * Derive market bucket from raw Telegram language_code.
+ * Does NOT normalise for UI — preserves true segment identity for analytics.
+ */
+export function deriveMarketBucket(rawLanguage?: string | null): MarketBucket {
+  if (!rawLanguage) return 'unknown';
+  const lower = rawLanguage.toLowerCase();
+  if (lower.startsWith('ru')) return 'ru';
+  if (lower.startsWith('ar')) return 'ar';
+  if (lower.startsWith('en')) return 'en';
+  if (lower.startsWith('hi')) return 'hi';
+  if (lower.startsWith('zh')) return 'zh-CN';
+  if (lower.startsWith('es')) return 'es';
+  // Check well-known language prefixes
+  const prefix = lower.split(/[-_]/)[0];
+  if (prefix && OTHER_KNOWN_PREFIXES.includes(prefix)) return 'other_known';
+  // Has a language code but we don't recognise it — still 'other_known'
+  // (they consciously set a language in Telegram, it's just not in our list)
+  return prefix ? 'other_known' : 'unknown';
+}
+
+/**
+ * Whether URL import is reliably supported for this market bucket.
+ * Currently only Russian market — WB, Ozon, GoldApple, YandexMarket parsers.
+ */
+export function isSupportedImportRegion(bucket: MarketBucket): boolean {
+  return bucket === 'ru';
+}
+
+/** Human-readable Russian label for each market bucket (for God Mode dashboard). */
+export const MARKET_BUCKET_LABELS: Record<MarketBucket, string> = {
+  ru: 'Россия',
+  ar: 'Арабский',
+  en: 'Английский',
+  hi: 'Индийский',
+  'zh-CN': 'Китайский',
+  es: 'Испанский',
+  other_known: 'Другие известные',
+  unknown: 'Неизвестно',
+};
+
 export const RU_CATALOG: CatalogTemplate[] = [
   { key: 'airpods',   titleKey: 'catalog_airpods',   emoji: '🎧', amount: 24990, currency: 'RUB' },
   { key: 'sneakers',  titleKey: 'catalog_sneakers',  emoji: '👟', amount: 12500, currency: 'RUB' },

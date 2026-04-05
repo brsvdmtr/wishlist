@@ -395,6 +395,11 @@ model UserProfile {
   firstWishSharePromptShown       Boolean @default(false)
   readyWishlistSharePromptShown   Boolean @default(false)
 
+  // Derived market segmentation (computed from language on every request)
+  normalizedLocale      String?   // Canonical locale: ru | en | zh-CN | hi | es | ar
+  marketBucket          String?   // Market bucket: ru | ar | en | hi | zh-CN | es | other_known | unknown
+  supportedImportRegion Boolean?  // true if user is in a market where URL import works reliably
+
   // First-touch acquisition attribution (source tagging for traffic analysis)
   firstAcquisitionSource          String?
   firstAcquisitionMedium          String?
