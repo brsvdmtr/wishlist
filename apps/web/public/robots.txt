@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /miniapp
+Disallow: /api/
+
+Sitemap: https://wishlistik.ru/sitemap.xml

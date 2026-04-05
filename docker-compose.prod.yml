@@ -23,6 +23,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL}
@@ -54,6 +55,7 @@ services:
       context: .
       dockerfile: Dockerfile.web
     restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
@@ -79,6 +81,7 @@ services:
       context: .
       dockerfile: Dockerfile.bot
     restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       NODE_ENV: production
       BOT_TOKEN: ${BOT_TOKEN}

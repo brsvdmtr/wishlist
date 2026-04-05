@@ -3582,10 +3582,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
     growTextarea(descTextareaRef.current);
   }, [editingDescription, descriptionText]);
 
-  const tgFetch = useCallback(async (path: string, init?: RequestInit) => {
+  const tgFetch = useCallback(async (path: string, init?: RequestInit & { timeoutMs?: number }) => {
     const url = `${apiBase}${path}`;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer = setTimeout(() => controller.abort(), init?.timeoutMs ?? 5000);
     try {
       const res = await fetch(url, {
         ...init,
@@ -3920,6 +3920,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       const res = await tgFetch('/tg/onboarding/try-import', {
         method: 'POST',
         body: JSON.stringify({ url: url.trim(), onboardingStateId: onboardingState.id }),
+        timeoutMs: 15_000, // URL parsing with Chromium can take 6-10s
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };
@@ -3946,9 +3947,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       }
       trackEvent('onboarding_try_paste', { url_domain: json.item.sourceDomain, parse_status: json.parseStatus });
     } catch (e) {
-      trackEvent('onboarding_try_import_exception', { error_type: e instanceof TypeError ? 'network' : 'other' });
-      // TypeError from fetch() = genuine network failure; everything else = import processing error
-      setOnboardingTryError(e instanceof TypeError ? t('error_network', locale) : t('error_import_generic', locale));
+      const isAbort = e instanceof Error && e.name === 'AbortError';
+      const isNetwork = e instanceof TypeError;
+      trackEvent('onboarding_try_import_exception', { error_type: isAbort ? 'timeout' : isNetwork ? 'network' : 'other' });
+      if (isAbort) {
+        setOnboardingTryError(locale === 'ru' ? 'Не удалось загрузить страницу. Попробуйте другую ссылку.' : 'Could not load the page. Try a different link.');
+      } else {
+        setOnboardingTryError(isNetwork ? t('error_network', locale) : t('error_import_generic', locale));
+      }
     } finally {
       setOnboardingTryLoading(false);
     }
@@ -6916,12 +6922,23 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                     fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontFamily: font,
                     opacity: (onboardingTryLoading || !onboardingTryUrl.trim()) ? 0.5 : 1, whiteSpace: 'nowrap',
                   }}>
-                  {onboardingTryLoading ? '…' : t('onboarding_try_paste_btn', locale)}
+                  {onboardingTryLoading ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid rgba(167,139,250,0.3)', borderTopColor: '#A78BFA', borderRadius: '50%', animation: 'onb-spin 0.8s linear infinite' }} />
+                    </span>
+                  ) : t('onboarding_try_paste_btn', locale)}
                 </button>
               </div>
 
+              {/* Loading hint */}
+              {onboardingTryLoading && (
+                <div style={{ textAlign: 'center', fontSize: 12, color: 'rgba(167,139,250,0.6)', lineHeight: 1.5, animation: 'onb-fade 0.3s ease-in' }}>
+                  {locale === 'ru' ? 'Анализируем ссылку…' : 'Analyzing link…'}
+                </div>
+              )}
+
               {/* Helper: works for some stores */}
-              {!onboardingTryError && (
+              {!onboardingTryError && !onboardingTryLoading && (
                 <div style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.25)', lineHeight: 1.5 }}>
                   {t('onboarding_path_import_hint', locale)}
                 </div>
@@ -7491,6 +7508,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         @keyframes slideUp { from { opacity:0; transform:translateY(100%) } to { opacity:1; transform:translateY(0) } }
         @keyframes toastIn { from { opacity:0; transform:translateY(20px) scale(0.95) } to { opacity:1; transform:translateY(0) scale(1) } }
         @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
+        @keyframes onb-spin { to { transform:rotate(360deg) } }
+        @keyframes onb-fade { from { opacity:0 } to { opacity:1 } }
         * { box-sizing:border-box; -webkit-tap-highlight-color:transparent }
         input, textarea, select { -webkit-appearance:none }
         /* Prevent the Telegram WebView from swallowing scroll gestures when the
