@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
 import { initSentry, captureException } from './sentry';
 
@@ -430,6 +430,17 @@ type GodStats = {
     total: number;
     segments: { segmentKey: string; segmentLabel: string; usersCount: number; sharePercent: number }[];
   };
+  marketBuckets?: { bucket: string; label: string; total: number; new7d: number }[];
+  importSplit?: {
+    supported: { total: number; new7d: number };
+    unsupported: { total: number; new7d: number };
+  };
+  bucketFunnel?: {
+    bucket: string; label: string; newUsers: number;
+    firstWishlist: number; firstItem: number;
+    onbStarted: number; onbCompleted: number;
+    importAttempts: number; importFails: number;
+  }[];
   acquisition?: {
     period: string;
     excludedTestUsers: number;
@@ -2847,7 +2858,53 @@ const SERVICE_START_PARAMS = new Set([
   'open_profile',
 ]);
 
-export default function MiniApp({ apiBase, botUsername, miniappShortName }: { apiBase: string; botUsername: string; miniappShortName: string }) {
+class MiniAppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    try { captureException(error); } catch (_) { /* sentry may not be loaded */ }
+    // eslint-disable-next-line no-console
+    console.error('[MiniApp] render error', error, info.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 32, textAlign: 'center', color: '#fff', fontFamily: 'system-ui' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>:(</div>
+          <div style={{ fontSize: 16, marginBottom: 8 }}>Something went wrong</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 16 }}>
+            {this.state.error?.message}
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ padding: '8px 24px', borderRadius: 8, border: 'none', background: '#A78BFA', color: '#fff', fontSize: 14, cursor: 'pointer' }}
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function MiniApp(props: { apiBase: string; botUsername: string; miniappShortName: string }) {
+  return (
+    <MiniAppErrorBoundary>
+      <MiniAppInner {...props} />
+    </MiniAppErrorBoundary>
+  );
+}
+
+function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: string; botUsername: string; miniappShortName: string }) {
   /** Build t.me deep link.
    *  Uses ?startapp= format which opens the Mini App directly via BotFather configuration.
    *  Format: https://t.me/<BOT>?startapp=<payload>
@@ -2957,6 +3014,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [onboardingTryError, setOnboardingTryError] = useState<string | null>(null);
   const [onboardingTryUrl, setOnboardingTryUrl] = useState('');
   const [onboardingShowImportInput, setOnboardingShowImportInput] = useState(false);
+  const [onboardingSupportedImportRegion, setOnboardingSupportedImportRegion] = useState(true);
   const [onboardingManualTitle, setOnboardingManualTitle] = useState('');
   const [onboardingManualPrice, setOnboardingManualPrice] = useState('');
   const [onboardingManualLoading, setOnboardingManualLoading] = useState(false);
@@ -3598,6 +3656,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         },
       });
       clearTimeout(timer);
+      if (res.status >= 500) {
+        trackEvent('api_server_error', { path, status: res.status });
+      }
       // Maintenance mode: API responds 503 + code=MAINTENANCE
       if (res.status === 503) {
         const json = await res.json().catch(() => ({})) as { code?: string };
@@ -3772,9 +3833,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         forcedRollout: boolean;
         draftsHaveUserContent: boolean;
         marketSegment?: 'ru' | 'global';
+        supportedImportRegion?: boolean;
         state: { id: string; status: string; variantKey: string | null; entryPoint: string | null; demoItemId: string | null; completionReason: string | null; metaJson?: unknown } | null;
       };
       if (json.marketSegment) setOnboardingMarketSegment(json.marketSegment);
+      if (json.supportedImportRegion != null) setOnboardingSupportedImportRegion(json.supportedImportRegion);
       if (json.state) {
         setOnboardingState(json.state);
         const meta = getOnboardingMeta(json.state.metaJson);
@@ -5788,6 +5851,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       } else {
         pushToast(t('wishlist_created', locale), 'success');
       }
+      trackEvent('wishlist_created', { wishlistId: json.wishlist.id });
       // Navigate into new wishlist and load its items (will include moved item if move succeeded)
       setCurrentWl(json.wishlist);
       setItems([]);
@@ -6166,6 +6230,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         } else {
           await loadItems(editingItem.wishlistId ?? currentWl!.id);
         }
+        trackEvent('item_edited', { itemId: editingItem.id });
         pushToast(t('item_saved', locale), 'success');
       } else {
         // currentWl is guaranteed non-null here: the early return above
@@ -6192,6 +6257,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         // Reload from API to get correct sorted position
         setWishlists((prev) => prev.map((wl) => wl.id === currentWl!.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
         await loadItems(currentWl!.id);
+        trackEvent('item_created', { wishlistId: currentWl!.id });
         pushToast(t('item_added', locale), 'success');
 
         // First Share Prompt: navigate to prompt if this was the first real regular wish
@@ -6240,6 +6306,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         );
       }
 
+      trackEvent('item_deleted');
       pushToast(t('delete_deleted', locale), 'success');
     } finally {
       setLoading(false);
@@ -6285,6 +6352,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
+      trackEvent('item_completed');
       pushToast(t('archive_received_toast', locale), 'success');
       try { tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch { /* ok */ }
     } finally {
@@ -6468,6 +6536,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setCurrentWl(null);
       setScreen('my-wishlists');
       pushToast(t('wl_deleted_toast', locale), 'success');
+      trackEvent('wishlist_deleted');
       // Update profile stats
       setProfileStats((prev) => prev ? { ...prev, wishlists: Math.max(0, prev.wishlists - 1) } : prev);
     } finally {
@@ -6571,6 +6640,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       if (viewingItem && viewingItem.id === reservingItem.id) setViewingItem(updatedItem);
       setReservationsCount((prev) => prev + 1);
       setProfileStats((prev) => prev ? { ...prev, reservedByMe: prev.reservedByMe + 1 } : prev);
+      trackEvent('item_reserved', { itemId: reservingItem.id });
       pushToast(t('reserve_success', locale), 'success');
       setReservingItem(null);
       setGuestName('');
@@ -6591,6 +6661,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       setReservations((prev) => prev.filter((r) => r.id !== item.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
       setProfileStats((prev) => prev ? { ...prev, reservedByMe: Math.max(0, prev.reservedByMe - 1) } : prev);
+      trackEvent('item_unreserved', { itemId: item.id });
       pushToast(t('unreserve_success', locale), 'success');
     } finally {
       setLoading(false);
@@ -6884,8 +6955,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 18 }}>›</span>
           </button>
 
-          {/* ── 3. IMPORT — TERTIARY (progressive disclosure) ── */}
-          {!onboardingShowImportInput ? (
+          {/* ── 3. IMPORT — TERTIARY (progressive disclosure, RU-only) ── */}
+          {!onboardingSupportedImportRegion ? null : !onboardingShowImportInput ? (
             <button onClick={() => {
               trackEvent('onboarding_path_try_import_started');
               setOnboardingShowImportInput(true);
@@ -12419,6 +12490,119 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                               </div>
                                             </div>
                                           ))}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* ── Распределение по рынкам ── */}
+                                    {godStats?.marketBuckets && godStats.marketBuckets.length > 0 && (() => {
+                                      const buckets = godStats.marketBuckets!;
+                                      const maxBucket = Math.max(...buckets.map(b => b.total), 1);
+                                      const bucketTotal = buckets.reduce((s, b) => s + b.total, 0);
+                                      const bucketColors: Record<string, string> = {
+                                        ru: '#5B8DEF', en: '#34C759', ar: '#30D5C8', hi: '#FFB340',
+                                        'zh-CN': '#FF6B6B', es: '#AF52DE', other_known: '#8E8E93', unknown: '#555',
+                                      };
+                                      return (
+                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
+                                          <div style={{ fontSize: 10, fontWeight: 700, color: '#FF9500', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+                                            🌍 Распределение по рынкам
+                                          </div>
+                                          <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 6 }}>
+                                            Всего: <span style={{ fontWeight: 700, color: C.text }}>{bucketTotal}</span>
+                                          </div>
+                                          {/* Header */}
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 0 4px', borderBottom: `1px solid ${C.border}` }}>
+                                            <span style={{ fontSize: 9, color: C.textMuted, flex: 1 }}>Рынок</span>
+                                            <span style={{ fontSize: 9, color: C.textMuted, width: 45, textAlign: 'right' }}>Всего</span>
+                                            <span style={{ fontSize: 9, color: C.textMuted, width: 40, textAlign: 'right' }}>7д</span>
+                                            <span style={{ fontSize: 9, color: C.textMuted, width: 35, textAlign: 'right' }}>%</span>
+                                          </div>
+                                          {buckets.map(b => (
+                                            <div key={b.bucket}>
+                                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                                                <span style={{ fontSize: 10, color: C.text, flex: 1 }}>{b.label}</span>
+                                                <span style={{ fontSize: 10, fontWeight: 700, color: C.text, width: 45, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.total}</span>
+                                                <span style={{ fontSize: 10, color: C.textMuted, width: 40, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.new7d > 0 ? `+${b.new7d}` : '—'}</span>
+                                                <span style={{ fontSize: 10, color: C.textMuted, width: 35, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucketTotal > 0 ? `${(b.total / bucketTotal * 100).toFixed(1)}` : '0'}</span>
+                                              </div>
+                                              <div style={{ height: 3, borderRadius: 2, background: C.border, overflow: 'hidden', marginBottom: 2 }}>
+                                                <div style={{ height: '100%', borderRadius: 2, width: `${(b.total / maxBucket) * 100}%`, background: bucketColors[b.bucket] ?? '#8E8E93' }} />
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* ── Поддержка импорта ── */}
+                                    {godStats?.importSplit && (() => {
+                                      const is = godStats.importSplit!;
+                                      const total = is.supported.total + is.unsupported.total;
+                                      return (
+                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
+                                          <div style={{ fontSize: 10, fontWeight: 700, color: '#34C759', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+                                            📦 По��держка импорта
+                                          </div>
+                                          {([
+                                            ['Импорт доступен (RU)', is.supported.total, is.supported.new7d, '#34C759'],
+                                            ['Импорт недоступен', is.unsupported.total, is.unsupported.new7d, '#FF6B6B'],
+                                          ] as [string, number, number, string][]).map(([label, tot, n7, color]) => (
+                                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
+                                              <span style={{ fontSize: 10, color: C.text, flex: 1 }}>{label}</span>
+                                              <span style={{ fontSize: 10, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', width: 50, textAlign: 'right' }}>
+                                                {tot} <span style={{ color: C.textMuted, fontWeight: 400, fontSize: 9 }}>({total > 0 ? (tot / total * 100).toFixed(0) : 0}%)</span>
+                                              </span>
+                                              <span style={{ fontSize: 9, color: C.textMuted, width: 35, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{n7 > 0 ? `+${n7}` : ''}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* ── Конверсия по рынкам (7д, новые юзеры) ── */}
+                                    {godStats?.bucketFunnel && godStats.bucketFunnel.length > 0 && (() => {
+                                      const bf = godStats.bucketFunnel!;
+                                      return (
+                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
+                                          <div style={{ fontSize: 10, fontWeight: 700, color: '#AF52DE', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+                                            📈 Конверсия по рынкам <span style={{ fontSize: 9, fontWeight: 400, textTransform: 'none', opacity: 0.7 }}>7д, новые</span>
+                                          </div>
+                                          {/* Header */}
+                                          <div style={{ display: 'flex', padding: '0 0 4px', borderBottom: `1px solid ${C.border}`, gap: 2 }}>
+                                            <span style={{ fontSize: 8, color: C.textMuted, flex: 1 }}>Рынок</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 30, textAlign: 'right' }}>Нов.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 30, textAlign: 'right' }}>Вишл.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 30, textAlign: 'right' }}>Жел.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 28, textAlign: 'right' }}>Онб.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 28, textAlign: 'right' }}>Зав.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 25, textAlign: 'right' }}>Имп.</span>
+                                          </div>
+                                          {bf.map(b => {
+                                            const convWl = b.newUsers > 0 ? (b.firstWishlist / b.newUsers * 100).toFixed(0) : '—';
+                                            return (
+                                              <div key={b.bucket} style={{ display: 'flex', padding: '4px 0', borderBottom: `1px solid ${C.border}`, gap: 2, alignItems: 'center' }}>
+                                                <span style={{ fontSize: 9, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.label}</span>
+                                                <span style={{ fontSize: 10, fontWeight: 600, color: C.text, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.newUsers}</span>
+                                                <span style={{ fontSize: 10, color: C.textMuted, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.firstWishlist}</span>
+                                                <span style={{ fontSize: 10, color: C.textMuted, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.firstItem}</span>
+                                                <span style={{ fontSize: 10, color: C.textMuted, width: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.onbStarted}</span>
+                                                <span style={{ fontSize: 10, color: C.textMuted, width: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.onbCompleted}</span>
+                                                <span style={{ fontSize: 10, color: b.importFails > 0 ? '#FF6B6B' : C.textMuted, width: 25, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                                                  {b.importAttempts > 0 ? `${b.importAttempts}` : '—'}
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                          {/* Conversion summary row */}
+                                          <div style={{ marginTop: 6, fontSize: 9, color: C.textMuted, lineHeight: 1.5 }}>
+                                            {bf.filter(b => b.newUsers >= 3).map(b => (
+                                              <div key={b.bucket}>
+                                                {b.label}: нов.{'\u2192'}вишл. <span style={{ fontWeight: 700, color: b.newUsers > 0 ? (b.firstWishlist / b.newUsers >= 0.3 ? '#34C759' : b.firstWishlist / b.newUsers >= 0.1 ? '#FFB340' : '#FF6B6B') : C.textMuted }}>{b.newUsers > 0 ? `${(b.firstWishlist / b.newUsers * 100).toFixed(0)}%` : '—'}</span>
+                                                {b.importAttempts > 0 && <>, имп.ошибки: <span style={{ fontWeight: 700, color: b.importFails > 0 ? '#FF6B6B' : '#34C759' }}>{b.importFails}/{b.importAttempts}</span></>}
+                                              </div>
+                                            ))}
+                                          </div>
                                         </div>
                                       );
                                     })()}
@@ -19440,6 +19624,7 @@ function ReadySharePromptSheet({ data, locale, tgUser, tgFetch, buildTgDeepLink,
         if (!cancelled && r.ok) {
           const d = await r.json() as { shareToken: string };
           setShareToken(d.shareToken);
+          trackEvent('share_token_generated', { wishlistId: data.wishlistId });
         }
       } catch { /* fall back to slug */ }
       finally { if (!cancelled) setTokenLoading(false); }
@@ -19560,6 +19745,7 @@ function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, build
         if (!cancelled && r.ok) {
           const d = await r.json() as { shareToken: string };
           setShareToken(d.shareToken);
+          trackEvent('share_token_generated', { wishlistId: data.wishlistId });
         }
       } catch { /* fall back to slug */ }
       finally { if (!cancelled) setTokenLoading(false); }

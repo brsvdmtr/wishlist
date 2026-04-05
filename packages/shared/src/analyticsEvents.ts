@@ -10,12 +10,23 @@ export const ANALYTICS_EVENTS = [
   'miniapp.boot_timeout',
   'miniapp.fatal_render_error',
   'wishlist.created',
+  'wishlist.deleted',
   'wish.created',
+  'wish.edited',
+  'wish.deleted',
+  'wish.completed',
   'import.started',
   'import.succeeded',
   'import.failed',
+  'import.bot_started',
+  'import.bot_succeeded',
+  'import.bot_failed',
   'guest.view_opened',
   'reservation.succeeded',
+  'reservation.cancelled',
+  'share.token_generated',
+  'subscription.cancelled',
+  'payment.pre_checkout_rejected',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

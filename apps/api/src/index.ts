@@ -13,7 +13,7 @@ import { prisma, Prisma } from '@wishlist/db';
 import logger from './logger';
 import pinoHttp from 'pino-http';
 import { parseUrl, validateUrl } from './url-parser.js';
-import { t, detectLocale, resolveEffectiveLocale, pluralize, type Locale, getOnboardingMeta, type OnboardingMeta, type OnboardingVariant, type AcquisitionPath, type CatalogTemplate, getCatalogForSegment } from '@wishlist/shared';
+import { t, detectLocale, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, getOnboardingMeta, type OnboardingMeta, type OnboardingVariant, type AcquisitionPath, type CatalogTemplate, getCatalogForSegment, deriveMarketBucket, isSupportedImportRegion, type MarketBucket, MARKET_BUCKET_LABELS } from '@wishlist/shared';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/api (pnpm -C apps/api dev).
@@ -306,10 +306,10 @@ async function sendTgBotMessage(chatId: string, text: string, replyMarkup?: Reco
       body: JSON.stringify(payload),
     });
     const data = await resp.json() as { ok: boolean; description?: string };
-    if (!data.ok) console.error('[sendTgBotMessage] Telegram API error:', data.description, 'chat_id:', chatId);
+    if (!data.ok) logger.error({ description: data.description, chatId }, 'sendTgBotMessage Telegram API error');
     return data.ok;
   } catch (err) {
-    console.error('[sendTgBotMessage] exception:', err);
+    logger.error({ err }, 'sendTgBotMessage exception');
     return false;
   }
 }
@@ -417,7 +417,7 @@ async function notifySubscribersOfChange(
       }),
     );
   } catch (err) {
-    console.error('[notifySubscribersOfChange] error:', err);
+    logger.error({ err }, 'notifySubscribersOfChange error');
   }
 }
 
@@ -1594,8 +1594,7 @@ async function isWishlistWritable(userId: string, wishlistId: string, planLimit:
 
 // Analytics / logging stub
 function trackEvent(event: string, userId?: string, props?: Record<string, unknown>) {
-  // eslint-disable-next-line no-console
-  console.log(`[analytics] ${event}`, userId ? `user=${userId}` : '', props ?? '');
+  logger.info({ event, userId, props }, 'analytics event');
   // Persist to DB for god-mode analytics: feature gate hits, onboarding, demo item, and error events.
   // Fire-and-forget — never blocks the request path.
   const shouldPersist =
@@ -1610,7 +1609,7 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
     prisma.analyticsEvent
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .create({ data: { event, userId, props: props ? (props as any) : undefined } })
-      .catch(() => {});
+      .catch((e) => logger.debug({ err: e, event }, 'analytics write failed'));
   }
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1620,9 +1619,12 @@ const ANALYTICS_EVENTS_SET = new Set([
   'bot.start_received', 'miniapp.open_attempt', 'miniapp.tg_context_detected',
   'miniapp.initdata_present', 'miniapp.bootstrap_started', 'miniapp.bootstrap_succeeded',
   'miniapp.bootstrap_failed', 'miniapp.first_rendered', 'miniapp.boot_timeout',
-  'miniapp.fatal_render_error', 'wishlist.created', 'wish.created',
+  'miniapp.fatal_render_error', 'wishlist.created', 'wishlist.deleted', 'wish.created',
+  'wish.edited', 'wish.deleted', 'wish.completed',
   'import.started', 'import.succeeded', 'import.failed',
-  'guest.view_opened', 'reservation.succeeded',
+  'import.bot_started', 'import.bot_succeeded', 'import.bot_failed',
+  'guest.view_opened', 'reservation.succeeded', 'reservation.cancelled',
+  'share.token_generated', 'subscription.cancelled', 'payment.pre_checkout_rejected',
 ]);
 
 function trackAnalyticsEvent(params: {
@@ -1643,7 +1645,7 @@ function trackAnalyticsEvent(params: {
   prisma.analyticsEvent.create({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: { event: params.event, userId: params.userId ?? null, props: props ? (props as any) : undefined },
-  }).catch(() => {});
+  }).catch((e) => logger.debug({ err: e, event: params.event }, 'analytics write failed'));
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2060,21 +2062,32 @@ async function getItemRole(
 
 tgRouter.use(requireTelegramAuth);
 
-// Persist raw Telegram language_code to UserProfile.language on every authenticated request.
-// IMPORTANT: UserProfile.language stores the RAW Telegram language_code (e.g. "ru", "en", "zh-hans",
-// "hi-IN") — NOT the normalised/effective locale. Normalisation to canonical locales (ru/en/zh-CN/
-// hi/es/ar) happens in the localeSegments SQL aggregation via CASE expression.
+// Persist raw Telegram language_code + derived segmentation fields on every authenticated request.
+// Fields updated: language (raw), normalizedLocale, marketBucket, supportedImportRegion.
 // Fire-and-forget: does not block the request path. Uses IS DISTINCT FROM to skip redundant writes.
 tgRouter.use((req, _res, next) => {
   if (req.tgUser?.language_code != null) {
     const telegramId = String(req.tgUser.id);
     const rawLang = req.tgUser.language_code;
+    const normLocale = normalizeLocale(rawLang);
+    const bucket = deriveMarketBucket(rawLang);
+    const importRegion = isSupportedImportRegion(bucket);
     prisma.$executeRawUnsafe(
-      `UPDATE "UserProfile" SET language = $1
+      `UPDATE "UserProfile"
+       SET language = $1,
+           "normalizedLocale" = $3,
+           "marketBucket" = $4,
+           "supportedImportRegion" = $5
        WHERE "userId" = (SELECT id FROM "User" WHERE "telegramId" = $2)
-         AND (language IS DISTINCT FROM $1)`,
+         AND (language IS DISTINCT FROM $1
+              OR "normalizedLocale" IS DISTINCT FROM $3
+              OR "marketBucket" IS DISTINCT FROM $4
+              OR "supportedImportRegion" IS DISTINCT FROM $5)`,
       rawLang,
       telegramId,
+      normLocale,
+      bucket,
+      importRegion,
     ).catch(() => {});
   }
   next();
@@ -2630,6 +2643,7 @@ tgRouter.post(
       data: { shareToken: token },
       select: { shareToken: true },
     });
+    trackAnalyticsEvent({ event: 'share.token_generated', userId: String(req.tgUser!.id), props: { wishlistId: req.params.id } });
 
     return res.json({ shareToken: updated.shareToken });
   }),
@@ -2847,6 +2861,7 @@ tgRouter.delete(
     }
 
     await prisma.wishlist.delete({ where: { id } });
+    trackAnalyticsEvent({ event: 'wishlist.deleted', userId: String(req.tgUser!.id), props: { wishlistId: req.params.id } });
 
     // Repack positions for remaining REGULAR non-archived wishlists to keep them contiguous
     const remaining = await prisma.wishlist.findMany({
@@ -3882,6 +3897,8 @@ tgRouter.patch(
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
 
+    trackAnalyticsEvent({ event: 'wish.edited', userId: String(req.tgUser!.id), props: { itemId: req.params.id } });
+
     // Onboarding: detect meaningful edit on a demo item → trigger completion
     if (item.isDemo && item.originVariantKey && item.originType === 'DEMO') {
       const template = getDemoTemplate(item.originVariantKey);
@@ -3979,6 +3996,8 @@ tgRouter.delete(
       },
     });
 
+    trackAnalyticsEvent({ event: 'wish.deleted', userId: String(req.tgUser!.id), props: { itemId: req.params.id } });
+
     // Cancel active hints when item is deleted
     void cancelItemHints(id);
 
@@ -4042,6 +4061,8 @@ tgRouter.post(
       },
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
+
+    trackAnalyticsEvent({ event: 'wish.completed', userId: String(req.tgUser!.id), props: { itemId: req.params.id } });
 
     // Cancel active hints when item is completed
     void cancelItemHints(id);
@@ -4264,6 +4285,8 @@ tgRouter.post(
       }
     }
 
+    trackAnalyticsEvent({ event: 'reservation.succeeded', userId: req.tgUser?.id != null ? String(req.tgUser.id) : undefined, props: { itemId: req.params.id } });
+
     // Cancel active hints when item is reserved
     void cancelItemHints(id);
 
@@ -4272,7 +4295,7 @@ tgRouter.post(
       where: { itemId_reserverUserId: { itemId: id, reserverUserId: user.id } },
       create: { itemId: id, reserverUserId: user.id },
       update: { active: true, endedAt: null, endReason: null, reminderSent: false },
-    }).catch(() => {});
+    }).catch((e) => logger.warn({ err: e }, 'reservationMeta upsert failed'));
 
     return res.json({ ok: true });
   }),
@@ -4320,6 +4343,8 @@ tgRouter.post(
     if (result.kind === 'not_found') return res.status(404).json({ error: 'Item not found' });
     if (result.kind === 'conflict') return res.status(409).json({ error: 'Cannot unreserve' });
     if (result.kind === 'forbidden') return res.status(403).json({ error: 'Forbidden' });
+
+    trackAnalyticsEvent({ event: 'reservation.cancelled', userId: req.tgUser?.id != null ? String(req.tgUser.id) : undefined, props: { itemId: req.params.id } });
 
     // Mark ReservationMeta as inactive (history)
     const unreserveUser = await getOrCreateTgUser(req.tgUser!);
@@ -4684,9 +4709,9 @@ tgRouter.post(
           is_persistent: true,
         },
       );
-      if (!sent) console.error('[hint] failed to send contact picker to chat', senderChatId);
+      if (!sent) logger.error({ senderChatId }, 'hint: failed to send contact picker to chat');
     } else {
-      console.error('[hint] no telegramChatId for user', user.id);
+      logger.error({ userId: user.id }, 'hint: no telegramChatId for user');
     }
 
     trackEvent('hint_created', user.id);
@@ -5313,7 +5338,7 @@ tgRouter.post(
       });
     } catch (err) {
       // Technical failure — don't burn the user's right
-      console.error('[promo] activation error:', err);
+      logger.error({ err }, 'promo activation error');
       return res.status(500).json({ error: 'activation_failed' });
     }
   }),
@@ -5761,6 +5786,8 @@ tgRouter.get(
     });
     const locale = getRequestLocale(req);
     const marketSegment = resolveMarketSegment(locale);
+    const rawLang = req.tgUser?.language_code;
+    const bucket = deriveMarketBucket(rawLang);
     return res.json({
       eligible: result.eligible,
       reason: result.reason,
@@ -5768,6 +5795,7 @@ tgRouter.get(
       draftsHaveUserContent: result.draftsHaveUserContent,
       state: state ?? null,
       marketSegment,
+      supportedImportRegion: isSupportedImportRegion(bucket),
     });
   }),
 );
@@ -6682,6 +6710,154 @@ tgRouter.get(
       });
     }
 
+    // ── Market bucket distribution ──────────────────────────────────────────────
+    // Uses the persisted marketBucket column for fast aggregation.
+    // Falls back to SQL derivation for users who haven't been seen since the migration.
+    type BucketRow = { bucket: string; total: number; new_7d: number };
+    const marketBucketRows = await prisma.$queryRaw<BucketRow[]>`
+      SELECT
+        COALESCE(p."marketBucket",
+          CASE
+            WHEN p.language IS NOT NULL THEN
+              CASE
+                WHEN LOWER(p.language) LIKE 'ru%' THEN 'ru'
+                WHEN LOWER(p.language) LIKE 'ar%' THEN 'ar'
+                WHEN LOWER(p.language) LIKE 'en%' THEN 'en'
+                WHEN LOWER(p.language) LIKE 'hi%' THEN 'hi'
+                WHEN LOWER(p.language) LIKE 'zh%' THEN 'zh-CN'
+                WHEN LOWER(p.language) LIKE 'es%' THEN 'es'
+                ELSE 'other_known'
+              END
+            ELSE 'unknown'
+          END
+        ) AS bucket,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE u."createdAt" >= ${cut7})::int AS new_7d
+      FROM "User" u
+      LEFT JOIN "UserProfile" p ON p."userId" = u.id
+      GROUP BY bucket
+      ORDER BY total DESC`;
+
+    const BUCKET_ORDER: MarketBucket[] = ['ru', 'en', 'ar', 'hi', 'zh-CN', 'es', 'other_known', 'unknown'];
+    const marketBuckets = BUCKET_ORDER.map(b => {
+      const row = marketBucketRows.find(r => r.bucket === b);
+      return {
+        bucket: b,
+        label: MARKET_BUCKET_LABELS[b],
+        total: row?.total ?? 0,
+        new7d: row?.new_7d ?? 0,
+      };
+    }).filter(b => b.total > 0);
+
+    // Import support split (users with/without import support)
+    type ImportSplitRow = { supported: boolean; total: number; new_7d: number };
+    const importSplitRows = await prisma.$queryRaw<ImportSplitRow[]>`
+      SELECT
+        COALESCE(p."supportedImportRegion",
+          CASE WHEN COALESCE(p."marketBucket",
+            CASE WHEN p.language IS NOT NULL AND LOWER(p.language) LIKE 'ru%' THEN 'ru' ELSE 'other' END
+          ) = 'ru' THEN true ELSE false END
+        ) AS supported,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE u."createdAt" >= ${cut7})::int AS new_7d
+      FROM "User" u
+      LEFT JOIN "UserProfile" p ON p."userId" = u.id
+      GROUP BY supported`;
+
+    const importSplit = {
+      supported: { total: 0, new7d: 0 },
+      unsupported: { total: 0, new7d: 0 },
+    };
+    for (const row of importSplitRows) {
+      const key = row.supported ? 'supported' : 'unsupported';
+      importSplit[key] = { total: row.total, new7d: row.new_7d };
+    }
+
+    // ── Conversion by market bucket ────────────────────────────────────────────
+    // Per-bucket: new users (7d), first wishlist, first item, onboarding paths, import usage
+    type BucketFunnelRow = { bucket: string; count: number };
+    const [bucketFirstWlRows, bucketFirstItemRows, bucketOnbStartedRows, bucketOnbCompletedRows, bucketImportAttemptRows, bucketImportFailRows] = await Promise.all([
+      // First regular wishlist created in last 7d, by bucket
+      prisma.$queryRaw<BucketFunnelRow[]>`
+        SELECT COALESCE(p."marketBucket", 'unknown') AS bucket, COUNT(DISTINCT w."ownerId")::int AS count
+        FROM "Wishlist" w
+        JOIN "User" u ON w."ownerId" = u.id
+        LEFT JOIN "UserProfile" p ON p."userId" = u.id
+        WHERE w.type = 'REGULAR' AND u."createdAt" >= ${cut7}
+        GROUP BY bucket`,
+      // First item in regular wishlist created in last 7d, by bucket
+      prisma.$queryRaw<BucketFunnelRow[]>`
+        SELECT COALESCE(p."marketBucket", 'unknown') AS bucket, COUNT(DISTINCT w."ownerId")::int AS count
+        FROM "Item" i
+        JOIN "Wishlist" w ON i."wishlistId" = w.id
+        JOIN "User" u ON w."ownerId" = u.id
+        LEFT JOIN "UserProfile" p ON p."userId" = u.id
+        WHERE i.status != 'DELETED' AND w.type = 'REGULAR' AND u."createdAt" >= ${cut7}
+        GROUP BY bucket`,
+      // Onboarding started (7d), by bucket
+      prisma.$queryRaw<BucketFunnelRow[]>`
+        SELECT COALESCE(p."marketBucket", 'unknown') AS bucket, COUNT(DISTINCT ae."userId")::int AS count
+        FROM "AnalyticsEvent" ae
+        JOIN "UserProfile" p ON p."userId" = ae."userId"
+        WHERE ae.event = 'onboarding_started' AND ae."createdAt" >= ${cut7}
+        GROUP BY bucket`,
+      // Onboarding completed (7d), by bucket
+      prisma.$queryRaw<BucketFunnelRow[]>`
+        SELECT COALESCE(p."marketBucket", 'unknown') AS bucket, COUNT(DISTINCT ae."userId")::int AS count
+        FROM "AnalyticsEvent" ae
+        JOIN "UserProfile" p ON p."userId" = ae."userId"
+        WHERE ae.event = 'onboarding_completed' AND ae."createdAt" >= ${cut7}
+        GROUP BY bucket`,
+      // Import attempts (7d), by bucket
+      prisma.$queryRaw<BucketFunnelRow[]>`
+        SELECT COALESCE(p."marketBucket", 'unknown') AS bucket, COUNT(*)::int AS count
+        FROM "AnalyticsEvent" ae
+        JOIN "UserProfile" p ON p."userId" = ae."userId"
+        WHERE ae.event = 'onboarding_try_import_submitted' AND ae."createdAt" >= ${cut7}
+        GROUP BY bucket`,
+      // Import failures (7d), by bucket
+      prisma.$queryRaw<BucketFunnelRow[]>`
+        SELECT COALESCE(p."marketBucket", 'unknown') AS bucket, COUNT(*)::int AS count
+        FROM "AnalyticsEvent" ae
+        JOIN "UserProfile" p ON p."userId" = ae."userId"
+        WHERE ae.event IN ('onboarding_try_import_error', 'onboarding_try_import_exception') AND ae."createdAt" >= ${cut7}
+        GROUP BY bucket`,
+    ]);
+
+    const bfMap = (rows: BucketFunnelRow[]) => {
+      const m: Record<string, number> = {};
+      for (const r of rows) m[r.bucket] = r.count;
+      return m;
+    };
+    const bfFirstWl = bfMap(bucketFirstWlRows);
+    const bfFirstItem = bfMap(bucketFirstItemRows);
+    const bfOnbStarted = bfMap(bucketOnbStartedRows);
+    const bfOnbCompleted = bfMap(bucketOnbCompletedRows);
+    const bfImportAttempts = bfMap(bucketImportAttemptRows);
+    const bfImportFails = bfMap(bucketImportFailRows);
+
+    const bucketFunnel = BUCKET_ORDER.map(b => {
+      const mbRow = marketBucketRows.find(r => r.bucket === b);
+      const newUsers = mbRow?.new_7d ?? 0;
+      const firstWl = bfFirstWl[b] ?? 0;
+      const firstItem = bfFirstItem[b] ?? 0;
+      const onbStarted = bfOnbStarted[b] ?? 0;
+      const onbCompleted = bfOnbCompleted[b] ?? 0;
+      const importAttempts = bfImportAttempts[b] ?? 0;
+      const importFails = bfImportFails[b] ?? 0;
+      return {
+        bucket: b,
+        label: MARKET_BUCKET_LABELS[b as MarketBucket] ?? b,
+        newUsers,
+        firstWishlist: firstWl,
+        firstItem,
+        onbStarted,
+        onbCompleted,
+        importAttempts,
+        importFails,
+      };
+    }).filter(b => b.newUsers > 0);
+
     // ── Acquisition / Growth Diagnostics (v2) ──────────────────────────────────
     // Exclude test/godMode users from acquisition metrics for clean data
     const testUsers = await prisma.user.findMany({
@@ -7047,6 +7223,9 @@ tgRouter.get(
         total: segTotal,
         segments,
       },
+      marketBuckets,
+      importSplit,
+      bucketFunnel,
       acquisition: {
         period: acqPeriod,
         excludedTestUsers: testUsers.length,
@@ -7267,8 +7446,7 @@ tgRouter.post(
 
     const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
     if (!data.ok || !data.result) {
-      // eslint-disable-next-line no-console
-      console.error('[billing] createInvoiceLink failed:', data);
+      logger.error({ data }, 'billing createInvoiceLink failed');
       trackEvent('checkout_failed', user.id, { reason: data.description });
       return res.status(502).json({ error: 'Failed to create invoice' });
     }
@@ -7349,6 +7527,7 @@ tgRouter.post(
       where: { id: sub.id },
       data: { cancelAtPeriodEnd: true, cancelledAt: new Date() },
     });
+    trackAnalyticsEvent({ event: 'subscription.cancelled', userId: String(req.tgUser!.id) });
 
     return res.json({
       subscription: {
@@ -7473,7 +7652,7 @@ tgRouter.post(
 
     const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
     if (!data.ok || !data.result) {
-      console.error('[billing] addon createInvoiceLink failed:', data);
+      logger.error({ data }, 'billing addon createInvoiceLink failed');
       trackEvent('addon_checkout_failed', user.id, { skuCode, reason: data.description });
       return res.status(502).json({ error: 'Failed to create invoice' });
     }
@@ -8038,7 +8217,7 @@ tgRouter.post(
           }).catch(() => {});
         }
       } catch (err) {
-        console.error('[support] failed to send to support chat:', err);
+        logger.error({ err }, 'support: failed to send to support chat');
       }
     }
 
@@ -8097,7 +8276,7 @@ tgRouter.post(
           }).catch(() => {});
         }
       } catch (err) {
-        console.error('[support] failed to send DM to user:', err);
+        logger.error({ err }, 'support: failed to send DM to user');
       }
     }
 
@@ -10356,17 +10535,17 @@ tgRouter.post('/santa/campaigns/:id/inbound/reserve', asyncHandler(async (req, r
 
   const participant = await prisma.santaParticipant.findUnique({ where: { campaignId_userId: { campaignId, userId: user.id } } });
   if (!participant || participant.status !== 'JOINED') {
-    console.error('[reserve] 403 not participant', { campaignId, userId: user.id, status: participant?.status });
+    logger.error({ campaignId, userId: user.id, status: participant?.status }, 'reserve: 403 not participant');
     return res.status(403).json({ error: 'Not a participant' });
   }
 
   const campaign = await prisma.santaCampaign.findUnique({ where: { id: campaignId }, select: { status: true, currentRoundId: true } });
   if (!campaign || campaign.status !== 'ACTIVE') {
-    console.error('[reserve] 409 campaign not ACTIVE', { campaignId, status: campaign?.status });
+    logger.error({ campaignId, status: campaign?.status }, 'reserve: 409 campaign not ACTIVE');
     return res.status(409).json({ error: 'Campaign not ACTIVE', message: `Campaign status is ${campaign?.status ?? 'not found'}` });
   }
   if (!campaign.currentRoundId) {
-    console.error('[reserve] 404 no active round', { campaignId });
+    logger.error({ campaignId }, 'reserve: 404 no active round');
     return res.status(404).json({ error: 'No active round' });
   }
 
@@ -10376,7 +10555,7 @@ tgRouter.post('/santa/campaigns/:id/inbound/reserve', asyncHandler(async (req, r
     select: { id: true, giftStatus: true, receiver: { select: { linkedWishlistId: true } } },
   });
   if (!assignment) {
-    console.error('[reserve] 404 assignment not found', { roundId, participantId: participant.id });
+    logger.error({ roundId, participantId: participant.id }, 'reserve: 404 assignment not found');
     return res.status(404).json({ error: 'Assignment not found' });
   }
 
@@ -10388,7 +10567,7 @@ tgRouter.post('/santa/campaigns/:id/inbound/reserve', asyncHandler(async (req, r
   // Validate item belongs to receiver's wishlist
   const receiverWishlistId = assignment.receiver.linkedWishlistId;
   if (!receiverWishlistId) {
-    console.error('[reserve] 409 receiver has no wishlist', { assignmentId: assignment.id });
+    logger.error({ assignmentId: assignment.id }, 'reserve: 409 receiver has no wishlist');
     return res.status(409).json({ error: 'receiver_no_wishlist', message: 'Receiver has no linked wishlist' });
   }
 
@@ -10397,7 +10576,7 @@ tgRouter.post('/santa/campaigns/:id/inbound/reserve', asyncHandler(async (req, r
     select: { id: true, title: true },
   });
   if (!item) {
-    console.error('[reserve] 404 item not found', { itemId, receiverWishlistId });
+    logger.error({ itemId, receiverWishlistId }, 'reserve: 404 item not found');
     return res.status(404).json({ error: 'Item not found or not reservable' });
   }
 
@@ -11085,8 +11264,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     return res.status(415).json({ error: err.message });
   }
 
-  // eslint-disable-next-line no-console
-  console.error(err);
+  logger.error({ err }, 'unhandled express error');
   if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
   return res.status(500).json({ error: 'Internal server error' });
 });
@@ -11098,12 +11276,10 @@ setInterval(async () => {
       where: { scheduledDeleteAt: { lte: new Date() } },
     });
     if (result.count > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[ttl] cleaned ${result.count} expired comments`);
+      logger.info({ count: result.count }, 'ttl: cleaned expired comments');
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('[ttl] cleanup failed', err);
+    logger.error({ err }, 'ttl cleanup failed');
   }
 }, 60 * 60 * 1000);
 
@@ -11117,8 +11293,7 @@ setInterval(async () => {
     });
     if (expired.length === 0) return;
 
-    // eslint-disable-next-line no-console
-    console.log(`[purge] found ${expired.length} expired archive items`);
+    logger.info({ count: expired.length }, 'purge: found expired archive items');
     let deleted = 0, files = 0, errors = 0;
 
     for (const item of expired) {
@@ -11132,16 +11307,13 @@ setInterval(async () => {
         }
       } catch (err) {
         errors++;
-        // eslint-disable-next-line no-console
-        console.error(`[purge] item ${item.id}:`, err);
+        logger.error({ err, itemId: item.id }, 'purge: item deletion failed');
       }
     }
 
-    // eslint-disable-next-line no-console
-    console.log(`[purge] done: ${deleted} deleted, ${files} files cleaned, ${errors} errors`);
+    logger.info({ deleted, files, errors }, 'purge: done');
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('[purge] job failed:', err);
+    logger.error({ err }, 'purge job failed');
   }
 }, 60 * 60 * 1000);
 
@@ -11156,12 +11328,10 @@ setInterval(async () => {
       data: { status: 'EXPIRED' },
     });
     if (expired.count > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[billing] expired ${expired.count} subscriptions`);
+      logger.info({ count: expired.count }, 'billing: expired subscriptions');
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('[billing] expiry check failed:', err);
+    logger.error({ err }, 'billing expiry check failed');
   }
 }, 60 * 60 * 1000);
 
@@ -11173,7 +11343,7 @@ setInterval(async () => {
       data: { status: 'EXPIRED' },
     });
     if (expired.count > 0) {
-      console.log(`[promo] expired ${expired.count} promo redemptions`);
+      logger.info({ count: expired.count }, 'promo: expired promo redemptions');
       // Start grace period for users who lost PRO (no paid sub either)
       const expiredRedemptions = await prisma.promoRedemption.findMany({
         where: { status: 'EXPIRED', expiresAt: { lte: new Date(), gte: new Date(Date.now() - 2 * 60 * 60 * 1000) } },
@@ -11198,7 +11368,7 @@ setInterval(async () => {
       }
     }
   } catch (err) {
-    console.error('[promo] expiry check failed:', err);
+    logger.error({ err }, 'promo expiry check failed');
   }
 }, 60 * 60 * 1000);
 
@@ -11257,11 +11427,11 @@ setInterval(async () => {
         },
       });
       if (archivedWlIds.length > 0 || archivedItemIds.length > 0) {
-        console.log(`[degradation] archived ${archivedWlIds.length} wishlists, ${archivedItemIds.length} items for user ${userId}`);
+        logger.info({ wishlists: archivedWlIds.length, items: archivedItemIds.length, userId }, 'degradation: archived data');
       }
     }
   } catch (err) {
-    console.error('[degradation] archive job failed:', err);
+    logger.error({ err }, 'degradation archive job failed');
   }
 }, 60 * 60 * 1000);
 
@@ -11289,10 +11459,10 @@ setInterval(async () => {
       if (itemIds.length) await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
       if (wlIds.length) await prisma.wishlist.deleteMany({ where: { id: { in: wlIds } } });
       await prisma.degradationState.update({ where: { id: ds.id }, data: { phase: 'PURGED' } });
-      console.log(`[degradation] purged ${wlIds.length} wishlists, ${itemIds.length} items for user ${ds.userId}`);
+      logger.info({ wishlists: wlIds.length, items: itemIds.length, userId: ds.userId }, 'degradation: purged data');
     }
   } catch (err) {
-    console.error('[degradation] purge job failed:', err);
+    logger.error({ err }, 'degradation purge job failed');
   }
 }, 60 * 60 * 1000);
 
@@ -11592,10 +11762,10 @@ setInterval(async () => {
         });
       }
 
-      console.log(`[lifecycle] ${delivered ? '✓' : '✗'} ${segment} touch${nextTouchNumber} → user ${candidate.id.slice(0, 8)}... ${actuallyOfferPromo ? '(+PROMO)' : ''}`);
+      logger.info({ delivered, segment, touchNumber: nextTouchNumber, userId: candidate.id.slice(0, 8), promo: actuallyOfferPromo }, 'lifecycle touch sent');
     }
   } catch (err) {
-    console.error('[lifecycle] scheduler error:', err);
+    logger.error({ err }, 'lifecycle scheduler error');
   }
 }, 60 * 60 * 1000); // every hour
 
@@ -11607,12 +11777,10 @@ setInterval(async () => {
       data: { status: 'EXPIRED' },
     });
     if (expired.count > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[santa-hints] expired ${expired.count} hint requests`);
+      logger.info({ count: expired.count }, 'santa-hints: expired hint requests');
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('[santa-hints] expiry check failed:', err);
+    logger.error({ err }, 'santa-hints expiry check failed');
   }
 }, 60 * 60 * 1000);
 
@@ -11661,12 +11829,10 @@ setInterval(async () => {
     }
 
     if (totalMissed > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[santa-deadlines] marked ${totalMissed} assignments as MISSED_DEADLINE`);
+      logger.info({ count: totalMissed }, 'santa-deadlines: marked assignments as MISSED_DEADLINE');
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('[santa-deadlines] missed-deadline job failed:', err);
+    logger.error({ err }, 'santa-deadlines missed-deadline job failed');
   }
 }, 60 * 60 * 1000);
 
@@ -11713,12 +11879,10 @@ setInterval(async () => {
     }
 
     if (totalWarned > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[santa-deadlines] sent DEADLINE_WARNING to ${totalWarned} givers`);
+      logger.info({ count: totalWarned }, 'santa-deadlines: sent DEADLINE_WARNING to givers');
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('[santa-deadlines] deadline-warning job failed:', err);
+    logger.error({ err }, 'santa-deadlines deadline-warning job failed');
   }
 }, 60 * 60 * 1000);
 
@@ -11793,9 +11957,9 @@ setInterval(async () => {
         });
       }
     }
-    if (sent > 0) console.log(`[reservation-reminders] sent ${sent} reminders`);
+    if (sent > 0) logger.info({ count: sent }, 'reservation-reminders: sent reminders');
   } catch (err) {
-    console.error('[reservation-reminders] job failed:', err);
+    logger.error({ err }, 'reservation-reminders job failed');
   }
 }, 15 * 60 * 1000); // every 15 minutes
 
@@ -11866,8 +12030,7 @@ async function sendSeasonalBroadcast(type: 'PROMO' | 'CLOSING_SOON', seasonYear:
     data:  { userCount: totalSent },
   }).catch(() => { /* non-fatal */ });
 
-  // eslint-disable-next-line no-console
-  console.log(`[santa-season] broadcast ${type} for season ${seasonYear} sent to ${totalSent} users`);
+  logger.info({ type, seasonYear, totalSent }, 'santa-season: broadcast sent');
   void sendAdminAlert(`🎅 Santa broadcast <b>${type}</b> (season ${seasonYear}) sent to <b>${totalSent}</b> users`);
 }
 
@@ -11900,8 +12063,7 @@ async function maybeRunSeasonalEvents(): Promise<void> {
         where: { year_type: { year: seasonYear, type: 'PROMO' } },
       });
       if (!alreadySent) {
-        // eslint-disable-next-line no-console
-        console.log(`[santa-season] Nov 1 — triggering PROMO broadcast for season ${seasonYear}`);
+        logger.info({ seasonYear }, 'santa-season: Nov 1 triggering PROMO broadcast');
         void sendSeasonalBroadcast('PROMO', seasonYear);
       }
     }
@@ -11914,14 +12076,12 @@ async function maybeRunSeasonalEvents(): Promise<void> {
         where: { year_type: { year: seasonYear, type: 'CLOSING_SOON' } },
       });
       if (!alreadySent) {
-        // eslint-disable-next-line no-console
-        console.log(`[santa-season] Feb 1 — triggering CLOSING_SOON broadcast for season ${seasonYear}`);
+        logger.info({ seasonYear }, 'santa-season: Feb 1 triggering CLOSING_SOON broadcast');
         void sendSeasonalBroadcast('CLOSING_SOON', seasonYear);
       }
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error('[santa-season] seasonal event check failed:', err);
+    logger.error({ err }, 'santa-season seasonal event check failed');
   }
 }
 
@@ -12980,8 +13140,7 @@ app.listen(PORT, () => {
     create: { id: 'global', santaEnabled: true },
     update: {}, // never overwrite an existing setting on startup
   }).catch(err => {
-    // eslint-disable-next-line no-console
-    console.error('[startup] SantaGlobalConfig upsert failed:', err);
+    logger.error({ err }, 'startup: SantaGlobalConfig upsert failed');
   });
 
   // Backfill: generate aliases for all existing rounds that have none yet.
@@ -13013,16 +13172,13 @@ app.listen(PORT, () => {
           data: aliasData.map(a => ({ roundId: round.id, ...a })),
           skipDuplicates: true,
         });
-        // eslint-disable-next-line no-console
-        console.log(`[startup] backfilled ${aliasData.length} aliases for round ${round.id}`);
+        logger.info({ count: aliasData.length, roundId: round.id }, 'startup: backfilled aliases for round');
       }
       if (rounds.length > 0) {
-        // eslint-disable-next-line no-console
-        console.log(`[startup] Santa alias backfill complete: ${rounds.length} round(s) processed`);
+        logger.info({ rounds: rounds.length }, 'startup: Santa alias backfill complete');
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[startup] Santa alias backfill failed (non-fatal):', err);
+      logger.error({ err }, 'startup: Santa alias backfill failed (non-fatal)');
     }
   })();
 });
@@ -13030,16 +13186,14 @@ app.listen(PORT, () => {
 // ─── Uncaught exception / rejection alerts ────────────────────────────────────
 process.on('uncaughtException', (err) => {
   logger.fatal({ err }, 'uncaughtException');
-  // eslint-disable-next-line no-console
-  console.error('[api] uncaughtException:', err);
+  logger.fatal({ err }, 'api uncaughtException');
   if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
   void sendAdminAlert(`🔴 <b>API uncaughtException</b>\n${String(err)}`).finally(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (reason) => {
   logger.error({ reason }, 'unhandledRejection');
-  // eslint-disable-next-line no-console
-  console.error('[api] unhandledRejection:', reason);
+  logger.error({ reason }, 'api unhandledRejection');
   if (process.env.GLITCHTIP_DSN && reason instanceof Error) Sentry.captureException(reason);
   void sendAdminAlert(`🔴 <b>API unhandledRejection</b>\n${String(reason)}`);
 });

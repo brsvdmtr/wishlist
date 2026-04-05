@@ -727,12 +727,14 @@ if (!token) {
       if (payloadType === 'pro_monthly') {
         // pro_monthly:<telegramId>:<uuid>
         if (parts.length < 3) {
+          logger.warn({ invoicePayload: raw, reason: 'invalid_pro_payload' }, 'pre_checkout rejected');
           await ctx.answerPreCheckoutQuery(false, 'Invalid payment');
           return;
         }
         const telegramId = parts[1];
         const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
         if (!user) {
+          logger.warn({ telegramId, reason: 'user_not_found' }, 'pre_checkout rejected');
           await ctx.answerPreCheckoutQuery(false, 'User not found');
           return;
         }
@@ -741,6 +743,7 @@ if (!token) {
       } else if (payloadType === 'addon') {
         // addon:<skuCode>:<telegramId>:<targetId|_>:<sessionId>
         if (parts.length < 5) {
+          logger.warn({ invoicePayload: raw, reason: 'invalid_addon_payload' }, 'pre_checkout rejected');
           await ctx.answerPreCheckoutQuery(false, 'Invalid addon payload');
           return;
         }
@@ -756,6 +759,7 @@ if (!token) {
           'reservation_pro_unlock',
         ]);
         if (!skuCode || !KNOWN_SKUS.has(skuCode)) {
+          logger.warn({ skuCode, reason: 'unknown_sku' }, 'pre_checkout rejected');
           await ctx.answerPreCheckoutQuery(false, 'Unknown SKU');
           return;
         }
@@ -767,12 +771,11 @@ if (!token) {
         await ctx.answerPreCheckoutQuery(true);
 
       } else {
+        logger.warn({ invoicePayload: raw, reason: 'unknown_payload_type', payloadType }, 'pre_checkout rejected');
         await ctx.answerPreCheckoutQuery(false, 'Invalid payment');
       }
     } catch (err) {
       logger.error({ err }, 'pre_checkout error');
-      // eslint-disable-next-line no-console
-      console.error('[bot] pre_checkout error:', err);
       if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
       await ctx.answerPreCheckoutQuery(false, 'Error').catch(() => {});
     }
@@ -994,8 +997,6 @@ if (!token) {
       logger.warn({ invoicePayload: raw }, 'unknown payment payload format');
     } catch (err) {
       logger.error({ err }, 'payment processing error');
-      // eslint-disable-next-line no-console
-      console.error('[bot] payment processing error:', err);
       if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
     }
   });
@@ -1257,13 +1258,16 @@ if (!token) {
         const body = await res.json().catch(() => ({})) as { error?: string };
         if (res.status === 402) {
           await ctx.reply(t('bot_import_drafts_full', locale));
+          logger.info({ telegramId, url: firstUrl, reason: 'drafts_full' }, 'bot import rejected');
           return;
         }
         if (res.status === 400) {
           await ctx.reply(body.error || t('bot_import_error', locale));
+          logger.info({ telegramId, url: firstUrl, status: 400, error: body.error }, 'bot import failed');
           return;
         }
         await ctx.reply(t('bot_import_error_retry', locale));
+        logger.warn({ telegramId, url: firstUrl, status: res.status }, 'bot import error');
         return;
       }
 
@@ -1290,6 +1294,7 @@ if (!token) {
           Markup.button.webApp(t('bot_import_open', locale), `${MINI_APP_URL}?startapp=draft_${item.id}`),
         ]),
       });
+      logger.info({ telegramId, url: firstUrl, itemId: item.id, domain: item.sourceDomain, parseStatus }, 'bot import succeeded');
     } catch (err) {
       logger.error({ err }, 'import-url error');
       await ctx.reply(t('bot_error', locale));
@@ -1380,8 +1385,6 @@ if (!token) {
   // Uncaught exception / rejection alerts
   process.on('uncaughtException', (err) => {
     logger.fatal({ err }, 'uncaughtException');
-    // eslint-disable-next-line no-console
-    console.error('[bot] uncaughtException:', err);
     if (process.env.GLITCHTIP_DSN) Sentry.captureException(err);
     setTimeout(() => process.exit(1), 15_000).unref();
     void sendAdminAlert(`🔴 <b>Bot uncaughtException</b>\n${String(err)}`).finally(() => process.exit(1));
@@ -1389,8 +1392,6 @@ if (!token) {
 
   process.on('unhandledRejection', (reason) => {
     logger.error({ reason }, 'unhandledRejection');
-    // eslint-disable-next-line no-console
-    console.error('[bot] unhandledRejection:', reason);
     if (process.env.GLITCHTIP_DSN && reason instanceof Error) Sentry.captureException(reason);
     void sendAdminAlert(`🔴 <b>Bot unhandledRejection</b>\n${String(reason)}`);
   });
