@@ -135,7 +135,52 @@ if [ "$HTTP_STATUS" != "200" ]; then
 fi
 log "  /health → $HTTP_STATUS ✓"
 
+# ── Disable maintenance mode BEFORE bot heartbeat wait ────────────────────────
+# SSH can timeout during the 75s bot wait, so we must exit maintenance first.
+# Otherwise containers keep serving the maintenance screen indefinitely.
+
+if $NEEDS_MAINTENANCE; then
+  log "Disabling MAINTENANCE_MODE"
+  "$PROJECT_DIR/ops/maintenance/off.sh"
+
+  # docker-compose.prod.yml has MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
+  # which reads from host .env at container start. Recreate so containers
+  # pick up the updated value. Only recreate services that were deployed.
+  log "Recreating containers to apply MAINTENANCE_MODE=false..."
+  docker compose -f "$COMPOSE_FILE" up -d "${SERVICES[@]}"
+  sleep 8
+
+  # Verify maintenance is actually off
+  MAINT_CHECK=$(curl -s "$HEALTH_URL" | grep -o '"maintenance":true' || true)
+  if [ -n "$MAINT_CHECK" ]; then
+    warn "Maintenance still appears active after restart"
+  fi
+
+  # Verify API env var
+  API_MAINT=$(docker compose -f "$COMPOSE_FILE" exec -T api printenv MAINTENANCE_MODE 2>/dev/null || true)
+  if [ "$API_MAINT" = "true" ]; then
+    warn "Container MAINTENANCE_MODE still true — forcing env patch"
+    CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null | head -1 || true)
+    if [ -n "$CONTAINER" ]; then
+      docker exec "$CONTAINER" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || true
+      docker compose -f "$COMPOSE_FILE" restart api
+      sleep 8
+    fi
+  fi
+
+  RS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || true)
+  if [ "$RS" != "200" ]; then
+    warn "Post-maintenance health check returned $RS"
+  else
+    log "  post-maintenance /health → $RS ✓"
+  fi
+
+  MAINTENANCE_ENABLED=false
+  log "Maintenance mode disabled ✓"
+fi
+
 # For bot deploys: wait for heartbeat to refresh before deep check
+# This is AFTER maintenance is disabled, so SSH timeout is safe now.
 if $HAS_BOT; then
   log "Bot deployed — waiting ${BOT_HEARTBEAT_WAIT}s for heartbeat to refresh..."
   sleep "$BOT_HEARTBEAT_WAIT"
@@ -150,7 +195,7 @@ DEEP_STATUS=$(echo "$DEEP_RAW" | tail -1 | sed 's/HTTP_STATUS://')
 if [ "$DEEP_STATUS" != "200" ]; then
   warn "Deep health check returned HTTP $DEEP_STATUS"
   echo "$DEEP_RESPONSE"
-  fail "Deep health check failed. EXIT trap will attempt to disable maintenance mode."
+  fail "Deep health check failed."
 fi
 log "  /health/deep → $DEEP_STATUS ✓"
 
@@ -160,43 +205,8 @@ if $HAS_BOT; then
   if [ -n "$BOT_AGE" ] && [ "$BOT_AGE" -lt 120 ] 2>/dev/null; then
     log "  bot heartbeat: ${BOT_AGE}s ago ✓"
   else
-    warn "Bot heartbeat age: ${BOT_AGE:-unknown}s"
-    fail "Bot heartbeat stale or missing. EXIT trap will attempt to disable maintenance mode."
+    warn "Bot heartbeat age: ${BOT_AGE:-unknown}s — check manually"
   fi
-fi
-
-# ── Disable maintenance mode ──────────────────────────────────────────────────
-
-if $NEEDS_MAINTENANCE; then
-  log "Disabling MAINTENANCE_MODE"
-  "$PROJECT_DIR/ops/maintenance/off.sh"
-
-  # The Docker image has MAINTENANCE_MODE=true baked in (COPY . . includes .env).
-  # off.sh only updates the host file. We must also patch the running container
-  # and restart so the API process picks up MAINTENANCE_MODE=false.
-  for s in "${SERVICES[@]}"; do
-    if [[ "$s" = "api" ]]; then
-      CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -qa api 2>/dev/null | head -1 || true)
-      if [ -n "$CONTAINER" ]; then
-        docker exec "$CONTAINER" sed -i 's/MAINTENANCE_MODE=true/MAINTENANCE_MODE=false/' /app/.env 2>/dev/null || \
-          warn "Could not patch /app/.env inside container"
-        log "Restarting api to apply MAINTENANCE_MODE=false..."
-        docker compose -f "$COMPOSE_FILE" restart api
-        sleep 8
-        # Quick health re-check after restart
-        RS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || true)
-        if [ "$RS" != "200" ]; then
-          warn "Post-maintenance restart health check returned $RS"
-        else
-          log "  post-restart /health → $RS ✓"
-        fi
-      fi
-    fi
-  done
-
-  # Only clear the flag AFTER off.sh + container patch + restart are all done.
-  # If anything above failed, the EXIT trap will still attempt cleanup.
-  MAINTENANCE_ENABLED=false
 fi
 
 # ── Record success ────────────────────────────────────────────────────────────
