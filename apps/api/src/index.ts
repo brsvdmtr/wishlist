@@ -6151,6 +6151,64 @@ tgRouter.post(
   }),
 );
 
+// POST /tg/onboarding/manual-add — add item manually during onboarding (v2)
+tgRouter.post(
+  '/onboarding/manual-add',
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({
+        title: z.string().min(1).max(200),
+        priceText: z.string().max(100).optional(),
+        onboardingStateId: z.string(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const state = await prisma.userOnboardingState.findUnique({ where: { id: parsed.data.onboardingStateId } });
+
+    if (!state || state.userId !== user.id || state.status !== 'IN_PROGRESS') {
+      return res.status(409).json({ error: 'Invalid onboarding state' });
+    }
+    const meta = getOnboardingMeta(state.metaJson);
+    if (meta.onboardingVariant !== 'v2_try') {
+      return res.status(400).json({ error: 'Wrong variant for manual-add' });
+    }
+
+    const draftsWl = await getOrCreateDraftsWishlist(user.id);
+    const item = await prisma.item.create({
+      data: {
+        wishlistId: draftsWl.id,
+        title: parsed.data.title.trim(),
+        url: '',
+        priceText: parsed.data.priceText?.trim() || null,
+        importMethod: 'onboarding_manual',
+      },
+    });
+
+    const newMeta: OnboardingMeta = {
+      ...meta,
+      manualItemIds: [...(meta.manualItemIds ?? []), item.id],
+      acquisitionPath: meta.acquisitionPath ?? 'manual',
+      lastStep: 'onboarding-create-wishlist',
+    };
+    await prisma.userOnboardingState.update({
+      where: { id: state.id },
+      data: { metaJson: newMeta as any },
+    });
+
+    trackEvent('onboarding_manual_item_added', user.id, {
+      onboarding_key: ONBOARDING_KEY,
+      version: ONBOARDING_VERSION,
+      onboarding_variant: 'v2_try',
+      item_id: item.id,
+      has_price: !!parsed.data.priceText,
+    });
+
+    return res.status(201).json({ item, ok: true });
+  }),
+);
+
 // POST /tg/onboarding/catalog-select — create items from catalog templates (v2)
 tgRouter.post(
   '/onboarding/catalog-select',

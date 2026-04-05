@@ -77,6 +77,7 @@ export interface OnboardingMeta {
   tryImportedItemIds?: string[];
   fallbackDemoItemId?: string | null;
   catalogItemIds?: string[];
+  manualItemIds?: string[];
   acquisitionPath?: AcquisitionPath | null;
   lastStep?: string | null;
   tryAttemptsUsed?: number;
@@ -1625,10 +1626,15 @@ const ru: Dict = {
   onboarding_path_title: 'С чего начнём?',
   onboarding_path_subtitle: 'Выбери удобный способ добавить первое желание',
   onboarding_path_catalog_title: 'Выбрать из готовых идей',
-  onboarding_path_catalog_desc: 'Более 30 идей на любой вкус',
+  onboarding_path_catalog_desc: 'Несколько готовых идей для старта',
   onboarding_path_catalog_badge: 'Рекомендуем',
   onboarding_path_import_link: 'Уже есть ссылка? Попробуем добавить автоматически',
   onboarding_path_import_hint: 'Работает не для всех магазинов',
+  // ── Onboarding v2: Manual add screen ──
+  onboarding_manual_page_title: 'Добавить вручную',
+  onboarding_manual_placeholder: 'Название желания',
+  onboarding_manual_price_placeholder: 'Цена (необязательно)',
+  onboarding_manual_submit: 'Добавить',
   // ── Onboarding v2: Catalog item names ──
   catalog_airpods: 'AirPods Pro',
   catalog_sneakers: 'Кроссовки Nike',
@@ -3248,10 +3254,15 @@ const en: Dict = {
   onboarding_path_title: 'How would you like to start?',
   onboarding_path_subtitle: 'Choose how to add your first wish',
   onboarding_path_catalog_title: 'Choose from ready ideas',
-  onboarding_path_catalog_desc: '30+ ideas for every taste',
+  onboarding_path_catalog_desc: 'A few ready ideas to help you start',
   onboarding_path_catalog_badge: 'Recommended',
   onboarding_path_import_link: 'Already have a link? We can try to add it automatically',
   onboarding_path_import_hint: 'Works only for some supported stores',
+  // ── Onboarding v2: Manual add screen ──
+  onboarding_manual_page_title: 'Add manually',
+  onboarding_manual_placeholder: 'Wish name',
+  onboarding_manual_price_placeholder: 'Price (optional)',
+  onboarding_manual_submit: 'Add',
   // ── Onboarding v2: Catalog item names ──
   catalog_airpods: 'AirPods Pro',
   catalog_sneakers: 'Nike Sneakers',

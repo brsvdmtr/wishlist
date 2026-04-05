@@ -475,7 +475,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall'
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall'
 | 'first-share-prompt';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
@@ -2957,6 +2957,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [onboardingTryError, setOnboardingTryError] = useState<string | null>(null);
   const [onboardingTryUrl, setOnboardingTryUrl] = useState('');
   const [onboardingShowImportInput, setOnboardingShowImportInput] = useState(false);
+  const [onboardingManualTitle, setOnboardingManualTitle] = useState('');
+  const [onboardingManualPrice, setOnboardingManualPrice] = useState('');
+  const [onboardingManualLoading, setOnboardingManualLoading] = useState(false);
+  const [onboardingManualError, setOnboardingManualError] = useState<string | null>(null);
   const [onboardingWlTitle, setOnboardingWlTitle] = useState('');
   const [onboardingCreatedWl, setOnboardingCreatedWl] = useState<{ id: string; slug: string; title: string } | null>(null);
 
@@ -3942,11 +3946,40 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       }
       trackEvent('onboarding_try_paste', { url_domain: json.item.sourceDomain, parse_status: json.parseStatus });
     } catch {
+      trackEvent('onboarding_try_import_exception');
       setOnboardingTryError(t('error_network', locale));
     } finally {
       setOnboardingTryLoading(false);
     }
   }, [onboardingState, tgFetch, locale, trackEvent]);
+
+  // ── Onboarding v2: manual add ──
+  const submitOnboardingManual = useCallback(async () => {
+    if (!onboardingState || !onboardingManualTitle.trim()) return;
+    setOnboardingManualLoading(true);
+    setOnboardingManualError(null);
+    try {
+      const res = await tgFetch('/tg/onboarding/manual-add', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: onboardingManualTitle.trim(),
+          priceText: onboardingManualPrice.trim() || undefined,
+          onboardingStateId: onboardingState.id,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        setOnboardingManualError(err.error || t('error_network', locale));
+        return;
+      }
+      trackEvent('onboarding_manual_submitted', { title_length: onboardingManualTitle.trim().length, has_price: !!onboardingManualPrice.trim() });
+      setScreen('onboarding-create-wishlist');
+    } catch {
+      setOnboardingManualError(t('error_network', locale));
+    } finally {
+      setOnboardingManualLoading(false);
+    }
+  }, [onboardingState, onboardingManualTitle, onboardingManualPrice, tgFetch, locale, trackEvent]);
 
   // ── Onboarding v2: submit catalog selection ──
   const submitCatalogSelection = useCallback(async () => {
@@ -6829,8 +6862,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           {/* ── 2. MANUAL — SECONDARY ── */}
           <button onClick={() => {
             trackEvent('onboarding_path_manual_started');
-            void updateOnboardingStep('onboarding-catalog', 'manual');
-            setScreen('onboarding-catalog');
+            void updateOnboardingStep('onboarding-manual', 'manual');
+            setScreen('onboarding-manual');
           }} style={{
             background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
             borderRadius: 18, padding: '16px 20px', display: 'flex', alignItems: 'center',
@@ -6900,8 +6933,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   <button onClick={() => {
                     trackEvent('onboarding_try_import_fallback_to_manual', { entry: 'inline_error' });
                     setOnboardingShowImportInput(false);
-                    void updateOnboardingStep('onboarding-catalog', 'manual');
-                    setScreen('onboarding-catalog');
+                    void updateOnboardingStep('onboarding-manual', 'manual');
+                    setScreen('onboarding-manual');
                   }} style={{
                     width: '100%', padding: '13px 0', borderRadius: 14,
                     background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
@@ -6932,6 +6965,99 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 28 }}>
           {[0,1,2,3,4,5].map(i => (
             <div key={i} style={{ width: i === 1 ? 24 : 8, height: 8, borderRadius: i === 1 ? 4 : '50%', background: i === 1 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderOnboardingManual() {
+    // Dedicated manual add screen: title + optional price → submit → create-wishlist
+    return (
+      <div data-overlay-scroll style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
+        display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
+        padding: '20px 24px calc(40px + env(safe-area-inset-bottom, 0px))',
+        WebkitOverflowScrolling: 'touch' as never, overscrollBehavior: 'contain',
+      }}>
+        {/* Back */}
+        <div style={{ alignSelf: 'flex-start' }}>
+          <button onClick={() => { setScreen('onboarding-try'); }}
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '6px 14px', color: 'rgba(255,255,255,0.45)', fontSize: 13, cursor: 'pointer', fontFamily: font }}>
+            ←
+          </button>
+        </div>
+
+        {/* Header */}
+        <div style={{ textAlign: 'center', fontSize: 42, margin: '24px 0 10px' }}>✏️</div>
+        <div style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.25 }}>
+          {t('onboarding_manual_page_title', locale)}
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 8, lineHeight: 1.45 }}>
+          {t('onboarding_try_manual_desc', locale)}
+        </div>
+
+        <div style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Title input */}
+          <div style={{
+            background: 'rgba(255,255,255,0.06)',
+            border: `1.5px solid ${onboardingManualError ? 'rgba(248,113,113,0.5)' : 'rgba(124,106,255,0.35)'}`,
+            borderRadius: 14, padding: '14px 16px',
+          }}>
+            <input
+              value={onboardingManualTitle}
+              onChange={(e) => { setOnboardingManualTitle(e.target.value); setOnboardingManualError(null); }}
+              placeholder={t('onboarding_manual_placeholder', locale)}
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+              style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 16, fontFamily: font }}
+            />
+          </div>
+
+          {/* Price input (optional) */}
+          <div style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 14, padding: '14px 16px',
+          }}>
+            <input
+              value={onboardingManualPrice}
+              onChange={(e) => setOnboardingManualPrice(e.target.value)}
+              placeholder={t('onboarding_manual_price_placeholder', locale)}
+              inputMode="numeric"
+              style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 16, fontFamily: font }}
+            />
+          </div>
+
+          {/* Error */}
+          {onboardingManualError && (
+            <div style={{ fontSize: 13, color: '#F87171', textAlign: 'center', lineHeight: 1.4 }}>{onboardingManualError}</div>
+          )}
+
+          {/* Submit */}
+          <button
+            onClick={() => void submitOnboardingManual()}
+            disabled={onboardingManualLoading || !onboardingManualTitle.trim()}
+            style={{
+              width: '100%', padding: '16px 0', borderRadius: 16, border: 'none',
+              background: (!onboardingManualTitle.trim() || onboardingManualLoading)
+                ? 'rgba(124,106,255,0.3)' : 'linear-gradient(135deg, #7c6aff, #a855f7)',
+              color: '#fff', fontSize: 16, fontWeight: 700,
+              cursor: (!onboardingManualTitle.trim() || onboardingManualLoading) ? 'default' : 'pointer',
+              fontFamily: font,
+              opacity: (!onboardingManualTitle.trim() || onboardingManualLoading) ? 0.6 : 1,
+              boxShadow: (!onboardingManualTitle.trim() || onboardingManualLoading) ? 'none' : '0 8px 24px rgba(124,106,255,0.4)',
+              transition: 'opacity 0.2s, box-shadow 0.2s',
+            }}>
+            {onboardingManualLoading ? '...' : t('onboarding_manual_submit', locale)}
+          </button>
+        </div>
+
+        {/* Step indicator dots */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 28 }}>
+          {[0,1,2,3,4,5].map(i => (
+            <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
           ))}
         </div>
       </div>
@@ -7035,8 +7161,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           <button onClick={() => {
             trackEvent('onboarding_recovery_manual');
             trackEvent('onboarding_try_import_fallback_to_manual', { entry: 'recovery_screen' });
-            void updateOnboardingStep('onboarding-catalog', 'manual');
-            setScreen('onboarding-catalog');
+            void updateOnboardingStep('onboarding-manual', 'manual');
+            setScreen('onboarding-manual');
           }} style={{
             width: '100%', padding: '16px 0', borderRadius: 16, border: 'none',
             background: 'linear-gradient(135deg, #7c6aff, #a855f7)', color: '#fff', fontSize: 16, fontWeight: 700,
@@ -19082,6 +19208,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 
       {/* ── ONBOARDING V2 SCREENS ── */}
       {screen === 'onboarding-try' && onboardingVariant === 'v2_try' && renderOnboardingTry()}
+      {screen === 'onboarding-manual' && onboardingVariant === 'v2_try' && renderOnboardingManual()}
       {screen === 'onboarding-success' && onboardingVariant === 'v2_try' && renderOnboardingSuccess()}
       {screen === 'onboarding-recovery' && onboardingVariant === 'v2_try' && renderOnboardingRecovery()}
       {screen === 'onboarding-catalog' && onboardingVariant === 'v2_try' && renderOnboardingCatalog()}
