@@ -471,6 +471,7 @@ type GodStats = {
       eventAlerts: { label: string; cur: number; prev: number; deltaPct: number }[];
     };
   };
+  sourceBreakdown?: { source: string; count: number }[];
   generatedAt: string;
 };
 
@@ -5254,7 +5255,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         }
       };
 
-      trackEvent('miniapp.bootstrap_started', { startParamType: startParam ? (startParam.startsWith('santa_') ? 'santa' : startParam.includes('__') ? 'guest' : 'service') : 'none' });
+      trackEvent('miniapp.bootstrap_started', { startParamType: startParam ? (startParam.startsWith('santa_') ? 'santa' : startParam.startsWith('src_') ? 'attribution' : startParam.includes('__') ? 'guest' : 'service') : 'none' });
 
       if (startParam && startParam.startsWith('santa_')) {
         // Deep link from Santa invite.
@@ -5400,6 +5401,30 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             } else {
               bootSetScreen('my-wishlists');
             }
+          })
+          .catch(handleErr);
+      } else if (startParam && startParam.startsWith('src_')) {
+        // Attribution deep link — src_<source>[__med_<medium>][__camp_<campaign>][__ref_<ref>]
+        // Parse and record first-touch attribution, then open home screen normally.
+        const attrParts = startParam.split('__');
+        const attrData: Record<string, string> = {};
+        for (const part of attrParts) {
+          if (part.startsWith('src_')) attrData.source = part.slice(4);
+          else if (part.startsWith('med_')) attrData.medium = part.slice(4);
+          else if (part.startsWith('camp_')) attrData.campaign = part.slice(5);
+          else if (part.startsWith('ref_')) attrData.ref = part.slice(4);
+        }
+        if (attrData.source) {
+          // Fire-and-forget — never blocks the boot path
+          tgFetch('/tg/analytics/attribution', { method: 'POST', body: JSON.stringify(attrData) }).catch(() => {});
+        }
+        trackEvent('miniapp_start_payload_resolved', { payload: startParam, type: 'attribution', source: attrData.source });
+        loadWishlists()
+          .then(async () => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+            void loadReservations();
+            const redirected = await checkOnboarding();
+            if (!redirected) bootSetScreen('my-wishlists');
           })
           .catch(handleErr);
       } else if (startParam) {
@@ -11870,6 +11895,25 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                                             <span style={{ fontSize: 12, fontWeight: 600, color: C.text, width: 40, textAlign: 'right' }}>{s.newUsers}</span>
                                             <span style={{ fontSize: 11, color: C.textMuted, width: 35, textAlign: 'right' }}>{s.withWishlist}</span>
                                             <span style={{ fontSize: 11, color: C.textMuted, width: 35, textAlign: 'right' }}>{s.withWish}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* External Source Breakdown (all-time, from tagged links) */}
+                                    {godStats.sourceBreakdown && godStats.sourceBreakdown.length > 0 && (
+                                      <div style={{ marginTop: 8, background: C.card, borderRadius: 12, padding: '10px 12px' }}>
+                                        <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                                          Внешние источники <span style={{ fontSize: 9, fontWeight: 400, textTransform: 'none', opacity: 0.7 }}>all-time</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 0 4px', borderBottom: `1px solid ${C.border}` }}>
+                                          <span style={{ fontSize: 10, color: C.textMuted, flex: 1 }}>Источник</span>
+                                          <span style={{ fontSize: 10, color: C.textMuted, width: 50, textAlign: 'right' }}>Всего</span>
+                                        </div>
+                                        {godStats.sourceBreakdown.map(s => (
+                                          <div key={s.source} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
+                                            <span style={{ fontSize: 11, color: C.textSec, flex: 1 }}>{s.source}</span>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: C.text, width: 50, textAlign: 'right' }}>{s.count}</span>
                                           </div>
                                         ))}
                                       </div>

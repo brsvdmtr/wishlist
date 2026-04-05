@@ -6840,6 +6840,18 @@ tgRouter.get(
       { key: 'guestOpens', label: 'Гостевые просмотры' },
     ]);
 
+    // ── Source breakdown (all-time, not period-filtered) ──────────────────────
+    // Groups users by firstAcquisitionSource field for external traffic attribution
+    type SrcBreakRow = { source: string; count: bigint };
+    const sourceBreakdownRaw = await prisma.$queryRaw<SrcBreakRow[]>`
+      SELECT "firstAcquisitionSource" AS source, COUNT(*)::int AS count
+      FROM "UserProfile"
+      WHERE "firstAcquisitionSource" IS NOT NULL
+      GROUP BY "firstAcquisitionSource"
+      ORDER BY count DESC
+    `;
+    const sourceBreakdown = sourceBreakdownRaw.map(r => ({ source: r.source, count: Number(r.count) }));
+
     return res.json({
       overview: {
         totalUsers,
@@ -6999,6 +7011,7 @@ tgRouter.get(
         dataNote,
         diagnosis: { dbAlerts, eventAlerts },
       },
+      ...(sourceBreakdown.length > 0 && { sourceBreakdown }),
       generatedAt: now.toISOString(),
     });
   }),
@@ -10946,6 +10959,39 @@ tgRouter.post('/telemetry', telemetryLimiter, asyncHandler(async (req, res) => {
   }
 
   return res.json({ ok: true });
+}));
+
+// POST /tg/analytics/attribution — First-touch source attribution.
+// Records firstAcquisitionSource/Medium/Campaign/Ref/At on UserProfile.
+// First-touch only: atomically sets fields only when firstAcquisitionSource IS NULL — never overwrites.
+// Returns { attributed: boolean } — true if this was the first (winning) attribution call.
+tgRouter.post('/analytics/attribution', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+
+  const raw = req.body as Record<string, unknown>;
+
+  // Sanitize: allow only alphanumeric, underscore, hyphen; truncate to 64 chars
+  const sanitize = (val: unknown, maxLen = 64): string | null => {
+    if (typeof val !== 'string' || !val.trim()) return null;
+    const clean = val.replace(/[^a-z0-9_\-]/gi, '_').slice(0, maxLen);
+    return clean || null;
+  };
+
+  const source = sanitize(raw.source);
+  if (!source) return res.status(400).json({ error: 'source is required and must be a non-empty string' });
+
+  const updated = await prisma.userProfile.updateMany({
+    where: { userId: user.id, firstAcquisitionSource: null },
+    data: {
+      firstAcquisitionSource: source,
+      firstAcquisitionMedium: sanitize(raw.medium),
+      firstAcquisitionCampaign: sanitize(raw.campaign),
+      firstAcquisitionRef: sanitize(raw.ref),
+      firstAcquisitionAt: new Date(),
+    },
+  });
+
+  return res.json({ attributed: updated.count > 0 });
 }));
 
 // ─── Maintenance mode middleware ──────────────────────────────────────────────
