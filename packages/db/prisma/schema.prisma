@@ -392,7 +392,8 @@ model UserProfile {
   cardDisplayMode     String  @default("auto")  // auto | showcase | compact
 
   // Growth prompts
-  firstWishSharePromptShown Boolean @default(false)
+  firstWishSharePromptShown       Boolean @default(false)
+  readyWishlistSharePromptShown   Boolean @default(false)
 
   // Support
   supportId String? @unique

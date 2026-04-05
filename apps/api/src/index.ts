@@ -1604,6 +1604,7 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
     event.startsWith('demo_item_') ||
     event.startsWith('gift_') ||
     event.startsWith('first_share_prompt_') ||
+    event.startsWith('ready_share_prompt_') ||
     event.startsWith('error:');
   if (shouldPersist && userId) {
     prisma.analyticsEvent
@@ -3364,6 +3365,29 @@ tgRouter.post(
       }
     }
 
+    // Ready Share Prompt: Option B — show when wishlist has ≥2 real items and flag not yet shown.
+    // Priority: first-share-prompt wins; never show both in the same request.
+    // V1 limitation: no "already shared enough" detection — only gates by readyWishlistSharePromptShown flag.
+    // Future: add exclusion if wishlist.shareToken is non-null (user already shared).
+    let showReadySharePrompt = false;
+    let realItemsInWishlist = 0;
+    if (!showFirstSharePrompt && wishlist.type === 'REGULAR') {
+      realItemsInWishlist = await prisma.item.count({
+        where: {
+          wishlistId,
+          isDemo: false,
+          status: { not: 'DELETED' },
+        },
+      });
+      if (realItemsInWishlist >= 2) {
+        const updated = await prisma.userProfile.updateMany({
+          where: { userId: user.id, readyWishlistSharePromptShown: false },
+          data: { readyWishlistSharePromptShown: true },
+        });
+        showReadySharePrompt = updated.count > 0;
+      }
+    }
+
     trackAnalyticsEvent({
       event: 'wish.created',
       userId: String(req.tgUser!.id),
@@ -3424,6 +3448,10 @@ tgRouter.post(
       ...(showFirstSharePrompt && {
         showFirstSharePrompt: true,
         promptData: { wishlistId, wishlistTitle: wishlist.title },
+      }),
+      ...(showReadySharePrompt && {
+        showReadySharePrompt: true,
+        readySharePromptData: { wishlistId, wishlistTitle: wishlist.title, itemsCount: realItemsInWishlist },
       }),
     });
   }),

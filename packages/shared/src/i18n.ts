@@ -717,6 +717,12 @@ const ru: Dict = {
   first_share_prompt_copy_link: 'Скопировать ссылку',
   first_share_prompt_later: 'Позже',
 
+  // ── Ready Share Prompt (second share trigger, ≥2 items) ───────────────────
+  ready_share_prompt_title: 'У тебя уже готовый вишлист',
+  ready_share_prompt_subtitle: 'В нём уже есть несколько желаний. Можно отправить близким, чтобы они знали, что тебе подарить.',
+  ready_share_prompt_share: 'Поделиться',
+  ready_share_prompt_later: 'Позже',
+
   // ── Price filters ─────────────────────────────────────────────────────────
   filter_all: 'Все',
   filter_under_3k: 'До 3 000 ₽',
@@ -2325,6 +2331,12 @@ const en: Dict = {
   first_share_prompt_share_tg: 'Share in Telegram',
   first_share_prompt_copy_link: 'Copy link',
   first_share_prompt_later: 'Later',
+
+  // ── Ready Share Prompt (second share trigger, ≥2 items) ───────────────────
+  ready_share_prompt_title: 'Your wishlist is ready to share',
+  ready_share_prompt_subtitle: 'It already has a few wishes. Send it to friends so they know what to gift you.',
+  ready_share_prompt_share: 'Share',
+  ready_share_prompt_later: 'Later',
 
   // ── Price filters ─────────────────────────────────────────────────────────
   filter_all: 'All',

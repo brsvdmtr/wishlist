@@ -3038,6 +3038,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
   const [settingsOriginScreen, setSettingsOriginScreen] = useState<Screen>('my-wishlists');
   const [firstSharePromptData, setFirstSharePromptData] = useState<{ wishlistId: string; wishlistTitle: string } | null>(null);
   const firstSharePromptShownRef = useRef(false);
+  const [readySharePromptData, setReadySharePromptData] = useState<{ wishlistId: string; wishlistTitle: string; itemsCount: number } | null>(null);
   const [faqOpenId, setFaqOpenId] = useState<number | null>(null);
   const [changelogOpenId, setChangelogOpenId] = useState<string | null>(null);
   const [changelogSeenId, setChangelogSeenId] = useState<string>(() => {
@@ -6103,7 +6104,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           return;
         }
         if (!res.ok) { pushToast(t('toast_add_error', locale), 'error'); return; }
-        const json = await res.json() as { item: Item; showFirstSharePrompt?: boolean; promptData?: { wishlistId: string; wishlistTitle: string } };
+        const json = await res.json() as { item: Item; showFirstSharePrompt?: boolean; promptData?: { wishlistId: string; wishlistTitle: string }; showReadySharePrompt?: boolean; readySharePromptData?: { wishlistId: string; wishlistTitle: string; itemsCount: number } };
 
         if (itemPhotoFile) {
           setPhotoUploading(true);
@@ -6121,6 +6122,11 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           setFirstSharePromptData(json.promptData);
           firstSharePromptShownRef.current = false;
           setScreen('first-share-prompt');
+        }
+
+        // Ready Share Prompt: show bottom sheet when wishlist has ≥2 real items (first-share wins)
+        if (!json.showFirstSharePrompt && json.showReadySharePrompt && json.readySharePromptData) {
+          setReadySharePromptData(json.readySharePromptData);
         }
       }
       blurActiveField();
@@ -18956,6 +18962,19 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
       {screen === 'onboarding-create-wishlist' && onboardingVariant === 'v2_try' && renderOnboardingCreateWishlist()}
       {screen === 'onboarding-share' && onboardingVariant === 'v2_try' && renderOnboardingShare()}
 
+      {/* ── READY SHARE PROMPT (bottom sheet, ≥2 items) ── */}
+      {readySharePromptData && screen === 'wishlist-detail' && (
+        <ReadySharePromptSheet
+          data={readySharePromptData}
+          locale={locale}
+          tgUser={tgUser}
+          tgFetch={tgFetch}
+          buildTgDeepLink={buildTgDeepLink}
+          trackEvent={trackEvent}
+          onClose={() => setReadySharePromptData(null)}
+        />
+      )}
+
       {/* ── FIRST SHARE PROMPT ── */}
       {screen === 'first-share-prompt' && firstSharePromptData && (
         <FirstSharePromptScreen
@@ -19094,6 +19113,126 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
 // ─────────────────────────────────────────────────
 // SHARE SCREEN (extracted to keep main component tidy)
 // ─────────────────────────────────────────────────
+
+// ── Ready Share Prompt — compact bottom sheet (second share trigger, ≥2 items) ──────────────
+function ReadySharePromptSheet({ data, locale, tgUser, tgFetch, buildTgDeepLink, trackEvent, onClose }: {
+  data: { wishlistId: string; wishlistTitle: string; itemsCount: number };
+  locale: Locale;
+  tgUser: TgUser | null;
+  tgFetch: (path: string, opts?: RequestInit) => Promise<Response>;
+  buildTgDeepLink: (payload?: string) => string | null;
+  trackEvent: (event: string, props?: Record<string, unknown>) => void;
+  onClose: () => void;
+}) {
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [tokenLoading, setTokenLoading] = useState(true);
+  const shownFiredRef = useRef(false);
+
+  useEffect(() => {
+    if (!shownFiredRef.current) {
+      shownFiredRef.current = true;
+      trackEvent('ready_share_prompt_shown', { wishlistId: data.wishlistId, itemsCount: data.itemsCount, entry: 'ready_wishlist_2plus' });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await tgFetch(`/tg/wishlists/${data.wishlistId}/share-token`, { method: 'POST' });
+        if (!cancelled && r.ok) {
+          const d = await r.json() as { shareToken: string };
+          setShareToken(d.shareToken);
+        }
+      } catch { /* fall back to slug */ }
+      finally { if (!cancelled) setTokenLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.wishlistId]);
+
+  const shareLink = buildTgDeepLink(shareToken ?? undefined);
+
+  const handleShare = () => {
+    if (!shareLink) return;
+    trackEvent('ready_share_prompt_share', { wishlistId: data.wishlistId, itemsCount: data.itemsCount, entry: 'ready_wishlist_2plus' });
+    const ownerName = tgUser?.first_name ?? '';
+    const intro = ownerName ? `${t('share_intro', locale, { name: ownerName })}\n\n` : '';
+    const shareText = `${intro}\u{1f381} ${data.wishlistTitle}\n${t('share_cta', locale)}`;
+    const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`;
+    try {
+      window.Telegram?.WebApp.openTelegramLink(tgShareUrl);
+    } catch {
+      window.open(tgShareUrl, '_blank');
+    }
+    onClose();
+  };
+
+  const handleLater = () => {
+    trackEvent('ready_share_prompt_later', { wishlistId: data.wishlistId, itemsCount: data.itemsCount, entry: 'ready_wishlist_2plus' });
+    onClose();
+  };
+
+  const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
+  const C_rsp = { accent: '#7C6AFF', text: '#F4F4F6', textSec: '#9CA3AF', textMuted: '#6B7280', bg: '#1B1B1F', surface: '#26262C', border: 'rgba(255,255,255,0.08)', accentSoft: 'rgba(124,106,255,0.12)' };
+
+  return (
+    <>
+      {/* Backdrop — tap to dismiss (treated as Later) */}
+      <div
+        onClick={handleLater}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 110 }}
+      />
+      {/* Sheet */}
+      <div style={{
+        position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 111,
+        background: C_rsp.surface, borderRadius: '20px 20px 0 0',
+        padding: '20px 20px 36px', fontFamily: font, color: C_rsp.text,
+        boxShadow: '0 -8px 32px rgba(0,0,0,0.4)',
+      }}>
+        {/* Drag handle */}
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)', margin: '0 auto 20px' }} />
+
+        <div style={{ fontSize: 28, marginBottom: 10, textAlign: 'center' }}>{'\u{1f4e4}'}</div>
+        <h2 style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', margin: '0 0 8px' }}>
+          {t('ready_share_prompt_title', locale)}
+        </h2>
+        <p style={{ fontSize: 14, color: C_rsp.textSec, textAlign: 'center', margin: '0 0 24px', lineHeight: 1.5 }}>
+          {t('ready_share_prompt_subtitle', locale)}
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            onClick={handleShare}
+            disabled={tokenLoading || !shareLink}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              padding: '14px 24px', borderRadius: 14, border: 'none', width: '100%',
+              fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+              background: C_rsp.accent, color: '#fff',
+              opacity: (tokenLoading || !shareLink) ? 0.5 : 1,
+              transition: 'opacity 0.15s',
+            }}
+          >
+            {'\u2708\uFE0F ' + t('ready_share_prompt_share', locale)}
+          </button>
+          <button
+            onClick={handleLater}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '12px 24px', borderRadius: 14, border: 'none', width: '100%',
+              fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+              background: 'transparent', color: C_rsp.textMuted,
+            }}
+          >
+            {t('ready_share_prompt_later', locale)}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
 
 function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, buildTgDeepLink, trackEvent, onSkip }: {
   data: { wishlistId: string; wishlistTitle: string };
