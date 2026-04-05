@@ -3945,9 +3945,10 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         setScreen('onboarding-success');
       }
       trackEvent('onboarding_try_paste', { url_domain: json.item.sourceDomain, parse_status: json.parseStatus });
-    } catch {
-      trackEvent('onboarding_try_import_exception');
-      setOnboardingTryError(t('error_network', locale));
+    } catch (e) {
+      trackEvent('onboarding_try_import_exception', { error_type: e instanceof TypeError ? 'network' : 'other' });
+      // TypeError from fetch() = genuine network failure; everything else = import processing error
+      setOnboardingTryError(e instanceof TypeError ? t('error_network', locale) : t('error_import_generic', locale));
     } finally {
       setOnboardingTryLoading(false);
     }
@@ -7004,6 +7005,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             background: 'rgba(255,255,255,0.06)',
             border: `1.5px solid ${onboardingManualError ? 'rgba(248,113,113,0.5)' : 'rgba(124,106,255,0.35)'}`,
             borderRadius: 14, padding: '14px 16px',
+            display: 'flex', alignItems: 'center',
           }}>
             <input
               value={onboardingManualTitle}
@@ -7011,7 +7013,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
               placeholder={t('onboarding_manual_placeholder', locale)}
               // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
-              style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 16, fontFamily: font }}
+              style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 16, fontFamily: font, lineHeight: '1.25', padding: 0, margin: 0 }}
             />
           </div>
 
@@ -7020,13 +7022,14 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             background: 'rgba(255,255,255,0.04)',
             border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: 14, padding: '14px 16px',
+            display: 'flex', alignItems: 'center',
           }}>
             <input
               value={onboardingManualPrice}
               onChange={(e) => setOnboardingManualPrice(e.target.value)}
               placeholder={t('onboarding_manual_price_placeholder', locale)}
               inputMode="numeric"
-              style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 16, fontFamily: font }}
+              style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 16, fontFamily: font, lineHeight: '1.25', padding: 0, margin: 0 }}
             />
           </div>
 
@@ -7400,11 +7403,29 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
         </div>
 
         <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Share block */}
-          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 18 }}>
+          {/* Share block — tappable: opens Telegram share for the created wishlist */}
+          <button onClick={() => {
+            if (!onboardingCreatedWl) return;
+            trackEvent('onboarding_share_card_tapped', { wishlistId: onboardingCreatedWl.id });
+            const link = buildTgDeepLink(onboardingCreatedWl.slug);
+            if (link) {
+              const name = tgUser?.first_name ?? '';
+              const intro = name ? `${t('share_intro', locale, { name })}\n\n` : '';
+              const shareText = `${intro}\u{1f381} ${onboardingCreatedWl.title}\n${t('share_cta', locale)}`;
+              const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(shareText)}`;
+              try { window.Telegram?.WebApp.openTelegramLink(tgShareUrl); } catch { window.open(tgShareUrl, '_blank'); }
+            }
+          }} style={{
+            background: onboardingCreatedWl ? 'rgba(124,106,255,0.08)' : 'rgba(255,255,255,0.04)',
+            border: onboardingCreatedWl ? '1px solid rgba(124,106,255,0.25)' : '1px solid rgba(255,255,255,0.07)',
+            borderRadius: 16, padding: 18, textAlign: 'left', width: '100%',
+            cursor: onboardingCreatedWl ? 'pointer' : 'default', fontFamily: font,
+            transition: 'background 0.15s',
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(124,106,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📤</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{t('onboarding_share_share_title', locale)}</div>
+              {onboardingCreatedWl && <span style={{ marginLeft: 'auto', color: '#A78BFA', fontSize: 18 }}>›</span>}
             </div>
             {onboardingCreatedWl && (
               <div style={{ fontSize: 12, color: 'rgba(124,106,255,0.7)', marginTop: 4 }}>
@@ -7414,9 +7435,9 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }}>
               {t('onboarding_share_share_desc', locale)}
             </div>
-          </div>
+          </button>
 
-          {/* Reserve block */}
+          {/* Reserve block — informational only */}
           <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(52,211,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎁</div>
@@ -10348,6 +10369,7 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
           ownerName={resolveOwnerName(profileData, tgUser)}
           ownerAvatarUrl={profileData?.avatarUrl ?? null}
           onCopied={() => pushToast(t('share_copied', locale), 'success')}
+          onShared={() => setScreen('wishlist-detail')}
           locale={locale}
           buildTgDeepLink={buildTgDeepLink}
           isPro={planInfo.code === 'PRO'}
@@ -19182,6 +19204,8 @@ export default function MiniApp({ apiBase, botUsername, miniappShortName }: { ap
                   const wl = wishlists[0];
                   if (wl) {
                     setCurrentWl(wl);
+                    setItems([]); // clear stale items before loading
+                    loadItems(wl.id).catch(() => { /* silent */ });
                     setScreen('share');
                   }
                 }}
@@ -19559,6 +19583,8 @@ function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, build
     } catch {
       window.open(tgShareUrl, '_blank');
     }
+    // Close prompt after opening share dialog — user returns to wishlist-detail
+    onSkip();
   };
 
   const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
@@ -19631,13 +19657,14 @@ function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, build
   );
 }
 
-function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, onCopied, buildTgDeepLink, isPro, locale, tgFetch }: {
+function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, onCopied, onShared, buildTgDeepLink, isPro, locale, tgFetch }: {
   wishlist: Wishlist;
   itemCount: number;
   tgUser: TgUser | null;
   ownerName: string;
   ownerAvatarUrl?: string | null;
   onCopied: () => void;
+  onShared?: () => void;
   buildTgDeepLink: (payload?: string) => string | null;
   isPro?: boolean;
   locale: Locale;
@@ -19715,6 +19742,8 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
       // Fallback if openTelegramLink is unavailable
       window.open(tgShareUrl, '_blank');
     }
+    // Close share screen after opening Telegram share dialog
+    onShared?.();
   };
 
   const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
