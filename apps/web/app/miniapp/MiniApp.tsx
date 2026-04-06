@@ -534,6 +534,17 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-06',
+    date: '06.04.2026',
+    items: [
+      { ru: '📂 Категории в вишлистах — группируй желания по разделам', en: '📂 Wishlist categories — organize wishes into sections' },
+      { ru: 'Создание, переименование и удаление категорий', en: 'Create, rename and delete categories' },
+      { ru: 'Перенос желаний между категориями (одно или несколько)', en: 'Move wishes between categories (single or bulk)' },
+      { ru: 'Перетаскивание для изменения порядка категорий', en: 'Drag to reorder categories' },
+      { ru: 'Сворачиваемые секции — и для владельца, и для гостей', en: 'Collapsible sections — for owner and guests' },
+    ],
+  },
+  {
     id: '2026-04-04',
     date: '04.04.2026',
     items: [
@@ -15176,7 +15187,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       <BottomSheet isOpen={!!showCatDelete} onClose={() => setShowCatDelete(null)} title={t('cat_delete', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
-            {t('cat_delete_confirm', locale)}
+            {t('cat_delete_confirm', locale, { name: showCatDelete?.name ?? '' })}
           </p>
           <div style={{ display: 'flex', gap: 10 }}>
             <button style={{ ...btnSecondary, flex: 1 }} onClick={() => setShowCatDelete(null)}>
