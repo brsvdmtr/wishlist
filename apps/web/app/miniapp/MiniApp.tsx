@@ -4634,6 +4634,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       status: i.status.toLowerCase() as 'available' | 'reserved' | 'purchased',
       reservedByDisplayName: i.reservedByDisplayName,
       reservedByActorHash: i.reservedByActorHash ?? null,
+      categoryId: (i as any).categoryId ?? null,
     }));
     setGuestItems(mappedItems);
     // Load categories for guest view if available
@@ -4644,7 +4645,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
     // Load don't gift data for guest view
     setGuestDontGift((json as any).dontGift ?? null);
-    setGuestDontGiftExpanded(false);
+    setGuestDontGiftExpanded(true);
     return mappedItems;
   }, [apiBase]);
 
