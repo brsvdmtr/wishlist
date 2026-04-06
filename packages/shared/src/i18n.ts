@@ -223,8 +223,8 @@ const ru: Dict = {
   maintenance_retry: 'Попробовать снова',
   maintenance_notify_hint: 'Когда всё восстановится, мы сообщим в бот.',
   bot_maintenance: '⚙️ Сервис временно на техобслуживании. Когда всё восстановится — мы напишем вам сюда.',
-  maintenance_recovery_text: '✅ Технические работы завершены. Всё снова работает, можно возвращаться в бот.',
-  maintenance_recovery_btn: 'Вернуться в бот',
+  maintenance_recovery_text: 'Привет! Мы всё починили 🛠\nБот снова работает — заходи, всё на месте ✨',
+  maintenance_recovery_btn: 'Открыть бот',
 
   // ── My Wishlists screen ───────────────────────────────────────────────────
   greeting: 'Привет, {{name}}!',
@@ -1929,8 +1929,8 @@ const en: Dict = {
   maintenance_retry: 'Try again',
   maintenance_notify_hint: 'We\'ll notify you here when service is back.',
   bot_maintenance: '⚙️ Service is temporarily under maintenance. We\'ll message you here when it\'s back.',
-  maintenance_recovery_text: '✅ Maintenance is over. Everything is working again — you can go back to the bot.',
-  maintenance_recovery_btn: 'Back to bot',
+  maintenance_recovery_text: 'Hey! We fixed everything 🛠\nThe bot is back up — come on in, nothing\'s lost ✨',
+  maintenance_recovery_btn: 'Open bot',
 
   // ── My Wishlists screen ───────────────────────────────────────────────────
   greeting: 'Hi, {{name}}!',
@@ -3635,8 +3635,8 @@ const zhCN: Dict = {
   maintenance_retry: '重试',
   maintenance_notify_hint: '恢复后我们会通知您。',
   bot_maintenance: '⚙️ 服务正在维护中。恢复后我们会通知您。',
-  maintenance_recovery_text: '✅ 维护已完成。一切恢复正常，可以继续使用了。',
-  maintenance_recovery_btn: '返回机器人',
+  maintenance_recovery_text: '嗨！我们修好啦 🛠\n机器人恢复正常了，快来看看吧 ✨',
+  maintenance_recovery_btn: '打开机器人',
 
   // ── My Wishlists screen ───────────────────────────────────────────────────
   greeting: '你好，{{name}}！',
@@ -5117,8 +5117,8 @@ const hi: Dict = {
   maintenance_retry: 'फिर से प्रयास करें',
   maintenance_notify_hint: 'सेवा वापस आने पर हम आपको सूचित करेंगे।',
   bot_maintenance: '⚙️ सेवा अस्थायी रूप से रखरखाव में है। वापस आने पर हम यहां संदेश भेजेंगे।',
-  maintenance_recovery_text: '✅ रखरखाव समाप्त हो गया। सब कुछ फिर से काम कर रहा है — बॉट पर वापस जा सकते हैं।',
-  maintenance_recovery_btn: 'बॉट पर वापस जाएं',
+  maintenance_recovery_text: 'नमस्ते! हमने सब ठीक कर दिया 🛠\nबॉट फिर से काम कर रहा है — आइए, सब सही है ✨',
+  maintenance_recovery_btn: 'बॉट खोलें',
 
   // ── My Wishlists screen ───────────────────────────────────────────────────
   greeting: 'नमस्ते, {{name}}!',
@@ -6599,8 +6599,8 @@ const es: Dict = {
   maintenance_retry: 'Intentar de nuevo',
   maintenance_notify_hint: 'Te avisaremos cuando el servicio esté de vuelta.',
   bot_maintenance: '⚙️ El servicio está en mantenimiento. Te avisaremos aquí cuando vuelva a funcionar.',
-  maintenance_recovery_text: '✅ El mantenimiento ha terminado. Todo funciona de nuevo — puedes volver al bot.',
-  maintenance_recovery_btn: 'Volver al bot',
+  maintenance_recovery_text: '¡Hola! Ya lo arreglamos todo 🛠\nEl bot vuelve a funcionar — entra, todo está en su sitio ✨',
+  maintenance_recovery_btn: 'Abrir bot',
 
   // ── My Wishlists screen ───────────────────────────────────────────────────
   greeting: '¡Hola, {{name}}!',
@@ -8081,8 +8081,8 @@ const ar: Dict = {
   maintenance_retry: 'حاول مجدداً',
   maintenance_notify_hint: 'سنبلغك عندما تعود الخدمة.',
   bot_maintenance: '⚙️ الخدمة قيد الصيانة مؤقتاً. سنراسلك هنا عندما تعود.',
-  maintenance_recovery_text: '✅ انتهت الصيانة. كل شيء يعمل مجدداً — يمكنك العودة إلى البوت.',
-  maintenance_recovery_btn: 'العودة إلى البوت',
+  maintenance_recovery_text: 'مرحباً! أصلحنا كل شيء 🛠\nالبوت يعمل مجدداً — ادخل، كل شيء في مكانه ✨',
+  maintenance_recovery_btn: 'فتح البوت',
 
   // ── My Wishlists screen ───────────────────────────────────────────────────
   greeting: 'مرحباً، {{name}}!',
