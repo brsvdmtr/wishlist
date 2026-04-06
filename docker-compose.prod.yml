@@ -96,6 +96,7 @@ services:
       APP_RELEASE: ${APP_RELEASE:-unknown}
       ADMIN_ALERT_CHAT_IDS: ${ADMIN_ALERT_CHAT_IDS:-}
       SUPPORT_CHAT_ID: ${SUPPORT_CHAT_ID:-}
+      MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
     depends_on:
       api:
         condition: service_started

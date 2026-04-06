@@ -8617,6 +8617,229 @@ internalRouter.get(
   }),
 );
 
+// ─── Maintenance recovery endpoints (internal) ──────────────────────────────
+
+// GET /internal/maintenance/active-incident — is there an unresolved incident?
+internalRouter.get(
+  '/maintenance/active-incident',
+  asyncHandler(async (_req, res) => {
+    const incident = await prisma.maintenanceIncident.findFirst({
+      where: { status: { in: ['active', 'recovering'] } },
+      orderBy: { startedAt: 'desc' },
+    });
+    if (!incident) return res.json({ active: false });
+    return res.json({
+      active: true,
+      incidentId: incident.id,
+      status: incident.status,
+      startedAt: incident.startedAt,
+      lastMaintenanceSignalAt: incident.lastMaintenanceSignalAt,
+      exposureCount: incident.exposureCount,
+    });
+  }),
+);
+
+// POST /internal/maintenance/exposure — record exposure from bot side
+internalRouter.post(
+  '/maintenance/exposure',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      telegramId: z.string().min(1),
+      surface: z.enum(['bot', 'miniapp']).default('bot'),
+      locale: z.string().max(10).default('ru'),
+      telegramChatId: z.string().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const { telegramId, surface, locale, telegramChatId } = parsed.data;
+
+    // Look up user by telegramId
+    const user = await prisma.user.findUnique({ where: { telegramId } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const chatId = telegramChatId ?? user.telegramChatId ?? null;
+    const incidentId = await recordMaintenanceExposure(user.id, surface, locale, chatId);
+    return res.json({ ok: true, incidentId });
+  }),
+);
+
+// POST /internal/maintenance/check-recovery — check if 15-min stability window passed
+internalRouter.post(
+  '/maintenance/check-recovery',
+  asyncHandler(async (_req, res) => {
+    const maintenanceOn = (process.env.MAINTENANCE_MODE ?? '').toLowerCase() === 'true';
+    if (maintenanceOn) {
+      return res.json({ recovered: false, reason: 'maintenance_mode_active' });
+    }
+
+    const incident = await prisma.maintenanceIncident.findFirst({
+      where: { status: { in: ['active', 'recovering'] } },
+      orderBy: { startedAt: 'desc' },
+    });
+    if (!incident) return res.json({ recovered: false, reason: 'no_active_incident' });
+
+    const STABILITY_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+    const msSinceLastSignal = Date.now() - incident.lastMaintenanceSignalAt.getTime();
+
+    if (msSinceLastSignal < STABILITY_WINDOW_MS) {
+      // Not yet stable — move to recovering state
+      if (incident.status !== 'recovering') {
+        await prisma.maintenanceIncident.update({
+          where: { id: incident.id },
+          data: { status: 'recovering' },
+        });
+      }
+      return res.json({
+        recovered: false,
+        reason: 'stability_window_in_progress',
+        incidentId: incident.id,
+        elapsedMinutes: Math.round(msSinceLastSignal / 60000),
+        remainingMinutes: Math.ceil((STABILITY_WINDOW_MS - msSinceLastSignal) / 60000),
+      });
+    }
+
+    // 15 minutes stable — mark recovered
+    const now = new Date();
+    await prisma.maintenanceIncident.update({
+      where: { id: incident.id },
+      data: { status: 'recovered', endedAt: now, recoveryConfirmedAt: now },
+    });
+
+    trackEvent('maintenance_recovery_confirmed', 'system', {
+      incidentId: incident.id,
+      recoveryConfirmedAt: now.toISOString(),
+    });
+
+    return res.json({ recovered: true, incidentId: incident.id });
+  }),
+);
+
+// POST /internal/maintenance/mark-return — mark user as returned after recovery
+internalRouter.post(
+  '/maintenance/mark-return',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      userId: z.string().min(1),
+      surface: z.enum(['bot', 'miniapp']).default('miniapp'),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const { userId, surface } = parsed.data;
+
+    // Find the most recently recovered incident with unreturned exposure for this user
+    const exposure = await prisma.maintenanceExposure.findFirst({
+      where: {
+        userId,
+        surface,
+        returnedAt: null,
+        incident: { status: 'recovered', recoveryConfirmedAt: { not: null } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!exposure) return res.json({ marked: false });
+
+    await prisma.maintenanceExposure.update({
+      where: { id: exposure.id },
+      data: { returnedAt: new Date() },
+    });
+
+    const wasNotified = !!exposure.notifiedAt;
+    trackEvent(wasNotified ? 'maintenance_returned_after_notice' : 'maintenance_returned_without_notice', userId, {
+      incidentId: exposure.incidentId,
+      ...(wasNotified && exposure.notifiedAt ? { timeFromNoticeSec: Math.round((Date.now() - exposure.notifiedAt.getTime()) / 1000) } : {}),
+    });
+
+    return res.json({ marked: true, incidentId: exposure.incidentId, wasNotified });
+  }),
+);
+
+// POST /internal/maintenance/send-recovery-notifications — send recovery messages
+internalRouter.post(
+  '/maintenance/send-recovery-notifications',
+  asyncHandler(async (_req, res) => {
+    // Find the most recently recovered incident that still has unsent notifications
+    const incident = await prisma.maintenanceIncident.findFirst({
+      where: { status: 'recovered', recoveryConfirmedAt: { not: null } },
+      orderBy: { recoveryConfirmedAt: 'desc' },
+    });
+    if (!incident) return res.json({ sent: 0, reason: 'no_recovered_incident' });
+
+    // Get exposures that: haven't been notified AND haven't self-returned
+    const exposures = await prisma.maintenanceExposure.findMany({
+      where: {
+        incidentId: incident.id,
+        notifiedAt: null,
+        returnedAt: null,
+      },
+      include: {
+        user: { select: { telegramChatId: true, telegramId: true } },
+      },
+    });
+
+    if (exposures.length === 0) return res.json({ sent: 0, reason: 'all_notified_or_returned' });
+
+    const miniAppUrl = process.env.MINI_APP_URL ?? (process.env.WEB_ORIGIN ? `${process.env.WEB_ORIGIN}/miniapp` : 'https://wishlistik.ru/miniapp');
+    let sentCount = 0;
+    let failCount = 0;
+    const BATCH_SIZE = 25;
+
+    for (let i = 0; i < exposures.length; i += BATCH_SIZE) {
+      const batch = exposures.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(async (exp) => {
+          const chatId = exp.telegramChatId ?? exp.user.telegramChatId;
+          if (!chatId) {
+            failCount++;
+            trackEvent('maintenance_recovery_notice_failed', exp.userId, { incidentId: incident.id, reason: 'no_chat_id' });
+            return;
+          }
+
+          const locale = (exp.locale || 'ru') as Parameters<typeof t>[1];
+          const text = t('maintenance_recovery_text', locale);
+          const btnLabel = t('maintenance_recovery_btn', locale);
+
+          const ok = await sendTgBotMessage(chatId, text, {
+            inline_keyboard: [[{ text: btnLabel, web_app: { url: miniAppUrl } }]],
+          });
+
+          if (ok) {
+            await prisma.maintenanceExposure.update({
+              where: { id: exp.id },
+              data: { notifiedAt: new Date() },
+            });
+            sentCount++;
+            trackEvent('maintenance_recovery_notice_sent', exp.userId, {
+              incidentId: incident.id, surface: exp.surface,
+            });
+          } else {
+            failCount++;
+            trackEvent('maintenance_recovery_notice_failed', exp.userId, {
+              incidentId: incident.id, reason: 'send_failed',
+            });
+          }
+        }),
+      );
+
+      // Telegram rate limit: pause 1s between batches
+      if (i + BATCH_SIZE < exposures.length) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+
+    // Update incident counters
+    await prisma.maintenanceIncident.update({
+      where: { id: incident.id },
+      data: { notificationsSent: { increment: sentCount } },
+    }).catch(() => {});
+
+    const summary = `🔔 Recovery notifications: ${sentCount} sent, ${failCount} failed out of ${exposures.length} eligible (incident ${incident.id})`;
+    void sendAdminAlert(summary);
+    logger.info({ incidentId: incident.id, sentCount, failCount }, 'maintenance recovery notifications sent');
+
+    return res.json({ sent: sentCount, failed: failCount, total: exposures.length, incidentId: incident.id });
+  }),
+);
+
 // Also support god-mode lookup via TG auth (for Mini App investigation UI)
 tgRouter.get(
   '/support/lookup/:ticketCode',
@@ -11779,11 +12002,110 @@ tgRouter.post('/analytics/attribution', asyncHandler(async (req, res) => {
   return res.json({ attributed: updated.count > 0 });
 }));
 
+// ─── Maintenance: record exposure (must be before maintenance middleware!) ────
+// Find-or-create the current active incident, then upsert an exposure row.
+async function recordMaintenanceExposure(userId: string, surface: string, locale: string, telegramChatId: string | null) {
+  // Find or create the active incident
+  let incident = await prisma.maintenanceIncident.findFirst({
+    where: { status: { in: ['active', 'recovering'] } },
+    orderBy: { startedAt: 'desc' },
+  });
+  if (!incident) {
+    incident = await prisma.maintenanceIncident.create({
+      data: { status: 'active', lastMaintenanceSignalAt: new Date() },
+    });
+  } else {
+    // Bump lastMaintenanceSignalAt
+    await prisma.maintenanceIncident.update({
+      where: { id: incident.id },
+      data: { lastMaintenanceSignalAt: new Date(), status: 'active' },
+    }).catch(() => {});
+  }
+
+  // Upsert exposure: don't duplicate, just update lastSeenAt
+  await prisma.maintenanceExposure.upsert({
+    where: {
+      incidentId_userId_surface: { incidentId: incident.id, userId, surface },
+    },
+    update: { lastSeenAt: new Date(), locale, ...(telegramChatId ? { telegramChatId } : {}) },
+    create: {
+      incidentId: incident.id,
+      userId,
+      surface,
+      locale,
+      telegramChatId,
+    },
+  });
+
+  // Increment exposure count (approximate — counts each new surface/user combo)
+  await prisma.maintenanceIncident.update({
+    where: { id: incident.id },
+    data: { exposureCount: { increment: 1 } },
+  }).catch(() => {});
+
+  trackEvent('maintenance_seen', userId, { incidentId: incident.id, surface });
+  return incident.id;
+}
+
+// POST /tg/maintenance-exposure — record that the current user saw the maintenance screen.
+// This endpoint is exempted from the maintenance middleware so it works during outages.
+tgRouter.post(
+  '/maintenance-exposure',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = (req.body?.locale as string) || 'ru';
+    const surface = (req.body?.surface as string) || 'miniapp';
+    const incidentId = await recordMaintenanceExposure(
+      user.id,
+      surface,
+      locale,
+      user.telegramChatId ?? null,
+    );
+    return res.json({ ok: true, incidentId });
+  }),
+);
+
+// POST /tg/maintenance-return — mark user as returned after recovery (lightweight, best-effort)
+tgRouter.post(
+  '/maintenance-return',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const surface = (req.body?.surface as string) || 'miniapp';
+
+    // Find the most recently recovered incident with unreturned exposure for this user
+    const exposure = await prisma.maintenanceExposure.findFirst({
+      where: {
+        userId: user.id,
+        surface,
+        returnedAt: null,
+        incident: { status: 'recovered', recoveryConfirmedAt: { not: null } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!exposure) return res.json({ marked: false });
+
+    await prisma.maintenanceExposure.update({
+      where: { id: exposure.id },
+      data: { returnedAt: new Date() },
+    });
+
+    const wasNotified = !!exposure.notifiedAt;
+    trackEvent(wasNotified ? 'maintenance_returned_after_notice' : 'maintenance_returned_without_notice', user.id, {
+      incidentId: exposure.incidentId,
+      ...(wasNotified && exposure.notifiedAt ? { timeFromNoticeSec: Math.round((Date.now() - exposure.notifiedAt.getTime()) / 1000) } : {}),
+    });
+
+    return res.json({ marked: true });
+  }),
+);
+
 // ─── Maintenance mode middleware ──────────────────────────────────────────────
 // When MAINTENANCE_MODE=true, block /tg/* and /public/* with 503 + code=MAINTENANCE.
 // /health, /health/deep, /uploads, /internal remain accessible.
+// Exception: POST /tg/maintenance-exposure must pass through so we can record who saw the outage.
 app.use(['/tg', '/public'], (req: Request, res: Response, next: NextFunction) => {
   if ((process.env.MAINTENANCE_MODE ?? '').toLowerCase() === 'true') {
+    if (req.method === 'POST' && req.path === '/maintenance-exposure') return next();
     return res.status(503).json({ error: 'Service temporarily unavailable', code: 'MAINTENANCE' });
   }
   return next();

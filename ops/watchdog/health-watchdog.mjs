@@ -5,6 +5,9 @@
  * Cron-runnable health watchdog for Wishlistik.
  * Checks /health/deep and the web homepage, deduplicates alerts via a state file,
  * sends one Telegram alert on first failure and one recovery alert on first success.
+ * After recovery, triggers maintenance recovery notification flow:
+ *   - Checks if 15-min stability window has passed
+ *   - Sends recovery notifications to affected users
  *
  * Usage:
  *   node ops/watchdog/health-watchdog.mjs
@@ -18,7 +21,7 @@
  *   MAINTENANCE_MODE      — if "true", skip alerting (planned downtime)
  *
  * Cron example (every 5 minutes):
- *   * /5 * * * * /usr/bin/node /opt/wishlist/ops/watchdog/health-watchdog.mjs >> /var/log/watchdog.log 2>&1
+ *   */5 * * * * /usr/bin/node /opt/wishlist/ops/watchdog/health-watchdog.mjs >> /var/log/watchdog.log 2>&1
  */
 
 import fs from 'node:fs';
@@ -49,12 +52,13 @@ if (!BASE_URL) {
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
-/** @returns {{ wasDown: boolean, downSince: string | null }} */
+/** @returns {{ wasDown: boolean, downSince: string | null, consecutiveHealthyChecks: number }} */
 function loadState() {
   try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    return { wasDown: false, downSince: null, consecutiveHealthyChecks: 0, ...raw };
   } catch {
-    return { wasDown: false, downSince: null };
+    return { wasDown: false, downSince: null, consecutiveHealthyChecks: 0 };
   }
 }
 
@@ -91,6 +95,25 @@ async function sendAlert(text) {
       }),
     ),
   );
+}
+
+/** Call an internal API endpoint (authenticated with BOT_TOKEN). */
+async function callInternalApi(path, method = 'POST') {
+  const url = `${BASE_URL}/api/internal${path}`;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-INTERNAL-KEY': BOT_TOKEN },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const body = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, body };
+  } catch (err) {
+    return { ok: false, status: 0, body: {}, error: String(err) };
+  }
 }
 
 // ─── Checks ──────────────────────────────────────────────────────────────────
@@ -134,6 +157,9 @@ const { healthResult, webResult, tgResult, tgRouteDown, isDown } = result;
 console.log(`[watchdog] health/deep: ${JSON.stringify(healthResult)} | web: ${JSON.stringify(webResult)} | tg: ${JSON.stringify(tgResult)} (down=${tgRouteDown}) | isDown: ${isDown}`);
 
 if (isDown) {
+  // Reset consecutive healthy counter whenever we see a failure
+  state.consecutiveHealthyChecks = 0;
+
   if (!state.wasDown) {
     // First failure — send alert
     state.wasDown = true;
@@ -156,19 +182,74 @@ if (isDown) {
   }
 } else {
   if (state.wasDown) {
-    // Recovery — send alert
-    const downSince = state.downSince ?? 'unknown';
-    state.wasDown = false;
-    state.downSince = null;
-    saveState(state);
+    // Service is up but was down — track stability window
+    state.consecutiveHealthyChecks = (state.consecutiveHealthyChecks || 0) + 1;
+    console.log(`[watchdog] recovery check ${state.consecutiveHealthyChecks}/3 (need 3 consecutive = ~15 min)`);
 
-    if (MAINTENANCE) {
-      console.log('[watchdog] MAINTENANCE_MODE=true — skipping recovery alert');
+    if (state.consecutiveHealthyChecks >= 3) {
+      // 3 consecutive healthy checks × 5-min cron = 15 minutes stable
+      const downSince = state.downSince ?? 'unknown';
+      state.wasDown = false;
+      state.downSince = null;
+      state.consecutiveHealthyChecks = 0;
+      saveState(state);
+
+      if (MAINTENANCE) {
+        console.log('[watchdog] MAINTENANCE_MODE=true — skipping recovery alert');
+      } else {
+        await sendAlert(`🟢 <b>Wishlistik RECOVERED</b> at ${now}\n(was down since ${downSince})`);
+        console.log('[watchdog] alert sent: RECOVERED');
+      }
+
+      // ─── Maintenance recovery notification flow ──────────────────────
+      // Check if there is an active incident and trigger recovery notifications
+      try {
+        const activeRes = await callInternalApi('/maintenance/active-incident', 'GET');
+        if (activeRes.ok && activeRes.body.active) {
+          console.log(`[watchdog] active incident found: ${activeRes.body.incidentId}, triggering recovery check`);
+
+          const recoveryRes = await callInternalApi('/maintenance/check-recovery');
+          if (recoveryRes.ok && recoveryRes.body.recovered) {
+            console.log(`[watchdog] incident recovered, sending notifications...`);
+            const notifyRes = await callInternalApi('/maintenance/send-recovery-notifications');
+            if (notifyRes.ok) {
+              console.log(`[watchdog] recovery notifications: ${notifyRes.body.sent} sent, ${notifyRes.body.failed} failed`);
+            } else {
+              console.error(`[watchdog] failed to send recovery notifications: ${JSON.stringify(notifyRes.body)}`);
+            }
+          } else {
+            console.log(`[watchdog] recovery check: ${JSON.stringify(recoveryRes.body)}`);
+          }
+        } else {
+          console.log('[watchdog] no active maintenance incident');
+        }
+      } catch (err) {
+        console.error(`[watchdog] maintenance recovery flow error: ${err}`);
+      }
     } else {
-      await sendAlert(`🟢 <b>Wishlistik RECOVERED</b> at ${now}\n(was down since ${downSince})`);
-      console.log('[watchdog] alert sent: RECOVERED');
+      saveState(state);
     }
   } else {
+    // Check if there's an active incident that needs recovery (e.g., from a previous run)
+    // This handles the case where the watchdog wasn't running during the stability window
+    try {
+      const activeRes = await callInternalApi('/maintenance/active-incident', 'GET');
+      if (activeRes.ok && activeRes.body.active && activeRes.body.status === 'recovering') {
+        const recoveryRes = await callInternalApi('/maintenance/check-recovery');
+        if (recoveryRes.ok && recoveryRes.body.recovered) {
+          console.log(`[watchdog] recovering incident found, sending notifications...`);
+          const notifyRes = await callInternalApi('/maintenance/send-recovery-notifications');
+          if (notifyRes.ok) {
+            console.log(`[watchdog] recovery notifications: ${notifyRes.body.sent} sent, ${notifyRes.body.failed} failed`);
+          }
+        } else if (recoveryRes.ok) {
+          console.log(`[watchdog] recovering incident: ${JSON.stringify(recoveryRes.body)}`);
+        }
+      }
+    } catch {
+      // silent — normal path when there's no active incident
+    }
+
     console.log('[watchdog] all healthy');
   }
 }

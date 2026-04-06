@@ -148,6 +148,7 @@ model User {
   lifecycleTouches               LifecycleTouch[]
   giftOccasions                  GiftOccasion[]       @relation("GiftOccasionsOwner")
   giftOccasionIdeas              GiftOccasionIdea[]   @relation("GiftOccasionIdeasOwner")
+  maintenanceExposures           MaintenanceExposure[]
 }
 
 model Wishlist {
@@ -1348,4 +1349,46 @@ model WishlistCategory {
 
   @@index([wishlistId, sortOrder])
   @@index([wishlistId, isDefault])
+}
+
+// ─── Maintenance Recovery ─────────────────────────────────────────────────────
+
+model MaintenanceIncident {
+  id                    String    @id @default(cuid())
+  startedAt             DateTime  @default(now())
+  endedAt               DateTime?
+  status                String    @default("active") // active | recovering | recovered
+  recoveryConfirmedAt   DateTime?
+  lastMaintenanceSignalAt DateTime @default(now())
+  exposureCount         Int       @default(0)
+  notificationsSent     Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  exposures MaintenanceExposure[]
+
+  @@index([status])
+  @@index([startedAt])
+}
+
+model MaintenanceExposure {
+  id              String    @id @default(cuid())
+  incidentId      String
+  userId          String
+  surface         String    // 'miniapp' | 'bot'
+  locale          String    @default("ru")
+  telegramChatId  String?
+  firstSeenAt     DateTime  @default(now())
+  lastSeenAt      DateTime  @default(now())
+  notifiedAt      DateTime?
+  returnedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  incident MaintenanceIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([incidentId, userId, surface])
+  @@index([incidentId, notifiedAt])
+  @@index([userId])
 }

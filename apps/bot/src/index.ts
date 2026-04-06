@@ -70,6 +70,34 @@ if (!token) {
   const bot = new Telegraf(token);
 
   const getLocale = (ctx: any): Locale => detectLocale(ctx.from?.language_code);
+  const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
+
+  // ─── Maintenance mode middleware ──────────────────────────────────────────
+  // When MAINTENANCE_MODE=true, reply with maintenance message and record exposure.
+  bot.use(async (ctx, next) => {
+    if ((process.env.MAINTENANCE_MODE ?? '').toLowerCase() !== 'true') return next();
+    // Only respond to messages and callback queries from users (not channel posts, edits, etc.)
+    if (!ctx.from || !ctx.chat) return;
+    // Don't intercept admin alert chats
+    const adminChatIds = (process.env.ADMIN_ALERT_CHAT_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    if (adminChatIds.includes(String(ctx.chat.id))) return next();
+    // Don't intercept support chat
+    const supportChatId = (process.env.SUPPORT_CHAT_ID ?? '').trim();
+    if (supportChatId && String(ctx.chat.id) === supportChatId) return next();
+
+    const locale = getLocale(ctx);
+    const chatId = String(ctx.chat.id);
+    const telegramId = String(ctx.from.id);
+
+    // Record exposure via internal API (best-effort)
+    fetch(`${API_BASE_URL}/internal/maintenance/exposure`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-INTERNAL-KEY': token! },
+      body: JSON.stringify({ telegramId, surface: 'bot', locale, telegramChatId: chatId }),
+    }).catch(() => {});
+
+    await ctx.reply(t('bot_maintenance', locale)).catch(() => {});
+  });
 
   // ─── Support chat configuration ───────────────────────────────────────────
   const SUPPORT_CHAT_ID = (process.env.SUPPORT_CHAT_ID ?? '').trim();
@@ -1207,7 +1235,6 @@ if (!token) {
   });
 
   // ─── URL import: text message handler ────────────────────────────────────
-  const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
   const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/gi;
 
   function escapeHtml(s: string): string {

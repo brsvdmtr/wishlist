@@ -3858,6 +3858,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setDraftsCount(0);
     }
     setReservationsCount(json.reservationsCount ?? 0);
+    // Mark user as returned after maintenance (best-effort, non-blocking)
+    tgFetch('/tg/maintenance-return', { method: 'POST', body: JSON.stringify({ surface: 'miniapp' }) }).catch(() => {});
   }, [tgFetch]);
 
   const loadReservations = useCallback(async () => {
@@ -5467,8 +5469,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         console.error('[WishBoard]', msg, { apiBase, initData: tg.initData?.substring(0, 50) });
         if (kind === 'maintenance' || msg === 'MAINTENANCE') {
           setScreen('maintenance');
+          // Record maintenance exposure (best-effort, endpoint is whitelisted during maintenance)
+          tgFetch('/tg/maintenance-exposure', { method: 'POST', body: JSON.stringify({ surface: 'miniapp', locale }) }).catch(() => {});
         } else if (kind === 'unavailable' || msg === 'UNAVAILABLE') {
           setScreen('maintenance');
+          tgFetch('/tg/maintenance-exposure', { method: 'POST', body: JSON.stringify({ surface: 'miniapp', locale }) }).catch(() => {});
         } else {
           setErrorMsg(t('error_load_failed', locale));
           setScreen('error');
@@ -8183,6 +8188,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
           <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>
             {t('maintenance_body', locale)}
+          </div>
+          <div style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, marginTop: 4 }}>
+            {t('maintenance_notify_hint', locale)}
           </div>
           <button
             style={{ ...btnPrimary, marginTop: 8, width: 200 }}
