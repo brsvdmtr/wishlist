@@ -6247,13 +6247,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (!currentWl) return;
     try {
       if (itemIds.length === 1) {
-        const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories/move-item`, {
+        const res = await tgFetch(`/tg/items/${itemIds[0]}/move-category`, {
           method: 'POST',
-          body: JSON.stringify({ itemId: itemIds[0], categoryId: targetCatId }),
+          body: JSON.stringify({ categoryId: targetCatId }),
         });
         if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
       } else {
-        const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories/bulk-move`, {
+        const res = await tgFetch('/tg/items/bulk-move-category', {
           method: 'POST',
           body: JSON.stringify({ itemIds, categoryId: targetCatId }),
         });
