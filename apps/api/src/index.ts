@@ -527,6 +527,7 @@ function mapItemForPublic(item: {
     status: item.status,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
+    categoryId: (item as any).categoryId ?? null,
     tags: item.itemTags.map((it) => it.tag),
     // Name of the guest who reserved (visible to other guests, hidden from owner by design).
     reservedByDisplayName:
@@ -624,6 +625,10 @@ publicRouter.get(
           },
         },
         tags: { select: { id: true, name: true } },
+        categories: {
+          orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+          select: { id: true, name: true, sortOrder: true, isDefault: true },
+        },
       },
     });
 
@@ -682,6 +687,7 @@ publicRouter.get(
       },
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,
+      categories: wishlist.categories,
     });
   }),
 );
@@ -726,6 +732,10 @@ publicRouter.get(
             },
           },
           tags: { select: { id: true, name: true } },
+          categories: {
+            orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+            select: { id: true, name: true, sortOrder: true, isDefault: true },
+          },
         },
       });
     } catch {
@@ -758,6 +768,7 @@ publicRouter.get(
       },
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,
+      categories: (wishlist as any).categories ?? [],
     });
   }),
 );
@@ -3211,10 +3222,17 @@ tgRouter.get(
         id: true, wishlistId: true, title: true, url: true, priceText: true,
         imageUrl: true, priority: true, position: true, status: true, description: true,
         sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+        categoryId: true,
       },
     });
 
-    return res.json({ items: items.map(mapTgItem) });
+    const categories = await prisma.wishlistCategory.findMany({
+      where: { wishlistId: id },
+      orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, name: true, sortOrder: true, isDefault: true },
+    });
+
+    return res.json({ items: items.map(i => ({ ...mapTgItem(i), categoryId: i.categoryId })), categories });
   }),
 );
 
@@ -3305,6 +3323,354 @@ tgRouter.get(
   }),
 );
 
+// ═══════════════════════════════════════════════════════
+// WISHLIST CATEGORIES
+// ═══════════════════════════════════════════════════════
+
+// GET /tg/wishlists/:id/categories — list categories for a wishlist (owner)
+tgRouter.get(
+  '/wishlists/:id/categories',
+  asyncHandler(async (req, res) => {
+    const wishlistId = req.params.id ?? '';
+    if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true } });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const categories = await prisma.wishlistCategory.findMany({
+      where: { wishlistId },
+      orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, name: true, sortOrder: true, isDefault: true },
+    });
+
+    return res.json({ categories });
+  }),
+);
+
+// POST /tg/wishlists/:id/categories — create category (Pro only)
+tgRouter.post(
+  '/wishlists/:id/categories',
+  asyncHandler(async (req, res) => {
+    const wishlistId = req.params.id ?? '';
+    if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const parsed = z.object({
+      name: z.string().min(1).max(24),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+    if (!ent.isPro) {
+      trackEvent('feature_gate_hit_categories', user.id, { plan: ent.plan.code });
+      return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+    }
+
+    const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true } });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Max 20 user categories per wishlist
+    const existingCount = await prisma.wishlistCategory.count({ where: { wishlistId, isDefault: false } });
+    if (existingCount >= 20) return res.status(400).json({ error: 'Category limit reached', limit: 20 });
+
+    // Duplicate check (case-insensitive, trimmed)
+    const trimmedName = parsed.data.name.trim();
+    const existing = await prisma.wishlistCategory.findMany({
+      where: { wishlistId },
+      select: { name: true },
+    });
+    const isDuplicate = existing.some(c => c.name.trim().toLowerCase() === trimmedName.toLowerCase());
+    if (isDuplicate) return res.status(409).json({ error: 'Duplicate category name' });
+
+    // Ensure default category exists
+    const defaultCat = await prisma.wishlistCategory.findFirst({ where: { wishlistId, isDefault: true } });
+    if (!defaultCat) {
+      await prisma.wishlistCategory.create({
+        data: { wishlistId, name: 'Без категории', sortOrder: 999999, isDefault: true },
+      });
+    }
+
+    // New category gets sortOrder = max existing + 1 (before default)
+    const maxOrder = await prisma.wishlistCategory.aggregate({
+      where: { wishlistId, isDefault: false },
+      _max: { sortOrder: true },
+    });
+    const nextOrder = (maxOrder._max.sortOrder ?? -1) + 1;
+
+    const category = await prisma.wishlistCategory.create({
+      data: { wishlistId, name: trimmedName, sortOrder: nextOrder, isDefault: false },
+      select: { id: true, name: true, sortOrder: true, isDefault: true },
+    });
+
+    trackEvent('wishlist_category_created', user.id, { wishlistId, categoryId: category.id, name: trimmedName });
+
+    // Return isFirst flag so client can show onboarding hint
+    const isFirst = existingCount === 0;
+
+    return res.json({ category, isFirst });
+  }),
+);
+
+// PATCH /tg/wishlists/:wlId/categories/:catId — rename category (Pro only)
+tgRouter.patch(
+  '/wishlists/:wlId/categories/:catId',
+  asyncHandler(async (req, res) => {
+    const { wlId, catId } = req.params;
+    if (!wlId || !catId) return res.status(400).json({ error: 'Missing ids' });
+
+    const parsed = z.object({
+      name: z.string().min(1).max(24),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+    if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+
+    const wishlist = await prisma.wishlist.findUnique({ where: { id: wlId }, select: { ownerId: true } });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const category = await prisma.wishlistCategory.findUnique({ where: { id: catId }, select: { id: true, wishlistId: true, isDefault: true } });
+    if (!category || category.wishlistId !== wlId) return res.status(404).json({ error: 'Category not found' });
+    if (category.isDefault) return res.status(400).json({ error: 'Cannot rename default category' });
+
+    // Duplicate check
+    const trimmedName = parsed.data.name.trim();
+    const siblings = await prisma.wishlistCategory.findMany({
+      where: { wishlistId: wlId, id: { not: catId } },
+      select: { name: true },
+    });
+    if (siblings.some(c => c.name.trim().toLowerCase() === trimmedName.toLowerCase())) {
+      return res.status(409).json({ error: 'Duplicate category name' });
+    }
+
+    const updated = await prisma.wishlistCategory.update({
+      where: { id: catId },
+      data: { name: trimmedName },
+      select: { id: true, name: true, sortOrder: true, isDefault: true },
+    });
+
+    trackEvent('wishlist_category_renamed', user.id, { wishlistId: wlId, categoryId: catId, name: trimmedName });
+
+    return res.json({ category: updated });
+  }),
+);
+
+// DELETE /tg/wishlists/:wlId/categories/:catId — delete category, move items to default (Pro only)
+tgRouter.delete(
+  '/wishlists/:wlId/categories/:catId',
+  asyncHandler(async (req, res) => {
+    const { wlId, catId } = req.params;
+    if (!wlId || !catId) return res.status(400).json({ error: 'Missing ids' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+    if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+
+    const wishlist = await prisma.wishlist.findUnique({ where: { id: wlId }, select: { ownerId: true } });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const category = await prisma.wishlistCategory.findUnique({ where: { id: catId }, select: { id: true, wishlistId: true, isDefault: true } });
+    if (!category || category.wishlistId !== wlId) return res.status(404).json({ error: 'Category not found' });
+    if (category.isDefault) return res.status(400).json({ error: 'Cannot delete default category' });
+
+    // Find or create default category
+    let defaultCat = await prisma.wishlistCategory.findFirst({ where: { wishlistId: wlId, isDefault: true } });
+    if (!defaultCat) {
+      defaultCat = await prisma.wishlistCategory.create({
+        data: { wishlistId: wlId, name: 'Без категории', sortOrder: 999999, isDefault: true },
+      });
+    }
+
+    // Move items to default, then delete category — in a transaction
+    const movedCount = await prisma.$transaction(async (tx) => {
+      // Get max position in default category to append at end
+      const maxPos = await tx.item.aggregate({
+        where: { categoryId: defaultCat!.id, status: { in: [...ACTIVE_STATUSES] } },
+        _max: { position: true },
+      });
+      const startPos = (maxPos._max.position ?? -1) + 1;
+
+      // Get items to move, preserving their current order
+      const itemsToMove = await tx.item.findMany({
+        where: { categoryId: catId, status: { in: [...ACTIVE_STATUSES] } },
+        orderBy: [{ position: 'asc' }],
+        select: { id: true },
+      });
+
+      // Update positions sequentially
+      for (let i = 0; i < itemsToMove.length; i++) {
+        await tx.item.update({
+          where: { id: itemsToMove[i]!.id },
+          data: { categoryId: defaultCat!.id, position: startPos + i },
+        });
+      }
+
+      // Also move any non-active items (archived etc)
+      await tx.item.updateMany({
+        where: { categoryId: catId },
+        data: { categoryId: defaultCat!.id },
+      });
+
+      // Delete category
+      await tx.wishlistCategory.delete({ where: { id: catId } });
+
+      return itemsToMove.length;
+    });
+
+    trackEvent('wishlist_category_deleted', user.id, { wishlistId: wlId, categoryId: catId, movedItems: movedCount });
+
+    return res.json({ ok: true, movedItems: movedCount });
+  }),
+);
+
+// POST /tg/wishlists/:id/categories/reorder — reorder categories (Pro only)
+tgRouter.post(
+  '/wishlists/:id/categories/reorder',
+  asyncHandler(async (req, res) => {
+    const wishlistId = req.params.id ?? '';
+    if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const parsed = z.object({
+      orderedIds: z.array(z.string()).min(1).max(20),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+    if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+
+    const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true } });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Only reorder non-default categories; default always stays last
+    await prisma.$transaction(async (tx) => {
+      for (let i = 0; i < parsed.data.orderedIds.length; i++) {
+        await tx.wishlistCategory.updateMany({
+          where: { id: parsed.data.orderedIds[i], wishlistId, isDefault: false },
+          data: { sortOrder: i },
+        });
+      }
+    });
+
+    return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/items/:id/move-category — move single item to category (Pro only)
+tgRouter.post(
+  '/items/:id/move-category',
+  asyncHandler(async (req, res) => {
+    const itemId = req.params.id ?? '';
+    if (!itemId) return res.status(400).json({ error: 'Missing item id' });
+
+    const parsed = z.object({
+      categoryId: z.string().min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+    if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+
+    const item = await prisma.item.findUnique({
+      where: { id: itemId },
+      select: { id: true, wishlistId: true, wishlist: { select: { ownerId: true } } },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Target category must belong to the same wishlist
+    const targetCat = await prisma.wishlistCategory.findUnique({
+      where: { id: parsed.data.categoryId },
+      select: { id: true, wishlistId: true },
+    });
+    if (!targetCat || targetCat.wishlistId !== item.wishlistId) {
+      return res.status(400).json({ error: 'Category does not belong to this wishlist' });
+    }
+
+    // Append at end of target category
+    const maxPos = await prisma.item.aggregate({
+      where: { categoryId: parsed.data.categoryId, status: { in: [...ACTIVE_STATUSES] } },
+      _max: { position: true },
+    });
+
+    await prisma.item.update({
+      where: { id: itemId },
+      data: { categoryId: parsed.data.categoryId, position: (maxPos._max.position ?? -1) + 1 },
+    });
+
+    trackEvent('wishlist_wish_moved_to_category', user.id, {
+      itemId, wishlistId: item.wishlistId, categoryId: parsed.data.categoryId,
+    });
+
+    return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/items/bulk-move-category — bulk move items to category (Pro only)
+tgRouter.post(
+  '/items/bulk-move-category',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      itemIds: z.array(z.string()).min(1).max(100),
+      categoryId: z.string().min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+    if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+
+    // Verify target category
+    const targetCat = await prisma.wishlistCategory.findUnique({
+      where: { id: parsed.data.categoryId },
+      select: { id: true, wishlistId: true },
+    });
+    if (!targetCat) return res.status(404).json({ error: 'Category not found' });
+
+    // Verify wishlist ownership
+    const wishlist = await prisma.wishlist.findUnique({
+      where: { id: targetCat.wishlistId },
+      select: { ownerId: true },
+    });
+    if (!wishlist || wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Only move items that belong to the same wishlist
+    const items = await prisma.item.findMany({
+      where: { id: { in: parsed.data.itemIds }, wishlistId: targetCat.wishlistId },
+      select: { id: true },
+    });
+
+    const maxPos = await prisma.item.aggregate({
+      where: { categoryId: parsed.data.categoryId, status: { in: [...ACTIVE_STATUSES] } },
+      _max: { position: true },
+    });
+    let nextPos = (maxPos._max.position ?? -1) + 1;
+
+    await prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        await tx.item.update({
+          where: { id: item.id },
+          data: { categoryId: parsed.data.categoryId, position: nextPos++ },
+        });
+      }
+    });
+
+    trackEvent('wishlist_bulk_moved_to_category', user.id, {
+      wishlistId: targetCat.wishlistId, categoryId: parsed.data.categoryId, count: items.length,
+    });
+
+    return res.json({ ok: true, moved: items.length });
+  }),
+);
+
 // POST /tg/wishlists/:id/items — add item
 tgRouter.post(
   '/wishlists/:id/items',
@@ -3361,6 +3727,7 @@ tgRouter.post(
         priority: numToPriority(parsed.data.priority ?? 2),
         imageUrl: parsed.data.imageUrl ?? null,
         currency,
+        categoryId: (await prisma.wishlistCategory.findFirst({ where: { wishlistId, isDefault: true }, select: { id: true } }))?.id ?? null,
       },
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });

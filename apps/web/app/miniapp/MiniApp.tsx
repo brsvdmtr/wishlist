@@ -208,10 +208,18 @@ type UpsellContext =
   | 'comments' | 'url_import' | 'hints'
   | 'wishlist_limit' | 'item_limit' | 'participant_limit' | 'subscription_limit'
   | 'sort_recommended'
-  | 'reservation_pro';
+  | 'reservation_pro'
+  | 'categories';
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
+
+type WishlistCategory = {
+  id: string;
+  name: string;
+  sortOrder: number;
+  isDefault: boolean;
+};
 
 type Item = {
   id: string;
@@ -228,6 +236,7 @@ type Item = {
   sourceDomain?: string | null;
   importMethod?: string | null;
   currency?: 'RUB' | 'USD';
+  categoryId?: string | null;
 };
 
 type GuestItem = Item & { reservedByDisplayName: string | null; reservedByActorHash: string | null };
@@ -1623,6 +1632,13 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     subtitle: t('res_pro_full_desc', locale),
     showTable: false,
     benefits: [t('plan_pro_f10', locale), t('plan_pro_f11', locale), t('plan_pro_f12', locale), t('plan_pro_f13', locale), t('plan_pro_f14', locale)],
+  },
+  categories: {
+    emoji: '📂',
+    title: t('upsell_categories_title', locale),
+    subtitle: t('upsell_categories_subtitle', locale),
+    showTable: false,
+    benefits: [t('upsell_categories_b1', locale), t('upsell_categories_b2', locale), t('upsell_categories_b3', locale)],
   },
 });
 
@@ -3053,6 +3069,30 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [currentWl, setCurrentWl] = useState<Wishlist | null>(null);
   const [items, setItems] = useState<Item[]>([]);
 
+  // ── Category state ──
+  const [categories, setCategories] = useState<WishlistCategory[]>([]);
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
+  const [showCatCreate, setShowCatCreate] = useState(false);
+  const [catCreateName, setCatCreateName] = useState('');
+  const [catCreateLoading, setCatCreateLoading] = useState(false);
+  const [showCatRename, setShowCatRename] = useState<WishlistCategory | null>(null);
+  const [catRenameName, setCatRenameName] = useState('');
+  const [catRenameLoading, setCatRenameLoading] = useState(false);
+  const [showCatDelete, setShowCatDelete] = useState<WishlistCategory | null>(null);
+  const [catDeleteLoading, setCatDeleteLoading] = useState(false);
+  const [catReorderMode, setCatReorderMode] = useState(false);
+  const [catReorderList, setCatReorderList] = useState<WishlistCategory[]>([]);
+  const [catReorderSaving, setCatReorderSaving] = useState(false);
+  const [catReorderDragIdx, setCatReorderDragIdx] = useState<number | null>(null);
+  const catReorderPointerStartY = useRef(0);
+  const catReorderPointerIdx = useRef<number | null>(null);
+  const [showCatPicker, setShowCatPicker] = useState<{ itemIds: string[] } | null>(null);
+  const [catOnboardingHint, setCatOnboardingHint] = useState(false);
+  const [showCatMenu, setShowCatMenu] = useState<WishlistCategory | null>(null);
+  // Guest categories (from public view)
+  const [guestCategories, setGuestCategories] = useState<WishlistCategory[]>([]);
+  const [guestCollapsedCats, setGuestCollapsedCats] = useState<Set<string>>(new Set());
+
   // Profile state
   const [profileData, setProfileData] = useState<{
     displayName: string | null;
@@ -4351,8 +4391,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const text = await res.text().catch(() => '');
       throw new Error(`API ${res.status}: ${text || res.statusText}`);
     }
-    const json = await res.json() as { items: Item[] };
+    const json = await res.json() as { items: Item[]; categories?: WishlistCategory[] };
     setItems(json.items);
+    if (json.categories) setCategories(json.categories);
+    else setCategories([]);
     setItemsLoadFailed(false);
   }, [tgFetch]);
 
@@ -4552,6 +4594,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       reservedByActorHash: i.reservedByActorHash ?? null,
     }));
     setGuestItems(mappedItems);
+    // Load categories for guest view if available
+    if ((json as any).categories) {
+      setGuestCategories((json as any).categories as WishlistCategory[]);
+    } else {
+      setGuestCategories([]);
+    }
     return mappedItems;
   }, [apiBase]);
 
@@ -6082,6 +6130,231 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleItemReorderPointerUp = () => {
     itemReorderPointerIdx.current = null;
     setItemReorderDragIdx(null);
+  };
+
+  // ── Category helpers ────────────────────────────────────────────────────
+  const userCategories = useMemo(() => categories.filter(c => !c.isDefault), [categories]);
+  const hasUserCategories = userCategories.length > 0;
+  const defaultCategory = useMemo(() => categories.find(c => c.isDefault) ?? null, [categories]);
+
+  /** Items grouped by category, respecting sortOrder. Returns array of { cat, items } */
+  const itemsByCategory = useMemo(() => {
+    if (!hasUserCategories) return [];
+    const sorted = [...categories].sort((a, b) => a.sortOrder - b.sortOrder);
+    const map = new Map<string, Item[]>();
+    for (const cat of sorted) map.set(cat.id, []);
+    for (const item of items) {
+      const cid = item.categoryId ?? defaultCategory?.id ?? '';
+      if (map.has(cid)) map.get(cid)!.push(item);
+      else {
+        // item's category not found — put in default
+        const dflt = defaultCategory?.id ?? '';
+        if (!map.has(dflt)) map.set(dflt, []);
+        map.get(dflt)!.push(item);
+      }
+    }
+    return sorted.map(cat => ({ cat, items: map.get(cat.id) ?? [] }));
+  }, [categories, items, hasUserCategories, defaultCategory]);
+
+  // Guest view: same grouping for guest categories
+  const guestUserCategories = useMemo(() => guestCategories.filter(c => !c.isDefault), [guestCategories]);
+  const guestHasUserCategories = guestUserCategories.length > 0;
+  const guestDefaultCategory = useMemo(() => guestCategories.find(c => c.isDefault) ?? null, [guestCategories]);
+
+  const handleCatCreate = async () => {
+    if (!currentWl || catCreateLoading) return;
+    const name = catCreateName.trim();
+    if (!name) return;
+    if (categories.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+      pushToast(t('cat_duplicate_error', locale), 'error');
+      return;
+    }
+    setCatCreateLoading(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories`, {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      });
+      if (res.status === 402) {
+        showUpsell('categories');
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        pushToast(body.error || t('toast_save_error', locale), 'error');
+        return;
+      }
+      const json = await res.json() as { category: WishlistCategory };
+      setCategories(prev => [...prev.filter(c => !c.isDefault), json.category, ...prev.filter(c => c.isDefault)].sort((a, b) => a.sortOrder - b.sortOrder));
+      setShowCatCreate(false);
+      setCatCreateName('');
+      trackEvent('category_created', { wishlistId: currentWl.id, categoryId: json.category.id });
+      // Show onboarding hint on first category creation
+      if (userCategories.length === 0) {
+        setCatOnboardingHint(true);
+        setTimeout(() => setCatOnboardingHint(false), 4000);
+      }
+      pushToast(t('cat_create', locale), 'success');
+    } finally {
+      setCatCreateLoading(false);
+    }
+  };
+
+  const handleCatRename = async () => {
+    if (!currentWl || !showCatRename || catRenameLoading) return;
+    const name = catRenameName.trim();
+    if (!name || name === showCatRename.name) return;
+    if (categories.some(c => c.id !== showCatRename.id && c.name.toLowerCase() === name.toLowerCase())) {
+      pushToast(t('cat_duplicate_error', locale), 'error');
+      return;
+    }
+    setCatRenameLoading(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories/${showCatRename.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
+      setCategories(prev => prev.map(c => c.id === showCatRename.id ? { ...c, name } : c));
+      setShowCatRename(null);
+      trackEvent('category_renamed', { wishlistId: currentWl.id, categoryId: showCatRename.id });
+      pushToast(t('cat_rename', locale), 'success');
+    } finally {
+      setCatRenameLoading(false);
+    }
+  };
+
+  const handleCatDelete = async () => {
+    if (!currentWl || !showCatDelete || catDeleteLoading) return;
+    setCatDeleteLoading(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories/${showCatDelete.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
+      // Items move to default category client-side
+      setItems(prev => prev.map(it => it.categoryId === showCatDelete.id ? { ...it, categoryId: defaultCategory?.id ?? null } : it));
+      setCategories(prev => prev.filter(c => c.id !== showCatDelete.id));
+      setShowCatDelete(null);
+      trackEvent('category_deleted', { wishlistId: currentWl.id, categoryId: showCatDelete.id });
+      pushToast(t('cat_delete', locale), 'success');
+    } finally {
+      setCatDeleteLoading(false);
+    }
+  };
+
+  const handleCatMoveItem = async (itemIds: string[], targetCatId: string) => {
+    if (!currentWl) return;
+    try {
+      if (itemIds.length === 1) {
+        const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories/move-item`, {
+          method: 'POST',
+          body: JSON.stringify({ itemId: itemIds[0], categoryId: targetCatId }),
+        });
+        if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
+      } else {
+        const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories/bulk-move`, {
+          method: 'POST',
+          body: JSON.stringify({ itemIds, categoryId: targetCatId }),
+        });
+        if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
+      }
+      setItems(prev => prev.map(it => itemIds.includes(it.id) ? { ...it, categoryId: targetCatId } : it));
+      setShowCatPicker(null);
+      const targetCat = categories.find(c => c.id === targetCatId);
+      trackEvent('category_items_moved', { wishlistId: currentWl.id, targetCategoryId: targetCatId, count: itemIds.length });
+      pushToast(t('cat_move_to', locale) + ' ' + (targetCat?.name ?? ''), 'success');
+      // If in bulk mode, exit it
+      if (bulkSelectionMode) {
+        setBulkSelectionMode(false);
+        setBulkSelectedIds(new Set());
+      }
+    } catch {
+      pushToast(t('toast_save_error', locale), 'error');
+    }
+  };
+
+  // Category reorder handlers (same PointerEvent pattern as item reorder)
+  const enterCatReorderMode = () => {
+    tgRef.current?.WebApp?.expand?.();
+    tgRef.current?.WebApp?.disableVerticalSwipes?.();
+    const nonDefault = categories.filter(c => !c.isDefault).sort((a, b) => a.sortOrder - b.sortOrder);
+    setCatReorderList(nonDefault);
+    setCatReorderDragIdx(null);
+    setCatReorderMode(true);
+  };
+
+  const cancelCatReorderMode = () => {
+    tgRef.current?.WebApp?.enableVerticalSwipes?.();
+    setCatReorderMode(false);
+    setCatReorderList([]);
+    setCatReorderDragIdx(null);
+  };
+
+  const handleSaveCatReorder = async () => {
+    if (catReorderSaving || !currentWl) return;
+    setCatReorderSaving(true);
+    try {
+      const orderedIds = catReorderList.map(c => c.id);
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}/categories/reorder`, {
+        method: 'POST',
+        body: JSON.stringify({ orderedIds }),
+      });
+      if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
+      // Apply new sort order
+      setCategories(prev => {
+        const updated = catReorderList.map((c, i) => ({ ...c, sortOrder: i }));
+        const defaults = prev.filter(c => c.isDefault);
+        return [...updated, ...defaults].sort((a, b) => a.sortOrder - b.sortOrder);
+      });
+      tgRef.current?.WebApp?.enableVerticalSwipes?.();
+      setCatReorderMode(false);
+      setCatReorderList([]);
+      trackEvent('category_reordered', { wishlistId: currentWl.id });
+      pushToast(t('cat_reorder_save', locale), 'success');
+    } finally {
+      setCatReorderSaving(false);
+    }
+  };
+
+  const handleCatReorderPointerDown = (e: React.PointerEvent, idx: number) => {
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    catReorderPointerStartY.current = e.clientY;
+    catReorderPointerIdx.current = idx;
+    setCatReorderDragIdx(idx);
+  };
+
+  const handleCatReorderPointerMove = (e: React.PointerEvent, idx: number) => {
+    e.preventDefault();
+    if (catReorderPointerIdx.current === null || catReorderPointerIdx.current !== idx) return;
+    const sc = scrollContainerRef.current;
+    if (sc) {
+      const SCROLL_ZONE = 80;
+      const SCROLL_SPEED = 8;
+      if (e.clientY < SCROLL_ZONE) sc.scrollTop -= SCROLL_SPEED;
+      else if (e.clientY > window.innerHeight - SCROLL_ZONE) sc.scrollTop += SCROLL_SPEED;
+    }
+    const deltaY = e.clientY - catReorderPointerStartY.current;
+    const cardHeight = 56;
+    const steps = Math.round(deltaY / cardHeight);
+    const newIdx = Math.max(0, Math.min(catReorderList.length - 1, idx + steps));
+    if (newIdx !== idx) {
+      setCatReorderList(prev => {
+        const next = [...prev];
+        const [item] = next.splice(idx, 1);
+        next.splice(newIdx, 0, item!);
+        catReorderPointerIdx.current = newIdx;
+        catReorderPointerStartY.current = e.clientY;
+        return next;
+      });
+      setCatReorderDragIdx(newIdx);
+    }
+  };
+
+  const handleCatReorderPointerUp = () => {
+    catReorderPointerIdx.current = null;
+    setCatReorderDragIdx(null);
   };
 
   const handleRenameWishlist = async () => {
@@ -9352,6 +9625,59 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </>
             )}
 
+            {/* ── Category reorder mode ── */}
+            {catReorderMode && (
+              <>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                  <button
+                    style={{ ...btnPrimary, flex: 1, opacity: catReorderSaving ? 0.6 : 1 }}
+                    onClick={() => void handleSaveCatReorder()}
+                    disabled={catReorderSaving}
+                  >
+                    {catReorderSaving ? '…' : t('cat_reorder_save', locale)}
+                  </button>
+                  <button style={{ ...btnGhost, flex: 1 }} onClick={cancelCatReorderMode}>
+                    {t('wl_reorder_cancel', locale)}
+                  </button>
+                </div>
+                {catReorderList.map((cat, idx) => {
+                  const isDragging = catReorderDragIdx === idx;
+                  const catItemCount = items.filter(it => it.categoryId === cat.id).length;
+                  return (
+                    <div
+                      key={cat.id}
+                      style={{
+                        background: isDragging ? C.accent + '22' : C.card,
+                        borderRadius: 14, padding: '12px 14px', marginBottom: 8,
+                        border: `1px solid ${isDragging ? C.accent : C.border}`,
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        transition: 'background 0.12s, border-color 0.12s',
+                        userSelect: 'none', touchAction: 'none',
+                      }}
+                    >
+                      <div
+                        onPointerDown={(e) => handleCatReorderPointerDown(e, idx)}
+                        onPointerMove={(e) => handleCatReorderPointerMove(e, idx)}
+                        onPointerUp={handleCatReorderPointerUp}
+                        onPointerCancel={handleCatReorderPointerUp}
+                        style={{ fontSize: 20, color: C.textMuted, cursor: 'grab', padding: '4px 6px 4px 0', lineHeight: 1, flexShrink: 0, touchAction: 'none' }}
+                      >
+                        ⠿
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {cat.name}
+                        </div>
+                        <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                          {catItemCount} {catItemCount === 1 ? (locale === 'ru' ? 'желание' : 'wish') : (locale === 'ru' ? 'желаний' : 'wishes')}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
             {/* ── Bulk selection header bar ── */}
             {bulkSelectionMode && (
               <div style={{
@@ -9374,70 +9700,139 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             )}
 
             {/* ── Normal mode items (with selection overlay) ── */}
-            {!itemReorderMode && items.map((item, i) => {
-              const isSelected = bulkSelectedIds.has(item.id);
-              const onItemTap = bulkSelectionMode
-                ? () => {
-                    setBulkSelectedIds(prev => {
-                      const next = new Set(prev);
-                      if (next.has(item.id)) next.delete(item.id);
-                      else next.add(item.id);
-                      return next;
-                    });
-                  }
-                : (it: Item) => { setViewingItem(it); setScreen('item-detail'); };
-
-              const selectionWrapper = (child: React.ReactNode) => (
-                <div
-                  key={item.id}
-                  style={{ position: 'relative' }}
-                  onTouchStart={() => {
-                    if (!bulkSelectionMode) {
-                      bulkLongPressTimer.current = setTimeout(() => {
-                        setBulkSelectionMode(true);
-                        setBulkSelectedIds(new Set([item.id]));
-                      }, 500);
+            {!itemReorderMode && !catReorderMode && (() => {
+              // Shared render function for a single item card
+              const renderItemCard = (item: Item, i: number, totalItems: number) => {
+                const isSelected = bulkSelectedIds.has(item.id);
+                const onItemTap = bulkSelectionMode
+                  ? () => {
+                      setBulkSelectedIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
+                        return next;
+                      });
                     }
-                  }}
-                  onTouchEnd={() => { if (bulkLongPressTimer.current) { clearTimeout(bulkLongPressTimer.current); bulkLongPressTimer.current = null; } }}
-                  onTouchMove={() => { if (bulkLongPressTimer.current) { clearTimeout(bulkLongPressTimer.current); bulkLongPressTimer.current = null; } }}
-                >
-                  {bulkSelectionMode && (
-                    <div style={{
-                      position: 'absolute', top: 8, left: 8, zIndex: 2,
-                      width: 24, height: 24, borderRadius: 12,
-                      background: isSelected ? C.accent : 'transparent',
-                      border: `2px solid ${isSelected ? C.accent : C.textMuted}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      {isSelected && <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>✓</span>}
-                    </div>
-                  )}
-                  {child}
-                </div>
-              );
+                  : (it: Item) => { setViewingItem(it); setScreen('item-detail'); };
 
-              const useNewCards = CARD_REDESIGN_ENABLED;
-              if (useNewCards) {
-                const cardMode = resolveCardMode(items.length, cardDisplayMode, planInfo.code === 'PRO');
-                const stagger = cardMode === 'compact' ? 0.04 : 0.08;
-                const gap = cardMode === 'compact' ? 8 : 14;
-                const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
-                return selectionWrapper(
-                  <div style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap }}>
-                    <Card item={item} onTap={() => onItemTap(item)} locale={locale} />
+                const selectionWrapper = (child: React.ReactNode) => (
+                  <div
+                    key={item.id}
+                    style={{ position: 'relative' }}
+                    onTouchStart={() => {
+                      if (!bulkSelectionMode) {
+                        bulkLongPressTimer.current = setTimeout(() => {
+                          setBulkSelectionMode(true);
+                          setBulkSelectedIds(new Set([item.id]));
+                        }, 500);
+                      }
+                    }}
+                    onTouchEnd={() => { if (bulkLongPressTimer.current) { clearTimeout(bulkLongPressTimer.current); bulkLongPressTimer.current = null; } }}
+                    onTouchMove={() => { if (bulkLongPressTimer.current) { clearTimeout(bulkLongPressTimer.current); bulkLongPressTimer.current = null; } }}
+                  >
+                    {bulkSelectionMode && (
+                      <div style={{
+                        position: 'absolute', top: 8, left: 8, zIndex: 2,
+                        width: 24, height: 24, borderRadius: 12,
+                        background: isSelected ? C.accent : 'transparent',
+                        border: `2px solid ${isSelected ? C.accent : C.textMuted}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {isSelected && <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>✓</span>}
+                      </div>
+                    )}
+                    {child}
                   </div>
                 );
+
+                const useNewCards = CARD_REDESIGN_ENABLED;
+                if (useNewCards) {
+                  const cardMode = resolveCardMode(totalItems, cardDisplayMode, planInfo.code === 'PRO');
+                  const stagger = cardMode === 'compact' ? 0.04 : 0.08;
+                  const gap = cardMode === 'compact' ? 8 : 14;
+                  const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
+                  return selectionWrapper(
+                    <div style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap }}>
+                      <Card item={item} onTap={() => onItemTap(item)} locale={locale} />
+                    </div>
+                  );
+                }
+                return selectionWrapper(
+                  <div style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
+                    <WishCardOwner item={item} onTap={() => onItemTap(item)} onDelete={setDeletingItem} onComplete={handleCompleteItem} locale={locale} />
+                  </div>
+                );
+              };
+
+              // ── Category sections mode ──
+              if (hasUserCategories) {
+                let globalIdx = 0;
+                return itemsByCategory.map(({ cat, items: catItems }) => {
+                  // Hide empty default category when user categories exist
+                  if (cat.isDefault && catItems.length === 0) return null;
+                  const isCollapsed = collapsedCats.has(cat.id);
+                  return (
+                    <div key={cat.id} style={{ marginBottom: 12 }}>
+                      {/* Category section header */}
+                      <div
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '8px 2px 6px', cursor: 'pointer', userSelect: 'none',
+                        }}
+                        onClick={() => setCollapsedCats(prev => {
+                          const next = new Set(prev);
+                          if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
+                          return next;
+                        })}
+                      >
+                        <span style={{
+                          fontSize: 12, color: C.textMuted, transition: 'transform 0.2s',
+                          transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                          display: 'inline-block',
+                        }}>▼</span>
+                        <span style={{
+                          fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font,
+                          flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {cat.isDefault ? t('cat_uncategorized', locale) : cat.name}
+                        </span>
+                        <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600, flexShrink: 0 }}>
+                          {catItems.length}
+                        </span>
+                        {!cat.isDefault && !bulkSelectionMode && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setShowCatMenu(cat); }}
+                            style={{
+                              background: 'none', border: 'none', padding: '2px 6px',
+                              fontSize: 16, color: C.textMuted, cursor: 'pointer', flexShrink: 0,
+                              lineHeight: 1,
+                            }}
+                          >⋯</button>
+                        )}
+                      </div>
+                      {/* Category items */}
+                      {!isCollapsed && catItems.map((item) => {
+                        const idx = globalIdx++;
+                        return renderItemCard(item, idx, items.length);
+                      })}
+                      {isCollapsed && (globalIdx += catItems.length, null)}
+                      {/* Empty category hint */}
+                      {!isCollapsed && catItems.length === 0 && !cat.isDefault && (
+                        <div style={{ padding: '16px 0', textAlign: 'center', fontSize: 13, color: C.textMuted }}>
+                          {t('cat_empty', locale)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
               }
-              return selectionWrapper(
-                <div style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-                  <WishCardOwner item={item} onTap={() => onItemTap(item)} onDelete={setDeletingItem} onComplete={handleCompleteItem} locale={locale} />
-                </div>
-              );
-            })}
+
+              // ── Flat list mode (no user categories) ──
+              return items.map((item, i) => renderItemCard(item, i, items.length));
+            })()}
 
             {/* ── Empty / Error state ── */}
-            {!itemReorderMode && !loading && items.length === 0 && (() => {
+            {!itemReorderMode && !catReorderMode && !loading && items.length === 0 && (() => {
               const knownNonEmpty = (currentWl.itemCount ?? 0) > 0;
               const isFalseEmpty = itemsLoadFailed && knownNonEmpty;
               const isNetworkError = itemsLoadFailed && !knownNonEmpty;
@@ -9536,7 +9931,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               );
             })()}
 
-            {!itemReorderMode && !currentWl.readOnly && (
+            {!itemReorderMode && !catReorderMode && !currentWl.readOnly && (
               <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
                 {t('items_limit_status', locale, { count: items.length, max: planLimits.items + (addOns.extraItemsPerWishlist?.[currentWl.id] ?? 0) })}
               </div>
@@ -9619,6 +10014,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div onClick={() => { setCopyingItem(viewingItem as Item); setShowCopyPicker(true); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
                     <span style={{ width: 22, textAlign: 'center' }}>📋</span> {t('item_copy_short', locale)}
                   </div>
+                  {hasUserCategories && (
+                    <div onClick={() => { setShowItemMenu(false); setShowCatPicker({ itemIds: [viewingItem!.id] }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
+                      <span style={{ width: 22, textAlign: 'center' }}>📂</span> {t('cat_choose', locale)}
+                    </div>
+                  )}
                   <div style={{ height: 1, background: C.border, margin: '2px 0' }} />
                   <div onClick={() => {
                     const item = viewingItem as Item;
@@ -10039,6 +10439,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         }}>
                           {t('item_copy_short', locale)}
                         </button>
+                        {/* Regular: Move to category */}
+                        {hasUserCategories && (
+                          <button onClick={() => setShowCatPicker({ itemIds: [viewingItem!.id] })} style={{
+                            ...btnBase, flex: 1, background: C.surface, color: '#A78BFA',
+                            border: `1px solid ${C.borderLight}`, borderRadius: 14,
+                            padding: '12px 16px', fontSize: 13, fontWeight: 500,
+                          }}>
+                            📂
+                          </button>
+                        )}
                         {/* Regular: Received */}
                         <button onClick={() => {
                           setShowItemForm(false);
@@ -10646,29 +11056,55 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {guestMainList.map((item, i) => {
-                const itemUnreadCount = guestUnreadItemCounts[item.id] ?? 0;
-                const useNewCards = CARD_REDESIGN_ENABLED;
-                if (useNewCards) {
-                  const allGuestItems = [...guestMainList, ...guestNoPriceBlock];
-                  const cardMode = resolveCardMode(allGuestItems.length, undefined, false);
-                  const stagger = cardMode === 'compact' ? 0.04 : 0.08;
-                  const gap = cardMode === 'compact' ? 8 : 14;
-                  const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
+              {(() => {
+                // Shared guest card renderer
+                const renderGuestCard = (item: GuestItem, i: number, totalItems: number) => {
+                  const itemUnreadCount = guestUnreadItemCounts[item.id] ?? 0;
+                  const useNewCards = CARD_REDESIGN_ENABLED;
+                  if (useNewCards) {
+                    const cardMode = resolveCardMode(totalItems, undefined, false);
+                    const stagger = cardMode === 'compact' ? 0.04 : 0.08;
+                    const gap = cardMode === 'compact' ? 8 : 14;
+                    const Card = cardMode === 'showcase' ? WishCardShowcase : WishCardCompact;
+                    return (
+                      <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
+                        <Card
+                          item={item}
+                          isGuest
+                          onTap={(it: GuestItem) => { setViewingItem(it); setScreen('guest-item-detail'); }}
+                          onReserve={(w: GuestItem) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                          onUnreserve={handleUnreserve}
+                          myActorHash={myActorHashRef.current}
+                          locale={locale}
+                        />
+                        {itemUnreadCount > 0 && (
+                          <span style={{
+                            position: 'absolute', top: -6, right: -6, zIndex: 10,
+                            minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
+                            background: C.orange, color: '#fff',
+                            fontSize: 11, fontWeight: 800, fontFamily: font,
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                            border: `2px solid ${C.bg}`,
+                            pointerEvents: 'none',
+                          }}>{itemUnreadCount}</span>
+                        )}
+                      </div>
+                    );
+                  }
                   return (
-                    <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * stagger}s both`, marginBottom: gap, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                      <Card
+                    <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
+                      <WishCardGuest
                         item={item}
-                        isGuest
-                        onTap={(it: GuestItem) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                        onReserve={(w: GuestItem) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
+                        onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
+                        onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
                         onUnreserve={handleUnreserve}
                         myActorHash={myActorHashRef.current}
                         locale={locale}
                       />
                       {itemUnreadCount > 0 && (
                         <span style={{
-                          position: 'absolute', top: -6, right: -6, zIndex: 10,
+                          position: 'absolute', top: 6, right: 6, zIndex: 10,
                           minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
                           background: C.orange, color: '#fff',
                           fontSize: 11, fontWeight: 800, fontFamily: font,
@@ -10680,32 +11116,61 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       )}
                     </div>
                   );
+                };
+
+                // If guest wishlist has user-created categories, render grouped
+                if (guestHasUserCategories) {
+                  const sortedCats = [...guestCategories].sort((a, b) => a.sortOrder - b.sortOrder);
+                  let gIdx = 0;
+                  const allItems = [...guestMainList, ...guestNoPriceBlock];
+                  return sortedCats.map(cat => {
+                    const catItems = guestMainList.filter(it => {
+                      const cid = it.categoryId ?? guestDefaultCategory?.id ?? '';
+                      return cid === cat.id;
+                    });
+                    if (cat.isDefault && catItems.length === 0) return null;
+                    const isCollapsed = guestCollapsedCats.has(cat.id);
+                    return (
+                      <div key={cat.id} style={{ marginBottom: 8 }}>
+                        <div
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '6px 2px 4px', cursor: 'pointer', userSelect: 'none',
+                          }}
+                          onClick={() => setGuestCollapsedCats(prev => {
+                            const next = new Set(prev);
+                            if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
+                            return next;
+                          })}
+                        >
+                          <span style={{
+                            fontSize: 12, color: C.textMuted, transition: 'transform 0.2s',
+                            transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                            display: 'inline-block',
+                          }}>▼</span>
+                          <span style={{
+                            fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font,
+                            flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {cat.isDefault ? t('cat_uncategorized', locale) : cat.name}
+                          </span>
+                          <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600, flexShrink: 0 }}>
+                            {catItems.length}
+                          </span>
+                        </div>
+                        {!isCollapsed && catItems.map(item => {
+                          const idx = gIdx++;
+                          return renderGuestCard(item, idx, allItems.length);
+                        })}
+                        {isCollapsed && (gIdx += catItems.length, null)}
+                      </div>
+                    );
+                  });
                 }
-                return (
-                  <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both`, position: 'relative', ...(itemUnreadCount > 0 ? { border: `1px solid rgba(251,191,36,0.25)`, borderRadius: 16 } : {}) }}>
-                    <WishCardGuest
-                      item={item}
-                      onTap={(it) => { setViewingItem(it); setScreen('guest-item-detail'); }}
-                      onReserve={(w) => { setReservingItem(w); setGuestName(tgUser?.first_name ?? ''); }}
-                      onUnreserve={handleUnreserve}
-                      myActorHash={myActorHashRef.current}
-                      locale={locale}
-                    />
-                    {itemUnreadCount > 0 && (
-                      <span style={{
-                        position: 'absolute', top: 6, right: 6, zIndex: 10,
-                        minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
-                        background: C.orange, color: '#fff',
-                        fontSize: 11, fontWeight: 800, fontFamily: font,
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                        border: `2px solid ${C.bg}`,
-                        pointerEvents: 'none',
-                      }}>{itemUnreadCount}</span>
-                    )}
-                  </div>
-                );
-              })}
+
+                // Flat list (no user categories)
+                return guestMainList.map((item, i) => renderGuestCard(item, i, [...guestMainList, ...guestNoPriceBlock].length));
+              })()}
 
               {/* ── No-price high-priority block ───────────────────────────── */}
               {guestNoPriceBlock.length > 0 && (
@@ -11989,6 +12454,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       const min = Math.round(sec / 60);
                       return min < 60 ? `${min} мин назад` : d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
                     };
+                    /** Smart delta: mutes % when base < 10 to avoid misleading +100% on tiny numbers */
                     const safeDelta = (cur: number, prev: number): { str: string; color: string } => {
                       if (prev === 0 && cur === 0) return { str: '—', color: C.textMuted };
                       if (prev === 0) return { str: `+${cur}`, color: C.green };
@@ -12002,72 +12468,134 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       try { const r = await tgFetch(`/tg/me/retention-stats?period=${period}`); if (r.ok) setRetentionStats(await r.json()); } catch {}
                       setRetentionLoading(false);
                     };
+
+                    // ── Shared components ──
+                    const SectionCard = ({ children, style: s }: { children: React.ReactNode; style?: React.CSSProperties }) => (
+                      <div style={{ background: C.surface, borderRadius: 12, padding: '10px 12px', marginBottom: 8, ...s }}>{children}</div>
+                    );
+                    const SectionTitle = ({ icon, label, color, badge }: { icon: string; label: string; color: string; badge?: string }) => (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, marginTop: 4 }}>
+                        <span style={{ fontSize: 12 }}>{icon}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</span>
+                        {badge && <span style={{ fontSize: 8, fontWeight: 600, color: C.textMuted, background: 'rgba(255,255,255,0.06)', borderRadius: 4, padding: '1px 5px' }}>{badge}</span>}
+                      </div>
+                    );
+                    const KpiRow = ({ label, value, color, hint, isPartial }: { label: string; value: string | number; color?: string; hint?: string; isPartial?: boolean }) => (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '3px 0' }}>
+                        <span style={{ fontSize: 11, color: isPartial ? C.textMuted : C.textSec }}>{label}{hint ? <span style={{ fontSize: 9, color: '#555', marginLeft: 4 }}>({hint})</span> : null}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: color ?? C.text, fontVariantNumeric: 'tabular-nums', opacity: isPartial ? 0.7 : 1 }}>{value}</span>
+                      </div>
+                    );
+                    const DeltaRow = ({ label, cur, prev, isEvent }: { label: string; cur: number; prev: number; isEvent?: boolean }) => {
+                      const d = safeDelta(cur, prev);
+                      return (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
+                          <span style={{ fontSize: 11, color: isEvent ? C.textMuted : C.textSec }}>{label}</span>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: isEvent ? C.textMuted : C.text, fontVariantNumeric: 'tabular-nums', opacity: isEvent ? 0.7 : 1 }}>{cur}</span>
+                            <span style={{ fontSize: 10, color: d.color, minWidth: 44, textAlign: 'right' }}>{d.str}</span>
+                          </div>
+                        </div>
+                      );
+                    };
+                    /** Conversion % with color coding */
+                    const ConvPct = ({ val, isPartial }: { val: number | null; isPartial?: boolean }) => {
+                      if (val == null) return null;
+                      const c = isPartial ? C.textMuted : val >= 30 ? C.green : val <= 5 ? C.orange : C.text;
+                      return <span style={{ fontSize: 12, fontWeight: 600, color: c, fontVariantNumeric: 'tabular-nums', opacity: isPartial ? 0.7 : 1 }}>{val}%</span>;
+                    };
+                    /** "partial" badge for event-based metrics */
+                    const PartialBadge = () => (
+                      <span style={{ fontSize: 7, fontWeight: 700, color: '#FBBF24', background: 'rgba(251,191,36,0.12)', borderRadius: 3, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.03em', verticalAlign: 'middle', marginLeft: 4 }}>event</span>
+                    );
+                    /** DB truth badge */
+                    const DbBadge = () => (
+                      <span style={{ fontSize: 7, fontWeight: 700, color: '#5B8DEF', background: 'rgba(91,141,239,0.12)', borderRadius: 3, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.03em', verticalAlign: 'middle', marginLeft: 4 }}>бд</span>
+                    );
+                    const SectionDivider = () => <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', margin: '6px 0' }} />;
+                    const CollapsibleBlock = ({ title, open, onToggle, children, color, badge }: { title: string; open: boolean; onToggle: () => void; children: React.ReactNode; color?: string; badge?: React.ReactNode }) => (
+                      <div>
+                        <button onClick={onToggle} style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', padding: '6px 0', textAlign: 'left', fontFamily: font, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: color ?? C.textMuted, display: 'flex', alignItems: 'center', gap: 4 }}>{open ? '▾' : '▸'} {title}{badge}</span>
+                        </button>
+                        {open && children}
+                      </div>
+                    );
+
                     return (
-                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-                        {/* ── Header ── */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: '#ff9900', letterSpacing: '0.06em', textTransform: 'uppercase' }}>📊 Дашборд</div>
-                          <button onClick={() => void loadGodStats()} disabled={godStatsLoading} style={{ background: 'none', border: 'none', cursor: godStatsLoading ? 'wait' : 'pointer', fontSize: 11, color: C.textMuted, padding: '2px 6px', borderRadius: 6, opacity: godStatsLoading ? 0.4 : 1, fontFamily: font, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span style={{ display: 'inline-block', animation: godStatsLoading ? 'spin 1s linear infinite' : 'none' }}>↻</span>
-                            {godStatsLoading ? 'Загружаю…' : 'Обновить'}
+                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid rgba(255,255,255,0.08)` }}>
+                        {/* ── Dashboard Header ── */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 14 }}>📊</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#ff9900', letterSpacing: '0.04em' }}>Дашборд</span>
+                          </div>
+                          <button onClick={() => void loadGodStats()} disabled={godStatsLoading} style={{ background: C.surface, border: 'none', cursor: godStatsLoading ? 'wait' : 'pointer', fontSize: 11, color: C.textMuted, padding: '4px 10px', borderRadius: 8, opacity: godStatsLoading ? 0.5 : 1, fontFamily: font, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ display: 'inline-block', animation: godStatsLoading ? 'spin 1s linear infinite' : 'none', fontSize: 12 }}>↻</span>
+                            {godStatsLoading ? '…' : 'Обновить'}
                           </button>
                         </div>
                         {godStatsError && !godStatsLoading && (
-                          <div style={{ fontSize: 11, color: C.red, padding: '4px 0 6px', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Ошибка{godStats ? ' — старые данные' : ''}</div>
+                          <div style={{ fontSize: 11, color: C.red, padding: '4px 8px 6px', display: 'flex', alignItems: 'center', gap: 4, background: C.redSoft, borderRadius: 8, marginBottom: 8 }}>⚠ Ошибка{godStats ? ' — показаны старые данные' : ''}</div>
                         )}
                         {godStatsLoading && !godStats && (
-                          <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', padding: '8px 0' }}>Загружаю…</div>
+                          <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', padding: '16px 0' }}>Загружаю…</div>
                         )}
                         {godStats && (() => {
                           const o = godStats.overview;
                           const acq = godStats.acquisition;
-                          const divider = <div style={{ height: 1, background: C.border, margin: '10px 0' }} />;
-                          const sHdr = (icon: string, label: string, color: string) => (
-                            <div style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>{icon} {label}</div>
-                          );
                           return (
                             <>
-                              {/* ═══ A. ОБЗОР ═══ */}
-                              {sHdr('◉', 'Обзор', '#FF9500')}
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '5px 4px', marginBottom: 6 }}>
+                              {/* ═══════════════════════════════════════════
+                                  A. ОБЗОР — executive summary grid
+                                  ═══════════════════════════════════════════ */}
+                              <SectionTitle icon="◉" label="Обзор" color="#FF9500" />
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginBottom: 4 }}>
                                 {([
-                                  ['Польз.', o.totalUsers],
-                                  ['Новых 24ч', o.newUsers24h],
-                                  ['Новых 7д', o.newUsers7d],
-                                  ['Актив. 7д', o.activeUsers7d],
-                                  ['Актив. 30д', o.activeUsers30d],
-                                  ['PRO', `${o.proUsers} (${pct(o.proUsers, o.totalUsers)}%)`],
-                                  ['Вишлистов', o.totalWishlists],
-                                  ['Желаний', o.totalItems],
-                                  ['Броней', o.totalReservations],
-                                ] as [string, string | number][]).map(([label, value]) => (
-                                  <div key={label} style={{ background: C.surface, borderRadius: 8, padding: '5px 8px' }}>
-                                    <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 1 }}>{label}</div>
-                                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>{value}</div>
+                                  ['Пользователи', o.totalUsers, '#FF9500'],
+                                  ['Новые 24ч', o.newUsers24h, null],
+                                  ['Новые 7д', o.newUsers7d, null],
+                                  ['Актив. 7д', o.activeUsers7d, '#5B8DEF'],
+                                  ['Актив. 30д', o.activeUsers30d, null],
+                                  ['Вишлисты', o.totalWishlists, null],
+                                  ['Желания', o.totalItems, null],
+                                  ['Брони', o.totalReservations, '#34C759'],
+                                  ['PRO', o.proUsers, '#AF52DE'],
+                                ] as [string, number, string | null][]).map(([label, value, accent]) => (
+                                  <div key={label} style={{ background: C.surface, borderRadius: 10, padding: '6px 8px' }}>
+                                    <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 2, lineHeight: 1 }}>{label}</div>
+                                    <div style={{ fontSize: 15, fontWeight: 700, color: accent ?? C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{value}</div>
                                   </div>
                                 ))}
                               </div>
-                              <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 4, lineHeight: 1.5 }}>
+                              <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 2, padding: '0 2px', lineHeight: 1.5 }}>
                                 жел./вишл. <span style={{ color: C.textSec, fontWeight: 600 }}>{fmt1(o.totalWishlists > 0 ? o.totalItems / o.totalWishlists : 0)}</span>
                                 {' · '}
                                 вишл./польз. <span style={{ color: C.textSec, fontWeight: 600 }}>{fmt1(godStats.funnel.usersWithWishlist > 0 ? o.totalWishlists / godStats.funnel.usersWithWishlist : 0)}</span>
+                                {' · '}
+                                PRO <span style={{ color: '#AF52DE', fontWeight: 600 }}>{pct(o.proUsers, o.totalUsers)}%</span>
                               </div>
 
-                              {divider}
+                              <SectionDivider />
 
-                              {/* ═══ B. АКТИВАЦИЯ ═══ */}
-                              {sHdr('⚡', 'Активация', '#5B8DEF')}
-                              <div style={{ display: 'flex', gap: 2, marginBottom: 10, background: C.bg, borderRadius: 8, padding: 2 }}>
+                              {/* ═══════════════════════════════════════════
+                                  B. АКТИВАЦИЯ — tabbed: funnel / onboarding / acquisition
+                                  ═══════════════════════════════════════════ */}
+                              <SectionTitle icon="⚡" label="Активация" color="#5B8DEF" />
+                              <div style={{ display: 'flex', gap: 0, marginBottom: 8, background: C.bg, borderRadius: 10, padding: 2, border: `1px solid ${C.border}` }}>
                                 {(['funnel', 'onboarding', 'acq'] as const).map((tab) => (
                                   <button key={tab} onClick={() => setActivationTab(tab)} style={{
-                                    flex: 1, padding: '4px 0', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                                    flex: 1, padding: '5px 0', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
                                     background: activationTab === tab ? '#5B8DEF' : 'transparent',
                                     color: activationTab === tab ? '#fff' : C.textMuted, fontFamily: font,
+                                    transition: 'background 0.2s, color 0.2s',
                                   }}>
                                     {tab === 'funnel' ? 'Воронка' : tab === 'onboarding' ? 'Онбординг' : 'Привлечение'}
                                   </button>
                                 ))}
                               </div>
+
+                              {/* ── B1: Funnel ── */}
                               {activationTab === 'funnel' && (() => {
                                 const steps = [
                                   { label: 'Любой вишлист', value: godStats.funnel.usersWithAnyWishlist ?? godStats.funnel.usersWithWishlist },
@@ -12078,15 +12606,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 ];
                                 const total = godStats.funnel.totalUsers;
                                 return (
-                                  <div style={{ marginBottom: 4 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                  <SectionCard>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                                       <span style={{ fontSize: 10, color: C.textMuted }}>Всего пользователей</span>
                                       <span style={{ fontSize: 12, fontWeight: 700, color: '#FF9500', fontVariantNumeric: 'tabular-nums' }}>{total}</span>
                                     </div>
                                     {steps.map((step, i) => {
                                       const p = pct(step.value, total);
                                       return (
-                                        <div key={i} style={{ marginBottom: 5 }}>
+                                        <div key={i} style={{ marginBottom: 4 }}>
                                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
                                             <span style={{ fontSize: 11, color: C.textSec }}>{step.label}</span>
                                             <span style={{ fontSize: 11, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
@@ -12099,119 +12627,128 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                         </div>
                                       );
                                     })}
-                                  </div>
+                                  </SectionCard>
                                 );
                               })()}
+
+                              {/* ── B2: Onboarding ── */}
                               {activationTab === 'onboarding' && (() => {
                                 const ab = godStats.onboardingAB;
-                                if (!ab) return <div style={{ fontSize: 11, color: C.textMuted, padding: '8px 0' }}>Нет данных онбординга</div>;
+                                if (!ab) return <SectionCard><div style={{ fontSize: 11, color: C.textMuted, padding: '4px 0' }}>Нет данных онбординга</div></SectionCard>;
                                 const v2s = ab.started['v2_try'] ?? 0;
                                 const v2c = ab.completed['v2_try'] ?? 0;
                                 const v2wl = ab.firstWishlist['v2_try'] ?? 0;
                                 const v2item = ab.firstItem['v2_try'] ?? 0;
                                 const convRate = ab.conversionRates?.['v2_try']?.startToComplete ?? '—';
                                 return (
-                                  <div style={{ marginBottom: 4 }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', marginBottom: 6 }}>
+                                  <SectionCard>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 12px', marginBottom: 4 }}>
                                       {([['Начали', v2s], ['Завершили', v2c], ['1й вишлист', v2wl], ['1й item', v2item]] as [string, number][]).map(([label, val]) => (
-                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
+                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
                                           <span style={{ fontSize: 11, color: C.textMuted }}>{label}</span>
                                           <span style={{ fontSize: 12, fontWeight: 700, color: '#7C6AFF', fontVariantNumeric: 'tabular-nums' }}>{val}</span>
                                         </div>
                                       ))}
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}`, marginBottom: 6 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
                                       <span style={{ fontSize: 11, color: C.textMuted }}>Конв. start→complete</span>
                                       <span style={{ fontSize: 12, fontWeight: 700, color: v2s > 0 ? (v2c / v2s >= 0.5 ? C.green : v2c / v2s >= 0.2 ? C.orange : C.red) : C.textMuted }}>{convRate}</span>
                                     </div>
                                     {Object.keys(ab.v2AcquisitionPaths).length > 0 && (
                                       <>
-                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Пути</div>
+                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2, marginTop: 2 }}>Пути</div>
                                         {Object.entries(ab.v2AcquisitionPaths).map(([path, count]) => (
-                                          <div key={path} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
+                                          <div key={path} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                                             <span style={{ fontSize: 11, color: C.textSec }}>{path}</span>
                                             <span style={{ fontSize: 11, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
                                           </div>
                                         ))}
                                       </>
                                     )}
-                                  </div>
+                                  </SectionCard>
                                 );
                               })()}
+
+                              {/* ── B3: Acquisition ── */}
                               {activationTab === 'acq' && (() => {
-                                if (!acq) return <div style={{ fontSize: 11, color: C.textMuted, padding: '8px 0' }}>Нет данных привлечения</div>;
+                                if (!acq) return <SectionCard><div style={{ fontSize: 11, color: C.textMuted, padding: '4px 0' }}>Нет данных привлечения</div></SectionCard>;
                                 const c = acq.current; const p = acq.previous;
                                 const evCov = acq.eventCoverage;
                                 const pDays = evCov?.periodDays ?? (acqPeriod === '24h' ? 1 : acqPeriod === '30d' ? 30 : 7);
                                 const anyEventIncomplete = evCov ? (evCov.botStartsDays < pDays || evCov.miniappOpensDays < pDays || evCov.guestEventsDays < pDays) : false;
                                 return (
-                                  <div style={{ marginBottom: 4 }}>
-                                    <div style={{ display: 'flex', gap: 2, marginBottom: 8, background: C.bg, borderRadius: 6, padding: 2 }}>
+                                  <>
+                                    <div style={{ display: 'flex', gap: 2, marginBottom: 8, background: C.bg, borderRadius: 8, padding: 2 }}>
                                       {(['24h', '7d', '30d'] as const).map(pd => (
                                         <button key={pd} onClick={() => { setAcqPeriod(pd); loadGodStats(undefined, pd); }} style={{
-                                          flex: 1, padding: '3px 0', borderRadius: 4, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                                          flex: 1, padding: '4px 0', borderRadius: 6, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
                                           background: acqPeriod === pd ? C.accent : 'transparent',
                                           color: acqPeriod === pd ? '#fff' : C.textMuted, fontFamily: font,
                                         }}>{pd}</button>
                                       ))}
                                     </div>
                                     {acq.excludedTestUsers > 0 && <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 4 }}>без тестовых ({acq.excludedTestUsers})</div>}
-                                    <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Рост (БД)</div>
-                                    {([
-                                      ['Новых пользователей', c.newUsers, p.newUsers],
-                                      ['Первый вишлист', c.firstWishlist, p.firstWishlist],
-                                      ['Первое желание', c.firstWish, p.firstWish],
-                                      ['Поделились', c.ownersShared, p.ownersShared],
-                                      ['Забронировали', c.reservers, p.reservers],
-                                    ] as [string, number, number][]).map(([label, cur, prev]) => {
-                                      const d = safeDelta(cur, prev);
-                                      return (
-                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
-                                          <span style={{ fontSize: 11, color: C.textSec }}>{label}</span>
-                                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                            <span style={{ fontSize: 12, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{cur}</span>
-                                            <span style={{ fontSize: 10, color: d.color, minWidth: 50, textAlign: 'right' }}>{d.str}</span>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
+                                    <SectionCard>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                                        <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Рост</span>
+                                        <DbBadge />
+                                      </div>
+                                      <DeltaRow label="Новых пользователей" cur={c.newUsers} prev={p.newUsers} />
+                                      <DeltaRow label="Первый вишлист" cur={c.firstWishlist} prev={p.firstWishlist} />
+                                      <DeltaRow label="Первое желание" cur={c.firstWish} prev={p.firstWish} />
+                                      <DeltaRow label="Поделились" cur={c.ownersShared} prev={p.ownersShared} />
+                                      <DeltaRow label="Гостевых просмотров" cur={c.guestOpens} prev={p.guestOpens} />
+                                      <DeltaRow label="Забронировали" cur={c.reservers} prev={p.reservers} />
+                                    </SectionCard>
                                     {acq.conversions.newToWishlist != null && (
-                                      <div style={{ marginTop: 6 }}>
-                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Конверсии (БД)</div>
+                                      <SectionCard style={{ marginTop: -4 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                                          <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Конверсии</span>
+                                          <DbBadge />
+                                        </div>
                                         {([
                                           ['Новый → вишлист', acq.conversions.newToWishlist],
                                           ['Новый → желание', acq.conversions.newToWish],
                                           ['Вишлист → шеринг', acq.conversions.wishlistToShare],
                                         ] as [string, number | null][]).filter(([, v]) => v != null).map(([label, val]) => (
-                                          <div key={label as string} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
+                                          <div key={label as string} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
                                             <span style={{ fontSize: 11, color: C.textSec }}>{label as string}</span>
-                                            <span style={{ fontSize: 12, fontWeight: 600, color: (val as number) >= 30 ? C.green : (val as number) <= 5 ? C.orange : C.text }}>{val as number}%</span>
+                                            <ConvPct val={val as number} />
                                           </div>
                                         ))}
-                                      </div>
+                                      </SectionCard>
                                     )}
                                     {acq.sources.length > 0 && (
-                                      <div style={{ marginTop: 6 }}>
-                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Источники нов.</div>
-                                        {acq.sources.map(s => (
-                                          <div key={s.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
-                                            <span style={{ fontSize: 11, color: C.textSec, flex: 1 }}>{s.label}</span>
-                                            <span style={{ fontSize: 11, fontWeight: 600, color: C.text, width: 30, textAlign: 'right' }}>{s.newUsers}</span>
-                                            <span style={{ fontSize: 10, color: C.textMuted, width: 28, textAlign: 'right' }}>{s.withWishlist}</span>
-                                            <span style={{ fontSize: 10, color: C.textMuted, width: 26, textAlign: 'right' }}>{s.withWish}</span>
+                                      <CollapsibleBlock title="Источники новых" open={godStatsDetailsOpen} onToggle={() => setGodStatsDetailsOpen(v => !v)}>
+                                        <SectionCard style={{ marginTop: 4 }}>
+                                          <div style={{ display: 'flex', padding: '0 0 3px', borderBottom: `1px solid ${C.border}`, marginBottom: 2 }}>
+                                            <span style={{ fontSize: 8, color: C.textMuted, flex: 1 }}>Источник</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 30, textAlign: 'right' }}>Нов.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 28, textAlign: 'right' }}>Вишл.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Жел.</span>
                                           </div>
-                                        ))}
-                                      </div>
+                                          {acq.sources.map(s => (
+                                            <div key={s.key} style={{ display: 'flex', padding: '2px 0' }}>
+                                              <span style={{ fontSize: 10, color: C.textSec, flex: 1 }}>{s.label}</span>
+                                              <span style={{ fontSize: 10, fontWeight: 600, color: C.text, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.newUsers}</span>
+                                              <span style={{ fontSize: 10, color: C.textMuted, width: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.withWishlist}</span>
+                                              <span style={{ fontSize: 10, color: C.textMuted, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.withWish}</span>
+                                            </div>
+                                          ))}
+                                        </SectionCard>
+                                      </CollapsibleBlock>
                                     )}
-                                    {anyEventIncomplete && <div style={{ marginTop: 6, fontSize: 9, color: '#FBBF24', background: 'rgba(251,191,36,0.06)', borderRadius: 6, padding: '3px 8px' }}>⚡ Часть событий: неполное покрытие</div>}
-                                  </div>
+                                    {anyEventIncomplete && <div style={{ fontSize: 9, color: '#FBBF24', background: 'rgba(251,191,36,0.06)', borderRadius: 8, padding: '4px 8px', marginTop: 4 }}>⚡ Часть событий: неполное покрытие периода</div>}
+                                  </>
                                 );
                               })()}
 
-                              {divider}
+                              <SectionDivider />
 
-                              {/* ═══ C. SOCIAL LOOP ═══ */}
-                              {sHdr('↗', 'Social loop', '#34C759')}
+                              {/* ═══════════════════════════════════════════
+                                  C. SOCIAL LOOP — key growth hypothesis
+                                  ═══════════════════════════════════════════ */}
+                              <SectionTitle icon="🔗" label="Social loop" color="#34C759" badge={acqPeriod} />
                               {acq ? (() => {
                                 const c = acq.current; const p = acq.previous;
                                 const evCov = acq.eventCoverage;
@@ -12219,58 +12756,63 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 const guestIncomplete = evCov ? evCov.guestEventsDays < pDays : false;
                                 return (
                                   <>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 4, marginBottom: 8 }}>
+                                    {/* Key numbers grid */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 6 }}>
                                       {([
-                                        ['Поделились', c.ownersShared, p.ownersShared],
-                                        ['Ссылок', c.shareLinksGenerated, p.shareLinksGenerated],
-                                        ['Гостевых', c.guestOpens, p.guestOpens],
-                                        ['Броней', c.reservers, p.reservers],
-                                      ] as [string, number, number][]).map(([label, cur, prev]) => {
+                                        ['Поделились', c.ownersShared, p.ownersShared, '#34C759'],
+                                        ['Ссылок создано', c.shareLinksGenerated, p.shareLinksGenerated, null],
+                                        ['Гостевые просмотры', c.guestOpens, p.guestOpens, '#5B8DEF'],
+                                        ['Забронировали', c.reservers, p.reservers, '#FF9500'],
+                                      ] as [string, number, number, string | null][]).map(([label, cur, prev, accent]) => {
                                         const d = safeDelta(cur, prev);
                                         return (
-                                          <div key={label} style={{ background: C.surface, borderRadius: 8, padding: '5px 7px' }}>
-                                            <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 1 }}>{label}</div>
-                                            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>{cur}</div>
-                                            <div style={{ fontSize: 9, color: d.color }}>{d.str}</div>
+                                          <div key={label} style={{ background: C.surface, borderRadius: 10, padding: '6px 10px' }}>
+                                            <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 2, lineHeight: 1 }}>{label}</div>
+                                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                              <span style={{ fontSize: 16, fontWeight: 700, color: accent ?? C.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{cur}</span>
+                                              <span style={{ fontSize: 9, color: d.color }}>{d.str}</span>
+                                            </div>
                                           </div>
                                         );
                                       })}
                                     </div>
-                                    {acq.conversions.wishlistToShare != null && (
-                                      <>
-                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Конверсии (БД)</div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
-                                          <span style={{ fontSize: 11, color: C.textSec }}>Вишлист → шеринг</span>
-                                          <span style={{ fontSize: 12, fontWeight: 600, color: acq.conversions.wishlistToShare >= 30 ? C.green : acq.conversions.wishlistToShare <= 5 ? C.orange : C.text }}>{acq.conversions.wishlistToShare}%</span>
+                                    {/* Всего броней */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 10px', background: C.surface, borderRadius: 8, marginBottom: 6 }}>
+                                      <span style={{ fontSize: 10, color: C.textMuted }}>Всего броней за период</span>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{c.totalReservations}</span>
+                                    </div>
+                                    {/* Conversions */}
+                                    <SectionCard>
+                                      {acq.conversions.wishlistToShare != null && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                                          <span style={{ fontSize: 11, color: C.textSec }}>Вишлист → шеринг<DbBadge /></span>
+                                          <ConvPct val={acq.conversions.wishlistToShare} />
                                         </div>
-                                      </>
-                                    )}
-                                    {(acq.conversions.shareToGuestOpen != null || acq.conversions.guestToReserve != null) && (
-                                      <div style={{ marginTop: 6, opacity: 0.8, position: 'relative' }}>
-                                        <div style={{ position: 'absolute', top: 0, right: 0, fontSize: 7, fontWeight: 700, color: '#FBBF24', background: 'rgba(251,191,36,0.12)', borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase' }}>partial</div>
-                                        <div style={{ fontSize: 9, color: '#FBBF24', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>События{guestIncomplete ? ' — неполные' : ''}</div>
-                                        {acq.conversions.shareToGuestOpen != null && (
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
-                                            <span style={{ fontSize: 11, color: C.textMuted }}>Ссылка → просмотр</span>
-                                            <span style={{ fontSize: 12, fontWeight: 600, color: C.textMuted }}>{acq.conversions.shareToGuestOpen}%</span>
-                                          </div>
-                                        )}
-                                        {acq.conversions.guestToReserve != null && (
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
-                                            <span style={{ fontSize: 11, color: C.textMuted }}>Просмотр → бронь</span>
-                                            <span style={{ fontSize: 12, fontWeight: 600, color: C.textMuted }}>{acq.conversions.guestToReserve}%</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
+                                      )}
+                                      {acq.conversions.shareToGuestOpen != null && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                                          <span style={{ fontSize: 11, color: C.textMuted }}>Ссылка → просмотр<PartialBadge /></span>
+                                          <ConvPct val={acq.conversions.shareToGuestOpen} isPartial />
+                                        </div>
+                                      )}
+                                      {acq.conversions.guestToReserve != null && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                                          <span style={{ fontSize: 11, color: C.textMuted }}>Просмотр → бронь<PartialBadge /></span>
+                                          <ConvPct val={acq.conversions.guestToReserve} isPartial />
+                                        </div>
+                                      )}
+                                      {guestIncomplete && <div style={{ fontSize: 8, color: '#FBBF24', marginTop: 4 }}>⚡ Гостевые события — неполное покрытие</div>}
+                                    </SectionCard>
                                   </>
                                 );
-                              })() : <div style={{ fontSize: 11, color: C.textMuted }}>—</div>}
+                              })() : <div style={{ fontSize: 11, color: C.textMuted, padding: '4px 0' }}>Нет данных</div>}
 
-                              {divider}
+                              <SectionDivider />
 
-                              {/* ═══ D. СЕГМЕНТЫ ═══ */}
-                              {sHdr('🌍', 'Сегменты', '#AF52DE')}
+                              {/* ═══════════════════════════════════════════
+                                  D. СЕГМЕНТЫ — market buckets (primary), import & bucket funnel (secondary)
+                                  ═══════════════════════════════════════════ */}
+                              <SectionTitle icon="🌍" label="Сегменты" color="#AF52DE" />
                               {godStats.marketBuckets && godStats.marketBuckets.length > 0 ? (() => {
                                 const buckets = godStats.marketBuckets!;
                                 const bucketTotal = buckets.reduce((s, b) => s + b.total, 0);
@@ -12281,194 +12823,192 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 };
                                 return (
                                   <>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 0 3px', borderBottom: `1px solid ${C.border}`, marginBottom: 2 }}>
-                                      <span style={{ fontSize: 9, color: C.textMuted, flex: 1 }}>Рынок</span>
-                                      <span style={{ fontSize: 9, color: C.textMuted, width: 40, textAlign: 'right' }}>Всего</span>
-                                      <span style={{ fontSize: 9, color: C.textMuted, width: 32, textAlign: 'right' }}>7д</span>
-                                      <span style={{ fontSize: 9, color: C.textMuted, width: 28, textAlign: 'right' }}>%</span>
-                                    </div>
-                                    {buckets.map(b => (
-                                      <div key={b.bucket}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' }}>
-                                          <span style={{ fontSize: 10, color: C.text, flex: 1 }}>{b.label}</span>
-                                          <span style={{ fontSize: 10, fontWeight: 700, color: C.text, width: 40, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.total}</span>
-                                          <span style={{ fontSize: 9, color: C.textMuted, width: 32, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.new7d > 0 ? `+${b.new7d}` : '—'}</span>
-                                          <span style={{ fontSize: 9, color: C.textMuted, width: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{bucketTotal > 0 ? (b.total / bucketTotal * 100).toFixed(0) : 0}%</span>
-                                        </div>
-                                        <div style={{ height: 2, borderRadius: 1, background: C.border, overflow: 'hidden', marginBottom: 1 }}>
-                                          <div style={{ height: '100%', borderRadius: 1, width: `${(b.total / maxBucket) * 100}%`, background: bucketColors[b.bucket] ?? '#8E8E93' }} />
-                                        </div>
-                                      </div>
-                                    ))}
+                                    <SectionCard>
+                                      {buckets.map(b => {
+                                        const share = bucketTotal > 0 ? (b.total / bucketTotal * 100) : 0;
+                                        return (
+                                          <div key={b.bucket} style={{ marginBottom: 3 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                                                <div style={{ width: 8, height: 8, borderRadius: 2, background: bucketColors[b.bucket] ?? '#8E8E93', flexShrink: 0 }} />
+                                                <span style={{ fontSize: 11, color: C.text }}>{b.label}</span>
+                                              </div>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums', width: 36, textAlign: 'right' }}>{b.total}</span>
+                                                {b.new7d > 0 && <span style={{ fontSize: 9, color: C.green, fontVariantNumeric: 'tabular-nums', width: 24, textAlign: 'right' }}>+{b.new7d}</span>}
+                                                {b.new7d <= 0 && <span style={{ width: 24 }} />}
+                                                <span style={{ fontSize: 9, color: C.textMuted, fontVariantNumeric: 'tabular-nums', width: 26, textAlign: 'right' }}>{share.toFixed(0)}%</span>
+                                              </div>
+                                            </div>
+                                            <div style={{ height: 2, borderRadius: 1, background: C.border, overflow: 'hidden', marginLeft: 14 }}>
+                                              <div style={{ height: '100%', borderRadius: 1, width: `${(b.total / maxBucket) * 100}%`, background: bucketColors[b.bucket] ?? '#8E8E93', transition: 'width 0.3s ease' }} />
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </SectionCard>
+                                    {/* Import split — secondary, compact */}
                                     {godStats.importSplit && (() => {
                                       const is = godStats.importSplit!;
                                       const total = is.supported.total + is.unsupported.total;
                                       return (
-                                        <div style={{ marginTop: 6, paddingTop: 5, borderTop: `1px solid ${C.border}` }}>
-                                          <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Импорт</div>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                                            <span style={{ fontSize: 10, color: '#34C759' }}>Доступен (RU)</span>
-                                            <span style={{ fontSize: 10, fontWeight: 700, color: '#34C759', fontVariantNumeric: 'tabular-nums' }}>{is.supported.total} <span style={{ fontSize: 9, fontWeight: 400, color: C.textMuted }}>({total > 0 ? (is.supported.total / total * 100).toFixed(0) : 0}%)</span></span>
+                                        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+                                          <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: '5px 8px' }}>
+                                            <div style={{ fontSize: 8, color: C.textMuted, marginBottom: 1 }}>Импорт доступен</div>
+                                            <div style={{ fontSize: 13, fontWeight: 700, color: '#34C759', fontVariantNumeric: 'tabular-nums' }}>{is.supported.total} <span style={{ fontSize: 9, fontWeight: 400, color: C.textMuted }}>{total > 0 ? `${(is.supported.total / total * 100).toFixed(0)}%` : ''}</span></div>
                                           </div>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <span style={{ fontSize: 10, color: C.textMuted }}>Недоступен</span>
-                                            <span style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>{is.unsupported.total}</span>
+                                          <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: '5px 8px' }}>
+                                            <div style={{ fontSize: 8, color: C.textMuted, marginBottom: 1 }}>Недоступен</div>
+                                            <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>{is.unsupported.total}</div>
                                           </div>
                                         </div>
                                       );
                                     })()}
+                                    {/* Bucket funnel — collapsible detail */}
                                     {godStats.bucketFunnel && godStats.bucketFunnel.length > 0 && (
-                                      <div style={{ marginTop: 6 }}>
-                                        <button onClick={() => setGodStatsDetailsOpen(v => !v)} style={{
-                                          background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', fontFamily: font,
-                                          fontSize: 10, fontWeight: 600, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 3,
-                                        }}>
-                                          {godStatsDetailsOpen ? '▾' : '▸'} Конверсия по рынкам <span style={{ fontWeight: 400, fontSize: 9, opacity: 0.7 }}>7д</span>
-                                        </button>
-                                        {godStatsDetailsOpen && (() => {
-                                          const bf = godStats.bucketFunnel!;
-                                          return (
-                                            <div style={{ marginTop: 4 }}>
-                                              <div style={{ display: 'flex', padding: '0 0 3px', borderBottom: `1px solid ${C.border}`, gap: 2 }}>
-                                                <span style={{ fontSize: 8, color: C.textMuted, flex: 1 }}>Рынок</span>
-                                                <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Нов.</span>
-                                                <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Вишл.</span>
-                                                <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Жел.</span>
-                                                <span style={{ fontSize: 8, color: C.textMuted, width: 24, textAlign: 'right' }}>Онб.</span>
-                                                <span style={{ fontSize: 8, color: C.textMuted, width: 20, textAlign: 'right' }}>Имп.</span>
-                                              </div>
-                                              {bf.map(b => (
-                                                <div key={b.bucket} style={{ display: 'flex', padding: '3px 0', borderBottom: `1px solid ${C.border}`, gap: 2, alignItems: 'center' }}>
-                                                  <span style={{ fontSize: 9, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.label}</span>
-                                                  <span style={{ fontSize: 9, fontWeight: 600, color: C.text, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.newUsers}</span>
-                                                  <span style={{ fontSize: 9, color: C.textMuted, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.firstWishlist}</span>
-                                                  <span style={{ fontSize: 9, color: C.textMuted, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.firstItem}</span>
-                                                  <span style={{ fontSize: 9, color: C.textMuted, width: 24, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.onbStarted}</span>
-                                                  <span style={{ fontSize: 9, color: b.importFails > 0 ? '#FF6B6B' : C.textMuted, width: 20, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.importAttempts > 0 ? `${b.importAttempts}` : '—'}</span>
-                                                </div>
-                                              ))}
-                                              <div style={{ marginTop: 4, fontSize: 9, color: C.textMuted, lineHeight: 1.6, display: 'flex', flexWrap: 'wrap', gap: '0 10px' }}>
-                                                {bf.filter(b => b.newUsers >= 5).map(b => (
-                                                  <span key={b.bucket}>
-                                                    {b.label}: <span style={{ fontWeight: 700, color: b.newUsers > 0 ? (b.firstWishlist / b.newUsers >= 0.3 ? '#34C759' : b.firstWishlist / b.newUsers >= 0.1 ? '#FFB340' : '#FF6B6B') : C.textMuted }}>
-                                                      {b.newUsers > 0 ? `${(b.firstWishlist / b.newUsers * 100).toFixed(0)}%` : '—'}
-                                                    </span>
-                                                  </span>
-                                                ))}
-                                              </div>
+                                      <CollapsibleBlock title="Конверсия по рынкам · 7д" open={godStatsDetailsOpen} onToggle={() => setGodStatsDetailsOpen(v => !v)} color={C.textMuted}>
+                                        <SectionCard style={{ marginTop: 4 }}>
+                                          <div style={{ display: 'flex', padding: '0 0 3px', borderBottom: `1px solid ${C.border}`, gap: 2, marginBottom: 2 }}>
+                                            <span style={{ fontSize: 8, color: C.textMuted, flex: 1 }}>Рынок</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Нов.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Вишл.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 26, textAlign: 'right' }}>Жел.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 24, textAlign: 'right' }}>Онб.</span>
+                                            <span style={{ fontSize: 8, color: C.textMuted, width: 20, textAlign: 'right' }}>Имп.</span>
+                                          </div>
+                                          {godStats.bucketFunnel!.map(b => (
+                                            <div key={b.bucket} style={{ display: 'flex', padding: '2px 0', gap: 2, alignItems: 'center' }}>
+                                              <span style={{ fontSize: 9, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.label}</span>
+                                              <span style={{ fontSize: 9, fontWeight: 600, color: C.text, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.newUsers}</span>
+                                              <span style={{ fontSize: 9, color: C.textMuted, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.firstWishlist}</span>
+                                              <span style={{ fontSize: 9, color: C.textMuted, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.firstItem}</span>
+                                              <span style={{ fontSize: 9, color: C.textMuted, width: 24, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.onbStarted}</span>
+                                              <span style={{ fontSize: 9, color: b.importFails > 0 ? '#FF6B6B' : C.textMuted, width: 20, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{b.importAttempts > 0 ? `${b.importAttempts}` : '—'}</span>
                                             </div>
-                                          );
-                                        })()}
-                                      </div>
+                                          ))}
+                                          {/* Quick conversion summary for markets with n>=5 */}
+                                          <div style={{ marginTop: 4, fontSize: 9, color: C.textMuted, lineHeight: 1.6, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
+                                            {godStats.bucketFunnel!.filter(b => b.newUsers >= 5).map(b => {
+                                              const conv = b.newUsers > 0 ? b.firstWishlist / b.newUsers : 0;
+                                              return (
+                                                <span key={b.bucket}>
+                                                  {b.label}: <span style={{ fontWeight: 700, color: conv >= 0.3 ? '#34C759' : conv >= 0.1 ? '#FFB340' : '#FF6B6B' }}>
+                                                    {b.newUsers > 0 ? `${(conv * 100).toFixed(0)}%` : '—'}
+                                                  </span>
+                                                </span>
+                                              );
+                                            })}
+                                          </div>
+                                        </SectionCard>
+                                      </CollapsibleBlock>
                                     )}
                                   </>
                                 );
                               })() : <div style={{ fontSize: 11, color: C.textMuted }}>—</div>}
 
-                              {divider}
+                              <SectionDivider />
 
-                              {/* ═══ E. RETENTION / WIN-BACK ═══ */}
-                              <button
-                                onClick={async () => {
+                              {/* ═══════════════════════════════════════════
+                                  E. RETENTION / WIN-BACK / DEBUG — collapsed by default
+                                  ═══════════════════════════════════════════ */}
+                              <CollapsibleBlock
+                                title="Retention & Win-back"
+                                color="#34D399"
+                                open={retentionOpen}
+                                onToggle={async () => {
                                   if (retentionOpen) { setRetentionOpen(false); return; }
                                   setRetentionOpen(true);
                                   await loadRetention(retentionPeriod);
                                 }}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', padding: 0, textAlign: 'left' }}
                               >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: retentionOpen ? 10 : 0 }}>
-                                  <span style={{ fontSize: 10, fontWeight: 700, color: '#34D399', letterSpacing: '0.07em', textTransform: 'uppercase' }}>↺ Retention & Win-back</span>
-                                  <span style={{ fontSize: 14, color: C.textMuted }}>{retentionOpen ? '▾' : '▸'}</span>
-                                </div>
-                              </button>
-                              {retentionOpen && retentionLoading && (
-                                <div style={{ fontSize: 12, color: C.textMuted, marginTop: 6 }}>Загрузка…</div>
-                              )}
-                              {retentionOpen && retentionStats && (() => {
-                                const rv = retentionStats;
-                                const o = rv.overview;
-                                const dbg = rv.debug;
-                                const segNames: Record<string, string> = { S1: 'S1 · Нет вишлиста', S2: 'S2 · Нет желаний', S3: 'S3 · Нет шеринга', S4: 'S4 · Давно неактивен' };
-                                const kpi = (label: string, value: number | string, color: string, hint?: string) => (
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
-                                    <span style={{ fontSize: 11, color: C.textMuted }}>{label}{hint ? <span style={{ fontSize: 9, color: '#555', marginLeft: 4 }}>({hint})</span> : null}</span>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
-                                  </div>
-                                );
-                                return (
-                                  <div style={{ marginTop: 8 }}>
-                                    <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                                      {[7, 30, 90].map(d => (
-                                        <button key={d} onClick={() => { setRetentionPeriod(d); void loadRetention(d); }} style={{
-                                          fontSize: 11, padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                                          background: retentionPeriod === d ? '#34D399' : C.surface,
-                                          color: retentionPeriod === d ? '#000' : C.textMuted, fontWeight: 600,
-                                        }}>{d} дн.</button>
-                                      ))}
-                                    </div>
-                                    <div style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
-                                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
-                                        {kpi('Отправлено', o.sent, C.text)}
-                                        {kpi('Доставлено', o.delivered, C.text)}
-                                        {kpi('Возврат 72ч', o.returned72h, '#FBBF24', o.returnRate72h)}
-                                        {kpi('Цел. шаг 7д', o.targetCompleted7d, '#7C6AFF', o.targetRate7d ?? '—')}
-                                        {kpi('Промо активировано', o.promoRedeemed, '#34D399')}
-                                        {kpi('PRO-доступов', o.activeGrants, '#34D399')}
-                                      </div>
-                                    </div>
-                                    {(rv.bySegment as any[]).filter((s: any) => s.sent > 0).map((s: any) => (
-                                      <div key={s.segment} style={{ background: C.surface, borderRadius: 10, padding: '8px 12px', marginBottom: 6 }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                                          <span style={{ fontSize: 11, fontWeight: 700, color: '#34D399' }}>{segNames[s.segment] || s.segment}</span>
-                                          <span style={{ fontSize: 9, color: C.textMuted }}>{s.targetAction || '—'}</span>
-                                        </div>
-                                        {s.promoPolicy && kpi('Промо', s.promoPolicy, '#7C6AFF')}
-                                        <div style={{ display: 'flex', gap: 12 }}>
-                                          <div style={{ flex: 1 }}>
-                                            {kpi('Отправлено', s.sent, C.text)}
-                                            {kpi('Возврат 72ч', s.returned72h, '#FBBF24', s.returnRate72h)}
-                                          </div>
-                                          <div style={{ flex: 1 }}>
-                                            {kpi('Доставлено', s.delivered, C.text)}
-                                            {kpi('Цел. шаг 7д', s.targetCompleted7d, '#7C6AFF', s.targetRate7d ?? '—')}
-                                          </div>
-                                        </div>
-                                        {(s.promoDelivered > 0 || s.promoRedeemed > 0) && (
-                                          <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
-                                            {kpi('Промо доставлено', s.promoDelivered, C.text)}
-                                            {kpi('Промо → цел. шаг', s.promoTargetCompleted ?? 0, '#7C6AFF', s.promoTargetRate ?? '—')}
-                                            {kpi('Промо активировано', s.promoRedeemed, '#34D399')}
-                                            {s.nonPromoTargetCompleted != null && kpi('Без промо → цел. шаг', s.nonPromoTargetCompleted, C.textMuted, s.nonPromoTargetRate ?? '—')}
-                                          </div>
-                                        )}
-                                      </div>
-                                    ))}
-                                    {(rv.byTouch as any[]).length > 0 && (
-                                      <div style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `1px dashed ${C.border}`, marginBottom: 6 }}>
-                                        <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>По волнам</div>
-                                        {(rv.byTouch as any[]).map((t: any) => (
-                                          <div key={`${t.segment}-${t.touchNumber}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}`, ...(t.disabled ? { opacity: 0.4 } : {}) }}>
-                                            <span style={{ fontSize: 10, color: C.textSec }}>{t.segment} · В{t.touchNumber}{t.disabled ? ' 🚫' : ''}</span>
-                                            <span style={{ fontSize: 10, color: C.textMuted }}>
-                                              {t.sent}→{t.delivered} · <span style={{ color: '#FBBF24' }}>{t.returnRate72h}</span> · <span style={{ color: '#7C6AFF' }}>{t.targetRate7d}</span>
-                                            </span>
-                                          </div>
+                                {retentionLoading && !retentionStats && (
+                                  <div style={{ fontSize: 11, color: C.textMuted, padding: '8px 0' }}>Загрузка…</div>
+                                )}
+                                {retentionStats && (() => {
+                                  const rv = retentionStats;
+                                  const ov = rv.overview;
+                                  const dbg = rv.debug;
+                                  const segNames: Record<string, string> = { S1: 'S1 · Нет вишлиста', S2: 'S2 · Нет желаний', S3: 'S3 · Нет шеринга', S4: 'S4 · Давно неактивен' };
+                                  return (
+                                    <div style={{ marginTop: 4 }}>
+                                      {/* Period selector */}
+                                      <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                                        {[7, 30, 90].map(d => (
+                                          <button key={d} onClick={() => { setRetentionPeriod(d); void loadRetention(d); }} style={{
+                                            fontSize: 11, padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                                            background: retentionPeriod === d ? '#34D399' : C.surface,
+                                            color: retentionPeriod === d ? '#000' : C.textMuted, fontWeight: 600, fontFamily: font,
+                                          }}>{d} дн.</button>
                                         ))}
                                       </div>
-                                    )}
-                                    {dbg && (
-                                      <div style={{ padding: '5px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `1px dashed ${C.border}` }}>
-                                        <div style={{ fontSize: 9, color: '#555' }}>
-                                          🔍 Touches: {dbg.totalTouchesInPeriod} · Excl.: {dbg.excludedTestUsers}
+                                      {/* Overview KPIs */}
+                                      <SectionCard>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
+                                          <KpiRow label="Отправлено" value={ov.sent} />
+                                          <KpiRow label="Доставлено" value={ov.delivered} />
+                                          <KpiRow label="Возврат 72ч" value={ov.returned72h} color="#FBBF24" hint={ov.returnRate72h} />
+                                          <KpiRow label="Цел. шаг 7д" value={ov.targetCompleted7d} color="#7C6AFF" hint={ov.targetRate7d ?? '—'} />
+                                          <KpiRow label="Промо активировано" value={ov.promoRedeemed} color="#34D399" />
+                                          <KpiRow label="PRO-доступов" value={ov.activeGrants} color="#34D399" />
                                         </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
+                                      </SectionCard>
+                                      {/* Segments */}
+                                      {(rv.bySegment as any[]).filter((s: any) => s.sent > 0).map((s: any) => (
+                                        <SectionCard key={s.segment} style={{ marginBottom: 4 }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: '#34D399' }}>{segNames[s.segment] || s.segment}</span>
+                                            <span style={{ fontSize: 9, color: C.textMuted }}>{s.targetAction || '—'}</span>
+                                          </div>
+                                          {s.promoPolicy && <KpiRow label="Промо" value={s.promoPolicy} color="#7C6AFF" />}
+                                          <div style={{ display: 'flex', gap: 10 }}>
+                                            <div style={{ flex: 1 }}>
+                                              <KpiRow label="Отпр." value={s.sent} />
+                                              <KpiRow label="Возвр. 72ч" value={s.returned72h} color="#FBBF24" hint={s.returnRate72h} />
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                              <KpiRow label="Дост." value={s.delivered} />
+                                              <KpiRow label="Цел. 7д" value={s.targetCompleted7d} color="#7C6AFF" hint={s.targetRate7d ?? '—'} />
+                                            </div>
+                                          </div>
+                                          {(s.promoDelivered > 0 || s.promoRedeemed > 0) && (
+                                            <div style={{ marginTop: 3, paddingTop: 3, borderTop: `1px solid ${C.border}` }}>
+                                              <KpiRow label="Промо дост." value={s.promoDelivered} />
+                                              <KpiRow label="Промо → цел." value={s.promoTargetCompleted ?? 0} color="#7C6AFF" hint={s.promoTargetRate ?? '—'} />
+                                              <KpiRow label="Промо актив." value={s.promoRedeemed} color="#34D399" />
+                                              {s.nonPromoTargetCompleted != null && <KpiRow label="Без промо → цел." value={s.nonPromoTargetCompleted} color={C.textMuted} hint={s.nonPromoTargetRate ?? '—'} />}
+                                            </div>
+                                          )}
+                                        </SectionCard>
+                                      ))}
+                                      {/* By-touch waves — debug-level detail, already inside collapsed Retention */}
+                                      {(rv.byTouch as any[]).length > 0 && (
+                                        <div style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `1px dashed ${C.border}`, marginBottom: 4, marginTop: 4 }}>
+                                          <div style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>По волнам</div>
+                                          {(rv.byTouch as any[]).map((t: any) => (
+                                            <div key={`${t.segment}-${t.touchNumber}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', ...(t.disabled ? { opacity: 0.4 } : {}) }}>
+                                              <span style={{ fontSize: 10, color: C.textSec }}>{t.segment} · В{t.touchNumber}{t.disabled ? ' 🚫' : ''}</span>
+                                              <span style={{ fontSize: 10, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                                                {t.sent}→{t.delivered} · <span style={{ color: '#FBBF24' }}>{t.returnRate72h}</span> · <span style={{ color: '#7C6AFF' }}>{t.targetRate7d}</span>
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                      {/* Debug footer */}
+                                      {dbg && (
+                                        <div style={{ padding: '3px 8px', background: 'rgba(255,255,255,0.02)', borderRadius: 6, border: `1px dashed ${C.border}` }}>
+                                          <div style={{ fontSize: 9, color: '#555' }}>
+                                            🔍 Touches: {dbg.totalTouchesInPeriod} · Excl.: {dbg.excludedTestUsers}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </CollapsibleBlock>
 
-                              {/* Timestamp */}
-                              <div style={{ fontSize: 9, color: C.textMuted, textAlign: 'right', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
+                              {/* ── Timestamp ── */}
+                              <div style={{ fontSize: 9, color: C.textMuted, textAlign: 'right', marginTop: 8, paddingTop: 6, borderTop: `1px solid ${C.border}` }}>
                                 {godStatsRefreshedAt
                                   ? <>↻ {relativeTime(godStatsRefreshedAt)} · {godStatsRefreshedAt.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</>
                                   : new Date(godStats.generatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
@@ -13362,6 +13902,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
        !currentWl.readOnly &&
        currentWl.id !== draftsWishlistId &&
        !itemReorderMode &&
+       !catReorderMode &&
        !showItemForm &&
        !keyboardOpen && (
         <div style={{
@@ -13397,7 +13938,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           background: C.surface, borderTop: `1px solid ${C.border}`,
           padding: '12px 16px', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
         }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: hasUserCategories ? '1fr 1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 8 }}>
             <button
               disabled={bulkActionLoading}
               onClick={async () => {
@@ -13442,14 +13983,34 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             >
               {t('bulk_move', locale)}
             </button>
-            <button
-              disabled={bulkActionLoading}
-              onClick={() => setShowBulkTargetPicker('copy')}
-              style={{ ...btnBase, background: C.greenSoft, color: C.green, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
-            >
-              {t('bulk_copy', locale)}
-            </button>
+            {!hasUserCategories && (
+              <button
+                disabled={bulkActionLoading}
+                onClick={() => setShowBulkTargetPicker('copy')}
+                style={{ ...btnBase, background: C.greenSoft, color: C.green, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+              >
+                {t('bulk_copy', locale)}
+              </button>
+            )}
           </div>
+          {hasUserCategories && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+              <button
+                disabled={bulkActionLoading}
+                onClick={() => setShowBulkTargetPicker('copy')}
+                style={{ ...btnBase, background: C.greenSoft, color: C.green, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+              >
+                {t('bulk_copy', locale)}
+              </button>
+              <button
+                disabled={bulkActionLoading}
+                onClick={() => setShowCatPicker({ itemIds: [...bulkSelectedIds] })}
+                style={{ ...btnBase, background: 'rgba(139,92,246,0.12)', color: '#A78BFA', borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+              >
+                {t('cat_choose', locale)}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -14438,6 +14999,42 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <span style={{ fontSize: 20 }}>↕️</span>
             <span>{t('wl_reorder', locale)}</span>
           </button>
+          {/* Create category */}
+          <button
+            onClick={() => {
+              if (planInfo.code === 'FREE') { setShowWlManage(false); showUpsell('categories'); return; }
+              setShowWlManage(false);
+              setCatCreateName('');
+              setShowCatCreate(true);
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              opacity: planInfo.code === 'FREE' ? 0.7 : 1,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>📂</span>
+            <span style={{ flex: 1 }}>{t('cat_create', locale)}</span>
+            {planInfo.code === 'FREE' && <ProBadge />}
+          </button>
+          {/* Manage categories (reorder) — only when user categories exist */}
+          {hasUserCategories && (
+            <button
+              onClick={() => {
+                setShowWlManage(false);
+                enterCatReorderMode();
+              }}
+              style={{
+                background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+                textAlign: 'start', cursor: 'pointer', fontFamily: font,
+                fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              }}
+            >
+              <span style={{ fontSize: 20 }}>↕️</span>
+              <span>{t('cat_reorder', locale)}</span>
+            </button>
+          )}
           {/* Select multiple (bulk actions) */}
           {items.length > 0 && (
             <button
@@ -14512,6 +15109,183 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </button>
         </div>
       </BottomSheet>
+
+      {/* ── Category create bottom sheet ── */}
+      <BottomSheet isOpen={showCatCreate} onClose={() => setShowCatCreate(false)} title={t('cat_create_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <input
+            value={catCreateName}
+            onChange={e => { if (e.target.value.length <= 40) setCatCreateName(e.target.value); }}
+            placeholder={t('cat_name_placeholder', locale)}
+            autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') void handleCatCreate(); }}
+            style={{
+              width: '100%', padding: '12px 14px', borderRadius: 12,
+              border: `1px solid ${C.border}`, background: C.surface,
+              color: C.text, fontSize: 15, fontFamily: font,
+              boxSizing: 'border-box' as const,
+            }}
+          />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button style={{ ...btnGhost, flex: 1 }} onClick={() => setShowCatCreate(false)}>
+              {t('wl_cancel', locale)}
+            </button>
+            <button
+              style={{ ...btnPrimary, flex: 1, opacity: catCreateLoading || !catCreateName.trim() ? 0.5 : 1 }}
+              onClick={() => void handleCatCreate()}
+              disabled={catCreateLoading || !catCreateName.trim()}
+            >
+              {catCreateLoading ? '…' : t('cat_create', locale)}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── Category rename bottom sheet ── */}
+      <BottomSheet isOpen={!!showCatRename} onClose={() => setShowCatRename(null)} title={t('cat_rename_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <input
+            value={catRenameName}
+            onChange={e => { if (e.target.value.length <= 40) setCatRenameName(e.target.value); }}
+            placeholder={t('cat_name_placeholder', locale)}
+            autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') void handleCatRename(); }}
+            style={{
+              width: '100%', padding: '12px 14px', borderRadius: 12,
+              border: `1px solid ${C.border}`, background: C.surface,
+              color: C.text, fontSize: 15, fontFamily: font,
+              boxSizing: 'border-box' as const,
+            }}
+          />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button style={{ ...btnGhost, flex: 1 }} onClick={() => setShowCatRename(null)}>
+              {t('wl_cancel', locale)}
+            </button>
+            <button
+              style={{ ...btnPrimary, flex: 1, opacity: catRenameLoading || !catRenameName.trim() ? 0.5 : 1 }}
+              onClick={() => void handleCatRename()}
+              disabled={catRenameLoading || !catRenameName.trim()}
+            >
+              {catRenameLoading ? '…' : t('cat_rename', locale)}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── Category delete confirmation ── */}
+      <BottomSheet isOpen={!!showCatDelete} onClose={() => setShowCatDelete(null)} title={t('cat_delete', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <p style={{ fontSize: 14, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
+            {t('cat_delete_confirm', locale)}
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button style={{ ...btnSecondary, flex: 1 }} onClick={() => setShowCatDelete(null)}>
+              {t('wl_cancel', locale)}
+            </button>
+            <button
+              style={{ ...btnPrimary, flex: 1, background: C.red, opacity: catDeleteLoading ? 0.6 : 1 }}
+              onClick={() => void handleCatDelete()}
+              disabled={catDeleteLoading}
+            >
+              {catDeleteLoading ? '…' : t('cat_delete', locale)}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── Category context menu ── */}
+      <BottomSheet isOpen={!!showCatMenu} onClose={() => setShowCatMenu(null)} title={showCatMenu?.name ?? ''}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button
+            onClick={() => {
+              if (showCatMenu) {
+                setCatRenameName(showCatMenu.name);
+                setShowCatRename(showCatMenu);
+              }
+              setShowCatMenu(null);
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>✏️</span>
+            {t('cat_rename', locale)}
+          </button>
+          <button
+            onClick={() => {
+              if (showCatMenu) setShowCatDelete(showCatMenu);
+              setShowCatMenu(null);
+            }}
+            style={{
+              background: C.redSoft, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.red, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🗑</span>
+            {t('cat_delete', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Category picker (move item / bulk move) ── */}
+      <BottomSheet isOpen={!!showCatPicker} onClose={() => setShowCatPicker(null)} title={t('cat_choose', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(cat => {
+            const catItemCount = items.filter(it => it.categoryId === cat.id).length;
+            // Highlight current category for single-item moves
+            const isCurrent = showCatPicker?.itemIds.length === 1 &&
+              items.find(it => it.id === showCatPicker.itemIds[0])?.categoryId === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => {
+                  if (isCurrent) return;
+                  void handleCatMoveItem(showCatPicker!.itemIds, cat.id);
+                }}
+                style={{
+                  background: isCurrent ? C.accentSoft : C.surface,
+                  border: isCurrent ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
+                  borderRadius: 14, padding: '14px 18px', textAlign: 'start',
+                  cursor: isCurrent ? 'default' : 'pointer',
+                  fontFamily: font, fontSize: 15, color: C.text,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  opacity: isCurrent ? 0.7 : 1,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: isCurrent ? 600 : 400 }}>
+                    {cat.isDefault ? t('cat_uncategorized', locale) : cat.name}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                    {catItemCount} {catItemCount === 1 ? (locale === 'ru' ? 'желание' : 'wish') : (locale === 'ru' ? 'желаний' : 'wishes')}
+                  </div>
+                </div>
+                {isCurrent && <span style={{ color: C.accent, fontSize: 18 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      </BottomSheet>
+
+      {/* ── Category onboarding hint toast ── */}
+      {catOnboardingHint && (
+        <div style={{
+          position: 'fixed', top: 80, left: 20, right: 20, zIndex: 200,
+          background: C.card, border: `1px solid ${C.accent}30`,
+          borderRadius: 14, padding: '14px 18px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+          animation: 'fadeIn 0.3s ease',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <span style={{ fontSize: 24 }}>💡</span>
+          <span style={{ fontSize: 13, color: C.text, lineHeight: 1.4, fontFamily: font }}>
+            {t('cat_onboarding_hint', locale)}
+          </span>
+        </div>
+      )}
 
       {/* ── Archive wishlist confirmation ── */}
       <BottomSheet isOpen={showArchiveWlConfirm} onClose={() => setShowArchiveWlConfirm(false)} title={t('wl_archive_confirm_title', locale)}>

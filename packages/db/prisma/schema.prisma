@@ -169,9 +169,10 @@ model Wishlist {
 
   type WishlistType @default(REGULAR)
 
-  owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  items Item[]
-  tags  Tag[]
+  owner      User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  items      Item[]
+  tags       Tag[]
+  categories WishlistCategory[]
   wishlistSubscriptions WishlistSubscription[]
   santaParticipants     SantaParticipant[]    @relation("SantaLinkedWishlists")
 
@@ -201,6 +202,7 @@ model Item {
   status           ItemStatus @default(AVAILABLE)
   reservationEpoch Int        @default(0)
   position         Int        @default(0)
+  categoryId       String?
   reserverUserId   String?
   archivedAt       DateTime?
   purgeAfter       DateTime?
@@ -208,6 +210,7 @@ model Item {
   updatedAt        DateTime   @updatedAt
 
   wishlist              Wishlist               @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  category              WishlistCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   itemTags              ItemTag[]
   reservationEvents     ReservationEvent[]
   comments              Comment[]
@@ -219,6 +222,7 @@ model Item {
   @@index([wishlistId])
   @@index([purgeAfter])
   @@index([wishlistId, priority, position])
+  @@index([categoryId])
 }
 
 model Tag {
@@ -1322,4 +1326,20 @@ model ReservationMeta {
   @@unique([itemId, reserverUserId])
   @@index([reserverUserId, active])
   @@index([reminderAt, reminderSent])
+}
+
+model WishlistCategory {
+  id         String   @id @default(cuid())
+  wishlistId String
+  name       String
+  sortOrder  Int      @default(0)
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  wishlist Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  items    Item[]
+
+  @@index([wishlistId, sortOrder])
+  @@index([wishlistId, isDefault])
 }
