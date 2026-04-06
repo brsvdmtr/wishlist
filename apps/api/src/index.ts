@@ -608,7 +608,7 @@ publicRouter.get(
         owner: {
           select: {
             firstName: true,
-            profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true } },
+            profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
           },
         },
         items: {
@@ -674,6 +674,21 @@ publicRouter.get(
 
     trackAnalyticsEvent({ event: 'guest.view_opened', props: { slug, itemCount: wishlist.items.length } });
 
+    // Build dontGift payload: only expose when visible AND has content
+    const slugProfile = wishlist.owner?.profile;
+    const slugDontGiftHasContent =
+      (slugProfile?.dontGiftPresets?.length ?? 0) > 0 ||
+      (slugProfile?.dontGiftCustomItems?.length ?? 0) > 0 ||
+      !!slugProfile?.dontGiftComment;
+    const slugDontGift =
+      slugProfile?.dontGiftVisible && slugDontGiftHasContent
+        ? {
+            presets: slugProfile.dontGiftPresets,
+            customItems: slugProfile.dontGiftCustomItems,
+            comment: slugProfile.dontGiftComment ?? null,
+          }
+        : null;
+
     return res.json({
       wishlist: {
         id: wishlist.id,
@@ -688,6 +703,7 @@ publicRouter.get(
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,
       categories: wishlist.categories,
+      dontGift: slugDontGift,
     });
   }),
 );
@@ -715,7 +731,7 @@ publicRouter.get(
           owner: {
             select: {
               firstName: true,
-              profile: { select: { displayName: true, username: true } },
+              profile: { select: { displayName: true, username: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
             },
           },
           items: {
@@ -757,6 +773,21 @@ publicRouter.get(
       wishlist.owner?.firstName?.trim() ||
       null;
 
+    // Build dontGift payload: only expose when visible AND has content
+    const tokenProfile = wishlist.owner?.profile;
+    const tokenDontGiftHasContent =
+      (tokenProfile?.dontGiftPresets?.length ?? 0) > 0 ||
+      (tokenProfile?.dontGiftCustomItems?.length ?? 0) > 0 ||
+      !!tokenProfile?.dontGiftComment;
+    const tokenDontGift =
+      tokenProfile?.dontGiftVisible && tokenDontGiftHasContent
+        ? {
+            presets: tokenProfile.dontGiftPresets,
+            customItems: tokenProfile.dontGiftCustomItems,
+            comment: tokenProfile.dontGiftComment ?? null,
+          }
+        : null;
+
     return res.json({
       wishlist: {
         id: wishlist.id,
@@ -769,6 +800,7 @@ publicRouter.get(
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,
       categories: (wishlist as any).categories ?? [],
+      dontGift: tokenDontGift,
     });
   }),
 );
@@ -6180,6 +6212,79 @@ tgRouter.patch(
       isPro,
       // Owner-only — never exposed in public/share API responses
       supportId: profile.supportId,
+    });
+  }),
+);
+
+// GET /tg/me/dont-gift — return current "Don't Gift" preferences
+tgRouter.get(
+  '/me/dont-gift',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const profile = await prisma.userProfile.findUnique({
+      where: { userId: user.id },
+      select: { dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true },
+    });
+
+    return res.json({
+      presets: profile?.dontGiftPresets ?? [],
+      customItems: profile?.dontGiftCustomItems ?? [],
+      comment: profile?.dontGiftComment ?? null,
+      visible: profile?.dontGiftVisible ?? true,
+    });
+  }),
+);
+
+// PUT /tg/me/dont-gift — save "Don't Gift" preferences (Pro-gated)
+tgRouter.put(
+  '/me/dont-gift',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      presets: z.array(z.string()).max(30).default([]),
+      customItems: z.array(z.string().max(100)).max(10).default([]),
+      comment: z.string().max(400).nullable().default(null),
+      visible: z.boolean().default(true),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    if (!ent.isPro) {
+      trackEvent('feature_gate_hit_dont_gift', user.id, { plan: ent.plan.code });
+      return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+    }
+
+    const { presets, customItems, comment, visible } = parsed.data;
+
+    const profile = await prisma.userProfile.upsert({
+      where: { userId: user.id },
+      update: {
+        dontGiftPresets: presets,
+        dontGiftCustomItems: customItems,
+        dontGiftComment: comment,
+        dontGiftVisible: visible,
+      },
+      create: {
+        userId: user.id,
+        dontGiftPresets: presets,
+        dontGiftCustomItems: customItems,
+        dontGiftComment: comment,
+        dontGiftVisible: visible,
+      },
+    });
+
+    trackEvent('dont_gift_saved', user.id, {
+      presetCount: presets.length,
+      customItemCount: customItems.length,
+      hasComment: !!comment,
+      visible,
+    });
+
+    return res.json({
+      presets: profile.dontGiftPresets,
+      customItems: profile.dontGiftCustomItems,
+      comment: profile.dontGiftComment,
+      visible: profile.dontGiftVisible,
     });
   }),
 );

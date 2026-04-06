@@ -204,12 +204,23 @@ type CreditsInfo = { hintCredits: number; importCredits: number };
 // SKU descriptor from server
 type SkuInfo = { code: string; price: number; type: string; targetRequired: boolean };
 
+const DONT_GIFT_PRESETS = [
+  'sweets', 'flowers', 'perfume', 'cosmetics', 'jewelry', 'clothes',
+  'shoes', 'souvenirs', 'soft_toys', 'alcohol', 'gift_cards', 'tech', 'candles', 'food',
+] as const;
+const DONT_GIFT_PRESET_EMOJIS: Record<string, string> = {
+  sweets: '🍬', flowers: '💐', perfume: '🧴', cosmetics: '💄', jewelry: '💍',
+  clothes: '👔', shoes: '👟', souvenirs: '🏺', soft_toys: '🧸', alcohol: '🍷',
+  gift_cards: '🎫', tech: '📱', candles: '🕯', food: '🍕',
+};
+
 type UpsellContext =
   | 'comments' | 'url_import' | 'hints'
   | 'wishlist_limit' | 'item_limit' | 'participant_limit' | 'subscription_limit'
   | 'sort_recommended'
   | 'reservation_pro'
-  | 'categories';
+  | 'categories'
+  | 'dont_gift';
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -1650,6 +1661,13 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     subtitle: t('upsell_categories_subtitle', locale),
     showTable: false,
     benefits: [t('upsell_categories_b1', locale), t('upsell_categories_b2', locale), t('upsell_categories_b3', locale)],
+  },
+  dont_gift: {
+    emoji: '🚫',
+    title: t('upsell_dont_gift_title', locale),
+    subtitle: t('upsell_dont_gift_subtitle', locale),
+    showTable: false,
+    benefits: [t('upsell_dont_gift_b1', locale), t('upsell_dont_gift_b2', locale), t('upsell_dont_gift_b3', locale)],
   },
 });
 
@@ -3103,6 +3121,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Guest categories (from public view)
   const [guestCategories, setGuestCategories] = useState<WishlistCategory[]>([]);
   const [guestCollapsedCats, setGuestCollapsedCats] = useState<Set<string>>(new Set());
+
+  // ── Don't Gift state ──
+  type DontGiftData = { presets: string[]; customItems: string[]; comment: string | null; visible: boolean };
+  const [dontGiftData, setDontGiftData] = useState<DontGiftData | null>(null);
+  const [showDontGiftEdit, setShowDontGiftEdit] = useState(false);
+  const [dontGiftSaving, setDontGiftSaving] = useState(false);
+  const [dgPresets, setDgPresets] = useState<string[]>([]);
+  const [dgCustomItems, setDgCustomItems] = useState<string[]>([]);
+  const [dgComment, setDgComment] = useState('');
+  const [dgVisible, setDgVisible] = useState(true);
+  const [dgNewItem, setDgNewItem] = useState('');
+  const [guestDontGift, setGuestDontGift] = useState<{ presets: string[]; customItems: string[]; comment: string | null } | null>(null);
+  const [guestDontGiftExpanded, setGuestDontGiftExpanded] = useState(false);
 
   // Profile state
   const [profileData, setProfileData] = useState<{
@@ -4611,6 +4642,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     } else {
       setGuestCategories([]);
     }
+    // Load don't gift data for guest view
+    setGuestDontGift((json as any).dontGift ?? null);
+    setGuestDontGiftExpanded(false);
     return mappedItems;
   }, [apiBase]);
 
@@ -6366,6 +6400,57 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleCatReorderPointerUp = () => {
     catReorderPointerIdx.current = null;
     setCatReorderDragIdx(null);
+  };
+
+  // ── Don't Gift handlers ──
+  const loadDontGift = useCallback(async () => {
+    try {
+      const res = await tgFetch('/tg/me/dont-gift');
+      if (res.ok) {
+        const data = await res.json() as DontGiftData;
+        setDontGiftData(data);
+        return data;
+      }
+    } catch { /* silent */ }
+    return null;
+  }, [tgFetch]);
+
+  const openDontGiftEdit = async () => {
+    const data = dontGiftData ?? await loadDontGift();
+    setDgPresets(data?.presets ?? []);
+    setDgCustomItems(data?.customItems ?? []);
+    setDgComment(data?.comment ?? '');
+    setDgVisible(data?.visible ?? true);
+    setDgNewItem('');
+    setShowDontGiftEdit(true);
+    trackEvent('dont_gift_edit_opened');
+  };
+
+  const saveDontGift = async () => {
+    if (dontGiftSaving) return;
+    setDontGiftSaving(true);
+    try {
+      const res = await tgFetch('/tg/me/dont-gift', {
+        method: 'PUT',
+        body: JSON.stringify({
+          presets: dgPresets,
+          customItems: dgCustomItems.filter(Boolean),
+          comment: dgComment.trim() || null,
+          visible: dgVisible,
+        }),
+      });
+      if (res.status === 402) { showUpsell('dont_gift'); return; }
+      if (res.ok) {
+        const data = await res.json() as DontGiftData;
+        setDontGiftData(data);
+        setShowDontGiftEdit(false);
+        pushToast(t('dont_gift_saved', locale), 'success');
+        trackEvent('dont_gift_saved', { presets: dgPresets.length, custom: dgCustomItems.length, hasComment: !!dgComment.trim() });
+      } else {
+        pushToast(t('toast_save_error', locale), 'error');
+      }
+    } catch { pushToast(t('toast_save_error', locale), 'error'); }
+    finally { setDontGiftSaving(false); }
   };
 
   const handleRenameWishlist = async () => {
@@ -10982,6 +11067,85 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             )}
           </div>
 
+          {/* ── Don't Gift block (guest view) ─────────────────────────── */}
+          {guestDontGift && (guestDontGift.presets.length > 0 || guestDontGift.customItems.length > 0 || guestDontGift.comment) && (
+            <>
+              <div
+                onClick={() => {
+                  if (!guestDontGiftExpanded) trackEvent('dont_gift_guest_expanded');
+                  setGuestDontGiftExpanded(!guestDontGiftExpanded);
+                }}
+                style={{
+                  background: C.card, borderRadius: 16, padding: '14px 18px',
+                  marginBottom: 4, cursor: 'pointer',
+                  border: `1px solid rgba(248,113,113,0.12)`,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 16 }}>🚫</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>
+                      {t('dont_gift_guest_title', locale)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {!guestDontGiftExpanded && (
+                      <span style={{ fontSize: 12, color: C.textMuted }}>
+                        {guestDontGift.presets.length + guestDontGift.customItems.length + (guestDontGift.comment ? 1 : 0)}
+                      </span>
+                    )}
+                    <span style={{
+                      fontSize: 12, color: C.textMuted, transition: 'transform 0.2s',
+                      transform: guestDontGiftExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                      display: 'inline-block',
+                    }}>▼</span>
+                  </div>
+                </div>
+                {guestDontGiftExpanded && (
+                  <div style={{ marginTop: 12 }}>
+                    {guestDontGift.presets.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                        {guestDontGift.presets.map(p => (
+                          <span key={p} style={{
+                            padding: '5px 12px', borderRadius: 20, fontSize: 13, fontWeight: 500,
+                            background: C.redSoft, color: C.red, fontFamily: font,
+                          }}>
+                            {DONT_GIFT_PRESET_EMOJIS[p] ?? ''} {t(('dont_gift_preset_' + p) as any, locale)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {guestDontGift.customItems.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        {guestDontGift.customItems.map((item, i) => (
+                          <div key={i} style={{ fontSize: 13, color: C.textSec, padding: '3px 0', lineHeight: 1.4 }}>
+                            • {item}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {guestDontGift.comment && (
+                      <div style={{
+                        fontSize: 13, color: C.textMuted, lineHeight: 1.5,
+                        paddingTop: 8, borderTop: `1px solid ${C.border}`,
+                      }}>
+                        {guestDontGift.comment}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Separator */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 14px' }}>
+                <div style={{ flex: 1, height: 1, background: C.borderLight }} />
+                <span style={{ fontSize: 13, color: C.textMuted, fontWeight: 600, whiteSpace: 'nowrap', fontFamily: font }}>
+                  🎁 {t('dont_gift_guest_separator', locale)}
+                </span>
+                <div style={{ flex: 1, height: 1, background: C.borderLight }} />
+              </div>
+            </>
+          )}
+
           {/* ── Filter & Sort bar ─────────────────────────────────────── */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
             {/* Filter button */}
@@ -13485,6 +13649,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 )}
               </SettingsSection>
 
+              {/* Don't Gift — PRO feature */}
+              <SettingsSection title={t('dont_gift_title', locale)}>
+                <SettingsActionRow
+                  icon={'🚫'}
+                  label={t('dont_gift_settings_label', locale)}
+                  onClick={() => {
+                    trackEvent('dont_gift_settings_tap');
+                    if (planInfo.code === 'FREE') {
+                      showUpsell('dont_gift');
+                      return;
+                    }
+                    void openDontGiftEdit();
+                  }}
+                />
+                {planInfo.code === 'FREE' && (
+                  <div style={{ padding: '0 16px 12px', fontSize: 12, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <ProBadge /> {t('dont_gift_settings_hint', locale)}
+                  </div>
+                )}
+                {planInfo.code !== 'FREE' && dontGiftData && (dontGiftData.presets.length > 0 || dontGiftData.customItems.length > 0 || dontGiftData.comment) && (
+                  <div style={{ padding: '0 16px 12px', fontSize: 12, color: C.green, fontWeight: 600 }}>
+                    ✓ {t('dont_gift_filled', locale)}
+                  </div>
+                )}
+              </SettingsSection>
+
               {/* Support & Service */}
               <SettingsSection title={t('settings_support_title', locale)}>
                 <SettingsActionRow icon={'\u{1F4CB}'} label={t('settings_changelog', locale)} dot={RELEASE_NOTES.length > 0 && changelogSeenId !== RELEASE_NOTES[0]!.id} onClick={() => {
@@ -15297,6 +15487,160 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </span>
         </div>
       )}
+
+      {/* ── Don't Gift edit sheet ── */}
+      <BottomSheet isOpen={showDontGiftEdit} onClose={() => setShowDontGiftEdit(false)} title={t('dont_gift_edit_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.5, marginBottom: 16 }}>
+            {t('dont_gift_edit_subtitle', locale)}
+          </div>
+
+          {/* Preset tags */}
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+            {t('dont_gift_presets_label', locale)}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+            {DONT_GIFT_PRESETS.map(key => {
+              const isOn = dgPresets.includes(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => setDgPresets(prev => isOn ? prev.filter(k => k !== key) : [...prev, key])}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '8px 14px', borderRadius: 20,
+                    fontSize: 14, fontWeight: 500, fontFamily: font,
+                    cursor: 'pointer', transition: 'all 0.15s',
+                    border: isOn ? '1.5px solid rgba(248,113,113,0.3)' : '1.5px solid transparent',
+                    background: isOn ? C.redSoft : C.surface,
+                    color: isOn ? C.red : C.textSec,
+                  }}
+                >
+                  {DONT_GIFT_PRESET_EMOJIS[key]} {t(('dont_gift_preset_' + key) as any, locale)}
+                  {isOn && <span style={{ fontSize: 12, opacity: 0.7 }}>✕</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom items */}
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+            {t('dont_gift_custom_label', locale)}
+          </div>
+          {dgCustomItems.map((item, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ width: 6, height: 6, borderRadius: 3, background: C.red, flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 14, color: C.text, fontFamily: font }}>{item}</span>
+              <button
+                onClick={() => setDgCustomItems(prev => prev.filter((_, idx) => idx !== i))}
+                style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 16, cursor: 'pointer', padding: '4px' }}
+              >✕</button>
+            </div>
+          ))}
+          {dgCustomItems.length < 10 && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, marginBottom: 16 }}>
+              <input
+                value={dgNewItem}
+                onChange={e => { if (e.target.value.length <= 100) setDgNewItem(e.target.value); }}
+                placeholder={t('dont_gift_custom_placeholder', locale)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && dgNewItem.trim()) {
+                    setDgCustomItems(prev => [...prev, dgNewItem.trim()]);
+                    setDgNewItem('');
+                  }
+                }}
+                style={{
+                  flex: 1, padding: '10px 12px', borderRadius: 12,
+                  border: `1px solid ${C.border}`, background: C.surface,
+                  color: C.text, fontSize: 14, fontFamily: font,
+                  boxSizing: 'border-box' as const,
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (dgNewItem.trim()) {
+                    setDgCustomItems(prev => [...prev, dgNewItem.trim()]);
+                    setDgNewItem('');
+                  }
+                }}
+                disabled={!dgNewItem.trim()}
+                style={{
+                  padding: '10px 16px', borderRadius: 12, border: 'none',
+                  background: dgNewItem.trim() ? C.accent : C.surface,
+                  color: dgNewItem.trim() ? '#fff' : C.textMuted,
+                  fontSize: 14, fontWeight: 600, fontFamily: font, cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >+</button>
+            </div>
+          )}
+          {dgCustomItems.length >= 10 && (
+            <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 16 }}>
+              {locale === 'ru' ? 'Максимум 10 пунктов' : 'Maximum 10 items'}
+            </div>
+          )}
+
+          {/* Comment */}
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+            {t('dont_gift_comment_label', locale)}
+          </div>
+          <textarea
+            value={dgComment}
+            onChange={e => { if (e.target.value.length <= 400) setDgComment(e.target.value); }}
+            placeholder={t('dont_gift_comment_placeholder', locale)}
+            style={{
+              width: '100%', padding: '12px 14px', borderRadius: 14,
+              border: `1px solid ${C.border}`, background: C.surface,
+              color: C.text, fontSize: 14, fontFamily: font, lineHeight: '1.5',
+              boxSizing: 'border-box' as const, minHeight: 80, resize: 'none',
+            }}
+          />
+          <div style={{ textAlign: 'right', fontSize: 11, color: dgComment.length > 360 ? C.orange : C.textMuted, marginTop: 4, marginBottom: 16 }}>
+            {dgComment.length} / 400
+          </div>
+
+          {/* Visibility toggle */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '14px 0', borderTop: `1px solid ${C.border}`, marginBottom: 16,
+          }}>
+            <span style={{ fontSize: 15, color: C.text, fontWeight: 500, fontFamily: font }}>
+              {t('dont_gift_visible_label', locale)}
+            </span>
+            <div
+              onClick={() => setDgVisible(!dgVisible)}
+              style={{
+                width: 52, height: 32, borderRadius: 16, position: 'relative', cursor: 'pointer',
+                background: dgVisible ? C.accent : C.surface,
+                border: dgVisible ? 'none' : `1.5px solid ${C.textMuted}`,
+                transition: 'background 0.2s',
+              }}
+            >
+              <div style={{
+                width: 26, height: 26, borderRadius: 13, background: '#fff',
+                position: 'absolute', top: 3,
+                left: dgVisible ? 23 : 3,
+                transition: 'left 0.15s',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+              }} />
+            </div>
+          </div>
+
+          {/* Save button */}
+          <button
+            onClick={() => void saveDontGift()}
+            disabled={dontGiftSaving}
+            style={{
+              width: '100%', padding: '16px', borderRadius: 14, border: 'none',
+              background: C.accent, color: '#fff',
+              fontSize: 16, fontWeight: 700, fontFamily: font,
+              cursor: 'pointer', opacity: dontGiftSaving ? 0.6 : 1,
+            }}
+          >
+            {dontGiftSaving ? '…' : t('dont_gift_save', locale)}
+          </button>
+        </div>
+      </BottomSheet>
 
       {/* ── Archive wishlist confirmation ── */}
       <BottomSheet isOpen={showArchiveWlConfirm} onClose={() => setShowArchiveWlConfirm(false)} title={t('wl_archive_confirm_title', locale)}>

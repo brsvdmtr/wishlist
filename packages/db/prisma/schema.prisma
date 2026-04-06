@@ -411,6 +411,12 @@ model UserProfile {
   firstAcquisitionRef             String?
   firstAcquisitionAt              DateTime?
 
+  // Don't Gift
+  dontGiftPresets     String[]  @default([])
+  dontGiftCustomItems String[]  @default([])
+  dontGiftComment     String?
+  dontGiftVisible     Boolean   @default(true)
+
   // Support
   supportId String? @unique
 
