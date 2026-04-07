@@ -635,6 +635,17 @@ if (!token) {
         return ctx.reply(t('bot_error', locale));
       }
     }
+    if (payload?.startsWith('gg_')) {
+      // Group gift invite deep link
+      const token = payload.slice(3);
+      logger.info({ telegramId, type: 'group_gift', token }, 'deep link received');
+      return ctx.reply(
+        '👥 Тебя пригласили скинуться на подарок!',
+        Markup.inlineKeyboard([
+          Markup.button.webApp('Открыть', `${MINI_APP_URL}?startapp=gg_${token}`),
+        ]),
+      );
+    }
     if (payload?.startsWith('profile_')) {
       // Public profile deep link
       const username = payload.slice('profile_'.length);
@@ -944,6 +955,7 @@ if (!token) {
           seasonal_decoration: 'seasonal_decoration',
           gift_notes_unlock: 'gift_notes_unlock',
           reservation_pro_unlock: 'reservation_pro_unlock',
+          group_gift_unlock: 'group_gift_unlock',
         };
         const SKU_CREDITS: Record<string, { key: 'hintCredits' | 'importCredits'; amount: number }> = {
           hints_pack_5:   { key: 'hintCredits',   amount: 5  },
@@ -959,6 +971,7 @@ if (!token) {
           seasonal_decoration: 29,
           gift_notes_unlock: 19,
           reservation_pro_unlock: 50,
+          group_gift_unlock: 79,
         };
 
         await prisma.$transaction(async (tx) => {

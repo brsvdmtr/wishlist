@@ -507,7 +507,8 @@ type GodStats = {
 };
 
 type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall'
-| 'first-share-prompt';
+| 'first-share-prompt'
+| 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -3195,6 +3196,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [settingsOriginScreen, setSettingsOriginScreen] = useState<Screen>('my-wishlists');
   const [firstSharePromptData, setFirstSharePromptData] = useState<{ wishlistId: string; wishlistTitle: string } | null>(null);
   const firstSharePromptShownRef = useRef(false);
+
+  // ── Group Gift state ──────────────────────────────────────────────────────
+  type GroupGiftData = {
+    id: string; itemId: string;
+    item: { id: string; title: string; imageUrl: string | null; price: number | null; currency: string; wishlistId: string };
+    organizerUserId: string; organizerName: string; organizerAvatarUrl: string | null;
+    targetAmount: number; currency: string; deadline: string | null;
+    note: string | null; pinnedInfo: string | null; status: string;
+    inviteToken: string; collectedAmount: number; participantCount: number;
+    progressPct: number; remaining: number;
+    isOrganizer: boolean; isParticipant: boolean;
+    participants: Array<{
+      id: string; userId: string; displayName: string; avatarUrl: string | null;
+      joinedAt: string; isOrganizer: boolean; isSelf: boolean; amount: number | null;
+    }>;
+    completedAt: string | null; cancelledAt: string | null; createdAt: string;
+  };
+  const [groupGiftData, setGroupGiftData] = useState<GroupGiftData | null>(null);
+  const [groupGiftCreateItemId, setGroupGiftCreateItemId] = useState<string | null>(null);
+  const [groupGiftCreateItem, setGroupGiftCreateItem] = useState<{ title: string; imageUrl: string | null; price: number | null; currency: string } | null>(null);
+  const [groupGiftMessages, setGroupGiftMessages] = useState<Array<{
+    id: string; text: string; type: string; createdAt: string;
+    senderId: string; senderName: string; senderAvatarUrl: string | null; isSelf: boolean;
+  }>>([]);
+  const [groupGiftJoinToken, setGroupGiftJoinToken] = useState<string | null>(null);
   const [readySharePromptData, setReadySharePromptData] = useState<{ wishlistId: string; wishlistTitle: string; itemsCount: number } | null>(null);
   const [faqOpenId, setFaqOpenId] = useState<number | null>(null);
   const [changelogOpenId, setChangelogOpenId] = useState<string | null>(null);
@@ -3420,6 +3446,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   // Gift Notes state
   const [gnAccess, setGnAccess] = useState<{ unlocked: boolean; unlockType: string | null; priceXtr: number }>({ unlocked: false, unlockType: null, priceXtr: 19 });
+  const [ggAccess, setGgAccess] = useState<{ unlocked: boolean; priceXtr: number }>({ unlocked: false, priceXtr: 79 });
   const [gnOccasions, setGnOccasions] = useState<any[]>([]);
   const [gnViewingOccasion, setGnViewingOccasion] = useState<any>(null);
   const [gnLoading, setGnLoading] = useState(false);
@@ -3839,6 +3866,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setPlanInfo(json.plan);
     setSubscription(json.subscription);
     if ((json as any).giftNotes) setGnAccess((json as any).giftNotes);
+    if ((json as any).groupGift) setGgAccess((json as any).groupGift);
     if ((json as any).cardDisplayMode) setCardDisplayMode((json as any).cardDisplayMode);
     if ((json as any).proSource !== undefined) setProSource((json as any).proSource);
     if ((json as any).promoPro !== undefined) setPromoPro((json as any).promoPro);
@@ -4996,6 +5024,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setGnAccess(prev => ({ ...prev, unlocked: true }));
           pushToast(t('addon_already_unlocked', locale), 'success');
         }
+        if (skuCode === 'group_gift_unlock') {
+          setGgAccess(prev => ({ ...prev, unlocked: true }));
+          pushToast(t('addon_already_unlocked', locale), 'success');
+        }
         setAddonCheckoutLoading(false);
         return;
       }
@@ -5034,6 +5066,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           // Sync gift notes access after purchase
           if (skuCode === 'gift_notes_unlock') {
             setGnAccess(prev => ({ ...prev, unlocked: true, unlockType: 'addon' }));
+          }
+          // Sync group gift access after purchase
+          if (skuCode === 'group_gift_unlock') {
+            setGgAccess(prev => ({ ...prev, unlocked: true }));
+            // After purchase, navigate to create screen if we were on paywall
+            if (screen === 'group-gift-paywall' && viewingItem) {
+              setGroupGiftCreateItemId(viewingItem.id);
+              setGroupGiftCreateItem({
+                title: viewingItem.title,
+                imageUrl: viewingItem.imageUrl ?? null,
+                price: viewingItem.price ?? null,
+                currency: (viewingItem as GuestItem).currency ?? 'RUB',
+              });
+              setScreen('group-gift-create');
+            }
           }
           // Sync reservation pro after purchase
           if (skuCode === 'reservation_pro_unlock') {
@@ -5264,6 +5311,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       trackEvent('first_share_prompt_dismissed', { wishlistId: firstSharePromptData?.wishlistId, entry: 'first_regular_wish' });
       setFirstSharePromptData(null);
       setScreen('wishlist-detail');
+    } else if (screen === 'group-gift-paywall') {
+      setScreen('guest-item-detail');
+    } else if (screen === 'group-gift-create') {
+      setScreen('guest-item-detail');
+    } else if (screen === 'group-gift-detail') {
+      setGroupGiftData(null);
+      setScreen('guest-view');
+    } else if (screen === 'group-gift-join') {
+      setGroupGiftJoinToken(null);
+      setGroupGiftData(null);
+      setScreen('guest-view');
+    } else if (screen === 'group-gift-chat') {
+      setScreen('group-gift-detail');
     } else if (screen === 'archive') {
       if (archiveSelectMode) {
         setArchiveSelectMode(false);
@@ -5535,6 +5595,28 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           .catch(() => bootSetScreen('my-wishlists'))
           .finally(() => setSantaJoinLoading(false));
         loadWishlists().catch(() => {});
+      } else if (startParam && startParam.startsWith('gg_')) {
+        // Deep link: group gift invite
+        const token = startParam.slice(3);
+        setGroupGiftJoinToken(token);
+        loadWishlists().catch(() => {});
+        tgFetch(`/tg/group-gifts/by-invite/${encodeURIComponent(token)}`)
+          .then(async (res) => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+            if (res.ok) {
+              const gg = await res.json() as GroupGiftData;
+              setGroupGiftData(gg);
+              // If already a participant, go to detail
+              if (gg.isParticipant) {
+                bootSetScreen('group-gift-detail');
+              } else {
+                bootSetScreen('group-gift-join');
+              }
+            } else {
+              bootSetScreen('my-wishlists');
+            }
+          })
+          .catch(() => bootSetScreen('my-wishlists'));
       } else if (startParam && startParam.startsWith('occasion_')) {
         // Deep link: open occasion detail in Gift Notes
         const occasionId = startParam.slice(9);
@@ -10798,10 +10880,48 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               })() : (
                 <>
                   {viewingItem.status === 'available' && (
-                    <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }}
-                      style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
-                      {t('reserve_btn', locale)}
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+                      <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }}
+                        style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
+                        {t('reserve_btn', locale)}
+                      </button>
+                      <button onClick={() => {
+                        trackEvent('group_gift_cta_clicked', { itemId: viewingItem.id });
+                        // Check entitlement first
+                        void (async () => {
+                          try {
+                            const r = await tgFetch('/tg/items/' + viewingItem.id + '/group-gift', { method: 'GET' });
+                            if (r.ok) {
+                              const d = await r.json() as { hasGroupGift: boolean; groupGift?: GroupGiftData };
+                              if (d.hasGroupGift && d.groupGift?.id) {
+                                setGroupGiftData(d.groupGift as GroupGiftData);
+                                setScreen('group-gift-detail');
+                                return;
+                              }
+                            }
+                          } catch { /* ignore */ }
+                          // No existing group gift — check entitlement
+                          if (ggAccess.unlocked) {
+                            setGroupGiftCreateItemId(viewingItem.id);
+                            setGroupGiftCreateItem({
+                              title: viewingItem.title,
+                              imageUrl: viewingItem.imageUrl ?? null,
+                              price: viewingItem.price ?? null,
+                              currency: (viewingItem as GuestItem).currency ?? 'RUB',
+                            });
+                            setScreen('group-gift-create');
+                          } else {
+                            setScreen('group-gift-paywall');
+                          }
+                        })();
+                      }}
+                        style={{ ...btnSecondary, width: '100%', borderRadius: 16, padding: '14px 24px', fontSize: 15 }}>
+                        {'👥 ' + t('gg_cta', locale)}
+                      </button>
+                      <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, padding: '0 8px' }}>
+                        {t('gg_cta_hint', locale)}
+                      </div>
+                    </div>
                   )}
                   {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && (
                     <>
@@ -20333,6 +20453,656 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           }}
         />
       )}
+
+      {/* ── GROUP GIFT: PAYWALL ── */}
+      {screen === 'group-gift-paywall' && viewingItem && (() => {
+        const price = ggAccess.priceXtr;
+        return (
+          <div style={{ padding: '24px 16px 40px', textAlign: 'center' }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 80, height: 80, borderRadius: 24,
+              background: `linear-gradient(145deg, ${C.accent}22, ${C.accent}08)`,
+              border: `1px solid ${C.accent}18`,
+              fontSize: 40, marginBottom: 20,
+            }}>👥</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, marginBottom: 8 }}>{t('gg_paywall_title', locale)}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, margin: '20px 0' }}>
+              {[
+                { emoji: '👥', text: t('gg_paywall_f1', locale) },
+                { emoji: '💬', text: t('gg_paywall_f2', locale) },
+                { emoji: '🔗', text: t('gg_paywall_f3', locale) },
+                { emoji: '🎯', text: t('gg_paywall_f4', locale) },
+              ].map((f, i) => (
+                <div key={i} style={{ background: C.surface, borderRadius: 14, padding: '14px 12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, marginBottom: 6 }}>{f.emoji}</div>
+                  <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.3 }}>{f.text}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: C.surface, borderRadius: 16, padding: '20px 16px', margin: '20px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <span style={{ fontSize: 28, fontWeight: 800, color: C.accent, fontFamily: font }}>{price}</span>
+                <span style={{ fontSize: 15, color: C.textSec }}>Stars</span>
+              </div>
+              <div style={{ display: 'inline-block', marginTop: 6, padding: '4px 10px', borderRadius: 8, background: C.accentSoft, color: C.accent, fontSize: 12, fontWeight: 600 }}>
+                {t('gg_paywall_badge', locale)}
+              </div>
+            </div>
+            <button
+              onClick={() => void handleBuyAddon('group_gift_unlock')}
+              disabled={addonCheckoutLoading}
+              style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16, marginBottom: 10, opacity: addonCheckoutLoading ? 0.6 : 1 }}>
+              {addonCheckoutLoading ? '...' : '⭐ ' + t('gg_paywall_buy', locale).replace('{{price}}', String(price))}
+            </button>
+            <button onClick={() => setScreen('guest-item-detail')}
+              style={{ ...btnGhost, width: '100%', fontSize: 15 }}>
+              {t('gg_paywall_later', locale)}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ── GROUP GIFT: CREATE ── */}
+      {screen === 'group-gift-create' && groupGiftCreateItem && (() => {
+        /* eslint-disable react-hooks/rules-of-hooks */
+        const [ggTargetAmt, setGgTargetAmt] = useState(groupGiftCreateItem.price ? String(groupGiftCreateItem.price) : '');
+        const [ggDeadline, setGgDeadline] = useState('');
+        const [ggNote, setGgNote] = useState('');
+        const [ggMyAmount, setGgMyAmount] = useState('');
+        const [ggCreating, setGgCreating] = useState(false);
+        /* eslint-enable react-hooks/rules-of-hooks */
+
+        const currSym = groupGiftCreateItem.currency === 'USD' ? '$' : groupGiftCreateItem.currency === 'EUR' ? '€' : '₽';
+        return (
+          <div style={{ padding: '16px 16px 40px' }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font, marginBottom: 16 }}>{'👥 ' + t('gg_create_title', locale)}</div>
+
+            {/* Item preview */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, background: C.surface, borderRadius: 14, marginBottom: 20 }}>
+              {groupGiftCreateItem.imageUrl ? (
+                <img src={groupGiftCreateItem.imageUrl} alt="" style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover' }} />
+              ) : (
+                <div style={{ width: 52, height: 52, borderRadius: 12, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🎁</div>
+              )}
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>{groupGiftCreateItem.title}</div>
+                {groupGiftCreateItem.price != null && (
+                  <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>
+                    {groupGiftCreateItem.price.toLocaleString()} {currSym}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('gg_create_target', locale)}</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="number" inputMode="numeric" value={ggTargetAmt} onChange={e => setGgTargetAmt(e.target.value)}
+                    style={{ ...inputStyle, flex: 1 }} placeholder={t('gg_amount_placeholder', locale)} />
+                  <span style={{ fontSize: 15, color: C.textSec, fontWeight: 600 }}>{currSym}</span>
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('gg_create_deadline', locale)}</label>
+                <input type="date" value={ggDeadline} onChange={e => setGgDeadline(e.target.value)}
+                  style={{ ...inputStyle, colorScheme: 'dark' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('gg_create_note', locale)}</label>
+                <textarea value={ggNote} onChange={e => setGgNote(e.target.value)} maxLength={500}
+                  style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} placeholder={t('gg_create_note_ph', locale)} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('gg_my_amount', locale)} ({currSym})</label>
+                <input type="number" inputMode="numeric" value={ggMyAmount} onChange={e => setGgMyAmount(e.target.value)}
+                  style={inputStyle} placeholder="0" />
+              </div>
+            </div>
+
+            {/* Info */}
+            <div style={{ margin: '16px 0', padding: 12, background: C.surface, borderRadius: 12, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 16 }}>ℹ️</span>
+              <span style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>{t('gg_create_info', locale)}</span>
+            </div>
+
+            <button
+              disabled={ggCreating || !ggTargetAmt || Number(ggTargetAmt) <= 0}
+              onClick={async () => {
+                setGgCreating(true);
+                try {
+                  const r = await tgFetch('/tg/items/' + groupGiftCreateItemId + '/group-gift', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      targetAmount: Number(ggTargetAmt),
+                      currency: groupGiftCreateItem.currency,
+                      deadline: ggDeadline || undefined,
+                      note: ggNote || undefined,
+                      displayName: tgUser?.first_name,
+                      myAmount: ggMyAmount ? Number(ggMyAmount) : 0,
+                    }),
+                  });
+                  if (!r.ok) {
+                    const err = await r.json().catch(() => ({})) as { error?: string };
+                    if (err.error === 'group_gift_required') {
+                      setScreen('group-gift-paywall');
+                    } else {
+                      pushToast(t('error_generic', locale), 'error');
+                    }
+                    return;
+                  }
+                  const gg = await r.json() as GroupGiftData;
+                  setGroupGiftData(gg);
+                  pushToast(t('gg_toast_created', locale), 'success');
+                  trackEvent('group_gift_created', { groupGiftId: gg.id });
+                  // Update item status locally
+                  setGuestItems(prev => prev.map(gi => gi.id === groupGiftCreateItemId ? { ...gi, status: 'reserved' as const } : gi));
+                  setScreen('group-gift-detail');
+                } catch {
+                  pushToast(t('error_generic', locale), 'error');
+                } finally {
+                  setGgCreating(false);
+                }
+              }}
+              style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16, opacity: (ggCreating || !ggTargetAmt) ? 0.6 : 1 }}>
+              {ggCreating ? '...' : '👥 ' + t('gg_create_btn', locale)}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ── GROUP GIFT: DETAIL ── */}
+      {screen === 'group-gift-detail' && groupGiftData && (() => {
+        const gg = groupGiftData;
+        const currSym = gg.currency === 'USD' ? '$' : gg.currency === 'EUR' ? '€' : '₽';
+        const fmtAmt = (n: number) => n.toLocaleString() + ' ' + currSym;
+        const deadlineDate = gg.deadline ? new Date(gg.deadline) : null;
+        const deadlinePassed = deadlineDate ? deadlineDate < new Date() : false;
+
+        return (
+          <div style={{ padding: '16px 16px 40px' }}>
+            {/* Header badge */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '6px 12px', borderRadius: 10,
+                background: gg.isOrganizer ? C.accentSoft : C.greenSoft,
+                color: gg.isOrganizer ? C.accent : C.green,
+                fontSize: 13, fontWeight: 600,
+              }}>
+                {gg.isOrganizer ? '⚡ ' + t('gg_badge_organizer', locale) : '👤 ' + t('gg_badge_participant', locale)}
+              </div>
+              <div style={{
+                padding: '4px 10px', borderRadius: 8,
+                background: gg.status === 'OPEN' ? C.greenSoft : gg.status === 'COMPLETED' ? C.accentSoft : C.redSoft,
+                color: gg.status === 'OPEN' ? C.green : gg.status === 'COMPLETED' ? C.accent : C.red,
+                fontSize: 12, fontWeight: 600,
+              }}>
+                {t(`gg_status_${gg.status.toLowerCase()}` as never, locale)}
+              </div>
+            </div>
+
+            {/* Item card */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, background: C.surface, borderRadius: 14, marginBottom: 16 }}>
+              {gg.item.imageUrl ? (
+                <img src={gg.item.imageUrl} alt="" style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover' }} />
+              ) : (
+                <div style={{ width: 52, height: 52, borderRadius: 12, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🎁</div>
+              )}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>{gg.item.title}</div>
+                {gg.item.price != null && (
+                  <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{gg.item.price.toLocaleString()} {currSym}</div>
+                )}
+              </div>
+            </div>
+
+            {/* Progress block */}
+            <div style={{ background: C.surface, borderRadius: 16, padding: 16, marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, color: C.textSec }}>{t('gg_collected', locale)}</span>
+                <span style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: font }}>{fmtAmt(gg.collectedAmount)} / {fmtAmt(gg.targetAmount)}</span>
+              </div>
+              {/* Progress bar */}
+              <div style={{ height: 8, borderRadius: 4, background: C.bg, overflow: 'hidden', marginBottom: 12 }}>
+                <div style={{ width: `${gg.progressPct}%`, height: '100%', borderRadius: 4, background: `linear-gradient(90deg, ${C.accent}, #9F8AFF)`, transition: 'width 0.3s' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.accent }}>{gg.progressPct}%</div>
+                  <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_progress', locale)}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{gg.participantCount}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_participants', locale)}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.orange }}>{fmtAmt(gg.remaining)}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_remaining', locale)}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Deadline banner */}
+            {deadlineDate && (
+              <div style={{
+                padding: '10px 14px', borderRadius: 12, marginBottom: 16,
+                background: deadlinePassed ? C.redSoft : C.orangeSoft,
+                color: deadlinePassed ? C.red : C.orange,
+                fontSize: 13, fontWeight: 600, textAlign: 'center',
+              }}>
+                {deadlinePassed ? '⚠️ ' + t('gg_deadline_passed', locale) : '⏰ ' + deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)}
+              </div>
+            )}
+
+            {/* Pinned info */}
+            {gg.pinnedInfo && (
+              <div style={{
+                padding: 14, borderRadius: 14, marginBottom: 16,
+                background: C.surface, borderLeft: `3px solid ${C.orange}`,
+              }}>
+                <div style={{ fontSize: 12, color: C.orange, fontWeight: 600, marginBottom: 4 }}>{'📌 ' + t('gg_pinned_info', locale)}</div>
+                <div style={{ fontSize: 14, color: C.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{gg.pinnedInfo}</div>
+              </div>
+            )}
+
+            {/* My amount (participant view) */}
+            {!gg.isOrganizer && gg.isParticipant && (() => {
+              const myP = gg.participants.find(p => p.isSelf);
+              return myP ? (
+                <div style={{ background: C.surface, borderRadius: 14, padding: 14, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: C.textSec }}>{t('gg_my_amount', locale)}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: C.accent, fontFamily: font }}>{myP.amount != null ? fmtAmt(myP.amount) : '—'}</div>
+                  </div>
+                  {gg.status === 'OPEN' && (
+                    <button onClick={() => {
+                      const newAmt = prompt(t('gg_join_amount', locale), String(myP.amount ?? 0));
+                      if (newAmt === null) return;
+                      void (async () => {
+                        try {
+                          const r = await tgFetch('/tg/group-gifts/' + gg.id + '/amount', {
+                            method: 'PATCH',
+                            body: JSON.stringify({ amount: Number(newAmt) || 0 }),
+                          });
+                          if (r.ok) {
+                            const updated = await r.json() as GroupGiftData;
+                            setGroupGiftData(updated);
+                            pushToast(t('gg_toast_amount_updated', locale), 'success');
+                          }
+                        } catch { pushToast(t('error_generic', locale), 'error'); }
+                      })();
+                    }}
+                      style={{ ...btnGhost, padding: '8px 14px', fontSize: 13, color: C.accent }}>
+                      {'✏️ ' + t('gg_edit_amount', locale)}
+                    </button>
+                  )}
+                </div>
+              ) : null;
+            })()}
+
+            {/* Participants list */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.textSec, marginBottom: 8 }}>{t('gg_participants', locale)} ({gg.participantCount})</div>
+              {gg.participants.map(p => (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
+                  <UserAvatar avatarUrl={p.avatarUrl} name={p.displayName} size={36} accent={p.isOrganizer ? C.accent : C.green} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, color: C.text, fontWeight: p.isSelf ? 700 : 500 }}>
+                      {p.displayName}{p.isSelf ? (' ← ' + t('me_label', locale)) : ''}
+                    </div>
+                    {p.isOrganizer && (
+                      <span style={{ fontSize: 11, color: C.accent, fontWeight: 600 }}>{'⚡ ' + t('gg_badge_organizer', locale)}</span>
+                    )}
+                  </div>
+                  {/* Organizer sees all amounts, participant sees only own */}
+                  {p.amount != null && (
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.accent }}>{fmtAmt(p.amount)}</span>
+                  )}
+                  {p.amount === null && (
+                    <span style={{ fontSize: 13, color: C.green }}>✓</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Chat button */}
+              <button onClick={() => {
+                void (async () => {
+                  try {
+                    const r = await tgFetch('/tg/group-gifts/' + gg.id + '/messages');
+                    if (r.ok) {
+                      const d = await r.json() as { messages: typeof groupGiftMessages };
+                      setGroupGiftMessages(d.messages);
+                    }
+                  } catch { /* ignore */ }
+                  setScreen('group-gift-chat');
+                })();
+              }} style={{ ...btnSecondary, width: '100%', borderRadius: 14 }}>
+                {'💬 ' + t('gg_write_chat', locale)}
+              </button>
+
+              {/* Share button */}
+              {gg.status === 'OPEN' && (
+                <button onClick={() => {
+                  const link = buildTgDeepLink(`gg_${gg.inviteToken}`) ?? `https://t.me/WishHub_bot?startapp=gg_${gg.inviteToken}`;
+                  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(t('gg_share_text', locale).replace('{{name}}', gg.organizerName))}`;
+                  try { window.Telegram?.WebApp.openTelegramLink(shareUrl); } catch { window.open(shareUrl, '_blank'); }
+                  trackEvent('group_gift_shared', { groupGiftId: gg.id });
+                }} style={{ ...btnPrimary, width: '100%', borderRadius: 14 }}>
+                  {'📤 ' + t('gg_share', locale)}
+                </button>
+              )}
+
+              {/* Organizer actions */}
+              {gg.isOrganizer && gg.status === 'OPEN' && (
+                <>
+                  <button onClick={() => {
+                    const newPinned = prompt(t('gg_edit_pinned', locale), gg.pinnedInfo ?? '');
+                    if (newPinned === null) return;
+                    void (async () => {
+                      try {
+                        const r = await tgFetch('/tg/group-gifts/' + gg.id + '/pinned', {
+                          method: 'PATCH',
+                          body: JSON.stringify({ pinnedInfo: newPinned }),
+                        });
+                        if (r.ok) {
+                          setGroupGiftData(prev => prev ? { ...prev, pinnedInfo: newPinned } : prev);
+                          pushToast(t('gg_toast_pinned_updated', locale), 'success');
+                        }
+                      } catch { pushToast(t('error_generic', locale), 'error'); }
+                    })();
+                  }} style={{ ...btnGhost, width: '100%', fontSize: 14 }}>
+                    {'📌 ' + t('gg_edit_pinned', locale)}
+                  </button>
+                  <button onClick={() => {
+                    if (!confirm(t('gg_complete_confirm', locale))) return;
+                    void (async () => {
+                      try {
+                        const r = await tgFetch('/tg/group-gifts/' + gg.id + '/complete', { method: 'POST' });
+                        if (r.ok) {
+                          setGroupGiftData(prev => prev ? { ...prev, status: 'COMPLETED' } : prev);
+                          pushToast(t('gg_toast_completed', locale), 'success');
+                        }
+                      } catch { pushToast(t('error_generic', locale), 'error'); }
+                    })();
+                  }} style={{ ...btnPrimary, width: '100%', borderRadius: 14, background: C.green }}>
+                    {'✅ ' + t('gg_complete', locale)}
+                  </button>
+                  <button onClick={() => {
+                    if (!confirm(t('gg_cancel_confirm', locale))) return;
+                    void (async () => {
+                      try {
+                        const r = await tgFetch('/tg/group-gifts/' + gg.id + '/cancel', { method: 'POST' });
+                        if (r.ok) {
+                          setGroupGiftData(null);
+                          pushToast(t('gg_toast_cancelled', locale), 'info');
+                          setScreen('guest-view');
+                        }
+                      } catch { pushToast(t('error_generic', locale), 'error'); }
+                    })();
+                  }} style={{ ...btnGhost, width: '100%', fontSize: 14, color: C.red }}>
+                    {'❌ ' + t('gg_cancel', locale)}
+                  </button>
+                </>
+              )}
+
+              {/* Participant: leave */}
+              {!gg.isOrganizer && gg.isParticipant && gg.status === 'OPEN' && (
+                <button onClick={() => {
+                  if (!confirm(t('gg_leave_confirm', locale))) return;
+                  void (async () => {
+                    try {
+                      const r = await tgFetch('/tg/group-gifts/' + gg.id + '/leave', { method: 'POST' });
+                      if (r.ok) {
+                        setGroupGiftData(null);
+                        pushToast(t('gg_toast_left', locale), 'info');
+                        setScreen('guest-view');
+                      }
+                    } catch { pushToast(t('error_generic', locale), 'error'); }
+                  })();
+                }} style={{ ...btnGhost, width: '100%', fontSize: 14, color: C.red }}>
+                  {t('gg_leave', locale)}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── GROUP GIFT: JOIN ── */}
+      {screen === 'group-gift-join' && groupGiftData && (() => {
+        const gg = groupGiftData;
+        const currSym = gg.currency === 'USD' ? '$' : gg.currency === 'EUR' ? '€' : '₽';
+        const fmtAmt = (n: number) => n.toLocaleString() + ' ' + currSym;
+        const deadlineDate = gg.deadline ? new Date(gg.deadline) : null;
+        const daysLeft = deadlineDate ? Math.ceil((deadlineDate.getTime() - Date.now()) / 86400000) : null;
+        /* eslint-disable react-hooks/rules-of-hooks */
+        const [joinAmt, setJoinAmt] = useState('');
+        const [joining, setJoining] = useState(false);
+        /* eslint-enable react-hooks/rules-of-hooks */
+
+        return (
+          <div style={{ padding: '24px 16px 40px', textAlign: 'center' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🎁</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font, marginBottom: 6 }}>{t('gg_join_title', locale)}</div>
+            <div style={{ fontSize: 14, color: C.textSec, marginBottom: 20 }}>{t('gg_join_invited', locale).replace('{{name}}', gg.organizerName)}</div>
+
+            {/* Item card */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, background: C.surface, borderRadius: 14, marginBottom: 16, textAlign: 'left' }}>
+              {gg.item.imageUrl ? (
+                <img src={gg.item.imageUrl} alt="" style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'cover' }} />
+              ) : (
+                <div style={{ width: 48, height: 48, borderRadius: 10, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎁</div>
+              )}
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{gg.item.title}</div>
+                {gg.item.price != null && <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{gg.item.price.toLocaleString()} {currSym}</div>}
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div style={{ display: 'flex', justifyContent: 'space-around', margin: '16px 0', padding: 12, background: C.surface, borderRadius: 14 }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{gg.progressPct}%</div>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_collected', locale)}</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{gg.participantCount}</div>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_participants', locale)}</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.orange }}>{fmtAmt(gg.remaining)}</div>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_remaining', locale)}</div>
+              </div>
+            </div>
+
+            {/* Deadline */}
+            {deadlineDate && daysLeft != null && daysLeft > 0 && (
+              <div style={{ padding: '10px 14px', borderRadius: 12, marginBottom: 16, background: C.orangeSoft, color: C.orange, fontSize: 13, fontWeight: 600 }}>
+                {'⏰ ' + t('gg_join_deadline', locale).replace('{{date}}', deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)).replace('{{days}}', String(daysLeft))}
+              </div>
+            )}
+
+            {/* Organizer note */}
+            {gg.note && (
+              <div style={{ padding: 14, borderRadius: 14, marginBottom: 16, background: C.surface, borderLeft: `3px solid ${C.accent}`, textAlign: 'left' }}>
+                <div style={{ fontSize: 14, color: C.text, whiteSpace: 'pre-wrap' }}>{gg.note}</div>
+              </div>
+            )}
+
+            {/* Amount input */}
+            <div style={{ textAlign: 'left', marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('gg_join_amount', locale)}</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="number" inputMode="numeric" value={joinAmt} onChange={e => setJoinAmt(e.target.value)}
+                  style={{ ...inputStyle, flex: 1, fontSize: 18, textAlign: 'center', fontWeight: 700 }} placeholder={t('gg_join_amount_ph', locale)} autoFocus />
+                <span style={{ fontSize: 16, color: C.textSec, fontWeight: 600 }}>{currSym}</span>
+              </div>
+            </div>
+
+            {/* Info */}
+            <div style={{ padding: 12, background: C.surface, borderRadius: 12, marginBottom: 20, display: 'flex', gap: 8, alignItems: 'flex-start', textAlign: 'left' }}>
+              <span style={{ fontSize: 14 }}>ℹ️</span>
+              <span style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>{t('gg_join_info', locale)}</span>
+            </div>
+
+            <button
+              disabled={joining}
+              onClick={async () => {
+                setJoining(true);
+                try {
+                  const r = await tgFetch('/tg/group-gifts/' + gg.id + '/join', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      amount: Number(joinAmt) || 0,
+                      displayName: tgUser?.first_name,
+                    }),
+                  });
+                  if (r.status === 409) {
+                    // Already a participant — go to detail
+                    const updated = await (await tgFetch('/tg/group-gifts/' + gg.id)).json() as GroupGiftData;
+                    setGroupGiftData(updated);
+                    setScreen('group-gift-detail');
+                    return;
+                  }
+                  if (!r.ok) { pushToast(t('error_generic', locale), 'error'); return; }
+                  const updated = await r.json() as GroupGiftData;
+                  setGroupGiftData(updated);
+                  pushToast(t('gg_toast_joined', locale), 'success');
+                  trackEvent('group_gift_joined', { groupGiftId: gg.id });
+                  setScreen('group-gift-detail');
+                } catch {
+                  pushToast(t('error_generic', locale), 'error');
+                } finally {
+                  setJoining(false);
+                }
+              }}
+              style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16, opacity: joining ? 0.6 : 1 }}>
+              {joining ? '...' : '✋ ' + t('gg_join_btn', locale)}
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ── GROUP GIFT: CHAT ── */}
+      {screen === 'group-gift-chat' && groupGiftData && (() => {
+        const gg = groupGiftData;
+        /* eslint-disable react-hooks/rules-of-hooks */
+        const [chatMsg, setChatMsg] = useState('');
+        const [sending, setSending] = useState(false);
+        const messagesEndRef = useRef<HTMLDivElement>(null);
+
+        useEffect(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, [groupGiftMessages.length]);
+
+        // Poll for new messages every 5s
+        useEffect(() => {
+          const interval = setInterval(async () => {
+            try {
+              const r = await tgFetch('/tg/group-gifts/' + gg.id + '/messages');
+              if (r.ok) {
+                const d = await r.json() as { messages: typeof groupGiftMessages };
+                setGroupGiftMessages(d.messages);
+              }
+            } catch { /* ignore */ }
+          }, 5000);
+          return () => clearInterval(interval);
+        }, [gg.id]);
+        /* eslint-enable react-hooks/rules-of-hooks */
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)' }}>
+            {/* Header */}
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <span style={{ fontSize: 18 }}>💬</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {t('gg_chat_title', locale)} · {gg.item.title}
+              </span>
+              <span style={{ fontSize: 13, color: C.textMuted }}>{gg.participantCount}</span>
+            </div>
+
+            {/* Pinned */}
+            {gg.pinnedInfo && (
+              <div style={{ padding: '8px 16px', background: C.orangeSoft, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+                <div style={{ fontSize: 11, color: C.orange, fontWeight: 600 }}>{'📌 ' + t('gg_chat_pinned', locale)}</div>
+                <div style={{ fontSize: 13, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{gg.pinnedInfo}</div>
+              </div>
+            )}
+
+            {/* Messages */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {groupGiftMessages.length === 0 && (
+                <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 14, padding: 40 }}>{t('gg_no_messages', locale)}</div>
+              )}
+              {groupGiftMessages.map(m => (
+                m.type === 'SYSTEM' ? (
+                  <div key={m.id} style={{ textAlign: 'center', fontSize: 12, color: C.textMuted, padding: '4px 0' }}>{m.text}</div>
+                ) : (
+                  <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: m.isSelf ? 'flex-end' : 'flex-start', flexDirection: m.isSelf ? 'row-reverse' : 'row' }}>
+                    {!m.isSelf && <UserAvatar avatarUrl={m.senderAvatarUrl} name={m.senderName} size={28} accent={C.accent} />}
+                    <div style={{
+                      maxWidth: '75%', padding: '8px 12px', borderRadius: 14,
+                      background: m.isSelf ? C.accent : C.surface,
+                      borderTopRightRadius: m.isSelf ? 4 : 14,
+                      borderTopLeftRadius: m.isSelf ? 14 : 4,
+                    }}>
+                      {!m.isSelf && <div style={{ fontSize: 11, fontWeight: 600, color: C.accent, marginBottom: 2 }}>{m.senderName}</div>}
+                      <div style={{ fontSize: 14, color: m.isSelf ? '#fff' : C.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
+                      <div style={{ fontSize: 10, color: m.isSelf ? 'rgba(255,255,255,0.5)' : C.textMuted, marginTop: 2, textAlign: 'right' }}>
+                        {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+                )
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input */}
+            <div style={{ padding: '10px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+              <input
+                value={chatMsg} onChange={e => setChatMsg(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && chatMsg.trim()) { e.preventDefault(); void sendChatMsg(); } }}
+                style={{ ...inputStyle, flex: 1, borderRadius: 20, padding: '10px 16px' }}
+                placeholder={t('gg_chat_input_ph', locale)}
+              />
+              <button
+                disabled={!chatMsg.trim() || sending}
+                onClick={() => void sendChatMsg()}
+                style={{
+                  width: 40, height: 40, borderRadius: 20, border: 'none',
+                  background: chatMsg.trim() ? C.accent : C.surface,
+                  color: '#fff', fontSize: 16, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  opacity: sending ? 0.5 : 1,
+                }}>↑</button>
+            </div>
+          </div>
+        );
+
+        async function sendChatMsg() {
+          if (!chatMsg.trim() || sending) return;
+          setSending(true);
+          try {
+            const r = await tgFetch('/tg/group-gifts/' + gg.id + '/messages', {
+              method: 'POST',
+              body: JSON.stringify({ text: chatMsg.trim() }),
+            });
+            if (r.ok) {
+              const msg = await r.json() as (typeof groupGiftMessages)[0];
+              setGroupGiftMessages(prev => [...prev, msg]);
+              setChatMsg('');
+            }
+          } catch { pushToast(t('error_generic', locale), 'error'); }
+          finally { setSending(false); }
+        }
+      })()}
 
       {/* ── PUBLIC PROFILE SCREEN ── */}
       {/* ── PROMO WIN-BACK REWARD MODAL ── */}
