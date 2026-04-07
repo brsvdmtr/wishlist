@@ -5364,7 +5364,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setScreen('guest-item-detail');
     } else if (screen === 'group-gift-detail') {
       setGroupGiftData(null);
-      if (fromReservations) {
+      if (homeReturnTab !== null) {
+        const tab = homeReturnTab;
+        setHomeReturnTab(null);
+        setHomeTab(tab);
+        if (tab === 'reservations') void loadReservations();
+        setScreen('my-wishlists');
+      } else if (fromReservations) {
         setFromReservations(false);
         setScreen('my-reservations');
       } else {
@@ -9142,13 +9148,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               <div key={item.id} style={{ animation: `fadeIn 0.3s ease ${delay}s both` }}>
                                 <div
                                   onClick={() => {
-                                    setViewingItem({ ...item, reservedByDisplayName: null, reservedByActorHash: myActorHashRef.current } as GuestItem);
-                                    setHomeReturnTab('reservations');
-                                    setScreen('guest-item-detail');
+                                    if (item.groupGiftId) {
+                                      void (async () => {
+                                        try {
+                                          const r = await tgFetch(`/tg/group-gifts/${item.groupGiftId}`);
+                                          if (r.ok) {
+                                            const gg = await r.json() as GroupGiftData;
+                                            setGroupGiftData(gg);
+                                            setHomeReturnTab('reservations');
+                                            setScreen('group-gift-detail');
+                                          }
+                                        } catch { /* ignore */ }
+                                      })();
+                                    } else {
+                                      setViewingItem({ ...item, reservedByDisplayName: null, reservedByActorHash: myActorHashRef.current } as GuestItem);
+                                      setHomeReturnTab('reservations');
+                                      setScreen('guest-item-detail');
+                                    }
                                   }}
                                   style={{
                                     background: C.card, borderRadius: 14, padding: 14,
-                                    border: `1px solid ${C.border}`, cursor: 'pointer',
+                                    border: `1px solid ${item.groupGiftRole ? 'rgba(124,106,255,0.25)' : C.border}`, cursor: 'pointer',
                                     WebkitTapHighlightColor: 'transparent',
                                   }}
                                 >
@@ -9161,8 +9181,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                           <span style={{ minWidth: 20, height: 20, borderRadius: 10, background: C.accent, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px', flexShrink: 0 }}>{item.unreadComments}</span>
                                         )}
                                       </div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                                        {item.meta?.purchased ? (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                                        {item.groupGiftRole ? (
+                                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: C.accentSoft, color: C.accent, display: 'inline-flex', alignItems: 'center', gap: 3 }}>👥 {t('gg_reservation_badge', locale)}</span>
+                                        ) : item.meta?.purchased ? (
                                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: C.accentSoft, color: C.accent, display: 'inline-flex', alignItems: 'center', gap: 3 }}>✓ {t('res_purchased', locale)}</span>
                                         ) : (
                                           <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>✓ {t('reservations_reserved', locale)}</span>
@@ -9171,6 +9193,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                           <span style={{ fontSize: 13, fontWeight: 600, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>
                                         )}
                                       </div>
+                                      {item.groupGiftRole && (
+                                        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>
+                                          {item.groupGiftRole === 'organizer'
+                                            ? t('gg_reservation_you_organizer', locale)
+                                            : `${t('gg_reservation_organizer', locale)}: ${item.groupGiftOrganizerName ?? ''}`}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                   {/* Pro section: note, actions */}
