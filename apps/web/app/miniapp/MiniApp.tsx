@@ -549,6 +549,18 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-07',
+    date: '07.04.2026',
+    items: [
+      { ru: '👥 Совместный подарок — скидывайтесь на один подарок компанией', en: '👥 Group Gift — pool money together for one gift' },
+      { ru: 'Создание сбора, приглашение участников по ссылке, отслеживание прогресса', en: 'Create a collection, invite participants via link, track progress' },
+      { ru: 'Чат участников внутри сбора', en: 'In-collection participant chat' },
+      { ru: 'Закрепление реквизитов для перевода', en: 'Pin payment details for transfers' },
+      { ru: 'Активные сборы отображаются в «Мои брони» — и для организатора, и для участников', en: 'Active collections appear in "My Reservations" — for organizer and participants' },
+      { ru: 'Исправлена ошибка при нажатии на «Скинуться компанией»', en: 'Fixed crash when tapping "Pool together"' },
+    ],
+  },
+  {
     id: '2026-04-06',
     date: '06.04.2026',
     items: [
