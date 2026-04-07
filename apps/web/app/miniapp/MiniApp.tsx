@@ -5471,9 +5471,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setScreen('maintenance');
           // Record maintenance exposure (best-effort, endpoint is whitelisted during maintenance)
           tgFetch('/tg/maintenance-exposure', { method: 'POST', body: JSON.stringify({ surface: 'miniapp', locale }) }).catch(() => {});
-        } else if (kind === 'unavailable' || msg === 'UNAVAILABLE') {
-          setScreen('maintenance');
-          tgFetch('/tg/maintenance-exposure', { method: 'POST', body: JSON.stringify({ surface: 'miniapp', locale }) }).catch(() => {});
+        } else if (kind === 'unavailable' || msg === 'UNAVAILABLE' || (e instanceof Error && e.name === 'AbortError')) {
+          // Network error / timeout — show connection error, not maintenance
+          setErrorMsg(locale === 'ru'
+            ? 'Нет подключения к интернету.\nПроверь сеть и попробуй ещё раз.'
+            : 'No internet connection.\nCheck your network and try again.');
+          setScreen('error');
         } else {
           setErrorMsg(t('error_load_failed', locale));
           setScreen('error');
@@ -5859,8 +5862,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (screen === 'guest-view' && guestWl && tgUser) {
       void loadGuestSubscriptionStatus(guestWl.id);
     }
-    if (screen !== 'guest-view') {
+    if (screen !== 'guest-view' && screen !== 'loading') {
       // Reset guest subscription state when leaving guest-view
+      // (skip 'loading' — it's an intermediate screen during subscription→guest navigation)
       setIsSubscribed(false);
       setSubscriberCount(0);
       setGuestSubId(null);
@@ -8001,6 +8005,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         @keyframes slideUp { from { opacity:0; transform:translateY(100%) } to { opacity:1; transform:translateY(0) } }
         @keyframes toastIn { from { opacity:0; transform:translateY(20px) scale(0.95) } to { opacity:1; transform:translateY(0) scale(1) } }
         @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
+        @keyframes skeletonShimmer { 0%,100% { opacity:0.25 } 50% { opacity:0.5 } }
         @keyframes onb-spin { to { transform:rotate(360deg) } }
         @keyframes onb-fade { from { opacity:0 } to { opacity:1 } }
         * { box-sizing:border-box; -webkit-tap-highlight-color:transparent }
@@ -8169,11 +8174,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
           );
         }
+        const isNetworkErr = errorMsg.includes('интернет') || errorMsg.includes('internet') || errorMsg.includes('connection');
         return (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
-            <div style={{ fontSize: 48 }}>😕</div>
-            <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>{t('error_loading', locale)}</div>
-            <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>{errorMsg || t('error_unknown', locale)}</div>
+            <div style={{ fontSize: 48 }}>{isNetworkErr ? '📡' : '😕'}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>
+              {isNetworkErr
+                ? (locale === 'ru' ? 'Нет связи' : 'No connection')
+                : t('error_loading', locale)}
+            </div>
+            <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{errorMsg || t('error_unknown', locale)}</div>
             <button style={{ ...btnPrimary, marginTop: 8, width: 200 }} onClick={() => window.location.reload()}>{t('retry', locale)}</button>
           </div>
         );
@@ -8464,6 +8474,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       await loadGuestWishlist(sub.wishlist.slug);
                       setScreen('guest-view');
                     } catch {
+                      pushToast(locale === 'ru' ? 'Не удалось загрузить. Проверь сеть.' : 'Failed to load. Check your connection.', 'error');
                       setScreen('my-wishlists');
                     }
                   }}
@@ -9656,7 +9667,22 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
 
             {loading && items.length === 0 && (
-              <div style={{ textAlign: 'center', padding: 40, color: C.textMuted }}>{t('loading', locale)}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 0' }}>
+                {[0, 1, 2, 3, 4].map(i => (
+                  <div key={i} style={{
+                    background: C.card, borderRadius: 16, padding: 14,
+                    display: 'flex', gap: 14, alignItems: 'center',
+                    animation: `skeletonShimmer 1.2s ease-in-out infinite`,
+                    animationDelay: `${i * 0.12}s`,
+                  }}>
+                    <div style={{ width: 56, height: 56, borderRadius: 12, background: C.surface, flexShrink: 0 }} />
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ height: 13, borderRadius: 6, background: C.surface, width: `${70 - i * 8}%` }} />
+                      <div style={{ height: 10, borderRadius: 5, background: C.surface, width: `${45 - i * 5}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
 
             {/* ── Item reorder mode ── */}
@@ -15621,7 +15647,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               style={{
                 width: 52, height: 32, borderRadius: 16, position: 'relative', cursor: 'pointer',
                 background: dgVisible ? C.accent : C.surface,
-                border: dgVisible ? 'none' : `1.5px solid ${C.textMuted}`,
+                border: 'none',
+                boxShadow: dgVisible ? 'none' : `inset 0 0 0 1.5px ${C.textMuted}`,
                 transition: 'background 0.2s',
               }}
             >
