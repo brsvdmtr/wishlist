@@ -1900,6 +1900,7 @@ const ru: Dict = {
   // ── Group Gift (Совместный подарок) ──────────────────────────────────────
   gg_cta: 'Скинуться компанией',
   gg_cta_hint: 'Объединитесь на один подарок, обсудите детали внутри бота и соберите сумму вместе',
+  gg_reservation_badge: 'Совместный сбор',
   gg_paywall_title: 'Совместный подарок',
   gg_paywall_f1: 'Участники и общий прогресс',
   gg_paywall_f2: 'Встроенный чат для обсуждения',
@@ -3675,6 +3676,7 @@ const en: Dict = {
   // ── Group Gift ──────────────────────────────────────────────────────────────
   gg_cta: 'Contribute together',
   gg_cta_hint: 'Pool money for one gift, discuss details in the app, and collect the amount together',
+  gg_reservation_badge: 'Group gift',
   gg_paywall_title: 'Group Gift',
   gg_paywall_f1: 'Participants and shared progress',
   gg_paywall_f2: 'Built-in chat for discussion',

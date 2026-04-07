@@ -2433,7 +2433,17 @@ tgRouter.get(
       }
     }
 
-    // 6. Map response
+    // 6. Batch fetch groupGiftId for items that have an active group gift
+    const ggMap = new Map<string, string>();
+    if (itemIds.length > 0) {
+      const ggs = await prisma.groupGift.findMany({
+        where: { itemId: { in: itemIds }, status: 'OPEN' },
+        select: { id: true, itemId: true },
+      });
+      for (const g of ggs) ggMap.set(g.itemId, g.id);
+    }
+
+    // 7. Map response
     const reservations = items.map(item => ({
       ...mapTgItem(item),
       ownerName: ownerNames.get(item.wishlist.owner.id) ?? t('api_user_fallback', locale),
@@ -2442,6 +2452,7 @@ tgRouter.get(
       unreadComments: unreadCounts[item.id] ?? 0,
       reservedAt: item.createdAt.toISOString(),
       ...(resPro ? { meta: metaMap.get(item.id) ?? null } : {}),
+      groupGiftId: ggMap.get(item.id) ?? null,
     }));
 
     return res.json({ reservations, reservationPro: resPro, reservationBeta: isReservationBeta(user) });

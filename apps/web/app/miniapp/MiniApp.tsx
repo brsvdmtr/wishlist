@@ -287,6 +287,7 @@ type ReservationItem = Item & {
   unreadComments: number;
   reservedAt?: string;
   meta?: ReservationMeta | null;
+  groupGiftId?: string | null;
 };
 
 type HistoryReservationItem = Item & {
@@ -2349,10 +2350,11 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
 // RESERVATION CARD (for "My Reservations" section)
 // ═══════════════════════════════════════════════════════
 
-function ReservationCard({ item, onTap, onUnreserve, animDelay, locale }: {
+function ReservationCard({ item, onTap, onUnreserve, onGroupGift, animDelay, locale }: {
   item: ReservationItem;
   onTap: () => void;
   onUnreserve: () => void;
+  onGroupGift?: () => void;
   animDelay: number;
   locale: Locale;
 }) {
@@ -2401,7 +2403,19 @@ function ReservationCard({ item, onTap, onUnreserve, animDelay, locale }: {
             {t('reservations_reserved', locale)}
           </span>
         </div>
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {onGroupGift && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onGroupGift(); }}
+              style={{
+                background: C.accentSoft, border: `1px solid rgba(124,106,255,0.3)`,
+                borderRadius: 10, padding: '6px 14px', fontSize: 12,
+                color: C.accent, cursor: 'pointer', fontFamily: font, fontWeight: 500,
+              }}
+            >
+              👥 {t('gg_reservation_badge', locale)}
+            </button>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); onUnreserve(); }}
             style={{
@@ -5330,7 +5344,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setScreen('guest-item-detail');
     } else if (screen === 'group-gift-detail') {
       setGroupGiftData(null);
-      setScreen('guest-view');
+      if (fromReservations) {
+        setFromReservations(false);
+        setScreen('my-reservations');
+      } else {
+        setScreen('guest-view');
+      }
     } else if (screen === 'group-gift-join') {
       setGroupGiftJoinToken(null);
       setGroupGiftData(null);
@@ -9717,6 +9736,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           setScreen('guest-item-detail');
                         }}
                         onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveFromReservations(item))}
+                        onGroupGift={item.groupGiftId ? () => {
+                          void (async () => {
+                            try {
+                              const r = await tgFetch(`/tg/group-gifts/${item.groupGiftId}`);
+                              if (r.ok) {
+                                const gg = await r.json() as GroupGiftData;
+                                setGroupGiftData(gg);
+                                setFromReservations(true);
+                                setScreen('group-gift-detail');
+                              }
+                            } catch { /* ignore */ }
+                          })();
+                        } : undefined}
                       />
                     );
                   })}
