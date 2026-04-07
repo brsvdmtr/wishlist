@@ -542,9 +542,9 @@ if (!token) {
     // Override any stale per-chat menu button left by previous bot versions
     await ctx.setChatMenuButton(menuButton).catch(() => {});
 
-    // Store chat ID for notifications
     const telegramId = String(ctx.from.id);
     const chatId = String(ctx.chat.id);
+    logger.info({ telegramId, startPayload: ctx.startPayload || null }, '/start received');
     await prisma.user.upsert({
       where: { telegramId },
       update: { telegramChatId: chatId },
