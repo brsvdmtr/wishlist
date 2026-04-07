@@ -1,7 +1,15 @@
--- Add market segmentation fields to UserProfile
-ALTER TABLE "UserProfile" ADD COLUMN "normalizedLocale" TEXT;
-ALTER TABLE "UserProfile" ADD COLUMN "marketBucket" TEXT;
-ALTER TABLE "UserProfile" ADD COLUMN "supportedImportRegion" BOOLEAN;
+-- Add market segmentation fields to UserProfile (idempotent)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'UserProfile' AND column_name = 'normalizedLocale') THEN
+    ALTER TABLE "UserProfile" ADD COLUMN "normalizedLocale" TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'UserProfile' AND column_name = 'marketBucket') THEN
+    ALTER TABLE "UserProfile" ADD COLUMN "marketBucket" TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'UserProfile' AND column_name = 'supportedImportRegion') THEN
+    ALTER TABLE "UserProfile" ADD COLUMN "supportedImportRegion" BOOLEAN;
+  END IF;
+END $$;
 
 -- Backfill existing users from their stored language (raw Telegram language_code)
 -- normalizedLocale: same logic as normalizeLocale() in i18n.ts

@@ -19,7 +19,7 @@ COMPOSE_FILE="$PROJECT_DIR/docker-compose.prod.yml"
 DEPLOY_DIR="$PROJECT_DIR/.deploy"
 HEALTH_URL="https://wishlistik.ru/api/health"
 HEALTH_DEEP_URL="https://wishlistik.ru/api/health/deep"
-BOT_HEARTBEAT_WAIT=75
+BOT_HEARTBEAT_WAIT=30
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -90,6 +90,14 @@ log "Commit: $SHA ($BRANCH)"
 mkdir -p "$DEPLOY_DIR"
 echo "$FULL_SHA" > "$DEPLOY_DIR/last-attempted-release"
 
+# ── Set APP_RELEASE so containers log the git SHA ────────────────────────────
+if grep -q '^APP_RELEASE=' .env; then
+  sed -i "s/^APP_RELEASE=.*/APP_RELEASE=$SHA/" .env
+else
+  echo "APP_RELEASE=$SHA" >> .env
+fi
+log "APP_RELEASE=$SHA"
+
 # ── Enable maintenance mode (api/web only) ────────────────────────────────────
 
 if $NEEDS_MAINTENANCE; then
@@ -146,10 +154,12 @@ if $NEEDS_MAINTENANCE; then
   docker compose -f "$COMPOSE_FILE" up -d "${SERVICES[@]}"
   sleep 8
 
-  # Verify maintenance is actually off
-  MAINT_CHECK=$(curl -s "$HEALTH_URL" | grep -o '"maintenance":true' || true)
-  if [ -n "$MAINT_CHECK" ]; then
+  # Verify maintenance is actually off via /health response
+  HEALTH_BODY=$(curl -s "$HEALTH_URL" || true)
+  if echo "$HEALTH_BODY" | grep -q '"maintenance":true'; then
     warn "Maintenance still appears active after restart"
+  elif echo "$HEALTH_BODY" | grep -q '"maintenance":false'; then
+    log "  /health confirms maintenance=false ✓"
   fi
 
   # Verify API env var

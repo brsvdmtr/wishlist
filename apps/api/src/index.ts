@@ -146,7 +146,10 @@ function deleteUploadFile(imageUrl: string | null): void {
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '30d', immutable: true }));
 // ──────────────────────────────────────────────────────────────────────────────
 
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) => {
+  const maintenance = (process.env.MAINTENANCE_MODE ?? '').toLowerCase() === 'true';
+  res.json({ ok: !maintenance, maintenance, release: process.env.APP_RELEASE ?? 'unknown' });
+});
 
 // ─── Deep health check ────────────────────────────────────────────────────────
 app.get('/health/deep', asyncHandler(async (_req, res) => {

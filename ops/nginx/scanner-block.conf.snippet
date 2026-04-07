@@ -1,0 +1,43 @@
+# ─── Block common vulnerability scanners at nginx level ──────────────────────
+#
+# Returns 444 (drop connection) for paths that are never valid in this app.
+# Keeps scanner noise out of Express logs entirely.
+#
+# HOW TO USE:
+#   Add inside the server { ... } block in /etc/nginx/sites-available/wishlistik.ru,
+#   BEFORE the location / and location /api/ blocks:
+#
+#   include /opt/wishlist/ops/nginx/scanner-block.conf.snippet;
+#
+# Or paste the location blocks directly into the server block.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# .env probes
+location ~ /\.env {
+    return 444;
+}
+
+# .environment, .git, .svn, .hg
+location ~ /\.(environment|git|svn|hg) {
+    return 444;
+}
+
+# PHP probes
+location ~ \.(php|phps|phtml)$ {
+    return 444;
+}
+
+# Common scanner targets
+location ~ ^/(wp-admin|wp-login|wp-content|wp-includes|wordpress|xmlrpc|phpinfo|adminer|phpmyadmin) {
+    return 444;
+}
+
+# Kubernetes / Docker / Cloud metadata probes
+location ~ ^/(v[0-9]+/(secrets|namespaces|executions)|credentials|_next/server) {
+    return 444;
+}
+
+# Open proxy test (absolute URL in request line)
+location ~ ^https?:// {
+    return 444;
+}
