@@ -3221,6 +3221,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     senderId: string; senderName: string; senderAvatarUrl: string | null; isSelf: boolean;
   }>>([]);
   const [groupGiftJoinToken, setGroupGiftJoinToken] = useState<string | null>(null);
+  // Group Gift form state (hoisted to avoid conditional hook calls)
+  const [ggTargetAmt, setGgTargetAmt] = useState('');
+  const [ggDeadline, setGgDeadline] = useState('');
+  const [ggNote, setGgNote] = useState('');
+  const [ggMyAmount, setGgMyAmount] = useState('');
+  const [ggCreating, setGgCreating] = useState(false);
+  const [ggJoinAmt, setGgJoinAmt] = useState('');
+  const [ggJoining, setGgJoining] = useState(false);
+  const [ggChatMsg, setGgChatMsg] = useState('');
+  const [ggChatSending, setGgChatSending] = useState(false);
+  const ggMessagesEndRef = useRef<HTMLDivElement>(null);
   const [readySharePromptData, setReadySharePromptData] = useState<{ wishlistId: string; wishlistTitle: string; itemsCount: number } | null>(null);
   const [faqOpenId, setFaqOpenId] = useState<number | null>(null);
   const [changelogOpenId, setChangelogOpenId] = useState<string | null>(null);
@@ -5079,6 +5090,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 price: viewingItem.price ?? null,
                 currency: (viewingItem as GuestItem).currency ?? 'RUB',
               });
+              setGgTargetAmt(viewingItem.price ? String(viewingItem.price) : '');
+              setGgDeadline(''); setGgNote(''); setGgMyAmount(''); setGgCreating(false);
               setScreen('group-gift-create');
             }
           }
@@ -5352,6 +5365,29 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       tg.BackButton.show();
     }
   }, [screen, santaWishlistPickerReturnId]);
+
+  // Group Gift chat: scroll to bottom when messages change
+  useEffect(() => {
+    if (screen === 'group-gift-chat') {
+      ggMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [screen, groupGiftMessages.length]);
+
+  // Group Gift chat: poll for new messages every 5s
+  useEffect(() => {
+    if (screen !== 'group-gift-chat' || !groupGiftData) return;
+    const ggId = groupGiftData.id;
+    const interval = setInterval(async () => {
+      try {
+        const r = await tgFetch('/tg/group-gifts/' + ggId + '/messages');
+        if (r.ok) {
+          const d = await r.json() as { messages: typeof groupGiftMessages };
+          setGroupGiftMessages(d.messages);
+        }
+      } catch { /* ignore */ }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [screen, groupGiftData?.id, tgFetch]);
 
   // --- Desktop sidebar navigation listener ---
   useEffect(() => {
@@ -10909,6 +10945,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               price: viewingItem.price ?? null,
                               currency: (viewingItem as GuestItem).currency ?? 'RUB',
                             });
+                            setGgTargetAmt(viewingItem.price ? String(viewingItem.price) : '');
+                            setGgDeadline(''); setGgNote(''); setGgMyAmount(''); setGgCreating(false);
                             setScreen('group-gift-create');
                           } else {
                             setScreen('group-gift-paywall');
@@ -11132,12 +11170,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               locale={locale}
             />
 
-            {/* Hint for third parties */}
-            {viewingItem.status === 'available' && !commentRole && (
-              <div style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', marginTop: 16, lineHeight: 1.5, padding: '0 16px' }}>
-                {t('after_reserve_hint', locale)}
-              </div>
-            )}
+            {/* Hint for third parties — hidden on guest-item-detail (gg_cta_hint already provides guidance) */}
 
             {/* Unreserve button — at the very bottom, below comments */}
             {viewingItem.status === 'reserved' && !!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current && homeReturnTab === 'reservations' && (
@@ -20505,14 +20538,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
       {/* ── GROUP GIFT: CREATE ── */}
       {screen === 'group-gift-create' && groupGiftCreateItem && (() => {
-        /* eslint-disable react-hooks/rules-of-hooks */
-        const [ggTargetAmt, setGgTargetAmt] = useState(groupGiftCreateItem.price ? String(groupGiftCreateItem.price) : '');
-        const [ggDeadline, setGgDeadline] = useState('');
-        const [ggNote, setGgNote] = useState('');
-        const [ggMyAmount, setGgMyAmount] = useState('');
-        const [ggCreating, setGgCreating] = useState(false);
-        /* eslint-enable react-hooks/rules-of-hooks */
-
         const currSym = groupGiftCreateItem.currency === 'USD' ? '$' : groupGiftCreateItem.currency === 'EUR' ? '€' : '₽';
         return (
           <div style={{ padding: '16px 16px 40px' }}>
@@ -20881,10 +20906,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const fmtAmt = (n: number) => n.toLocaleString() + ' ' + currSym;
         const deadlineDate = gg.deadline ? new Date(gg.deadline) : null;
         const daysLeft = deadlineDate ? Math.ceil((deadlineDate.getTime() - Date.now()) / 86400000) : null;
-        /* eslint-disable react-hooks/rules-of-hooks */
-        const [joinAmt, setJoinAmt] = useState('');
-        const [joining, setJoining] = useState(false);
-        /* eslint-enable react-hooks/rules-of-hooks */
+        const joinAmt = ggJoinAmt;
+        const setJoinAmt = setGgJoinAmt;
+        const joining = ggJoining;
+        const setJoining = setGgJoining;
 
         return (
           <div style={{ padding: '24px 16px 40px', textAlign: 'center' }}>
@@ -20992,29 +21017,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {/* ── GROUP GIFT: CHAT ── */}
       {screen === 'group-gift-chat' && groupGiftData && (() => {
         const gg = groupGiftData;
-        /* eslint-disable react-hooks/rules-of-hooks */
-        const [chatMsg, setChatMsg] = useState('');
-        const [sending, setSending] = useState(false);
-        const messagesEndRef = useRef<HTMLDivElement>(null);
-
-        useEffect(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, [groupGiftMessages.length]);
-
-        // Poll for new messages every 5s
-        useEffect(() => {
-          const interval = setInterval(async () => {
-            try {
-              const r = await tgFetch('/tg/group-gifts/' + gg.id + '/messages');
-              if (r.ok) {
-                const d = await r.json() as { messages: typeof groupGiftMessages };
-                setGroupGiftMessages(d.messages);
-              }
-            } catch { /* ignore */ }
-          }, 5000);
-          return () => clearInterval(interval);
-        }, [gg.id]);
-        /* eslint-enable react-hooks/rules-of-hooks */
+        const chatMsg = ggChatMsg;
+        const setChatMsg = setGgChatMsg;
+        const sending = ggChatSending;
+        const setSending = setGgChatSending;
+        const messagesEndRef = ggMessagesEndRef;
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)' }}>
