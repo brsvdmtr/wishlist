@@ -288,6 +288,8 @@ type ReservationItem = Item & {
   reservedAt?: string;
   meta?: ReservationMeta | null;
   groupGiftId?: string | null;
+  groupGiftRole?: 'organizer' | 'participant' | null;
+  groupGiftOrganizerName?: string | null;
 };
 
 type HistoryReservationItem = Item & {
@@ -2390,19 +2392,35 @@ function ReservationCard({ item, onTap, onUnreserve, onGroupGift, animDelay, loc
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
           {item.price != null && (
             <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>
               {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
             </span>
           )}
-          <span style={{
-            fontSize: 11, background: C.greenSoft, color: C.green,
-            padding: '2px 8px', borderRadius: 6, fontWeight: 600,
-          }}>
-            {t('reservations_reserved', locale)}
-          </span>
+          {item.groupGiftRole ? (
+            <span style={{
+              fontSize: 11, background: C.accentSoft, color: C.accent,
+              padding: '2px 8px', borderRadius: 6, fontWeight: 600,
+            }}>
+              👥 {t('gg_reservation_badge', locale)}
+            </span>
+          ) : (
+            <span style={{
+              fontSize: 11, background: C.greenSoft, color: C.green,
+              padding: '2px 8px', borderRadius: 6, fontWeight: 600,
+            }}>
+              {t('reservations_reserved', locale)}
+            </span>
+          )}
         </div>
+        {item.groupGiftRole && (
+          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
+            {item.groupGiftRole === 'organizer'
+              ? t('gg_reservation_you_organizer', locale)
+              : `${t('gg_reservation_organizer', locale)}: ${item.groupGiftOrganizerName ?? ''}`}
+          </div>
+        )}
         <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {onGroupGift && (
             <button
@@ -2416,16 +2434,18 @@ function ReservationCard({ item, onTap, onUnreserve, onGroupGift, animDelay, loc
               👥 {t('gg_reservation_badge', locale)}
             </button>
           )}
-          <button
-            onClick={(e) => { e.stopPropagation(); onUnreserve(); }}
-            style={{
-              background: C.redSoft, border: `1px solid rgba(248,113,113,0.3)`,
-              borderRadius: 10, padding: '6px 14px', fontSize: 12,
-              color: C.red, cursor: 'pointer', fontFamily: font, fontWeight: 500,
-            }}
-          >
-            {t('reservations_unreserve', locale)}
-          </button>
+          {item.groupGiftRole !== 'participant' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onUnreserve(); }}
+              style={{
+                background: C.redSoft, border: `1px solid rgba(248,113,113,0.3)`,
+                borderRadius: 10, padding: '6px 14px', fontSize: 12,
+                color: C.red, cursor: 'pointer', fontFamily: font, fontWeight: 500,
+              }}
+            >
+              {t('reservations_unreserve', locale)}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -9727,13 +9747,28 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         animDelay={delay}
                         locale={locale}
                         onTap={() => {
-                          setViewingItem({
-                            ...item,
-                            reservedByDisplayName: null,
-                            reservedByActorHash: myActorHashRef.current,
-                          } as GuestItem);
-                          setFromReservations(true);
-                          setScreen('guest-item-detail');
+                          if (item.groupGiftId) {
+                            // Group gift items — go straight to group gift detail
+                            void (async () => {
+                              try {
+                                const r = await tgFetch(`/tg/group-gifts/${item.groupGiftId}`);
+                                if (r.ok) {
+                                  const gg = await r.json() as GroupGiftData;
+                                  setGroupGiftData(gg);
+                                  setFromReservations(true);
+                                  setScreen('group-gift-detail');
+                                }
+                              } catch { /* ignore */ }
+                            })();
+                          } else {
+                            setViewingItem({
+                              ...item,
+                              reservedByDisplayName: null,
+                              reservedByActorHash: myActorHashRef.current,
+                            } as GuestItem);
+                            setFromReservations(true);
+                            setScreen('guest-item-detail');
+                          }
                         }}
                         onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveFromReservations(item))}
                         onGroupGift={item.groupGiftId ? () => {

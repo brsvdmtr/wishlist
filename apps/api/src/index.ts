@@ -2266,7 +2266,7 @@ tgRouter.get(
 
     // Count user's active reservations (for "My Reservations" section)
     // Includes both regular item reservations and Santa-flow SantaItemReservation rows.
-    const [regularReservationsCount, santaReservationsCount] = await Promise.all([
+    const [regularReservationsCount, santaReservationsCount, ggParticipantCount] = await Promise.all([
       prisma.item.count({ where: { reserverUserId: user.id, status: 'RESERVED' } }),
       prisma.santaItemReservation.count({
         where: {
@@ -2277,8 +2277,15 @@ tgRouter.get(
           },
         },
       }),
+      // Count group gift participations where user is NOT the item reserver (to avoid double-counting)
+      prisma.groupGiftParticipant.count({
+        where: {
+          userId: user.id,
+          groupGift: { status: 'OPEN', item: { reserverUserId: { not: user.id } } },
+        },
+      }),
     ]);
-    const reservationsCount = regularReservationsCount + santaReservationsCount;
+    const reservationsCount = regularReservationsCount + santaReservationsCount + ggParticipantCount;
 
     return res.json({
       wishlists: wishlists.map((wl, idx) => {
@@ -2443,7 +2450,70 @@ tgRouter.get(
       for (const g of ggs) ggMap.set(g.itemId, g.id);
     }
 
-    // 7. Map response
+    // 7. Fetch group gift participations (user is participant but NOT the item reserver)
+    const ggParts = await prisma.groupGiftParticipant.findMany({
+      where: { userId: user.id, groupGift: { status: 'OPEN' } },
+      select: {
+        groupGift: {
+          select: {
+            id: true,
+            itemId: true,
+            organizer: {
+              select: {
+                id: true, firstName: true, telegramChatId: true,
+                profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true } },
+              },
+            },
+            item: {
+              select: {
+                id: true, wishlistId: true, title: true, url: true, priceText: true,
+                imageUrl: true, priority: true, status: true, description: true,
+                sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+                createdAt: true, updatedAt: true,
+                wishlist: {
+                  select: {
+                    owner: {
+                      select: {
+                        id: true, firstName: true, telegramChatId: true,
+                        profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    // Filter out items already in main reservations (organizer = reserver)
+    const ggPartExtras = ggParts.filter(p => !itemIds.includes(p.groupGift.itemId));
+
+    // Resolve organizer names for participant items
+    const ggOrganizerNames = new Map<string, string>();
+    await Promise.all(
+      ggPartExtras.map(async (p) => {
+        const org = p.groupGift.organizer;
+        if (!ggOrganizerNames.has(org.id)) {
+          ggOrganizerNames.set(org.id, await resolveUserFirstName(org, locale));
+        }
+      }),
+    );
+
+    // Resolve owner names for participant items
+    for (const p of ggPartExtras) {
+      const owner = p.groupGift.item.wishlist.owner;
+      if (!ownerNames.has(owner.id)) {
+        ownerNames.set(owner.id, await resolveUserFirstName(owner, locale));
+        const profile = owner.profile;
+        ownerAvatarUrls.set(
+          owner.id,
+          (profile?.avatarPublic !== false && profile?.avatarUrl) ? profile.avatarUrl : null,
+        );
+      }
+    }
+
+    // 8. Map response
     const reservations = items.map(item => ({
       ...mapTgItem(item),
       ownerName: ownerNames.get(item.wishlist.owner.id) ?? t('api_user_fallback', locale),
@@ -2453,7 +2523,27 @@ tgRouter.get(
       reservedAt: item.createdAt.toISOString(),
       ...(resPro ? { meta: metaMap.get(item.id) ?? null } : {}),
       groupGiftId: ggMap.get(item.id) ?? null,
+      groupGiftRole: (ggMap.has(item.id) ? 'organizer' : null) as 'organizer' | 'participant' | null,
+      groupGiftOrganizerName: null as string | null,
     }));
+
+    // Add participant group gift items
+    for (const p of ggPartExtras) {
+      const item = p.groupGift.item;
+      const ownerId = item.wishlist.owner.id;
+      reservations.push({
+        ...mapTgItem(item),
+        ownerName: ownerNames.get(ownerId) ?? t('api_user_fallback', locale),
+        ownerAvatarUrl: ownerAvatarUrls.get(ownerId) ?? null,
+        ownerId,
+        unreadComments: 0,
+        reservedAt: item.createdAt.toISOString(),
+        ...(resPro ? { meta: null } : {}),
+        groupGiftId: p.groupGift.id,
+        groupGiftRole: 'participant' as const,
+        groupGiftOrganizerName: ggOrganizerNames.get(p.groupGift.organizer.id) ?? null,
+      });
+    }
 
     return res.json({ reservations, reservationPro: resPro, reservationBeta: isReservationBeta(user) });
   }),
