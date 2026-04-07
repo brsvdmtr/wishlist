@@ -20901,9 +20901,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               ))}
             </div>
 
-            {/* Action buttons */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Chat button */}
+            {/* ── Section 1: Primary actions (Chat + Share) ── */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
               <button onClick={() => {
                 void (async () => {
                   try {
@@ -20915,94 +20914,117 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   } catch { /* ignore */ }
                   setScreen('group-gift-chat');
                 })();
-              }} style={{ ...btnSecondary, width: '100%', borderRadius: 14 }}>
+              }} style={{ ...btnSecondary, flex: 1, borderRadius: 14, padding: '14px 0' }}>
                 {'💬 ' + t('gg_write_chat', locale)}
               </button>
-
-              {/* Share button */}
               {gg.status === 'OPEN' && (
                 <button onClick={() => {
                   const link = buildTgDeepLink(`gg_${gg.inviteToken}`) ?? `https://t.me/WishHub_bot?startapp=gg_${gg.inviteToken}`;
                   const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(t('gg_share_text', locale).replace('{{name}}', gg.organizerName))}`;
                   try { window.Telegram?.WebApp.openTelegramLink(shareUrl); } catch { window.open(shareUrl, '_blank'); }
                   trackEvent('group_gift_shared', { groupGiftId: gg.id });
-                }} style={{ ...btnPrimary, width: '100%', borderRadius: 14 }}>
+                }} style={{ ...btnPrimary, flex: 1, borderRadius: 14, padding: '14px 0' }}>
                   {'📤 ' + t('gg_share', locale)}
                 </button>
               )}
+            </div>
 
-              {/* Organizer actions */}
-              {gg.isOrganizer && gg.status === 'OPEN' && (
-                <>
-                  <button onClick={() => {
-                    const newPinned = prompt(t('gg_edit_pinned', locale), gg.pinnedInfo ?? '');
-                    if (newPinned === null) return;
-                    void (async () => {
-                      try {
-                        const r = await tgFetch('/tg/group-gifts/' + gg.id + '/pinned', {
-                          method: 'PATCH',
-                          body: JSON.stringify({ pinnedInfo: newPinned }),
-                        });
-                        if (r.ok) {
-                          setGroupGiftData(prev => prev ? { ...prev, pinnedInfo: newPinned } : prev);
-                          pushToast(t('gg_toast_pinned_updated', locale), 'success');
-                        }
-                      } catch { pushToast(t('error_generic', locale), 'error'); }
-                    })();
-                  }} style={{ ...btnGhost, width: '100%', fontSize: 14 }}>
-                    {'📌 ' + t('gg_edit_pinned', locale)}
-                  </button>
-                  <button onClick={() => {
-                    if (!confirm(t('gg_complete_confirm', locale))) return;
-                    void (async () => {
-                      try {
-                        const r = await tgFetch('/tg/group-gifts/' + gg.id + '/complete', { method: 'POST' });
-                        if (r.ok) {
-                          setGroupGiftData(prev => prev ? { ...prev, status: 'COMPLETED' } : prev);
-                          pushToast(t('gg_toast_completed', locale), 'success');
-                        }
-                      } catch { pushToast(t('error_generic', locale), 'error'); }
-                    })();
-                  }} style={{ ...btnPrimary, width: '100%', borderRadius: 14, background: C.green }}>
-                    {'✅ ' + t('gg_complete', locale)}
-                  </button>
-                  <button onClick={() => {
-                    if (!confirm(t('gg_cancel_confirm', locale))) return;
-                    void (async () => {
-                      try {
-                        const r = await tgFetch('/tg/group-gifts/' + gg.id + '/cancel', { method: 'POST' });
-                        if (r.ok) {
-                          setGroupGiftData(null);
-                          pushToast(t('gg_toast_cancelled', locale), 'info');
-                          setScreen('guest-view');
-                        }
-                      } catch { pushToast(t('error_generic', locale), 'error'); }
-                    })();
-                  }} style={{ ...btnGhost, width: '100%', fontSize: 14, color: C.red }}>
-                    {'❌ ' + t('gg_cancel', locale)}
-                  </button>
-                </>
-              )}
+            {/* ── Section 2: Management (organizer only) ── */}
+            {gg.isOrganizer && gg.status === 'OPEN' && (
+              <div style={{ marginTop: 24 }}>
+                <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 8 }}>
+                  {t('gg_section_manage', locale)}
+                </div>
+                <div style={{ background: C.surface, borderRadius: 14, overflow: 'hidden' }}>
+                  <div
+                    onClick={() => {
+                      const newPinned = prompt(t('gg_edit_pinned', locale), gg.pinnedInfo ?? '');
+                      if (newPinned === null) return;
+                      void (async () => {
+                        try {
+                          const r = await tgFetch('/tg/group-gifts/' + gg.id + '/pinned', {
+                            method: 'PATCH',
+                            body: JSON.stringify({ pinnedInfo: newPinned }),
+                          });
+                          if (r.ok) {
+                            setGroupGiftData(prev => prev ? { ...prev, pinnedInfo: newPinned } : prev);
+                            pushToast(t('gg_toast_pinned_updated', locale), 'success');
+                          }
+                        } catch { pushToast(t('error_generic', locale), 'error'); }
+                      })();
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', padding: '14px 16px',
+                      cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
+                    <span style={{ fontSize: 16, marginRight: 10 }}>📌</span>
+                    <span style={{ flex: 1, fontSize: 14, color: C.text, fontWeight: 500 }}>{t('gg_edit_pinned', locale)}</span>
+                    <span style={{ fontSize: 18, color: C.textMuted }}>›</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
-              {/* Participant: leave */}
-              {!gg.isOrganizer && gg.isParticipant && gg.status === 'OPEN' && (
+            {/* ── Section 3: Complete & Cancel (organizer) ── */}
+            {gg.isOrganizer && gg.status === 'OPEN' && (
+              <div style={{ marginTop: 24 }}>
                 <button onClick={() => {
-                  if (!confirm(t('gg_leave_confirm', locale))) return;
+                  if (!confirm(t('gg_complete_confirm', locale))) return;
                   void (async () => {
                     try {
-                      const r = await tgFetch('/tg/group-gifts/' + gg.id + '/leave', { method: 'POST' });
+                      const r = await tgFetch('/tg/group-gifts/' + gg.id + '/complete', { method: 'POST' });
+                      if (r.ok) {
+                        setGroupGiftData(prev => prev ? { ...prev, status: 'COMPLETED' } : prev);
+                        pushToast(t('gg_toast_completed', locale), 'success');
+                      }
+                    } catch { pushToast(t('error_generic', locale), 'error'); }
+                  })();
+                }} style={{ ...btnPrimary, width: '100%', borderRadius: 14, background: C.green, padding: '15px 0' }}>
+                  {'✅ ' + t('gg_complete', locale)}
+                </button>
+                <button onClick={() => {
+                  if (!confirm(t('gg_cancel_confirm', locale))) return;
+                  void (async () => {
+                    try {
+                      const r = await tgFetch('/tg/group-gifts/' + gg.id + '/cancel', { method: 'POST' });
                       if (r.ok) {
                         setGroupGiftData(null);
-                        pushToast(t('gg_toast_left', locale), 'info');
+                        pushToast(t('gg_toast_cancelled', locale), 'info');
                         setScreen('guest-view');
                       }
                     } catch { pushToast(t('error_generic', locale), 'error'); }
                   })();
-                }} style={{ ...btnGhost, width: '100%', fontSize: 14, color: C.red }}>
-                  {t('gg_leave', locale)}
+                }} style={{
+                  background: 'none', border: 'none', width: '100%', marginTop: 16, padding: '10px 0',
+                  fontSize: 13, color: C.red, opacity: 0.7, cursor: 'pointer', fontFamily: font, fontWeight: 500, textAlign: 'center' as const,
+                }}>
+                  {'❌ ' + t('gg_cancel', locale)}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* ── Participant: leave ── */}
+            {!gg.isOrganizer && gg.isParticipant && gg.status === 'OPEN' && (
+              <button onClick={() => {
+                if (!confirm(t('gg_leave_confirm', locale))) return;
+                void (async () => {
+                  try {
+                    const r = await tgFetch('/tg/group-gifts/' + gg.id + '/leave', { method: 'POST' });
+                    if (r.ok) {
+                      setGroupGiftData(null);
+                      pushToast(t('gg_toast_left', locale), 'info');
+                      setScreen('guest-view');
+                    }
+                  } catch { pushToast(t('error_generic', locale), 'error'); }
+                })();
+              }} style={{
+                background: 'none', border: 'none', width: '100%', marginTop: 20, padding: '10px 0',
+                fontSize: 13, color: C.red, opacity: 0.7, cursor: 'pointer', fontFamily: font, fontWeight: 500, textAlign: 'center' as const,
+              }}>
+                {t('gg_leave', locale)}
+              </button>
+            )}
           </div>
         );
       })()}
