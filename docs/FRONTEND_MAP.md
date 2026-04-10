@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-04-02. Verified from source code.
+> Date: 2026-04-10. Verified from source code.
 
 ---
 
@@ -41,7 +41,7 @@ packages/shared/src/
 
 `MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook. There is no routing library. ~300 `useState` calls and 240+ in the main component.
 
-### Screen Type Union (36 screens)
+### Screen Type Union (46 screens)
 
 ```typescript
 type Screen =
@@ -54,16 +54,22 @@ type Screen =
   | 'settings' | 'profile' | 'public-profile'
   // Archive / Drafts (2)
   | 'archive' | 'drafts'
-  // Onboarding v2 (9)
+  // Onboarding v2 (10)
   | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete'
   | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery'
   | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share'
+  | 'onboarding-manual'
   // Secret Santa (9)
   | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join'
   | 'santa-chat' | 'santa-polls' | 'santa-exclusions'
   | 'santa-organizer' | 'santa-receiver-wishlist'
   // Gift Notes (3)
-  | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall';
+  | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall'
+  // Group Gift (5)
+  | 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail'
+  | 'group-gift-join' | 'group-gift-chat'
+  // Settings extras (4)
+  | 'faq' | 'changelog' | 'legal' | 'legal-doc';
 ```
 
 Navigation is done by calling `setScreen(...)` together with supporting state (`setSelectedWishlist(...)`, `setSelectedItem(...)`, etc.). There are no URL changes.
@@ -105,7 +111,7 @@ Navigation is done by calling `setScreen(...)` together with supporting state (`
 | 14 | `archive` | Archived/completed items -- either wishlist-specific or global. Restore/purge. Bulk restore, bulk hard-delete |
 | 15 | `drafts` | SYSTEM_DRAFTS wishlist: URL-imported items awaiting curation. Move to real wishlist or edit. Bulk move, bulk delete, bulk archive |
 
-#### Onboarding v2 (9)
+#### Onboarding v2 (10)
 
 Multi-step welcome flow for new users. Controlled by server-side onboarding status (`/tg/onboarding/status`).
 
@@ -146,6 +152,35 @@ Occasion-based gift idea tracker. Requires add-on purchase (`gift_notes_unlock`)
 | 34 | `gift-notes` | List of gift occasions (birthdays, holidays, etc.). Create/edit occasions with recurrence |
 | 35 | `gift-notes-occasion` | Detail view for a single occasion: ideas list, add/complete/delete ideas, edit occasion metadata, complete/archive/delete occasion |
 | 36 | `gift-notes-paywall` | Paywall gate for Gift Notes add-on purchase via Telegram Stars |
+
+#### Group Gift (5)
+
+Full group gift collection system with shared contributions, chat, and invite links.
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 37 | `group-gift-paywall` | Purchase screen for `group_gift_unlock` (79 Stars). Shows features list, buy button |
+| 38 | `group-gift-create` | Create form: target amount, deadline (optional), note, initial contribution amount |
+| 39 | `group-gift-detail` | Main dashboard: progress bar, participants list with amounts, chat button, share button. Organizer sees management section (edit payment details, complete, cancel). Participant sees own amount editor and leave option |
+| 40 | `group-gift-join` | Join screen via invite link: shows item, organizer name, progress, amount input |
+| 41 | `group-gift-chat` | Chat messages between participants. Supports USER and SYSTEM message types. Auto-polls every 5s |
+
+#### Settings Extras (4)
+
+Additional screens accessible from the settings area.
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 42 | `faq` | FAQ screen in settings |
+| 43 | `changelog` | Release notes / What's New |
+| 44 | `legal` | Legal documents list |
+| 45 | `legal-doc` | Single legal document view |
+
+#### Onboarding Extra (1)
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 46 | `onboarding-manual` | Manual item creation in onboarding |
 
 ---
 

@@ -1,6 +1,6 @@
 # WishBoard — User Flows
 
-> Source of truth for all user journeys. Last updated: 2026-04-02 · Branch: main
+> Source of truth for all user journeys. Last updated: 2026-04-10 · Branch: main
 >
 > This document reflects the product as implemented, not aspirational features.
 
@@ -32,6 +32,9 @@
 22. [Promo Code Redemption](#flow-22-promo-code-redemption)
 23. [Lifecycle / Degradation](#flow-23-lifecycle--degradation)
 24. [Change Badges / Unread](#flow-24-change-badges--unread)
+25. [Group Gift (Совместный подарок)](#flow-25-group-gift-совместный-подарок)
+26. [Wishlist Categories](#flow-26-wishlist-categories)
+27. [Don't Gift (Не дарить)](#flow-27-dont-gift-не-дарить)
 
 ---
 
@@ -800,3 +803,167 @@ This flow manages what happens when a user loses PRO access (subscription expire
 **Edge cases:**
 - If a subscriber has no unreads, `unreadCount` is 0 and no badge is shown.
 - Unread records are deduplicated by `entityId` — multiple changes to the same item count as one unread entity.
+
+---
+
+## Flow 25: Group Gift (Совместный подарок)
+
+**Actor:** Guest viewing a friend's wishlist (organizer), invited users (participants).
+
+### Paywall
+
+1. Guest taps an item in a friend's wishlist and opens the item detail view.
+2. Guest taps the **"Скинуться компанией"** button.
+3. **If not unlocked:** The app shows the `group_gift_unlock` paywall. App sends `POST /tg/billing/addon/checkout` with `{ skuCode: 'group_gift_unlock' }`.
+4. Server generates a Telegram Stars invoice for **79 XTR** (SKU: `group_gift_unlock`, type: permanent).
+5. User pays via Telegram Stars invoice flow and calls `POST /tg/billing/addon/sync` to refresh access.
+
+### Create collection
+
+6. Guest sets the **target amount** for the group gift.
+7. Optionally sets a **deadline** (date by which contributions should be collected).
+8. Optionally adds a **note** (visible to all participants).
+9. Enters their **own contribution** amount.
+10. App sends `POST /tg/items/:id/group-gift` with `{ targetAmount, deadline?, note?, ownContribution }`.
+11. Server creates a `GroupGift` record, a `GroupGiftParticipation` record for the organizer, and **auto-reserves** the item for the organizer.
+
+### Share / Invite
+
+12. The organizer is presented with a share button to invite friends via Telegram.
+13. The invite link uses a deep link format: `https://t.me/{BOT_USERNAME}?startapp=gg_{inviteToken}`.
+14. The organizer shares the link via Telegram's native share dialog.
+
+### Join flow (invited user)
+
+15. Invited user taps the deep link in Telegram; the Mini App opens with `?startapp=gg_{inviteToken}`.
+16. The app detects the `gg_` prefix and loads the group gift detail via the invite token.
+17. The invited user sees the item details, current progress toward the target amount, and participant list.
+18. The invited user enters their **contribution amount** and confirms.
+19. App sends the join request; the server creates a `GroupGiftParticipation` record for the new participant.
+20. The **organizer receives a Telegram notification** that a new participant has joined.
+
+### Detail screen
+
+21. The group gift detail screen shows:
+    - Progress bar (collected amount vs. target amount)
+    - Participant list with individual contribution amounts
+    - Chat section for participant communication
+    - Pinned payment info (set by the organizer)
+22. All participants can access the detail screen from the item view or from **"My Reservations"**.
+
+### Organizer actions
+
+23. **Edit payment details:** Organizer can update pinned payment information (e.g. card number, payment method).
+24. **Complete collection:** Organizer marks the collection as complete. All participants are notified via Telegram.
+25. **Cancel collection:** Organizer cancels the group gift. All participants are notified via Telegram. The item reservation is released.
+
+### Participant actions
+
+26. **Edit own amount:** Participant can update their contribution amount.
+27. **Leave collection:** Participant can leave the group gift (their contribution is removed).
+28. **Chat:** Participant can send messages in the group gift chat.
+
+### Entry from My Reservations
+
+29. Both the organizer and participants see group gift items in the **My Reservations** tab.
+30. Group gift items are displayed with a distinct badge indicating they are part of a group collection.
+31. Tapping a group gift reservation opens the group gift detail screen.
+
+### Notifications
+
+32. Organizer is notified when someone joins the collection.
+33. All participants are notified when the collection is completed.
+34. All participants are notified when the collection is cancelled.
+
+**Edge cases:**
+- If the organizer cancels, the item's reservation is released and becomes available again.
+- The invite token is unique per group gift and remains valid until the collection is completed or cancelled.
+- A user cannot join a group gift for an item on their own wishlist.
+
+---
+
+## Flow 26: Wishlist Categories
+
+**Actor:** Authenticated wishlist owner, or guest viewing a wishlist.
+
+### Creating a category
+
+1. Owner opens a wishlist detail view.
+2. Owner taps the **"+"** button or opens the menu and selects "Add category".
+3. Owner enters a **category name**.
+4. App sends the create request; server creates a category record associated with the wishlist.
+5. The new category appears as a collapsible section in the wishlist.
+
+### Renaming a category
+
+6. Owner long-presses on a category header (or uses the menu on the category header).
+7. A rename input appears with the current name pre-filled.
+8. Owner edits the name and confirms.
+9. App sends the update request with the new name.
+
+### Deleting a category
+
+10. Owner selects "Delete" from the category menu.
+11. A confirmation prompt warns that items will be moved to the default (uncategorized) section.
+12. On confirm, the app sends the delete request.
+13. All items previously in that category are moved to uncategorized.
+
+### Moving items to a category
+
+14. Owner selects one or more items (single or bulk selection).
+15. Owner chooses "Move to category" from the action menu.
+16. A category picker appears listing all categories for this wishlist.
+17. Owner selects the target category.
+18. App sends the move request; items are reassigned to the selected category.
+
+### Reordering categories
+
+19. Owner enters reorder mode (drag handle on category headers).
+20. Owner drags categories to change their display order.
+21. App sends the updated sort order to the server.
+
+### Guest view
+
+22. When a guest views a shared wishlist, categories are displayed as **collapsible sections**.
+23. Each category section can be expanded or collapsed independently.
+24. Items without a category appear in a default section.
+
+**Edge cases:**
+- A wishlist can have zero categories; in that case, all items appear in a flat list (backward-compatible).
+- Category names must be unique within a wishlist.
+- Deleting the last category returns the wishlist to a flat item list.
+
+---
+
+## Flow 27: Don't Gift (Не дарить)
+
+**Actor:** Authenticated PRO user managing their profile, or guest viewing a friend's wishlist.
+
+**Precondition:** Active PRO subscription required to configure Don't Gift preferences.
+
+### Configuration (profile settings)
+
+1. User opens **Profile settings**.
+2. User navigates to the **"Don't Gift"** section (visible to PRO users only).
+3. The screen presents **preset categories** as toggleable chips:
+   - Food, Alcohol, Sweets, Flowers, Perfume, and other common gift categories.
+4. User toggles on/off any preset categories they do not want to receive as gifts.
+5. Below the presets, a **custom items** section allows free-text entries of specific unwanted items.
+6. User adds, edits, or removes custom entries as needed.
+7. An optional **comment** field allows the user to add a free-text explanation (e.g. "I have allergies" or "Already have too many").
+8. A **visibility toggle** controls whether friends can see the Don't Gift restrictions on the user's guest wishlist view.
+9. All changes are saved via the profile settings API.
+
+### Guest view
+
+10. When a guest views a wishlist whose owner has Don't Gift configured and visibility enabled, an expanded **"Don't Gift"** block is displayed on the guest wishlist view.
+11. The block shows:
+    - Selected preset categories (as tags/chips)
+    - Custom unwanted items (as a list)
+    - The owner's comment (if provided)
+12. This helps guests avoid purchasing unwanted gifts.
+
+**Edge cases:**
+- FREE users do not see the Don't Gift configuration section in settings. The feature is PRO-only.
+- If visibility is toggled off, the Don't Gift block is hidden from guests even if preferences are configured.
+- Don't Gift preferences persist across plan changes but are only visible to guests while the user has an active PRO subscription.

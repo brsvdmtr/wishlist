@@ -1,8 +1,8 @@
 # Data Model — Wishlist Telegram Mini App
 
-_Last updated: 2026-04-02_
+_Last updated: 2026-04-10_
 
-> **51 models, 30 enums** (PostgreSQL 16, managed by Prisma ORM)
+> **58 models, 31 enums** (PostgreSQL 16, managed by Prisma ORM)
 
 ---
 
@@ -321,6 +321,15 @@ Type of message in a campaign chat.
 | `USER`   | Regular participant message        |
 | `SYSTEM` | System-generated event message     |
 
+### `GroupGiftStatus`
+Lifecycle state of a group gift collection.
+
+| Value       | Meaning                                          |
+|-------------|--------------------------------------------------|
+| `OPEN`      | Collection is active, accepting participants     |
+| `COMPLETED` | Target reached or organizer closed the collection|
+| `CANCELLED` | Organizer cancelled the collection               |
+
 ---
 
 ## Models
@@ -363,6 +372,9 @@ A registered user, identified primarily by their Telegram account.
 - `lifecycleTouches[]` → `LifecycleTouch`
 - `giftOccasions[]` → `GiftOccasion`
 - `giftOccasionIdeas[]` → `GiftOccasionIdea`
+- `groupGiftsOrganized[]` → `GroupGift` (group gifts organized by this user)
+- `groupGiftParticipations[]` → `GroupGiftParticipant` (group gift participations)
+- `groupGiftMessages[]` → `GroupGiftMessage` (messages sent in group gifts)
 
 ---
 
@@ -397,6 +409,13 @@ Extended preferences and privacy settings for a user. Created lazily on the firs
 | `newWishlistPosition`  | String             | Yes      | `"bottom"`   | Whether new wishlists are inserted at the top or bottom of the list   |
 | `cardDisplayMode`      | String             | Yes      | `"auto"`     | Card display mode: auto, showcase, compact                            |
 | `supportId`            | String             | No       | —            | Unique support identifier                                             |
+| `normalizedLocale`     | String             | No       | —            | Canonical locale: `ru`, `en`, `zh-CN`, `hi`, `es`, `ar`              |
+| `marketBucket`         | String             | No       | —            | Market bucket: `ru`, `ar`, `en`, `hi`, `zh-CN`, `es`, `other_known`, `unknown` |
+| `supportedImportRegion`| Boolean            | No       | —            | `true` if user is in a market where URL import works reliably         |
+| `dontGiftPresets`      | String[]           | Yes      | `[]`         | Preset "don't gift me" categories                                     |
+| `dontGiftCustomItems`  | String[]           | Yes      | `[]`         | Custom free-text "don't gift me" items                                |
+| `dontGiftComment`      | String             | No       | —            | Free-text comment about gift preferences                              |
+| `dontGiftVisible`      | Boolean            | Yes      | `true`       | Whether the "don't gift" section is visible to others                 |
 | `createdAt`            | DateTime           | Yes      | now          |                                                                       |
 | `updatedAt`            | DateTime           | Yes      | auto         |                                                                       |
 
@@ -429,6 +448,7 @@ An ordered collection of wish items owned by a user.
 - `owner` → `User`
 - `items[]` → `Item`
 - `tags[]` → `Tag`
+- `categories[]` → `WishlistCategory` (item categories within this wishlist)
 - `wishlistSubscriptions[]` → `WishlistSubscription`
 - `santaParticipants[]` → `SantaParticipant` (linked wishlists in Santa campaigns)
 
@@ -460,6 +480,7 @@ A single wish within a wishlist.
 | `status`          | `ItemStatus`   | Yes      | `AVAILABLE` |                                                                                           |
 | `reservationEpoch`| Int            | Yes      | `0`         | Increments on each new reservation cycle; used to scope comments to the current reservation |
 | `position`        | Int            | Yes      | `0`         | Manual sort order within a priority group                                                  |
+| `categoryId`     | String         | No       | —           | FK → `WishlistCategory`. Optional category within the wishlist                            |
 | `reserverUserId`  | String         | No       | —           | Telegram user ID (not FK) of the person who reserved this item                            |
 | `archivedAt`      | DateTime       | No       | —           | Set when the item is archived                                                              |
 | `purgeAfter`      | DateTime       | No       | —           | Set to `now + 90 days` when `status = DELETED`; background job hard-deletes after this date |
@@ -468,12 +489,14 @@ A single wish within a wishlist.
 
 **Relations:**
 - `wishlist` → `Wishlist`
+- `category` → `WishlistCategory?` (optional, onDelete: SetNull)
 - `itemTags[]` → `ItemTag`
 - `reservationEvents[]` → `ReservationEvent`
 - `comments[]` → `Comment`
 - `commentReadCursors[]` → `CommentReadCursor`
 - `hints[]` → `Hint`
 - `santaItemReservations[]` → `SantaItemReservation`
+- `groupGift` → `GroupGift?` (optional one-to-one; one group gift per item)
 
 ---
 
@@ -978,6 +1001,96 @@ The Secret Santa subsystem adds 20 models. Key models are summarized below; see 
 
 ---
 
+### `WishlistCategory`
+A named category within a wishlist for organizing items into groups (e.g. "Книги", "Электроника"). Items can optionally belong to one category.
+
+| Field       | Type     | Required | Default | Notes                                               |
+|-------------|----------|----------|---------|-----------------------------------------------------|
+| `id`        | String   | Yes      | cuid    |                                                     |
+| `wishlistId`| String   | Yes      | --      | FK → `Wishlist` (CASCADE delete)                    |
+| `name`      | String   | Yes      | --      | Category display name                               |
+| `sortOrder` | Int      | Yes      | `0`     | Manual sort order within the wishlist               |
+| `isDefault` | Boolean  | Yes      | `false` | Whether this is the default category                |
+| `createdAt` | DateTime | Yes      | now     |                                                     |
+| `updatedAt` | DateTime | Yes      | auto    |                                                     |
+
+**Relations:**
+- `wishlist` → `Wishlist`
+- `items[]` → `Item`
+
+**Indexes:** `(wishlistId, sortOrder)`, `(wishlistId, isDefault)`
+
+---
+
+### Group Gift Models
+
+The Group Gift subsystem enables splitting a gift purchase among multiple participants. One group gift can exist per item; the organizer creates it, and participants join via an invite token.
+
+### `GroupGift`
+A group gift collection campaign linked to a single wish item.
+
+| Field             | Type              | Required | Default | Notes                                                      |
+|-------------------|-------------------|----------|---------|------------------------------------------------------------|
+| `id`              | String            | Yes      | cuid    |                                                            |
+| `itemId`          | String            | Yes      | --      | Unique FK → `Item` (CASCADE delete). One group gift per item |
+| `organizerUserId` | String            | Yes      | --      | FK → `User` (CASCADE delete)                              |
+| `targetAmount`    | Int               | Yes      | --      | Target amount in whole units (e.g. `32990` = 32 990 ₽)    |
+| `currency`        | `Currency`        | Yes      | `RUB`   | Currency for the target amount                             |
+| `deadline`        | Date              | No       | --      | Optional deadline for the collection                       |
+| `note`            | VarChar(500)      | No       | --      | Organizer's note for participants                          |
+| `pinnedInfo`      | VarChar(1000)     | No       | --      | Pinned info message visible to all participants            |
+| `status`          | `GroupGiftStatus` | Yes      | `OPEN`  |                                                            |
+| `inviteToken`     | String            | Yes      | cuid    | Unique invite token for joining the group gift             |
+| `completedAt`     | DateTime          | No       | --      | When the collection was completed                          |
+| `cancelledAt`     | DateTime          | No       | --      | When the collection was cancelled                          |
+| `createdAt`       | DateTime          | Yes      | now     |                                                            |
+| `updatedAt`       | DateTime          | Yes      | auto    |                                                            |
+
+**Relations:**
+- `item` → `Item`
+- `organizer` → `User`
+- `participants[]` → `GroupGiftParticipant`
+- `messages[]` → `GroupGiftMessage`
+
+**Indexes:** `(organizerUserId)`, `(inviteToken)`, `(status)`
+
+---
+
+### `GroupGiftParticipant`
+A user's participation (pledge) in a group gift.
+
+| Field        | Type     | Required | Default | Notes                                       |
+|--------------|----------|----------|---------|---------------------------------------------|
+| `id`         | String   | Yes      | cuid    |                                             |
+| `groupGiftId`| String   | Yes      | --      | FK → `GroupGift` (CASCADE delete)           |
+| `userId`     | String   | Yes      | --      | FK → `User` (CASCADE delete)               |
+| `amount`     | Int      | Yes      | --      | Pledged amount in whole units               |
+| `displayName`| String   | Yes      | --      | Display name snapshot at join time          |
+| `joinedAt`   | DateTime | Yes      | now     |                                             |
+| `updatedAt`  | DateTime | Yes      | auto    |                                             |
+
+**Unique constraint:** `(groupGiftId, userId)` — one participation per user per group gift.
+
+**Indexes:** `(userId)`, `(groupGiftId)`
+
+---
+
+### `GroupGiftMessage`
+A chat message within a group gift conversation.
+
+| Field          | Type     | Required | Default  | Notes                                     |
+|----------------|----------|----------|----------|--------------------------------------------|
+| `id`           | String   | Yes      | cuid     |                                            |
+| `groupGiftId`  | String   | Yes      | --       | FK → `GroupGift` (CASCADE delete)          |
+| `senderUserId` | String   | Yes      | --       | FK → `User` (CASCADE delete)              |
+| `text`         | VarChar(2000) | Yes | --       | Message text                               |
+| `type`         | String   | Yes      | `"USER"` | `USER` (human message) or `SYSTEM` (auto-generated) |
+| `createdAt`    | DateTime | Yes      | now      |                                            |
+
+**Indexes:** `(groupGiftId, createdAt)`, `(senderUserId)`
+
+---
+
 ## Entity Relationship Overview
 
 ```
@@ -992,8 +1105,13 @@ User ─────────────────────────
   │              │                  ├──► CommentReadCursor ◄──┤│
   │              │                  ├──► ItemTag              ││
   │              │                  ├──► Hint ◄───────────────┤│
-  │              │                  └──► SantaItemReservation ││
+  │              │                  ├──► SantaItemReservation ││
+  │              │                  └──► GroupGift?           ││
+  │              │                         │                  ││
+  │              │                         ├──► Participant[] ││
+  │              │                         └──► Message[]     ││
   │              │                                            ││
+  │              ├── has ──► WishlistCategory[] ◄── Item      ││
   │              ├── has ──► Tag ◄── ItemTag                  ││
   │              │                                            ││
   │              └── followed by ──► WishlistSubscription ◄───┘│
@@ -1058,6 +1176,13 @@ SantaGlobalConfig / SantaSeasonConfig / SantaSeasonalBroadcastLog │
 | SantaCampaign -> SantaRound          | 1 : many         | Draw rounds within a campaign                  |
 | SantaRound -> SantaAssignment        | 1 : many         | Giver-receiver pairings per round              |
 | SantaAssignment -> SantaItemReservation | 1 : many      | Santa-specific item claims                     |
+| Wishlist -> WishlistCategory           | 1 : many         | Item categories within a wishlist              |
+| WishlistCategory -> Item               | 1 : many         | Items in a category (optional FK)              |
+| Item -> GroupGift                      | 1 : 0..1        | One group gift per item                        |
+| User -> GroupGift (organized)          | 1 : many         | Group gifts organized by user                  |
+| GroupGift -> GroupGiftParticipant      | 1 : many         | Participants in a group gift                   |
+| GroupGift -> GroupGiftMessage          | 1 : many         | Chat messages in a group gift                  |
+| User -> GroupGiftParticipant           | 1 : many         | User's group gift participations               |
 
 ---
 
@@ -1068,8 +1193,18 @@ SantaGlobalConfig / SantaSeasonConfig / SantaSeasonalBroadcastLog │
 | `Item`           | `wishlistId`                              | Fetch all items for a wishlist                            |
 | `Item`           | `purgeAfter`                              | Background job to hard-delete soft-deleted items          |
 | `Item`           | `(wishlistId, priority, position)`        | Ordered item listing within a wishlist                    |
+| `Item`           | `categoryId`                              | Fetch items by category                                   |
 | `SupportSession` | `(telegramChatId, promptMessageId)`       | ForceReply routing lookup                                 |
 | `SupportSession` | `expiresAt`                               | TTL cleanup of expired sessions                           |
+| `WishlistCategory` | `(wishlistId, sortOrder)`               | Ordered category listing within a wishlist                |
+| `WishlistCategory` | `(wishlistId, isDefault)`               | Lookup default category for a wishlist                    |
+| `GroupGift`      | `organizerUserId`                         | Fetch group gifts by organizer                            |
+| `GroupGift`      | `inviteToken`                             | Lookup group gift by invite token                         |
+| `GroupGift`      | `status`                                  | Filter group gifts by status                              |
+| `GroupGiftParticipant` | `userId`                            | Fetch participations by user                              |
+| `GroupGiftParticipant` | `groupGiftId`                       | Fetch participants for a group gift                       |
+| `GroupGiftMessage` | `(groupGiftId, createdAt)`              | Chronological message listing within a group gift         |
+| `GroupGiftMessage` | `senderUserId`                          | Fetch messages by sender                                  |
 
 ---
 

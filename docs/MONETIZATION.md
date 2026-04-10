@@ -1,7 +1,7 @@
 # MONETIZATION
 
 > Source of truth for plans, limits, entitlements, billing flow, and paywall content.
-> Last updated: 2026-04-02 · Branch: main
+> Last updated: 2026-04-10 · Branch: main
 
 ---
 
@@ -306,6 +306,8 @@ One-time purchases via Telegram Stars. Defined in `ONE_TIME_SKUS` constant in `a
 | `import_pack_25` | 79 | consumable | +25 import credits |
 | `seasonal_decoration` | 29 | cosmetic | Seasonal decoration for a wishlist (target required) |
 | `gift_notes_unlock` | 19 | permanent | Unlock Gift Notes feature |
+| `reservation_pro_unlock` | 50 | permanent | Unlock reservation PRO features (purchase status tracking, notes, reminders, history) |
+| `group_gift_unlock` | 79 | permanent | Unlock ability to create group gift collections. Not included in PRO subscription |
 
 ### Add-on Caps (`ADDON_CAPS`)
 
@@ -371,7 +373,26 @@ One-time unlock (19 XTR) or included with PRO. Enables occasion-based gift plann
 
 ---
 
-## 14. Promo System
+## 14. Group Gift Monetization
+
+One-time unlock (79 XTR). **Not bundled with PRO subscription** -- purchased separately.
+
+- **Price**: 79 Telegram Stars (permanent)
+- **SKU**: `group_gift_unlock`
+- **Access**: Gives permanent access to create group gift collections. PRO users must still purchase separately.
+- **Gate**: `hasGroupGiftAccess()` -- checks for `UserAddOn(addonType='group_gift_unlock')`
+- **Features unlocked**: Create group gift collections, set target amount, invite participants, manage contributions
+
+### Group Gift API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/tg/billing/group-gift/checkout` | Create Stars invoice for Group Gift unlock |
+| `POST` | `/tg/billing/group-gift/sync` | Verify purchase |
+
+---
+
+## 15. Promo System
 
 Promo codes (e.g. `WISHPRO`) grant entitlements without Telegram Stars payment.
 
@@ -403,7 +424,7 @@ When PRO access expires (subscription lapses, promo grant expires), a `Degradati
 
 ---
 
-## 15. Lifecycle Messaging
+## 16. Lifecycle Messaging
 
 The system sends targeted messages via bot DM based on user lifecycle state:
 - **Winback**: Users who had PRO and lost it receive re-engagement messages with promo codes

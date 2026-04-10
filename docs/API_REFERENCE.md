@@ -1,6 +1,6 @@
 # API_REFERENCE.md — Complete Endpoint Reference
 
-> Last updated: 2026-04-02. Verified from `apps/api/src/index.ts` (~11,964 lines, 157+ route handlers).
+> Last updated: 2026-04-10. Verified from `apps/api/src/index.ts` (~14,800 lines, 180+ route handlers).
 
 ---
 
@@ -80,7 +80,7 @@ All routes require `X-TG-INIT-DATA` (HMAC-validated). User is auto-upserted on e
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| GET | `/tg/wishlists` | Owner | My wishlists (REGULAR, non-archived). Response includes `plan`, `subscription`, `proSource`, `promoPro`, `giftNotes`, `godMode`, `canGodMode`, `drafts`, `reservationsCount`, `addOns`, `credits`, `skus`, `cardDisplayMode`. Each wishlist includes `readOnly` flag |
+| GET | `/tg/wishlists` | Owner | My wishlists (REGULAR, non-archived). Response includes `plan`, `subscription`, `proSource`, `promoPro`, `giftNotes`, `groupGift`, `godMode`, `canGodMode`, `drafts`, `reservationsCount`, `addOns`, `credits`, `skus`, `cardDisplayMode`. Each wishlist includes `readOnly` flag. `reservationsCount` includes group gift participations where user is not the item reserver |
 | POST | `/tg/wishlists` | Any auth | Create wishlist. Body: `{ title, deadline? }`. **402** if count >= effective wishlist limit. Inherits `commentPolicy` and insert position from profile settings |
 | PATCH | `/tg/wishlists/:id` | Owner | Update title, deadline, visibility, allowSubscriptions, commentPolicy. **403** if FREE user sets `visibility=PUBLIC_PROFILE|PRIVATE`, `allowSubscriptions=NOBODY`, or `commentPolicy=SUBSCRIBERS`. Notifies subscribers of title/deadline changes |
 | DELETE | `/tg/wishlists/:id` | Owner | Hard-delete wishlist. Blocks if linked to active Santa campaign. Repacks positions |
@@ -120,6 +120,20 @@ All routes require `X-TG-INIT-DATA` (HMAC-validated). User is auto-upserted on e
 | POST | `/tg/items/bulk-hard-delete` | Owner | Permanently delete archived items (DELETED, COMPLETED, or ARCHIVED only). Body: `{ itemIds }` |
 | POST | `/tg/archive/purge` | Owner | Permanently delete ALL DELETED/COMPLETED items for the user |
 
+### Wishlist Categories (PRO-gated)
+
+All category endpoints (except GET) require PRO. Max 20 user categories per wishlist. Default category ("Без категории") is auto-created when the first custom category is added.
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/wishlists/:id/categories` | Owner | List categories for a wishlist. Ordered by `isDefault ASC, sortOrder ASC, createdAt ASC`. Response: `{ categories[] }` — each has `id`, `name`, `sortOrder`, `isDefault` |
+| POST | `/tg/wishlists/:id/categories` | Owner (PRO) | Create category. Body: `{ name: string (1-24 chars) }`. **402** if not PRO. **400** if limit (20) reached. **409** if duplicate name (case-insensitive). Response: `{ category, isFirst }` |
+| PATCH | `/tg/wishlists/:wlId/categories/:catId` | Owner (PRO) | Rename category. Body: `{ name: string (1-24 chars) }`. **402** if not PRO. **400** if default category. **409** if duplicate name. Response: `{ category }` |
+| DELETE | `/tg/wishlists/:wlId/categories/:catId` | Owner (PRO) | Delete category. Moves items to default category (preserving order). **402** if not PRO. **400** if default category. Response: `{ ok: true, movedItems: number }` |
+| POST | `/tg/wishlists/:id/categories/reorder` | Owner (PRO) | Reorder non-default categories. Body: `{ orderedIds: string[] (max 20) }`. Default category always stays last. Response: `{ ok: true }` |
+| POST | `/tg/items/:id/move-category` | Owner (PRO) | Move single item to a different category. Body: `{ categoryId }`. **400** if category not in same wishlist. Appends at end of target category. Response: `{ ok: true }` |
+| POST | `/tg/items/bulk-move-category` | Owner (PRO) | Move multiple items to a category. Body: `{ itemIds: string[] (max 100), categoryId }`. Only moves items that belong to the same wishlist as target category. Response: `{ ok: true, moved: number }` |
+
 ### Items — Guest Actions
 
 | Method | Path | Who | Description |
@@ -138,7 +152,7 @@ All routes require `X-TG-INIT-DATA` (HMAC-validated). User is auto-upserted on e
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| GET | `/tg/reservations` | Auth user | Items reserved by the current user (status=RESERVED, reserverUserId=me). Includes `ownerName`, `ownerAvatarUrl`, `ownerId`, `unreadComments` per item. For Reservation-PRO users also includes `reservationMeta` (note, purchased, reminderAt) and `reservationPro: true` flag |
+| GET | `/tg/reservations` | Auth user | Items reserved by the current user (status=RESERVED, reserverUserId=me) **plus** items where user is a GroupGiftParticipant (not the reserver). Includes `ownerName`, `ownerAvatarUrl`, `ownerId`, `unreadComments` per item. Each item also includes `groupGiftId` (string or null), `groupGiftRole` ('organizer' / 'participant' / null), and `groupGiftOrganizerName` (string or null, set for participant role). For Reservation-PRO users also includes `reservationMeta` (note, purchased, reminderAt) and `reservationPro: true` flag |
 
 ### Reservations PRO (beta-gated)
 
@@ -205,6 +219,15 @@ Access controlled by `hasReservationPro()` — currently limited to focus-group 
 | PATCH | `/tg/me/settings` | Auth user | Update settings. `languageMode` (auto/manual), `manualLanguage` (ru/en/zh-CN/hi/es/ar). PRO-gated: all notification preferences, `commentsEnabled`, `newWishlistPosition=top`, `cardDisplayMode` non-auto |
 | DELETE | `/tg/me/account` | Auth user | Permanently delete account. Blocks if user owns active Santa campaigns |
 
+### Don't Gift Preferences (PRO-gated save)
+
+Allows users to specify items they don't want to receive as gifts. Visible on public wishlist pages when `dontGiftVisible=true` and has content.
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| GET | `/tg/me/dont-gift` | Auth user | Return current "Don't Gift" preferences. Response: `{ presets: string[], customItems: string[], comment: string | null, visible: boolean }` |
+| PUT | `/tg/me/dont-gift` | Auth user (PRO) | Save preferences. Body: `{ presets?: string[] (max 30), customItems?: string[] (max 10, each max 100 chars), comment?: string | null (max 400), visible?: boolean }`. **402** if not PRO. Upserts profile. Response: same shape as GET |
+
 ### Plan & Billing
 
 | Method | Path | Who | Description |
@@ -223,7 +246,7 @@ Access controlled by `hasReservationPro()` — currently limited to focus-group 
 | POST | `/tg/billing/addon/checkout` | Auth user | Create Stars invoice for a one-time SKU. Body: `{ skuCode, targetId? }`. Validates caps. Response: `{ invoiceUrl, sessionId }` |
 | POST | `/tg/billing/addon/sync` | Auth user | Return current add-ons and credits after purchase |
 
-**10 Add-on SKUs:**
+**12 Add-on SKUs:**
 
 | SKU Code | Price (XTR) | Type | Target | Description |
 |----------|-------------|------|--------|-------------|
@@ -237,6 +260,8 @@ Access controlled by `hasReservationPro()` — currently limited to focus-group 
 | `import_pack_25` | 79 | consumable | no | 25 import credits |
 | `seasonal_decoration` | 29 | cosmetic | wishlist | Seasonal wishlist decoration |
 | `gift_notes_unlock` | 19 | permanent | no | Unlock Gift Notes feature |
+| `reservation_pro_unlock` | 50 | permanent | no | Unlock Reservation PRO feature |
+| `group_gift_unlock` | 79 | permanent | no | Unlock Group Gift feature |
 
 ### Gift Notes (19 XTR one-time unlock)
 
@@ -420,6 +445,28 @@ Access controlled by `hasReservationPro()` — currently limited to focus-group 
 | POST | `/tg/santa/campaigns/:id/exit-requests/:requestId/approve` | Organizer | Approve exit request (re-assigns) |
 | POST | `/tg/santa/campaigns/:id/exit-requests/:requestId/deny` | Organizer | Deny exit request |
 
+### Group Gift (79 XTR one-time unlock)
+
+Collaborative gift collection. Requires `group_gift_unlock` add-on (checked via `ent.hasGroupGift`). Creates a group collection for an item where multiple users pool money. The item is reserved on creation and unreserved on cancellation.
+
+**Lifecycle:** OPEN -> COMPLETED or CANCELLED.
+
+| Method | Path | Who | Description |
+|--------|------|-----|-------------|
+| POST | `/tg/items/:id/group-gift` | Auth user (Group Gift) | Create a group gift for an item. Body: `{ targetAmount: int (min 1), currency?: 'RUB'|'USD'|'EUR'|'GBP' (default RUB), deadline?: ISO8601, note?: string (max 500), displayName?: string (max 64), myAmount?: int (min 0) }`. Reserves the item, creates organizer as first participant, posts SYSTEM message. **403** `group_gift_required` (with `priceXtr`) if no add-on. **403** if own item. **404** if item not found. **409** if item not available or group gift already exists. Response: GroupGift object (201) |
+| GET | `/tg/items/:id/group-gift` | Auth user | Check if item has a group gift. If no group gift: `{ hasGroupGift: false }`. If exists and viewer is a member: `{ hasGroupGift: true, groupGift: GroupGift }`. If exists but viewer is not a member: `{ hasGroupGift: true, groupGift: { id, status } }` |
+| GET | `/tg/group-gifts/:id` | Member | Get group gift detail (role-dependent response — organizer sees all amounts, participant sees only own). **403** if not organizer/participant. **404** if not found. Response: GroupGift object |
+| GET | `/tg/group-gifts/by-invite/:token` | Auth user | Get group gift by invite token (for join flow). **403** if viewer is the item owner. **404** if token not found. **409** if group gift is not OPEN. Response: GroupGift object |
+| GET | `/tg/group-gifts/my` | Auth user | List user's active (OPEN) group gifts. Response: `{ organized: GroupGift[], participating: GroupGift[] }` |
+| POST | `/tg/group-gifts/:id/join` | Auth user | Join a group gift. Body: `{ amount: int (min 0), displayName?: string (max 64) }`. Posts SYSTEM message, notifies organizer. **403** if item owner. **404** if not found. **409** if not OPEN or already a participant. Response: GroupGift object |
+| PATCH | `/tg/group-gifts/:id/amount` | Participant | Update own contribution amount. Body: `{ amount: int (min 0) }`. Posts SYSTEM message. **403** if not a participant. **409** if not OPEN. Response: GroupGift object |
+| POST | `/tg/group-gifts/:id/leave` | Participant (not organizer) | Leave a group gift. Deletes participant row, posts SYSTEM message. **403** if organizer (must cancel instead). **404** if not a participant or not found. **409** if not OPEN. Response: `{ ok: true }` |
+| POST | `/tg/group-gifts/:id/complete` | Organizer | Complete collection. Sets `status=COMPLETED`, `completedAt=now`. Posts SYSTEM message, notifies all participants. **403** if not organizer. **409** if not OPEN. Response: `{ ok: true }` |
+| POST | `/tg/group-gifts/:id/cancel` | Organizer | Cancel collection. Sets `status=CANCELLED`, `cancelledAt=now`. Unreserves the item (sets `status=AVAILABLE`, clears `reserverUserId`). Posts SYSTEM message, notifies all participants. **403** if not organizer. **409** if not OPEN. Response: `{ ok: true }` |
+| PATCH | `/tg/group-gifts/:id/pinned` | Organizer | Update pinned payment info. Body: `{ pinnedInfo: string (max 1000) }`. Posts SYSTEM message. **403** if not organizer. Response: `{ ok: true }` |
+| GET | `/tg/group-gifts/:id/messages` | Member | Get chat messages (cursor-based pagination). Query: `?cursor=ISO8601&limit=N` (default 50, max 100). Returns messages in ascending order. **403** if not a member. Response: `{ messages[], hasMore: boolean }` |
+| POST | `/tg/group-gifts/:id/messages` | Member | Send a chat message. Body: `{ text: string (1-2000 chars) }`. **403** if not a member. Response: Message object (201) |
+
 ---
 
 ## Internal Routes (`/internal/*`)
@@ -430,6 +477,16 @@ Requires `X-INTERNAL-KEY` header equal to `BOT_TOKEN`. Used by the bot process f
 |--------|------|-------------|
 | POST | `/internal/import-url` | Parse URL and create item in SYSTEM_DRAFTS for a given `userId`. Body: `{ userId, url, note?, source? }`. **402** if not PRO or Drafts >= 50. Rate-limited: 30 req/min |
 | GET | `/internal/support/tickets/:ticketCode` | Lookup support ticket with full message history, user info, and recent context for incident investigation |
+
+**Maintenance Recovery:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/internal/maintenance/active-incident` | Check for unresolved incident (`status IN ['active', 'recovering']`). Returns `{ active, incidentId?, status?, startedAt?, lastMaintenanceSignalAt?, exposureCount? }` |
+| POST | `/internal/maintenance/exposure` | Record user exposure during maintenance. Body: `{ telegramId, surface?: 'bot'|'miniapp' (default bot), locale?: string (default 'ru'), telegramChatId? }`. Looks up user by telegramId. **404** if user not found. Response: `{ ok: true, incidentId }` |
+| POST | `/internal/maintenance/check-recovery` | Check if 15-minute stability window has passed since last maintenance signal. If `MAINTENANCE_MODE=true`: `{ recovered: false, reason: 'maintenance_mode_active' }`. If no active incident: `{ recovered: false, reason: 'no_active_incident' }`. If window in progress: `{ recovered: false, reason: 'stability_window_in_progress', elapsedMinutes, remainingMinutes }`. If stable: marks incident as `recovered`, returns `{ recovered: true, incidentId }` |
+| POST | `/internal/maintenance/mark-return` | Mark user as returned after recovery. Body: `{ userId, surface?: 'bot'|'miniapp' (default miniapp) }`. Finds most recent unreturned exposure for a recovered incident. Tracks return event. Response: `{ marked: boolean, incidentId?, wasNotified? }` |
+| POST | `/internal/maintenance/send-recovery-notifications` | Send recovery notifications to exposed users who haven't self-returned. Sends localized Telegram message with Mini App button. Batched (25 at a time, 1s delay between batches). Response: `{ sent, failed, total, incidentId }` |
 
 Note: Subscription activation is handled directly by the bot process writing to the database (not via an internal HTTP endpoint).
 
@@ -550,5 +607,68 @@ HTTP status 503. Routes `/health`, `/health/deep`, `/uploads/*`, `/internal/*` r
   text: string;
   reservationEpoch: number;
   createdAt: string;             // ISO 8601
+}
+```
+
+### GroupGift
+
+Role-dependent: organizer sees all participant amounts; non-organizer participants see only their own amount (others shown as `null`).
+
+```typescript
+{
+  id: string;
+  itemId: string;
+  item: {
+    id: string;
+    title: string;
+    imageUrl: string | null;
+    price: number | null;
+    currency: 'RUB' | 'USD' | 'EUR' | 'GBP' | null;
+    wishlistId: string;
+  };
+  organizerUserId: string;
+  organizerName: string;
+  organizerAvatarUrl: string | null;
+  targetAmount: number;
+  currency: 'RUB' | 'USD' | 'EUR' | 'GBP';
+  deadline: string | null;           // ISO 8601
+  note: string | null;
+  pinnedInfo: string | null;
+  status: 'OPEN' | 'COMPLETED' | 'CANCELLED';
+  inviteToken: string;
+  collectedAmount: number;           // sum of participant amounts
+  participantCount: number;
+  progressPct: number;               // 0-100
+  remaining: number;                 // max(0, targetAmount - collectedAmount)
+  isOrganizer: boolean;
+  isParticipant: boolean;
+  participants: {
+    id: string;
+    userId: string;
+    displayName: string;
+    avatarUrl: string | null;
+    joinedAt: string;                // ISO 8601
+    isOrganizer: boolean;
+    isSelf: boolean;
+    amount: number | null;           // visible to organizer and self only
+  }[];
+  completedAt: string | null;       // ISO 8601
+  cancelledAt: string | null;       // ISO 8601
+  createdAt: string;                 // ISO 8601
+}
+```
+
+### GroupGiftMessage
+
+```typescript
+{
+  id: string;
+  text: string;
+  type: 'USER' | 'SYSTEM';
+  createdAt: string;                 // ISO 8601
+  senderId: string;
+  senderName: string;
+  senderAvatarUrl: string | null;
+  isSelf: boolean;
 }
 ```

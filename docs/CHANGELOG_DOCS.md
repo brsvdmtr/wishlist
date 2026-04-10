@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-04-10 — Weekly Documentation Update
+
+**19 docs updated** to reflect changes from 35 commits (April 3--10):
+
+- **CURRENT_PRODUCT_STATE.md** — added 5 new features (Group Gift, Categories, Don't Gift, Maintenance Recovery, Market Segmentation), updated counts
+- **DATA_MODEL.md** — added 7 new models, 1 enum, new fields on Item and UserProfile (58 models / 31 enums total)
+- **API_REFERENCE.md** — added ~30 new endpoints (group gift suite, categories, don't gift, maintenance)
+- **MONETIZATION.md** — added 2 new SKUs (reservation_pro_unlock 50 XTR, group_gift_unlock 79 XTR), 12 total
+- **FRONTEND_MAP.md** — added 10 new screens (5 group gift, faq, changelog, legal, legal-doc, onboarding-manual), 46 total
+- **USER_FLOWS.md** — added 3 new flows (Group Gift, Categories, Don't Gift), 27 total
+- **CHANGELOG_DOCS.md** — this entry
+
+**Key shipped features:**
+
+- Wishlist Categories (full-stack: schema, API, frontend, i18n)
+- Group Gift / Совместный подарок (full-stack: 3 new models, 13 API endpoints, 5 screens, 138 i18n keys)
+- Don't Gift profile restrictions (PRO feature)
+- Maintenance recovery notification system
+- Market segmentation analytics infrastructure
+- God Mode analytics dashboard redesign
+- First-touch source attribution
+- Promo-based win-back rewards
+
+---
+
 ## 2026-04-02 — Full Documentation Audit
 
 **Scope**: All 19 existing docs updated, 6 new docs created.
