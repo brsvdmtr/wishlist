@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 
 type CuratedItem = {
   id: string;
@@ -8,9 +8,6 @@ type CuratedItem = {
   priceText: string | null;
   currency: string;
   imageUrl: string | null;
-  url: string | null;
-  description: string | null;
-  position: number;
 };
 
 type SelectionData = {
@@ -32,12 +29,8 @@ const C = {
   accent: '#7C6AFF',
   accentSoft: 'rgba(124,106,255,0.12)',
   border: 'rgba(255,255,255,0.06)',
-  green: '#34D399',
-  greenSoft: 'rgba(52,211,153,0.12)',
   orange: '#FBBF24',
   orangeSoft: 'rgba(251,191,36,0.1)',
-  red: '#F87171',
-  redSoft: 'rgba(248,113,113,0.12)',
 };
 
 const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
@@ -52,16 +45,16 @@ function formatPrice(priceText: string | null, currency: string) {
   return `${priceText} ${sym}`;
 }
 
-export default function CuratedSelectionClient({ expired, data }: { expired: boolean; data: SelectionData | { error: string; expiresAt?: string } }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+export default function CuratedSelectionClient({ expired, data, token }: { expired: boolean; data: SelectionData | { error: string; expiresAt?: string }; token: string }) {
+  const botLink = `https://t.me/WishBoardBot?start=cs_${token}`;
 
   if (expired) {
     return (
       <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: font, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center' }}>
         <div style={{ width: 80, height: 80, borderRadius: 24, background: C.orangeSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, marginBottom: 24 }}>⏱️</div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 12px' }}>Срок подборки истёк</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 12px' }}>Срок действия истёк</h1>
         <p style={{ fontSize: 15, color: C.textSec, lineHeight: 1.5, maxWidth: 320 }}>
-          Эта подборка была активна 45 дней и больше недоступна. Попросите отправителя создать новую.
+          Эта подборка была доступна 45 дней. Попросите отправителя создать новую.
         </p>
         <a
           href="https://t.me/WishBoardBot"
@@ -78,124 +71,96 @@ export default function CuratedSelectionClient({ expired, data }: { expired: boo
   }
 
   const { selection } = data as SelectionData;
-  const expiryDate = new Date(selection.expiresAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  const previewItems = selection.items.slice(0, 3);
+  const moreCount = selection.itemCount - previewItems.length;
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: font }}>
-      {/* Header */}
-      <div style={{ padding: '24px 20px 0' }}>
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: font, display: 'flex', flexDirection: 'column' }}>
+      {/* Hero */}
+      <div style={{ padding: '48px 24px 24px', textAlign: 'center' }}>
+        <div style={{ width: 72, height: 72, borderRadius: 20, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 20px' }}>📋</div>
         <div style={{
           display: 'inline-block', padding: '4px 12px', borderRadius: 8,
           background: 'rgba(96,165,250,0.12)', color: '#60A5FA',
           fontSize: 12, fontWeight: 600, marginBottom: 12,
         }}>
-          📋 Подборка из вишлиста
+          WishBoard
         </div>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', lineHeight: 1.2 }}>
           {selection.title}
         </h1>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 14, color: C.textSec }}>
-            {selection.itemCount} {selection.itemCount === 1 ? 'желание' : selection.itemCount < 5 ? 'желания' : 'желаний'}
-          </span>
-          <span style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '2px 8px', borderRadius: 6 }}>
-            Действует до {expiryDate}
-          </span>
-        </div>
+        <p style={{ fontSize: 15, color: C.textSec, margin: 0 }}>
+          {selection.itemCount} {selection.itemCount === 1 ? 'желание' : selection.itemCount < 5 ? 'желания' : 'желаний'}
+        </p>
       </div>
 
-      {/* Items */}
-      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {selection.items.map(item => {
-          const isExpanded = expandedId === item.id;
-          return (
-            <div
-              key={item.id}
-              onClick={() => setExpandedId(isExpanded ? null : item.id)}
-              style={{
-                background: C.surface, borderRadius: 14, overflow: 'hidden',
-                border: `1px solid ${C.border}`, cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14 }}>
-                {item.imageUrl ? (
-                  <img
-                    src={item.imageUrl}
-                    alt=""
-                    style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
-                  />
-                ) : (
-                  <div style={{
-                    width: 56, height: 56, borderRadius: 10, flexShrink: 0,
-                    background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
-                  }}>🎁</div>
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 15, fontWeight: 600, color: C.text,
-                    whiteSpace: isExpanded ? 'normal' : 'nowrap',
-                    overflow: isExpanded ? 'visible' : 'hidden',
-                    textOverflow: isExpanded ? 'unset' : 'ellipsis',
-                  }}>{item.title}</div>
-                  {item.priceText && (
-                    <div style={{ fontSize: 14, color: C.accent, fontWeight: 600, marginTop: 4 }}>
-                      {formatPrice(item.priceText, item.currency)}
-                    </div>
-                  )}
-                </div>
-                <span style={{ color: C.textMuted, fontSize: 14, transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>›</span>
-              </div>
-
-              {isExpanded && (
-                <div style={{ padding: '0 14px 14px', borderTop: `1px solid ${C.border}` }}>
-                  {item.description && (
-                    <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, margin: '12px 0 0' }}>{item.description}</p>
-                  )}
-                  {item.url && (
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        marginTop: 12, padding: '8px 14px', borderRadius: 10,
-                        background: C.accentSoft, color: C.accent,
-                        fontSize: 13, fontWeight: 600, textDecoration: 'none',
-                      }}
-                    >
-                      Открыть ссылку ↗
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Info block */}
-      <div style={{ padding: '0 20px 20px' }}>
-        <div style={{
-          borderRadius: 12, padding: '12px 16px', fontSize: 13,
-          background: 'rgba(96,165,250,0.08)', color: '#60A5FA', lineHeight: 1.5,
-        }}>
-          ℹ️ Это подборка из вишлиста. Здесь нельзя бронировать.
-        </div>
-      </div>
-
-      {/* CTA */}
-      <div style={{ padding: '0 20px 40px', textAlign: 'center' }}>
+      {/* CTA Button */}
+      <div style={{ padding: '0 24px' }}>
         <a
-          href="https://t.me/WishBoardBot"
+          href={botLink}
           style={{
-            display: 'block', padding: '14px 0', borderRadius: 14,
+            display: 'block', padding: '16px 0', borderRadius: 14,
             background: C.accent, color: '#fff', textDecoration: 'none',
-            fontSize: 15, fontWeight: 600,
+            fontSize: 16, fontWeight: 700, textAlign: 'center',
           }}
         >
-          Создать свой вишлист в WishBoard
+          Открыть в Telegram
+        </a>
+      </div>
+
+      {/* Mini preview */}
+      <div style={{ padding: '24px 24px 0' }}>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Превью
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {previewItems.map(item => (
+            <div key={item.id} style={{
+              background: C.surface, borderRadius: 12, padding: 12,
+              border: `1px solid ${C.border}`,
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              {item.imageUrl ? (
+                <img src={item.imageUrl} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 44, height: 44, borderRadius: 8, flexShrink: 0, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎁</div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 14, fontWeight: 600, color: C.text,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>{item.title}</div>
+                {item.priceText && (
+                  <div style={{ fontSize: 13, color: C.accent, fontWeight: 600, marginTop: 2 }}>
+                    {formatPrice(item.priceText, item.currency)}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        {moreCount > 0 && (
+          <div style={{ textAlign: 'center', padding: '12px 0', fontSize: 14, color: C.textMuted }}>
+            и ещё {moreCount}...
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ flex: 1 }} />
+      <div style={{ padding: '24px', textAlign: 'center' }}>
+        <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.5, marginBottom: 16 }}>
+          Откройте в Telegram, чтобы просмотреть все желания, сохранить подборку и создать свой вишлист
+        </div>
+        <a
+          href={botLink}
+          style={{
+            display: 'block', padding: '14px 0', borderRadius: 14,
+            background: C.surface, color: C.accent, textDecoration: 'none',
+            fontSize: 15, fontWeight: 600, border: `1px solid ${C.border}`,
+          }}
+        >
+          Открыть в Telegram
         </a>
       </div>
     </div>

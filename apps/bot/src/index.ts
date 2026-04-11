@@ -677,6 +677,17 @@ if (!token) {
         ]),
       );
     }
+    if (payload?.startsWith('cs_')) {
+      // Curated selection deep link — open lite-wishlist in Mini App
+      const token = payload.slice(3);
+      logger.info({ telegramId, type: 'curated_selection', token }, 'deep link received');
+      return ctx.reply(
+        t('bot_cs_invite_msg', locale),
+        Markup.inlineKeyboard([
+          Markup.button.webApp(t('bot_cs_open_btn', locale), `${MINI_APP_URL}?startapp=cs_${token}`),
+        ]),
+      );
+    }
     if (payload?.startsWith('profile_')) {
       // Public profile deep link
       const username = payload.slice('profile_'.length);

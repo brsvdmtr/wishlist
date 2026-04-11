@@ -26,11 +26,11 @@ async function fetchSelection(token: string) {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   try {
     const result = await fetchSelection(params.token);
-    if (!result || result.expired) return { title: 'WishBoard — Curated Selection' };
+    if (!result || result.expired) return { title: 'WishBoard' };
     const sel = result.data.selection;
     return {
       title: `${sel.title} — WishBoard`,
-      description: `Curated selection: ${sel.itemCount} wishes`,
+      description: `${sel.itemCount} wishes shared via WishBoard`,
     };
   } catch {
     return { title: 'WishBoard' };
@@ -40,5 +40,5 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function CuratedSelectionPage({ params }: PageProps) {
   const result = await fetchSelection(params.token);
   if (!result) notFound();
-  return <CuratedSelectionClient expired={result.expired} data={result.data} />;
+  return <CuratedSelectionClient expired={result.expired} data={result.data} token={params.token} />;
 }

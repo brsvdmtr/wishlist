@@ -2989,7 +2989,7 @@ tgRouter.get(
       select: {
         id: true, shareToken: true, title: true, viewCount: true,
         deactivatedAt: true, expiresAt: true, createdAt: true,
-        _count: { select: { items: true } },
+        _count: { select: { items: true, subscriptions: true } },
       },
     });
 
@@ -3000,6 +3000,7 @@ tgRouter.get(
         title: s.title,
         itemCount: s._count.items,
         viewCount: s.viewCount,
+        subscriberCount: s._count.subscriptions,
         isActive: !s.deactivatedAt && s.expiresAt > new Date(),
         expiresAt: s.expiresAt,
         createdAt: s.createdAt,
@@ -3024,6 +3025,160 @@ tgRouter.delete(
     trackEvent('selection_deactivated', user.id, { selectionId: id });
 
     return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/selections/:id/subscribe — subscribe to a curated selection
+tgRouter.post(
+  '/selections/:id/subscribe',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing selection id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const selection = await prisma.curatedSelection.findUnique({
+      where: { id },
+      select: { id: true, ownerId: true, deactivatedAt: true, expiresAt: true },
+    });
+    if (!selection) return res.status(404).json({ error: 'Selection not found' });
+    if (selection.ownerId === user.id) return res.status(400).json({ error: 'Cannot subscribe to own selection' });
+    if (selection.deactivatedAt || selection.expiresAt < new Date()) {
+      return res.status(410).json({ error: 'Selection expired' });
+    }
+
+    await prisma.curatedSelectionSubscription.upsert({
+      where: { curatedSelectionId_subscriberId: { curatedSelectionId: id, subscriberId: user.id } },
+      update: {},
+      create: { curatedSelectionId: id, subscriberId: user.id },
+    });
+
+    trackEvent('selection_subscribed', user.id, { selectionId: id });
+    return res.json({ ok: true, subscribed: true });
+  }),
+);
+
+// DELETE /tg/selections/:id/subscribe — unsubscribe from a curated selection
+tgRouter.delete(
+  '/selections/:id/subscribe',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing selection id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    await prisma.curatedSelectionSubscription.deleteMany({
+      where: { curatedSelectionId: id, subscriberId: user.id },
+    });
+
+    trackEvent('selection_unsubscribed', user.id, { selectionId: id });
+    return res.json({ ok: true, subscribed: false });
+  }),
+);
+
+// GET /tg/selections/:id/subscribe — check subscription status
+tgRouter.get(
+  '/selections/:id/subscribe',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing selection id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const sub = await prisma.curatedSelectionSubscription.findUnique({
+      where: { curatedSelectionId_subscriberId: { curatedSelectionId: id, subscriberId: user.id } },
+      select: { id: true },
+    });
+
+    return res.json({ subscribed: !!sub });
+  }),
+);
+
+// GET /tg/selections/by-token/:token — authenticated curated selection view (includes isSubscribed + isOwner)
+tgRouter.get(
+  '/selections/by-token/:token',
+  asyncHandler(async (req, res) => {
+    const token = req.params.token ?? '';
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const selection = await prisma.curatedSelection.findUnique({
+      where: { shareToken: token },
+      select: {
+        id: true, title: true, ownerId: true, expiresAt: true, deactivatedAt: true,
+        owner: { select: { firstName: true, profile: { select: { displayName: true } } } },
+        items: { orderBy: { position: 'asc' }, select: { id: true, title: true, priceText: true, currency: true, imageUrl: true, url: true, description: true, position: true } },
+      },
+    });
+    if (!selection) return res.status(404).json({ error: 'Selection not found' });
+
+    const expired = !!selection.deactivatedAt || selection.expiresAt < new Date();
+    if (expired) {
+      return res.status(410).json({ error: 'expired', expiresAt: selection.expiresAt });
+    }
+
+    const isOwner = selection.ownerId === user.id;
+    let isSubscribed = false;
+    if (!isOwner) {
+      const sub = await prisma.curatedSelectionSubscription.findUnique({
+        where: { curatedSelectionId_subscriberId: { curatedSelectionId: selection.id, subscriberId: user.id } },
+        select: { id: true },
+      });
+      isSubscribed = !!sub;
+    }
+
+    // Track view — fire-and-forget
+    prisma.curatedSelection.update({ where: { shareToken: token }, data: { viewCount: { increment: 1 } } }).catch(() => {});
+    trackEvent('selection_viewed', user.id, { selectionId: selection.id });
+
+    const ownerName = selection.owner.profile?.displayName || selection.owner.firstName || null;
+
+    return res.json({
+      selection: {
+        id: selection.id,
+        title: selection.title,
+        itemCount: selection.items.length,
+        expiresAt: selection.expiresAt,
+        ownerName,
+        isOwner,
+        isSubscribed,
+        items: selection.items,
+      },
+    });
+  }),
+);
+
+// GET /tg/selections/subscribed — list subscribed curated selections
+tgRouter.get(
+  '/selections/subscribed',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const subs = await prisma.curatedSelectionSubscription.findMany({
+      where: { subscriberId: user.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        createdAt: true,
+        curatedSelection: {
+          select: {
+            id: true, shareToken: true, title: true, expiresAt: true,
+            deactivatedAt: true, createdAt: true,
+            owner: { select: { firstName: true, profile: { select: { displayName: true } } } },
+            _count: { select: { items: true } },
+          },
+        },
+      },
+    });
+
+    const selections = subs
+      .filter(s => !s.curatedSelection.deactivatedAt && s.curatedSelection.expiresAt > new Date())
+      .map(s => ({
+        id: s.curatedSelection.id,
+        shareToken: s.curatedSelection.shareToken,
+        title: s.curatedSelection.title,
+        itemCount: s.curatedSelection._count.items,
+        ownerName: s.curatedSelection.owner.profile?.displayName || s.curatedSelection.owner.firstName || null,
+        expiresAt: s.curatedSelection.expiresAt,
+        subscribedAt: s.createdAt,
+      }));
+
+    return res.json({ selections });
   }),
 );
 
@@ -12567,6 +12722,27 @@ setInterval(async () => {
     }
   } catch (err) {
     logger.error({ err }, 'ttl cleanup failed');
+  }
+}, 60 * 60 * 1000);
+
+// TTL cleanup for expired curated selections — delete subscriptions to expired/deactivated selections (hourly)
+setInterval(async () => {
+  try {
+    const result = await prisma.curatedSelectionSubscription.deleteMany({
+      where: {
+        curatedSelection: {
+          OR: [
+            { expiresAt: { lte: new Date() } },
+            { deactivatedAt: { not: null } },
+          ],
+        },
+      },
+    });
+    if (result.count > 0) {
+      logger.info({ count: result.count }, 'ttl: cleaned subscriptions for expired/deactivated curated selections');
+    }
+  } catch (err) {
+    logger.error({ err }, 'curated selection subscription ttl cleanup failed');
   }
 }, 60 * 60 * 1000);
 

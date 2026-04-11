@@ -558,6 +558,8 @@ const RELEASE_NOTES: ReleaseNote[] = [
     id: '2026-04-11',
     date: '11.04.2026',
     items: [
+      { ru: '📋 PRO: Поделиться частью вишлиста — отправь только выбранные желания', en: '📋 PRO: Share part of wishlist — send only selected wishes' },
+      { ru: 'Ссылка открывается прямо в Telegram, можно сохранить подборку', en: 'Link opens directly in Telegram, you can save the selection' },
       { ru: '🚫 PRO: Что лучше не дарить — настройка для каждого вишлиста', en: '🚫 PRO: What not to gift — per-wishlist settings' },
       { ru: 'Плашка-подсказка прямо внутри вишлиста — заполни за пару тапов', en: 'Helpful prompt right inside the wishlist — fill in with a few taps' },
       { ru: 'Три режима: общий список, отдельный для вишлиста или скрыть', en: 'Three modes: global list, custom per wishlist, or hide' },
@@ -3303,9 +3305,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [curatedResult, setCuratedResult] = useState<{ id: string; shareToken: string; title: string; itemCount: number; expiresAt: string } | null>(null);
   const [showCuratedSuccess, setShowCuratedSuccess] = useState(false);
   const [curatedViewData, setCuratedViewData] = useState<{
-    title: string; expiresAt: string; items: { id: string; title: string; priceText: string | null; currency: string; imageUrl: string | null; url: string | null; description: string | null }[];
+    id: string; title: string; expiresAt: string; ownerName: string | null; isOwner: boolean; isSubscribed: boolean;
+    items: { id: string; title: string; priceText: string | null; currency: string; imageUrl: string | null; url: string | null; description: string | null }[];
   } | null>(null);
   const [curatedViewExpired, setCuratedViewExpired] = useState(false);
+  const [curatedSubscribing, setCuratedSubscribing] = useState(false);
 
   // Profile state
   const [profileData, setProfileData] = useState<{
@@ -3571,6 +3575,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Items with unreads (for highlight in guest-view opened from subscriptions)
   const [guestUnreadEntityIds, setGuestUnreadEntityIds] = useState<string[]>([]);
   const [guestUnreadItemCounts, setGuestUnreadItemCounts] = useState<Record<string, number>>({});
+  // Curated selection subscriptions (lite-wishlists saved by user)
+  const [curatedSubs, setCuratedSubs] = useState<{ id: string; shareToken: string; title: string; itemCount: number; ownerName: string | null; expiresAt: string }[]>([]);
 
   // Guest filter & sort state
   const [guestBudgetMax, setGuestBudgetMax] = useState<number | null>(null);
@@ -4426,12 +4432,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const loadSubscriptions = useCallback(async () => {
     setSubscriptionsLoading(true);
     try {
-      const res = await tgFetch('/tg/me/subscriptions');
-      if (!res.ok) return;
-      const json = await res.json() as { subscriptions: SubscribedWishlist[] };
-      setSubscriptions(json.subscriptions);
-      // Sync lightweight unread counter with full data
-      setSubUnreadCount(json.subscriptions.reduce((s, sub) => s + sub.unreadCount, 0));
+      const [subRes, csRes] = await Promise.all([
+        tgFetch('/tg/me/subscriptions'),
+        tgFetch('/tg/selections/subscribed'),
+      ]);
+      if (subRes.ok) {
+        const json = await subRes.json() as { subscriptions: SubscribedWishlist[] };
+        setSubscriptions(json.subscriptions);
+        setSubUnreadCount(json.subscriptions.reduce((s, sub) => s + sub.unreadCount, 0));
+      }
+      if (csRes.ok) {
+        const csJson = await csRes.json() as { selections: typeof curatedSubs };
+        setCuratedSubs(csJson.selections);
+      }
     } catch {
       // silent
     } finally {
@@ -5981,10 +5994,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           })
           .catch(handleErr);
       } else if (startParam && startParam.startsWith('cs_')) {
-        // Deep link: show curated selection in-app
+        // Deep link: show curated selection in-app (authenticated — includes isSubscribed)
         const csToken = startParam.slice(3);
         Promise.all([
-          fetch(`${apiBase}/public/selections/${encodeURIComponent(csToken)}`, { cache: 'no-store' }),
+          tgFetch(`${apiBase}/tg/selections/by-token/${encodeURIComponent(csToken)}`),
           loadWishlists().catch(() => {}),
         ])
           .then(async ([res]) => {
@@ -6897,6 +6910,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       }
     } catch { /* ignore */ }
   }, [tgFetch, pushToast, locale]);
+
+  const toggleCuratedSubscription = useCallback(async () => {
+    if (!curatedViewData || curatedSubscribing) return;
+    setCuratedSubscribing(true);
+    try {
+      const method = curatedViewData.isSubscribed ? 'DELETE' : 'POST';
+      const res = await tgFetch(`/tg/selections/${curatedViewData.id}/subscribe`, { method });
+      if (res.ok) {
+        const newSubscribed = !curatedViewData.isSubscribed;
+        setCuratedViewData(prev => prev ? { ...prev, isSubscribed: newSubscribed } : prev);
+        pushToast(t(newSubscribed ? 'curated_subscribed_toast' : 'curated_unsubscribed_toast', locale), 'success');
+      }
+    } catch { /* ignore */ }
+    setCuratedSubscribing(false);
+  }, [curatedViewData, curatedSubscribing, tgFetch, pushToast, locale]);
 
   const handleRenameWishlist = async () => {
     if (!currentWl) return;
@@ -8940,6 +8968,57 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </div>
                 </div>
               ))}
+
+              {/* Curated selection subscriptions (lite-wishlists) */}
+              {curatedSubs.length > 0 && (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 16, marginBottom: 8 }}>
+                    📋 {t('curated_saved_section', locale)}
+                  </div>
+                  {curatedSubs.map((cs, i) => (
+                    <div
+                      key={cs.id}
+                      onClick={async () => {
+                        setScreen('loading');
+                        try {
+                          const res = await tgFetch(`/tg/selections/by-token/${encodeURIComponent(cs.shareToken)}`);
+                          if (res.ok) {
+                            const data = await res.json();
+                            setCuratedViewData(data.selection);
+                            setCuratedViewExpired(false);
+                            setScreen('curated-view');
+                          } else if (res.status === 410) {
+                            setCuratedViewExpired(true);
+                            setCuratedViewData(null);
+                            setScreen('curated-view');
+                          } else {
+                            pushToast(locale === 'ru' ? 'Не удалось загрузить' : 'Failed to load', 'error');
+                            setScreen('my-wishlists');
+                          }
+                        } catch {
+                          pushToast(locale === 'ru' ? 'Не удалось загрузить' : 'Failed to load', 'error');
+                          setScreen('my-wishlists');
+                        }
+                      }}
+                      style={{
+                        background: C.card, borderRadius: 16, padding: 18, cursor: 'pointer',
+                        border: `1px solid ${C.border}`,
+                        animation: `fadeIn 0.3s ease ${i * 0.08}s both`,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, fontFamily: font, color: C.text, marginBottom: 2 }}>{cs.title}</div>
+                          <div style={{ fontSize: 12, color: C.textMuted }}>
+                            {cs.ownerName ? `${cs.ownerName} · ` : ''}{cs.itemCount} {locale === 'ru' ? (cs.itemCount === 1 ? 'желание' : cs.itemCount < 5 ? 'желания' : 'желаний') : (cs.itemCount === 1 ? 'wish' : 'wishes')}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 20, color: C.textMuted }}>›</span>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           )}
 
@@ -11668,6 +11747,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 8px', lineHeight: 1.2 }}>
                   {sel.title}
                 </h1>
+                {sel.ownerName && (
+                  <div style={{ fontSize: 14, color: C.textSec, marginBottom: 4 }}>
+                    {locale === 'ru' ? 'от' : 'by'} {sel.ownerName}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
                   <span style={{ fontSize: 14, color: C.textSec }}>
                     {sel.items.length} {locale === 'ru' ? (sel.items.length === 1 ? 'желание' : sel.items.length < 5 ? 'желания' : 'желаний') : (sel.items.length === 1 ? 'wish' : 'wishes')}
@@ -11676,6 +11760,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     {t('curated_public_valid_until', locale, { date: expiryDate })}
                   </span>
                 </div>
+
+                {/* Subscribe/Unsubscribe button — only for non-owners */}
+                {!sel.isOwner && (
+                  <button
+                    onClick={toggleCuratedSubscription}
+                    disabled={curatedSubscribing}
+                    style={{
+                      ...btnBase, width: '100%', padding: '14px 0', borderRadius: 14,
+                      fontSize: 15, fontWeight: 600, border: 'none', marginBottom: 16,
+                      background: sel.isSubscribed ? C.surface : C.accent,
+                      color: sel.isSubscribed ? C.textSec : '#fff',
+                      opacity: curatedSubscribing ? 0.6 : 1,
+                    }}
+                  >
+                    {sel.isSubscribed ? t('curated_unsubscribe_btn', locale) : t('curated_subscribe_btn', locale)}
+                  </button>
+                )}
 
                 {/* Item cards */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -11720,6 +11821,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <div style={{ marginTop: 16, borderRadius: 12, padding: '12px 16px', fontSize: 13, background: 'rgba(96,165,250,0.08)', color: '#60A5FA', lineHeight: 1.5 }}>
                   ℹ️ {t('curated_public_info', locale)}
                 </div>
+                {!sel.isOwner && !sel.isSubscribed && (
+                  <div style={{ marginTop: 10, borderRadius: 12, padding: '12px 16px', fontSize: 13, background: C.accentSoft, color: C.accent, lineHeight: 1.5 }}>
+                    💡 {t('curated_ttl_subscribe_hint', locale)}
+                  </div>
+                )}
               </>
             );
           })() : null}

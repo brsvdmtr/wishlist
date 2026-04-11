@@ -154,6 +154,7 @@ model User {
   groupGiftParticipations        GroupGiftParticipant[]   @relation("GroupGiftParticipations")
   groupGiftMessages              GroupGiftMessage[]       @relation("GroupGiftMessages")
   curatedSelections              CuratedSelection[]
+  curatedSelectionSubscriptions  CuratedSelectionSubscription[]
 }
 
 model Wishlist {
@@ -1489,7 +1490,8 @@ model CuratedSelection {
 
   wishlist  Wishlist               @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
   owner     User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  items     CuratedSelectionItem[]
+  items         CuratedSelectionItem[]
+  subscriptions CuratedSelectionSubscription[]
 
   @@index([ownerId])
   @@index([wishlistId])
@@ -1511,5 +1513,19 @@ model CuratedSelectionItem {
 
   curatedSelection CuratedSelection @relation(fields: [curatedSelectionId], references: [id], onDelete: Cascade)
 
+  @@index([curatedSelectionId])
+}
+
+model CuratedSelectionSubscription {
+  id                   String   @id @default(cuid())
+  curatedSelectionId   String
+  subscriberId         String
+  createdAt            DateTime @default(now())
+
+  curatedSelection CuratedSelection @relation(fields: [curatedSelectionId], references: [id], onDelete: Cascade)
+  subscriber       User             @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+
+  @@unique([curatedSelectionId, subscriberId])
+  @@index([subscriberId])
   @@index([curatedSelectionId])
 }
