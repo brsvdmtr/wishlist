@@ -21,7 +21,8 @@
  *   MAINTENANCE_MODE      — if "true", skip alerting (planned downtime)
  *
  * Cron example (every 5 minutes):
- *   */5 * * * * /usr/bin/node /opt/wishlist/ops/watchdog/health-watchdog.mjs >> /var/log/watchdog.log 2>&1
+ *   star/5 * * * * /usr/bin/node /opt/wishlist/ops/watchdog/health-watchdog.mjs
+ *   (replace "star" with asterisk)
  */
 
 import fs from 'node:fs';
