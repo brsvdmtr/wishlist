@@ -1,3 +1,8 @@
+import dns from 'node:dns';
+// Prefer IPv6 for Telegram API — Timeweb VPS periodically loses IPv4 connectivity
+// to Telegram DC2 (149.154.166.110) while IPv6 stays up.
+dns.setDefaultResultOrder('ipv6first');
+
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';

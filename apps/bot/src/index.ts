@@ -1,3 +1,8 @@
+import dns from 'node:dns';
+// Prefer IPv6 for Telegram API — Timeweb VPS periodically loses IPv4 connectivity
+// to Telegram DC2 (149.154.166.110) while IPv6 (2001:67c:4e8:f004::9) stays up.
+dns.setDefaultResultOrder('ipv6first');
+
 import dotenv from 'dotenv';
 import { Telegraf, Markup } from 'telegraf';
 import fs from 'node:fs';
@@ -1463,6 +1468,11 @@ if (!token) {
     void sendAdminAlert(`🔴 <b>Bot unhandledRejection</b>\n${String(reason)}`);
   });
 
-  process.once('SIGINT', () => bot.stop('SIGINT'));
-  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+  // Graceful shutdown — guard against "Bot is not running!" when SIGTERM
+  // arrives before bot.launch() completes (e.g. during getMe timeout).
+  const gracefulStop = (signal: string) => {
+    try { bot.stop(signal); } catch { process.exit(0); }
+  };
+  process.once('SIGINT', () => gracefulStop('SIGINT'));
+  process.once('SIGTERM', () => gracefulStop('SIGTERM'));
 }
