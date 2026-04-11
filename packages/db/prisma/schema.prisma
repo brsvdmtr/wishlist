@@ -137,6 +137,7 @@ model User {
   addOns                 UserAddOn[]
   credits                UserCredits?
   purchases              Purchase[]
+  welcomeSent            Boolean              @default(true)
   santaTestMode          Boolean              @default(false)
   ownedSantaCampaigns            SantaCampaign[]              @relation("OwnedSantaCampaigns")
   santaParticipations            SantaParticipant[]           @relation("SantaParticipations")

@@ -4,7 +4,7 @@ import dns from 'node:dns';
 dns.setDefaultResultOrder('ipv6first');
 
 import dotenv from 'dotenv';
-import { Telegraf, Markup } from 'telegraf';
+import { Telegraf, Markup, TelegramError } from 'telegraf';
 import fs from 'node:fs';
 import path from 'node:path';
 import { prisma } from '@wishlist/db';
@@ -560,11 +560,18 @@ if (!token) {
     const telegramId = String(ctx.from.id);
     const chatId = String(ctx.chat.id);
     logger.info({ telegramId, startPayload: ctx.startPayload || null }, '/start received');
+    // Upsert user with welcomeSent=false on both create AND update.
+    //  - create: brand-new user, hasn't received welcome yet
+    //  - update: user may have been pre-created by Mini App (API getOrCreateTgUser)
+    //    with welcomeSent=true (default), so /start must reset to false to track delivery
+    // welcomeSent is set back to true after successful message delivery below.
     await prisma.user.upsert({
       where: { telegramId },
-      update: { telegramChatId: chatId },
-      create: { telegramId, telegramChatId: chatId },
-    }).catch(() => { /* user may not exist yet — will be created by API later */ });
+      update: { telegramChatId: chatId, welcomeSent: false },
+      create: { telegramId, telegramChatId: chatId, welcomeSent: false },
+    }).catch((err) => {
+      logger.warn({ err, telegramId }, 'user upsert failed in /start');
+    });
 
     // Fire-and-forget analytics
     prisma.analyticsEvent.create({
@@ -580,6 +587,15 @@ if (!token) {
     }).catch(() => {});
 
     const payload = ctx.startPayload; // slug passed via ?start=SLUG deep link
+
+    // Deep link users get a contextual reply (not a welcome message).
+    // Mark welcomeSent=true so the startup recovery loop doesn't spam them later.
+    if (payload) {
+      await prisma.user.update({ where: { telegramId }, data: { welcomeSent: true } }).catch((err) => {
+        logger.warn({ err, telegramId }, 'failed to mark welcomeSent for deep-link user');
+      });
+    }
+
     if (payload?.startsWith('santa_')) {
       // Secret Santa invite deep link
       const token = payload.slice('santa_'.length);
@@ -686,8 +702,21 @@ if (!token) {
     // Regular start — two separate messages:
     // 1. welcome (link preview disabled so the Support link doesn't generate preview)
     // 2. donation (link preview intentionally enabled for Tribute link)
-    await ctx.reply(t('bot_start', locale), { link_preview_options: { is_disabled: true } });
-    return ctx.reply(t('bot_donation', locale));
+    //
+    // Guaranteed delivery: if the welcome reply fails (network, crash), welcomeSent
+    // stays false and the startup recovery loop will retry on next boot.
+    // This prevents losing first-time users who /start during downtime.
+    //
+    // Mark welcomeSent=true after the FIRST message — the donation is best-effort.
+    // This avoids sending a duplicate welcome if only the donation message failed.
+    try {
+      await ctx.reply(t('bot_start', locale), { link_preview_options: { is_disabled: true } });
+      await prisma.user.update({ where: { telegramId }, data: { welcomeSent: true } }).catch(() => {});
+      await ctx.reply(t('bot_donation', locale)).catch(() => {});
+    } catch (err) {
+      logger.error({ err, telegramId }, 'failed to deliver welcome message');
+      // welcomeSent stays false → startup recovery will retry
+    }
   });
 
   // /help — includes support button
@@ -1447,6 +1476,10 @@ if (!token) {
   async function launchBot(): Promise<void> {
     while (!shutdownRequested) {
       launchAttempt++;
+      // Clear stale botInfo from previous failed attempts — Telegraf sets it
+      // after getMe() but never clears it. Without this, startupCheck may fire
+      // on a stale value before polling is actually active.
+      (bot as any).botInfo = undefined;
       try {
         await bot.launch();
         // launch() resolves when polling stops (SIGTERM/SIGINT)
@@ -1481,6 +1514,69 @@ if (!token) {
 
   void launchBot();
 
+  // ─── Startup welcome recovery ──────────────────────────────────────────
+  // On startup, find users who never received their welcome message (welcomeSent=false)
+  // and deliver it. This covers crashes/network errors during /start handling.
+  // Limited to users created in last 7 days to avoid spamming ancient records.
+  async function deliverPendingWelcomes(): Promise<void> {
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const pending = await prisma.user.findMany({
+        where: {
+          welcomeSent: false,
+          telegramChatId: { not: null },
+          createdAt: { gte: sevenDaysAgo },
+        },
+        select: { id: true, telegramId: true, telegramChatId: true, profile: { select: { normalizedLocale: true } } },
+      });
+
+      if (pending.length === 0) return;
+      logger.info({ count: pending.length }, 'delivering pending welcome messages');
+
+      let sent = 0;
+      let blocked = 0;
+      let failed = 0;
+
+      for (const user of pending) {
+        if (shutdownRequested) break;
+        const chatId = user.telegramChatId!;
+        const locale = detectLocale(user.profile?.normalizedLocale ?? undefined);
+
+        try {
+          // Send welcome via raw API (not ctx — we're outside an update handler).
+          // Mark welcomeSent=true after the first message so partial delivery
+          // doesn't cause a full duplicate on the next retry.
+          await bot.telegram.sendMessage(chatId, t('bot_start', locale), { link_preview_options: { is_disabled: true } });
+          await prisma.user.update({ where: { id: user.id }, data: { welcomeSent: true } });
+          await bot.telegram.sendMessage(chatId, t('bot_donation', locale)).catch(() => {});
+          sent++;
+          logger.info({ telegramId: user.telegramId }, 'pending welcome delivered');
+        } catch (err: unknown) {
+          // 403 = user blocked bot — mark as sent so we don't retry forever
+          const is403 = (err instanceof TelegramError && err.code === 403);
+          if (is403) {
+            await prisma.user.update({ where: { id: user.id }, data: { welcomeSent: true } }).catch(() => {});
+            blocked++;
+            logger.warn({ telegramId: user.telegramId }, 'user blocked bot, marking welcome as delivered');
+          } else {
+            failed++;
+            logger.error({ err, telegramId: user.telegramId }, 'failed to deliver pending welcome');
+          }
+        }
+
+        // Small delay between messages to respect Telegram rate limits
+        if (pending.length > 1) await new Promise((r) => setTimeout(r, 500));
+      }
+
+      logger.info({ sent, blocked, failed }, 'pending welcome delivery complete');
+      if (sent > 0 || blocked > 0) {
+        void sendAdminAlert(`📬 <b>Pending welcomes</b>: ${sent} sent, ${blocked} blocked, ${failed} failed`);
+      }
+    } catch (err) {
+      logger.error({ err }, 'deliverPendingWelcomes failed');
+    }
+  }
+
   // Startup detection — poll for bot.botInfo (set by Telegraf after getMe succeeds).
   // bot.launch() resolves only when polling STOPS, so we can't use .then().
   // .unref() so this interval doesn't prevent process.exit() on fatal errors.
@@ -1491,6 +1587,8 @@ if (!token) {
       resumeHeartbeat();
       logger.info({ attempt: launchAttempt }, 'bot polling active');
       void sendAdminAlert(`🟢 <b>Bot started</b>${launchAttempt > 1 ? ` (after ${launchAttempt} attempts)` : ''}\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
+      // Deliver any pending welcome messages from previous failed /start attempts
+      void deliverPendingWelcomes();
     }
   }, 2_000);
   startupCheck.unref();
@@ -1511,9 +1609,11 @@ if (!token) {
 
   // Graceful shutdown — set flag to abort retry loop, then stop bot.
   // Guards against "Bot is not running!" when SIGTERM arrives during getMe timeout.
+  // Do NOT process.exit(0) on the catch — exit code 0 prevents Docker restart.
+  // Instead let launchBot() check shutdownRequested and return naturally.
   const gracefulStop = (signal: string) => {
     shutdownRequested = true;
-    try { bot.stop(signal); } catch { process.exit(0); }
+    try { bot.stop(signal); } catch { /* not running yet — launchBot will exit via flag */ }
   };
   process.once('SIGINT', () => gracefulStop('SIGINT'));
   process.once('SIGTERM', () => gracefulStop('SIGTERM'));
