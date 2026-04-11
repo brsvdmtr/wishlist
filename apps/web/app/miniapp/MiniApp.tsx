@@ -2730,16 +2730,51 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
     <BottomSheet isOpen={state !== null} onClose={onClose}>
       {content && (
         <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
-          {/* Hero emoji with gradient glow */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 68, height: 68, borderRadius: 22,
-            background: `linear-gradient(145deg, ${C.accent}22, ${C.accent}08)`,
-            border: `1px solid ${C.accent}18`,
-            fontSize: 32, marginBottom: 16,
-          }}>
-            {content.emoji}
-          </div>
+          {/* Custom illustration for dont_gift_banner paywall */}
+          {state?.context === 'dont_gift_banner' ? (
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: '20px 16px', marginBottom: 16, borderRadius: 16,
+              background: `linear-gradient(135deg, rgba(52,211,153,0.08), rgba(124,106,255,0.1))`,
+            }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[
+                  { emoji: '📱', ok: true },
+                  { emoji: '📚', ok: true },
+                  { emoji: '🍬', ok: false },
+                  { emoji: '💐', ok: false },
+                  { emoji: '🎧', ok: true },
+                ].map((g, i) => (
+                  <div key={i} style={{
+                    width: 48, height: 48, borderRadius: 12, fontSize: 22,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: g.ok ? C.greenSoft : C.redSoft,
+                    position: 'relative', opacity: g.ok ? 1 : 0.7,
+                  }}>
+                    {g.emoji}
+                    {!g.ok && <div style={{
+                      position: 'absolute', width: 36, height: 2, background: C.red,
+                      transform: 'rotate(-45deg)', borderRadius: 1,
+                    }} />}
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: C.textSec, marginTop: 10 }}>
+                {locale === 'ru' ? 'Друзья увидят, что стоит избегать' : 'Friends will see what to avoid'}
+              </div>
+            </div>
+          ) : (
+            /* Default hero emoji with gradient glow */
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 68, height: 68, borderRadius: 22,
+              background: `linear-gradient(145deg, ${C.accent}22, ${C.accent}08)`,
+              border: `1px solid ${C.accent}18`,
+              fontSize: 32, marginBottom: 16,
+            }}>
+              {content.emoji}
+            </div>
+          )}
 
           <div style={{ fontSize: 20, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
             {content.title}
@@ -2751,20 +2786,29 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
           {/* Benefits list for feature gates */}
           {content.benefits && (
             <div style={{ marginTop: 18, textAlign: 'start', padding: '0 4px' }}>
-              {content.benefits.map((b, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '7px 0', fontSize: 14, color: C.textSec, lineHeight: 1.3,
-                }}>
-                  <span style={{
-                    width: 22, height: 22, borderRadius: 11,
-                    background: C.accentSoft, color: C.accent,
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, flexShrink: 0, fontWeight: 700,
-                  }}>✓</span>
-                  {b}
-                </div>
-              ))}
+              {content.benefits.map((b, i) => {
+                // Custom icons for dont_gift_banner paywall
+                const bannerIcons = ['💔', '🎯', '💚'];
+                const bannerBgs = [C.redSoft, C.accentSoft, C.greenSoft];
+                const bannerColors = [C.red, C.accent, C.green];
+                const isBanner = state?.context === 'dont_gift_banner';
+                return (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 0', fontSize: 14, color: C.text, lineHeight: 1.4,
+                    borderTop: i > 0 ? `1px solid ${C.border}` : 'none',
+                  }}>
+                    <span style={{
+                      width: 28, height: 28, borderRadius: 8,
+                      background: isBanner ? bannerBgs[i] : C.accentSoft,
+                      color: isBanner ? bannerColors[i] : C.accent,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 14, flexShrink: 0,
+                    }}>{isBanner ? bannerIcons[i] : '✓'}</span>
+                    {b}
+                  </div>
+                );
+              })}
             </div>
           )}
 
