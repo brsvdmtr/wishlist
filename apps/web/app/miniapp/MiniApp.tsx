@@ -565,6 +565,8 @@ const RELEASE_NOTES: ReleaseNote[] = [
       { ru: 'Плашка-подсказка прямо внутри вишлиста — заполни за пару тапов', en: 'Helpful prompt right inside the wishlist — fill in with a few taps' },
       { ru: 'Три режима: общий список, отдельный для вишлиста или скрыть', en: 'Three modes: global list, custom per wishlist, or hide' },
       { ru: 'Гости видят компактный блок с тегами и комментарием', en: 'Guests see a compact block with tags and a comment' },
+      { ru: '🔗 Управление ссылками — просматривай и отключай все активные ссылки в одном месте', en: '🔗 Link management — view and disable all active links in one place' },
+      { ru: 'Детали по каждой ссылке: просмотры, подписчики, срок действия', en: 'Details per link: views, subscribers, expiry date' },
     ],
   },
   {
@@ -1732,6 +1734,8 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
     { icon: '👁', title: t('plan_pro_f7', locale), subtitle: t('plan_pro_sub7', locale) },
     { icon: '🛡', title: t('plan_pro_f8', locale), subtitle: t('plan_pro_sub8', locale) },
     { icon: '📅', title: t('plan_pro_f9', locale), subtitle: t('plan_pro_sub9', locale) },
+    { icon: '📋', title: t('plan_pro_f15', locale), subtitle: t('plan_pro_sub15', locale), isNew: true },
+    { icon: '🚫', title: t('plan_pro_f16', locale), subtitle: t('plan_pro_sub16', locale), isNew: true },
     // Reservation Pro features
     { icon: '📋', title: t('plan_pro_f10', locale), subtitle: t('plan_pro_sub10', locale), isNew: true },
     { icon: '📝', title: t('plan_pro_f11', locale), subtitle: t('plan_pro_sub11', locale), isNew: true },
@@ -14264,8 +14268,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
         );
 
-        const SettingsRow = ({ icon, label, value, hint, onClick, proBadge, disabled, valueSmall }: {
-          icon?: string; label: string; value: string; hint?: string; onClick?: () => void; proBadge?: boolean; disabled?: boolean; valueSmall?: boolean;
+        const SettingsRow = ({ icon, label, value, hint, onClick, proBadge, disabled, valueSmall, newBadge }: {
+          icon?: string; label: string; value: string; hint?: string; onClick?: () => void; proBadge?: boolean; disabled?: boolean; valueSmall?: boolean; newBadge?: boolean;
         }) => (
           <div onClick={disabled ? undefined : onClick} style={{
             display: 'flex', alignItems: 'center', padding: '14px 0', gap: 12,
@@ -14284,6 +14288,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 15, fontWeight: 500, color: C.text, lineHeight: 1.3 }}>{label}</span>
                 {proBadge && <ProBadge />}
+                {newBadge && <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #34D399, #10B981)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>NEW</span>}
               </div>
               {hint && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{hint}</div>}
             </div>
@@ -14615,6 +14620,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   label={t('settings_link_management', locale)}
                   value={linkMgmtData ? t('settings_link_management_count', locale, { count: (linkMgmtData.selections.length + linkMgmtData.wishlists.length + (linkMgmtData.profile ? 1 : 0)).toString() }) : ''}
                   valueSmall
+                  newBadge
                   onClick={() => { setScreen('link-management'); void loadActiveLinks(); }}
                 />
                 <SDivider />
