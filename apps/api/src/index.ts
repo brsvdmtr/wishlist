@@ -2886,6 +2886,31 @@ tgRouter.post(
   }),
 );
 
+// DELETE /tg/wishlists/:id/share-token — revoke share token (owner only)
+tgRouter.delete(
+  '/wishlists/:id/share-token',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const wishlist = await prisma.wishlist.findUnique({
+      where: { id },
+      select: { id: true, ownerId: true, shareToken: true },
+    });
+    if (!wishlist || wishlist.ownerId !== user.id) {
+      return res.status(404).json({ error: 'Wishlist not found' });
+    }
+
+    if (wishlist.shareToken) {
+      await prisma.wishlist.update({ where: { id }, data: { shareToken: null } });
+      trackEvent('share_token_revoked', user.id, { wishlistId: id });
+    }
+
+    return res.json({ ok: true });
+  }),
+);
+
 // ── Curated Selections ────────────────────────────────────────────────────
 
 async function generateUniqueCuratedToken(): Promise<string> {
@@ -6571,6 +6596,52 @@ tgRouter.get(
       isPro,
       // Owner-only — never exposed in public/share API responses
       supportId: profile.supportId,
+    });
+  }),
+);
+
+// GET /tg/me/active-links — all active share links for link management screen
+tgRouter.get(
+  '/me/active-links',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const [selections, wishlists, profile] = await Promise.all([
+      prisma.curatedSelection.findMany({
+        where: { ownerId: user.id, deactivatedAt: null, expiresAt: { gt: new Date() } },
+        orderBy: { expiresAt: 'asc' },
+        select: {
+          id: true, shareToken: true, title: true, viewCount: true,
+          expiresAt: true, createdAt: true,
+          _count: { select: { items: true, subscriptions: true } },
+        },
+      }),
+      prisma.wishlist.findMany({
+        where: { ownerId: user.id, shareToken: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, slug: true, title: true, shareToken: true, shareOpenCount: true },
+      }),
+      prisma.userProfile.findUnique({
+        where: { userId: user.id },
+        select: { username: true, profileVisibility: true },
+      }),
+    ]);
+
+    const profileLink = profile?.username && profile.profileVisibility !== 'NOBODY'
+      ? { username: profile.username, profileVisibility: profile.profileVisibility }
+      : null;
+
+    return res.json({
+      selections: selections.map(s => ({
+        id: s.id, shareToken: s.shareToken, title: s.title,
+        viewCount: s.viewCount, subscriberCount: s._count.subscriptions,
+        itemCount: s._count.items, expiresAt: s.expiresAt, createdAt: s.createdAt,
+      })),
+      wishlists: wishlists.map(w => ({
+        id: w.id, slug: w.slug, title: w.title,
+        shareToken: w.shareToken!, viewCount: w.shareOpenCount,
+      })),
+      profile: profileLink,
     });
   }),
 );

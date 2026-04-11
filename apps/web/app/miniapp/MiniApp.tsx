@@ -517,7 +517,8 @@ type GodStats = {
 type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall'
 | 'first-share-prompt'
 | 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat'
-| 'curated-view';
+| 'curated-view'
+| 'link-management';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -3311,6 +3312,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [curatedViewExpired, setCuratedViewExpired] = useState(false);
   const [curatedSubscribing, setCuratedSubscribing] = useState(false);
 
+  // Link management state
+  type LinkMgmtSelection = { id: string; shareToken: string; title: string; viewCount: number; subscriberCount: number; itemCount: number; expiresAt: string; createdAt: string };
+  type LinkMgmtWishlist = { id: string; slug: string; title: string; shareToken: string; viewCount: number };
+  type LinkMgmtProfile = { username: string; profileVisibility: string };
+  type LinkMgmtDetailItem = { type: 'selection' | 'wishlist' | 'profile'; data: LinkMgmtSelection | LinkMgmtWishlist | LinkMgmtProfile };
+  const [linkMgmtData, setLinkMgmtData] = useState<{ selections: LinkMgmtSelection[]; wishlists: LinkMgmtWishlist[]; profile: LinkMgmtProfile | null } | null>(null);
+  const [linkMgmtLoading, setLinkMgmtLoading] = useState(false);
+  const [linkMgmtDetailItem, setLinkMgmtDetailItem] = useState<LinkMgmtDetailItem | null>(null);
+  const [linkMgmtConfirmRevoke, setLinkMgmtConfirmRevoke] = useState(false);
+  const [linkMgmtRevoking, setLinkMgmtRevoking] = useState(false);
+
   // Profile state
   const [profileData, setProfileData] = useState<{
     displayName: string | null;
@@ -5372,6 +5384,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setCuratedViewData(null);
       setCuratedViewExpired(false);
       setScreen('my-wishlists');
+    } else if (screen === 'link-management') {
+      setLinkMgmtData(null);
+      setLinkMgmtDetailItem(null);
+      setLinkMgmtConfirmRevoke(false);
+      setScreen('settings');
     } else if (screen === 'public-profile') {
       setPublicProfileData(null);
       setPublicProfileUsername(null);
@@ -5635,6 +5652,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       'santa-chat': 'santa-hub',
       'profile': 'profile',
       'settings': 'settings',
+      'link-management': 'settings',
     };
     const activeScreen = screenToNav[screen] ?? 'my-wishlists';
     document.querySelectorAll('.wb-nav-item').forEach(el => {
@@ -6012,7 +6030,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               setCuratedViewExpired(false);
               bootSetScreen('curated-view');
             } else {
-              bootSetScreen('my-wishlists');
+              // Revoked or invalid — show invalid link screen
+              setCuratedViewData(null);
+              setCuratedViewExpired(true);
+              bootSetScreen('curated-view');
             }
           })
           .catch(handleErr);
@@ -6925,6 +6946,46 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     } catch { /* ignore */ }
     setCuratedSubscribing(false);
   }, [curatedViewData, curatedSubscribing, tgFetch, pushToast, locale]);
+
+  // ── Link management handlers ──
+  const loadActiveLinks = useCallback(async () => {
+    setLinkMgmtLoading(true);
+    try {
+      const res = await tgFetch('/tg/me/active-links');
+      if (res.ok) {
+        const json = await res.json() as { selections: LinkMgmtSelection[]; wishlists: LinkMgmtWishlist[]; profile: LinkMgmtProfile | null };
+        setLinkMgmtData(json);
+      }
+    } catch { /* ignore */ }
+    setLinkMgmtLoading(false);
+  }, [tgFetch]);
+
+  const revokeLinkMgmtItem = useCallback(async () => {
+    if (!linkMgmtDetailItem || linkMgmtRevoking) return;
+    setLinkMgmtRevoking(true);
+    try {
+      let ok = false;
+      if (linkMgmtDetailItem.type === 'selection') {
+        const sel = linkMgmtDetailItem.data as LinkMgmtSelection;
+        const res = await tgFetch(`/tg/selections/${sel.id}`, { method: 'DELETE' });
+        ok = res.ok;
+      } else if (linkMgmtDetailItem.type === 'wishlist') {
+        const wl = linkMgmtDetailItem.data as LinkMgmtWishlist;
+        const res = await tgFetch(`/tg/wishlists/${wl.id}/share-token`, { method: 'DELETE' });
+        ok = res.ok;
+      } else if (linkMgmtDetailItem.type === 'profile') {
+        await patchSettings({ privacy: { ...settingsData!.privacy, profileVisibility: 'NOBODY' } });
+        ok = true;
+      }
+      if (ok) {
+        pushToast(t('link_revoked_toast', locale), 'success');
+        setLinkMgmtConfirmRevoke(false);
+        setLinkMgmtDetailItem(null);
+        void loadActiveLinks();
+      }
+    } catch { pushToast(t('toast_save_error', locale), 'error'); }
+    setLinkMgmtRevoking(false);
+  }, [linkMgmtDetailItem, linkMgmtRevoking, tgFetch, patchSettings, settingsData, pushToast, locale, loadActiveLinks]);
 
   const handleRenameWishlist = async () => {
     if (!currentWl) return;
@@ -11723,14 +11784,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {screen === 'curated-view' && (
         <div style={{ padding: '16px 20px 120px' }}>
           {curatedViewExpired ? (
-            <div style={{ textAlign: 'center', paddingTop: 60 }}>
-              <div style={{ width: 80, height: 80, borderRadius: 24, background: 'rgba(251,191,36,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto 20px' }}>⏱️</div>
-              <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 12px' }}>
-                {t('curated_expired_title', locale)}
+            <div style={{ textAlign: 'center', paddingTop: 80 }}>
+              <div style={{ width: 80, height: 80, borderRadius: 24, background: 'rgba(248,113,113,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto 20px' }}>🚫</div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font, margin: '0 0 10px' }}>
+                {t('link_invalid_title', locale)}
               </h2>
-              <p style={{ fontSize: 15, color: C.textSec, lineHeight: 1.5, maxWidth: 300, margin: '0 auto' }}>
-                {t('curated_expired_body', locale)}
+              <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, maxWidth: 300, margin: '0 auto', whiteSpace: 'pre-line' }}>
+                {t('link_invalid_body', locale)}
               </p>
+              <button
+                onClick={() => { setScreen('my-wishlists'); setCuratedViewExpired(false); }}
+                style={{ ...btnPrimary, marginTop: 28, padding: '14px 28px', borderRadius: 14, fontSize: 15, fontWeight: 600, border: 'none', maxWidth: 280 }}
+              >
+                {wishlists.length > 0 ? t('link_invalid_cta_home', locale) : t('link_invalid_cta_create', locale)}
+              </button>
             </div>
           ) : curatedViewData ? (() => {
             const sel = curatedViewData;
@@ -11825,6 +11892,128 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ marginTop: 10, borderRadius: 12, padding: '12px 16px', fontSize: 13, background: C.accentSoft, color: C.accent, lineHeight: 1.5 }}>
                     💡 {t('curated_ttl_subscribe_hint', locale)}
                   </div>
+                )}
+              </>
+            );
+          })() : null}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          LINK MANAGEMENT
+          ══════════════════════════════════════════════ */}
+      {screen === 'link-management' && (
+        <div style={{ padding: '16px 20px 120px' }}>
+          {linkMgmtLoading && !linkMgmtData ? (
+            <div style={{ textAlign: 'center', paddingTop: 60, color: C.textSec, fontSize: 15 }}>...</div>
+          ) : linkMgmtData && (linkMgmtData.selections.length + linkMgmtData.wishlists.length + (linkMgmtData.profile ? 1 : 0)) === 0 ? (
+            /* Empty state */
+            <div style={{ textAlign: 'center', paddingTop: 60 }}>
+              <div style={{ width: 80, height: 80, borderRadius: 24, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto 20px' }}>🔗</div>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font, margin: '0 0 10px' }}>
+                {t('links_empty_title', locale)}
+              </h2>
+              <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, maxWidth: 300, margin: '0 auto' }}>
+                {t('links_empty_body', locale)}
+              </p>
+              <p style={{ fontSize: 13, color: C.textMuted, marginTop: 12, lineHeight: 1.4 }}>
+                {t('links_empty_hint', locale)}
+              </p>
+            </div>
+          ) : linkMgmtData ? (() => {
+            const selections = linkMgmtData.selections;
+            const wishlists = linkMgmtData.wishlists;
+            const profile = linkMgmtData.profile;
+            const hasTemporary = selections.length > 0;
+            const hasPermanent = wishlists.length > 0 || !!profile;
+
+            const daysLeft = (expiresAt: string) => {
+              const diff = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000);
+              return diff;
+            };
+            const statusText = (days: number) => {
+              if (days <= 0) return { text: t('link_status_expires_today', locale), color: C.red };
+              if (days === 1) return { text: t('link_status_expires_tomorrow', locale), color: C.red };
+              if (days <= 7) return { text: t('link_status_days_left', locale, { days: String(days) }), color: '#FBBF24' };
+              return { text: t('link_status_days_left', locale, { days: String(days) }), color: C.textMuted };
+            };
+
+            return (
+              <>
+                {hasTemporary && (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, margin: '4px 0 10px' }}>
+                      {t('links_section_temporary', locale)}
+                    </div>
+                    {selections.map(sel => {
+                      const days = daysLeft(sel.expiresAt);
+                      const st = statusText(days);
+                      return (
+                        <div key={sel.id} onClick={() => setLinkMgmtDetailItem({ type: 'selection', data: sel })} style={{
+                          background: '#2F2F38', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
+                          marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
+                        }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(96,165,250,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>📋</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {sel.title}
+                              {days <= 1 && <span style={{ fontSize: 14 }}>⚠️</span>}
+                            </div>
+                            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {t('link_type_lite', locale)}
+                              <span style={{ fontSize: 10, fontWeight: 600, color: '#FBBF24', background: 'rgba(251,191,36,0.1)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                                {t('link_badge_temporary', locale)}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: st.color, whiteSpace: 'nowrap' }}>{st.text}</span>
+                          </div>
+                          <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 300, flexShrink: 0 }}>›</span>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {hasPermanent && (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, margin: `${hasTemporary ? 24 : 4}px 0 10px` }}>
+                      {t('links_section_permanent', locale)}
+                    </div>
+                    {wishlists.map(wl => (
+                      <div key={wl.id} onClick={() => setLinkMgmtDetailItem({ type: 'wishlist', data: wl })} style={{
+                        background: '#2F2F38', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
+                        marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
+                      }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 12, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎁</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wl.title}</div>
+                          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 3 }}>{t('link_type_wishlist', locale)}</div>
+                        </div>
+                        <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                          <span style={{ fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap' }}>{t('link_status_no_expiry', locale)}</span>
+                        </div>
+                        <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 300, flexShrink: 0 }}>›</span>
+                      </div>
+                    ))}
+                    {profile && (
+                      <div onClick={() => setLinkMgmtDetailItem({ type: 'profile', data: profile })} style={{
+                        background: '#2F2F38', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
+                        marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
+                      }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(52,211,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>👤</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.username}</div>
+                          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 3 }}>{t('link_type_profile', locale)}</div>
+                        </div>
+                        <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                          <span style={{ fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap' }}>{t('link_status_no_expiry', locale)}</span>
+                        </div>
+                        <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 300, flexShrink: 0 }}>›</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             );
@@ -14419,6 +14608,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   label={t('settings_allow_hints', locale)}
                   value={settingsData.privacy.hintsEnabled}
                   onChange={(v) => patchSettings({ privacy: { ...settingsData.privacy, hintsEnabled: v } })}
+                />
+                <SDivider />
+                <SettingsRow
+                  icon={'\u{1F517}'}
+                  label={t('settings_link_management', locale)}
+                  value={linkMgmtData ? t('settings_link_management_count', locale, { count: (linkMgmtData.selections.length + linkMgmtData.wishlists.length + (linkMgmtData.profile ? 1 : 0)).toString() }) : ''}
+                  valueSmall
+                  onClick={() => { setScreen('link-management'); void loadActiveLinks(); }}
                 />
                 <SDivider />
                 <SettingsRow
@@ -18028,6 +18225,181 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               }}
             >
               🗑 {t('delete', locale)}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* ── LINK MANAGEMENT — DETAIL BOTTOM SHEET ── */}
+      <BottomSheet isOpen={!!linkMgmtDetailItem && !linkMgmtConfirmRevoke} onClose={() => setLinkMgmtDetailItem(null)}>
+        {linkMgmtDetailItem && (() => {
+          const isSelection = linkMgmtDetailItem.type === 'selection';
+          const isWishlist = linkMgmtDetailItem.type === 'wishlist';
+          const isProfile = linkMgmtDetailItem.type === 'profile';
+          const icon = isSelection ? '📋' : isWishlist ? '🎁' : '👤';
+          const iconBg = isSelection ? 'rgba(96,165,250,0.12)' : isWishlist ? C.accentSoft : 'rgba(52,211,153,0.12)';
+          const title = isSelection ? (linkMgmtDetailItem.data as LinkMgmtSelection).title
+            : isWishlist ? (linkMgmtDetailItem.data as LinkMgmtWishlist).title
+            : (linkMgmtDetailItem.data as LinkMgmtProfile).username;
+          const typeLabel = isSelection ? t('link_type_lite', locale) : isWishlist ? t('link_type_wishlist', locale) : t('link_type_profile', locale);
+
+          // Build the shareable link
+          let shareableLink: string | null = null;
+          if (isSelection) {
+            shareableLink = buildTgDeepLink(`cs_${(linkMgmtDetailItem.data as LinkMgmtSelection).shareToken}`);
+          } else if (isWishlist) {
+            const wl = linkMgmtDetailItem.data as LinkMgmtWishlist;
+            shareableLink = buildTgDeepLink(wl.shareToken || wl.slug);
+          } else if (isProfile) {
+            shareableLink = buildTgDeepLink(`profile_${(linkMgmtDetailItem.data as LinkMgmtProfile).username}`);
+          }
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{icon}</div>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{title}</div>
+                  <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {typeLabel}
+                    {isSelection && (
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#FBBF24', background: 'rgba(251,191,36,0.1)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
+                        {t('link_badge_temporary', locale)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Detail rows */}
+              <div style={{ background: C.surface, borderRadius: 14, padding: '4px 16px' }}>
+                {isSelection && (() => {
+                  const sel = linkMgmtDetailItem.data as LinkMgmtSelection;
+                  const created = new Date(sel.createdAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+                  const validUntil = new Date(sel.expiresAt).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+                  const days = Math.ceil((new Date(sel.expiresAt).getTime() - Date.now()) / 86400000);
+                  return (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{t('link_detail_created', locale, { date: '' }).replace('{{date}}', '').trim() || (locale === 'ru' ? 'Создана' : 'Created')}</span>
+                        <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{created}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Действует до' : 'Valid until'}</span>
+                        <span style={{ fontSize: 14, color: C.text, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {validUntil}
+                          <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 400 }}>({days} {locale === 'ru' ? 'дн.' : 'd'})</span>
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Подписчики' : 'Subscribers'}</span>
+                        <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{sel.subscriberCount}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Просмотры' : 'Views'}</span>
+                        <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{sel.viewCount}</span>
+                      </div>
+                    </>
+                  );
+                })()}
+                {isWishlist && (() => {
+                  const wl = linkMgmtDetailItem.data as LinkMgmtWishlist;
+                  return (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Срок' : 'Expiry'}</span>
+                        <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{t('link_detail_no_expiry', locale)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Просмотры' : 'Views'}</span>
+                        <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{wl.viewCount}</span>
+                      </div>
+                    </>
+                  );
+                })()}
+                {isProfile && (() => {
+                  const prof = linkMgmtDetailItem.data as LinkMgmtProfile;
+                  return (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.border}` }}>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Срок' : 'Expiry'}</span>
+                        <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{t('link_detail_no_expiry', locale)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
+                        <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Видимость' : 'Visibility'}</span>
+                        <span style={{ fontSize: 14, color: '#34D399', fontWeight: 500 }}>
+                          {prof.profileVisibility === 'ALL' ? (locale === 'ru' ? 'Открыт для всех' : 'Public') : prof.profileVisibility === 'LINK_ONLY' ? (locale === 'ru' ? 'По ссылке' : 'Link only') : prof.profileVisibility}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Info hint for wishlist */}
+              {isWishlist && (
+                <div style={{ background: 'rgba(96,165,250,0.08)', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#60A5FA', lineHeight: 1.5 }}>
+                  {locale === 'ru' ? 'После отключения старая ссылка перестанет работать. При повторном шеринге создастся новая.' : 'After disabling, the old link will stop working. A new one will be created when you share again.'}
+                </div>
+              )}
+              {/* Info hint for profile */}
+              {isProfile && (
+                <div style={{ background: 'rgba(251,191,36,0.1)', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#FBBF24', lineHeight: 1.5 }}>
+                  {locale === 'ru' ? 'Закрытие профиля скроет его для всех, кто ещё не подписан. Подписчики сохранят доступ.' : 'Closing your profile will hide it from everyone not subscribed. Subscribers keep access.'}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {shareableLink && (
+                  <button
+                    onClick={async () => {
+                      try { await navigator.clipboard.writeText(shareableLink!); } catch { /* ignore */ }
+                      pushToast(locale === 'ru' ? 'Ссылка скопирована' : 'Link copied', 'success');
+                    }}
+                    style={{ ...btnBase, width: '100%', padding: '14px 0', borderRadius: 14, fontSize: 15, fontWeight: 600, border: 'none', background: C.surface, color: C.text }}
+                  >
+                    📋 {t('link_action_copy', locale)}
+                  </button>
+                )}
+                {shareableLink && (
+                  <button
+                    onClick={() => {
+                      const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(shareableLink!)}`;
+                      try { window.Telegram?.WebApp?.openTelegramLink?.(tgShareUrl); } catch { window.open(tgShareUrl, '_blank'); }
+                    }}
+                    style={{ ...btnBase, width: '100%', padding: '14px 0', borderRadius: 14, fontSize: 15, fontWeight: 600, border: 'none', background: C.surface, color: C.text }}
+                  >
+                    📤 {t('link_action_share', locale)}
+                  </button>
+                )}
+                <button
+                  onClick={() => setLinkMgmtConfirmRevoke(true)}
+                  style={{ ...btnBase, width: '100%', padding: '14px 0', borderRadius: 14, fontSize: 15, fontWeight: 600, border: 'none', background: 'rgba(248,113,113,0.1)', color: '#F87171' }}
+                >
+                  {isProfile ? `🔒 ${t('link_action_close_profile', locale)}` : `🚫 ${t('link_action_revoke', locale)}`}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </BottomSheet>
+
+      {/* ── LINK MANAGEMENT — CONFIRM REVOKE ── */}
+      <BottomSheet isOpen={linkMgmtConfirmRevoke} onClose={() => setLinkMgmtConfirmRevoke(false)} title={linkMgmtDetailItem?.type === 'profile' ? t('link_revoke_profile_title', locale) : t('link_revoke_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+            {linkMgmtDetailItem?.type === 'profile' ? t('link_revoke_profile_body', locale) : t('link_revoke_body', locale)}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button style={{ ...btnGhost, flex: 1 }} onClick={() => setLinkMgmtConfirmRevoke(false)}>{t('cancel', locale)}</button>
+            <button
+              style={{ ...btnPrimary, flex: 2, background: C.red, opacity: linkMgmtRevoking ? 0.6 : 1 }}
+              disabled={linkMgmtRevoking}
+              onClick={() => void revokeLinkMgmtItem()}
+            >
+              {linkMgmtDetailItem?.type === 'profile' ? t('link_revoke_profile_confirm', locale) : t('link_revoke_confirm', locale)}
             </button>
           </div>
         </div>
