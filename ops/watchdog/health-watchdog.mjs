@@ -98,6 +98,56 @@ async function sendAlert(text) {
   );
 }
 
+/** Run a SQL query directly against PostgreSQL via docker exec. Works even when API is down. */
+async function runSql(query) {
+  const { execSync } = await import('node:child_process');
+  try {
+    const result = execSync(
+      `docker compose -f /opt/wishlist/docker-compose.prod.yml exec -T postgres psql -U wishlist -d wishlist -t -A -c "${query.replace(/"/g, '\\"')}"`,
+      { encoding: 'utf8', timeout: 15_000 },
+    );
+    return result.trim();
+  } catch (err) {
+    console.error(`[watchdog] SQL error: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * On first DOWN detection, create a MaintenanceIncident and exposure records
+ * for all users active in the last 24h. This runs via direct DB access so it
+ * works even when the API is completely unreachable.
+ */
+async function createDowntimeExposures() {
+  try {
+    // Create incident
+    const incidentId = await runSql(
+      `INSERT INTO "MaintenanceIncident" (id, "startedAt", status, "lastMaintenanceSignalAt", "exposureCount", "notificationsSent", "createdAt", "updatedAt") VALUES (gen_random_uuid()::text, NOW(), 'active', NOW(), 0, 0, NOW(), NOW()) RETURNING id`,
+    );
+    if (!incidentId) {
+      console.error('[watchdog] failed to create incident');
+      return null;
+    }
+    console.log(`[watchdog] created incident: ${incidentId}`);
+
+    // Find users active in last 24h (from AnalyticsEvent) who have a telegramChatId
+    const insertedCount = await runSql(
+      `WITH active_users AS ( SELECT DISTINCT ae."userId" AS telegram_id FROM "AnalyticsEvent" ae WHERE ae."createdAt" > NOW() - INTERVAL '24 hours' AND ae."userId" IS NOT NULL ), eligible AS ( SELECT u.id, u."telegramChatId", au.telegram_id FROM active_users au JOIN "User" u ON u."telegramId" = au.telegram_id WHERE u."telegramChatId" IS NOT NULL ) INSERT INTO "MaintenanceExposure" (id, "incidentId", "userId", surface, locale, "telegramChatId", "firstSeenAt", "lastSeenAt", "createdAt", "updatedAt") SELECT gen_random_uuid()::text, '${incidentId}', e.id, 'miniapp', 'ru', e."telegramChatId", NOW(), NOW(), NOW(), NOW() FROM eligible e ON CONFLICT ("incidentId", "userId", surface) DO NOTHING RETURNING id`,
+    );
+
+    const count = insertedCount ? insertedCount.split('\n').filter(Boolean).length : 0;
+
+    // Update exposure count on incident
+    await runSql(`UPDATE "MaintenanceIncident" SET "exposureCount" = ${count} WHERE id = '${incidentId}'`);
+
+    console.log(`[watchdog] created ${count} exposure records for incident ${incidentId}`);
+    return incidentId;
+  } catch (err) {
+    console.error(`[watchdog] createDowntimeExposures error: ${err}`);
+    return null;
+  }
+}
+
 /** Call an internal API endpoint (authenticated with BOT_TOKEN). */
 async function callInternalApi(path, method = 'POST') {
   const url = `${BASE_URL}/api/internal${path}`;
@@ -177,6 +227,11 @@ if (isDown) {
       ].filter(Boolean).join('\n');
       await sendAlert(`🔴 <b>Wishlistik DOWN</b> at ${now}\n\n${details}`);
       console.log('[watchdog] alert sent: DOWN');
+
+      // Create incident + exposure records for active users directly in DB.
+      // API is unreachable so we bypass it entirely.
+      const incidentId = await createDowntimeExposures();
+      if (incidentId) state.incidentId = incidentId;
     }
   } else {
     console.log('[watchdog] still down (alert already sent)');
@@ -203,26 +258,20 @@ if (isDown) {
       }
 
       // ─── Maintenance recovery notification flow ──────────────────────
-      // Check if there is an active incident and trigger recovery notifications
+      // Mark incident as recovered directly in DB (reliable), then use API to send notifications
       try {
-        const activeRes = await callInternalApi('/maintenance/active-incident', 'GET');
-        if (activeRes.ok && activeRes.body.active) {
-          console.log(`[watchdog] active incident found: ${activeRes.body.incidentId}, triggering recovery check`);
+        // Mark any active/recovering incident as recovered via direct SQL
+        await runSql(
+          `UPDATE "MaintenanceIncident" SET status = 'recovered', "endedAt" = NOW(), "recoveryConfirmedAt" = NOW(), "updatedAt" = NOW() WHERE status IN ('active', 'recovering')`,
+        );
 
-          const recoveryRes = await callInternalApi('/maintenance/check-recovery');
-          if (recoveryRes.ok && recoveryRes.body.recovered) {
-            console.log(`[watchdog] incident recovered, sending notifications...`);
-            const notifyRes = await callInternalApi('/maintenance/send-recovery-notifications');
-            if (notifyRes.ok) {
-              console.log(`[watchdog] recovery notifications: ${notifyRes.body.sent} sent, ${notifyRes.body.failed} failed`);
-            } else {
-              console.error(`[watchdog] failed to send recovery notifications: ${JSON.stringify(notifyRes.body)}`);
-            }
-          } else {
-            console.log(`[watchdog] recovery check: ${JSON.stringify(recoveryRes.body)}`);
-          }
+        // Now use API to send recovery notifications (API is back up at this point)
+        const notifyRes = await callInternalApi('/maintenance/send-recovery-notifications');
+        if (notifyRes.ok) {
+          const { sent = 0, failed = 0 } = notifyRes.body;
+          console.log(`[watchdog] recovery notifications: ${sent} sent, ${failed} failed`);
         } else {
-          console.log('[watchdog] no active maintenance incident');
+          console.error(`[watchdog] failed to send recovery notifications: ${JSON.stringify(notifyRes.body)}`);
         }
       } catch (err) {
         console.error(`[watchdog] maintenance recovery flow error: ${err}`);
