@@ -13291,6 +13291,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         { label: t('settings_subscriptions', locale), desc: t('settings_desc_subscriptions', locale) },
                         { label: t('settings_privacy_pro', locale), desc: t('settings_desc_privacy_pro', locale) },
                         { label: t('settings_event_calendar', locale), desc: t('settings_desc_event_calendar', locale) },
+                        { label: t('settings_lite_share', locale), desc: t('settings_desc_lite_share', locale) },
+                        { label: t('settings_dont_gift', locale), desc: t('settings_desc_dont_gift', locale) },
                       ].map((row) => (
                         <div key={row.label}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
