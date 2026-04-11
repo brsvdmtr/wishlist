@@ -147,6 +147,8 @@ type WishlistVisibility = 'link_only' | 'public_profile' | 'private';
 type AllowSubscriptions = 'all' | 'nobody';
 type CommentPolicy = 'all' | 'subscribers';
 
+type DontGiftMode = 'global' | 'local' | 'hidden';
+
 type Wishlist = {
   id: string;
   slug: string;
@@ -160,6 +162,7 @@ type Wishlist = {
   allowSubscriptions: AllowSubscriptions;
   commentPolicy: CommentPolicy;
   shareToken?: string | null;
+  dontGiftMode?: DontGiftMode;
 };
 
 /** Filter wishlists to only valid writable targets for copy/move operations.
@@ -220,7 +223,8 @@ type UpsellContext =
   | 'sort_recommended'
   | 'reservation_pro'
   | 'categories'
-  | 'dont_gift';
+  | 'dont_gift'
+  | 'dont_gift_banner';
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -1684,6 +1688,13 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     subtitle: t('upsell_dont_gift_subtitle', locale),
     showTable: false,
     benefits: [t('upsell_dont_gift_b1', locale), t('upsell_dont_gift_b2', locale), t('upsell_dont_gift_b3', locale)],
+  },
+  dont_gift_banner: {
+    emoji: '🎁',
+    title: t('upsell_dont_gift_banner_title', locale),
+    subtitle: t('upsell_dont_gift_banner_subtitle', locale),
+    showTable: false,
+    benefits: [t('upsell_dont_gift_banner_b1', locale), t('upsell_dont_gift_banner_b2', locale), t('upsell_dont_gift_banner_b3', locale)],
   },
 });
 
@@ -3181,6 +3192,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [dgNewItem, setDgNewItem] = useState('');
   const [guestDontGift, setGuestDontGift] = useState<{ presets: string[]; customItems: string[]; comment: string | null } | null>(null);
   const [guestDontGiftExpanded, setGuestDontGiftExpanded] = useState(false);
+  // Per-wishlist dont-gift state
+  const [wlDontGiftMode, setWlDontGiftMode] = useState<DontGiftMode>('global');
+  const [wlDgPresets, setWlDgPresets] = useState<string[]>([]);
+  const [wlDgCustomItems, setWlDgCustomItems] = useState<string[]>([]);
+  const [wlDgComment, setWlDgComment] = useState('');
+  const [showWlDontGiftEdit, setShowWlDontGiftEdit] = useState(false);
+  const [wlDgSaving, setWlDgSaving] = useState(false);
+  const dontGiftBannerDismissed = useRef<Set<string>>(new Set());
 
   // Profile state
   const [profileData, setProfileData] = useState<{
@@ -6600,6 +6619,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     return null;
   }, [tgFetch]);
 
+  // Lazy-load global dont-gift data for banner visibility check
+  useEffect(() => {
+    if (screen === 'wishlist-detail' && !dontGiftData) {
+      void loadDontGift();
+    }
+  }, [screen, dontGiftData, loadDontGift]);
+
   const openDontGiftEdit = async () => {
     const data = dontGiftData ?? await loadDontGift();
     setDgPresets(data?.presets ?? []);
@@ -6637,6 +6663,57 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     } catch { pushToast(t('toast_save_error', locale), 'error'); }
     finally { setDontGiftSaving(false); }
   };
+
+  // ── Per-wishlist Don't Gift handlers ──
+  const openWlDontGiftEdit = useCallback(async (wlId: string) => {
+    try {
+      const res = await tgFetch(`/tg/wishlists/${wlId}/dont-gift`);
+      if (res.ok) {
+        const data = await res.json() as { mode: DontGiftMode; presets: string[]; customItems: string[]; comment: string | null };
+        setWlDontGiftMode(data.mode);
+        setWlDgPresets(data.presets);
+        setWlDgCustomItems(data.customItems);
+        setWlDgComment(data.comment ?? '');
+      }
+    } catch { /* use defaults */ }
+    setShowWlDontGiftEdit(true);
+  }, [tgFetch]);
+
+  const saveWlDontGift = useCallback(async (wlId: string) => {
+    if (wlDgSaving) return;
+    setWlDgSaving(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${wlId}/dont-gift`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          mode: wlDontGiftMode,
+          presets: wlDgPresets,
+          customItems: wlDgCustomItems.filter(Boolean),
+          comment: wlDgComment.trim() || null,
+        }),
+      });
+      if (res.status === 402) { showUpsell('dont_gift_banner'); return; }
+      if (res.ok) {
+        // Update the local wishlist mode
+        setWishlists(prev => prev.map(w => w.id === wlId ? { ...w, dontGiftMode: wlDontGiftMode } : w));
+        setShowWlDontGiftEdit(false);
+        pushToast(t('dont_gift_saved', locale), 'success');
+        trackEvent('wishlist_do_not_gift_created', { wishlistId: wlId, mode: wlDontGiftMode, presets: wlDgPresets.length });
+      } else {
+        pushToast(t('toast_save_error', locale), 'error');
+      }
+    } catch { pushToast(t('toast_save_error', locale), 'error'); }
+    finally { setWlDgSaving(false); }
+  }, [tgFetch, wlDontGiftMode, wlDgPresets, wlDgCustomItems, wlDgComment, wlDgSaving, showUpsell, pushToast, locale, trackEvent]);
+
+  const handleDontGiftBannerTap = useCallback((wlId: string) => {
+    trackEvent('banner_clicked_do_not_gift', { wishlistId: wlId });
+    if (planInfo.code === 'FREE') {
+      showUpsell('dont_gift_banner', { wishlistId: wlId });
+      return;
+    }
+    void openWlDontGiftEdit(wlId);
+  }, [planInfo.code, showUpsell, openWlDontGiftEdit, trackEvent]);
 
   const handleRenameWishlist = async () => {
     if (!currentWl) return;
@@ -10055,6 +10132,52 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 </button>
               </div>
             )}
+
+            {/* ── Don't Gift promotional banner (Variant B — Emotional) ── */}
+            {!itemReorderMode && !catReorderMode && !bulkSelectionMode && currentWl && items.length > 0 && (() => {
+              const wl = currentWl;
+              const mode = wl.dontGiftMode ?? 'global';
+              // Show banner if: mode is global AND global list is empty, or no mode set yet
+              // AND banner not dismissed for this wishlist
+              const globalHasContent = dontGiftData && (dontGiftData.presets.length > 0 || dontGiftData.customItems.length > 0 || !!dontGiftData.comment);
+              const shouldShow = mode === 'global' && !globalHasContent && !dontGiftBannerDismissed.current.has(wl.id);
+              if (!shouldShow) return null;
+              return (
+                <div
+                  key="dg-banner"
+                  style={{
+                    padding: 16, borderRadius: 16, marginBottom: 8, cursor: 'pointer',
+                    background: `linear-gradient(135deg, rgba(248,113,113,0.08), rgba(124,106,255,0.08))`,
+                    border: '1px solid rgba(248,113,113,0.15)',
+                    transition: 'border-color 0.15s',
+                  }}
+                  onClick={() => handleDontGiftBannerTap(wl.id)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                    <span style={{ fontSize: 20 }}>🎁</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t('dont_gift_banner_title', locale)}</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
+                    {t('dont_gift_banner_subtitle', locale)}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: C.accent }}>{t('dont_gift_banner_cta', locale)} →</span>
+                    <span
+                      style={{ fontSize: 12, color: C.textMuted }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        dontGiftBannerDismissed.current.add(wl.id);
+                        trackEvent('banner_dismissed_do_not_gift', { wishlistId: wl.id });
+                        // Force re-render
+                        setWishlists(prev => [...prev]);
+                      }}
+                    >
+                      {t('dont_gift_banner_dismiss', locale)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Normal mode items (with selection overlay) ── */}
             {!itemReorderMode && !catReorderMode && (() => {
@@ -15570,6 +15693,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <span style={{ fontSize: 20 }}>🔒</span>
             {t('wl_manage_privacy', locale)}
           </button>
+          {/* Don't Gift per-wishlist settings */}
+          <button
+            onClick={() => {
+              setShowWlManage(false);
+              if (planInfo.code === 'FREE') {
+                showUpsell('dont_gift_banner', { wishlistId: currentWl?.id });
+                return;
+              }
+              if (currentWl) void openWlDontGiftEdit(currentWl.id);
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🚫</span>
+            {t('dont_gift_banner_title', locale)}
+            {planInfo.code === 'FREE' && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, color: '#fff', marginLeft: 'auto',
+                background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)',
+                padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5,
+              }}>PRO</span>
+            )}
+          </button>
           {/* Archive wishlist */}
           <button
             onClick={() => {
@@ -15935,6 +16084,120 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             }}
           >
             {dontGiftSaving ? '…' : t('dont_gift_save', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Per-wishlist Don't Gift edit sheet (3 modes) ── */}
+      <BottomSheet isOpen={showWlDontGiftEdit} onClose={() => setShowWlDontGiftEdit(false)} title={t('dont_gift_banner_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Mode 1: Global */}
+          {(['global', 'local', 'hidden'] as const).map(mode => {
+            const isSelected = wlDontGiftMode === mode;
+            const globalCount = (dontGiftData?.presets?.length ?? 0) + (dontGiftData?.customItems?.length ?? 0);
+            return (
+              <div key={mode}>
+                <div
+                  onClick={() => setWlDontGiftMode(mode)}
+                  style={{
+                    padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
+                    background: isSelected ? 'rgba(124,106,255,0.05)' : C.surface,
+                    border: `2px solid ${isSelected ? C.accent : C.border}`,
+                    transition: 'all 0.15s', position: 'relative',
+                  }}
+                >
+                  {/* Radio circle */}
+                  <div style={{
+                    position: 'absolute', top: 16, right: 16,
+                    width: 20, height: 20, borderRadius: 10,
+                    border: `2px solid ${isSelected ? C.accent : C.textMuted}`,
+                    background: isSelected ? C.accent : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {isSelected && <div style={{ width: 8, height: 8, borderRadius: 4, background: '#fff' }} />}
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.text, paddingRight: 30, fontFamily: font }}>
+                    {t(`dont_gift_mode_${mode}` as any, locale)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4, paddingRight: 30, marginTop: 3 }}>
+                    {t(`dont_gift_mode_${mode}_desc` as any, locale)}
+                  </div>
+                  {mode === 'global' && globalCount > 0 && (
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      fontSize: 11, fontWeight: 500, color: C.green, marginTop: 6,
+                      padding: '3px 8px', background: C.greenSoft, borderRadius: 6,
+                    }}>
+                      ✓ {t('dont_gift_mode_global_status', locale, { count: String(globalCount) })}
+                    </div>
+                  )}
+
+                  {/* Inline local form */}
+                  {mode === 'local' && isSelected && (
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                      {/* Compact preset tags */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                        {DONT_GIFT_PRESETS.map(key => {
+                          const isOn = wlDgPresets.includes(key);
+                          return (
+                            <button
+                              key={key}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setWlDgPresets(prev => isOn ? prev.filter(k => k !== key) : [...prev, key]);
+                              }}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                padding: '6px 10px', borderRadius: 16,
+                                fontSize: 12, fontWeight: 500, fontFamily: font,
+                                cursor: 'pointer', transition: 'all 0.15s',
+                                border: isOn ? '1.5px solid rgba(248,113,113,0.3)' : '1.5px solid transparent',
+                                background: isOn ? C.redSoft : C.card,
+                                color: isOn ? C.red : C.textSec,
+                              }}
+                            >
+                              {DONT_GIFT_PRESET_EMOJIS[key]} {t(('dont_gift_preset_' + key) as any, locale)}
+                              {isOn && <span style={{ fontSize: 10, opacity: 0.7 }}>✕</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {/* Comment */}
+                      <textarea
+                        value={wlDgComment}
+                        onClick={e => e.stopPropagation()}
+                        onChange={e => { if (e.target.value.length <= 400) setWlDgComment(e.target.value); }}
+                        placeholder={t('dont_gift_comment_hint', locale)}
+                        style={{
+                          width: '100%', padding: '10px 12px', borderRadius: 12,
+                          border: `1px solid ${C.border}`, background: C.card,
+                          color: C.text, fontSize: 13, fontFamily: font, lineHeight: '1.5',
+                          boxSizing: 'border-box' as const, minHeight: 48, resize: 'none',
+                        }}
+                      />
+                      <div style={{ textAlign: 'right', fontSize: 11, color: wlDgComment.length > 360 ? C.orange : C.textMuted, marginTop: 2 }}>
+                        {wlDgComment.length} / 400
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Save button */}
+          <button
+            onClick={() => currentWl && void saveWlDontGift(currentWl.id)}
+            disabled={wlDgSaving}
+            style={{
+              width: '100%', padding: 16, borderRadius: 14, border: 'none',
+              background: C.accent, color: '#fff',
+              fontSize: 16, fontWeight: 700, fontFamily: font,
+              cursor: 'pointer', opacity: wlDgSaving ? 0.6 : 1,
+              marginTop: 8,
+            }}
+          >
+            {wlDgSaving ? '…' : t('dont_gift_save', locale)}
           </button>
         </div>
       </BottomSheet>

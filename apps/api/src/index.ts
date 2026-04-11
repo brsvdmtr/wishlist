@@ -613,6 +613,10 @@ publicRouter.get(
         deadline: true,
         visibility: true,
         ownerId: true,
+        dontGiftMode: true,
+        dontGiftPresets: true,
+        dontGiftCustomItems: true,
+        dontGiftComment: true,
         owner: {
           select: {
             firstName: true,
@@ -682,20 +686,27 @@ publicRouter.get(
 
     trackAnalyticsEvent({ event: 'guest.view_opened', props: { slug, itemCount: wishlist.items.length } });
 
-    // Build dontGift payload: only expose when visible AND has content
+    // Build dontGift payload respecting per-wishlist mode
     const slugProfile = wishlist.owner?.profile;
-    const slugDontGiftHasContent =
-      (slugProfile?.dontGiftPresets?.length ?? 0) > 0 ||
-      (slugProfile?.dontGiftCustomItems?.length ?? 0) > 0 ||
-      !!slugProfile?.dontGiftComment;
-    const slugDontGift =
-      slugProfile?.dontGiftVisible && slugDontGiftHasContent
-        ? {
-            presets: slugProfile.dontGiftPresets,
-            customItems: slugProfile.dontGiftCustomItems,
-            comment: slugProfile.dontGiftComment ?? null,
-          }
-        : null;
+    let slugDontGift: { presets: string[]; customItems: string[]; comment: string | null } | null = null;
+    if (wishlist.dontGiftMode === 'local') {
+      const hasLocal =
+        wishlist.dontGiftPresets.length > 0 ||
+        wishlist.dontGiftCustomItems.length > 0 ||
+        !!wishlist.dontGiftComment;
+      if (hasLocal) {
+        slugDontGift = { presets: wishlist.dontGiftPresets, customItems: wishlist.dontGiftCustomItems, comment: wishlist.dontGiftComment ?? null };
+      }
+    } else if (wishlist.dontGiftMode !== 'hidden') {
+      // "global" mode (default): use profile-level settings
+      const slugDontGiftHasContent =
+        (slugProfile?.dontGiftPresets?.length ?? 0) > 0 ||
+        (slugProfile?.dontGiftCustomItems?.length ?? 0) > 0 ||
+        !!slugProfile?.dontGiftComment;
+      if (slugProfile?.dontGiftVisible && slugDontGiftHasContent) {
+        slugDontGift = { presets: slugProfile.dontGiftPresets, customItems: slugProfile.dontGiftCustomItems, comment: slugProfile.dontGiftComment ?? null };
+      }
+    }
 
     return res.json({
       wishlist: {
@@ -736,6 +747,10 @@ publicRouter.get(
           title: true,
           description: true,
           deadline: true,
+          dontGiftMode: true,
+          dontGiftPresets: true,
+          dontGiftCustomItems: true,
+          dontGiftComment: true,
           owner: {
             select: {
               firstName: true,
@@ -781,20 +796,26 @@ publicRouter.get(
       wishlist.owner?.firstName?.trim() ||
       null;
 
-    // Build dontGift payload: only expose when visible AND has content
+    // Build dontGift payload respecting per-wishlist mode
     const tokenProfile = wishlist.owner?.profile;
-    const tokenDontGiftHasContent =
-      (tokenProfile?.dontGiftPresets?.length ?? 0) > 0 ||
-      (tokenProfile?.dontGiftCustomItems?.length ?? 0) > 0 ||
-      !!tokenProfile?.dontGiftComment;
-    const tokenDontGift =
-      tokenProfile?.dontGiftVisible && tokenDontGiftHasContent
-        ? {
-            presets: tokenProfile.dontGiftPresets,
-            customItems: tokenProfile.dontGiftCustomItems,
-            comment: tokenProfile.dontGiftComment ?? null,
-          }
-        : null;
+    let tokenDontGift: { presets: string[]; customItems: string[]; comment: string | null } | null = null;
+    if (wishlist.dontGiftMode === 'local') {
+      const hasLocal =
+        wishlist.dontGiftPresets.length > 0 ||
+        wishlist.dontGiftCustomItems.length > 0 ||
+        !!wishlist.dontGiftComment;
+      if (hasLocal) {
+        tokenDontGift = { presets: wishlist.dontGiftPresets, customItems: wishlist.dontGiftCustomItems, comment: wishlist.dontGiftComment ?? null };
+      }
+    } else if (wishlist.dontGiftMode !== 'hidden') {
+      const tokenDontGiftHasContent =
+        (tokenProfile?.dontGiftPresets?.length ?? 0) > 0 ||
+        (tokenProfile?.dontGiftCustomItems?.length ?? 0) > 0 ||
+        !!tokenProfile?.dontGiftComment;
+      if (tokenProfile?.dontGiftVisible && tokenDontGiftHasContent) {
+        tokenDontGift = { presets: tokenProfile.dontGiftPresets, customItems: tokenProfile.dontGiftCustomItems, comment: tokenProfile.dontGiftComment ?? null };
+      }
+    }
 
     return res.json({
       wishlist: {
@@ -2251,7 +2272,7 @@ tgRouter.get(
       select: {
         id: true, slug: true, title: true, description: true, deadline: true,
         visibility: true, allowSubscriptions: true, commentPolicy: true,
-        shareToken: true,
+        shareToken: true, dontGiftMode: true,
         items: { select: { status: true } },
       },
     });
@@ -2308,6 +2329,7 @@ tgRouter.get(
           allowSubscriptions: (wl.allowSubscriptions as string).toLowerCase() as 'all' | 'nobody',
           commentPolicy: (wl.commentPolicy as string).toLowerCase() as 'all' | 'subscribers',
           shareToken: wl.shareToken ?? null,
+          dontGiftMode: wl.dontGiftMode as 'global' | 'local' | 'hidden',
         };
       }),
       plan: {
@@ -2947,6 +2969,7 @@ tgRouter.patch(
         visibility: z.enum(['LINK_ONLY', 'PUBLIC_PROFILE', 'PRIVATE']).optional(),
         allowSubscriptions: z.enum(['ALL', 'NOBODY']).optional(),
         commentPolicy: z.enum(['ALL', 'SUBSCRIBERS']).optional(),
+        dontGiftMode: z.enum(['global', 'local', 'hidden']).optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
@@ -2969,6 +2992,10 @@ tgRouter.patch(
     if (!isPro && parsed.data.commentPolicy === 'SUBSCRIBERS') {
       return res.status(403).json({ error: 'pro_required', message: 'Upgrade to Pro to restrict comments' });
     }
+    // PRO-gate dontGiftMode changes (except "global" which is the default)
+    if (!isPro && parsed.data.dontGiftMode && parsed.data.dontGiftMode !== 'global') {
+      return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+    }
 
     // Detect which subscriber-visible fields are changing
     const wlChangedFields: string[] = [];
@@ -2985,12 +3012,17 @@ tgRouter.patch(
         ...(parsed.data.visibility !== undefined ? { visibility: parsed.data.visibility } : {}),
         ...(parsed.data.allowSubscriptions !== undefined ? { allowSubscriptions: parsed.data.allowSubscriptions } : {}),
         ...(parsed.data.commentPolicy !== undefined ? { commentPolicy: parsed.data.commentPolicy } : {}),
+        ...(parsed.data.dontGiftMode !== undefined ? { dontGiftMode: parsed.data.dontGiftMode } : {}),
       },
       select: {
         id: true, slug: true, title: true, description: true, deadline: true,
-        visibility: true, allowSubscriptions: true, commentPolicy: true,
+        visibility: true, allowSubscriptions: true, commentPolicy: true, dontGiftMode: true,
       },
     });
+
+    if (parsed.data.dontGiftMode !== undefined) {
+      trackEvent('wishlist_do_not_gift_mode_changed', user.id, { wishlistId: id, mode: parsed.data.dontGiftMode });
+    }
 
     // Notify subscribers of wishlist-level change
     if (wlChangedFields.length > 0) {
@@ -3010,6 +3042,7 @@ tgRouter.patch(
         visibility: (updated.visibility as string).toLowerCase(),
         allowSubscriptions: (updated.allowSubscriptions as string).toLowerCase(),
         commentPolicy: (updated.commentPolicy as string).toLowerCase(),
+        dontGiftMode: updated.dontGiftMode,
       },
     });
   }),
@@ -6405,6 +6438,86 @@ tgRouter.put(
       customItems: profile.dontGiftCustomItems,
       comment: profile.dontGiftComment,
       visible: profile.dontGiftVisible,
+    });
+  }),
+);
+
+// GET /tg/wishlists/:id/dont-gift — return per-wishlist "Don't Gift" settings
+tgRouter.get(
+  '/wishlists/:id/dont-gift',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const wishlist = await prisma.wishlist.findUnique({
+      where: { id },
+      select: { ownerId: true, dontGiftMode: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true },
+    });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    return res.json({
+      mode: wishlist.dontGiftMode,
+      presets: wishlist.dontGiftPresets,
+      customItems: wishlist.dontGiftCustomItems,
+      comment: wishlist.dontGiftComment ?? null,
+    });
+  }),
+);
+
+// PUT /tg/wishlists/:id/dont-gift — save per-wishlist "Don't Gift" settings (Pro-gated)
+tgRouter.put(
+  '/wishlists/:id/dont-gift',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const parsed = z.object({
+      mode: z.enum(['global', 'local', 'hidden']),
+      presets: z.array(z.string()).max(30).default([]),
+      customItems: z.array(z.string().max(100)).max(10).default([]),
+      comment: z.string().max(400).nullable().default(null),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    if (!ent.isPro) {
+      trackEvent('feature_gate_hit_dont_gift', user.id, { plan: ent.plan.code });
+      return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+    }
+
+    const wishlist = await prisma.wishlist.findUnique({ where: { id }, select: { ownerId: true } });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const { mode, presets, customItems, comment } = parsed.data;
+
+    const updated = await prisma.wishlist.update({
+      where: { id },
+      data: {
+        dontGiftMode: mode,
+        dontGiftPresets: mode === 'local' ? presets : [],
+        dontGiftCustomItems: mode === 'local' ? customItems.filter(Boolean) : [],
+        dontGiftComment: mode === 'local' ? (comment?.trim() || null) : null,
+      },
+      select: { dontGiftMode: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true },
+    });
+
+    trackEvent('wishlist_do_not_gift_created', user.id, {
+      wishlistId: id,
+      mode,
+      presetCount: presets.length,
+      customItemCount: customItems.filter(Boolean).length,
+      hasComment: !!comment?.trim(),
+    });
+
+    return res.json({
+      mode: updated.dontGiftMode,
+      presets: updated.dontGiftPresets,
+      customItems: updated.dontGiftCustomItems,
+      comment: updated.dontGiftComment,
     });
   }),
 );
