@@ -516,7 +516,8 @@ type GodStats = {
 
 type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall'
 | 'first-share-prompt'
-| 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat';
+| 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat'
+| 'curated-view';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -3301,6 +3302,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [curatedCreating, setCuratedCreating] = useState(false);
   const [curatedResult, setCuratedResult] = useState<{ id: string; shareToken: string; title: string; itemCount: number; expiresAt: string } | null>(null);
   const [showCuratedSuccess, setShowCuratedSuccess] = useState(false);
+  const [curatedViewData, setCuratedViewData] = useState<{
+    title: string; expiresAt: string; items: { id: string; title: string; priceText: string | null; currency: string; imageUrl: string | null; url: string | null; description: string | null }[];
+  } | null>(null);
+  const [curatedViewExpired, setCuratedViewExpired] = useState(false);
 
   // Profile state
   const [profileData, setProfileData] = useState<{
@@ -5350,6 +5355,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       if (screen === 'guest-view') {
         loadWishlists().catch(() => { /* silent — screen already set */ });
       }
+    } else if (screen === 'curated-view') {
+      setCuratedViewData(null);
+      setCuratedViewExpired(false);
+      setScreen('my-wishlists');
     } else if (screen === 'public-profile') {
       setPublicProfileData(null);
       setPublicProfileUsername(null);
@@ -5972,15 +5981,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           })
           .catch(handleErr);
       } else if (startParam && startParam.startsWith('cs_')) {
-        // Deep link: open curated selection public view in browser
+        // Deep link: show curated selection in-app
         const csToken = startParam.slice(3);
-        const csUrl = `${apiBase.replace('/api', '')}/p/${csToken}`;
-        window.Telegram?.WebApp.openLink(csUrl);
-        // Load own wishlists in the background so user sees their data when they return
-        loadWishlists()
-          .then(async () => {
+        Promise.all([
+          fetch(`${apiBase}/public/selections/${encodeURIComponent(csToken)}`, { cache: 'no-store' }),
+          loadWishlists().catch(() => {}),
+        ])
+          .then(async ([res]) => {
             trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
-            bootSetScreen('my-wishlists');
+            if (res.status === 410) {
+              setCuratedViewExpired(true);
+              setCuratedViewData(null);
+              bootSetScreen('curated-view');
+            } else if (res.ok) {
+              const data = await res.json();
+              setCuratedViewData(data.selection);
+              setCuratedViewExpired(false);
+              bootSetScreen('curated-view');
+            } else {
+              bootSetScreen('my-wishlists');
+            }
           })
           .catch(handleErr);
       } else if (startParam) {
@@ -11615,6 +11635,94 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════
+          CURATED SELECTION — IN-APP VIEW
+          ══════════════════════════════════════════════ */}
+      {screen === 'curated-view' && (
+        <div style={{ padding: '16px 20px 120px' }}>
+          {curatedViewExpired ? (
+            <div style={{ textAlign: 'center', paddingTop: 60 }}>
+              <div style={{ width: 80, height: 80, borderRadius: 24, background: 'rgba(251,191,36,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto 20px' }}>⏱️</div>
+              <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 12px' }}>
+                {t('curated_expired_title', locale)}
+              </h2>
+              <p style={{ fontSize: 15, color: C.textSec, lineHeight: 1.5, maxWidth: 300, margin: '0 auto' }}>
+                {t('curated_expired_body', locale)}
+              </p>
+            </div>
+          ) : curatedViewData ? (() => {
+            const sel = curatedViewData;
+            const expiryDate = new Date(sel.expiresAt).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' });
+            return (
+              <>
+                <div style={{
+                  display: 'inline-block', padding: '4px 12px', borderRadius: 8,
+                  background: 'rgba(96,165,250,0.12)', color: '#60A5FA',
+                  fontSize: 12, fontWeight: 600, marginBottom: 12,
+                }}>
+                  📋 {t('curated_public_badge', locale)}
+                </div>
+                <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 8px', lineHeight: 1.2 }}>
+                  {sel.title}
+                </h1>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+                  <span style={{ fontSize: 14, color: C.textSec }}>
+                    {sel.items.length} {locale === 'ru' ? (sel.items.length === 1 ? 'желание' : sel.items.length < 5 ? 'желания' : 'желаний') : (sel.items.length === 1 ? 'wish' : 'wishes')}
+                  </span>
+                  <span style={{ fontSize: 12, color: '#FBBF24', background: 'rgba(251,191,36,0.1)', padding: '2px 8px', borderRadius: 6 }}>
+                    {t('curated_public_valid_until', locale, { date: expiryDate })}
+                  </span>
+                </div>
+
+                {/* Item cards */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {sel.items.map(item => (
+                    <div key={item.id} style={{
+                      background: C.surface, borderRadius: 14, overflow: 'hidden',
+                      border: `1px solid ${C.border}`,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14 }}>
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt="" style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 56, height: 56, borderRadius: 10, flexShrink: 0, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🎁</div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{item.title}</div>
+                          {item.priceText && (
+                            <div style={{ fontSize: 14, color: C.accent, fontWeight: 600, marginTop: 4 }}>{item.priceText} {item.currency === 'RUB' ? '₽' : item.currency === 'USD' ? '$' : item.currency === 'EUR' ? '€' : item.currency}</div>
+                          )}
+                        </div>
+                      </div>
+                      {(item.description || item.url) && (
+                        <div style={{ padding: '0 14px 14px', borderTop: `1px solid ${C.border}` }}>
+                          {item.description && <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, margin: '12px 0 0' }}>{item.description}</p>}
+                          {item.url && (
+                            <a href={item.url} target="_blank" rel="noopener noreferrer" style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 6,
+                              marginTop: 12, padding: '8px 14px', borderRadius: 10,
+                              background: C.accentSoft, color: C.accent,
+                              fontSize: 13, fontWeight: 600, textDecoration: 'none',
+                            }}>
+                              {locale === 'ru' ? 'Открыть ссылку' : 'Open link'} ↗
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Info */}
+                <div style={{ marginTop: 16, borderRadius: 12, padding: '12px 16px', fontSize: 13, background: 'rgba(96,165,250,0.08)', color: '#60A5FA', lineHeight: 1.5 }}>
+                  ℹ️ {t('curated_public_info', locale)}
+                </div>
+              </>
+            );
+          })() : null}
         </div>
       )}
 
