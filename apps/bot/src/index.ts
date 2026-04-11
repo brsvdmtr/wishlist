@@ -1357,17 +1357,21 @@ if (!token) {
     }
   });
 
+  // Transient error detection — shared by retryTgApi and launchBot.
+  function isTransientError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    const msg = err.message;
+    return /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|socket hang up|timeout|network/i.test(msg) ||
+      ('code' in err && typeof (err as any).code === 'number' && (err as any).code >= 500);
+  }
+
   // Retry helper for Telegram API calls — exponential backoff on transient errors.
   async function retryTgApi<T>(label: string, fn: () => Promise<T>, maxAttempts = 3): Promise<T | undefined> {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await fn();
       } catch (err: unknown) {
-        const isTransient =
-          err instanceof Error &&
-          (/ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|socket hang up|timeout/i.test(err.message) ||
-           ('code' in err && typeof (err as any).code === 'number' && (err as any).code >= 500));
-        if (!isTransient || attempt === maxAttempts) {
+        if (!isTransientError(err) || attempt === maxAttempts) {
           logger.error({ err, label, attempt }, 'telegram API call failed');
           return undefined;
         }
@@ -1419,9 +1423,16 @@ if (!token) {
   }
 
   // Heartbeat: update every 60 s so /health/deep can detect bot absence.
-  // Starts immediately — paused during launch retries so zombies can't fake health.
+  // Paused during launch retries so zombies can't fake health; resumed on success.
   void updateHeartbeat();
-  const heartbeatTimer = setInterval(() => void updateHeartbeat(), 60_000);
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = setInterval(() => void updateHeartbeat(), 60_000);
+
+  function pauseHeartbeat() {
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+  }
+  function resumeHeartbeat() {
+    if (!heartbeatTimer) { heartbeatTimer = setInterval(() => void updateHeartbeat(), 60_000); }
+  }
 
   // ─── Launch with retry ───────────────────────────────────────────────────
   // bot.launch() resolves when polling STOPS (on SIGTERM), not on start.
@@ -1433,43 +1444,37 @@ if (!token) {
   let launchAttempt = 0;
   let shutdownRequested = false;
 
-  function isTransientError(err: unknown): boolean {
-    if (!(err instanceof Error)) return false;
-    const msg = err.message;
-    return /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|socket hang up|timeout|network/i.test(msg) ||
-      ('code' in err && typeof (err as any).code === 'number' && (err as any).code >= 500);
-  }
-
   async function launchBot(): Promise<void> {
-    launchAttempt++;
-    try {
-      await bot.launch();
-      // launch() resolves when polling stops (SIGTERM/SIGINT)
-      logger.info('bot stopped gracefully');
-    } catch (err: unknown) {
-      if (shutdownRequested) return;
+    while (!shutdownRequested) {
+      launchAttempt++;
+      try {
+        await bot.launch();
+        // launch() resolves when polling stops (SIGTERM/SIGINT)
+        logger.info('bot stopped gracefully');
+        return;
+      } catch (err: unknown) {
+        if (shutdownRequested) return;
 
-      const transient = isTransientError(err);
-      const canRetry = transient && launchAttempt < MAX_LAUNCH_ATTEMPTS;
+        const transient = isTransientError(err);
+        const canRetry = transient && launchAttempt < MAX_LAUNCH_ATTEMPTS;
 
-      if (canRetry) {
-        const delay = Math.min(5000 * Math.pow(2, launchAttempt - 1), 60_000);
-        logger.warn({ err, attempt: launchAttempt, nextRetryMs: delay }, 'bot launch failed, retrying');
-        // Pause heartbeat during retry — don't fake health
-        clearInterval(heartbeatTimer);
-        if (launchAttempt === 1) {
-          // Alert on first failure only — don't spam
-          void sendAdminAlert(`⚠️ <b>Bot launch failed</b> (attempt ${launchAttempt}, retrying in ${delay / 1000}s)\n${String(err)}`);
+        if (canRetry) {
+          const delay = Math.min(5000 * Math.pow(2, launchAttempt - 1), 60_000);
+          logger.warn({ err, attempt: launchAttempt, nextRetryMs: delay }, 'bot launch failed, retrying');
+          pauseHeartbeat();
+          if (launchAttempt === 1) {
+            void sendAdminAlert(`⚠️ <b>Bot launch failed</b> (attempt ${launchAttempt}, retrying in ${delay / 1000}s)\n${String(err)}`);
+          }
+          await new Promise((r) => setTimeout(r, delay));
+        } else {
+          // Fatal or exhausted retries — exit and let Docker restart
+          logger.fatal({ err, attempt: launchAttempt, transient }, 'failed to start');
+          if (process.env.GLITCHTIP_DSN && err instanceof Error) Sentry.captureException(err);
+          pauseHeartbeat();
+          setTimeout(() => process.exit(1), 15_000).unref();
+          void sendAdminAlert(`🔴 <b>Bot failed to start</b> (${launchAttempt} attempts)\n${String(err)}`).finally(() => process.exit(1));
+          return;
         }
-        await new Promise((r) => setTimeout(r, delay));
-        if (!shutdownRequested) return launchBot();
-      } else {
-        // Fatal or exhausted retries — exit and let Docker restart
-        logger.fatal({ err, attempt: launchAttempt, transient }, 'failed to start');
-        if (process.env.GLITCHTIP_DSN && err instanceof Error) Sentry.captureException(err);
-        clearInterval(heartbeatTimer);
-        setTimeout(() => process.exit(1), 15_000).unref();
-        void sendAdminAlert(`🔴 <b>Bot failed to start</b> (${launchAttempt} attempts)\n${String(err)}`).finally(() => process.exit(1));
       }
     }
   }
@@ -1478,14 +1483,17 @@ if (!token) {
 
   // Startup detection — poll for bot.botInfo (set by Telegraf after getMe succeeds).
   // bot.launch() resolves only when polling STOPS, so we can't use .then().
+  // .unref() so this interval doesn't prevent process.exit() on fatal errors.
   const startupCheck = setInterval(() => {
     if (shutdownRequested) { clearInterval(startupCheck); return; }
     if (bot.botInfo) {
       clearInterval(startupCheck);
+      resumeHeartbeat();
       logger.info({ attempt: launchAttempt }, 'bot polling active');
       void sendAdminAlert(`🟢 <b>Bot started</b>${launchAttempt > 1 ? ` (after ${launchAttempt} attempts)` : ''}\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
     }
   }, 2_000);
+  startupCheck.unref();
 
   // Uncaught exception / rejection alerts
   process.on('uncaughtException', (err) => {
