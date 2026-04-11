@@ -553,6 +553,16 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-11',
+    date: '11.04.2026',
+    items: [
+      { ru: '🚫 PRO: Что лучше не дарить — настройка для каждого вишлиста', en: '🚫 PRO: What not to gift — per-wishlist settings' },
+      { ru: 'Плашка-подсказка прямо внутри вишлиста — заполни за пару тапов', en: 'Helpful prompt right inside the wishlist — fill in with a few taps' },
+      { ru: 'Три режима: общий список, отдельный для вишлиста или скрыть', en: 'Three modes: global list, custom per wishlist, or hide' },
+      { ru: 'Гости видят компактный блок с тегами и комментарием', en: 'Guests see a compact block with tags and a comment' },
+    ],
+  },
+  {
     id: '2026-04-07',
     date: '07.04.2026',
     items: [
