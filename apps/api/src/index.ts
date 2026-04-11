@@ -910,6 +910,45 @@ publicRouter.get(
   }),
 );
 
+// GET /public/selections/:token — public curated selection view
+publicRouter.get(
+  '/selections/:token',
+  publicReadLimiter,
+  asyncHandler(async (req, res) => {
+    const token = req.params.token ?? '';
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+
+    const selection = await prisma.curatedSelection.findUnique({
+      where: { shareToken: token },
+      select: {
+        id: true, title: true, expiresAt: true, deactivatedAt: true, createdAt: true,
+        items: { orderBy: { position: 'asc' }, select: { id: true, title: true, priceText: true, currency: true, imageUrl: true, url: true, description: true, position: true } },
+      },
+    });
+    if (!selection) return res.status(404).json({ error: 'Selection not found' });
+
+    if (selection.deactivatedAt || selection.expiresAt < new Date()) {
+      trackEvent('selection_expired_viewed', undefined, { selectionId: selection.id });
+      return res.status(410).json({ error: 'expired', expiresAt: selection.expiresAt });
+    }
+
+    // Track view — fire-and-forget
+    prisma.curatedSelection.update({ where: { shareToken: token }, data: { viewCount: { increment: 1 } } }).catch(() => {});
+
+    trackEvent('selection_viewed', undefined, { selectionId: selection.id });
+
+    return res.json({
+      selection: {
+        id: selection.id,
+        title: selection.title,
+        itemCount: selection.items.length,
+        expiresAt: selection.expiresAt,
+        items: selection.items,
+      },
+    });
+  }),
+);
+
 publicRouter.post(
   '/items/:id/reserve',
   publicActionLimiter,
@@ -2844,6 +2883,147 @@ tgRouter.post(
     trackAnalyticsEvent({ event: 'share.token_generated', userId: String(req.tgUser!.id), props: { wishlistId: req.params.id } });
 
     return res.json({ shareToken: updated.shareToken });
+  }),
+);
+
+// ── Curated Selections ────────────────────────────────────────────────────
+
+async function generateUniqueCuratedToken(): Promise<string> {
+  for (let i = 0; i < 10; i++) {
+    const token = crypto.randomBytes(9).toString('base64url');
+    const existing = await prisma.curatedSelection.findUnique({ where: { shareToken: token } });
+    if (!existing) return token;
+  }
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+}
+
+// POST /tg/wishlists/:id/selections — create a curated selection (Pro-gated)
+tgRouter.post(
+  '/wishlists/:id/selections',
+  asyncHandler(async (req, res) => {
+    const wishlistId = req.params.id ?? '';
+    if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const parsed = z.object({
+      title: z.string().min(1).max(100),
+      itemIds: z.array(z.string()).min(1).max(200),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    if (!ent.isPro) {
+      trackEvent('feature_gate_hit_curated_selection', user.id, { plan: ent.plan.code });
+      return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
+    }
+
+    const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true } });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const items = await prisma.item.findMany({
+      where: { id: { in: parsed.data.itemIds }, wishlistId, status: { in: ['AVAILABLE', 'RESERVED', 'PURCHASED'] } },
+      select: { id: true, title: true, priceText: true, currency: true, imageUrl: true, url: true, description: true },
+    });
+    if (items.length === 0) return res.status(400).json({ error: 'No valid items' });
+
+    const shareToken = await generateUniqueCuratedToken();
+    const expiresAt = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000);
+
+    // Preserve order from request
+    const idOrder = new Map(parsed.data.itemIds.map((id, i) => [id, i]));
+    const orderedItems = items.sort((a, b) => (idOrder.get(a.id) ?? 999) - (idOrder.get(b.id) ?? 999));
+
+    const selection = await prisma.curatedSelection.create({
+      data: {
+        wishlistId,
+        ownerId: user.id,
+        title: parsed.data.title.trim(),
+        shareToken,
+        expiresAt,
+        items: {
+          create: orderedItems.map((item, idx) => ({
+            originalItemId: item.id,
+            position: idx,
+            title: item.title,
+            priceText: item.priceText,
+            currency: item.currency,
+            imageUrl: item.imageUrl,
+            url: item.url,
+            description: item.description,
+          })),
+        },
+      },
+      select: { id: true, shareToken: true, title: true, expiresAt: true, _count: { select: { items: true } } },
+    });
+
+    trackEvent('selection_created', user.id, { wishlistId, selectionId: selection.id, itemCount: selection._count.items });
+
+    return res.json({
+      selection: {
+        id: selection.id,
+        shareToken: selection.shareToken,
+        title: selection.title,
+        itemCount: selection._count.items,
+        expiresAt: selection.expiresAt,
+      },
+    });
+  }),
+);
+
+// GET /tg/wishlists/:id/selections — list curated selections for a wishlist (owner only)
+tgRouter.get(
+  '/wishlists/:id/selections',
+  asyncHandler(async (req, res) => {
+    const wishlistId = req.params.id ?? '';
+    if (!wishlistId) return res.status(400).json({ error: 'Missing wishlist id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const wishlist = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { ownerId: true } });
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+    if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const selections = await prisma.curatedSelection.findMany({
+      where: { wishlistId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, shareToken: true, title: true, viewCount: true,
+        deactivatedAt: true, expiresAt: true, createdAt: true,
+        _count: { select: { items: true } },
+      },
+    });
+
+    return res.json({
+      selections: selections.map(s => ({
+        id: s.id,
+        shareToken: s.shareToken,
+        title: s.title,
+        itemCount: s._count.items,
+        viewCount: s.viewCount,
+        isActive: !s.deactivatedAt && s.expiresAt > new Date(),
+        expiresAt: s.expiresAt,
+        createdAt: s.createdAt,
+      })),
+    });
+  }),
+);
+
+// DELETE /tg/selections/:id — deactivate a curated selection
+tgRouter.delete(
+  '/selections/:id',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing selection id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const selection = await prisma.curatedSelection.findUnique({ where: { id }, select: { ownerId: true } });
+    if (!selection) return res.status(404).json({ error: 'Selection not found' });
+    if (selection.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    await prisma.curatedSelection.update({ where: { id }, data: { deactivatedAt: new Date() } });
+    trackEvent('selection_deactivated', user.id, { selectionId: id });
+
+    return res.json({ ok: true });
   }),
 );
 

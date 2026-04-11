@@ -224,7 +224,8 @@ type UpsellContext =
   | 'reservation_pro'
   | 'categories'
   | 'dont_gift'
-  | 'dont_gift_banner';
+  | 'dont_gift_banner'
+  | 'curated_selection';
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -1706,6 +1707,13 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     showTable: false,
     benefits: [t('upsell_dont_gift_banner_b1', locale), t('upsell_dont_gift_banner_b2', locale), t('upsell_dont_gift_banner_b3', locale)],
   },
+  curated_selection: {
+    emoji: '📋',
+    title: t('upsell_curated_title', locale),
+    subtitle: t('upsell_curated_subtitle', locale),
+    showTable: false,
+    benefits: [t('upsell_curated_b1', locale), t('upsell_curated_b2', locale), t('upsell_curated_b3', locale)],
+  },
 });
 
 // Centralized PRO benefits config — single source of truth for all paywall/plan screens
@@ -2740,8 +2748,33 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
     <BottomSheet isOpen={state !== null} onClose={onClose}>
       {content && (
         <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
-          {/* Custom illustration for dont_gift_banner paywall */}
-          {state?.context === 'dont_gift_banner' ? (
+          {/* Custom illustration for special paywall contexts */}
+          {state?.context === 'curated_selection' ? (
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: '20px 16px', marginBottom: 16, borderRadius: 16,
+              background: `linear-gradient(135deg, rgba(96,165,250,0.1), rgba(124,106,255,0.08))`,
+            }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {['🎁', '📱', '✈️'].map((e, i) => (
+                  <div key={i} style={{
+                    width: 44, height: 44, borderRadius: 12, fontSize: 20,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: C.accentSoft, border: `2px solid ${C.accent}30`,
+                  }}>{e}</div>
+                ))}
+                <div style={{ fontSize: 20, color: C.accent, margin: '0 6px' }}>→</div>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12, fontSize: 20,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(96,165,250,0.15)', border: '2px solid rgba(96,165,250,0.3)',
+                }}>📋</div>
+              </div>
+              <div style={{ fontSize: 12, color: C.textSec, marginTop: 10 }}>
+                {locale === 'ru' ? 'Только нужные желания в одной ссылке' : 'Only selected wishes in one link'}
+              </div>
+            </div>
+          ) : state?.context === 'dont_gift_banner' ? (
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               padding: '20px 16px', marginBottom: 16, borderRadius: 16,
@@ -2797,11 +2830,16 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
           {content.benefits && (
             <div style={{ marginTop: 18, textAlign: 'start', padding: '0 4px' }}>
               {content.benefits.map((b, i) => {
-                // Custom icons for dont_gift_banner paywall
+                // Custom icons for special paywall contexts
                 const bannerIcons = ['💔', '🎯', '💚'];
+                const curatedIcons = ['✅', '🔒', '⏱️'];
                 const bannerBgs = [C.redSoft, C.accentSoft, C.greenSoft];
+                const curatedBgs = [C.greenSoft, C.accentSoft, 'rgba(96,165,250,0.12)'];
                 const bannerColors = [C.red, C.accent, C.green];
+                const curatedColors = [C.green, C.accent, '#60A5FA'];
                 const isBanner = state?.context === 'dont_gift_banner';
+                const isCurated = state?.context === 'curated_selection';
+                const isCustom = isBanner || isCurated;
                 return (
                   <div key={i} style={{
                     display: 'flex', alignItems: 'center', gap: 10,
@@ -2810,11 +2848,11 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
                   }}>
                     <span style={{
                       width: 28, height: 28, borderRadius: 8,
-                      background: isBanner ? bannerBgs[i] : C.accentSoft,
-                      color: isBanner ? bannerColors[i] : C.accent,
+                      background: isCurated ? curatedBgs[i] : isBanner ? bannerBgs[i] : C.accentSoft,
+                      color: isCurated ? curatedColors[i] : isBanner ? bannerColors[i] : C.accent,
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 14, flexShrink: 0,
-                    }}>{isBanner ? bannerIcons[i] : '✓'}</span>
+                    }}>{isCurated ? curatedIcons[i] : isBanner ? bannerIcons[i] : '✓'}</span>
                     {b}
                   </div>
                 );
@@ -3254,6 +3292,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [showWlDontGiftEdit, setShowWlDontGiftEdit] = useState(false);
   const [wlDgSaving, setWlDgSaving] = useState(false);
   const dontGiftBannerDismissed = useRef<Set<string>>(new Set());
+
+  // Curated Selection state
+  const [curatedSelectionMode, setCuratedSelectionMode] = useState(false);
+  const [curatedSelectedIds, setCuratedSelectedIds] = useState<Set<string>>(new Set());
+  const [showCuratedConfigure, setShowCuratedConfigure] = useState(false);
+  const [curatedTitle, setCuratedTitle] = useState('');
+  const [curatedCreating, setCuratedCreating] = useState(false);
+  const [curatedResult, setCuratedResult] = useState<{ id: string; shareToken: string; title: string; itemCount: number; expiresAt: string } | null>(null);
+  const [showCuratedSuccess, setShowCuratedSuccess] = useState(false);
 
   // Profile state
   const [profileData, setProfileData] = useState<{
@@ -5251,6 +5298,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // --- Navigation with Telegram BackButton
   const navBack = useCallback(async () => {
     // Cancel active reorder modes before navigating away
+    if (curatedSelectionMode) { setCuratedSelectionMode(false); setCuratedSelectedIds(new Set()); return; }
     if (bulkSelectionMode) { setBulkSelectionMode(false); setBulkSelectedIds(new Set()); return; }
     if (itemReorderMode) { cancelItemReorderMode(); return; }
     if (reorderMode) { cancelReorderMode(); return; }
@@ -5921,6 +5969,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             void loadReservations();
             const redirected = await checkOnboarding();
             if (!redirected) bootSetScreen('my-wishlists');
+          })
+          .catch(handleErr);
+      } else if (startParam && startParam.startsWith('cs_')) {
+        // Deep link: open curated selection public view in browser
+        const csToken = startParam.slice(3);
+        const csUrl = `${apiBase.replace('/api', '')}/p/${csToken}`;
+        window.Telegram?.WebApp.openLink(csUrl);
+        // Load own wishlists in the background so user sees their data when they return
+        loadWishlists()
+          .then(async () => {
+            trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+            bootSetScreen('my-wishlists');
           })
           .catch(handleErr);
       } else if (startParam) {
@@ -6768,6 +6828,55 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
     void openWlDontGiftEdit(wlId);
   }, [planInfo.code, showUpsell, openWlDontGiftEdit, trackEvent]);
+
+  // ── Curated Selection handlers ──────────────────────────────────────────
+  const enterCuratedSelectionMode = useCallback(() => {
+    if (planInfo.code === 'FREE') {
+      showUpsell('curated_selection');
+      return;
+    }
+    setCuratedSelectionMode(true);
+    setCuratedSelectedIds(new Set());
+    trackEvent('selection_started', { wishlistId: currentWl?.id });
+  }, [planInfo.code, showUpsell, trackEvent, currentWl?.id]);
+
+  const createCuratedSelection = useCallback(async () => {
+    if (!currentWl || curatedCreating || curatedSelectedIds.size === 0) return;
+    const title = curatedTitle.trim();
+    if (!title) return;
+    setCuratedCreating(true);
+    try {
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}/selections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, itemIds: [...curatedSelectedIds] }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCuratedResult(data.selection);
+        setShowCuratedConfigure(false);
+        setShowCuratedSuccess(true);
+        setCuratedSelectionMode(false);
+      } else {
+        pushToast(t('curated_error_title', locale), 'error');
+      }
+    } catch {
+      pushToast(t('curated_error_title', locale), 'error');
+    } finally {
+      setCuratedCreating(false);
+    }
+  }, [currentWl, curatedCreating, curatedSelectedIds, curatedTitle, tgFetch, pushToast, locale]);
+
+  const deactivateCuratedSelection = useCallback(async (selectionId: string) => {
+    try {
+      const res = await tgFetch(`/tg/selections/${selectionId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setShowCuratedSuccess(false);
+        setCuratedResult(null);
+        pushToast(locale === 'ru' ? 'Ссылка отключена' : 'Link disabled', 'success');
+      }
+    } catch { /* ignore */ }
+  }, [tgFetch, pushToast, locale]);
 
   const handleRenameWishlist = async () => {
     if (!currentWl) return;
@@ -10166,7 +10275,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </>
             )}
 
-            {/* ── Bulk selection header bar ── */}
+            {/* ── Bulk / Curated selection header bar ── */}
             {bulkSelectionMode && (
               <div style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -10184,6 +10293,30 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
                   {bulkSelectedIds.size === items.length ? t('bulk_cancel', locale) : t('bulk_select_all', locale)}
                 </button>
+              </div>
+            )}
+            {curatedSelectionMode && !bulkSelectionMode && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '10px 0',
+                }}>
+                  <button onClick={() => { setCuratedSelectionMode(false); setCuratedSelectedIds(new Set()); }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
+                    {t('bulk_cancel', locale)}
+                  </button>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                    📋 {t('curated_select_title', locale)}
+                  </span>
+                  <button onClick={() => {
+                    if (curatedSelectedIds.size === items.length) setCuratedSelectedIds(new Set());
+                    else setCuratedSelectedIds(new Set(items.map(i => i.id)));
+                  }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
+                    {curatedSelectedIds.size === items.length ? t('bulk_cancel', locale) : t('bulk_select_all', locale)}
+                  </button>
+                </div>
+                <div style={{ fontSize: 13, color: C.textSec, textAlign: 'center' }}>
+                  {t('curated_select_subtitle', locale)}
+                </div>
               </div>
             )}
 
@@ -10237,7 +10370,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {!itemReorderMode && !catReorderMode && (() => {
               // Shared render function for a single item card
               const renderItemCard = (item: Item, i: number, totalItems: number) => {
-                const isSelected = bulkSelectedIds.has(item.id);
+                const anySelMode = bulkSelectionMode || curatedSelectionMode;
+                const isSelected = bulkSelectionMode ? bulkSelectedIds.has(item.id) : curatedSelectionMode ? curatedSelectedIds.has(item.id) : false;
                 const onItemTap = bulkSelectionMode
                   ? () => {
                       setBulkSelectedIds(prev => {
@@ -10247,14 +10381,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         return next;
                       });
                     }
-                  : (it: Item) => { setViewingItem(it); setScreen('item-detail'); };
+                  : curatedSelectionMode
+                    ? () => {
+                        setCuratedSelectedIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(item.id)) next.delete(item.id);
+                          else next.add(item.id);
+                          return next;
+                        });
+                      }
+                    : (it: Item) => { setViewingItem(it); setScreen('item-detail'); };
 
+                const selCheckColor = curatedSelectionMode ? '#60A5FA' : C.accent;
                 const selectionWrapper = (child: React.ReactNode) => (
                   <div
                     key={item.id}
                     style={{ position: 'relative' }}
                     onTouchStart={() => {
-                      if (!bulkSelectionMode) {
+                      if (!anySelMode) {
                         bulkLongPressTimer.current = setTimeout(() => {
                           setBulkSelectionMode(true);
                           setBulkSelectedIds(new Set([item.id]));
@@ -10264,12 +10408,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     onTouchEnd={() => { if (bulkLongPressTimer.current) { clearTimeout(bulkLongPressTimer.current); bulkLongPressTimer.current = null; } }}
                     onTouchMove={() => { if (bulkLongPressTimer.current) { clearTimeout(bulkLongPressTimer.current); bulkLongPressTimer.current = null; } }}
                   >
-                    {bulkSelectionMode && (
+                    {anySelMode && (
                       <div style={{
                         position: 'absolute', top: 8, left: 8, zIndex: 2,
                         width: 24, height: 24, borderRadius: 12,
-                        background: isSelected ? C.accent : 'transparent',
-                        border: `2px solid ${isSelected ? C.accent : C.textMuted}`,
+                        background: isSelected ? selCheckColor : 'transparent',
+                        border: `2px solid ${isSelected ? selCheckColor : C.textMuted}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
                         {isSelected && <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>✓</span>}
@@ -11477,7 +11621,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {/* ══════════════════════════════════════════════
           OWNER — SHARE
           ══════════════════════════════════════════════ */}
-      {screen === 'share' && currentWl && (
+      {screen === 'share' && currentWl && (<>
         <ShareScreen
           wishlist={currentWl}
           itemCount={items.length}
@@ -11491,7 +11635,28 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           isPro={planInfo.code === 'PRO'}
           tgFetch={tgFetch}
         />
-      )}
+        {/* Curated selection nudge in share screen */}
+        <div style={{ padding: '0 20px', marginTop: -100 }}>
+          <div
+            onClick={() => {
+              setScreen('wishlist-detail');
+              setTimeout(() => enterCuratedSelectionMode(), 100);
+            }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '14px 16px', background: C.surface, borderRadius: 14,
+              border: `1px solid ${C.border}`, cursor: 'pointer',
+            }}
+          >
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(96,165,250,0.12)', color: '#60A5FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>📋</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{t('curated_nudge_title', locale)}</div>
+              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 1 }}>{t('curated_nudge_subtitle', locale)}</div>
+            </div>
+            <span style={{ color: C.textMuted, fontSize: 14 }}>›</span>
+          </div>
+        </div>
+      </>)}
 
       {/* ══════════════════════════════════════════════
           GUEST VIEW
@@ -14658,13 +14823,28 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {t('bulk_move', locale)}
             </button>
             {!hasUserCategories && (
-              <button
-                disabled={bulkActionLoading}
-                onClick={() => setShowBulkTargetPicker('copy')}
-                style={{ ...btnBase, background: C.greenSoft, color: C.green, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
-              >
-                {t('bulk_copy', locale)}
-              </button>
+              <>
+                <button
+                  disabled={bulkActionLoading}
+                  onClick={() => setShowBulkTargetPicker('copy')}
+                  style={{ ...btnBase, background: C.greenSoft, color: C.green, borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+                >
+                  {t('bulk_copy', locale)}
+                </button>
+                <button
+                  disabled={bulkActionLoading}
+                  onClick={() => {
+                    if (planInfo.code === 'FREE') { showUpsell('curated_selection'); return; }
+                    setCuratedSelectedIds(new Set(bulkSelectedIds));
+                    setBulkSelectionMode(false);
+                    setCuratedTitle(t('curated_default_title', locale));
+                    setShowCuratedConfigure(true);
+                  }}
+                  style={{ ...btnBase, background: 'rgba(96,165,250,0.12)', color: '#60A5FA', borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+                >
+                  {t('curated_bulk_btn', locale)}
+                </button>
+              </>
             )}
           </div>
           {hasUserCategories && (
@@ -14683,10 +14863,233 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               >
                 {t('cat_choose', locale)}
               </button>
+              <button
+                disabled={bulkActionLoading}
+                onClick={() => {
+                  if (planInfo.code === 'FREE') { showUpsell('curated_selection'); return; }
+                  setCuratedSelectedIds(new Set(bulkSelectedIds));
+                  setBulkSelectionMode(false);
+                  setCuratedTitle(t('curated_default_title', locale));
+                  setShowCuratedConfigure(true);
+                }}
+                style={{ ...btnBase, background: 'rgba(96,165,250,0.12)', color: '#60A5FA', borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+              >
+                {t('curated_bulk_btn', locale)}
+              </button>
             </div>
           )}
         </div>
       )}
+
+      {/* ── Curated Selection bottom bar ── */}
+      {curatedSelectionMode && !bulkSelectionMode && screen === 'wishlist-detail' && (
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
+          background: C.bg, borderTop: `1px solid ${C.border}`,
+          padding: '12px 20px calc(12px + env(safe-area-inset-bottom))',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <span style={{ flex: 1, fontSize: 14, color: C.textSec }}>
+            {t('curated_selected_count', locale, { selected: curatedSelectedIds.size, total: items.length })}
+          </span>
+          <button
+            disabled={curatedSelectedIds.size === 0}
+            onClick={() => {
+              setCuratedTitle(t('curated_default_title', locale));
+              setShowCuratedConfigure(true);
+            }}
+            style={{
+              padding: '12px 24px', borderRadius: 12, border: 'none',
+              background: curatedSelectedIds.size > 0 ? '#60A5FA' : C.surface,
+              color: curatedSelectedIds.size > 0 ? '#fff' : C.textMuted,
+              fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+              opacity: curatedSelectedIds.size === 0 ? 0.5 : 1,
+            }}
+          >
+            {t('curated_continue', locale)}
+          </button>
+        </div>
+      )}
+
+      {/* ── Curated Selection Configure Sheet ── */}
+      <BottomSheet isOpen={showCuratedConfigure} onClose={() => setShowCuratedConfigure(false)} title={t('curated_configure_title', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.4 }}>
+            {t('curated_configure_subtitle', locale)}
+          </div>
+
+          {/* Title input */}
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: C.text, display: 'block', marginBottom: 6 }}>
+              {t('curated_title_label', locale)}
+            </label>
+            <input
+              value={curatedTitle}
+              onChange={e => setCuratedTitle(e.target.value.slice(0, 100))}
+              placeholder={t('curated_title_placeholder', locale)}
+              style={{
+                ...inputStyle, width: '100%', boxSizing: 'border-box',
+                borderColor: curatedTitle.trim() ? C.border : C.red,
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 12 }}>
+              {!curatedTitle.trim() && (
+                <span style={{ color: C.red }}>{t('curated_title_error', locale)}</span>
+              )}
+              <span style={{ color: C.textMuted, marginLeft: 'auto' }}>{curatedTitle.length}/100</span>
+            </div>
+          </div>
+
+          {/* Selected items preview */}
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: C.text, display: 'block', marginBottom: 8 }}>
+              {t('curated_items_label', locale)} ({curatedSelectedIds.size})
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {items.filter(i => curatedSelectedIds.has(i.id)).slice(0, 5).map(item => (
+                <div key={item.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 12px', background: C.surface, borderRadius: 10,
+                }}>
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: 36, height: 36, borderRadius: 8, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🎁</div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</div>
+                    {item.price != null && <div style={{ fontSize: 12, color: C.textMuted }}>{item.price.toLocaleString()}</div>}
+                  </div>
+                </div>
+              ))}
+              {curatedSelectedIds.size > 5 && (
+                <div style={{ fontSize: 13, color: C.textSec, textAlign: 'center', padding: '4px 0' }}>
+                  {t('curated_items_more', locale, { count: curatedSelectedIds.size - 5 })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Info notices */}
+          <div style={{ borderRadius: 12, padding: '10px 14px', fontSize: 13, background: 'rgba(251,191,36,0.1)', color: '#FBBF24', lineHeight: 1.5 }}>
+            ⏱️ {t('curated_ttl_notice', locale)}
+          </div>
+          <div style={{ borderRadius: 12, padding: '10px 14px', fontSize: 13, background: C.accentSoft, color: C.accent, lineHeight: 1.5 }}>
+            📌 {t('curated_snapshot_notice', locale)}
+          </div>
+
+          {/* CTA */}
+          <button
+            disabled={!curatedTitle.trim() || curatedCreating}
+            onClick={createCuratedSelection}
+            style={{
+              padding: '14px 0', borderRadius: 14, border: 'none', width: '100%',
+              background: curatedTitle.trim() && !curatedCreating ? '#60A5FA' : C.surface,
+              color: curatedTitle.trim() && !curatedCreating ? '#fff' : C.textMuted,
+              fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font,
+              opacity: curatedCreating ? 0.6 : 1,
+            }}
+          >
+            {curatedCreating ? '...' : t('curated_share_cta', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ── Curated Selection Success Sheet ── */}
+      <BottomSheet isOpen={showCuratedSuccess && !!curatedResult} onClose={() => { setShowCuratedSuccess(false); setCuratedResult(null); }}>
+        {curatedResult && (() => {
+          const link = buildTgDeepLink(`cs_${curatedResult.shareToken}`);
+          const expiryDate = new Date(curatedResult.expiresAt).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' });
+          return (
+            <div style={{ textAlign: 'center', padding: '8px 0' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: 20, margin: '0 auto 16px',
+                background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
+              }}>✅</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font }}>
+                {t('curated_success_title', locale)}
+              </div>
+              <div style={{ fontSize: 14, color: C.textSec, marginTop: 8 }}>
+                {t('curated_success_subtitle', locale, { title: curatedResult.title, count: curatedResult.itemCount })}
+              </div>
+              <div style={{
+                display: 'inline-block', marginTop: 12, padding: '4px 12px',
+                borderRadius: 8, background: 'rgba(251,191,36,0.1)', color: '#FBBF24',
+                fontSize: 12, fontWeight: 600,
+              }}>
+                ⏱️ {t('curated_ttl_badge', locale)} · {t('curated_public_valid_until', locale, { date: expiryDate })}
+              </div>
+
+              {link && (
+                <div style={{
+                  marginTop: 16, padding: '10px 14px', background: C.surface, borderRadius: 10,
+                  border: `1px solid ${C.border}`, fontSize: 12, color: C.textMuted,
+                  wordBreak: 'break-all', textAlign: 'left',
+                }}>
+                  {link}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+                {link && (
+                  <button
+                    onClick={() => {
+                      const name = tgUser?.first_name ?? '';
+                      const shareText = `📋 ${curatedResult.title}`;
+                      const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(shareText)}`;
+                      try { window.Telegram?.WebApp.openTelegramLink(tgShareUrl); } catch { window.open(tgShareUrl, '_blank'); }
+                      trackEvent('selection_shared_telegram', { selectionId: curatedResult.id });
+                    }}
+                    style={{
+                      padding: '14px 0', borderRadius: 14, border: 'none', width: '100%',
+                      background: '#3B82F6', color: '#fff',
+                      fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                    }}
+                  >
+                    {t('curated_send_telegram', locale)}
+                  </button>
+                )}
+                {link && (
+                  <button
+                    onClick={async () => {
+                      try { await navigator.clipboard.writeText(link); } catch { /* ignore */ }
+                      pushToast(t('curated_link_copied', locale), 'success');
+                      trackEvent('selection_link_copied', { selectionId: curatedResult.id });
+                    }}
+                    style={{
+                      padding: '14px 0', borderRadius: 14, border: 'none', width: '100%',
+                      background: C.accentSoft, color: C.accent,
+                      fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                    }}
+                  >
+                    {t('curated_copy_link', locale)}
+                  </button>
+                )}
+                <button
+                  onClick={() => { if (curatedResult) deactivateCuratedSelection(curatedResult.id); }}
+                  style={{
+                    padding: '12px 0', borderRadius: 14, border: 'none', width: '100%',
+                    background: 'transparent', color: C.textMuted,
+                    fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: font,
+                  }}
+                >
+                  {t('curated_disable_link', locale)}
+                </button>
+                <button
+                  onClick={() => { setShowCuratedSuccess(false); setCuratedResult(null); }}
+                  style={{
+                    padding: '12px 0', borderRadius: 14, border: 'none', width: '100%',
+                    background: C.surface, color: C.text,
+                    fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                  }}
+                >
+                  {t('curated_done', locale)}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </BottomSheet>
 
       {/* ═══════════════════════════════════════════════════════════════
           GIFT NOTES — Поводы и идеи (v2.1)
@@ -15765,6 +16168,28 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           >
             <span style={{ fontSize: 20 }}>🚫</span>
             {t('dont_gift_banner_title', locale)}
+            {planInfo.code === 'FREE' && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, color: '#fff', marginLeft: 'auto',
+                background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)',
+                padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5,
+              }}>PRO</span>
+            )}
+          </button>
+          {/* Curated Selection */}
+          <button
+            onClick={() => {
+              setShowWlManage(false);
+              enterCuratedSelectionMode();
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>📋</span>
+            {t('curated_share_btn', locale)}
             {planInfo.code === 'FREE' && (
               <span style={{
                 fontSize: 10, fontWeight: 700, color: '#fff', marginLeft: 'auto',

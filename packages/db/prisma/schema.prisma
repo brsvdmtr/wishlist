@@ -153,6 +153,7 @@ model User {
   groupGiftsOrganized            GroupGift[]              @relation("GroupGiftOrganizer")
   groupGiftParticipations        GroupGiftParticipant[]   @relation("GroupGiftParticipations")
   groupGiftMessages              GroupGiftMessage[]       @relation("GroupGiftMessages")
+  curatedSelections              CuratedSelection[]
 }
 
 model Wishlist {
@@ -186,6 +187,7 @@ model Wishlist {
   categories WishlistCategory[]
   wishlistSubscriptions WishlistSubscription[]
   santaParticipants     SantaParticipant[]    @relation("SantaLinkedWishlists")
+  curatedSelections     CuratedSelection[]
 
   @@index([ownerId])
   @@index([ownerId, position])
@@ -1472,4 +1474,42 @@ model GroupGiftMessage {
 
   @@index([groupGiftId, createdAt])
   @@index([senderUserId])
+}
+
+model CuratedSelection {
+  id             String    @id @default(cuid())
+  wishlistId     String
+  ownerId        String
+  title          String    @db.VarChar(100)
+  shareToken     String    @unique
+  viewCount      Int       @default(0)
+  deactivatedAt  DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+
+  wishlist  Wishlist               @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  owner     User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  items     CuratedSelectionItem[]
+
+  @@index([ownerId])
+  @@index([wishlistId])
+  @@index([shareToken])
+  @@index([expiresAt])
+}
+
+model CuratedSelectionItem {
+  id                  String  @id @default(cuid())
+  curatedSelectionId  String
+  originalItemId      String?
+  position            Int     @default(0)
+  title               String
+  priceText           String?
+  currency            Currency @default(RUB)
+  imageUrl            String?
+  url                 String?
+  description         String? @db.VarChar(500)
+
+  curatedSelection CuratedSelection @relation(fields: [curatedSelectionId], references: [id], onDelete: Cascade)
+
+  @@index([curatedSelectionId])
 }
