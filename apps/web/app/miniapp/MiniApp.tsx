@@ -5997,7 +5997,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // Deep link: show curated selection in-app (authenticated — includes isSubscribed)
         const csToken = startParam.slice(3);
         Promise.all([
-          tgFetch(`${apiBase}/tg/selections/by-token/${encodeURIComponent(csToken)}`),
+          tgFetch(`/tg/selections/by-token/${encodeURIComponent(csToken)}`),
           loadWishlists().catch(() => {}),
         ])
           .then(async ([res]) => {
