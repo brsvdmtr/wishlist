@@ -69,6 +69,16 @@ if (!token) {
 } else {
   const bot = new Telegraf(token);
 
+  // Catch all unhandled middleware errors — structured pino logging instead of
+  // Telegraf's default plain-text "Unhandled error while processing update".
+  bot.catch((err: unknown, ctx) => {
+    logger.error(
+      { err, updateType: ctx.updateType, chatId: ctx.chat?.id, fromId: ctx.from?.id },
+      'bot middleware error',
+    );
+    if (process.env.GLITCHTIP_DSN && err instanceof Error) Sentry.captureException(err);
+  });
+
   const getLocale = (ctx: any): Locale => detectLocale(ctx.from?.language_code);
   const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
 
@@ -1338,33 +1348,51 @@ if (!token) {
       logger.info({ telegramId, url: firstUrl, itemId: item.id, domain: item.sourceDomain, parseStatus }, 'bot import succeeded');
     } catch (err) {
       logger.error({ err }, 'import-url error');
-      await ctx.reply(t('bot_error', locale));
+      await ctx.reply(t('bot_error', locale)).catch(() => {});
     }
   });
 
+  // Retry helper for Telegram API calls — exponential backoff on transient errors.
+  async function retryTgApi<T>(label: string, fn: () => Promise<T>, maxAttempts = 3): Promise<T | undefined> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (err: unknown) {
+        const isTransient =
+          err instanceof Error &&
+          (/ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|socket hang up|timeout/i.test(err.message) ||
+           ('code' in err && typeof (err as any).code === 'number' && (err as any).code >= 500));
+        if (!isTransient || attempt === maxAttempts) {
+          logger.error({ err, label, attempt }, 'telegram API call failed');
+          return undefined;
+        }
+        const delay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+        logger.warn({ label, attempt, nextRetryMs: delay }, 'telegram API call failed, retrying');
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+    return undefined;
+  }
+
   // Set bot commands for default (English) and Russian locales
-  bot.telegram
-    .setMyCommands([
+  void retryTgApi('setMyCommands:en', () =>
+    bot.telegram.setMyCommands([
       { command: 'start', description: t('bot_cmd_start', 'en') },
       { command: 'support', description: t('bot_cmd_support', 'en') },
       { command: 'paysupport', description: t('bot_cmd_paysupport', 'en') },
-    ])
-    .catch((err: unknown) => {
-      logger.error({ err }, 'failed to set commands');
-    });
+    ]),
+  );
 
-  bot.telegram
-    .setMyCommands(
+  void retryTgApi('setMyCommands:ru', () =>
+    bot.telegram.setMyCommands(
       [
         { command: 'start', description: t('bot_cmd_start', 'ru') },
         { command: 'support', description: t('bot_cmd_support', 'ru') },
         { command: 'paysupport', description: t('bot_cmd_paysupport', 'ru') },
       ],
       { language_code: 'ru' },
-    )
-    .catch((err: unknown) => {
-      logger.error({ err }, 'failed to set ru commands');
-    });
+    ),
+  );
 
   // Set bot description for all supported locales (shown in "What can this bot do?").
   // Default (no language_code) = English as fallback for unsupported locales.
@@ -1377,14 +1405,12 @@ if (!token) {
     { locale: 'ar', tgCode: 'ar' },
   ];
   for (const { locale, tgCode } of descriptionLocales) {
-    bot.telegram
-      .callApi('setMyDescription', {
+    void retryTgApi(`setMyDescription:${tgCode ?? 'default'}`, () =>
+      bot.telegram.callApi('setMyDescription', {
         description: t('bot_description', locale),
         ...(tgCode ? { language_code: tgCode } : {}),
-      } as Parameters<typeof bot.telegram.callApi>[1])
-      .catch((err: unknown) => {
-        logger.error({ err, locale }, 'failed to set description');
-      });
+      } as Parameters<typeof bot.telegram.callApi>[1]),
+    );
   }
 
   // Heartbeat: update every 60 s so /health/deep can detect bot absence.
