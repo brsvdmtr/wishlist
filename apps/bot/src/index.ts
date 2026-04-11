@@ -1474,14 +1474,18 @@ if (!token) {
     }
   }
 
-  void launchBot().then(() => {
-    // First successful launch — send startup alert after short delay
-    // to confirm bot didn't crash immediately (409 etc).
-    if (!shutdownRequested && bot.botInfo) {
+  void launchBot();
+
+  // Startup detection — poll for bot.botInfo (set by Telegraf after getMe succeeds).
+  // bot.launch() resolves only when polling STOPS, so we can't use .then().
+  const startupCheck = setInterval(() => {
+    if (shutdownRequested) { clearInterval(startupCheck); return; }
+    if (bot.botInfo) {
+      clearInterval(startupCheck);
       logger.info({ attempt: launchAttempt }, 'bot polling active');
       void sendAdminAlert(`🟢 <b>Bot started</b>${launchAttempt > 1 ? ` (after ${launchAttempt} attempts)` : ''}\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
     }
-  });
+  }, 2_000);
 
   // Uncaught exception / rejection alerts
   process.on('uncaughtException', (err) => {
