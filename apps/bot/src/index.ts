@@ -1419,40 +1419,69 @@ if (!token) {
   }
 
   // Heartbeat: update every 60 s so /health/deep can detect bot absence.
-  // Starts immediately — cleared on launch failure so zombies can't fake health.
+  // Starts immediately — paused during launch retries so zombies can't fake health.
   void updateHeartbeat();
   const heartbeatTimer = setInterval(() => void updateHeartbeat(), 60_000);
 
-  // Track launch failure so the delayed startup alert doesn't fire on crash.
-  let startFailed = false;
+  // ─── Launch with retry ───────────────────────────────────────────────────
+  // bot.launch() resolves when polling STOPS (on SIGTERM), not on start.
+  // On transient failures (ETIMEDOUT, ECONNRESET) we retry in-process with
+  // exponential backoff (5s → 10s → 20s → 40s → 60s cap) instead of
+  // process.exit(1) + Docker restart (which adds its own backoff on top).
+  // Fatal errors (409 Conflict, 401 Unauthorized) still exit immediately.
+  const MAX_LAUNCH_ATTEMPTS = 10;
+  let launchAttempt = 0;
+  let shutdownRequested = false;
 
-  // NOTE: bot.launch() resolves when polling STOPS (on SIGTERM), not on start.
-  // Use .catch() to detect startup failure (e.g. 409 Conflict).
-  bot
-    .launch()
-    .then(() => {
+  function isTransientError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    const msg = err.message;
+    return /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|socket hang up|timeout|network/i.test(msg) ||
+      ('code' in err && typeof (err as any).code === 'number' && (err as any).code >= 500);
+  }
+
+  async function launchBot(): Promise<void> {
+    launchAttempt++;
+    try {
+      await bot.launch();
+      // launch() resolves when polling stops (SIGTERM/SIGINT)
       logger.info('bot stopped gracefully');
-    })
-    .catch((err: unknown) => {
-      startFailed = true;
-      clearInterval(heartbeatTimer);
-      logger.fatal({ err }, 'failed to start');
-      if (process.env.GLITCHTIP_DSN && err instanceof Error) Sentry.captureException(err);
-      // Hard exit deadline: if sendAdminAlert hangs, exit anyway after 15 s
-      setTimeout(() => process.exit(1), 15_000).unref();
-      void sendAdminAlert(`🔴 <b>Bot failed to start</b>\n${String(err)}`).finally(() => process.exit(1));
-    });
+    } catch (err: unknown) {
+      if (shutdownRequested) return;
 
-  // Startup alert — delayed 5 s to confirm bot didn't crash immediately (409 etc).
-  // Guards: startFailed flag (set by .catch) + bot.botInfo (set after getMe() succeeds).
-  // Without botInfo check, a slow getMe() (Telegraf timeout = 500 s) would cause
-  // a false "started" alert before the bot has actually connected.
-  setTimeout(() => {
-    if (!startFailed && bot.botInfo) {
-      logger.info('bot polling active');
-      void sendAdminAlert(`🟢 <b>Bot started</b>\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
+      const transient = isTransientError(err);
+      const canRetry = transient && launchAttempt < MAX_LAUNCH_ATTEMPTS;
+
+      if (canRetry) {
+        const delay = Math.min(5000 * Math.pow(2, launchAttempt - 1), 60_000);
+        logger.warn({ err, attempt: launchAttempt, nextRetryMs: delay }, 'bot launch failed, retrying');
+        // Pause heartbeat during retry — don't fake health
+        clearInterval(heartbeatTimer);
+        if (launchAttempt === 1) {
+          // Alert on first failure only — don't spam
+          void sendAdminAlert(`⚠️ <b>Bot launch failed</b> (attempt ${launchAttempt}, retrying in ${delay / 1000}s)\n${String(err)}`);
+        }
+        await new Promise((r) => setTimeout(r, delay));
+        if (!shutdownRequested) return launchBot();
+      } else {
+        // Fatal or exhausted retries — exit and let Docker restart
+        logger.fatal({ err, attempt: launchAttempt, transient }, 'failed to start');
+        if (process.env.GLITCHTIP_DSN && err instanceof Error) Sentry.captureException(err);
+        clearInterval(heartbeatTimer);
+        setTimeout(() => process.exit(1), 15_000).unref();
+        void sendAdminAlert(`🔴 <b>Bot failed to start</b> (${launchAttempt} attempts)\n${String(err)}`).finally(() => process.exit(1));
+      }
     }
-  }, 5_000).unref();
+  }
+
+  void launchBot().then(() => {
+    // First successful launch — send startup alert after short delay
+    // to confirm bot didn't crash immediately (409 etc).
+    if (!shutdownRequested && bot.botInfo) {
+      logger.info({ attempt: launchAttempt }, 'bot polling active');
+      void sendAdminAlert(`🟢 <b>Bot started</b>${launchAttempt > 1 ? ` (after ${launchAttempt} attempts)` : ''}\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
+    }
+  });
 
   // Uncaught exception / rejection alerts
   process.on('uncaughtException', (err) => {
@@ -1468,9 +1497,10 @@ if (!token) {
     void sendAdminAlert(`🔴 <b>Bot unhandledRejection</b>\n${String(reason)}`);
   });
 
-  // Graceful shutdown — guard against "Bot is not running!" when SIGTERM
-  // arrives before bot.launch() completes (e.g. during getMe timeout).
+  // Graceful shutdown — set flag to abort retry loop, then stop bot.
+  // Guards against "Bot is not running!" when SIGTERM arrives during getMe timeout.
   const gracefulStop = (signal: string) => {
+    shutdownRequested = true;
     try { bot.stop(signal); } catch { process.exit(0); }
   };
   process.once('SIGINT', () => gracefulStop('SIGINT'));
