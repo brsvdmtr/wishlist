@@ -106,6 +106,10 @@ services:
 networks:
   wishlist-network:
     driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: "fd00:dead:cafe::/48"
 
 volumes:
   wishlist_pg_data:
