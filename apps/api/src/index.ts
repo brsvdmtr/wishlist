@@ -1647,10 +1647,12 @@ async function getUserEntitlement(userId: string, godMode = false): Promise<{
   return { plan: PLANS.FREE, isPro: false, proSource: null, subscription: null, promoPro: null };
 }
 
-/** Unified effective entitlement resolver — single source of truth for all limit checks */
-async function getEffectiveEntitlements(userId: string, godMode = false) {
+/** Unified effective entitlement resolver — single source of truth for all limit checks.
+ *  When godMode is omitted, auto-resolves from DB so callers can't forget it. */
+async function getEffectiveEntitlements(userId: string, godMode?: boolean) {
+  const resolvedGodMode = godMode ?? (await prisma.user.findUnique({ where: { id: userId }, select: { godMode: true } }))?.godMode ?? false;
   const [base, addOns, credits] = await Promise.all([
-    getUserEntitlement(userId, godMode),
+    getUserEntitlement(userId, resolvedGodMode),
     prisma.userAddOn.findMany({ where: { userId } }),
     prisma.userCredits.findUnique({ where: { userId } }),
   ]);
