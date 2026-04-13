@@ -3199,12 +3199,58 @@ class MiniAppErrorBoundary extends React.Component<
 }
 
 function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl: Wishlist; locale: Locale; onSave: (updated: Partial<Wishlist>) => void; onClose: () => void; doFetch: (url: string, init?: RequestInit) => Promise<Response> }) {
+  const onboardKey = `smart_res_onboard_${wl.id}`;
+  const [showOnboard, setShowOnboard] = React.useState(() => {
+    try { return !window.localStorage.getItem(onboardKey); } catch { return true; }
+  });
   const [srEnabled, setSrEnabled] = React.useState(wl.smartReservationsEnabled ?? false);
   const [srTtl, setSrTtl] = React.useState(wl.smartResTtlHours ?? 72);
   const [srExtend, setSrExtend] = React.useState(wl.smartResAllowExtend ?? true);
   const [srMaxExt, setSrMaxExt] = React.useState(wl.smartResMaxExtensions ?? 2);
   const [srSaving, setSrSaving] = React.useState(false);
   const dirty = srEnabled !== (wl.smartReservationsEnabled ?? false) || srTtl !== (wl.smartResTtlHours ?? 72) || srExtend !== (wl.smartResAllowExtend ?? true) || srMaxExt !== (wl.smartResMaxExtensions ?? 2);
+
+  if (showOnboard) {
+    const steps = [
+      { emoji: '⏱', text: t('smart_res_onboard_s1', locale) },
+      { emoji: '🔔', text: t('smart_res_onboard_s2', locale) },
+      { emoji: '🔄', text: t('smart_res_onboard_s3', locale) },
+      { emoji: '✅', text: t('smart_res_onboard_s4', locale) },
+    ];
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, textAlign: 'center' }}>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 68, height: 68, borderRadius: 22, margin: '0 auto',
+          background: `linear-gradient(145deg, ${C.accent}22, ${C.accent}08)`,
+          border: `1px solid ${C.accent}18`, fontSize: 32,
+        }}>⏰</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font }}>{t('smart_res_section_title', locale)}</div>
+        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5 }}>{t('smart_res_toggle_hint', locale)}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, textAlign: 'start' }}>
+          {steps.map((s, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '12px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none',
+            }}>
+              <span style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, flexShrink: 0,
+              }}>{s.emoji}</span>
+              <span style={{ fontSize: 14, color: C.text, lineHeight: 1.4 }}>{s.text}</span>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => {
+          try { window.localStorage.setItem(onboardKey, '1'); } catch { /* ok */ }
+          setShowOnboard(false);
+        }} style={{ ...btnPrimary, marginTop: 4 }}>
+          {locale === 'ru' ? 'Настроить' : 'Configure'}
+        </button>
+      </div>
+    );
+  }
 
   const saveSr = async () => {
     setSrSaving(true);
