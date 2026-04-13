@@ -7098,12 +7098,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           method: 'POST',
           body: JSON.stringify({ categoryId: targetCatId }),
         });
+        if (res.status === 402) { showUpsell('categories'); setShowCatPicker(null); return; }
         if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
       } else {
         const res = await tgFetch('/tg/items/bulk-move-category', {
           method: 'POST',
           body: JSON.stringify({ itemIds, categoryId: targetCatId }),
         });
+        if (res.status === 402) { showUpsell('categories'); setShowCatPicker(null); return; }
         if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
       }
       setItems(prev => prev.map(it => itemIds.includes(it.id) ? { ...it, categoryId: targetCatId } : it));
