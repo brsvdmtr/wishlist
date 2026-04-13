@@ -86,6 +86,12 @@ if (!token) {
   const getLocale = (ctx: any): Locale => detectLocale(ctx.from?.language_code);
   const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
 
+  // ─── Debug: log every incoming update ────────────────────────────────────
+  bot.use((ctx, next) => {
+    logger.info({ updateType: ctx.updateType, fromId: ctx.from?.id, chatId: ctx.chat?.id }, 'update received');
+    return next();
+  });
+
   // ─── Maintenance mode middleware ──────────────────────────────────────────
   // When MAINTENANCE_MODE=true, reply with maintenance message and record exposure.
   bot.use(async (ctx, next) => {
@@ -1313,6 +1319,7 @@ if (!token) {
 
   bot.on('text', async (ctx) => {
     const text = ctx.message.text;
+    logger.info({ telegramId: String(ctx.from.id), textLen: text.length, textStart: text.substring(0, 80) }, 'text message received');
     if (text.startsWith('/')) return; // skip commands
 
     const locale = getLocale(ctx);
