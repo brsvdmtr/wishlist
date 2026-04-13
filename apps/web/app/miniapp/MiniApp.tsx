@@ -581,6 +581,17 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-13',
+    date: '13.04.2026',
+    items: [
+      { ru: '⏱ PRO: Умные брони — бронь с таймером, автоснятие, напоминания', en: '⏱ PRO: Smart Reservations — timed reservations, auto-release, reminders' },
+      { ru: 'Настрой срок брони (24ч / 48ч / 72ч / 7д) для каждого вишлиста', en: 'Set reservation TTL (24h / 48h / 72h / 7d) per wishlist' },
+      { ru: 'Даритель получает напоминание и может продлить бронь', en: 'Gifter gets a reminder and can extend the reservation' },
+      { ru: 'Если бронь не продлена — желание автоматически освобождается', en: 'If not extended — the wish is automatically released' },
+      { ru: 'Доступно в PRO или как отдельный add-on за 15 Stars', en: 'Available with PRO or as a standalone add-on for 15 Stars' },
+    ],
+  },
+  {
     id: '2026-04-11',
     date: '11.04.2026',
     items: [
@@ -3183,6 +3194,97 @@ class MiniAppErrorBoundary extends React.Component<
     }
     return this.props.children;
   }
+}
+
+function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl: Wishlist; locale: Locale; onSave: (updated: Partial<Wishlist>) => void; onClose: () => void; doFetch: (url: string, init?: RequestInit) => Promise<Response> }) {
+  const [srEnabled, setSrEnabled] = React.useState(wl.smartReservationsEnabled ?? false);
+  const [srTtl, setSrTtl] = React.useState(wl.smartResTtlHours ?? 72);
+  const [srExtend, setSrExtend] = React.useState(wl.smartResAllowExtend ?? true);
+  const [srMaxExt, setSrMaxExt] = React.useState(wl.smartResMaxExtensions ?? 2);
+  const [srSaving, setSrSaving] = React.useState(false);
+  const dirty = srEnabled !== (wl.smartReservationsEnabled ?? false) || srTtl !== (wl.smartResTtlHours ?? 72) || srExtend !== (wl.smartResAllowExtend ?? true) || srMaxExt !== (wl.smartResMaxExtensions ?? 2);
+
+  const saveSr = async () => {
+    setSrSaving(true);
+    try {
+      const res = await doFetch(`/tg/wishlists/${wl.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ smartReservationsEnabled: srEnabled, smartResTtlHours: srTtl, smartResAllowExtend: srExtend, smartResMaxExtensions: srMaxExt }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        onSave(json.wishlist);
+        onClose();
+      } else {
+        // error handled by caller
+      }
+    } catch { /* */ }
+    setSrSaving(false);
+  };
+
+  const ttlOptions = [24, 48, 72, 168] as const;
+  const ttlLabels: Record<number, string> = { 24: '24h', 48: '48h', 72: '72h', 168: '7d' };
+  const extOptions = [1, 2, 3] as const;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
+        <div>
+          <div style={{ fontSize: 15, color: C.text, fontWeight: 600 }}>{t('smart_res_toggle', locale)}</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>{t('smart_res_toggle_hint', locale)}</div>
+        </div>
+        <button onClick={() => setSrEnabled(!srEnabled)} style={{
+          width: 50, height: 30, borderRadius: 15, border: 'none', cursor: 'pointer', padding: 2,
+          background: srEnabled ? C.green : C.surfaceHover, transition: 'background .2s',
+        }}>
+          <div style={{ width: 26, height: 26, borderRadius: 13, background: '#fff', transition: 'transform .2s', transform: srEnabled ? 'translateX(20px)' : 'translateX(0)' }} />
+        </button>
+      </div>
+      {srEnabled && (
+        <>
+          <div>
+            <div style={{ fontSize: 13, color: C.textSec, marginBottom: 8 }}>{t('smart_res_ttl_label', locale)}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {ttlOptions.map(v => (
+                <button key={v} onClick={() => setSrTtl(v)} style={{
+                  flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+                  background: srTtl === v ? C.accentSoft : C.surface, color: srTtl === v ? C.accent : C.textSec,
+                  fontWeight: 600, fontSize: 14, fontFamily: font,
+                }}>{ttlLabels[v]}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 14, color: C.text }}>{t('smart_res_extend_label', locale)}</span>
+            <button onClick={() => setSrExtend(!srExtend)} style={{
+              width: 50, height: 30, borderRadius: 15, border: 'none', cursor: 'pointer', padding: 2,
+              background: srExtend ? C.green : C.surfaceHover, transition: 'background .2s',
+            }}>
+              <div style={{ width: 26, height: 26, borderRadius: 13, background: '#fff', transition: 'transform .2s', transform: srExtend ? 'translateX(20px)' : 'translateX(0)' }} />
+            </button>
+          </div>
+          {srExtend && (
+            <div>
+              <div style={{ fontSize: 13, color: C.textSec, marginBottom: 8 }}>{t('smart_res_max_ext_label', locale)}</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {extOptions.map(v => (
+                  <button key={v} onClick={() => setSrMaxExt(v)} style={{
+                    flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+                    background: srMaxExt === v ? C.accentSoft : C.surface, color: srMaxExt === v ? C.accent : C.textSec,
+                    fontWeight: 600, fontSize: 14, fontFamily: font,
+                  }}>{v}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.4 }}>{t('smart_res_info', locale)}</div>
+        </>
+      )}
+      <button onClick={() => void saveSr()} disabled={!dirty || srSaving} style={{
+        ...btnPrimary, opacity: !dirty || srSaving ? 0.5 : 1,
+      }}>{srSaving ? '…' : t('save', locale)}</button>
+    </div>
+  );
 }
 
 export default function MiniApp(props: { apiBase: string; botUsername: string; miniappShortName: string }) {
@@ -17334,102 +17436,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
       {/* ── Smart Reservations settings sheet ── */}
       <BottomSheet isOpen={!!smartResSheetWl} onClose={() => setSmartResSheetWl(null)} title={t('smart_res_section_title', locale)}>
-        {smartResSheetWl && (() => {
-          const wl = smartResSheetWl;
-          const [srEnabled, setSrEnabled] = React.useState(wl.smartReservationsEnabled ?? false);
-          const [srTtl, setSrTtl] = React.useState(wl.smartResTtlHours ?? 72);
-          const [srExtend, setSrExtend] = React.useState(wl.smartResAllowExtend ?? true);
-          const [srMaxExt, setSrMaxExt] = React.useState(wl.smartResMaxExtensions ?? 2);
-          const [srSaving, setSrSaving] = React.useState(false);
-          const dirty = srEnabled !== (wl.smartReservationsEnabled ?? false) || srTtl !== (wl.smartResTtlHours ?? 72) || srExtend !== (wl.smartResAllowExtend ?? true) || srMaxExt !== (wl.smartResMaxExtensions ?? 2);
-
-          const saveSr = async () => {
-            setSrSaving(true);
-            try {
-              const res = await tgFetch(`/tg/wishlists/${wl.id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ smartReservationsEnabled: srEnabled, smartResTtlHours: srTtl, smartResAllowExtend: srExtend, smartResMaxExtensions: srMaxExt }),
-              });
-              if (res.ok) {
-                const json = await res.json();
-                setWishlists(prev => prev.map(w => w.id === wl.id ? { ...w, ...json.wishlist } : w));
-                setSmartResSheetWl(null);
-                pushToast(t('dont_gift_saved', locale), 'success');
-              } else {
-                pushToast('Error', 'error');
-              }
-            } catch { pushToast('Error', 'error'); }
-            setSrSaving(false);
-          };
-
-          const ttlOptions = [24, 48, 72, 168] as const;
-          const ttlLabels: Record<number, string> = { 24: '24h', 48: '48h', 72: '72h', 168: '7d' };
-          const extOptions = [1, 2, 3] as const;
-
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Toggle */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
-                <div>
-                  <div style={{ fontSize: 15, color: C.text, fontWeight: 600 }}>{t('smart_res_toggle', locale)}</div>
-                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>{t('smart_res_toggle_hint', locale)}</div>
-                </div>
-                <button onClick={() => setSrEnabled(!srEnabled)} style={{
-                  width: 50, height: 30, borderRadius: 15, border: 'none', cursor: 'pointer', padding: 2,
-                  background: srEnabled ? C.green : C.surfaceHover, transition: 'background .2s',
-                }}>
-                  <div style={{ width: 26, height: 26, borderRadius: 13, background: '#fff', transition: 'transform .2s', transform: srEnabled ? 'translateX(20px)' : 'translateX(0)' }} />
-                </button>
-              </div>
-              {srEnabled && (
-                <>
-                  {/* TTL */}
-                  <div>
-                    <div style={{ fontSize: 13, color: C.textSec, marginBottom: 8 }}>{t('smart_res_ttl_label', locale)}</div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {ttlOptions.map(v => (
-                        <button key={v} onClick={() => setSrTtl(v)} style={{
-                          flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
-                          background: srTtl === v ? C.accentSoft : C.surface, color: srTtl === v ? C.accent : C.textSec,
-                          fontWeight: 600, fontSize: 14, fontFamily: font,
-                        }}>{ttlLabels[v]}</button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Allow Extend */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 14, color: C.text }}>{t('smart_res_extend_label', locale)}</span>
-                    <button onClick={() => setSrExtend(!srExtend)} style={{
-                      width: 50, height: 30, borderRadius: 15, border: 'none', cursor: 'pointer', padding: 2,
-                      background: srExtend ? C.green : C.surfaceHover, transition: 'background .2s',
-                    }}>
-                      <div style={{ width: 26, height: 26, borderRadius: 13, background: '#fff', transition: 'transform .2s', transform: srExtend ? 'translateX(20px)' : 'translateX(0)' }} />
-                    </button>
-                  </div>
-                  {/* Max Extensions */}
-                  {srExtend && (
-                    <div>
-                      <div style={{ fontSize: 13, color: C.textSec, marginBottom: 8 }}>{t('smart_res_max_ext_label', locale)}</div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        {extOptions.map(v => (
-                          <button key={v} onClick={() => setSrMaxExt(v)} style={{
-                            flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
-                            background: srMaxExt === v ? C.accentSoft : C.surface, color: srMaxExt === v ? C.accent : C.textSec,
-                            fontWeight: 600, fontSize: 14, fontFamily: font,
-                          }}>{v}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.4 }}>{t('smart_res_info', locale)}</div>
-                </>
-              )}
-              <button onClick={() => void saveSr()} disabled={!dirty || srSaving} style={{
-                ...btnPrimary, opacity: !dirty || srSaving ? 0.5 : 1,
-              }}>{srSaving ? '…' : t('save', locale)}</button>
-            </div>
-          );
-        })()}
+        {smartResSheetWl && <SmartResSettingsContent wl={smartResSheetWl} locale={locale} doFetch={tgFetch} onClose={() => setSmartResSheetWl(null)} onSave={(updated) => {
+          setWishlists(prev => prev.map(w => w.id === smartResSheetWl!.id ? { ...w, ...updated } : w));
+          pushToast(t('dont_gift_saved', locale), 'success');
+        }} />}
       </BottomSheet>
 
       {/* ── Delete with reserved items warning ── */}
