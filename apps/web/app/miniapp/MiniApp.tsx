@@ -2811,6 +2811,7 @@ const CONTEXT_ADDON_SKUS: Partial<Record<UpsellContext, string[]>> = {
   hints:             ['hints_pack_5', 'hints_pack_10'],
   url_import:        ['import_pack_10', 'import_pack_25'],
   reservation_pro:   ['reservation_pro_unlock'],
+  smart_reservations:['smart_reservations_unlock'],
 };
 
 function getAddonOffers(locale: Locale): Record<string, { title: string; tag: string }> {
@@ -2826,6 +2827,7 @@ function getAddonOffers(locale: Locale): Record<string, { title: string; tag: st
     seasonal_decoration:    { title: t('addon_seasonal_decoration_title', locale),  tag: t('addon_seasonal_decoration_desc', locale) },
     gift_notes_unlock:      { title: t('addon_gift_notes_title', locale),           tag: t('addon_gift_notes_desc', locale) },
     reservation_pro_unlock: { title: t('addon_title_reservation_pro_unlock', locale), tag: t('addon_desc_reservation_pro_unlock', locale) },
+    smart_reservations_unlock: { title: t('addon_title_smart_reservations_unlock', locale), tag: t('addon_desc_smart_reservations_unlock', locale) },
   };
 }
 
@@ -17438,6 +17440,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       <BottomSheet isOpen={!!smartResSheetWl} onClose={() => setSmartResSheetWl(null)} title={t('smart_res_section_title', locale)}>
         {smartResSheetWl && <SmartResSettingsContent wl={smartResSheetWl} locale={locale} doFetch={tgFetch} onClose={() => setSmartResSheetWl(null)} onSave={(updated) => {
           setWishlists(prev => prev.map(w => w.id === smartResSheetWl!.id ? { ...w, ...updated } : w));
+          setCurrentWl(prev => prev && prev.id === smartResSheetWl!.id ? { ...prev, ...updated } : prev);
           pushToast(t('dont_gift_saved', locale), 'success');
         }} />}
       </BottomSheet>
