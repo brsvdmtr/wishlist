@@ -86,7 +86,6 @@ services:
     stop_grace_period: 30s
     environment:
       NODE_ENV: production
-      NODE_OPTIONS: "--dns-result-order=ipv6first"
       BOT_TOKEN: ${BOT_TOKEN}
       DATABASE_URL: ${DATABASE_URL}
       API_BASE_URL: http://api:3001

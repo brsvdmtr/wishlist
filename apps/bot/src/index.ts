@@ -1,7 +1,6 @@
-import dns from 'node:dns';
-// Prefer IPv6 for Telegram API — Timeweb VPS periodically loses IPv4 connectivity
-// to Telegram DC2 (149.154.166.110) while IPv6 (2001:67c:4e8:f004::9) stays up.
-dns.setDefaultResultOrder('ipv6first');
+// NOTE: IPv6-first was removed — Docker SNAT breaks long-poll connections to
+// Telegram while IPv4 currently works fine. If RKN blocks IPv4 again, re-add
+// dns.setDefaultResultOrder('ipv6first') AND fix Docker IPv6 NAT first.
 
 import dotenv from 'dotenv';
 import { Telegraf, Markup, TelegramError } from 'telegraf';
