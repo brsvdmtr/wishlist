@@ -9331,8 +9331,9 @@ internalRouter.post(
       return res.status(400).json({ error: err.message || 'Invalid URL' });
     }
 
-    // Feature gate: url_import requires PRO
-    const ent = await getUserEntitlement(parsed.data.userId);
+    // Feature gate: url_import requires PRO (respect godMode for admin users)
+    const user = await prisma.user.findUnique({ where: { id: parsed.data.userId }, select: { godMode: true } });
+    const ent = await getUserEntitlement(parsed.data.userId, user?.godMode ?? false);
     if (!ent.plan.features.includes('url_import')) {
       return res.status(402).json({ error: 'Pro feature', feature: 'url_import' });
     }
