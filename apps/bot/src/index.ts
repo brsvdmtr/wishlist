@@ -88,7 +88,10 @@ if (!token) {
 
   // ─── Debug: log every incoming update ────────────────────────────────────
   bot.use((ctx, next) => {
-    logger.info({ updateType: ctx.updateType, fromId: ctx.from?.id, chatId: ctx.chat?.id }, 'update received');
+    const msg = (ctx as any).message;
+    const msgKeys = msg ? Object.keys(msg).filter(k => !['from', 'chat', 'date', 'message_id'].includes(k)).join(',') : 'none';
+    const hasText = msg && 'text' in msg;
+    logger.info({ updateType: ctx.updateType, fromId: ctx.from?.id, chatId: ctx.chat?.id, msgKeys, hasText, textSnip: hasText ? String(msg.text).substring(0, 60) : null }, 'update received');
     return next();
   });
 
