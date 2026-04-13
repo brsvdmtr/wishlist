@@ -1357,7 +1357,13 @@ if (!token) {
         const body = await res.json().catch(() => ({})) as { error?: string; feature?: string };
         if (res.status === 402) {
           const isProGate = body.feature === 'url_import' || body.error === 'Pro feature';
-          await ctx.reply(t(isProGate ? 'bot_import_pro_required' : 'bot_import_drafts_full', locale));
+          if (isProGate) {
+            await ctx.reply(t('bot_import_pro_required', locale), Markup.inlineKeyboard([
+              Markup.button.webApp(t('bot_import_pro_btn', locale), `${MINI_APP_URL}?startapp=upgrade_pro`),
+            ]));
+          } else {
+            await ctx.reply(t('bot_import_drafts_full', locale));
+          }
           logger.info({ telegramId, url: firstUrl, reason: isProGate ? 'pro_required' : 'drafts_full' }, 'bot import rejected');
           return;
         }

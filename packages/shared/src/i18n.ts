@@ -967,6 +967,7 @@ const ru: Dict = {
     'Слишком много неразобранных желаний. Разбери часть в приложении, потом добавляй новые 📦',
   bot_import_pro_required:
     'Добавление по ссылке — функция PRO-подписки ✨\nПодключи PRO в приложении, чтобы быстро сохранять ссылки.',
+  bot_import_pro_btn: 'Подключить PRO ✨',
   bot_import_error: 'Не удалось обработать ссылку 🤷',
   bot_import_error_retry: 'Не удалось обработать ссылку. Попробуй ещё раз 🤷',
   bot_import_success: '✅ <b>Добавлено в Неразобранное</b>',
@@ -2903,6 +2904,7 @@ const en: Dict = {
   bot_multiple_urls: 'Found multiple links. Creating a card from the first one 👌',
   bot_import_drafts_full: 'Too many unprocessed wishes. Sort some in the app first 📦',
   bot_import_pro_required: 'Import by link is a PRO feature ✨\nSubscribe to PRO in the app to save links instantly.',
+  bot_import_pro_btn: 'Get PRO ✨',
   bot_import_error: 'Failed to process link 🤷',
   bot_import_error_retry: 'Failed to process link. Try again 🤷',
   bot_import_success: '✅ <b>Added to Inbox</b>',

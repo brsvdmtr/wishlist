@@ -243,7 +243,8 @@ type UpsellContext =
   | 'dont_gift'
   | 'dont_gift_banner'
   | 'curated_selection'
-  | 'smart_reservations';
+  | 'smart_reservations'
+  | 'bot_import';
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -1764,6 +1765,13 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     showTable: false,
     benefits: [t('upsell_smart_res_b1', locale), t('upsell_smart_res_b2', locale), t('upsell_smart_res_b3', locale)],
   },
+  bot_import: {
+    emoji: '🔗',
+    title: t('upsell_url_title', locale),
+    subtitle: t('upsell_url_subtitle', locale),
+    showTable: false,
+    benefits: [t('upsell_url_b1', locale), t('upsell_url_b2', locale), t('upsell_url_b3', locale)],
+  },
 });
 
 // Centralized PRO benefits config — single source of truth for all paywall/plan screens
@@ -3160,6 +3168,7 @@ const SERVICE_START_PARAMS = new Set([
   'add_item',
   'open_drafts',
   'open_profile',
+  'upgrade_pro',
 ]);
 
 class MiniAppErrorBoundary extends React.Component<
@@ -6415,6 +6424,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               } else {
                 bootSetScreen('my-wishlists');
               }
+            } else if (startParam === 'upgrade_pro') {
+              bootSetScreen('my-wishlists');
+              // Show PRO upsell sheet after a short delay so the home screen renders first
+              setTimeout(() => showUpsell('bot_import'), 400);
             } else {
               bootSetScreen('my-wishlists');
             }
