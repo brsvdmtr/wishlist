@@ -1354,10 +1354,11 @@ if (!token) {
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
+        const body = await res.json().catch(() => ({})) as { error?: string; feature?: string };
         if (res.status === 402) {
-          await ctx.reply(t('bot_import_drafts_full', locale));
-          logger.info({ telegramId, url: firstUrl, reason: 'drafts_full' }, 'bot import rejected');
+          const isProGate = body.feature === 'url_import' || body.error === 'Pro feature';
+          await ctx.reply(t(isProGate ? 'bot_import_pro_required' : 'bot_import_drafts_full', locale));
+          logger.info({ telegramId, url: firstUrl, reason: isProGate ? 'pro_required' : 'drafts_full' }, 'bot import rejected');
           return;
         }
         if (res.status === 400) {
