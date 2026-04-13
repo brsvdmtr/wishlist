@@ -13308,8 +13308,7 @@ setInterval(async () => {
         createdAt: { lte: candidateThreshold },
       },
       select: { id: true, telegramChatId: true, telegramId: true, updatedAt: true, createdAt: true, profile: { select: { notifyMarketing: true, languageMode: true, manualLanguage: true } } },
-      take: 200, // process in batches to avoid overload
-      orderBy: { updatedAt: 'asc' }, // oldest first
+      orderBy: { createdAt: 'desc' }, // newest first — ensure fresh signups get onboarding touches
     });
 
     for (const candidate of candidates) {
