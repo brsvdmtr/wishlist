@@ -1410,11 +1410,11 @@ const INIT_DATA_MAX_AGE_SECONDS = Math.max(60, parseInt(process.env.INIT_DATA_MA
 /** Allow minor clock skew (seconds). */
 const INIT_DATA_CLOCK_SKEW_SECONDS = 30;
 
-function validateTelegramInitData(initData: string, botToken: string): TelegramUser | null {
+function validateTelegramInitData(initData: string, botToken: string): { user: TelegramUser } | { reason: string } {
   try {
     const params = new URLSearchParams(initData);
     const hash = params.get('hash');
-    if (!hash) return null;
+    if (!hash) return { reason: 'no_hash' };
     params.delete('hash');
     const checkString = [...params.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -1422,22 +1422,22 @@ function validateTelegramInitData(initData: string, botToken: string): TelegramU
       .join('\n');
     const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
     const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
-    if (!secureCompare(expectedHash, hash)) return null;
+    if (!secureCompare(expectedHash, hash)) return { reason: 'hash_mismatch' };
 
     // ── auth_date expiry: reject stale or missing auth_date ───────────────
     const authDateStr = params.get('auth_date');
-    if (!authDateStr) return null;
+    if (!authDateStr) return { reason: 'no_auth_date' };
     const authDate = Number(authDateStr);
-    if (!Number.isFinite(authDate) || authDate <= 0) return null;
+    if (!Number.isFinite(authDate) || authDate <= 0) return { reason: 'invalid_auth_date' };
     const nowSec = Math.floor(Date.now() / 1000);
-    if (authDate > nowSec + INIT_DATA_CLOCK_SKEW_SECONDS) return null;       // future beyond skew
-    if (nowSec - authDate > INIT_DATA_MAX_AGE_SECONDS) return null;          // expired
+    if (authDate > nowSec + INIT_DATA_CLOCK_SKEW_SECONDS) return { reason: 'future_auth_date' };
+    if (nowSec - authDate > INIT_DATA_MAX_AGE_SECONDS) return { reason: 'expired' };
 
     const userStr = params.get('user');
-    if (!userStr) return null;
-    return JSON.parse(userStr) as TelegramUser;
+    if (!userStr) return { reason: 'no_user' };
+    return { user: JSON.parse(userStr) as TelegramUser };
   } catch {
-    return null;
+    return { reason: 'parse_error' };
   }
 }
 
@@ -1463,10 +1463,13 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction) {
   }
 
   const initData = req.get('X-TG-INIT-DATA') ?? '';
-  const user = validateTelegramInitData(initData, botToken);
-  if (!user) return res.status(401).json({ error: 'Invalid Telegram auth' });
+  const result = validateTelegramInitData(initData, botToken);
+  if ('reason' in result) {
+    logger.debug({ reason: result.reason, path: req.path, ip: req.ip, initDataLen: initData.length }, 'auth_rejected');
+    return res.status(401).json({ error: 'Invalid Telegram auth' });
+  }
 
-  req.tgUser = user;
+  req.tgUser = result.user;
   return next();
 }
 
@@ -2256,13 +2259,13 @@ tgRouter.use((req, _res, next) => {
 
 // Error-tracking middleware — records 4xx/5xx responses to AnalyticsEvent.
 // Fires on res.on('finish') so it never blocks the request path.
-// Excludes 401 (normal unauthenticated noise). Event format:
+// Includes 401 for auth failure visibility. Event format:
 //   error:{METHOD}:{STATUS}:{route}   e.g. error:POST:402:/tg/items
 // Route uses req.route.path (Express pattern) so IDs are grouped (:id, :campaignId, …).
 tgRouter.use((req, res, next) => {
   res.on('finish', () => {
     const status = res.statusCode;
-    if (status >= 400 && status !== 401) {
+    if (status >= 400) {
       const route = req.route?.path ? (req.baseUrl + req.route.path) : req.path;
       const method = req.method;
       const userId = req.tgUser?.id != null ? String(req.tgUser.id) : null;
@@ -13297,6 +13300,9 @@ const MAX_WAVES: Record<string, number> = { S1: 2, S2: 3, S3: 2, S4: 3 };
 
 setInterval(async () => {
   if (!BOT_TOKEN_FOR_DM) return;
+  const cycleStart = Date.now();
+  let touchesSent = 0;
+  let touchesFailed = 0;
   try {
     // Find users who haven't been updated recently (potential churn candidates)
     const candidateThreshold = new Date(Date.now() - 6 * 60 * 60 * 1000); // at least 6h inactive
@@ -13451,10 +13457,13 @@ setInterval(async () => {
         });
       }
 
+      if (delivered) touchesSent++; else touchesFailed++;
       logger.info({ delivered, segment, touchNumber: nextTouchNumber, userId: candidate.id.slice(0, 8), promo: actuallyOfferPromo }, 'lifecycle touch sent');
     }
+
+    logger.info({ candidatesFound: candidates.length, touchesSent, touchesFailed, durationMs: Date.now() - cycleStart }, 'lifecycle_cycle_completed');
   } catch (err) {
-    logger.error({ err }, 'lifecycle scheduler error');
+    logger.error({ err, touchesSent, touchesFailed, durationMs: Date.now() - cycleStart }, 'lifecycle scheduler error');
   }
 }, 60 * 60 * 1000); // every hour
 

@@ -543,7 +543,8 @@ type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-d
 | 'first-share-prompt'
 | 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat'
 | 'curated-view'
-| 'link-management';
+| 'link-management'
+| 'guest-link-expired';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -3176,21 +3177,41 @@ class MiniAppErrorBoundary extends React.Component<
     try { captureException(error); } catch (_) { /* sentry may not be loaded */ }
     // eslint-disable-next-line no-console
     console.error('[MiniApp] render error', error, info.componentStack);
+
+    // Best-effort telemetry beacon — fire and forget
+    try {
+      const apiBase = (typeof window !== 'undefined' && (window as any).__WISHBOARD_API_BASE) || '';
+      if (apiBase) {
+        const body = JSON.stringify({ events: [{
+          event: 'error_boundary_triggered',
+          ts: Date.now(),
+          props: { errorMessage: error.message?.substring(0, 200), componentStack: info.componentStack?.substring(0, 300) },
+        }] });
+        navigator.sendBeacon?.(`${apiBase}/tg/telemetry`, body) ||
+          fetch(`${apiBase}/tg/telemetry`, { method: 'POST', body, headers: { 'Content-Type': 'application/json' }, keepalive: true }).catch(() => {});
+      }
+    } catch (_) { /* telemetry is best-effort */ }
   }
   render() {
     if (this.state.hasError) {
+      const isRu = typeof navigator !== 'undefined' && /^ru\b/i.test(navigator.language || '');
       return (
         <div style={{ padding: 32, textAlign: 'center', color: '#fff', fontFamily: 'system-ui' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>:(</div>
-          <div style={{ fontSize: 16, marginBottom: 8 }}>Something went wrong</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 16 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>😕</div>
+          <div style={{ fontSize: 16, marginBottom: 8 }}>
+            {isRu ? 'Что-то пошло не так' : 'Something went wrong'}
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 16, lineHeight: 1.5 }}>
+            {isRu ? 'Попробуйте перезагрузить приложение.' : 'Try reloading the app.'}
+          </div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 16, fontFamily: 'monospace', wordBreak: 'break-all' }}>
             {this.state.error?.message}
           </div>
           <button
             onClick={() => window.location.reload()}
-            style={{ padding: '8px 24px', borderRadius: 8, border: 'none', background: '#A78BFA', color: '#fff', fontSize: 14, cursor: 'pointer' }}
+            style={{ padding: '10px 28px', borderRadius: 10, border: 'none', background: '#A78BFA', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
           >
-            Reload
+            {isRu ? 'Перезагрузить' : 'Reload'}
           </button>
         </div>
       );
@@ -3451,6 +3472,9 @@ export default function MiniApp(props: { apiBase: string; botUsername: string; m
 }
 
 function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: string; botUsername: string; miniappShortName: string }) {
+  // Expose apiBase for error boundary telemetry (class component can't access props)
+  if (typeof window !== 'undefined') (window as any).__WISHBOARD_API_BASE = apiBase;
+
   /** Build t.me deep link.
    *  Uses ?startapp= format which opens the Mini App directly via BotFather configuration.
    *  Format: https://t.me/<BOT>?startapp=<payload>
@@ -4318,8 +4342,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     growTextarea(descTextareaRef.current);
   }, [editingDescription, descriptionText]);
 
-  const tgFetch = useCallback(async (path: string, init?: RequestInit & { timeoutMs?: number }) => {
+  const tgFetch = useCallback(async (path: string, init?: RequestInit & { timeoutMs?: number; _retried?: boolean }) => {
     const url = `${apiBase}${path}`;
+    const fetchStart = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), init?.timeoutMs ?? 5000);
     try {
@@ -4344,17 +4369,42 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         err.kind = json.code === 'MAINTENANCE' ? 'maintenance' : 'unavailable';
         throw err;
       }
+      // Auto-retry: GET requests that got 5xx — one retry after 1s delay
+      const method = (init?.method || 'GET').toUpperCase();
+      if (res.status >= 500 && method === 'GET' && !init?._retried) {
+        await new Promise(r => setTimeout(r, 1000));
+        return tgFetch(path, { ...init, _retried: true });
+      }
       return res;
     } catch (err) {
       clearTimeout(timer);
-      if (err instanceof Error && (err.name === 'AbortError' || (err as { kind?: string }).kind)) {
+      const durationMs = Date.now() - fetchStart;
+      const isAbort = err instanceof Error && err.name === 'AbortError';
+      const hasKind = (err as { kind?: string }).kind;
+
+      // Track network errors
+      trackEvent('miniapp.network_error', {
+        endpoint: path,
+        durationMs,
+        errorType: isAbort ? 'timeout' : hasKind || 'network',
+        status: null,
+      });
+
+      // Auto-retry: GET requests that failed with network error/timeout — one retry after 1s delay
+      const method = (init?.method || 'GET').toUpperCase();
+      if (method === 'GET' && !init?._retried && !hasKind) {
+        await new Promise(r => setTimeout(r, 1000));
+        return tgFetch(path, { ...init, _retried: true });
+      }
+
+      if (err instanceof Error && (isAbort || hasKind)) {
         throw err;
       }
       const wrapped = new Error(`Fetch ${url}: ${err instanceof Error ? err.message : String(err)}`) as Error & { kind: string };
       wrapped.kind = 'unavailable';
       throw wrapped;
     }
-  }, [apiBase]);
+  }, [apiBase, trackEvent]);
 
   const flushTelemetry = useCallback(() => {
     const events = telemetryBufferRef.current;
@@ -5941,6 +5991,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   }, [screen, santaWishlistPickerReturnId]);
 
+  // Onboarding step tracking — fire event when user lands on any onboarding screen
+  useEffect(() => {
+    const onboardingScreens = [
+      'onboarding-entry', 'onboarding-demo', 'onboarding-complete', 'onboarding-try',
+      'onboarding-success', 'onboarding-recovery', 'onboarding-manual',
+      'onboarding-catalog', 'onboarding-create-wishlist', 'onboarding-share',
+    ] as const;
+    const idx = onboardingScreens.indexOf(screen as typeof onboardingScreens[number]);
+    if (idx !== -1) {
+      trackEvent('onboarding.step_viewed', { step: screen, variant: onboardingVariant, stepIndex: idx });
+    }
+  }, [screen, onboardingVariant, trackEvent]);
+
   // Group Gift chat: scroll to bottom when messages change
   useEffect(() => {
     if (screen === 'group-gift-chat') {
@@ -6137,8 +6200,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const handleErr = (e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
         const kind = (e as { kind?: string }).kind;
+        const durationMs = Date.now() - bootStartTimeRef.current;
         // eslint-disable-next-line no-console
         console.error('[WishBoard]', msg, { apiBase, initData: tg.initData?.substring(0, 50) });
+
+        // Track bootstrap error for observability
+        const errorType = kind === 'maintenance' ? 'maintenance'
+          : kind === 'unavailable' || msg === 'UNAVAILABLE' ? 'unavailable'
+          : (e instanceof Error && e.name === 'AbortError') ? 'timeout'
+          : 'unknown';
+        trackEvent('miniapp.bootstrap_error', { errorType, errorMessage: msg.substring(0, 200), durationMs });
+
         if (kind === 'maintenance' || msg === 'MAINTENANCE') {
           setScreen('maintenance');
           // Record maintenance exposure (best-effort, endpoint is whitelisted during maintenance)
@@ -6153,6 +6225,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setErrorMsg(t('error_load_failed', locale));
           setScreen('error');
         }
+
+        // Flush telemetry — errors might prevent normal flush, send what we have
+        flushTelemetry();
       };
 
       trackEvent('miniapp.bootstrap_started', { startParamType: startParam ? (startParam.startsWith('santa_') ? 'santa' : startParam.startsWith('src_') ? 'attribution' : startParam.includes('__') ? 'guest' : 'service') : 'none' });
@@ -6406,17 +6481,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             bootSetScreen('guest-view');
           })
           .catch((err) => {
-            // Public link 404: don't crash the app — fall back to home screen.
+            // Public link 404/invalid — show expired link screen instead of silently falling back
             trackEvent('miniapp_start_payload_public_fetch_failed', { payload: startParam, error: (err as Error).message });
+            trackEvent('miniapp.guest_link_expired', { startParam });
             // eslint-disable-next-line no-console
-            console.warn('[WishBoard] Public deep link failed, falling back to home', startParam);
-            loadWishlists()
-              .then(async () => {
-                trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
-                const redirected = await checkOnboarding();
-                if (!redirected) bootSetScreen('my-wishlists');
-              })
-              .catch(handleErr);
+            console.warn('[WishBoard] Public deep link failed', startParam);
+            // Pre-load user wishlists so "My wishlists" button works immediately
+            loadWishlists().catch(() => {});
+            bootSetScreen('guest-link-expired');
           });
         loadWishlists().catch(() => { /* non-critical for guest flow */ });
       } else {
@@ -9070,6 +9142,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
         );
       })()}
+
+      {/* ── GUEST LINK EXPIRED ── */}
+      {screen === 'guest-link-expired' && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
+          <div style={{ fontSize: 48 }}>🔗</div>
+          <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text }}>
+            {locale === 'ru' ? 'Ссылка недействительна' : 'Link expired'}
+          </div>
+          <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5 }}>
+            {locale === 'ru'
+              ? 'Этот вишлист был удалён или ссылка больше не работает.'
+              : 'This wishlist has been deleted or the link no longer works.'}
+          </div>
+          <button
+            style={{ ...btnPrimary, marginTop: 8, width: 220 }}
+            onClick={() => { setScreen('my-wishlists'); }}
+          >
+            {locale === 'ru' ? 'Мои вишлисты' : 'My wishlists'}
+          </button>
+        </div>
+      )}
 
       {/* ── MAINTENANCE ── */}
       {screen === 'maintenance' && (
