@@ -13150,7 +13150,7 @@ setInterval(async () => {
 // and sends Telegram DM messages via bot API. WISHPRO offered only on eligible touches.
 
 const BOT_TOKEN_FOR_DM = process.env.BOT_TOKEN ?? '';
-const MINI_APP_URL_FOR_DM = process.env.MINI_APP_URL ?? 'https://example.com/miniapp';
+const MINI_APP_URL_FOR_DM = process.env.MINI_APP_URL ?? 'https://wishlistik.ru/miniapp';
 const LIFECYCLE_PROMO_CODE = 'WISHPRO';
 const LIFECYCLE_PROMO_COOLDOWN_DAYS = 60; // max 1 promo offer per 60 days
 const LIFECYCLE_MSG_COOLDOWN_HOURS = 72; // min 72h between messages

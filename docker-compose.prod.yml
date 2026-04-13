@@ -42,6 +42,7 @@ services:
       SUPPORT_CHAT_ID: ${SUPPORT_CHAT_ID:-}
       MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
       GOD_MODE_TELEGRAM_IDS: ${GOD_MODE_TELEGRAM_IDS:-}
+      MINI_APP_URL: ${MINI_APP_URL:-https://wishlistik.ru/miniapp}
     volumes:
       - wishlist_uploads:/data/uploads
     depends_on:

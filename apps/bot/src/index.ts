@@ -86,14 +86,6 @@ if (!token) {
   const getLocale = (ctx: any): Locale => detectLocale(ctx.from?.language_code);
   const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:3001';
 
-  // ─── Debug: log every incoming update ────────────────────────────────────
-  bot.use((ctx, next) => {
-    const msg = (ctx as any).message;
-    const msgKeys = msg ? Object.keys(msg).filter(k => !['from', 'chat', 'date', 'message_id'].includes(k)).join(',') : 'none';
-    const hasText = msg && 'text' in msg;
-    logger.info({ updateType: ctx.updateType, fromId: ctx.from?.id, chatId: ctx.chat?.id, msgKeys, hasText, textSnip: hasText ? String(msg.text).substring(0, 60) : null }, 'update received');
-    return next();
-  });
 
   // ─── Maintenance mode middleware ──────────────────────────────────────────
   // When MAINTENANCE_MODE=true, reply with maintenance message and record exposure.
@@ -889,7 +881,6 @@ if (!token) {
   bot.on('message', async (ctx, next) => {
     const msg = ctx.message;
     if (!('successful_payment' in msg) || !msg.successful_payment) {
-      logger.info({ fromId: ctx.from?.id, step: 'payment_handler_passthrough' }, 'dbg');
       return next();
     }
 
@@ -1115,7 +1106,7 @@ if (!token) {
   // a message with users_shared. We deliver the hint directly via Bot API.
   bot.on('message', async (ctx, next) => {
     const msg = ctx.message as unknown as Record<string, unknown>;
-    if (!msg.users_shared) { logger.info({ fromId: ctx.from?.id, step: 'users_shared_passthrough' }, 'dbg'); return next(); }
+    if (!msg.users_shared) return next();
 
     const senderTgId = String(ctx.from!.id);
     const locale = getLocale(ctx); // sender's locale for status messages
@@ -1250,7 +1241,6 @@ if (!token) {
   bot.on('message', async (ctx, next) => {
     const msg = ctx.message as any;
     if (!msg || !ctx.from) return next();
-    logger.info({ fromId: ctx.from?.id, step: 'support_handler_enter' }, 'dbg');
 
     const chatId = String(ctx.chat.id);
 
@@ -1302,19 +1292,16 @@ if (!token) {
     const msgText: string = 'text' in msg ? String((msg as any).text || '') : '';
     const looksLikeUrl = /^https?:\/\/\S+$/i.test(msgText.trim());
     const isCommand = msgText.startsWith('/');
-    logger.info({ fromId: ctx.from?.id, step: 'support_case3', looksLikeUrl, isCommand, msgTextLen: msgText.length }, 'dbg');
     if (!looksLikeUrl && !isCommand) {
       const openTicket = await prisma.supportTicket.findFirst({
         where: { user: { telegramChatId: chatId }, status: { notIn: ['CLOSED'] } },
       });
       if (openTicket) {
-        logger.info({ fromId: ctx.from?.id, step: 'support_case3_consumed', ticketCode: openTicket.ticketCode }, 'dbg');
         await handleUserFollowUp(ctx, openTicket);
         return;
       }
     }
 
-    logger.info({ fromId: ctx.from?.id, step: 'support_handler_passthrough' }, 'dbg');
     return next();
   });
 
@@ -1327,7 +1314,6 @@ if (!token) {
 
   bot.on('text', async (ctx) => {
     const text = ctx.message.text;
-    logger.info({ telegramId: String(ctx.from.id), textLen: text.length, textStart: text.substring(0, 80) }, 'text message received');
     if (text.startsWith('/')) return; // skip commands
 
     const locale = getLocale(ctx);
