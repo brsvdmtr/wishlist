@@ -889,6 +889,7 @@ if (!token) {
   bot.on('message', async (ctx, next) => {
     const msg = ctx.message;
     if (!('successful_payment' in msg) || !msg.successful_payment) {
+      logger.info({ fromId: ctx.from?.id, step: 'payment_handler_passthrough' }, 'dbg');
       return next();
     }
 
@@ -1114,7 +1115,7 @@ if (!token) {
   // a message with users_shared. We deliver the hint directly via Bot API.
   bot.on('message', async (ctx, next) => {
     const msg = ctx.message as unknown as Record<string, unknown>;
-    if (!msg.users_shared) return next();
+    if (!msg.users_shared) { logger.info({ fromId: ctx.from?.id, step: 'users_shared_passthrough' }, 'dbg'); return next(); }
 
     const senderTgId = String(ctx.from!.id);
     const locale = getLocale(ctx); // sender's locale for status messages
@@ -1249,6 +1250,7 @@ if (!token) {
   bot.on('message', async (ctx, next) => {
     const msg = ctx.message as any;
     if (!msg || !ctx.from) return next();
+    logger.info({ fromId: ctx.from?.id, step: 'support_handler_enter' }, 'dbg');
 
     const chatId = String(ctx.chat.id);
 
@@ -1300,16 +1302,19 @@ if (!token) {
     const msgText: string = 'text' in msg ? String((msg as any).text || '') : '';
     const looksLikeUrl = /^https?:\/\/\S+$/i.test(msgText.trim());
     const isCommand = msgText.startsWith('/');
+    logger.info({ fromId: ctx.from?.id, step: 'support_case3', looksLikeUrl, isCommand, msgTextLen: msgText.length }, 'dbg');
     if (!looksLikeUrl && !isCommand) {
       const openTicket = await prisma.supportTicket.findFirst({
         where: { user: { telegramChatId: chatId }, status: { notIn: ['CLOSED'] } },
       });
       if (openTicket) {
+        logger.info({ fromId: ctx.from?.id, step: 'support_case3_consumed', ticketCode: openTicket.ticketCode }, 'dbg');
         await handleUserFollowUp(ctx, openTicket);
         return;
       }
     }
 
+    logger.info({ fromId: ctx.from?.id, step: 'support_handler_passthrough' }, 'dbg');
     return next();
   });
 
