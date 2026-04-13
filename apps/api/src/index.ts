@@ -856,6 +856,22 @@ publicRouter.get(
         avatarUpdatedAt: true,
         avatarPublic: true,
         profileVisibility: true,
+        // Showcase fields
+        showcaseEnabled: true,
+        showcaseCoverUrl: true,
+        showcaseBio: true,
+        showcasePinnedIds: true,
+        showcasePreferences: true,
+        showcaseSizeClothing: true,
+        showcaseSizeShoes: true,
+        showcaseSizeRing: true,
+        showcaseSizeOther: true,
+        showcaseBrands: true,
+        // Don't gift
+        dontGiftPresets: true,
+        dontGiftCustomItems: true,
+        dontGiftComment: true,
+        dontGiftVisible: true,
       },
     });
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
@@ -867,6 +883,11 @@ publicRouter.get(
 
     // For non-ALL visibility, return profile info only (no wishlist list)
     const isPublic = profile.profileVisibility === 'ALL';
+
+    // Check if user has active PRO for showcase rendering
+    const ent = await getEffectiveEntitlements(profile.userId, false);
+    const isPro = ent.plan.code === 'PRO';
+    const showcaseActive = isPro && profile.showcaseEnabled;
 
     let publicWishlists: Array<{ id: string; slug: string; title: string; deadline: string | null; itemCount: number; reservedCount: number }> = [];
     if (isPublic) {
@@ -897,6 +918,48 @@ publicRouter.get(
     const publicAvatarUrl = profile.avatarPublic ? profile.avatarUrl : null;
     const publicAvatarThumbUrl = profile.avatarPublic ? profile.avatarThumbUrl : null;
 
+    // Showcase data — only if PRO active and showcase enabled
+    let showcase = null;
+    if (showcaseActive) {
+      // Filter pinned IDs to only include existing public wishlists
+      const pinnedIds = (profile.showcasePinnedIds ?? []).filter((id) =>
+        publicWishlists.some((wl) => wl.id === id),
+      );
+      const pinnedWishlists = pinnedIds.map((id) => publicWishlists.find((wl) => wl.id === id)!).filter(Boolean);
+
+      const hasDontGift = profile.dontGiftVisible &&
+        ((profile.dontGiftPresets ?? []).length > 0 || (profile.dontGiftCustomItems ?? []).length > 0 || !!profile.dontGiftComment);
+
+      showcase = {
+        coverUrl: profile.showcaseCoverUrl,
+        bio: profile.showcaseBio,
+        pinnedWishlists,
+        preferences: profile.showcasePreferences,
+        sizes: (profile.showcaseSizeClothing || profile.showcaseSizeShoes || profile.showcaseSizeRing || profile.showcaseSizeOther)
+          ? {
+              clothing: profile.showcaseSizeClothing,
+              shoes: profile.showcaseSizeShoes,
+              ring: profile.showcaseSizeRing,
+              other: profile.showcaseSizeOther,
+            }
+          : null,
+        brands: profile.showcaseBrands ?? [],
+        dontGift: hasDontGift
+          ? {
+              presets: profile.dontGiftPresets ?? [],
+              customItems: profile.dontGiftCustomItems ?? [],
+              comment: profile.dontGiftComment,
+            }
+          : null,
+      };
+    }
+
+    trackEvent('public_profile.viewed', undefined, {
+      profileUserId: profile.userId,
+      hasShowcase: showcaseActive,
+      wishlistCount: publicWishlists.length,
+    });
+
     return res.json({
       profile: {
         displayName: profile.displayName,
@@ -906,8 +969,10 @@ publicRouter.get(
         avatarThumbUrl: publicAvatarThumbUrl,
         avatarUpdatedAt: profile.avatarUpdatedAt?.toISOString() ?? null,
         isPublic,
+        isPro,
       },
       wishlists: publicWishlists,
+      showcase,
     });
   }),
 );
@@ -1647,10 +1712,12 @@ async function getUserEntitlement(userId: string, godMode = false): Promise<{
   return { plan: PLANS.FREE, isPro: false, proSource: null, subscription: null, promoPro: null };
 }
 
-/** Unified effective entitlement resolver — single source of truth for all limit checks */
-async function getEffectiveEntitlements(userId: string, godMode = false) {
+/** Unified effective entitlement resolver — single source of truth for all limit checks.
+ *  When godMode is omitted, auto-resolves from DB so callers can't forget it. */
+async function getEffectiveEntitlements(userId: string, godMode?: boolean) {
+  const resolvedGodMode = godMode ?? (await prisma.user.findUnique({ where: { id: userId }, select: { godMode: true } }))?.godMode ?? false;
   const [base, addOns, credits] = await Promise.all([
-    getUserEntitlement(userId, godMode),
+    getUserEntitlement(userId, resolvedGodMode),
     prisma.userAddOn.findMany({ where: { userId } }),
     prisma.userCredits.findUnique({ where: { userId } }),
   ]);
@@ -1768,6 +1835,8 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
     event.startsWith('first_share_prompt_') ||
     event.startsWith('ready_share_prompt_') ||
     event.startsWith('group_gift_') ||
+    event.startsWith('showcase.') ||
+    event.startsWith('public_profile.') ||
     event.startsWith('error:');
   if (shouldPersist && userId) {
     prisma.analyticsEvent
@@ -6683,6 +6752,180 @@ tgRouter.delete(
       data: { avatarUrl: null, avatarThumbUrl: null, avatarUpdatedAt: null },
     });
 
+    return res.json({ success: true });
+  }),
+);
+
+// ── Showcase (PRO gift profile) ─────────────────────────────────────────────
+
+// GET /tg/me/showcase — owner's showcase data
+tgRouter.get(
+  '/me/showcase',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
+    const profile = await getOrCreateProfile(user.id, locale);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    const isPro = ent.plan.code === 'PRO';
+
+    // Return showcase fields + available wishlists for pinning
+    const wishlists = await prisma.wishlist.findMany({
+      where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        id: true, slug: true, title: true,
+        items: { where: { status: { in: [...ACTIVE_STATUSES] } }, select: { id: true, status: true } },
+      },
+    });
+
+    const availableWishlists = wishlists.map((wl) => ({
+      id: wl.id,
+      slug: wl.slug,
+      title: wl.title,
+      itemCount: wl.items.length,
+      reservedCount: wl.items.filter((i) => i.status !== 'AVAILABLE').length,
+    }));
+
+    // Filter out pinned IDs that no longer exist
+    const validPinnedIds = (profile.showcasePinnedIds ?? []).filter((id) =>
+      wishlists.some((wl) => wl.id === id),
+    );
+
+    return res.json({
+      isPro,
+      showcase: {
+        enabled: profile.showcaseEnabled,
+        coverUrl: profile.showcaseCoverUrl,
+        bio: profile.showcaseBio,
+        pinnedIds: validPinnedIds,
+        preferences: profile.showcasePreferences,
+        sizeClothing: profile.showcaseSizeClothing,
+        sizeShoes: profile.showcaseSizeShoes,
+        sizeRing: profile.showcaseSizeRing,
+        sizeOther: profile.showcaseSizeOther,
+        brands: profile.showcaseBrands ?? [],
+        updatedAt: profile.showcaseUpdatedAt?.toISOString() ?? null,
+      },
+      dontGift: {
+        presets: profile.dontGiftPresets ?? [],
+        customItems: profile.dontGiftCustomItems ?? [],
+        comment: profile.dontGiftComment,
+        visible: profile.dontGiftVisible,
+      },
+      availableWishlists,
+    });
+  }),
+);
+
+// PATCH /tg/me/showcase — save showcase data (PRO only)
+tgRouter.patch(
+  '/me/showcase',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    if (ent.plan.code !== 'PRO') return res.status(403).json({ error: 'PRO required' });
+
+    const parsed = z.object({
+      bio: z.string().max(180).nullable().optional(),
+      pinnedIds: z.array(z.string()).max(3).optional(),
+      preferences: z.string().max(300).nullable().optional(),
+      sizeClothing: z.string().max(30).nullable().optional(),
+      sizeShoes: z.string().max(30).nullable().optional(),
+      sizeRing: z.string().max(30).nullable().optional(),
+      sizeOther: z.string().max(60).nullable().optional(),
+      brands: z.array(z.string().max(40)).max(10).optional(),
+      enabled: z.boolean().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const data = parsed.data;
+    const updateData: Record<string, unknown> = { showcaseUpdatedAt: new Date() };
+
+    if (data.bio !== undefined) updateData.showcaseBio = data.bio;
+    if (data.pinnedIds !== undefined) {
+      // Validate pinned IDs exist
+      const existing = await prisma.wishlist.findMany({
+        where: { id: { in: data.pinnedIds }, ownerId: user.id, type: 'REGULAR', archivedAt: null },
+        select: { id: true },
+      });
+      const validIds = data.pinnedIds.filter((id) => existing.some((wl) => wl.id === id));
+      updateData.showcasePinnedIds = validIds;
+    }
+    if (data.preferences !== undefined) updateData.showcasePreferences = data.preferences;
+    if (data.sizeClothing !== undefined) updateData.showcaseSizeClothing = data.sizeClothing;
+    if (data.sizeShoes !== undefined) updateData.showcaseSizeShoes = data.sizeShoes;
+    if (data.sizeRing !== undefined) updateData.showcaseSizeRing = data.sizeRing;
+    if (data.sizeOther !== undefined) updateData.showcaseSizeOther = data.sizeOther;
+    if (data.brands !== undefined) updateData.showcaseBrands = data.brands;
+    if (data.enabled !== undefined) updateData.showcaseEnabled = data.enabled;
+
+    const profile = await prisma.userProfile.update({
+      where: { userId: user.id },
+      data: updateData,
+    });
+
+    trackEvent('showcase.saved', user.id, {
+      enabled: profile.showcaseEnabled,
+      hasCover: !!profile.showcaseCoverUrl,
+      hasBio: !!profile.showcaseBio,
+      pinnedCount: (profile.showcasePinnedIds ?? []).length,
+      hasPreferences: !!profile.showcasePreferences,
+      hasSizes: !!(profile.showcaseSizeClothing || profile.showcaseSizeShoes || profile.showcaseSizeRing),
+      brandsCount: (profile.showcaseBrands ?? []).length,
+    });
+
+    return res.json({ success: true });
+  }),
+);
+
+// POST /tg/me/showcase/cover — upload showcase cover image
+tgRouter.post(
+  '/me/showcase/cover',
+  upload.single('cover'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    if (ent.plan.code !== 'PRO') return res.status(403).json({ error: 'PRO required' });
+
+    const profile = await getOrCreateProfile(user.id, locale);
+
+    // Process cover — wider aspect, higher res than avatar
+    const full = await processImage(req.file.buffer, { maxDim: 1200, quality: 80, suffix: 'cover' });
+
+    // Delete old cover if exists
+    deleteUploadFile(profile.showcaseCoverUrl);
+
+    const coverUrl = `/api/uploads/${full.filename}`;
+    await prisma.userProfile.update({
+      where: { userId: user.id },
+      data: { showcaseCoverUrl: coverUrl, showcaseUpdatedAt: new Date() },
+    });
+
+    trackEvent('showcase.cover_uploaded', user.id);
+
+    return res.json({ coverUrl });
+  }),
+);
+
+// DELETE /tg/me/showcase/cover — remove showcase cover
+tgRouter.delete(
+  '/me/showcase/cover',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const locale = getRequestLocale(req);
+    const profile = await getOrCreateProfile(user.id, locale);
+
+    deleteUploadFile(profile.showcaseCoverUrl);
+    await prisma.userProfile.update({
+      where: { userId: user.id },
+      data: { showcaseCoverUrl: null, showcaseUpdatedAt: new Date() },
+    });
+
+    trackEvent('showcase.cover_removed', user.id);
     return res.json({ success: true });
   }),
 );
