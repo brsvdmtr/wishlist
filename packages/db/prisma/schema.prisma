@@ -182,6 +182,12 @@ model Wishlist {
   dontGiftCustomItems String[] @default([])
   dontGiftComment     String?
 
+  // Smart Reservations
+  smartReservationsEnabled Boolean @default(false)
+  smartResTtlHours        Int     @default(72)
+  smartResAllowExtend     Boolean @default(true)
+  smartResMaxExtensions   Int     @default(2)
+
   owner      User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   items      Item[]
   tags       Tag[]
@@ -1339,6 +1345,13 @@ model ReservationMeta {
   active          Boolean   @default(true)
   endedAt         DateTime?
   endReason       String?   // 'unreserved' | 'completed' | 'archived'
+  // Smart Reservations
+  expiresAt              DateTime?
+  extensionCount         Int       @default(0)
+  isSmartRes             Boolean   @default(false)
+  smartResTtlHours       Int?      // snapshot of wishlist TTL at creation
+  smartResMaxExtensions  Int?      // snapshot of max extensions at creation
+  smartResAllowExtend    Boolean?  // snapshot of allow extend at creation
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -1347,6 +1360,7 @@ model ReservationMeta {
   @@unique([itemId, reserverUserId])
   @@index([reserverUserId, active])
   @@index([reminderAt, reminderSent])
+  @@index([isSmartRes, active, expiresAt])
 }
 
 model WishlistCategory {

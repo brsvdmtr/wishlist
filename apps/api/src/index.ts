@@ -617,6 +617,7 @@ publicRouter.get(
         dontGiftPresets: true,
         dontGiftCustomItems: true,
         dontGiftComment: true,
+        smartReservationsEnabled: true, smartResTtlHours: true,
         owner: {
           select: {
             firstName: true,
@@ -751,6 +752,7 @@ publicRouter.get(
           dontGiftPresets: true,
           dontGiftCustomItems: true,
           dontGiftComment: true,
+          smartReservationsEnabled: true, smartResTtlHours: true,
           owner: {
             select: {
               firstName: true,
@@ -1445,6 +1447,8 @@ function tgActorHash(telegramId: number): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
+const SYSTEM_ACTOR_HASH = '00000000-0000-0000-0000-000000000000';
+
 function requireTelegramAuth(req: Request, res: Response, next: NextFunction) {
   const botToken = process.env.BOT_TOKEN ?? '';
   if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
@@ -1508,6 +1512,37 @@ function hasReservationPro(user: { telegramId?: string | null; godMode: boolean 
   return false;
 }
 
+/** Smart Reservations: lead-time hours for reminder/expiringSoon by TTL */
+function getSmartResLeadHours(ttlH: number): number {
+  if (ttlH >= 168) return 48;
+  if (ttlH >= 72) return 24;
+  if (ttlH >= 48) return 12;
+  return 6;
+}
+
+/** Smart Reservations: compute derived fields from meta snapshot */
+function smartResDerive(meta: { expiresAt: Date | null; extensionCount: number; isSmartRes: boolean; smartResMaxExtensions: number | null; smartResAllowExtend: boolean | null; smartResTtlHours: number | null }) {
+  if (!meta.isSmartRes || !meta.expiresAt) return { canExtend: false, isExpiringSoon: false, isExpired: false };
+  const now = Date.now();
+  const expires = meta.expiresAt.getTime();
+  const isExpired = expires <= now;
+  const leadH = getSmartResLeadHours(meta.smartResTtlHours ?? 72);
+  const isExpiringSoon = !isExpired && (expires - now) <= leadH * 3600000;
+  const canExtend = !isExpired && (meta.smartResAllowExtend ?? false) && meta.extensionCount < (meta.smartResMaxExtensions ?? 0);
+  return { canExtend, isExpiringSoon, isExpired };
+}
+
+/** Smart Reservations: owner-side entitlement check (PRO or per-wishlist add-on) */
+function hasSmartReservations(
+  ownerUser: { godMode: boolean },
+  ownerIsPro: boolean,
+  ownerAddOns: Array<{ addonType: string; targetId?: string | null }>,
+  wishlistId: string,
+): boolean {
+  if (ownerUser.godMode || ownerIsPro) return true;
+  return ownerAddOns.some(a => a.addonType === 'smart_reservations_unlock' && a.targetId === wishlistId);
+}
+
 // ─── Gift Notes (Поводы и идеи) — one-time unlock ────────────────────────────
 const GIFT_NOTES_PRICE_XTR = parseInt(process.env.GIFT_NOTES_PRICE_XTR ?? '19', 10);
 const GIFT_NOTES_SKU = 'gift_notes_unlock';
@@ -1528,6 +1563,7 @@ const ONE_TIME_SKUS = {
   gift_notes_unlock:       { code: 'gift_notes_unlock',       price: GIFT_NOTES_PRICE_XTR, type: 'permanent' as const, addonType: 'gift_notes_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: false },
   reservation_pro_unlock:  { code: 'reservation_pro_unlock',  price: 50, type: 'permanent' as const, addonType: 'reservation_pro_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: false },
   group_gift_unlock:       { code: 'group_gift_unlock',       price: GROUP_GIFT_PRICE_XTR, type: 'permanent' as const, addonType: 'group_gift_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: false },
+  smart_reservations_unlock: { code: 'smart_reservations_unlock', price: 15, type: 'permanent' as const, addonType: 'smart_reservations_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: true },
 } as const;
 
 type SkuCode = keyof typeof ONE_TIME_SKUS;
@@ -1653,6 +1689,10 @@ async function getEffectiveEntitlements(userId: string, godMode = false) {
       unlockType: base.isPro ? 'PRO' as const : addOns.some(a => a.addonType === GIFT_NOTES_SKU) ? 'ONE_TIME' as const : godMode ? 'GOD' as const : null,
       priceXtr: GIFT_NOTES_PRICE_XTR,
     },
+    // Smart Reservations: per-wishlist add-on IDs
+    smartReservationsWishlists: new Set<string>(
+      addOns.filter(a => a.addonType === 'smart_reservations_unlock' && a.targetId).map(a => a.targetId!)
+    ),
     // Group Gift access: one-time unlock via UserAddOn (not included in PRO)
     hasGroupGift: godMode || addOns.some(a => a.addonType === GROUP_GIFT_SKU),
     groupGift: {
@@ -2312,6 +2352,7 @@ tgRouter.get(
         id: true, slug: true, title: true, description: true, deadline: true,
         visibility: true, allowSubscriptions: true, commentPolicy: true,
         shareToken: true, dontGiftMode: true,
+        smartReservationsEnabled: true, smartResTtlHours: true,
         items: { select: { status: true } },
       },
     });
@@ -2396,6 +2437,7 @@ tgRouter.get(
         extraSubscriptionSlots: ent.addOns.filter(a => a.addonType === 'subscription_slot').reduce((s, a) => s + a.quantity, 0),
         seasonalWishlists: [...ent.seasonalWishlists],
         extraItemsPerWishlist: ent.extraItemsPerWishlist,
+        smartReservationsWishlists: [...ent.smartReservationsWishlists],
       },
       credits: {
         hintCredits: ent.hintCredits,
@@ -2488,20 +2530,27 @@ tgRouter.get(
       }),
     );
 
-    // 5. Batch fetch ReservationMeta for Pro users
-    const metaMap = new Map<string, { note: string | null; purchased: boolean; purchasedAt: string | null; reminderAt: string | null; reminderSent: boolean; reminderDates: string[] | null }>();
-    if (resPro && itemIds.length > 0) {
+    // 5. Batch fetch ReservationMeta (always needed for smart res; Pro users get extra fields)
+    type MetaEntry = { note: string | null; purchased: boolean; purchasedAt: string | null; reminderAt: string | null; reminderSent: boolean; reminderDates: string[] | null; expiresAt: string | null; extensionCount: number; isSmartRes: boolean; maxExtensions: number; canExtend: boolean; isExpiringSoon: boolean; isExpired: boolean };
+    const metaMap = new Map<string, MetaEntry>();
+    if (itemIds.length > 0) {
       const metas = await prisma.reservationMeta.findMany({
         where: { reserverUserId: user.id, itemId: { in: itemIds }, active: true },
       });
       for (const m of metas) {
+        const derived = smartResDerive(m);
         metaMap.set(m.itemId, {
-          note: m.note,
+          note: resPro ? m.note : null,
           purchased: m.purchased,
           purchasedAt: m.purchasedAt?.toISOString() ?? null,
-          reminderAt: m.reminderAt?.toISOString() ?? null,
-          reminderSent: m.reminderSent,
-          reminderDates: (m.reminderDates as string[] | null) ?? null,
+          reminderAt: resPro ? (m.reminderAt?.toISOString() ?? null) : null,
+          reminderSent: resPro ? m.reminderSent : false,
+          reminderDates: resPro ? ((m.reminderDates as string[] | null) ?? null) : null,
+          expiresAt: m.expiresAt?.toISOString() ?? null,
+          extensionCount: m.extensionCount,
+          isSmartRes: m.isSmartRes,
+          maxExtensions: m.smartResMaxExtensions ?? 0,
+          ...derived,
         });
       }
     }
@@ -2587,7 +2636,7 @@ tgRouter.get(
       ownerId: item.wishlist.owner.id,
       unreadComments: unreadCounts[item.id] ?? 0,
       reservedAt: item.createdAt.toISOString(),
-      ...(resPro ? { meta: metaMap.get(item.id) ?? null } : {}),
+      meta: metaMap.get(item.id) ?? null,
       groupGiftId: ggMap.get(item.id) ?? null,
       groupGiftRole: (ggMap.has(item.id) ? 'organizer' : null) as 'organizer' | 'participant' | null,
       groupGiftOrganizerName: null as string | null,
@@ -2604,7 +2653,7 @@ tgRouter.get(
         ownerId,
         unreadComments: 0,
         reservedAt: item.createdAt.toISOString(),
-        ...(resPro ? { meta: null } : {}),
+        meta: null,
         groupGiftId: p.groupGift.id,
         groupGiftRole: 'participant' as const,
         groupGiftOrganizerName: ggOrganizerNames.get(p.groupGift.organizer.id) ?? null,
@@ -3330,12 +3379,16 @@ tgRouter.patch(
         allowSubscriptions: z.enum(['ALL', 'NOBODY']).optional(),
         commentPolicy: z.enum(['ALL', 'SUBSCRIBERS']).optional(),
         dontGiftMode: z.enum(['global', 'local', 'hidden']).optional(),
+        smartReservationsEnabled: z.boolean().optional(),
+        smartResTtlHours: z.union([z.literal(24), z.literal(48), z.literal(72), z.literal(168)]).optional(),
+        smartResAllowExtend: z.boolean().optional(),
+        smartResMaxExtensions: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
 
     const user = await getOrCreateTgUser(req.tgUser!);
-    const ent = await getUserEntitlement(user.id, user.godMode);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
     const isPro = ent.plan.code !== 'FREE';
 
     const wishlist = await prisma.wishlist.findUnique({ where: { id }, select: { ownerId: true, title: true } });
@@ -3356,6 +3409,13 @@ tgRouter.patch(
     if (!isPro && parsed.data.dontGiftMode && parsed.data.dontGiftMode !== 'global') {
       return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
     }
+    // Smart Reservations gate: owner must have entitlement (PRO or per-wishlist add-on)
+    const hasSmartResFields = parsed.data.smartReservationsEnabled !== undefined ||
+      parsed.data.smartResTtlHours !== undefined || parsed.data.smartResAllowExtend !== undefined ||
+      parsed.data.smartResMaxExtensions !== undefined;
+    if (hasSmartResFields && !hasSmartReservations({ godMode: user.godMode }, isPro, ent.addOns, id)) {
+      return res.status(402).json({ error: 'smart_reservations_required' });
+    }
 
     // Detect which subscriber-visible fields are changing
     const wlChangedFields: string[] = [];
@@ -3373,10 +3433,15 @@ tgRouter.patch(
         ...(parsed.data.allowSubscriptions !== undefined ? { allowSubscriptions: parsed.data.allowSubscriptions } : {}),
         ...(parsed.data.commentPolicy !== undefined ? { commentPolicy: parsed.data.commentPolicy } : {}),
         ...(parsed.data.dontGiftMode !== undefined ? { dontGiftMode: parsed.data.dontGiftMode } : {}),
+        ...(parsed.data.smartReservationsEnabled !== undefined ? { smartReservationsEnabled: parsed.data.smartReservationsEnabled } : {}),
+        ...(parsed.data.smartResTtlHours !== undefined ? { smartResTtlHours: parsed.data.smartResTtlHours } : {}),
+        ...(parsed.data.smartResAllowExtend !== undefined ? { smartResAllowExtend: parsed.data.smartResAllowExtend } : {}),
+        ...(parsed.data.smartResMaxExtensions !== undefined ? { smartResMaxExtensions: parsed.data.smartResMaxExtensions } : {}),
       },
       select: {
         id: true, slug: true, title: true, description: true, deadline: true,
         visibility: true, allowSubscriptions: true, commentPolicy: true, dontGiftMode: true,
+        smartReservationsEnabled: true, smartResTtlHours: true, smartResAllowExtend: true, smartResMaxExtensions: true,
       },
     });
 
@@ -3403,6 +3468,10 @@ tgRouter.patch(
         allowSubscriptions: (updated.allowSubscriptions as string).toLowerCase(),
         commentPolicy: (updated.commentPolicy as string).toLowerCase(),
         dontGiftMode: updated.dontGiftMode,
+        smartReservationsEnabled: updated.smartReservationsEnabled,
+        smartResTtlHours: updated.smartResTtlHours,
+        smartResAllowExtend: updated.smartResAllowExtend,
+        smartResMaxExtensions: updated.smartResMaxExtensions,
       },
     });
   }),
@@ -5145,13 +5214,20 @@ tgRouter.post(
       if (!item) return { kind: 'not_found' as const };
       if (item.status !== 'AVAILABLE') return { kind: 'conflict' as const };
 
-      // Check participant limit (based on wishlist owner's plan)
+      // Check participant limit (based on wishlist owner's plan) + smart reservations
       const wishlist = await tx.wishlist.findUnique({
         where: { id: item.wishlistId },
-        select: { ownerId: true },
+        select: {
+          ownerId: true,
+          smartReservationsEnabled: true, smartResTtlHours: true,
+          smartResAllowExtend: true, smartResMaxExtensions: true,
+        },
       });
+      let smartRes = false;
+      let smartResExpiresAt: Date | null = null;
       if (wishlist) {
-        const ownerEnt = await getUserEntitlement(wishlist.ownerId);
+        const ownerUser = await tx.user.findUnique({ where: { id: wishlist.ownerId }, select: { godMode: true } });
+        const ownerEnt = await getEffectiveEntitlements(wishlist.ownerId, ownerUser?.godMode ?? false);
         const activeReservations = await tx.item.findMany({
           where: { wishlistId: item.wishlistId, status: 'RESERVED' },
           select: { reserverUserId: true },
@@ -5162,6 +5238,15 @@ tgRouter.post(
         );
         if (!existingReserverIds.has(user.id) && existingReserverIds.size >= ownerEnt.plan.participants) {
           return { kind: 'participant_limit' as const, limit: ownerEnt.plan.participants };
+        }
+        // Smart Reservations: double-check both toggle AND owner entitlement
+        if (wishlist.smartReservationsEnabled) {
+          smartRes = hasSmartReservations(
+            { godMode: ownerUser?.godMode ?? false }, ownerEnt.isPro, ownerEnt.addOns, item.wishlistId
+          );
+        }
+        if (smartRes) {
+          smartResExpiresAt = new Date(Date.now() + wishlist.smartResTtlHours * 3600000);
         }
       }
 
@@ -5185,7 +5270,7 @@ tgRouter.post(
         where: { itemId: id, scheduledDeleteAt: { not: null } },
         data: { scheduledDeleteAt: null },
       });
-      return { kind: 'ok' as const, wishlistId: item.wishlistId };
+      return { kind: 'ok' as const, wishlistId: item.wishlistId, smartRes, smartResExpiresAt, smartResTtlHours: wishlist?.smartResTtlHours ?? null };
     });
 
     if (result.kind === 'not_found') return res.status(404).json({ error: 'Item not found' });
@@ -5196,7 +5281,7 @@ tgRouter.post(
       // Notify owner
       const itemData = await prisma.item.findUnique({
         where: { id },
-        select: { title: true, wishlist: { select: { ownerId: true } } },
+        select: { title: true, wishlist: { select: { ownerId: true, smartResTtlHours: true, smartResAllowExtend: true, smartResMaxExtensions: true } } },
       });
       if (itemData) {
         const owner = await prisma.user.findUnique({
@@ -5208,6 +5293,23 @@ tgRouter.post(
           void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: displayName, title: itemData.title }));
         }
       }
+
+      // Ensure ReservationMeta exists (reactivate if re-reserving same item) with smart res snapshot
+      const smartResSnapshot = result.smartRes && itemData ? {
+        expiresAt: result.smartResExpiresAt, isSmartRes: true, extensionCount: 0,
+        smartResTtlHours: itemData.wishlist.smartResTtlHours,
+        smartResMaxExtensions: itemData.wishlist.smartResMaxExtensions,
+        smartResAllowExtend: itemData.wishlist.smartResAllowExtend,
+      } : null;
+      const smartResCleanup = {
+        isSmartRes: false, expiresAt: null, extensionCount: 0,
+        smartResTtlHours: null, smartResMaxExtensions: null, smartResAllowExtend: null,
+      };
+      void prisma.reservationMeta.upsert({
+        where: { itemId_reserverUserId: { itemId: id, reserverUserId: user.id } },
+        create: { itemId: id, reserverUserId: user.id, ...(smartResSnapshot ?? {}) },
+        update: { active: true, endedAt: null, endReason: null, reminderSent: false, ...(smartResSnapshot ?? smartResCleanup) },
+      }).catch((e) => logger.warn({ err: e }, 'reservationMeta upsert failed'));
     }
 
     trackAnalyticsEvent({ event: 'reservation.succeeded', userId: req.tgUser?.id != null ? String(req.tgUser.id) : undefined, props: { itemId: req.params.id } });
@@ -5215,14 +5317,7 @@ tgRouter.post(
     // Cancel active hints when item is reserved
     void cancelItemHints(id);
 
-    // Ensure ReservationMeta exists (reactivate if re-reserving same item)
-    void prisma.reservationMeta.upsert({
-      where: { itemId_reserverUserId: { itemId: id, reserverUserId: user.id } },
-      create: { itemId: id, reserverUserId: user.id },
-      update: { active: true, endedAt: null, endReason: null, reminderSent: false },
-    }).catch((e) => logger.warn({ err: e }, 'reservationMeta upsert failed'));
-
-    return res.json({ ok: true });
+    return res.json({ ok: true, expiresAt: result.kind === 'ok' ? result.smartResExpiresAt?.toISOString() ?? null : null });
   }),
 );
 
@@ -5279,6 +5374,44 @@ tgRouter.post(
     }).catch(() => {});
 
     return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/items/:id/extend-reservation — gifter extends their smart reservation
+tgRouter.post(
+  '/items/:id/extend-reservation',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const item = await prisma.item.findUnique({ where: { id }, select: { status: true, reserverUserId: true } });
+    if (!item) return res.status(404).json({ error: 'not_found' });
+    if (item.status !== 'RESERVED') return res.status(409).json({ error: 'reservation_not_active' });
+    if (item.reserverUserId !== user.id) return res.status(403).json({ error: 'not_reserver' });
+
+    const meta = await prisma.reservationMeta.findUnique({
+      where: { itemId_reserverUserId: { itemId: id, reserverUserId: user.id } },
+    });
+    if (!meta || !meta.isSmartRes || !meta.active) return res.status(400).json({ error: 'not_smart_reservation' });
+    if (!meta.smartResAllowExtend) return res.status(403).json({ error: 'extend_not_allowed' });
+    if (meta.extensionCount >= (meta.smartResMaxExtensions ?? 0)) return res.status(409).json({ error: 'max_extensions_reached' });
+    if (!meta.expiresAt || meta.expiresAt.getTime() <= Date.now()) return res.status(409).json({ error: 'reservation_expired' });
+
+    const newExpiresAt = new Date(Date.now() + (meta.smartResTtlHours ?? 72) * 3600000);
+    const updated = await prisma.reservationMeta.update({
+      where: { id: meta.id },
+      data: { expiresAt: newExpiresAt, extensionCount: meta.extensionCount + 1, reminderSent: false },
+    });
+
+    const derived = smartResDerive(updated);
+    return res.json({
+      expiresAt: updated.expiresAt?.toISOString() ?? null,
+      extensionCount: updated.extensionCount,
+      maxExtensions: updated.smartResMaxExtensions ?? 0,
+      ...derived,
+    });
   }),
 );
 
@@ -8816,6 +8949,10 @@ tgRouter.post(
     if (skuCode === 'group_gift_unlock') {
       const hasIt = ent.addOns.some(a => a.addonType === 'group_gift_unlock');
       if (hasIt) return res.json({ alreadyUnlocked: true });
+    }
+    if (skuCode === 'smart_reservations_unlock') {
+      const hasIt = ent.addOns.some(a => a.addonType === 'smart_reservations_unlock' && a.targetId === targetId);
+      if (hasIt || ent.isPro) return res.json({ alreadyUnlocked: true });
     }
 
     const botToken = process.env.BOT_TOKEN;
@@ -13637,6 +13774,117 @@ async function maybeRunSeasonalEvents(): Promise<void> {
 // Santa seasonal events: check every hour for calendar milestones (Nov 1, Feb 1).
 // Idempotent — safe to run hourly; each broadcast fires at most once per year via DB dedup.
 setInterval(() => { void maybeRunSeasonalEvents(); }, 60 * 60 * 1000);
+
+// ─── Smart Reservations: auto-release cron (every 5 min) ─────────────────────
+setInterval(async () => {
+  try {
+    const now = new Date();
+    const expiredMetas = await prisma.reservationMeta.findMany({
+      where: { isSmartRes: true, active: true, expiresAt: { lte: now } },
+      take: 50,
+      include: {
+        item: {
+          select: {
+            id: true, title: true, status: true, reserverUserId: true, reservationEpoch: true,
+            wishlist: { select: { ownerId: true, owner: { select: { telegramChatId: true } } } },
+          },
+        },
+      },
+    });
+    for (const meta of expiredMetas) {
+      try {
+        if (!meta.active) continue;
+        // Repair: inconsistent state — item not RESERVED but meta still active
+        if (meta.item.status !== 'RESERVED') {
+          console.warn('Smart res auto-release: inconsistent state', { metaId: meta.id, itemId: meta.item.id, itemStatus: meta.item.status });
+          await prisma.reservationMeta.update({
+            where: { id: meta.id },
+            data: { active: false, endedAt: now, endReason: 'inconsistent_state' },
+          });
+          continue;
+        }
+        // Guard: reservation belongs to someone else now
+        if (meta.item.reserverUserId !== meta.reserverUserId) continue;
+
+        await prisma.$transaction(async (tx) => {
+          await tx.item.update({ where: { id: meta.item.id }, data: { status: 'AVAILABLE', reserverUserId: null } });
+          await tx.reservationEvent.create({
+            data: { itemId: meta.item.id, type: 'UNRESERVED', actorHash: SYSTEM_ACTOR_HASH, comment: 'auto_released' },
+          });
+          await tx.comment.create({
+            data: { itemId: meta.item.id, type: 'SYSTEM', text: t('api_system_auto_released', 'ru'), reservationEpoch: meta.item.reservationEpoch },
+          });
+          const ttl = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+          await tx.comment.updateMany({
+            where: { itemId: meta.item.id, scheduledDeleteAt: null },
+            data: { scheduledDeleteAt: ttl },
+          });
+          await tx.reservationMeta.update({
+            where: { id: meta.id },
+            data: { active: false, endedAt: now, endReason: 'auto_released' },
+          });
+        });
+
+        // Notify gifter
+        const reserver = await prisma.user.findUnique({ where: { id: meta.reserverUserId }, select: { telegramChatId: true } });
+        if (reserver?.telegramChatId) {
+          void sendTgNotification(reserver.telegramChatId, t('notif_smart_res_auto_released_gifter', 'ru', { title: meta.item.title }));
+        }
+        // Notify owner
+        const ownerChatId = meta.item.wishlist.owner.telegramChatId;
+        if (ownerChatId) {
+          void sendTgNotification(ownerChatId, t('notif_smart_res_auto_released_owner', 'ru', { title: meta.item.title }));
+        }
+        logger.info({ metaId: meta.id, itemId: meta.item.id }, 'smart-res: auto-released');
+      } catch (err) {
+        logger.error({ err, metaId: meta.id }, 'smart-res: auto-release item failed');
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, 'smart-res: auto-release cron failed');
+  }
+}, 5 * 60 * 1000);
+
+// ─── Smart Reservations: reminder cron (every 15 min) ────────────────────────
+setInterval(async () => {
+  try {
+    const now = new Date();
+    const candidates = await prisma.reservationMeta.findMany({
+      where: { isSmartRes: true, active: true, reminderSent: false, expiresAt: { not: null, gt: now } },
+      take: 50,
+      include: {
+        item: { select: { id: true, title: true } },
+      },
+    });
+    for (const meta of candidates) {
+      try {
+        if (!meta.expiresAt) continue;
+        const leadH = getSmartResLeadHours(meta.smartResTtlHours ?? 72);
+        const windowStart = meta.expiresAt.getTime() - leadH * 3600000;
+        if (now.getTime() < windowStart) continue; // not in reminder window yet
+
+        const reserver = await prisma.user.findUnique({ where: { id: meta.reserverUserId }, select: { telegramChatId: true } });
+        if (!reserver?.telegramChatId) {
+          // No chat ID — mark as sent to avoid retrying
+          await prisma.reservationMeta.update({ where: { id: meta.id }, data: { reminderSent: true } });
+          continue;
+        }
+        const hoursLeft = Math.max(1, Math.round((meta.expiresAt.getTime() - now.getTime()) / 3600000));
+        const delivered = await sendTgNotification(reserver.telegramChatId, t('notif_smart_res_expiring', 'ru', { title: meta.item.title, hours: String(hoursLeft) }))
+          .then(() => true).catch(() => false);
+        if (delivered) {
+          await prisma.reservationMeta.update({ where: { id: meta.id }, data: { reminderSent: true } });
+          logger.info({ metaId: meta.id, itemId: meta.item.id }, 'smart-res: reminder sent');
+        }
+        // On failure: leave reminderSent=false, cron retries next tick
+      } catch (err) {
+        logger.error({ err, metaId: meta.id }, 'smart-res: reminder item failed');
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, 'smart-res: reminder cron failed');
+  }
+}, 15 * 60 * 1000);
 
 // ─── Batch 4.1: Santa Campaign Chat ──────────────────────────────────────────
 

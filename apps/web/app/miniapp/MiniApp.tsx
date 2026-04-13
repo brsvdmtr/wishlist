@@ -113,6 +113,18 @@ const fmtPrice = (p: number | null, locale: Locale = 'ru', currency: 'RUB' | 'US
   return currency === 'USD' ? `${formatted} $` : `${formatted} ₽`;
 };
 
+/** Format smart reservation remaining time as "Xd Xh" or "Xh Xm" or "Xm" */
+const formatSmartResTimer = (ms: number): string => {
+  if (ms <= 0) return '0m';
+  const totalMin = Math.floor(ms / 60000);
+  const d = Math.floor(totalMin / 1440);
+  const h = Math.floor((totalMin % 1440) / 60);
+  const m = totalMin % 60;
+  if (d > 0) return h > 0 ? `${d}d ${h}h` : `${d}d`;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  return `${m}m`;
+};
+
 /** Strip everything except digits from a user-facing price string. Returns raw digit string. */
 const parsePriceFromDisplay = (value: string): string => value.replace(/\D/g, '');
 
@@ -163,6 +175,10 @@ type Wishlist = {
   commentPolicy: CommentPolicy;
   shareToken?: string | null;
   dontGiftMode?: DontGiftMode;
+  smartReservationsEnabled?: boolean;
+  smartResTtlHours?: number;
+  smartResAllowExtend?: boolean;
+  smartResMaxExtensions?: number;
 };
 
 /** Filter wishlists to only valid writable targets for copy/move operations.
@@ -201,6 +217,7 @@ type AddOnsInfo = {
   extraSubscriptionSlots: number;
   seasonalWishlists: string[];
   extraItemsPerWishlist?: Record<string, number>;
+  smartReservationsWishlists?: string[];
 };
 type CreditsInfo = { hintCredits: number; importCredits: number };
 
@@ -225,7 +242,8 @@ type UpsellContext =
   | 'categories'
   | 'dont_gift'
   | 'dont_gift_banner'
-  | 'curated_selection';
+  | 'curated_selection'
+  | 'smart_reservations';
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -283,6 +301,13 @@ type ReservationMeta = {
   reminderAt: string | null;
   reminderSent: boolean;
   reminderDates: string[] | null;
+  expiresAt: string | null;
+  extensionCount: number;
+  isSmartRes: boolean;
+  maxExtensions: number;
+  canExtend: boolean;
+  isExpiringSoon: boolean;
+  isExpired: boolean;
 };
 
 type ReservationItem = Item & {
@@ -1720,6 +1745,13 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     showTable: false,
     benefits: [t('upsell_curated_b1', locale), t('upsell_curated_b2', locale), t('upsell_curated_b3', locale)],
   },
+  smart_reservations: {
+    emoji: '⏰',
+    title: t('upsell_smart_res_title', locale),
+    subtitle: t('upsell_smart_res_subtitle', locale),
+    showTable: false,
+    benefits: [t('upsell_smart_res_b1', locale), t('upsell_smart_res_b2', locale), t('upsell_smart_res_b3', locale)],
+  },
 });
 
 // Centralized PRO benefits config — single source of truth for all paywall/plan screens
@@ -2401,14 +2433,22 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
 // RESERVATION CARD (for "My Reservations" section)
 // ═══════════════════════════════════════════════════════
 
-function ReservationCard({ item, onTap, onUnreserve, onGroupGift, animDelay, locale }: {
+function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, animDelay, locale, now }: {
   item: ReservationItem;
   onTap: () => void;
   onUnreserve: () => void;
+  onExtend?: () => void;
   onGroupGift?: () => void;
   animDelay: number;
   locale: Locale;
+  now: number;
 }) {
+  const meta = item.meta;
+  const isSmart = meta?.isSmartRes && meta.expiresAt;
+  const expiresMs = isSmart ? new Date(meta!.expiresAt!).getTime() : 0;
+  const remainMs = expiresMs - now;
+  const isExpired = isSmart && remainMs <= 0;
+  const isExpiring = isSmart && !isExpired && meta!.isExpiringSoon;
   return (
     <div
       onClick={onTap}
@@ -2470,7 +2510,49 @@ function ReservationCard({ item, onTap, onUnreserve, onGroupGift, animDelay, loc
               : `${t('gg_reservation_organizer', locale)}: ${item.groupGiftOrganizerName ?? ''}`}
           </div>
         )}
+        {isSmart && (
+          <div style={{ marginTop: 8 }}>
+            {isExpired ? (
+              <span style={{ fontSize: 12, color: C.red, fontWeight: 600 }}>{t('smart_res_expired', locale)}</span>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 600,
+                  background: isExpiring ? 'rgba(251,191,36,0.15)' : 'rgba(52,211,153,0.12)',
+                  color: isExpiring ? C.orange : C.green,
+                }}>
+                  ⏱ {formatSmartResTimer(remainMs)}
+                </span>
+                {meta!.extensionCount > 0 && (
+                  <span style={{ fontSize: 10, color: C.textMuted }}>{t('smart_res_extended_badge', locale, { count: String(meta!.extensionCount), max: String(meta!.maxExtensions) })}</span>
+                )}
+              </div>
+            )}
+            {/* Progress bar */}
+            {!isExpired && meta!.expiresAt && (() => {
+              const ttlMs = (meta!.maxExtensions > 0 ? meta!.maxExtensions : 1) * 3600000 * 72; // approximate
+              const pct = Math.max(0, Math.min(100, (remainMs / (ttlMs > 0 ? ttlMs : 72 * 3600000)) * 100));
+              return (
+                <div style={{ marginTop: 6, height: 3, borderRadius: 2, background: C.surfaceHover, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', borderRadius: 2, background: isExpiring ? C.orange : C.green, width: `${pct}%`, transition: 'width 1s linear' }} />
+                </div>
+              );
+            })()}
+          </div>
+        )}
         <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {isSmart && !isExpired && meta!.canExtend && onExtend && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onExtend(); }}
+              style={{
+                background: C.accentSoft, border: `1px solid rgba(124,106,255,0.3)`,
+                borderRadius: 10, padding: '6px 14px', fontSize: 12,
+                color: C.accent, cursor: 'pointer', fontFamily: font, fontWeight: 500,
+              }}
+            >
+              {t('smart_res_extend_btn', locale)}
+            </button>
+          )}
           {onGroupGift && (
             <button
               onClick={(e) => { e.stopPropagation(); onGroupGift(); }}
@@ -3183,6 +3265,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [addOns, setAddOns] = useState<AddOnsInfo>({ extraWishlistSlots: 0, extraSubscriptionSlots: 0, seasonalWishlists: [] });
   const [credits, setCredits] = useState<CreditsInfo>({ hintCredits: 0, importCredits: 0 });
   const [availableSkus, setAvailableSkus] = useState<SkuInfo[]>([]);
+  const [smartResSheetWl, setSmartResSheetWl] = useState<Wishlist | null>(null);
 
   // SKU codes that are visually "globally capped" on offer cards.
   // Wishlist-scoped SKUs (extra_items_5/15, seasonal_decoration) are only globally
@@ -3455,6 +3538,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [reservationsLoading, setReservationsLoading] = useState(false);
   const [reservationPro, setReservationPro] = useState(false);
   const [reservationBeta, setReservationBeta] = useState(false);
+  // Smart Reservations: adaptive timer for countdown display
+  const [smartResNow, setSmartResNow] = useState(Date.now());
+  React.useEffect(() => {
+    const hasSmartRes = reservations.some(r => r.meta?.isSmartRes && r.meta.expiresAt);
+    if (!hasSmartRes) return;
+    const hasUrgent = reservations.some(r => {
+      if (!r.meta?.isSmartRes || !r.meta.expiresAt) return false;
+      const remain = new Date(r.meta.expiresAt).getTime() - Date.now();
+      return remain > 0 && remain < 3600000;
+    });
+    const interval = hasUrgent ? 1000 : 60000;
+    const id = setInterval(() => setSmartResNow(Date.now()), interval);
+    return () => clearInterval(id);
+  }, [reservations]);
   // Reservation Pro state
   type ResTab = 'active' | 'history';
   const [resTab, setResTab] = useState<ResTab>('active');
@@ -3501,7 +3598,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   // Guest state
-  const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName: string | null; ownerAvatarUrl: string | null } | null>(null);
+  const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName: string | null; ownerAvatarUrl: string | null; smartReservationsEnabled?: boolean; smartResTtlHours?: number } | null>(null);
   const [guestItems, setGuestItems] = useState<GuestItem[]>([]);
 
   // Item detail view (for both owner and guest)
@@ -7703,7 +7800,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const json = await res.json() as { reminderAt: string | null; reminderDates: string[] | null };
         setReservations((prev) => prev.map((r) => r.id === itemId ? {
           ...r,
-          meta: { ...(r.meta ?? { note: null, purchased: false, purchasedAt: null, reminderAt: null, reminderSent: false, reminderDates: null }), reminderAt: json.reminderAt, reminderDates: json.reminderDates, reminderSent: false },
+          meta: { ...(r.meta ?? { note: null, purchased: false, purchasedAt: null, reminderAt: null, reminderSent: false, reminderDates: null, expiresAt: null, extensionCount: 0, isSmartRes: false, maxExtensions: 0, canExtend: false, isExpiringSoon: false, isExpired: false }), reminderAt: json.reminderAt, reminderDates: json.reminderDates, reminderSent: false },
         } : r));
         setResReminderSheetItem(null);
         pushToast(t('res_reminder_set', locale), 'success');
@@ -9533,6 +9630,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                       }
                                     }}
                                     onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveSantaItem(item))}
+                                    now={smartResNow}
                                   />
                                 );
                               })}
@@ -10147,6 +10245,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               setScreen('guest-item-detail');
                             }}
                             onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveSantaItem(item))}
+                            now={smartResNow}
                           />
                         );
                       })}
@@ -10216,6 +10315,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           }
                         }}
                         onUnreserve={() => setPendingUnreserveAction(() => () => handleUnreserveFromReservations(item))}
+                        now={smartResNow}
+                        onExtend={item.meta?.isSmartRes && item.meta?.canExtend ? () => {
+                          void (async () => {
+                            try {
+                              const r = await tgFetch(`/tg/items/${item.id}/extend-reservation`, { method: 'POST' });
+                              if (r.ok) {
+                                const data = await r.json();
+                                setReservations(prev => prev.map(ri => ri.id === item.id ? { ...ri, meta: ri.meta ? { ...ri.meta, expiresAt: data.expiresAt, extensionCount: data.extensionCount, canExtend: data.canExtend, isExpiringSoon: data.isExpiringSoon, isExpired: data.isExpired } : ri.meta } : ri));
+                                pushToast(t('smart_res_extend_btn', locale) + ' ✓', 'success');
+                              } else {
+                                const err = await r.json().catch(() => ({ error: 'unknown' }));
+                                const msg = err.error === 'reservation_expired' ? t('smart_res_err_expired', locale) : err.error === 'max_extensions_reached' ? t('smart_res_err_max_ext', locale) : err.error === 'extend_not_allowed' ? t('smart_res_err_not_allowed', locale) : 'Error';
+                                pushToast(msg, 'error');
+                              }
+                            } catch { pushToast('Error', 'error'); }
+                          })();
+                        } : undefined}
                         onGroupGift={item.groupGiftId ? () => {
                           void (async () => {
                             try {
@@ -16595,6 +16711,36 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               }}>PRO</span>
             )}
           </button>
+          {/* Smart Reservations per-wishlist settings */}
+          <button
+            onClick={() => {
+              setShowWlManage(false);
+              const hasAccess = planInfo.code !== 'FREE' || (addOns.smartReservationsWishlists ?? []).includes(currentWl?.id ?? '');
+              if (!hasAccess) {
+                showUpsell('smart_reservations', { wishlistId: currentWl?.id });
+                return;
+              }
+              setSmartResSheetWl(currentWl ?? null);
+            }}
+            style={{
+              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              textAlign: 'start', cursor: 'pointer', fontFamily: font,
+              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 20 }}>⏰</span>
+            {t('smart_res_section_title', locale)}
+            {planInfo.code === 'FREE' && !(addOns.smartReservationsWishlists ?? []).includes(currentWl?.id ?? '') && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, color: '#fff', marginLeft: 'auto',
+                background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)',
+                padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5,
+              }}>PRO</span>
+            )}
+            {currentWl?.smartReservationsEnabled && (
+              <span style={{ fontSize: 10, fontWeight: 600, color: C.green, marginLeft: 'auto' }}>✓</span>
+            )}
+          </button>
           {/* Curated Selection */}
           <button
             onClick={() => {
@@ -17186,6 +17332,106 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         </div>
       </BottomSheet>
 
+      {/* ── Smart Reservations settings sheet ── */}
+      <BottomSheet isOpen={!!smartResSheetWl} onClose={() => setSmartResSheetWl(null)} title={t('smart_res_section_title', locale)}>
+        {smartResSheetWl && (() => {
+          const wl = smartResSheetWl;
+          const [srEnabled, setSrEnabled] = React.useState(wl.smartReservationsEnabled ?? false);
+          const [srTtl, setSrTtl] = React.useState(wl.smartResTtlHours ?? 72);
+          const [srExtend, setSrExtend] = React.useState(wl.smartResAllowExtend ?? true);
+          const [srMaxExt, setSrMaxExt] = React.useState(wl.smartResMaxExtensions ?? 2);
+          const [srSaving, setSrSaving] = React.useState(false);
+          const dirty = srEnabled !== (wl.smartReservationsEnabled ?? false) || srTtl !== (wl.smartResTtlHours ?? 72) || srExtend !== (wl.smartResAllowExtend ?? true) || srMaxExt !== (wl.smartResMaxExtensions ?? 2);
+
+          const saveSr = async () => {
+            setSrSaving(true);
+            try {
+              const res = await tgFetch(`/tg/wishlists/${wl.id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ smartReservationsEnabled: srEnabled, smartResTtlHours: srTtl, smartResAllowExtend: srExtend, smartResMaxExtensions: srMaxExt }),
+              });
+              if (res.ok) {
+                const json = await res.json();
+                setWishlists(prev => prev.map(w => w.id === wl.id ? { ...w, ...json.wishlist } : w));
+                setSmartResSheetWl(null);
+                pushToast(t('dont_gift_saved', locale), 'success');
+              } else {
+                pushToast('Error', 'error');
+              }
+            } catch { pushToast('Error', 'error'); }
+            setSrSaving(false);
+          };
+
+          const ttlOptions = [24, 48, 72, 168] as const;
+          const ttlLabels: Record<number, string> = { 24: '24h', 48: '48h', 72: '72h', 168: '7d' };
+          const extOptions = [1, 2, 3] as const;
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
+                <div>
+                  <div style={{ fontSize: 15, color: C.text, fontWeight: 600 }}>{t('smart_res_toggle', locale)}</div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>{t('smart_res_toggle_hint', locale)}</div>
+                </div>
+                <button onClick={() => setSrEnabled(!srEnabled)} style={{
+                  width: 50, height: 30, borderRadius: 15, border: 'none', cursor: 'pointer', padding: 2,
+                  background: srEnabled ? C.green : C.surfaceHover, transition: 'background .2s',
+                }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 13, background: '#fff', transition: 'transform .2s', transform: srEnabled ? 'translateX(20px)' : 'translateX(0)' }} />
+                </button>
+              </div>
+              {srEnabled && (
+                <>
+                  {/* TTL */}
+                  <div>
+                    <div style={{ fontSize: 13, color: C.textSec, marginBottom: 8 }}>{t('smart_res_ttl_label', locale)}</div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {ttlOptions.map(v => (
+                        <button key={v} onClick={() => setSrTtl(v)} style={{
+                          flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+                          background: srTtl === v ? C.accentSoft : C.surface, color: srTtl === v ? C.accent : C.textSec,
+                          fontWeight: 600, fontSize: 14, fontFamily: font,
+                        }}>{ttlLabels[v]}</button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Allow Extend */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 14, color: C.text }}>{t('smart_res_extend_label', locale)}</span>
+                    <button onClick={() => setSrExtend(!srExtend)} style={{
+                      width: 50, height: 30, borderRadius: 15, border: 'none', cursor: 'pointer', padding: 2,
+                      background: srExtend ? C.green : C.surfaceHover, transition: 'background .2s',
+                    }}>
+                      <div style={{ width: 26, height: 26, borderRadius: 13, background: '#fff', transition: 'transform .2s', transform: srExtend ? 'translateX(20px)' : 'translateX(0)' }} />
+                    </button>
+                  </div>
+                  {/* Max Extensions */}
+                  {srExtend && (
+                    <div>
+                      <div style={{ fontSize: 13, color: C.textSec, marginBottom: 8 }}>{t('smart_res_max_ext_label', locale)}</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {extOptions.map(v => (
+                          <button key={v} onClick={() => setSrMaxExt(v)} style={{
+                            flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+                            background: srMaxExt === v ? C.accentSoft : C.surface, color: srMaxExt === v ? C.accent : C.textSec,
+                            fontWeight: 600, fontSize: 14, fontFamily: font,
+                          }}>{v}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.4 }}>{t('smart_res_info', locale)}</div>
+                </>
+              )}
+              <button onClick={() => void saveSr()} disabled={!dirty || srSaving} style={{
+                ...btnPrimary, opacity: !dirty || srSaving ? 0.5 : 1,
+              }}>{srSaving ? '…' : t('save', locale)}</button>
+            </div>
+          );
+        })()}
+      </BottomSheet>
+
       {/* ── Delete with reserved items warning ── */}
       <BottomSheet isOpen={showDeleteWlReserved} onClose={() => { if (!deletingWl && !transferingItems) setShowDeleteWlReserved(false); }} title={t('wl_delete_reserved_title', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -17738,6 +17984,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {reservingItem.price != null && <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{fmtPrice(reservingItem.price, locale, reservingItem.currency ?? 'RUB')}</div>}
               </div>
             </div>
+            {guestWl?.smartReservationsEnabled && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                background: 'rgba(124,106,255,0.08)', borderRadius: 10, border: `1px solid rgba(124,106,255,0.15)`,
+              }}>
+                <span style={{ fontSize: 18 }}>⏰</span>
+                <div>
+                  <div style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{t('smart_res_reserve_info', locale)}</div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                    {t('smart_res_reserve_ttl', locale, { hours: String(guestWl.smartResTtlHours ?? 72) })}
+                  </div>
+                </div>
+              </div>
+            )}
             <div>
               <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('reserve_name_label', locale)}</label>
               <input style={inputStyle} placeholder={t('reserve_name_placeholder', locale)} value={guestName} onChange={(e) => setGuestName(e.target.value)} autoFocus />
