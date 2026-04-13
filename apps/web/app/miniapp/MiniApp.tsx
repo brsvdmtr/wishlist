@@ -1779,6 +1779,7 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
     { icon: '📅', title: t('plan_pro_f9', locale), subtitle: t('plan_pro_sub9', locale) },
     { icon: '📋', title: t('plan_pro_f15', locale), subtitle: t('plan_pro_sub15', locale), isNew: true },
     { icon: '🚫', title: t('plan_pro_f16', locale), subtitle: t('plan_pro_sub16', locale), isNew: true },
+    { icon: '⏱', title: t('plan_pro_f17', locale), subtitle: t('plan_pro_sub17', locale), isNew: true },
     // Reservation Pro features
     { icon: '📋', title: t('plan_pro_f10', locale), subtitle: t('plan_pro_sub10', locale), isNew: true },
     { icon: '📝', title: t('plan_pro_f11', locale), subtitle: t('plan_pro_sub11', locale), isNew: true },
@@ -3210,44 +3211,150 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
   const [srSaving, setSrSaving] = React.useState(false);
   const dirty = srEnabled !== (wl.smartReservationsEnabled ?? false) || srTtl !== (wl.smartResTtlHours ?? 72) || srExtend !== (wl.smartResAllowExtend ?? true) || srMaxExt !== (wl.smartResMaxExtensions ?? 2);
 
+  const [obStep, setObStep] = React.useState(0);
   if (showOnboard) {
-    const steps = [
-      { emoji: '⏱', text: t('smart_res_onboard_s1', locale) },
-      { emoji: '🔔', text: t('smart_res_onboard_s2', locale) },
-      { emoji: '🔄', text: t('smart_res_onboard_s3', locale) },
-      { emoji: '✅', text: t('smart_res_onboard_s4', locale) },
-    ];
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, textAlign: 'center' }}>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 68, height: 68, borderRadius: 22, margin: '0 auto',
-          background: `linear-gradient(145deg, ${C.accent}22, ${C.accent}08)`,
-          border: `1px solid ${C.accent}18`, fontSize: 32,
-        }}>⏰</div>
-        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font }}>{t('smart_res_section_title', locale)}</div>
-        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5 }}>{t('smart_res_toggle_hint', locale)}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, textAlign: 'start' }}>
-          {steps.map((s, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '12px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none',
-            }}>
-              <span style={{
-                width: 36, height: 36, borderRadius: 10,
-                background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 18, flexShrink: 0,
-              }}>{s.emoji}</span>
-              <span style={{ fontSize: 14, color: C.text, lineHeight: 1.4 }}>{s.text}</span>
+    const isRu = locale === 'ru';
+    const finishOnboard = () => {
+      try { window.localStorage.setItem(onboardKey, '1'); } catch { /* ok */ }
+      setShowOnboard(false);
+    };
+    const dots = (
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 20 }}>
+        {[0, 1, 2, 3].map(i => (
+          <div key={i} style={{ width: 20, height: 4, borderRadius: 2, background: i === obStep ? C.accent : i < obStep ? `${C.accent}66` : C.surfaceHover }} />
+        ))}
+      </div>
+    );
+    const nextBtn = (label: string) => (
+      <button onClick={() => setObStep(obStep + 1)} style={{ ...btnPrimary }}>{label}</button>
+    );
+    const skipBtn = (
+      <div style={{ textAlign: 'center', marginTop: 8 }}>
+        <span onClick={finishOnboard} style={{ fontSize: 12, color: C.textMuted, cursor: 'pointer' }}>{isRu ? 'Пропустить' : 'Skip'}</span>
+      </div>
+    );
+
+    if (obStep === 0) return (
+      <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
+        {dots}
+        <div style={{ width: 80, height: 80, borderRadius: 24, background: `linear-gradient(145deg, rgba(52,211,153,0.2), rgba(52,211,153,0.08))`, border: '1px solid rgba(52,211,153,0.2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, margin: '0 auto 16px' }}>✓</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{isRu ? 'Умные брони подключены!' : 'Smart Reservations enabled!'}</div>
+        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>
+          {isRu ? <>Теперь бронирования на вишлисте <strong style={{ color: C.text }}>«{wl.title}»</strong> управляются автоматически.</> : <>Reservations on <strong style={{ color: C.text }}>"{wl.title}"</strong> are now managed automatically.</>}
+        </div>
+        <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 24, textAlign: 'start' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>{isRu ? 'Что включено' : 'What\'s included'}</div>
+          {[isRu ? 'Автоснятие зависших броней' : 'Auto-release of stale reservations', isRu ? 'Напоминания дарителям' : 'Reminders to gifters', isRu ? 'Продление и подтверждение брони' : 'Extend and confirm reservations'].map((text, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+              <span style={{ color: C.green, fontSize: 16 }}>✓</span>
+              <span style={{ fontSize: 14, color: C.text }}>{text}</span>
             </div>
           ))}
         </div>
-        <button onClick={() => {
-          try { window.localStorage.setItem(onboardKey, '1'); } catch { /* ok */ }
-          setShowOnboard(false);
-        }} style={{ ...btnPrimary, marginTop: 4 }}>
-          {locale === 'ru' ? 'Настроить' : 'Configure'}
-        </button>
+        {nextBtn(isRu ? 'Далее →' : 'Next →')}
+      </div>
+    );
+
+    if (obStep === 1) return (
+      <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
+        {dots}
+        <div style={{ fontSize: 36, marginBottom: 12 }}>⏱</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{isRu ? 'Бронь с таймером' : 'Timed Reservation'}</div>
+        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>{isRu ? 'Когда кто-то бронирует подарок, запускается обратный отсчёт.' : 'When someone reserves a gift, a countdown starts.'}</div>
+        <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 16, textAlign: 'start' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎧</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Sony WH-1000XM5</div>
+              <div style={{ fontSize: 12, color: C.accent, marginTop: 2 }}>✅ {isRu ? 'Забронировано' : 'Reserved'}</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textSec }}>
+            <span>⏱</span>
+            <span>{isRu ? 'До' : 'Until'} <strong style={{ color: C.text }}>16 {isRu ? 'апреля' : 'Apr'}, 18:00</strong> · 2{isRu ? ' дн.' : 'd'} 23{isRu ? ' ч.' : 'h'}</span>
+          </div>
+          <div style={{ height: 4, borderRadius: 2, background: C.surfaceHover, marginTop: 8 }}>
+            <div style={{ width: '40%', height: '100%', borderRadius: 2, background: C.accent }} />
+          </div>
+        </div>
+        <div style={{ padding: 12, background: C.bg, borderRadius: 12, marginBottom: 24 }}>
+          <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.6 }}>
+            {isRu ? <>Ты выбираешь срок: <strong style={{ color: C.text }}>24ч</strong>, <strong style={{ color: C.text }}>48ч</strong>, <strong style={{ color: C.text }}>72ч</strong> или <strong style={{ color: C.text }}>7 дней</strong>. Даритель видит, сколько осталось.</> : <>You choose the duration: <strong style={{ color: C.text }}>24h</strong>, <strong style={{ color: C.text }}>48h</strong>, <strong style={{ color: C.text }}>72h</strong> or <strong style={{ color: C.text }}>7 days</strong>. The gifter sees the remaining time.</>}
+          </div>
+        </div>
+        {nextBtn(isRu ? 'Далее →' : 'Next →')}
+        {skipBtn}
+      </div>
+    );
+
+    if (obStep === 2) return (
+      <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
+        {dots}
+        <div style={{ fontSize: 36, marginBottom: 12 }}>🔔</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{isRu ? 'Без сюрпризов' : 'No surprises'}</div>
+        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>{isRu ? 'Бронь не слетает молча. Даритель всегда предупреждён.' : 'Reservations don\'t expire silently. The gifter is always warned.'}</div>
+        <div style={{ background: C.card, borderRadius: 16, padding: '16px 16px 12px', marginBottom: 16, textAlign: 'start' }}>
+          {[
+            { color: C.accent, label: isRu ? 'Бронь создана' : 'Reservation created', desc: isRu ? 'Даритель получает подтверждение с датой истечения' : 'Gifter gets confirmation with expiry date', hasLine: true },
+            { color: '#FBBF24', label: isRu ? 'Напоминание' : 'Reminder', desc: isRu ? 'За 24ч до истечения — можно продлить или подтвердить' : '24h before expiry — can extend or confirm', hasLine: true },
+            { color: C.green, label: isRu ? 'Продлить или отпустить' : 'Extend or release', desc: isRu ? 'Даритель решает сам, а не пропадает молча' : 'Gifter decides, instead of disappearing silently', hasLine: false },
+          ].map((ev, i) => (
+            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: ev.color, flexShrink: 0 }} />
+                {ev.hasLine && <div style={{ width: 2, height: 32, background: C.surfaceHover }} />}
+              </div>
+              <div style={{ paddingBottom: ev.hasLine ? 12 : 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: ev.color }}>{ev.label}</div>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{ev.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: 12, background: C.bg, borderRadius: 12, marginBottom: 24 }}>
+          <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.6 }}>
+            {isRu ? <>Продление доступно до <strong style={{ color: C.text }}>2 раз</strong> — достаточно, чтобы успеть, но бронь не зависнет навсегда.</> : <>Extensions available up to <strong style={{ color: C.text }}>2 times</strong> — enough to make it, but the reservation won't hang forever.</>}
+          </div>
+        </div>
+        {nextBtn(isRu ? 'Далее →' : 'Next →')}
+        {skipBtn}
+      </div>
+    );
+
+    // Step 4: auto-release + CTA
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
+        {dots}
+        <div style={{ fontSize: 36, marginBottom: 12 }}>🧹</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{isRu ? 'Порядок без усилий' : 'Effortless order'}</div>
+        <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>{isRu ? 'Если даритель не реагирует — бронь снимается автоматически. Желание возвращается в список.' : 'If the gifter doesn\'t respond — the reservation is auto-released. The wish returns to the list.'}</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <div style={{ flex: 1, background: 'rgba(248,113,113,0.12)', borderRadius: 14, padding: '14px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#F87171', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{isRu ? 'Было' : 'Before'}</div>
+            <div style={{ fontSize: 22, marginBottom: 6 }}>😰</div>
+            <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4 }}>{isRu ? 'Бронь зависла, подарок заблокирован' : 'Reservation stuck, gift blocked'}</div>
+          </div>
+          <div style={{ flex: 1, background: 'rgba(52,211,153,0.12)', borderRadius: 14, padding: '14px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{isRu ? 'Стало' : 'After'}</div>
+            <div style={{ fontSize: 22, marginBottom: 6 }}>😌</div>
+            <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4 }}>{isRu ? 'Бронь снялась сама, желание снова доступно' : 'Reservation auto-released, wish available again'}</div>
+          </div>
+        </div>
+        <div style={{ background: C.card, borderRadius: 14, padding: 14, marginBottom: 24, textAlign: 'start' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>{isRu ? 'Настройки по умолчанию' : 'Default settings'}</div>
+          {[
+            { label: isRu ? 'Срок брони' : 'Reservation TTL', value: '72 ' + (isRu ? 'часа' : 'hours') },
+            { label: isRu ? 'Продление' : 'Extensions', value: isRu ? 'До 2 раз' : 'Up to 2 times' },
+            { label: isRu ? 'Напоминание' : 'Reminder', value: isRu ? 'За 24 часа' : '24 hours before' },
+          ].map((row, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+              <span style={{ color: C.textSec }}>{row.label}</span>
+              <span style={{ color: C.text, fontWeight: 600 }}>{row.value}</span>
+            </div>
+          ))}
+        </div>
+        <button onClick={finishOnboard} style={{ ...btnPrimary }}>⚙️ {isRu ? 'Настроить под себя' : 'Customize settings'}</button>
+        <button onClick={finishOnboard} style={{ ...btnSecondary, marginTop: 8 }}>{isRu ? 'Оставить по умолчанию' : 'Keep defaults'}</button>
       </div>
     );
   }
@@ -13559,6 +13666,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         { label: t('settings_event_calendar', locale), desc: t('settings_desc_event_calendar', locale) },
                         { label: t('settings_lite_share', locale), desc: t('settings_desc_lite_share', locale) },
                         { label: t('settings_dont_gift', locale), desc: t('settings_desc_dont_gift', locale) },
+                        { label: t('smart_res_section_title', locale), desc: t('smart_res_toggle_hint', locale) },
                       ].map((row) => (
                         <div key={row.label}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

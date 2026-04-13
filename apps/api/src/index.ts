@@ -2352,7 +2352,7 @@ tgRouter.get(
         id: true, slug: true, title: true, description: true, deadline: true,
         visibility: true, allowSubscriptions: true, commentPolicy: true,
         shareToken: true, dontGiftMode: true,
-        smartReservationsEnabled: true, smartResTtlHours: true,
+        smartReservationsEnabled: true, smartResTtlHours: true, smartResAllowExtend: true, smartResMaxExtensions: true,
         items: { select: { status: true } },
       },
     });
@@ -2410,6 +2410,10 @@ tgRouter.get(
           commentPolicy: (wl.commentPolicy as string).toLowerCase() as 'all' | 'subscribers',
           shareToken: wl.shareToken ?? null,
           dontGiftMode: wl.dontGiftMode as 'global' | 'local' | 'hidden',
+          smartReservationsEnabled: wl.smartReservationsEnabled,
+          smartResTtlHours: wl.smartResTtlHours,
+          smartResAllowExtend: wl.smartResAllowExtend,
+          smartResMaxExtensions: wl.smartResMaxExtensions,
         };
       }),
       plan: {
