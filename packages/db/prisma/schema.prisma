@@ -292,11 +292,15 @@ model Comment {
   text              String      @db.VarChar(300)
   reservationEpoch  Int         @default(0)
   scheduledDeleteAt DateTime?
+  parentCommentId   String?
   createdAt         DateTime    @default(now())
 
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item    Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: SetNull)
+  replies Comment[] @relation("CommentReplies")
 
   @@index([itemId, createdAt])
+  @@index([parentCommentId])
   @@index([scheduledDeleteAt])
 }
 

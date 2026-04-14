@@ -367,6 +367,13 @@ type CommentDTO = {
   text: string;
   reservationEpoch: number;
   createdAt: string;
+  parentCommentId: string | null;
+  parentPreview: null | {
+    id: string;
+    text: string;
+    authorDisplayName: string | null;
+    deleted: boolean;
+  };
 };
 
 type SantaCampaignStatus = 'DRAFT' | 'OPEN' | 'LOCKED' | 'DRAW_IN_PROGRESS' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
@@ -557,6 +564,7 @@ type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-d
 | 'curated-view'
 | 'link-management'
 | 'guest-link-expired'
+| 'item-unavailable'
 | 'showcase-editor' | 'showcase-preview';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
@@ -2650,7 +2658,12 @@ function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, anim
 // COMMENTS THREAD (module-level to keep stable identity)
 // ═══════════════════════════════════════════════════════
 
-function CommentsThread({ commentRole, comments, commentText, setCommentText, commentSending, myActorHash, onDeleteComment, onSendComment, isArchive, locale }: {
+function CommentsThread({
+  commentRole, comments, commentText, setCommentText, commentSending, myActorHash,
+  onDeleteComment, onSendComment, isArchive, locale,
+  replyingTo, onStartReply, onCancelReply,
+  expandInitially, highlightCommentId, commentNodeRefs,
+}: {
   commentRole: 'owner' | 'reserver' | null;
   comments: CommentDTO[];
   commentText: string;
@@ -2661,8 +2674,16 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
   onDeleteComment: (id: string) => void;
   onSendComment: () => void;
   isArchive?: boolean;
+  replyingTo: CommentDTO | null;
+  onStartReply: (c: CommentDTO) => void;
+  onCancelReply: () => void;
+  expandInitially?: boolean;
+  highlightCommentId?: string | null;
+  commentNodeRefs?: React.MutableRefObject<Map<string, HTMLDivElement>>;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(!!expandInitially);
+  // React to expandInitially becoming true later (e.g. when deeplink-entry effect fires)
+  useEffect(() => { if (expandInitially) setExpanded(true); }, [expandInitially]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   if (!commentRole) return null;
@@ -2756,10 +2777,49 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
                 {c.text} · {new Date(c.createdAt).toLocaleString(toIntlLocale(locale), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
               </div>
             ) : (
-              <div key={c.id} style={{
-                alignSelf: isMine(c) ? 'flex-end' : 'flex-start',
-                maxWidth: '75%',
-              }}>
+              <div
+                key={c.id}
+                ref={(node) => {
+                  if (!commentNodeRefs) return;
+                  if (node) commentNodeRefs.current.set(c.id, node);
+                  else commentNodeRefs.current.delete(c.id);
+                }}
+                style={{
+                  alignSelf: isMine(c) ? 'flex-end' : 'flex-start',
+                  maxWidth: '75%',
+                  transition: 'box-shadow 0.2s ease',
+                  borderRadius: 18,
+                  ...(highlightCommentId === c.id
+                    ? { animation: 'commentPulse 2.5s ease-out', padding: 2, margin: -2 }
+                    : {}),
+                }}
+              >
+                {/* Reply marker — shown above the bubble if this comment has a parent */}
+                {c.parentCommentId && (
+                  <div style={{
+                    fontSize: 11, color: C.textMuted, fontFamily: font,
+                    marginBottom: 4, lineHeight: 1.3,
+                    textAlign: isMine(c) ? 'right' : 'left',
+                    paddingLeft: isMine(c) ? 0 : 6,
+                    paddingRight: isMine(c) ? 6 : 0,
+                  }}>
+                    {c.parentPreview && !c.parentPreview.deleted ? (
+                      <>
+                        <span style={{ opacity: 0.7 }}>↳ {t('comments_reply_tag', locale)}</span>
+                        {' '}
+                        <span style={{ opacity: 0.9 }}>
+                          «{c.parentPreview.text.length > 40
+                            ? c.parentPreview.text.slice(0, 40) + '…'
+                            : c.parentPreview.text}»
+                        </span>
+                      </>
+                    ) : (
+                      <span style={{ opacity: 0.6, fontStyle: 'italic' }}>
+                        ↳ {t('comments_reply_deleted_tag', locale)}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {!isMine(c) && (
                   <div style={{ fontSize: 12, color: C.accent, marginBottom: 2, fontWeight: 600, fontFamily: font }}>
                     {c.authorDisplayName ?? t('comments_anon', locale)}
@@ -2788,17 +2848,32 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
                     }}>
                       {new Date(c.createdAt).toLocaleTimeString(toIntlLocale(locale), { hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    {canDelete(c) && !isArchive && (
-                      <button
-                        onClick={() => void onDeleteComment(c.id)}
-                        style={{
-                          background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer',
-                          fontSize: 12, color: isMine(c) ? 'rgba(255,255,255,0.35)' : C.textMuted,
-                        }}
-                      >
-                        ✕
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      {/* Reply button — only on top-level USER comments, when composer is enabled */}
+                      {!isArchive && c.parentCommentId === null && c.type === 'USER' && (
+                        <button
+                          onClick={() => onStartReply(c)}
+                          aria-label={t('comments_reply_header', locale)}
+                          style={{
+                            background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer',
+                            fontSize: 13, lineHeight: 1, color: isMine(c) ? 'rgba(255,255,255,0.55)' : C.accent,
+                          }}
+                        >
+                          ↩
+                        </button>
+                      )}
+                      {canDelete(c) && !isArchive && (
+                        <button
+                          onClick={() => void onDeleteComment(c.id)}
+                          style={{
+                            background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer',
+                            fontSize: 12, color: isMine(c) ? 'rgba(255,255,255,0.35)' : C.textMuted,
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2809,43 +2884,76 @@ function CommentsThread({ commentRole, comments, commentText, setCommentText, co
 
       {/* Composer */}
       {!isArchive && (
-        <div style={{ display: 'flex', gap: 8, padding: '10px 14px 14px', alignItems: 'flex-end' }}>
-          <div style={{ flex: 1, position: 'relative' }}>
-            <textarea
-              style={{
-                ...inputStyle,
-                minHeight: 40, maxHeight: 80, resize: 'none',
-                padding: '10px 40px 10px 14px',
-                borderRadius: 12, fontSize: 14,
-                background: C.bg, lineHeight: 1.4,
-              }}
-              placeholder={t('comments_placeholder', locale)}
-              value={commentText}
-              onChange={(e) => { setCommentText(e.target.value.slice(0, 300)); growTextarea(e.target); }}
-              maxLength={300}
-              onFocus={(e) => handleTextareaFocus(e.currentTarget)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSendComment(); } }}
-            />
-            <span style={{
-              position: 'absolute', right: 12, bottom: 8,
-              fontSize: 9, color: C.textMuted,
-              opacity: commentText.length > 280 ? 1 : 0.4,
-              ...(commentText.length > 280 ? { color: C.orange } : {}),
+        <>
+          {/* Reply chip — shown above the composer when replyingTo is set */}
+          {replyingTo && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              margin: '6px 14px 0', padding: '8px 10px',
+              background: C.accentSoft, borderLeft: `3px solid ${C.accent}`, borderRadius: 10,
+              minHeight: 40,
             }}>
-              {commentText.length}/300
-            </span>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 11, color: C.accent, fontWeight: 700, fontFamily: font, letterSpacing: 0.2 }}>
+                  {t('comments_reply_header', locale)}
+                </span>
+                <span style={{
+                  fontSize: 12, color: C.text, fontFamily: font, lineHeight: 1.3,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {(replyingTo.authorDisplayName ?? t('comments_anon', locale))}: «{replyingTo.text.length > 80 ? replyingTo.text.slice(0, 80) + '…' : replyingTo.text}»
+                </span>
+              </div>
+              <button
+                onClick={() => onCancelReply()}
+                aria-label="Cancel reply"
+                style={{
+                  background: 'none', border: 'none', padding: 6, cursor: 'pointer',
+                  fontSize: 14, color: C.textMuted, lineHeight: 1, flexShrink: 0,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, padding: '10px 14px 14px', alignItems: 'flex-end' }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <textarea
+                style={{
+                  ...inputStyle,
+                  minHeight: 40, maxHeight: 80, resize: 'none',
+                  padding: '10px 40px 10px 14px',
+                  borderRadius: 12, fontSize: 14,
+                  background: C.bg, lineHeight: 1.4,
+                }}
+                placeholder={replyingTo ? t('comments_reply_placeholder', locale) : t('comments_placeholder', locale)}
+                value={commentText}
+                onChange={(e) => { setCommentText(e.target.value.slice(0, 300)); growTextarea(e.target); }}
+                maxLength={300}
+                onFocus={(e) => handleTextareaFocus(e.currentTarget)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSendComment(); } }}
+              />
+              <span style={{
+                position: 'absolute', right: 12, bottom: 8,
+                fontSize: 9, color: C.textMuted,
+                opacity: commentText.length > 280 ? 1 : 0.4,
+                ...(commentText.length > 280 ? { color: C.orange } : {}),
+              }}>
+                {commentText.length}/300
+              </span>
+            </div>
+            <button
+              onClick={() => void onSendComment()}
+              disabled={!commentText.trim() || commentSending}
+              style={{
+                ...btnPrimary, width: 36, height: 36, padding: 0, borderRadius: 18,
+                opacity: commentText.trim() ? 1 : 0.35, flexShrink: 0, fontSize: 14,
+              }}
+            >
+              {commentSending ? '…' : '↑'}
+            </button>
           </div>
-          <button
-            onClick={() => void onSendComment()}
-            disabled={!commentText.trim() || commentSending}
-            style={{
-              ...btnPrimary, width: 36, height: 36, padding: 0, borderRadius: 18,
-              opacity: commentText.trim() ? 1 : 0.35, flexShrink: 0, fontSize: 14,
-            }}
-          >
-            {commentSending ? '…' : '↑'}
-          </button>
-        </div>
+        </>
       )}
     </div>
   );
@@ -4112,6 +4220,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [commentText, setCommentText] = useState('');
   const [commentRole, setCommentRole] = useState<'owner' | 'reserver' | null>(null);
   const [commentSending, setCommentSending] = useState(false);
+  // Reply mode — transient, cleared after send or explicit cancel
+  const [replyingTo, setReplyingTo] = useState<CommentDTO | null>(null);
+  // Deeplink reply entry state — consumed exactly once per deeplink landing
+  const replyEntryRef = useRef<{ itemId: string; commentId: string; consumed: boolean } | null>(null);
+  // Per-comment DOM refs for scroll/highlight
+  const commentNodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  // Which comment to visually pulse after deeplink land
+  const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
+  // item-unavailable reason — surfaces on the error screen
+  const [itemUnavailableReason, setItemUnavailableReason] = useState<'not_found' | 'forbidden' | 'unknown'>('not_found');
 
   // Hint state
   const [hintLoading, setHintLoading] = useState(false);
@@ -5596,32 +5714,55 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     const stripped = text.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s.…]+/gu, '');
     if (stripped.length === 0) { pushToast(t('comments_write_something', locale), 'error'); return; }
 
+    // Reply targeting — if the target is itself a reply, fold up to its parent (one-level cap).
+    // Server still validates strictly; this is UI-forgiveness for mid-flight state.
+    const replyTarget = replyingTo;
+    const parentCommentId = replyTarget
+      ? (replyTarget.parentCommentId ?? replyTarget.id)
+      : undefined;
+    const isReply = parentCommentId !== undefined;
+
     setCommentSending(true);
     try {
       const res = await tgFetch(`/tg/items/${viewingItem.id}/comments`, {
         method: 'POST',
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(isReply ? { text, parentCommentId } : { text }),
       });
       if (!res.ok) {
         if (res.status === 402) {
           showUpsell('comments', { auto: true });
+          if (isReply) trackEvent('comment_reply_failed', { itemId: viewingItem.id, parentCommentId, reason: 'paywall' });
           return;
         }
         const json = await res.json().catch(() => ({})) as { error?: string };
         if (res.status === 403 && json.error === 'comments_restricted') {
           pushToast(t('comments_restricted_toast', locale), 'error');
+          if (isReply) trackEvent('comment_reply_failed', { itemId: viewingItem.id, parentCommentId, reason: 'restricted' });
+          return;
+        }
+        // Parent-specific failures → clear reply mode and surface a targeted toast
+        if (isReply && res.status === 400 && json.error && json.error.startsWith('parent_')) {
+          pushToast(t('comments_reply_target_missing', locale), 'info');
+          trackEvent('comment_reply_failed', { itemId: viewingItem.id, parentCommentId, reason: json.error });
+          setReplyingTo(null);
           return;
         }
         pushToast(json.error || t('comments_send_error', locale), 'error');
+        if (isReply) trackEvent('comment_reply_failed', { itemId: viewingItem.id, parentCommentId, reason: json.error || 'unknown', status: res.status });
         return;
       }
       const json = await res.json() as { comment: CommentDTO };
       setComments(prev => [...prev, json.comment]);
       setCommentText('');
+      if (isReply) {
+        trackEvent('comment_reply_sent', { itemId: viewingItem.id, parentCommentId, commentId: json.comment.id });
+        setReplyingTo(null);
+      }
     } finally {
       setCommentSending(false);
     }
-  }, [viewingItem, commentText, commentSending, tgFetch, pushToast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewingItem, commentText, commentSending, tgFetch, pushToast, replyingTo, trackEvent, showUpsell, locale]);
 
   const handleDeleteComment = useCallback(async (commentId: string) => {
     if (!viewingItem) return;
@@ -6271,6 +6412,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       } else {
         setScreen('wishlist-detail');
       }
+    } else if (screen === 'item-unavailable') {
+      replyEntryRef.current = null;
+      setScreen('my-wishlists');
     }
   }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData, guestViewReturnToProfileUsername, checkOnboarding, loadPublicProfile, loadProfileSubscribeStatus]);
 
@@ -6678,6 +6822,54 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             bootSetScreen('drafts');
           })
           .catch(handleErr);
+      } else if (startParam && startParam.startsWith('crpl_')) {
+        // Comment-reply deep link: crpl_<itemId>__c_<commentId>
+        // Opens the mini app directly to the item, expands comments, scrolls + highlights
+        // the target comment, and activates reply mode (see comment-reply-entry effect).
+        const rest = startParam.slice('crpl_'.length);
+        const sepIdx = rest.indexOf('__c_');
+        const targetItemId = sepIdx >= 0 ? rest.slice(0, sepIdx) : '';
+        const targetCommentId = sepIdx >= 0 ? rest.slice(sepIdx + 4) : '';
+        // Strict id validation — refuse to land if payload is malformed
+        const looksLikeId = (s: string) => /^[a-z0-9_-]{10,40}$/i.test(s);
+        if (!looksLikeId(targetItemId) || !looksLikeId(targetCommentId)) {
+          trackEvent('comment_reply_deeplink_opened', { reason: 'malformed', payload: startParam });
+          loadWishlists()
+            .then(() => { trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current }); bootSetScreen('my-wishlists'); })
+            .catch(handleErr);
+        } else {
+          trackEvent('comment_reply_deeplink_opened', { itemId: targetItemId, commentId: targetCommentId });
+          // Parallel: own wishlists (for back-nav coherence) + item resolution
+          const itemPromise = tgFetch(`/tg/items/${encodeURIComponent(targetItemId)}`)
+            .then(async (res) => {
+              if (res.status === 404) return { kind: 'not_found' as const };
+              if (res.status === 403) return { kind: 'forbidden' as const };
+              if (!res.ok) return { kind: 'error' as const };
+              const json = await res.json() as { item: Item };
+              return { kind: 'ok' as const, item: json.item };
+            })
+            .catch(() => ({ kind: 'error' as const }));
+
+          Promise.all([loadWishlists().catch(() => {}), itemPromise])
+            .then(([, itemResult]) => {
+              trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
+              if (itemResult.kind === 'ok') {
+                replyEntryRef.current = { itemId: targetItemId, commentId: targetCommentId, consumed: false };
+                setViewingItem(itemResult.item);
+                bootSetScreen('item-detail');
+              } else if (itemResult.kind === 'not_found') {
+                setItemUnavailableReason('not_found');
+                bootSetScreen('item-unavailable');
+              } else if (itemResult.kind === 'forbidden') {
+                setItemUnavailableReason('forbidden');
+                bootSetScreen('item-unavailable');
+              } else {
+                setItemUnavailableReason('unknown');
+                bootSetScreen('item-unavailable');
+              }
+            })
+            .catch(handleErr);
+        }
       } else if (startParam && startParam.includes('__item_')) {
         // Deep link to specific item (e.g. from hint): <slug>__item_<itemId>
         const sepIdx = startParam.indexOf('__item_');
@@ -7058,9 +7250,71 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setComments([]);
       setCommentRole(null);
       setCommentText('');
+      // Clear reply mode when leaving a comment-capable screen
+      setReplyingTo(null);
+      setHighlightCommentId(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingItem, screen, loadComments]);
+
+  // Reply-deeplink entry: after comments load, find target, scroll + highlight + enter reply mode.
+  // Consumed exactly once per deeplink landing (via replyEntryRef.current.consumed flag).
+  useEffect(() => {
+    const entry = replyEntryRef.current;
+    if (!entry || entry.consumed) return;
+    if (!viewingItem || viewingItem.id !== entry.itemId) return;
+    if (screen !== 'item-detail' && screen !== 'guest-item-detail') return;
+    if (comments.length === 0) return; // wait for comments to load
+
+    // Find target — it may be deleted/orphaned (scheduledDeleteAt / TTL passed)
+    const target = comments.find(c => c.id === entry.commentId);
+    const isArchive = viewingItem.status === 'completed' || viewingItem.status === 'deleted';
+
+    if (target && target.type === 'USER') {
+      trackEvent('comment_reply_target_found', { itemId: entry.itemId, commentId: entry.commentId });
+      // If target itself is a reply, reply to its parent instead (one-level thread cap).
+      // UI-forgiving: server still enforces strict parent_is_reply at send-time.
+      if (target.parentCommentId) {
+        trackEvent('comment_reply_deeplink_resolved_to_parent', {
+          itemId: entry.itemId, originalCommentId: entry.commentId, parentCommentId: target.parentCommentId,
+        });
+      }
+      // Scroll + highlight regardless of archive status
+      requestAnimationFrame(() => {
+        const node = commentNodeRefs.current.get(target.id);
+        if (node) {
+          try { node.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* ignore */ }
+        }
+        setHighlightCommentId(target.id);
+        trackEvent('comment_reply_target_highlighted', { itemId: entry.itemId, commentId: target.id });
+        // Clear highlight after animation completes
+        setTimeout(() => { setHighlightCommentId(prev => prev === target.id ? null : prev); }, 2600);
+      });
+      // Enter reply mode only if composer is actually available
+      if (!isArchive && commentRole) {
+        setReplyingTo(target);
+        trackEvent('comment_reply_mode_entered', {
+          itemId: entry.itemId, commentId: target.id, source: 'deeplink',
+        });
+      } else {
+        trackEvent('comment_reply_mode_skipped', {
+          itemId: entry.itemId, commentId: target.id,
+          reason: isArchive ? 'archive' : 'no_role',
+        });
+        pushToast(t('comments_reply_target_missing', locale), 'info');
+      }
+    } else {
+      // Target missing (deleted, TTL-gone, or SYSTEM) — surface a toast
+      trackEvent('comment_reply_target_missing', {
+        itemId: entry.itemId, commentId: entry.commentId,
+        reason: target ? 'not_user_comment' : 'not_found',
+      });
+      pushToast(t('comments_reply_target_missing', locale), 'info');
+    }
+
+    entry.consumed = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comments, viewingItem, screen, commentRole]);
 
   // Auto-load receiver wishlist when giver card mounts with a linked wishlist
   useEffect(() => {
@@ -9315,6 +9569,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         @keyframes skeletonShimmer { 0%,100% { opacity:0.25 } 50% { opacity:0.5 } }
         @keyframes onb-spin { to { transform:rotate(360deg) } }
         @keyframes onb-fade { from { opacity:0 } to { opacity:1 } }
+        @keyframes commentPulse {
+          0%   { box-shadow: 0 0 0 0 rgba(59,130,246,0.55); background-color: rgba(59,130,246,0.18); border-radius: 12px; }
+          60%  { box-shadow: 0 0 0 6px rgba(59,130,246,0);    background-color: rgba(59,130,246,0.10); border-radius: 12px; }
+          100% { box-shadow: 0 0 0 0 rgba(59,130,246,0);      background-color: transparent;           border-radius: 12px; }
+        }
         * { box-sizing:border-box; -webkit-tap-highlight-color:transparent }
         input, textarea, select { -webkit-appearance:none }
         /* Prevent the Telegram WebView from swallowing scroll gestures when the
@@ -9513,6 +9772,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             onClick={() => { setScreen('my-wishlists'); }}
           >
             {locale === 'ru' ? 'Мои вишлисты' : 'My wishlists'}
+          </button>
+        </div>
+      )}
+
+      {/* ── ITEM UNAVAILABLE — deeplink landed on a missing/forbidden/errored item ── */}
+      {screen === 'item-unavailable' && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16, padding: 24 }}>
+          <div style={{ fontSize: 48 }}>
+            {itemUnavailableReason === 'forbidden' ? '🔒' : itemUnavailableReason === 'unknown' ? '📡' : '😕'}
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, textAlign: 'center', color: C.text, fontFamily: font }}>
+            {t('item_unavailable_title', locale)}
+          </div>
+          <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5, fontFamily: font }}>
+            {t('item_unavailable_subtitle', locale)}
+          </div>
+          <button
+            style={{ ...btnPrimary, marginTop: 8, width: 220 }}
+            onClick={() => {
+              replyEntryRef.current = null;
+              setItemUnavailableReason('not_found');
+              setScreen('my-wishlists');
+            }}
+          >
+            {t('go_home_btn', locale)}
           </button>
         </div>
       )}
@@ -11853,6 +12137,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 onSendComment={handleSendComment}
                 isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
                 locale={locale}
+                replyingTo={replyingTo}
+                onStartReply={(c) => {
+                  setReplyingTo(c);
+                  trackEvent('comment_reply_ui_tapped', { source: 'bubble', itemId: viewingItem.id, commentId: c.id });
+                }}
+                onCancelReply={() => {
+                  if (replyingTo) trackEvent('comment_reply_cancelled', { itemId: viewingItem.id, commentId: replyingTo.id, reason: 'user_cancel' });
+                  setReplyingTo(null);
+                }}
+                expandInitially={replyEntryRef.current?.itemId === viewingItem.id && !replyEntryRef.current?.consumed}
+                highlightCommentId={highlightCommentId}
+                commentNodeRefs={commentNodeRefs}
               />
             ) : (
               <div onClick={() => showUpsell('comments')} style={{
@@ -12056,6 +12352,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 onSendComment={handleSendComment}
                 isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
                 locale={locale}
+                replyingTo={replyingTo}
+                onStartReply={(c) => {
+                  setReplyingTo(c);
+                  trackEvent('comment_reply_ui_tapped', { source: 'bubble', itemId: viewingItem.id, commentId: c.id });
+                }}
+                onCancelReply={() => {
+                  if (replyingTo) trackEvent('comment_reply_cancelled', { itemId: viewingItem.id, commentId: replyingTo.id, reason: 'user_cancel' });
+                  setReplyingTo(null);
+                }}
+                expandInitially={replyEntryRef.current?.itemId === viewingItem.id && !replyEntryRef.current?.consumed}
+                highlightCommentId={highlightCommentId}
+                commentNodeRefs={commentNodeRefs}
               />
             ) : (
               <div
@@ -12654,6 +12962,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               onSendComment={handleSendComment}
               isArchive={viewingItem.status === 'completed' || viewingItem.status === 'deleted'}
               locale={locale}
+              replyingTo={replyingTo}
+              onStartReply={(c) => {
+                setReplyingTo(c);
+                trackEvent('comment_reply_ui_tapped', { source: 'bubble', itemId: viewingItem.id, commentId: c.id });
+              }}
+              onCancelReply={() => {
+                if (replyingTo) trackEvent('comment_reply_cancelled', { itemId: viewingItem.id, commentId: replyingTo.id, reason: 'user_cancel' });
+                setReplyingTo(null);
+              }}
+              expandInitially={replyEntryRef.current?.itemId === viewingItem.id && !replyEntryRef.current?.consumed}
+              highlightCommentId={highlightCommentId}
+              commentNodeRefs={commentNodeRefs}
             />
 
             {/* Hint for third parties — hidden on guest-item-detail (gg_cta_hint already provides guidance) */}

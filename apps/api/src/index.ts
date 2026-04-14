@@ -342,15 +342,27 @@ async function sendAdminAlert(text: string): Promise<void> {
 // Notification batching (30s debounce per item+recipient)
 const pendingNotifications = new Map<string, { chatId: string; itemTitle: string; count: number; timer: ReturnType<typeof setTimeout> }>();
 
-function queueCommentNotification(key: string, chatId: string, itemTitle: string, text: string) {
+/**
+ * Queue a comment notification.
+ * First notification for a given (item, recipient) key is sent immediately with optional inline keyboard.
+ * Subsequent comments within 30s are batched into a single text-only summary (no CTA — target is ambiguous).
+ */
+function queueCommentNotification(
+  key: string,
+  chatId: string,
+  itemTitle: string,
+  text: string,
+  replyMarkup?: Record<string, unknown>,
+) {
   const existing = pendingNotifications.get(key);
   if (existing) {
     existing.count++;
     return;
   }
 
-  // Send first notification immediately
-  void sendTgNotification(chatId, text);
+  // Send first notification immediately (with inline keyboard if provided)
+  if (replyMarkup) void sendTgBotMessage(chatId, text, replyMarkup);
+  else void sendTgNotification(chatId, text);
 
   const entry = {
     chatId,
@@ -362,10 +374,39 @@ function queueCommentNotification(key: string, chatId: string, itemTitle: string
       if (!e || e.count === 0) return;
       const notifLocale: Locale = 'ru'; // notifications use Russian as default
       const word = pluralize(e.count, 'новый комментарий', 'новых комментария', 'новых комментариев', notifLocale);
+      // Batch fallback goes WITHOUT inline keyboard — target comment is ambiguous
       void sendTgNotification(e.chatId, t('notif_batch_comments', notifLocale, { count: e.count, word, title: e.itemTitle }));
     }, 30_000),
   };
   pendingNotifications.set(key, entry);
+}
+
+// Reply-author notification dedupe (30s per parentCommentId+recipient)
+const pendingReplyNotifications = new Map<string, { timer: ReturnType<typeof setTimeout> }>();
+
+/**
+ * Send a "someone replied to your comment" notification with 30s dedupe.
+ * Uses same-shape dedupe as comment notifications but a separate namespace — if the same parent
+ * receives multiple replies in 30s from the same responder, only the first fires a notification.
+ */
+function queueReplyAuthorNotification(
+  parentCommentId: string,
+  recipientUserId: string,
+  chatId: string,
+  text: string,
+  replyMarkup: Record<string, unknown>,
+) {
+  const key = `reply:${parentCommentId}:${recipientUserId}`;
+  if (pendingReplyNotifications.has(key)) return; // dedupe within window
+  void sendTgBotMessage(chatId, text, replyMarkup);
+  const timer = setTimeout(() => { pendingReplyNotifications.delete(key); }, 30_000);
+  pendingReplyNotifications.set(key, { timer });
+}
+
+/** Build the mini app deep link URL for opening a specific comment in reply mode. */
+function buildCommentReplyDeepLink(itemId: string, commentId: string): string {
+  const miniAppUrl = process.env.MINI_APP_URL ?? (process.env.WEB_ORIGIN ? `${process.env.WEB_ORIGIN}/miniapp` : 'https://wishlistik.ru/miniapp');
+  return `${miniAppUrl}?startapp=crpl_${encodeURIComponent(itemId)}__c_${encodeURIComponent(commentId)}`;
 }
 
 /**
@@ -5669,6 +5710,33 @@ tgRouter.post(
   }),
 );
 
+// GET /tg/items/:id — fetch a single item for deep-link resolution (owner/reserver only).
+// Used by comment-reply deep links when the item is not in any already-loaded wishlist.
+tgRouter.get(
+  '/items/:id',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const ctx = await getItemRole(id, req.tgUser!);
+    if (!ctx) return res.status(404).json({ error: 'Item not found' });
+    if (ctx.role === 'third_party') return res.status(403).json({ error: 'Forbidden' });
+
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: {
+        id: true, wishlistId: true, title: true, url: true, priceText: true,
+        imageUrl: true, priority: true, position: true, status: true, description: true,
+        sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+        categoryId: true,
+      },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    return res.json({ item: { ...mapTgItem(item), categoryId: item.categoryId }, role: ctx.role });
+  }),
+);
+
 // GET /tg/items/:id/comments — list comments (owner/reserver only)
 tgRouter.get(
   '/items/:id/comments',
@@ -5686,21 +5754,80 @@ tgRouter.get(
       select: {
         id: true, type: true, authorActorHash: true, authorDisplayName: true,
         text: true, reservationEpoch: true, createdAt: true,
+        parentCommentId: true, scheduledDeleteAt: true,
       },
     });
+
+    // Build parent-preview map. We look up parents among the same item's comments (cheap — already loaded).
+    // For reserver viewing a parent from an older reservation epoch, we hide text/name but still mark it present.
+    const byId = new Map(comments.map(c => [c.id, c]));
+    const PARENT_PREVIEW_TEXT_MAX = 120;
 
     // For reserver: anonymize previous epoch comments
     const locale = getRequestLocale(req);
     const mapped = comments.map((c) => {
+      let parentPreview: null | {
+        id: string;
+        text: string;
+        authorDisplayName: string | null;
+        deleted: boolean;
+      } = null;
+
+      if (c.parentCommentId) {
+        const parent = byId.get(c.parentCommentId);
+        if (!parent) {
+          // fk was SET NULL elsewhere or parent not in this item — treat as missing
+          parentPreview = { id: c.parentCommentId, text: '', authorDisplayName: null, deleted: true };
+        } else {
+          // internal reason classification — not exposed to client but drives the flag
+          let unavailableReason: null | 'missing' | 'ttl_hidden' | 'epoch_hidden' = null;
+          if (parent.scheduledDeleteAt) unavailableReason = 'ttl_hidden';
+          else if (
+            ctx.role === 'reserver' &&
+            parent.type === 'USER' &&
+            parent.reservationEpoch < ctx.item.reservationEpoch &&
+            parent.authorActorHash !== ctx.actorHash
+          ) {
+            unavailableReason = 'epoch_hidden';
+          }
+
+          if (unavailableReason) {
+            parentPreview = { id: parent.id, text: '', authorDisplayName: null, deleted: true };
+          } else {
+            const truncated = parent.text.length > PARENT_PREVIEW_TEXT_MAX
+              ? parent.text.slice(0, PARENT_PREVIEW_TEXT_MAX - 1) + '…'
+              : parent.text;
+            parentPreview = {
+              id: parent.id,
+              text: truncated,
+              authorDisplayName: parent.authorDisplayName ?? null,
+              deleted: false,
+            };
+          }
+        }
+      }
+
+      const base = {
+        id: c.id,
+        type: c.type,
+        authorActorHash: c.authorActorHash,
+        authorDisplayName: c.authorDisplayName,
+        text: c.text,
+        reservationEpoch: c.reservationEpoch,
+        createdAt: c.createdAt.toISOString(),
+        parentCommentId: c.parentCommentId,
+        parentPreview,
+      };
+
       if (
         ctx.role === 'reserver' &&
         c.type === 'USER' &&
         c.reservationEpoch < ctx.item.reservationEpoch &&
         c.authorActorHash !== ctx.actorHash
       ) {
-        return { ...c, authorDisplayName: t('comments_anon', locale), createdAt: c.createdAt.toISOString() };
+        return { ...base, authorDisplayName: t('comments_anon', locale) };
       }
-      return { ...c, createdAt: c.createdAt.toISOString() };
+      return base;
     });
 
     return res.json({ comments: mapped, role: ctx.role });
@@ -5749,8 +5876,11 @@ tgRouter.post(
       return res.status(400).json({ error: t('api_comment_archived', locale) });
     }
 
-    // Validate text
-    const parsed = z.object({ text: z.string().min(1).max(300) }).safeParse(req.body);
+    // Validate text + optional parentCommentId
+    const parsed = z.object({
+      text: z.string().min(1).max(300),
+      parentCommentId: z.string().cuid().optional(),
+    }).safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
     const text = parsed.data.text.trim();
     if (!text) {
@@ -5763,6 +5893,31 @@ tgRouter.post(
     if (stripped.length === 0) {
       const locale = getRequestLocale(req);
       return res.status(400).json({ error: t('api_comment_meaningful', locale) });
+    }
+
+    // Validate parentCommentId (strict — no silent normalization)
+    let parent: { id: string; itemId: string; type: 'USER' | 'SYSTEM'; parentCommentId: string | null; authorActorHash: string | null; scheduledDeleteAt: Date | null } | null = null;
+    if (parsed.data.parentCommentId) {
+      parent = await prisma.comment.findUnique({
+        where: { id: parsed.data.parentCommentId },
+        select: { id: true, itemId: true, type: true, parentCommentId: true, authorActorHash: true, scheduledDeleteAt: true },
+      });
+      if (!parent) {
+        return res.status(404).json({ error: 'parent_not_found' });
+      }
+      if (parent.itemId !== id) {
+        return res.status(400).json({ error: 'parent_item_mismatch' });
+      }
+      if (parent.type !== 'USER') {
+        return res.status(400).json({ error: 'parent_not_user_comment' });
+      }
+      if (parent.parentCommentId !== null) {
+        // One-level reply only — no silent upgrade. UI should target upstream parent itself.
+        return res.status(400).json({ error: 'parent_is_reply' });
+      }
+      if (parent.scheduledDeleteAt) {
+        return res.status(400).json({ error: 'parent_unavailable' });
+      }
     }
 
     // Anti-spam checks
@@ -5825,15 +5980,26 @@ tgRouter.post(
         authorDisplayName: displayName,
         text,
         reservationEpoch: ctx.item.reservationEpoch,
+        parentCommentId: parent?.id ?? null,
       },
       select: {
         id: true, type: true, authorActorHash: true, authorDisplayName: true,
         text: true, reservationEpoch: true, createdAt: true,
+        parentCommentId: true,
       },
     });
 
-    // Notify the other party
+    // Build inline keyboard for the primary comment notification — a "Reply to comment" button
+    // that opens the mini app deep-linked to this specific comment with reply mode active.
     const notifLocale: Locale = 'ru'; // notifications to other users default to Russian
+    const replyBtnLabel = t('comment_reply_btn', notifLocale);
+    const deepLinkUrl = buildCommentReplyDeepLink(id, comment.id);
+    const commentReplyMarkup = {
+      inline_keyboard: [[{ text: replyBtnLabel, web_app: { url: deepLinkUrl } }]],
+    };
+
+    // Notify the other party (recipient of the notification = the one who did NOT write this comment)
+    let notifiedRecipientUserId: string | null = null;
     if (ctx.role === 'reserver') {
       // Notify owner
       const owner = await prisma.user.findUnique({
@@ -5842,8 +6008,12 @@ tgRouter.post(
       });
       if (owner?.telegramChatId) {
         const key = `${id}:${owner.id}`;
-        queueCommentNotification(key, owner.telegramChatId, ctx.item.title,
-          t('notif_commented_reserver', notifLocale, { name: displayName, title: ctx.item.title, text }));
+        queueCommentNotification(
+          key, owner.telegramChatId, ctx.item.title,
+          t('notif_commented_reserver', notifLocale, { name: displayName, title: ctx.item.title, text }),
+          commentReplyMarkup,
+        );
+        notifiedRecipientUserId = owner.id;
       }
     } else if (ctx.role === 'owner' && ctx.item.reserverUserId) {
       // Notify reserver
@@ -5853,12 +6023,98 @@ tgRouter.post(
       });
       if (reserver?.telegramChatId) {
         const key = `${id}:${reserver.id}`;
-        queueCommentNotification(key, reserver.telegramChatId, ctx.item.title,
-          t('notif_commented_owner', notifLocale, { title: ctx.item.title, text }));
+        queueCommentNotification(
+          key, reserver.telegramChatId, ctx.item.title,
+          t('notif_commented_owner', notifLocale, { title: ctx.item.title, text }),
+          commentReplyMarkup,
+        );
+        notifiedRecipientUserId = reserver.id;
+      }
+    }
+    if (notifiedRecipientUserId) {
+      trackEvent('comment_reply_notification_sent', ctx.user.id, {
+        itemId: id,
+        commentId: comment.id,
+        recipientUserId: notifiedRecipientUserId,
+        role: ctx.role,
+        isReply: parent !== null,
+      });
+    }
+
+    // ── If this comment is a reply, separately notify the author of the parent comment. ──
+    // This is a distinct channel from the "someone commented" notification above — different recipient,
+    // different dedupe key, different message. Fire-and-forget.
+    if (parent) {
+      try {
+        // Resolve parent author user: parent.authorActorHash maps to either the owner or the current reserver.
+        // We fetch the owner once (needs telegramId to derive their actorHash) and compare.
+        let parentAuthorUser: { id: string; telegramChatId: string | null } | null = null;
+
+        const owner = await prisma.user.findUnique({
+          where: { id: ctx.item.wishlist.ownerId },
+          select: { id: true, telegramChatId: true, telegramId: true },
+        });
+        const ownerActorHash = owner?.telegramId
+          ? tgActorHash(Number(owner.telegramId))
+          : null;
+
+        if (ownerActorHash && parent.authorActorHash && secureCompare(ownerActorHash, parent.authorActorHash)) {
+          parentAuthorUser = { id: owner!.id, telegramChatId: owner!.telegramChatId };
+        } else if (ctx.item.reserverUserId) {
+          // Reserver match — only if current reservation is the same actor as the parent comment
+          const currentReserverActor = ctx.item.reservationEvents[0]?.actorHash ?? null;
+          if (currentReserverActor && parent.authorActorHash && secureCompare(currentReserverActor, parent.authorActorHash)) {
+            parentAuthorUser = await prisma.user.findUnique({
+              where: { id: ctx.item.reserverUserId },
+              select: { id: true, telegramChatId: true },
+            });
+          }
+        }
+
+        if (
+          parentAuthorUser &&
+          parentAuthorUser.telegramChatId &&
+          parentAuthorUser.id !== ctx.user.id // don't self-notify
+        ) {
+          const replyText = t('notif_comment_reply', notifLocale, {
+            title: ctx.item.title,
+            ownerName: displayName,
+            text,
+          });
+          queueReplyAuthorNotification(
+            parent.id,
+            parentAuthorUser.id,
+            parentAuthorUser.telegramChatId,
+            replyText,
+            commentReplyMarkup,
+          );
+          trackEvent('comment_reply_sent_notification_to_author', ctx.user.id, {
+            itemId: id,
+            parentCommentId: parent.id,
+            replyCommentId: comment.id,
+            recipientUserId: parentAuthorUser.id,
+          });
+        } else {
+          trackEvent('comment_reply_sent_notification_failed', ctx.user.id, {
+            itemId: id,
+            parentCommentId: parent.id,
+            reason: !parentAuthorUser ? 'author_not_resolved' :
+                    !parentAuthorUser.telegramChatId ? 'no_chat_id' :
+                    'self_reply',
+          });
+        }
+      } catch (err) {
+        // never fail the main POST because of notification side-effects
+        logger.warn({ err, parentCommentId: parent.id }, 'reply-author notification failed');
+        trackEvent('comment_reply_sent_notification_failed', ctx.user.id, {
+          itemId: id,
+          parentCommentId: parent.id,
+          reason: 'exception',
+        });
       }
     }
 
-    return res.status(201).json({ comment: { ...comment, createdAt: comment.createdAt.toISOString() } });
+    return res.status(201).json({ comment: { ...comment, createdAt: comment.createdAt.toISOString(), parentPreview: null } });
   }),
 );
 
@@ -5876,7 +6132,7 @@ tgRouter.delete(
 
     const comment = await prisma.comment.findUnique({
       where: { id: commentId },
-      select: { id: true, type: true, authorActorHash: true, itemId: true },
+      select: { id: true, type: true, authorActorHash: true, itemId: true, parentCommentId: true },
     });
     if (!comment || comment.itemId !== id) return res.status(404).json({ error: 'Comment not found' });
 
@@ -5888,7 +6144,22 @@ tgRouter.delete(
       return res.status(403).json({ error: 'Forbidden' });
     }
 
+    // If this is a top-level comment with replies, they will be SET NULL'd by FK and become
+    // orphan normal comments in the UI. Track this to monitor how often it happens.
+    let orphanedRepliesCount = 0;
+    if (comment.parentCommentId === null) {
+      orphanedRepliesCount = await prisma.comment.count({ where: { parentCommentId: commentId } });
+    }
+
     await prisma.comment.delete({ where: { id: commentId } });
+    if (orphanedRepliesCount > 0) {
+      trackEvent('comment_deleted_with_replies', ctx.user.id, {
+        itemId: id,
+        commentId,
+        orphanedRepliesCount,
+        role: ctx.role,
+      });
+    }
     return res.json({ ok: true });
   }),
 );
