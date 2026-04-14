@@ -585,6 +585,17 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-14',
+    date: '14.04.2026',
+    items: [
+      { ru: '✨ PRO: Подарочная витрина — личная страница с обложкой, избранными вишлистами и предпочтениями', en: '✨ PRO: Gift Showcase — a personal page with cover, featured wishlists and preferences' },
+      { ru: 'Обложка профиля, био и закреплённые вишлисты на самом верху', en: 'Profile cover, bio and pinned wishlists pinned to the top' },
+      { ru: 'Размеры и любимые бренды — чтобы дарителям было проще выбрать', en: 'Sizes and favourite brands — to make gifting easier' },
+      { ru: 'Публичная ссылка на витрину — поделись одним тапом в Telegram', en: 'Public showcase link — share with one tap in Telegram' },
+      { ru: 'Прогресс заполнения и предпросмотр перед публикацией', en: 'Progress tracker and preview before publishing' },
+    ],
+  },
+  {
     id: '2026-04-13',
     date: '13.04.2026',
     items: [
@@ -23509,16 +23520,44 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const saveField = (data: Parameters<typeof saveShowcase>[0]) => {
           void saveShowcase(data, { silent: true });
         };
-        const sectionStatus = (filled: boolean) => (
+        const sectionStatus = (filled: boolean, customFilledLabel?: string) => (
           <span style={{
-            fontSize: 11, fontWeight: 600,
+            fontSize: 12, fontWeight: 600,
+            padding: '3px 10px', borderRadius: 20,
+            background: filled ? 'rgba(52,211,153,0.12)' : C.surface,
             color: filled ? C.green : C.textMuted,
             display: 'inline-flex', alignItems: 'center', gap: 4,
+            whiteSpace: 'nowrap',
           }}>
-            <span style={{ fontSize: 9 }}>●</span>
-            {filled ? t('showcase_section_configured', locale) : t('showcase_section_empty', locale)}
+            {filled
+              ? `✓ ${customFilledLabel ?? t('showcase_section_done', locale)}`
+              : t('showcase_section_not_filled', locale)}
           </span>
         );
+        const sectionCardStyle: React.CSSProperties = {
+          background: C.card, borderRadius: 14, padding: 16, marginBottom: 12,
+          border: `1px solid ${C.border}`,
+        };
+        const sectionHeadStyle: React.CSSProperties = {
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        };
+        const sectionLeftStyle: React.CSSProperties = {
+          display: 'flex', alignItems: 'center', gap: 10, minWidth: 0,
+        };
+        const sectionIconStyle: React.CSSProperties = { fontSize: 20, flexShrink: 0 };
+        const sectionTitleStyle: React.CSSProperties = {
+          fontSize: 15, fontWeight: 600, color: C.text,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        };
+        const sectionDescStyle: React.CSSProperties = {
+          fontSize: 12, color: C.textMuted, marginTop: 4, paddingLeft: 30, lineHeight: 1.35,
+        };
+        const clearBtnStyle: React.CSSProperties = {
+          position: 'absolute', top: 8, right: 8, width: 24, height: 24,
+          borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.08)',
+          color: C.textMuted, cursor: 'pointer', fontFamily: font, fontSize: 14,
+          lineHeight: '24px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        };
         const bioLen = (sc?.bio ?? '').length;
         const prefLen = (sc?.preferences ?? '').length;
         const coverGradient = 'linear-gradient(135deg, #3a2d6e 0%, #1a1538 50%, #2d1f4e 100%)';
@@ -23535,26 +23574,29 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             : t('showcase_progress_title_default', locale);
         return (
           <div style={{ padding: '0 0 140px', fontFamily: font, color: C.text, animation: 'fadeIn 0.3s ease' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', gap: 12, borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+            {/* Top nav — just back button */}
+            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px' }}>
               <button onClick={navBack} style={{ background: 'none', border: 'none', color: C.text, fontSize: 16, cursor: 'pointer', fontFamily: font, padding: '4px 0' }}>
                 ‹ {t('back', locale)}
-              </button>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{t('showcase_editor_title', locale)}</div>
-              <button
-                onClick={() => { trackEvent('showcase.preview_opened'); setScreen('showcase-preview'); }}
-                style={{ background: 'none', border: 'none', color: C.accent, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font }}
-              >
-                {t('showcase_editor_preview', locale)}
               </button>
             </div>
 
             {showcaseLoading && !sc ? (
               <div style={{ padding: '80px 24px', textAlign: 'center', color: C.textMuted }}>{t('loading', locale)}</div>
             ) : sc && (
-              <div style={{ padding: '16px 20px 24px' }}>
+              <div style={{ padding: '4px 20px 24px' }}>
+                {/* ── Page heading ── */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, color: C.text }}>
+                    {t('showcase_editor_heading', locale)}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
+                    {t('showcase_editor_heading_desc', locale)}
+                  </div>
+                </div>
+
                 {/* ── Progress bar ── */}
-                <div style={{ background: C.card, borderRadius: 14, padding: '12px 16px', marginBottom: 16, border: `1px solid ${C.border}` }}>
+                <div style={{ background: C.card, borderRadius: 14, padding: '12px 16px', marginBottom: 12, border: `1px solid ${C.border}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{progressTitle}</span>
                     <span style={{ fontSize: 12, color: C.accent, fontWeight: 700 }}>{filledSections} / {totalSections}</span>
@@ -23572,16 +23614,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 </div>
 
                 {/* ── Cover ── */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t('showcase_section_cover', locale)}</div>
+                <div style={sectionCardStyle}>
+                  <div style={sectionHeadStyle}>
+                    <div style={sectionLeftStyle}>
+                      <span style={sectionIconStyle}>📷</span>
+                      <span style={sectionTitleStyle}>{t('showcase_section_cover', locale)}</span>
+                    </div>
                     {sectionStatus(!!sc.coverUrl)}
                   </div>
-                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_cover_desc', locale)}</div>
+                  <div style={sectionDescStyle}>{t('showcase_section_cover_desc', locale)}</div>
                   <div
                     onClick={() => { if (!showcaseCoverUploading && !sc.coverUrl) showcaseCoverInputRef.current?.click(); }}
                     style={{
-                      width: '100%', height: 160, borderRadius: 14, overflow: 'hidden',
+                      width: '100%', height: 140, borderRadius: 12, overflow: 'hidden', marginTop: 12,
                       cursor: sc.coverUrl ? 'default' : 'pointer',
                       background: sc.coverUrl
                         ? `url(${sc.coverUrl}) center/cover no-repeat`
@@ -23600,6 +23645,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         {t('showcase_section_cover_uploading', locale)}
                       </div>
                     )}
+                    {sc.coverUrl && !showcaseCoverUploading && (
+                      <div style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); showcaseCoverInputRef.current?.click(); }}
+                          style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+                        >
+                          {t('showcase_section_cover_replace', locale)}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowcaseCoverRemoveConfirm(true); }}
+                          aria-label={t('showcase_section_cover_remove', locale)}
+                          style={{ padding: '6px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', lineHeight: 1 }}
+                        >×</button>
+                      </div>
+                    )}
                   </div>
                   <input
                     ref={showcaseCoverInputRef} type="file" accept="image/*"
@@ -23610,54 +23670,60 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       if (file) await uploadShowcaseCover(file);
                     }}
                   />
-                  {sc.coverUrl && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <button
-                        onClick={() => showcaseCoverInputRef.current?.click()}
-                        style={{ flex: 1, padding: '10px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: C.surface, color: C.text, border: `1px solid ${C.border}` }}
-                      >
-                        {t('showcase_section_cover_replace', locale)}
-                      </button>
-                      <button
-                        onClick={() => setShowcaseCoverRemoveConfirm(true)}
-                        style={{ flex: 1, padding: '10px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: 'transparent', color: C.textMuted, border: `1px solid ${C.border}` }}
-                      >
-                        {t('showcase_section_cover_remove', locale)}
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 {/* ── Bio ── */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_bio', locale)}</div>
+                <div style={sectionCardStyle}>
+                  <div style={sectionHeadStyle}>
+                    <div style={sectionLeftStyle}>
+                      <span style={sectionIconStyle}>✍️</span>
+                      <span style={sectionTitleStyle}>{t('showcase_section_bio', locale)}</span>
+                    </div>
                     {sectionStatus(!!sc.bio)}
                   </div>
-                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_bio_desc', locale)}</div>
-                  <textarea
-                    value={sc.bio ?? ''}
-                    maxLength={180}
-                    placeholder={t('showcase_section_bio_placeholder', locale)}
-                    onChange={(e) => setShowcaseData({ ...sc, bio: e.target.value })}
-                    onBlur={() => saveField({ bio: sc.bio ?? null })}
-                    rows={3}
-                    style={{
-                      width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12,
-                      background: C.surface, color: C.text, fontSize: 14, fontFamily: font, lineHeight: 1.5,
-                      border: `1px solid ${C.border}`, outline: 'none', resize: 'vertical',
-                    }}
-                  />
+                  <div style={sectionDescStyle}>{t('showcase_section_bio_desc', locale)}</div>
+                  <div style={{ position: 'relative', marginTop: 12 }}>
+                    <textarea
+                      value={sc.bio ?? ''}
+                      maxLength={180}
+                      placeholder={t('showcase_section_bio_placeholder', locale)}
+                      onChange={(e) => setShowcaseData({ ...sc, bio: e.target.value })}
+                      onBlur={() => saveField({ bio: sc.bio ?? null })}
+                      rows={3}
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        padding: sc.bio ? '12px 40px 12px 14px' : '12px 14px',
+                        borderRadius: 10,
+                        background: C.surface, color: C.text, fontSize: 14, fontFamily: font, lineHeight: 1.5,
+                        border: `1px solid ${C.borderLight}`, outline: 'none', resize: 'none',
+                      }}
+                    />
+                    {sc.bio && (
+                      <button
+                        type="button"
+                        aria-label={t('showcase_input_clear', locale)}
+                        onClick={() => {
+                          setShowcaseData({ ...sc, bio: '' });
+                          saveField({ bio: null });
+                        }}
+                        style={clearBtnStyle}
+                      >×</button>
+                    )}
+                  </div>
                   <div style={{ textAlign: 'right', fontSize: 11, color: C.textMuted, marginTop: 4 }}>{t('showcase_bio_limit', locale, { count: String(bioLen) })}</div>
                 </div>
 
                 {/* ── Pinned wishlists ── */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_pinned', locale)}</div>
-                    {sectionStatus(pinnedIds.length > 0)}
+                <div style={sectionCardStyle}>
+                  <div style={sectionHeadStyle}>
+                    <div style={sectionLeftStyle}>
+                      <span style={sectionIconStyle}>📌</span>
+                      <span style={sectionTitleStyle}>{t('showcase_section_pinned', locale)}</span>
+                    </div>
+                    {sectionStatus(pinnedIds.length > 0, `${pinnedIds.length}/3`)}
                   </div>
-                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_pinned_desc', locale)}</div>
+                  <div style={sectionDescStyle}>{t('showcase_section_pinned_desc', locale)}</div>
+                  <div style={{ marginTop: 12 }}>
                   {showcaseAvailableWishlists.length === 0 ? (
                     <div style={{ padding: 16, background: C.surface, borderRadius: 12, textAlign: 'center', fontSize: 13, color: C.textMuted }}>
                       {t('showcase_section_pinned_empty', locale)}
@@ -23692,71 +23758,121 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       })}
                     </div>
                   )}
+                  </div>
                 </div>
 
                 {/* ── Preferences ── */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_preferences', locale)}</div>
+                <div style={sectionCardStyle}>
+                  <div style={sectionHeadStyle}>
+                    <div style={sectionLeftStyle}>
+                      <span style={sectionIconStyle}>💡</span>
+                      <span style={sectionTitleStyle}>{t('showcase_section_preferences', locale)}</span>
+                    </div>
                     {sectionStatus(!!sc.preferences)}
                   </div>
-                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_preferences_desc', locale)}</div>
-                  <textarea
-                    value={sc.preferences ?? ''}
-                    maxLength={300}
-                    placeholder={t('showcase_section_preferences_placeholder', locale)}
-                    onChange={(e) => setShowcaseData({ ...sc, preferences: e.target.value })}
-                    onBlur={() => saveField({ preferences: sc.preferences ?? null })}
-                    rows={4}
-                    style={{
-                      width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12,
-                      background: C.surface, color: C.text, fontSize: 14, fontFamily: font, lineHeight: 1.5,
-                      border: `1px solid ${C.border}`, outline: 'none', resize: 'vertical',
-                    }}
-                  />
+                  <div style={sectionDescStyle}>{t('showcase_section_preferences_desc', locale)}</div>
+                  <div style={{ position: 'relative', marginTop: 12 }}>
+                    <textarea
+                      value={sc.preferences ?? ''}
+                      maxLength={300}
+                      placeholder={t('showcase_section_preferences_placeholder', locale)}
+                      onChange={(e) => setShowcaseData({ ...sc, preferences: e.target.value })}
+                      onBlur={() => saveField({ preferences: sc.preferences ?? null })}
+                      rows={4}
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        padding: sc.preferences ? '12px 40px 12px 14px' : '12px 14px',
+                        borderRadius: 10,
+                        background: C.surface, color: C.text, fontSize: 14, fontFamily: font, lineHeight: 1.5,
+                        border: `1px solid ${C.borderLight}`, outline: 'none', resize: 'none',
+                      }}
+                    />
+                    {sc.preferences && (
+                      <button
+                        type="button"
+                        aria-label={t('showcase_input_clear', locale)}
+                        onClick={() => {
+                          setShowcaseData({ ...sc, preferences: '' });
+                          saveField({ preferences: null });
+                        }}
+                        style={clearBtnStyle}
+                      >×</button>
+                    )}
+                  </div>
                   <div style={{ textAlign: 'right', fontSize: 11, color: C.textMuted, marginTop: 4 }}>{t('showcase_pref_limit', locale, { count: String(prefLen) })}</div>
                 </div>
 
                 {/* ── Sizes ── */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_sizes', locale)}</div>
+                <div style={sectionCardStyle}>
+                  <div style={sectionHeadStyle}>
+                    <div style={sectionLeftStyle}>
+                      <span style={sectionIconStyle}>📏</span>
+                      <span style={sectionTitleStyle}>{t('showcase_section_sizes', locale)}</span>
+                    </div>
                     {sectionStatus(!!(sc.sizes.clothing || sc.sizes.shoes || sc.sizes.ring || sc.sizes.other))}
                   </div>
-                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_sizes_desc', locale)}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div style={sectionDescStyle}>{t('showcase_section_sizes_desc', locale)}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
                     {([
                       ['clothing', 'showcase_size_clothing', 'showcase_size_placeholder_clothing', 'sizeClothing'],
                       ['shoes', 'showcase_size_shoes', 'showcase_size_placeholder_shoes', 'sizeShoes'],
                       ['ring', 'showcase_size_ring', 'showcase_size_placeholder_ring', 'sizeRing'],
                       ['other', 'showcase_size_other', 'showcase_size_placeholder_other', 'sizeOther'],
-                    ] as const).map(([key, labelKey, phKey, patchKey]) => (
+                    ] as const).map(([key, labelKey, phKey, patchKey]) => {
+                      const sizeVal = (sc.sizes as any)[key] ?? '';
+                      return (
                       <div key={key}>
                         <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4, fontWeight: 600 }}>{t(labelKey, locale)}</div>
-                        <input
-                          type="text"
-                          value={(sc.sizes as any)[key] ?? ''}
-                          placeholder={t(phKey, locale)}
-                          onChange={(e) => setShowcaseData({ ...sc, sizes: { ...sc.sizes, [key]: e.target.value } })}
-                          onBlur={() => saveField({ [patchKey]: ((sc.sizes as any)[key] as string)?.trim() || null } as any)}
-                          style={{
-                            width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10,
-                            background: C.surface, color: C.text, fontSize: 14, fontFamily: font,
-                            border: `1px solid ${C.border}`, outline: 'none',
-                          }}
-                        />
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type="text"
+                            value={sizeVal}
+                            placeholder={t(phKey, locale)}
+                            onChange={(e) => setShowcaseData({ ...sc, sizes: { ...sc.sizes, [key]: e.target.value } })}
+                            onBlur={() => saveField({ [patchKey]: (sizeVal as string)?.trim() || null } as any)}
+                            style={{
+                              width: '100%', boxSizing: 'border-box',
+                              padding: sizeVal ? '10px 32px 10px 12px' : '10px 12px',
+                              borderRadius: 10,
+                              background: C.surface, color: C.text, fontSize: 14, fontFamily: font,
+                              border: `1px solid ${C.borderLight}`, outline: 'none',
+                            }}
+                          />
+                          {sizeVal && (
+                            <button
+                              type="button"
+                              aria-label={t('showcase_input_clear', locale)}
+                              onClick={() => {
+                                setShowcaseData({ ...sc, sizes: { ...sc.sizes, [key]: '' } });
+                                saveField({ [patchKey]: null } as any);
+                              }}
+                              style={{
+                                position: 'absolute', top: '50%', right: 6, transform: 'translateY(-50%)',
+                                width: 22, height: 22, borderRadius: 11, border: 'none',
+                                background: 'rgba(255,255,255,0.08)', color: C.textMuted,
+                                cursor: 'pointer', fontFamily: font, fontSize: 13,
+                                padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                              }}
+                            >×</button>
+                          )}
+                        </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 </div>
 
                 {/* ── Brands ── */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_brands', locale)}</div>
-                    {sectionStatus((sc.brands?.length ?? 0) > 0)}
+                <div style={sectionCardStyle}>
+                  <div style={sectionHeadStyle}>
+                    <div style={sectionLeftStyle}>
+                      <span style={sectionIconStyle}>✨</span>
+                      <span style={sectionTitleStyle}>{t('showcase_section_brands', locale)}</span>
+                    </div>
+                    {sectionStatus((sc.brands?.length ?? 0) > 0, `${sc.brands?.length ?? 0}/10`)}
                   </div>
-                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_brands_desc', locale)}</div>
+                  <div style={sectionDescStyle}>{t('showcase_section_brands_desc', locale)}</div>
+                  <div style={{ marginTop: 12 }}>
                   {(sc.brands?.length ?? 0) > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                       {sc.brands.map((b, i) => (
@@ -23829,31 +23945,50 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   {sc.brands.length >= 10 && (
                     <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>{t('showcase_section_brands_limit', locale)}</div>
                   )}
+                  </div>
                 </div>
 
                 {/* ── Anti-gifts (managed via global dont-gift sheet) ── */}
-                <div
-                  onClick={() => { void openDontGiftEdit(); }}
-                  style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: 14, borderRadius: 14, background: C.card, cursor: 'pointer',
-                    border: `1px solid ${C.border}`, marginBottom: 20,
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_antigift', locale)}</div>
-                      {sectionStatus(hasAntiGift)}
+                <div style={sectionCardStyle}>
+                  <div style={sectionHeadStyle}>
+                    <div style={sectionLeftStyle}>
+                      <span style={sectionIconStyle}>🚫</span>
+                      <span style={sectionTitleStyle}>{t('showcase_section_antigift', locale)}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: C.textMuted }}>{t('showcase_section_antigift_desc', locale)}</div>
+                    {sectionStatus(hasAntiGift, t('showcase_section_configured', locale))}
                   </div>
-                  <div style={{ color: C.accent, fontSize: 13, fontWeight: 600, padding: '6px 10px', borderRadius: 10, background: 'rgba(124,106,255,0.12)' }}>
-                    {t('showcase_section_antigift_cta', locale)}
-                  </div>
+                  <div style={sectionDescStyle}>{t('showcase_section_antigift_desc', locale)}</div>
+                  <button
+                    type="button"
+                    onClick={() => { void openDontGiftEdit(); }}
+                    style={{
+                      marginTop: 12, width: '100%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: font,
+                      background: C.surface, color: C.text, border: `1px solid ${C.borderLight}`,
+                      fontSize: 14, fontWeight: 600, textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ color: C.accent }}>{t('showcase_section_antigift_cta', locale)}</span>
+                    <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>
+                  </button>
                 </div>
 
-                {/* ── Publish / save button (inline, not fixed) ── */}
-                <div style={{ marginTop: 12 }}>
+                {/* ── Preview + Save buttons ── */}
+                <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => { trackEvent('showcase.preview_opened'); setScreen('showcase-preview'); }}
+                    disabled={!hasAnyContent}
+                    style={{
+                      ...btnSecondary,
+                      background: hasAnyContent ? C.accentSoft : C.surface,
+                      color: hasAnyContent ? C.accent : C.textMuted,
+                      cursor: hasAnyContent ? 'pointer' : 'default',
+                    }}
+                  >
+                    {t('showcase_editor_preview_cta', locale)}
+                  </button>
                   <button
                     onClick={async () => {
                       await saveShowcase({ enabled: true }, { publish: !sc.enabled });
@@ -23969,104 +24104,204 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ width: 60 }} />
             </div>
 
-            {sc && (
+            {sc && (() => {
+              const hasAntiGift = !!dontGiftData && (
+                (dontGiftData.presets?.length ?? 0) > 0 ||
+                (dontGiftData.customItems?.length ?? 0) > 0 ||
+                !!dontGiftData.comment
+              );
+              const scSectionStyle: React.CSSProperties = { padding: '0 20px', marginBottom: 20 };
+              const scSectionTitleStyle: React.CSSProperties = {
+                fontSize: 13, fontWeight: 600, textTransform: 'uppercase',
+                letterSpacing: '0.06em', color: C.textMuted, marginBottom: 12,
+              };
+              return (
               <div>
-                {/* Hero A — immersive cover */}
+                {/* Hero (Visual): cover + left-aligned avatar + info ─ */}
                 <div style={{ position: 'relative' }}>
                   {sc.coverUrl ? (
-                    <div style={{ position: 'relative', width: '100%', height: 260, backgroundImage: `url(${sc.coverUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+                    <div style={{ position: 'relative', width: '100%', height: 220, backgroundImage: `url(${sc.coverUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
                       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(27,27,31,0.18) 0%, rgba(27,27,31,0.72) 70%, rgba(27,27,31,1) 100%)' }} />
                     </div>
                   ) : (
-                    <div style={{ position: 'relative', width: '100%', height: 200, background: 'linear-gradient(135deg, #2a1f5e 0%, #1a1040 40%, #3d2870 100%)' }}>
+                    <div style={{ position: 'relative', width: '100%', height: 180, background: 'linear-gradient(135deg, #2a1f5e 0%, #1a1040 40%, #3d2870 100%)' }}>
                       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: `linear-gradient(to top, ${C.bg} 0%, transparent 100%)` }} />
                     </div>
                   )}
-                  <div style={{ position: 'relative', marginTop: sc.coverUrl ? -80 : -70, padding: '0 20px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ padding: '0 20px', marginTop: -44, position: 'relative', zIndex: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14 }}>
                       <div style={{
-                        width: 92, height: 92, borderRadius: '50%', overflow: 'hidden',
-                        background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        border: `3px solid ${C.bg}`, boxShadow: `0 6px 24px rgba(0,0,0,0.5)`,
+                        width: 72, height: 72, borderRadius: '50%', overflow: 'hidden',
+                        background: `linear-gradient(135deg, ${C.accent}, #a78bfa)`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: `3px solid ${C.bg}`, flexShrink: 0,
                       }}>
                         {dg?.avatarUrl
                           ? <img src={dg.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : <span style={{ fontSize: 42 }}>👤</span>}
+                          : <span style={{ fontSize: 32 }}>👤</span>}
                       </div>
-                      <div style={{ fontSize: 22, fontWeight: 800, textAlign: 'center', marginTop: 12 }}>{dg?.displayName || dg?.username || ''}</div>
-                      {dg?.username && <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{dg.username}</div>}
-                      {(sc.bio || dg?.bio) && (
-                        <div style={{ fontSize: 14, color: C.textSec, marginTop: 10, textAlign: 'center', lineHeight: 1.5, maxWidth: 440 }}>
-                          {sc.bio || dg?.bio}
+                      <div style={{ paddingBottom: 4, minWidth: 0 }}>
+                        <div style={{ fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{dg?.displayName || dg?.username || ''}</span>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center',
+                            background: `linear-gradient(135deg, ${C.accent} 0%, #a78bfa 100%)`,
+                            color: '#fff', fontSize: 10, fontWeight: 700,
+                            padding: '2px 8px', borderRadius: 10, letterSpacing: '0.04em',
+                          }}>PRO</span>
                         </div>
-                      )}
+                        {dg?.username && <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{dg.username}</div>}
+                      </div>
                     </div>
+                    {(sc.bio || dg?.bio) && (
+                      <div style={{ fontSize: 14, color: C.textSec, marginTop: 12, lineHeight: 1.45 }}>
+                        {sc.bio || dg?.bio}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div style={{ padding: '24px 20px 40px' }}>
-                  {pinnedWls.length > 0 && (
-                    <div style={{ marginBottom: 24 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {pinnedWls.map((wl) => (
-                          <div key={wl.id} style={{ background: `linear-gradient(135deg, ${C.accent}1A, ${C.card})`, borderRadius: 16, padding: 16, border: `1px solid ${C.accent}35`, position: 'relative' }}>
-                            <div style={{ position: 'absolute', top: 10, right: 12, fontSize: 10, color: C.accent, background: `${C.accent}20`, padding: '2px 7px', borderRadius: 6, fontWeight: 700 }}>★</div>
-                            <div style={{ fontSize: 16, fontWeight: 700 }}>{wl.title}</div>
-                            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{wl.itemCount} {t('wishes_count_short', locale)}</div>
+                <div style={{ height: 24 }} />
+
+                {/* ── Pinned wishlists ── */}
+                {pinnedWls.length > 0 && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>📌 {t('showcase_public_featured_title', locale)}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {pinnedWls.map((wl) => (
+                        <div key={wl.id} style={{
+                          background: C.surface, borderRadius: 12, padding: '14px 16px',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          border: `1px solid ${C.border}`,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                            <div style={{
+                              width: 36, height: 36, borderRadius: 10,
+                              background: C.accentSoft, color: C.accent,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 18, flexShrink: 0,
+                            }}>📌</div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wl.title}</div>
+                              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{wl.itemCount} {t('wishes_count_short', locale)}</div>
+                            </div>
                           </div>
+                          <span style={{ color: C.textMuted, fontSize: 18, flexShrink: 0, marginLeft: 8 }}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Preferences ── */}
+                {sc.preferences && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>💡 {t('showcase_public_preferences_title', locale)}</div>
+                    <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{sc.preferences}</div>
+                  </div>
+                )}
+
+                {/* ── Sizes ── */}
+                {hasSizes && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>📏 {t('showcase_public_sizes_title', locale)}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {([
+                        ['clothing', sc.sizes.clothing],
+                        ['shoes', sc.sizes.shoes],
+                        ['ring', sc.sizes.ring],
+                        ['other', sc.sizes.other],
+                      ] as const).filter(([, v]) => !!v).map(([key, value]) => (
+                        <div key={key} style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', border: `1px solid ${C.border}` }}>
+                          <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{t(`showcase_size_${key}` as any, locale)}</div>
+                          <div style={{ fontSize: 15, fontWeight: 600 }}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Brands ── */}
+                {sc.brands.length > 0 && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>✨ {t('showcase_public_brands_title', locale)}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {sc.brands.map((b, i) => (
+                        <span key={i} style={{
+                          display: 'inline-flex', alignItems: 'center',
+                          padding: '6px 14px', borderRadius: 20,
+                          fontSize: 13, fontWeight: 500,
+                          background: C.accentSoft, color: C.accent,
+                        }}>{b}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Anti-gifts (from dontGiftData, preview own) ── */}
+                {hasAntiGift && dontGiftData && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>🚫 {t('showcase_public_antigift_title', locale)}</div>
+                    {(dontGiftData.presets.length > 0 || dontGiftData.customItems.length > 0) && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {dontGiftData.presets.map((key) => (
+                          <span key={`p-${key}`} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            padding: '6px 12px', borderRadius: 20, fontSize: 13,
+                            background: 'rgba(248,113,113,0.12)', color: C.red,
+                            border: '1px solid rgba(248,113,113,0.15)',
+                          }}>
+                            <span>{DONT_GIFT_PRESET_EMOJIS[key] || '🚫'}</span>
+                            {t(`dont_gift_preset_${key}` as any, locale)}
+                          </span>
+                        ))}
+                        {dontGiftData.customItems.map((item, i) => (
+                          <span key={`c-${i}`} style={{
+                            display: 'inline-flex', alignItems: 'center',
+                            padding: '6px 12px', borderRadius: 20, fontSize: 13,
+                            background: 'rgba(248,113,113,0.12)', color: C.red,
+                            border: '1px solid rgba(248,113,113,0.15)',
+                          }}>{item}</span>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                    {dontGiftData.comment && (
+                      <div style={{
+                        fontSize: 13, color: C.textSec, lineHeight: 1.45,
+                        marginTop: 10, padding: '10px 14px',
+                        background: C.surface, borderRadius: 10,
+                        borderLeft: `3px solid ${C.red}`,
+                      }}>{dontGiftData.comment}</div>
+                    )}
+                  </div>
+                )}
 
-                  {otherWls.length > 0 && (
-                    <>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-                        {t('showcase_public_wishlists_title', locale)}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {otherWls.map((wl) => (
-                          <div key={wl.id} style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}` }}>
-                            <div style={{ fontSize: 16, fontWeight: 700 }}>{wl.title}</div>
-                            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{wl.itemCount} {t('wishes_count_short', locale)}</div>
+                {/* ── Other wishlists ── */}
+                {otherWls.length > 0 && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>{t('showcase_public_other_title', locale)}</div>
+                    <div style={{ background: C.card, borderRadius: 12, padding: '4px 16px', border: `1px solid ${C.border}` }}>
+                      {otherWls.map((wl, i) => (
+                        <div key={wl.id} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '12px 0',
+                          borderBottom: i < otherWls.length - 1 ? `1px solid ${C.border}` : 'none',
+                        }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wl.title}</div>
+                            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{wl.itemCount} {t('wishes_count_short', locale)}</div>
                           </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                  {sc.preferences && (
-                    <div style={{ marginTop: 24 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>{t('showcase_public_preferences_title', locale)}</div>
-                      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{sc.preferences}</div>
+                          <span style={{ color: C.textMuted, fontSize: 16, marginLeft: 8 }}>›</span>
+                        </div>
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {hasSizes && (
-                    <div style={{ marginTop: 24 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>{t('showcase_public_sizes_title', locale)}</div>
-                      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {sc.sizes.clothing && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_clothing', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sc.sizes.clothing}</span></div>}
-                        {sc.sizes.shoes && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_shoes', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sc.sizes.shoes}</span></div>}
-                        {sc.sizes.ring && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_ring', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sc.sizes.ring}</span></div>}
-                        {sc.sizes.other && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_other', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sc.sizes.other}</span></div>}
-                      </div>
-                    </div>
-                  )}
-
-                  {sc.brands.length > 0 && (
-                    <div style={{ marginTop: 24 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>{t('showcase_public_brands_title', locale)}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {sc.brands.map((b, i) => (
-                          <span key={i} style={{ padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: C.surface, border: `1px solid ${C.border}`, color: C.text }}>{b}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <div style={{ height: 20 }} />
               </div>
-            )}
+              );
+            })()}
           </div>
         );
       })()}
@@ -24112,13 +24347,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               const nonPinnedWishlists = pp.wishlists.filter((wl) => !pinnedIds.has(wl.id));
               const sizes = showcase?.sizes;
               const hasSizes = !!sizes && (!!sizes.clothing || !!sizes.shoes || !!sizes.ring || !!sizes.other);
+              const scSectionStyle: React.CSSProperties = { padding: '0 20px', marginBottom: 20 };
+              const scSectionTitleStyle: React.CSSProperties = {
+                fontSize: 13, fontWeight: 600, textTransform: 'uppercase',
+                letterSpacing: '0.06em', color: C.textMuted, marginBottom: 12,
+              };
               return (
               <div style={{ padding: 0 }}>
-                {/* ── Hero (Variant A — immersive cover) ── */}
+                {/* ── Hero (Visual): cover + left-aligned avatar + info ── */}
                 <div style={{ position: 'relative' }}>
                   {hasShowcase && showcase?.coverUrl ? (
                     <div style={{
-                      position: 'relative', width: '100%', height: 260,
+                      position: 'relative', width: '100%', height: 220,
                       backgroundImage: `url(${showcase.coverUrl})`,
                       backgroundSize: 'cover', backgroundPosition: 'center',
                     }}>
@@ -24128,180 +24368,218 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       }} />
                     </div>
                   ) : (
-                    <div style={{ position: 'relative', width: '100%', height: 200, background: 'linear-gradient(135deg, #2a1f5e 0%, #1a1040 40%, #3d2870 100%)' }}>
+                    <div style={{ position: 'relative', width: '100%', height: 180, background: 'linear-gradient(135deg, #2a1f5e 0%, #1a1040 40%, #3d2870 100%)' }}>
                       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: `linear-gradient(to top, ${C.bg} 0%, transparent 100%)` }} />
                     </div>
                   )}
-                  <div style={{ position: 'relative', marginTop: hasShowcase && showcase?.coverUrl ? -80 : -70, padding: '0 20px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ padding: '0 20px', marginTop: -44, position: 'relative', zIndex: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14 }}>
                       <div style={{
-                        width: 92, height: 92, borderRadius: '50%', overflow: 'hidden',
-                        background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        border: `3px solid ${C.bg}`,
-                        boxShadow: `0 6px 24px rgba(0,0,0,0.5)`,
+                        width: 72, height: 72, borderRadius: '50%', overflow: 'hidden',
+                        background: `linear-gradient(135deg, ${C.accent}, #a78bfa)`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: `3px solid ${C.bg}`, flexShrink: 0,
                       }}>
                         {pp.profile.avatarUrl
                           ? <img src={pp.profile.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : <span style={{ fontSize: 42 }}>👤</span>}
+                          : <span style={{ fontSize: 32 }}>👤</span>}
                       </div>
-                      <div style={{ fontSize: 22, fontWeight: 800, textAlign: 'center', marginTop: 12 }}>{pp.profile.displayName || pp.profile.username || publicProfileUsername}</div>
-                      {pp.profile.username && <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{pp.profile.username}</div>}
-                      {(showcase?.bio || pp.profile.bio) && (
-                        <div style={{ fontSize: 14, color: C.textSec, marginTop: 10, textAlign: 'center', lineHeight: 1.5, maxWidth: 440 }}>
-                          {showcase?.bio || pp.profile.bio}
+                      <div style={{ paddingBottom: 4, minWidth: 0 }}>
+                        <div style={{ fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pp.profile.displayName || pp.profile.username || publicProfileUsername}</span>
+                          {hasShowcase && (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center',
+                              background: `linear-gradient(135deg, ${C.accent} 0%, #a78bfa 100%)`,
+                              color: '#fff', fontSize: 10, fontWeight: 700,
+                              padding: '2px 8px', borderRadius: 10, letterSpacing: '0.04em',
+                            }}>PRO</span>
+                          )}
                         </div>
-                      )}
-                      {isOwn && <div style={{ fontSize: 12, color: C.accent, marginTop: 10, background: C.accentSoft, padding: '4px 12px', borderRadius: 8 }}>{t('public_profile_this_is_you', locale)}</div>}
+                        {pp.profile.username && <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{pp.profile.username}</div>}
+                      </div>
                     </div>
+                    {(showcase?.bio || pp.profile.bio) && (
+                      <div style={{ fontSize: 14, color: C.textSec, marginTop: 12, lineHeight: 1.45 }}>
+                        {showcase?.bio || pp.profile.bio}
+                      </div>
+                    )}
+                    {isOwn && (
+                      <div style={{ fontSize: 12, color: C.accent, marginTop: 12, background: C.accentSoft, padding: '4px 12px', borderRadius: 8, display: 'inline-block' }}>
+                        {t('public_profile_this_is_you', locale)}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div style={{ padding: '24px 20px 40px' }}>
-                  {/* ── Pinned wishlists ── */}
-                  {hasShowcase && showcase && showcase.pinned.length > 0 && (
-                    <div style={{ marginBottom: 24 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {showcase.pinned.map((wl) => (
-                          <div key={wl.id}
-                            onClick={() => {
-                              trackEvent('public_profile.wishlist_opened', { source: 'pinned' });
-                              void loadGuestWishlist(wl.slug).then(() => setScreen('guest-view')).catch(() => {});
-                            }}
-                            style={{
-                              background: `linear-gradient(135deg, ${C.accent}1A, ${C.card})`,
-                              borderRadius: 16, padding: 16, cursor: 'pointer',
-                              border: `1px solid ${C.accent}35`, position: 'relative',
-                            }}>
-                            <div style={{ position: 'absolute', top: 10, right: 12, fontSize: 10, color: C.accent, background: `${C.accent}20`, padding: '2px 7px', borderRadius: 6, fontWeight: 700, letterSpacing: '0.04em' }}>★</div>
-                            <div style={{ fontSize: 16, fontWeight: 700 }}>{wl.title}</div>
-                            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
-                              {wl.itemCount} {t('wishes_count_short', locale)} · {wl.reservedCount} {t('reserved_count_short', locale)}
-                            </div>
-                            {wl.itemCount > 0 && (
-                              <div style={{ height: 4, borderRadius: 100, background: C.surface, marginTop: 8 }}>
-                                <div style={{ height: '100%', borderRadius: 100, background: `linear-gradient(90deg, ${C.accent}, ${C.green})`, width: `${Math.min(100, (wl.reservedCount / wl.itemCount) * 100)}%`, transition: 'width 0.5s' }} />
+                <div style={{ height: 24 }} />
+
+                {/* ── Pinned wishlists ── */}
+                {hasShowcase && showcase && showcase.pinned.length > 0 && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>📌 {t('showcase_public_featured_title', locale)}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {showcase.pinned.map((wl) => (
+                        <div key={wl.id}
+                          onClick={() => {
+                            trackEvent('public_profile.wishlist_opened', { source: 'pinned' });
+                            void loadGuestWishlist(wl.slug).then(() => setScreen('guest-view')).catch(() => {});
+                          }}
+                          style={{
+                            background: C.surface, borderRadius: 12, padding: '14px 16px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            border: `1px solid ${C.border}`, cursor: 'pointer',
+                          }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                            <div style={{
+                              width: 36, height: 36, borderRadius: 10,
+                              background: C.accentSoft, color: C.accent,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 18, flexShrink: 0,
+                            }}>📌</div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wl.title}</div>
+                              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                                {wl.itemCount} {t('wishes_count_short', locale)}
+                                {wl.reservedCount > 0 ? ` · ${wl.reservedCount} ${t('reserved_count_short', locale)}` : ''}
                               </div>
-                            )}
+                            </div>
                           </div>
+                          <span style={{ color: C.textMuted, fontSize: 18, flexShrink: 0, marginLeft: 8 }}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Preferences ── */}
+                {hasShowcase && showcase?.preferences && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>💡 {t('showcase_public_preferences_title', locale)}</div>
+                    <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                      {showcase.preferences}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Sizes ── */}
+                {hasShowcase && hasSizes && sizes && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>📏 {t('showcase_public_sizes_title', locale)}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {([
+                        ['clothing', sizes.clothing],
+                        ['shoes', sizes.shoes],
+                        ['ring', sizes.ring],
+                        ['other', sizes.other],
+                      ] as const).filter(([, v]) => !!v).map(([key, value]) => (
+                        <div key={key} style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', border: `1px solid ${C.border}` }}>
+                          <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{t(`showcase_size_${key}` as any, locale)}</div>
+                          <div style={{ fontSize: 15, fontWeight: 600 }}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Brands ── */}
+                {hasShowcase && showcase && showcase.brands.length > 0 && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>✨ {t('showcase_public_brands_title', locale)}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {showcase.brands.map((b, i) => (
+                        <span key={i} style={{
+                          display: 'inline-flex', alignItems: 'center',
+                          padding: '6px 14px', borderRadius: 20,
+                          fontSize: 13, fontWeight: 500,
+                          background: C.accentSoft, color: C.accent,
+                        }}>{b}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Anti-gifts ── */}
+                {hasShowcase && showcase?.antiGift && (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>🚫 {t('showcase_public_antigift_title', locale)}</div>
+                    {(showcase.antiGift.presets.length > 0 || showcase.antiGift.customItems.length > 0) && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {showcase.antiGift.presets.map((key) => (
+                          <span key={`p-${key}`} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            padding: '6px 12px', borderRadius: 20, fontSize: 13,
+                            background: 'rgba(248,113,113,0.12)', color: C.red,
+                            border: '1px solid rgba(248,113,113,0.15)',
+                          }}>
+                            <span>{DONT_GIFT_PRESET_EMOJIS[key] || '🚫'}</span>
+                            {t(`dont_gift_preset_${key}` as any, locale)}
+                          </span>
+                        ))}
+                        {showcase.antiGift.customItems.map((item, i) => (
+                          <span key={`c-${i}`} style={{
+                            display: 'inline-flex', alignItems: 'center',
+                            padding: '6px 12px', borderRadius: 20, fontSize: 13,
+                            background: 'rgba(248,113,113,0.12)', color: C.red,
+                            border: '1px solid rgba(248,113,113,0.15)',
+                          }}>{item}</span>
                         ))}
                       </div>
-                    </div>
-                  )}
-
-                  {/* ── Other wishlists ── */}
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-                    {hasShowcase && showcase && showcase.pinned.length > 0
-                      ? t('showcase_public_wishlists_title', locale)
-                      : t('public_profile_wishlists_title', locale)}
+                    )}
+                    {showcase.antiGift.comment && (
+                      <div style={{
+                        fontSize: 13, color: C.textSec, lineHeight: 1.45,
+                        marginTop: 10, padding: '10px 14px',
+                        background: C.surface, borderRadius: 10,
+                        borderLeft: `3px solid ${C.red}`,
+                        whiteSpace: 'pre-wrap',
+                      }}>{showcase.antiGift.comment}</div>
+                    )}
                   </div>
+                )}
 
-                  {nonPinnedWishlists.length === 0 && (!hasShowcase || (showcase?.pinned?.length ?? 0) === 0) ? (
+                {/* ── Other (non-pinned) wishlists ── */}
+                {nonPinnedWishlists.length === 0 && (!hasShowcase || (showcase?.pinned?.length ?? 0) === 0) ? (
+                  <div style={{ padding: '0 20px 20px' }}>
                     <div style={{ padding: '32px 16px', textAlign: 'center', background: C.surface, borderRadius: 14 }}>
                       <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
                       <div style={{ fontSize: 14, color: C.textMuted }}>{t('public_profile_no_wishlists', locale)}</div>
                     </div>
-                  ) : nonPinnedWishlists.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {nonPinnedWishlists.map(wl => (
+                  </div>
+                ) : nonPinnedWishlists.length > 0 ? (
+                  <div style={scSectionStyle}>
+                    <div style={scSectionTitleStyle}>
+                      {hasShowcase && showcase && showcase.pinned.length > 0
+                        ? t('showcase_public_other_title', locale)
+                        : t('public_profile_wishlists_title', locale)}
+                    </div>
+                    <div style={{ background: C.card, borderRadius: 12, padding: '4px 16px', border: `1px solid ${C.border}` }}>
+                      {nonPinnedWishlists.map((wl, i) => (
                         <div key={wl.id}
                           onClick={() => {
                             trackEvent('public_profile.wishlist_opened', { source: 'list' });
                             void loadGuestWishlist(wl.slug).then(() => setScreen('guest-view')).catch(() => {});
                           }}
                           style={{
-                            background: C.card, borderRadius: 14, padding: 16, cursor: 'pointer',
-                            border: `1px solid ${C.border}`,
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            padding: '12px 0', cursor: 'pointer',
+                            borderBottom: i < nonPinnedWishlists.length - 1 ? `1px solid ${C.border}` : 'none',
                           }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ fontSize: 16, fontWeight: 700 }}>{wl.title}</div>
-                            <span style={{ fontSize: 18, color: C.textMuted }}>›</span>
-                          </div>
-                          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
-                            {wl.itemCount} {t('wishes_count_short', locale)} · {wl.reservedCount} {t('reserved_count_short', locale)}
-                          </div>
-                          {wl.itemCount > 0 && (
-                            <div style={{ height: 4, borderRadius: 100, background: C.surface, marginTop: 8 }}>
-                              <div style={{ height: '100%', borderRadius: 100, background: `linear-gradient(90deg, ${C.accent}, ${C.green})`, width: `${Math.min(100, (wl.reservedCount / wl.itemCount) * 100)}%`, transition: 'width 0.5s' }} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wl.title}</div>
+                            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                              {wl.itemCount} {t('wishes_count_short', locale)}
+                              {wl.reservedCount > 0 ? ` · ${wl.reservedCount} ${t('reserved_count_short', locale)}` : ''}
                             </div>
-                          )}
+                          </div>
+                          <span style={{ color: C.textMuted, fontSize: 16, marginLeft: 8 }}>›</span>
                         </div>
                       ))}
                     </div>
-                  ) : null}
+                  </div>
+                ) : null}
 
-                  {/* ── Preferences ── */}
-                  {hasShowcase && showcase?.preferences && (
-                    <div style={{ marginTop: 24 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                        {t('showcase_public_preferences_title', locale)}
-                      </div>
-                      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                        {showcase.preferences}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Sizes ── */}
-                  {hasShowcase && hasSizes && sizes && (
-                    <div style={{ marginTop: 24 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                        {t('showcase_public_sizes_title', locale)}
-                      </div>
-                      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {sizes.clothing && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_clothing', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sizes.clothing}</span></div>}
-                        {sizes.shoes && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_shoes', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sizes.shoes}</span></div>}
-                        {sizes.ring && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_ring', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sizes.ring}</span></div>}
-                        {sizes.other && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_other', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sizes.other}</span></div>}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Brands ── */}
-                  {hasShowcase && showcase && showcase.brands.length > 0 && (
-                    <div style={{ marginTop: 24 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                        {t('showcase_public_brands_title', locale)}
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {showcase.brands.map((b, i) => (
-                          <span key={i} style={{
-                            padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-                            background: C.surface, border: `1px solid ${C.border}`, color: C.text,
-                          }}>{b}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Anti-gifts ── */}
-                  {hasShowcase && showcase?.antiGift && (
-                    <div style={{ marginTop: 24 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                        {t('showcase_public_antigift_title', locale)}
-                      </div>
-                      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}` }}>
-                        {(showcase.antiGift.presets.length > 0 || showcase.antiGift.customItems.length > 0) && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: showcase.antiGift.comment ? 10 : 0 }}>
-                            {showcase.antiGift.presets.map((key) => (
-                              <span key={`p-${key}`} style={{ padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: C.surface, border: `1px solid ${C.border}`, color: C.text, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                                <span>{DONT_GIFT_PRESET_EMOJIS[key] || '🚫'}</span>
-                                {t(`dont_gift_preset_${key}` as any, locale)}
-                              </span>
-                            ))}
-                            {showcase.antiGift.customItems.map((item, i) => (
-                              <span key={`c-${i}`} style={{ padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: C.surface, border: `1px solid ${C.border}`, color: C.text }}>{item}</span>
-                            ))}
-                          </div>
-                        )}
-                        {showcase.antiGift.comment && (
-                          <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                            {showcase.antiGift.comment}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <div style={{ height: 20 }} />
               </div>
               );
             })()}
