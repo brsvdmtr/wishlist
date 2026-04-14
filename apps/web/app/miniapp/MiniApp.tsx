@@ -296,6 +296,16 @@ type SubscribedWishlist = {
   unreadItemCounts: Record<string, number>;
 };
 
+type SubscribedProfile = {
+  id: string; // profile subscription id
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  isPro: boolean;
+  hasShowcase: boolean;
+  createdAt: string;
+};
+
 type ReservationMeta = {
   note: string | null;
   purchased: boolean;
@@ -4044,6 +4054,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [guestUnreadItemCounts, setGuestUnreadItemCounts] = useState<Record<string, number>>({});
   // Curated selection subscriptions (lite-wishlists saved by user)
   const [curatedSubs, setCuratedSubs] = useState<{ id: string; shareToken: string; title: string; itemCount: number; ownerName: string | null; expiresAt: string }[]>([]);
+  // Profile subscriptions — "follow another user's showcase" (separate from wishlist subs)
+  const [profileSubs, setProfileSubs] = useState<SubscribedProfile[]>([]);
+  const [profileSubsLoading, setProfileSubsLoading] = useState(false);
+  // Subscribe CTA state on the public-profile screen
+  const [publicProfileSubscribed, setPublicProfileSubscribed] = useState(false);
+  const [publicProfileSubInFlight, setPublicProfileSubInFlight] = useState(false);
 
   // Guest filter & sort state
   const [guestBudgetMax, setGuestBudgetMax] = useState<number | null>(null);
@@ -4924,10 +4940,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const loadSubscriptions = useCallback(async () => {
     setSubscriptionsLoading(true);
+    setProfileSubsLoading(true);
     try {
-      const [subRes, csRes] = await Promise.all([
+      const [subRes, csRes, psRes] = await Promise.all([
         tgFetch('/tg/me/subscriptions'),
         tgFetch('/tg/selections/subscribed'),
+        tgFetch('/tg/me/profile-subscriptions'),
       ]);
       if (subRes.ok) {
         const json = await subRes.json() as { subscriptions: SubscribedWishlist[] };
@@ -4938,12 +4956,77 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const csJson = await csRes.json() as { selections: typeof curatedSubs };
         setCuratedSubs(csJson.selections);
       }
+      if (psRes.ok) {
+        const psJson = await psRes.json() as { subscriptions: SubscribedProfile[] };
+        setProfileSubs(psJson.subscriptions);
+      }
     } catch {
       // silent
     } finally {
       setSubscriptionsLoading(false);
+      setProfileSubsLoading(false);
     }
   }, [tgFetch]);
+
+  /** Check whether current user follows a profile (for CTA state on public-profile screen) */
+  const loadProfileSubscribeStatus = useCallback(async (username: string) => {
+    try {
+      const r = await tgFetch(`/tg/profiles/${encodeURIComponent(username)}/subscribe`);
+      if (!r.ok) return;
+      const json = await r.json() as { subscribed: boolean };
+      setPublicProfileSubscribed(!!json.subscribed);
+    } catch {
+      // silent
+    }
+  }, [tgFetch]);
+
+  /** Subscribe to a profile (from public-profile CTA). Optimistic UI. */
+  const subscribeToProfile = useCallback(async (username: string) => {
+    if (publicProfileSubInFlight) return;
+    setPublicProfileSubInFlight(true);
+    setPublicProfileSubscribed(true); // optimistic
+    try {
+      const r = await tgFetch(`/tg/profiles/${encodeURIComponent(username)}/subscribe`, { method: 'POST' });
+      if (!r.ok) {
+        setPublicProfileSubscribed(false);
+        if (r.status === 403) {
+          pushToast(t('public_profile_subscribe_closed', locale), 'error');
+        } else {
+          pushToast(t('error_generic', locale), 'error');
+        }
+        return;
+      }
+      pushToast(t('public_profile_subscribe_toast', locale), 'success');
+      trackEvent('profile_subscribe', { username });
+    } catch {
+      setPublicProfileSubscribed(false);
+    } finally {
+      setPublicProfileSubInFlight(false);
+    }
+  }, [tgFetch, publicProfileSubInFlight, pushToast, locale, trackEvent]);
+
+  /** Unsubscribe from a profile. Optimistic UI. */
+  const unsubscribeFromProfile = useCallback(async (username: string) => {
+    if (publicProfileSubInFlight) return;
+    setPublicProfileSubInFlight(true);
+    setPublicProfileSubscribed(false); // optimistic
+    try {
+      const r = await tgFetch(`/tg/profiles/${encodeURIComponent(username)}/subscribe`, { method: 'DELETE' });
+      if (!r.ok) {
+        setPublicProfileSubscribed(true);
+        pushToast(t('error_generic', locale), 'error');
+        return;
+      }
+      pushToast(t('public_profile_unsubscribe_toast', locale), 'info');
+      // Drop from the list if present (so returning to home reflects state)
+      setProfileSubs((prev) => prev.filter((p) => p.username.toLowerCase() !== username.toLowerCase()));
+      trackEvent('profile_unsubscribe', { username });
+    } catch {
+      setPublicProfileSubscribed(true);
+    } finally {
+      setPublicProfileSubInFlight(false);
+    }
+  }, [tgFetch, publicProfileSubInFlight, pushToast, locale, trackEvent]);
 
   const loadGuestSubscriptionStatus = useCallback(async (wishlistId: string) => {
     try {
@@ -5983,6 +6066,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setPublicProfileData(null);
       setPublicProfileUsername(null);
       setPublicProfileError(null);
+      setPublicProfileSubscribed(false);
       setScreen('my-wishlists');
       // Deep-link visitors arrive here via profile_{username} startParam;
       // their own wishlists may not be loaded yet, so fetch them now.
@@ -6563,7 +6647,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const username = startParam.slice('profile_'.length);
         if (username) {
           setPublicProfileUsername(username);
+          setPublicProfileSubscribed(false);
           void loadPublicProfile(username);
+          void loadProfileSubscribeStatus(username);
           trackEvent('miniapp.bootstrap_succeeded', { durationMs: Date.now() - bootStartTimeRef.current });
           bootSetScreen('public-profile');
           loadWishlists().catch(() => {});
@@ -9613,20 +9699,49 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
           )}
 
-          {/* Subscribed wishlists */}
-          {homeTab === 'wishlists' && myWishlistsTab === 'subscribed' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {subscriptionsLoading && (
-                <div style={{ textAlign: 'center', padding: '32px 0', color: C.textMuted, fontSize: 14 }}>{t('loading', locale)}</div>
-              )}
-              {!subscriptionsLoading && subscriptions.length === 0 && (
+          {/* Subscribed — Wishlists block + Profiles block */}
+          {homeTab === 'wishlists' && myWishlistsTab === 'subscribed' && (() => {
+            const wlCount = subscriptions.length + curatedSubs.length;
+            const prCount = profileSubs.length;
+            const bothEmpty = wlCount === 0 && prCount === 0;
+            const isLoading = subscriptionsLoading || profileSubsLoading;
+            if (isLoading && bothEmpty) {
+              return <div style={{ textAlign: 'center', padding: '32px 0', color: C.textMuted, fontSize: 14 }}>{t('loading', locale)}</div>;
+            }
+            if (!isLoading && bothEmpty) {
+              return (
                 <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>👥</div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('sub_empty_title', locale)}</div>
                   <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('sub_empty_hint', locale)}</div>
                 </div>
-              )}
-              {subscriptions.map((sub, i) => (
+              );
+            }
+            const blockHeaderStyle: React.CSSProperties = {
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              margin: '0 2px 10px', padding: 0,
+            };
+            const blockTitleStyle: React.CSSProperties = {
+              fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '0.08em', color: C.textMuted,
+            };
+            const countPillStyle: React.CSSProperties = {
+              fontSize: 11, color: C.textSec, background: C.surface,
+              padding: '2px 8px', borderRadius: 10,
+            };
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* ─── Wishlists block ─── */}
+                <div style={blockHeaderStyle}>
+                  <div style={blockTitleStyle}>{t('profile_subs_block_wishlists', locale)}</div>
+                  {wlCount > 0 && <div style={countPillStyle}>{wlCount}</div>}
+                </div>
+                {wlCount === 0 && !subscriptionsLoading && (
+                  <div style={{ fontSize: 13, color: C.textMuted, padding: '8px 2px 4px', lineHeight: 1.45 }}>
+                    {t('sub_empty_hint', locale)}
+                  </div>
+                )}
+                {subscriptions.map((sub, i) => (
                 <div
                   key={sub.id}
                   onClick={async () => {
@@ -9727,8 +9842,52 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   ))}
                 </>
               )}
-            </div>
-          )}
+
+                {/* ─── Profiles block ─── */}
+                <div style={{ ...blockHeaderStyle, marginTop: wlCount > 0 ? 20 : 4 }}>
+                  <div style={blockTitleStyle}>{t('profile_subs_block_profiles', locale)}</div>
+                  {prCount > 0 && <div style={countPillStyle}>{prCount}</div>}
+                </div>
+                {prCount === 0 && !profileSubsLoading && (
+                  <div style={{ fontSize: 13, color: C.textMuted, padding: '8px 2px 4px', lineHeight: 1.45 }}>
+                    {t('profile_subs_empty_profiles_hint', locale)}
+                  </div>
+                )}
+                {profileSubs.map((p, i) => (
+                  <div
+                    key={p.id}
+                    onClick={() => {
+                      setPublicProfileUsername(p.username);
+                      setPublicProfileSubscribed(true);
+                      setPublicProfileError(null);
+                      setPublicProfileData(null);
+                      void loadPublicProfile(p.username);
+                      setScreen('public-profile');
+                      trackEvent('profile_open_from_subs', { username: p.username });
+                    }}
+                    style={{
+                      background: C.card, borderRadius: 16, padding: 14, cursor: 'pointer',
+                      border: `1px solid ${C.border}`,
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      animation: `fadeIn 0.3s ease ${i * 0.06}s both`,
+                    }}
+                  >
+                    <UserAvatar avatarUrl={p.avatarUrl} name={p.displayName} size={48} accent={C.accent} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.displayName}</div>
+                        {p.isPro && (
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: C.accent, color: '#fff', fontWeight: 700, letterSpacing: '0.04em', flexShrink: 0 }}>PRO</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{p.username}</div>
+                    </div>
+                    <span style={{ fontSize: 20, color: C.textMuted, flexShrink: 0 }}>›</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* ── WISHLISTS TAB — mine subtab ─────────────────────────── */}
           {homeTab === 'wishlists' && myWishlistsTab === 'mine' && (
@@ -24456,6 +24615,35 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <div style={{ fontSize: 14, color: C.textSec, marginTop: 12, lineHeight: 1.45 }}>
                         {showcase?.bio || pp.profile.bio}
                       </div>
+                    )}
+                    {!isOwn && hasShowcase && pp.profile.username && (
+                      <button
+                        onClick={() => {
+                          const uname = pp.profile.username!;
+                          if (publicProfileSubscribed) void unsubscribeFromProfile(uname);
+                          else void subscribeToProfile(uname);
+                        }}
+                        disabled={publicProfileSubInFlight}
+                        style={{
+                          marginTop: 14,
+                          width: '100%',
+                          padding: '11px 16px',
+                          borderRadius: 12,
+                          border: publicProfileSubscribed ? `1px solid ${C.border}` : 'none',
+                          background: publicProfileSubscribed ? C.surface : C.accent,
+                          color: publicProfileSubscribed ? C.green : '#fff',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          fontFamily: font,
+                          cursor: publicProfileSubInFlight ? 'default' : 'pointer',
+                          opacity: publicProfileSubInFlight ? 0.6 : 1,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {publicProfileSubscribed
+                          ? t('public_profile_subscribed', locale)
+                          : t('public_profile_subscribe', locale)}
+                      </button>
                     )}
                     {isOwn && (
                       <div style={{ fontSize: 12, color: C.accent, marginTop: 12, background: C.accentSoft, padding: '4px 12px', borderRadius: 8, display: 'inline-block' }}>

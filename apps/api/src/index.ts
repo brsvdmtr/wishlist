@@ -3925,6 +3925,141 @@ tgRouter.post(
   }),
 );
 
+// ─── Profile subscriptions (follow another user's public profile/showcase) ───
+
+// GET /tg/me/profile-subscriptions — list profiles the user follows
+tgRouter.get(
+  '/me/profile-subscriptions',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const subs = await prisma.profileSubscription.findMany({
+      where: { subscriberId: user.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        targetUserId: true,
+        createdAt: true,
+        target: {
+          select: {
+            id: true,
+            godMode: true,
+            firstName: true,
+            profile: {
+              select: {
+                displayName: true,
+                username: true,
+                avatarUrl: true,
+                avatarThumbUrl: true,
+                avatarPublic: true,
+                profileVisibility: true,
+                showcaseEnabled: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Filter out profiles that became NOBODY or lost their username
+    const visible = subs.filter((s) => {
+      const p = s.target.profile;
+      return p && p.username && p.profileVisibility !== 'NOBODY';
+    });
+
+    // Compute isPro in parallel (showcase only shows for PRO)
+    const withPro = await Promise.all(visible.map(async (s) => {
+      const ent = await getUserEntitlement(s.target.id, s.target.godMode);
+      const p = s.target.profile!;
+      return {
+        id: s.id,
+        username: p.username!,
+        displayName: p.displayName?.trim() || p.username!.trim() || s.target.firstName?.trim() || '…',
+        avatarUrl: p.avatarPublic ? (p.avatarThumbUrl || p.avatarUrl) : null,
+        isPro: ent.isPro,
+        hasShowcase: ent.isPro && p.showcaseEnabled,
+        createdAt: s.createdAt.toISOString(),
+      };
+    }));
+
+    return res.json({ subscriptions: withPro });
+  }),
+);
+
+// POST /tg/profiles/:username/subscribe — follow a profile
+tgRouter.post(
+  '/profiles/:username/subscribe',
+  asyncHandler(async (req, res) => {
+    const username = (req.params.username ?? '').trim();
+    if (!username) return res.status(400).json({ error: 'Missing username' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const targetProfile = await prisma.userProfile.findFirst({
+      where: { username: { equals: username, mode: 'insensitive' } },
+      select: { userId: true, profileVisibility: true, subscribePolicy: true },
+    });
+    if (!targetProfile) return res.status(404).json({ error: 'Profile not found' });
+    if (targetProfile.userId === user.id) return res.status(400).json({ error: 'Cannot subscribe to your own profile' });
+    if (targetProfile.profileVisibility === 'NOBODY') return res.status(404).json({ error: 'Profile not found' });
+    if (targetProfile.subscribePolicy === 'NOBODY') return res.status(403).json({ error: 'subscriptions_closed' });
+
+    const sub = await prisma.profileSubscription.upsert({
+      where: { subscriberId_targetUserId: { subscriberId: user.id, targetUserId: targetProfile.userId } },
+      update: {},
+      create: { subscriberId: user.id, targetUserId: targetProfile.userId },
+      select: { id: true, targetUserId: true, createdAt: true },
+    });
+
+    return res.json({ subscription: { id: sub.id, targetUserId: sub.targetUserId, createdAt: sub.createdAt.toISOString() } });
+  }),
+);
+
+// DELETE /tg/profiles/:username/subscribe — unfollow a profile
+tgRouter.delete(
+  '/profiles/:username/subscribe',
+  asyncHandler(async (req, res) => {
+    const username = (req.params.username ?? '').trim();
+    if (!username) return res.status(400).json({ error: 'Missing username' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const targetProfile = await prisma.userProfile.findFirst({
+      where: { username: { equals: username, mode: 'insensitive' } },
+      select: { userId: true },
+    });
+    if (!targetProfile) return res.json({ ok: true }); // idempotent
+
+    await prisma.profileSubscription.deleteMany({
+      where: { subscriberId: user.id, targetUserId: targetProfile.userId },
+    });
+    return res.json({ ok: true });
+  }),
+);
+
+// GET /tg/profiles/:username/subscribe — subscription status (for CTA state on public profile)
+tgRouter.get(
+  '/profiles/:username/subscribe',
+  asyncHandler(async (req, res) => {
+    const username = (req.params.username ?? '').trim();
+    if (!username) return res.status(400).json({ error: 'Missing username' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const targetProfile = await prisma.userProfile.findFirst({
+      where: { username: { equals: username, mode: 'insensitive' } },
+      select: { userId: true },
+    });
+    if (!targetProfile) return res.json({ subscribed: false });
+    if (targetProfile.userId === user.id) return res.json({ subscribed: false, isOwn: true });
+
+    const sub = await prisma.profileSubscription.findUnique({
+      where: { subscriberId_targetUserId: { subscriberId: user.id, targetUserId: targetProfile.userId } },
+      select: { id: true },
+    });
+    return res.json({ subscribed: !!sub });
+  }),
+);
+
 // GET /tg/wishlists/:id/items — owner view (no reservation names)
 tgRouter.get(
   '/wishlists/:id/items',

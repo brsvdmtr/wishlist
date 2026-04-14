@@ -155,6 +155,8 @@ model User {
   groupGiftMessages              GroupGiftMessage[]       @relation("GroupGiftMessages")
   curatedSelections              CuratedSelection[]
   curatedSelectionSubscriptions  CuratedSelectionSubscription[]
+  profileSubscriptions           ProfileSubscription[]        @relation("ProfileSubscriber")
+  profileSubscribers             ProfileSubscription[]        @relation("ProfileTarget")
 }
 
 model Wishlist {
@@ -490,6 +492,22 @@ model SubscriptionUnread {
 
   @@unique([subId, entityId, fieldName])
   @@index([subId])
+}
+
+// Follow another user's public profile (showcase). Separate from WishlistSubscription —
+// this is a "follow the person" relation, independent of any specific wishlist.
+model ProfileSubscription {
+  id            String   @id @default(cuid())
+  subscriberId  String
+  targetUserId  String
+  createdAt     DateTime @default(now())
+
+  subscriber User @relation("ProfileSubscriber", fields: [subscriberId], references: [id], onDelete: Cascade)
+  target     User @relation("ProfileTarget",     fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriberId, targetUserId])
+  @@index([subscriberId])
+  @@index([targetUserId])
 }
 
 model ServiceHeartbeat {
