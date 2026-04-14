@@ -5984,6 +5984,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setPublicProfileUsername(null);
       setPublicProfileError(null);
       setScreen('my-wishlists');
+      // Deep-link visitors arrive here via profile_{username} startParam;
+      // their own wishlists may not be loaded yet, so fetch them now.
+      loadWishlists().catch(() => { /* silent — screen already set */ });
     } else if (screen === 'profile') {
       setScreen('my-wishlists');
     } else if (screen === 'showcase-editor') {
@@ -23587,14 +23590,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             ? t('showcase_progress_title_almost', locale)
             : t('showcase_progress_title_default', locale);
         return (
-          <div style={{ padding: '0 0 140px', fontFamily: font, color: C.text, animation: 'fadeIn 0.3s ease' }}>
-            {/* Top nav — just back button */}
-            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px' }}>
-              <button onClick={navBack} style={{ background: 'none', border: 'none', color: C.text, fontSize: 16, cursor: 'pointer', fontFamily: font, padding: '4px 0' }}>
-                ‹ {t('back', locale)}
-              </button>
-            </div>
-
+          <div style={{ padding: '16px 0 140px', fontFamily: font, color: C.text, animation: 'fadeIn 0.3s ease' }}>
+            {/* Telegram's native BackButton handles back navigation — no inline back button needed */}
             {showcaseLoading && !sc ? (
               <div style={{ padding: '80px 24px', textAlign: 'center', color: C.textMuted }}>{t('loading', locale)}</div>
             ) : sc && (
