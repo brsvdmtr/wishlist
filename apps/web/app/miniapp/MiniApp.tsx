@@ -6278,13 +6278,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Re-registering on every navBack identity change caused Telegram SDK to lose
   // the handler after many onClick/offClick cycles (e.g. sub→unsub→sub rapidly).
   const navBackRef = useRef(navBack);
+  const screenRef = useRef(screen);
   useEffect(() => { navBackRef.current = navBack; }, [navBack]);
+  useEffect(() => { screenRef.current = screen; }, [screen]);
   useEffect(() => {
-    const tg = window.Telegram?.WebApp;
-    if (!tg) return;
-    const handler = () => { void navBackRef.current(); };
-    tg.BackButton.onClick(handler);
-    return () => tg.BackButton.offClick(handler);
+    // Retry-based registration so we don't miss the window where SDK isn't
+    // ready yet at component mount. Without retry, an undefined tg on first
+    // render left BackButton.onClick un-registered for the lifetime of the app.
+    let cancelled = false;
+    let registeredTg: NonNullable<typeof window.Telegram>['WebApp'] | null = null;
+    const handler = () => {
+      try {
+        trackEvent('miniapp.backbutton_pressed', { screen: screenRef.current });
+      } catch { /* telemetry must never break Back */ }
+      void navBackRef.current();
+    };
+    const attempt = () => {
+      if (cancelled) return;
+      const tg = window.Telegram?.WebApp;
+      if (!tg?.BackButton) {
+        setTimeout(attempt, 100);
+        return;
+      }
+      tg.BackButton.onClick(handler);
+      registeredTg = tg;
+    };
+    attempt();
+    return () => {
+      cancelled = true;
+      registeredTg?.BackButton?.offClick(handler);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
