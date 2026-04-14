@@ -2733,14 +2733,21 @@ function CommentsThread({
   }
 
   /* ── Expanded: full thread with scroll ── */
+  // Cap the whole card at 75vh — on a wish with many comments the composer used to
+  // slide off-screen because messages pushed page height past the viewport. With a
+  // flex column + inner scroll area, the header/subtitle/composer stay visible
+  // while the message list scrolls internally.
   return (
-    <div style={{ marginTop: 20, background: C.surface, borderRadius: 14, overflow: 'hidden', animation: 'fadeIn 0.2s ease' }}>
+    <div style={{
+      marginTop: 20, background: C.surface, borderRadius: 14, overflow: 'hidden', animation: 'fadeIn 0.2s ease',
+      display: 'flex', flexDirection: 'column', maxHeight: '75vh',
+    }}>
       {/* Header — tap to collapse */}
       <div
         onClick={() => setExpanded(false)}
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          padding: '12px 14px 6px', cursor: 'pointer',
+          padding: '12px 14px 6px', cursor: 'pointer', flexShrink: 0,
         }}
       >
         <span style={{ fontSize: 15, lineHeight: 1 }}>💬</span>
@@ -2749,18 +2756,19 @@ function CommentsThread({
         <span style={{ fontSize: 12, color: C.textMuted, marginLeft: 'auto', transform: 'rotate(90deg)', display: 'inline-block' }}>›</span>
       </div>
 
-      <div style={{ fontSize: 11, color: C.textMuted, padding: '0 14px', marginBottom: 10, lineHeight: 1.4 }}>
+      <div style={{ fontSize: 11, color: C.textMuted, padding: '0 14px', marginBottom: 10, lineHeight: 1.4, flexShrink: 0 }}>
         {t('comments_subtitle', locale)}
       </div>
 
       {isArchive && (
-        <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 14px', borderRadius: 12, margin: '0 14px 10px' }}>
+        <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 14px', borderRadius: 12, margin: '0 14px 10px', flexShrink: 0 }}>
           {t('comments_archive_warning', locale)}
         </div>
       )}
 
-      {/* Messages — scrollable */}
-      <div ref={scrollRef} style={{ maxHeight: 340, overflowY: 'auto', padding: '0 14px', WebkitOverflowScrolling: 'touch' }}>
+      {/* Messages — scrollable. flex:1 + minHeight:0 lets this area shrink/grow
+          while the composer+chip below stay pinned to the bottom of the card. */}
+      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 14px', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {comments.length === 0 && (
             <div style={{ textAlign: 'center', fontSize: 13, color: C.textMuted, padding: '12px 0 8px' }}>
@@ -2893,7 +2901,7 @@ function CommentsThread({
               display: 'flex', alignItems: 'center', gap: 10,
               margin: '6px 14px 0', padding: '8px 10px',
               background: C.accentSoft, borderLeft: `3px solid ${C.accent}`, borderRadius: 10,
-              minHeight: 40,
+              minHeight: 40, flexShrink: 0,
             }}>
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span style={{ fontSize: 11, color: C.accent, fontWeight: 700, fontFamily: font, letterSpacing: 0.2 }}>
@@ -2918,7 +2926,7 @@ function CommentsThread({
               </button>
             </div>
           )}
-          <div style={{ display: 'flex', gap: 8, padding: '10px 14px 14px', alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: 8, padding: '10px 14px 14px', alignItems: 'flex-end', flexShrink: 0 }}>
             <div style={{ flex: 1, position: 'relative' }}>
               <textarea
                 style={{
@@ -6166,6 +6174,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         setHomeTab(tab);
         if (tab === 'wishes') void loadAllItems();
         setScreen('my-wishlists');
+      } else if (!currentWl) {
+        // No wishlist context — this happens when user arrived via a comment-reply deeplink
+        // or any other entry that jumps straight to item-detail. Falling through to
+        // 'wishlist-detail' would render a grey screen (that branch requires currentWl).
+        replyEntryRef.current = null;
+        setScreen('my-wishlists');
       } else {
         setScreen('wishlist-detail');
       }
@@ -6418,7 +6432,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       replyEntryRef.current = null;
       setScreen('my-wishlists');
     }
-  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData, guestViewReturnToProfileUsername, checkOnboarding, loadPublicProfile, loadProfileSubscribeStatus]);
+  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData, guestViewReturnToProfileUsername, checkOnboarding, loadPublicProfile, loadProfileSubscribeStatus, currentWl]);
 
   // Combined registration + show/hide: re-register handler on every screen
   // change. Previous "register once" approach let iOS Telegram silently drop
@@ -8196,15 +8210,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           if (delRes.ok) finalItem = { ...finalItem, imageUrl: null };
         }
 
+        // Keep the item-detail view in sync with the fresh payload — otherwise the
+        // screen continues to render the stale pre-edit snapshot (esp. noticeable
+        // when the user got here via a deeplink: item-detail is the ONLY screen
+        // showing this item, so not refreshing it looks like nothing happened).
+        setViewingItem(prev => prev && prev.id === finalItem.id ? { ...prev, ...finalItem } : prev);
+
         // Reload the right container. Draft items live in SYSTEM_DRAFTS — use
         // loadDrafts() so the drafts list reflects the update. Regular items use
         // loadItems() which reloads the current wishlist sorted by priority DESC.
+        // For deeplink entries currentWl is null and the user isn't in a wishlist
+        // browse context, so skip loadItems entirely — nothing depends on it.
         const savingDraftItem = editingItem.wishlistId === draftsWishlistId;
         if (savingDraftItem) {
           await loadDrafts();
           setScreen('drafts'); // Return to drafts screen after saving
-        } else {
-          await loadItems(editingItem.wishlistId ?? currentWl!.id);
+        } else if (currentWl) {
+          await loadItems(editingItem.wishlistId ?? currentWl.id);
         }
         trackEvent('item_edited', { itemId: editingItem.id });
         pushToast(t('item_saved', locale), 'success');
@@ -19166,12 +19188,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {/* Title */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_name', locale)}</div>
-            <input
-              style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 15, fontWeight: 500, padding: '12px 14px' }}
-              placeholder={t('item_name_placeholder', locale)}
-              value={itemTitle}
-              onChange={(e) => setItemTitle(e.target.value)}
-            />
+            <div style={{ position: 'relative' as const }}>
+              <input
+                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 15, fontWeight: 500, padding: '12px 38px 12px 14px' }}
+                placeholder={t('item_name_placeholder', locale)}
+                value={itemTitle}
+                onChange={(e) => setItemTitle(e.target.value)}
+              />
+              {itemTitle && <button type="button" aria-label="Clear" onClick={() => setItemTitle('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+            </div>
           </div>
           {/* URL with hint + preview — uncontrolled to fix iOS selection */}
           <div>
@@ -19396,7 +19421,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_name', locale)}</label>
-            <input style={inputStyle} placeholder={t('item_name_placeholder', locale)} value={itemTitle} onChange={(e) => setItemTitle(e.target.value)} />
+            <div style={{ position: 'relative' as const }}>
+              <input style={{ ...inputStyle, paddingRight: 38 }} placeholder={t('item_name_placeholder', locale)} value={itemTitle} onChange={(e) => setItemTitle(e.target.value)} />
+              {itemTitle && <button type="button" aria-label="Clear" onClick={() => setItemTitle('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+            </div>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_description', locale)}</label>

@@ -286,6 +286,14 @@ async function cancelItemHints(itemId: string): Promise<void> {
   } catch { /* best-effort */ }
 }
 
+/** Escape user-controlled strings for safe use inside Telegram HTML parse_mode.
+ * Telegram HTML is tag-based (`<b>`, `<i>`, `<blockquote>`), so the only chars that need
+ * escaping in interpolated values are `&`, `<`, `>` — no quote escaping needed.
+ */
+function escapeTgHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 /** Best-effort Telegram notification. Fire-and-forget – never throws. */
 async function sendTgNotification(chatId: string, text: string): Promise<void> {
   const token = process.env.BOT_TOKEN;
@@ -340,12 +348,21 @@ async function sendAdminAlert(text: string): Promise<void> {
 }
 
 // Notification batching (30s debounce per item+recipient)
-const pendingNotifications = new Map<string, { chatId: string; itemTitle: string; count: number; timer: ReturnType<typeof setTimeout> }>();
+type PendingEntry = {
+  chatId: string;
+  itemTitle: string;
+  count: number;
+  lastReplyMarkup?: Record<string, unknown>;
+  timer: ReturnType<typeof setTimeout>;
+};
+const pendingNotifications = new Map<string, PendingEntry>();
 
 /**
  * Queue a comment notification.
  * First notification for a given (item, recipient) key is sent immediately with optional inline keyboard.
- * Subsequent comments within 30s are batched into a single text-only summary (no CTA — target is ambiguous).
+ * Subsequent comments within 30s are batched into a single summary notification.
+ * The batch summary carries the LATEST reply markup (pointing at the most recent comment) so
+ * users can still tap "Reply" — otherwise 2+ comments in 30s would land without a CTA.
  */
 function queueCommentNotification(
   key: string,
@@ -357,6 +374,8 @@ function queueCommentNotification(
   const existing = pendingNotifications.get(key);
   if (existing) {
     existing.count++;
+    // Refresh CTA to point at the most recent comment (used when batch timer fires)
+    if (replyMarkup) existing.lastReplyMarkup = replyMarkup;
     return;
   }
 
@@ -364,18 +383,23 @@ function queueCommentNotification(
   if (replyMarkup) void sendTgBotMessage(chatId, text, replyMarkup);
   else void sendTgNotification(chatId, text);
 
-  const entry = {
+  const entry: PendingEntry = {
     chatId,
     itemTitle,
     count: 0,
+    lastReplyMarkup: replyMarkup,
     timer: setTimeout(() => {
       const e = pendingNotifications.get(key);
       pendingNotifications.delete(key);
       if (!e || e.count === 0) return;
       const notifLocale: Locale = 'ru'; // notifications use Russian as default
       const word = pluralize(e.count, 'новый комментарий', 'новых комментария', 'новых комментариев', notifLocale);
-      // Batch fallback goes WITHOUT inline keyboard — target comment is ambiguous
-      void sendTgNotification(e.chatId, t('notif_batch_comments', notifLocale, { count: e.count, word, title: e.itemTitle }));
+      const batchText = t('notif_batch_comments', notifLocale, {
+        count: e.count, word, title: escapeTgHtml(e.itemTitle),
+      });
+      // Include latest CTA so the user can tap "Reply" from the batch summary too
+      if (e.lastReplyMarkup) void sendTgBotMessage(e.chatId, batchText, e.lastReplyMarkup);
+      else void sendTgNotification(e.chatId, batchText);
     }, 30_000),
   };
   pendingNotifications.set(key, entry);
@@ -6011,7 +6035,11 @@ tgRouter.post(
         const key = `${id}:${owner.id}`;
         queueCommentNotification(
           key, owner.telegramChatId, ctx.item.title,
-          t('notif_commented_reserver', notifLocale, { name: displayName, title: ctx.item.title, text }),
+          t('notif_commented_reserver', notifLocale, {
+            name: escapeTgHtml(displayName),
+            title: escapeTgHtml(ctx.item.title),
+            text: escapeTgHtml(text),
+          }),
           commentReplyMarkup,
         );
         notifiedRecipientUserId = owner.id;
@@ -6026,7 +6054,10 @@ tgRouter.post(
         const key = `${id}:${reserver.id}`;
         queueCommentNotification(
           key, reserver.telegramChatId, ctx.item.title,
-          t('notif_commented_owner', notifLocale, { title: ctx.item.title, text }),
+          t('notif_commented_owner', notifLocale, {
+            title: escapeTgHtml(ctx.item.title),
+            text: escapeTgHtml(text),
+          }),
           commentReplyMarkup,
         );
         notifiedRecipientUserId = reserver.id;
@@ -6078,9 +6109,9 @@ tgRouter.post(
           parentAuthorUser.id !== ctx.user.id // don't self-notify
         ) {
           const replyText = t('notif_comment_reply', notifLocale, {
-            title: ctx.item.title,
-            ownerName: displayName,
-            text,
+            title: escapeTgHtml(ctx.item.title),
+            ownerName: escapeTgHtml(displayName),
+            text: escapeTgHtml(text),
           });
           queueReplyAuthorNotification(
             parent.id,
