@@ -2206,6 +2206,17 @@ const ru: Dict = {
   showcase_brand_limit_reached: 'Лимит 10 брендов',
   showcase_bio_limit: '{{count}}/180',
   showcase_pref_limit: '{{count}}/300',
+  showcase_progress_title_default: 'Оформи витрину',
+  showcase_progress_title_almost: 'Почти готово',
+  showcase_progress_title_full: 'Витрина заполнена',
+  showcase_progress_hint_empty: 'Обложка, био и пин-вишлисты — базовый набор, с которого стоит начать',
+  showcase_progress_hint_partial: 'Добавь размеры и любимые бренды, чтобы дарителям было проще',
+  showcase_progress_hint_full: 'Всё заполнено — можно делиться ссылкой',
+  showcase_cover_remove_title: 'Удалить обложку?',
+  showcase_cover_remove_desc: 'Изображение обложки будет удалено с витрины. Ты сможешь загрузить новое в любой момент.',
+  showcase_cover_remove_confirm: 'Удалить',
+  plan_pro_f18: 'Премиум-профиль',
+  plan_pro_sub18: 'Обложка, избранные вишлисты, предпочтения и размеры — личная страница для подарков.',
 };
 
 const en: Dict = {
@@ -4217,6 +4228,17 @@ const en: Dict = {
   showcase_brand_limit_reached: 'Max 10 brands',
   showcase_bio_limit: '{{count}}/180',
   showcase_pref_limit: '{{count}}/300',
+  showcase_progress_title_default: 'Build your showcase',
+  showcase_progress_title_almost: 'Almost there',
+  showcase_progress_title_full: 'Showcase complete',
+  showcase_progress_hint_empty: 'Start with a cover, bio and pinned wishlists — the essentials',
+  showcase_progress_hint_partial: 'Add sizes and favorite brands to make gifting easier',
+  showcase_progress_hint_full: 'All set — time to share the link',
+  showcase_cover_remove_title: 'Remove cover?',
+  showcase_cover_remove_desc: 'The cover image will be removed from your showcase. You can upload a new one anytime.',
+  showcase_cover_remove_confirm: 'Remove',
+  plan_pro_f18: 'Premium profile',
+  plan_pro_sub18: 'Cover image, pinned wishlists, preferences and sizes — a personal gift showcase.',
 };
 
 // ─── Additional locale dictionaries ──────────────────────────────────────────

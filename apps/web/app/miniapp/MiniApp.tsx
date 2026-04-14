@@ -1803,6 +1803,7 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
     { icon: '📋', title: t('plan_pro_f15', locale), subtitle: t('plan_pro_sub15', locale), isNew: true },
     { icon: '🚫', title: t('plan_pro_f16', locale), subtitle: t('plan_pro_sub16', locale), isNew: true },
     { icon: '⏱', title: t('plan_pro_f17', locale), subtitle: t('plan_pro_sub17', locale), isNew: true },
+    { icon: '✨', title: t('plan_pro_f18', locale), subtitle: t('plan_pro_sub18', locale), isNew: true },
     // Reservation Pro features
     { icon: '📋', title: t('plan_pro_f10', locale), subtitle: t('plan_pro_sub10', locale), isNew: true },
     { icon: '📝', title: t('plan_pro_f11', locale), subtitle: t('plan_pro_sub11', locale), isNew: true },
@@ -3769,6 +3770,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [showcaseCoverUploading, setShowcaseCoverUploading] = useState(false);
   const [showcasePublished, setShowcasePublished] = useState(false);
   const [showcaseBrandInput, setShowcaseBrandInput] = useState('');
+  const [showcaseCoverRemoveConfirm, setShowcaseCoverRemoveConfirm] = useState(false);
   const showcaseCoverInputRef = useRef<HTMLInputElement>(null);
   const [titlePressed, setTitlePressed] = useState(false); // pressed-state for tappable item title
   const [editingProfile, setEditingProfile] = useState(false);
@@ -7388,7 +7390,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   // Lazy-load global dont-gift data for banner visibility check
   useEffect(() => {
-    if (screen === 'wishlist-detail' && !dontGiftData) {
+    if ((screen === 'wishlist-detail' || screen === 'showcase-editor') && !dontGiftData) {
       void loadDontGift();
     }
   }, [screen, dontGiftData, loadDontGift]);
@@ -23472,11 +23474,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {screen === 'showcase-editor' && (() => {
         const sc = showcaseData;
         const pinnedIds = sc?.pinnedIds ?? [];
-        const hasAnyContent = !!sc && (
-          !!sc.coverUrl || !!sc.bio || pinnedIds.length > 0 ||
-          !!sc.preferences || !!sc.sizes?.clothing || !!sc.sizes?.shoes ||
-          !!sc.sizes?.ring || !!sc.sizes?.other || (sc.brands?.length ?? 0) > 0
+        const hasSizes = !!sc && !!(sc.sizes?.clothing || sc.sizes?.shoes || sc.sizes?.ring || sc.sizes?.other);
+        const hasAntiGift = !!dontGiftData && (
+          (dontGiftData.presets?.length ?? 0) > 0 ||
+          (dontGiftData.customItems?.length ?? 0) > 0 ||
+          !!dontGiftData.comment
         );
+        const filledSections = !sc ? 0 : (
+          (sc.coverUrl ? 1 : 0) +
+          (sc.bio ? 1 : 0) +
+          (pinnedIds.length > 0 ? 1 : 0) +
+          (sc.preferences ? 1 : 0) +
+          (hasSizes ? 1 : 0) +
+          ((sc.brands?.length ?? 0) > 0 ? 1 : 0) +
+          (hasAntiGift ? 1 : 0)
+        );
+        const totalSections = 7;
+        const hasAnyContent = filledSections > 0;
         const togglePin = (id: string) => {
           if (!sc) return;
           const isIn = pinnedIds.includes(id);
@@ -23507,10 +23521,22 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         );
         const bioLen = (sc?.bio ?? '').length;
         const prefLen = (sc?.preferences ?? '').length;
+        const coverGradient = 'linear-gradient(135deg, #3a2d6e 0%, #1a1538 50%, #2d1f4e 100%)';
+        const progressPct = Math.round((filledSections / totalSections) * 100);
+        const progressHint = filledSections === 0
+          ? t('showcase_progress_hint_empty', locale)
+          : filledSections === totalSections
+            ? t('showcase_progress_hint_full', locale)
+            : t('showcase_progress_hint_partial', locale);
+        const progressTitle = filledSections === totalSections
+          ? t('showcase_progress_title_full', locale)
+          : filledSections >= 4
+            ? t('showcase_progress_title_almost', locale)
+            : t('showcase_progress_title_default', locale);
         return (
-          <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 90, overflowY: 'auto', fontFamily: font, color: C.text }}>
+          <div style={{ padding: '0 0 140px', fontFamily: font, color: C.text, animation: 'fadeIn 0.3s ease' }}>
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', gap: 12, borderBottom: `1px solid ${C.border}`, background: C.bg, position: 'sticky', top: 0, zIndex: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', gap: 12, borderBottom: `1px solid ${C.border}`, background: C.bg }}>
               <button onClick={navBack} style={{ background: 'none', border: 'none', color: C.text, fontSize: 16, cursor: 'pointer', fontFamily: font, padding: '4px 0' }}>
                 ‹ {t('back', locale)}
               </button>
@@ -23526,7 +23552,25 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {showcaseLoading && !sc ? (
               <div style={{ padding: '80px 24px', textAlign: 'center', color: C.textMuted }}>{t('loading', locale)}</div>
             ) : sc && (
-              <div style={{ padding: '16px 20px 140px' }}>
+              <div style={{ padding: '16px 20px 24px' }}>
+                {/* ── Progress bar ── */}
+                <div style={{ background: C.card, borderRadius: 14, padding: '12px 16px', marginBottom: 16, border: `1px solid ${C.border}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{progressTitle}</span>
+                    <span style={{ fontSize: 12, color: C.accent, fontWeight: 700 }}>{filledSections} / {totalSections}</span>
+                  </div>
+                  <div style={{ background: C.surface, borderRadius: 6, height: 6, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', width: `${progressPct}%`, borderRadius: 6,
+                      background: filledSections === totalSections
+                        ? `linear-gradient(90deg, ${C.green}, #6ee7b7)`
+                        : `linear-gradient(90deg, ${C.accent}, #a78bfa)`,
+                      transition: 'width 0.4s ease',
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8, lineHeight: 1.35 }}>{progressHint}</div>
+                </div>
+
                 {/* ── Cover ── */}
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
@@ -23535,20 +23579,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </div>
                   <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_cover_desc', locale)}</div>
                   <div
-                    onClick={() => !showcaseCoverUploading && showcaseCoverInputRef.current?.click()}
+                    onClick={() => { if (!showcaseCoverUploading && !sc.coverUrl) showcaseCoverInputRef.current?.click(); }}
                     style={{
-                      width: '100%', height: 160, borderRadius: 14, overflow: 'hidden', cursor: 'pointer',
+                      width: '100%', height: 160, borderRadius: 14, overflow: 'hidden',
+                      cursor: sc.coverUrl ? 'default' : 'pointer',
                       background: sc.coverUrl
                         ? `url(${sc.coverUrl}) center/cover no-repeat`
-                        : `linear-gradient(135deg, ${C.accent}24, ${C.accent}08)`,
-                      border: `1px solid ${sc.coverUrl ? 'transparent' : C.border}`,
+                        : coverGradient,
                       position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                   >
                     {!sc.coverUrl && !showcaseCoverUploading && (
-                      <div style={{ textAlign: 'center' }}>
+                      <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.88)' }}>
                         <div style={{ fontSize: 32, marginBottom: 6 }}>📸</div>
-                        <div style={{ fontSize: 13, color: C.textSec, fontWeight: 600 }}>{t('showcase_section_cover_upload', locale)}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{t('showcase_section_cover_upload', locale)}</div>
                       </div>
                     )}
                     {showcaseCoverUploading && (
@@ -23575,7 +23619,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         {t('showcase_section_cover_replace', locale)}
                       </button>
                       <button
-                        onClick={removeShowcaseCover}
+                        onClick={() => setShowcaseCoverRemoveConfirm(true)}
                         style={{ flex: 1, padding: '10px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: 'transparent', color: C.textMuted, border: `1px solid ${C.border}` }}
                       >
                         {t('showcase_section_cover_remove', locale)}
@@ -23787,9 +23831,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   )}
                 </div>
 
-                {/* ── Anti-gifts (managed externally) ── */}
+                {/* ── Anti-gifts (managed via global dont-gift sheet) ── */}
                 <div
-                  onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
+                  onClick={() => { void openDontGiftEdit(); }}
                   style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: 14, borderRadius: 14, background: C.card, cursor: 'pointer',
@@ -23799,7 +23843,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_antigift', locale)}</div>
-                      {sectionStatus(!!(profileData?.bio))}
+                      {sectionStatus(hasAntiGift)}
                     </div>
                     <div style={{ fontSize: 12, color: C.textMuted }}>{t('showcase_section_antigift_desc', locale)}</div>
                   </div>
@@ -23808,17 +23852,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </div>
                 </div>
 
-                {/* ── Publish / save bottom bar ── */}
-                <div style={{
-                  position: 'fixed', left: 0, right: 0, bottom: 0, background: `linear-gradient(180deg, rgba(27,27,31,0) 0%, ${C.bg} 30%)`,
-                  padding: '20px 20px calc(20px + env(safe-area-inset-bottom, 0px))', zIndex: 10,
-                }}>
+                {/* ── Publish / save button (inline, not fixed) ── */}
+                <div style={{ marginTop: 12 }}>
                   <button
                     onClick={async () => {
-                      const ok = await saveShowcase({ enabled: true }, { publish: !sc.enabled });
-                      if (ok && !sc.enabled) {
-                        // publish success — stay on editor and show success state
-                      }
+                      await saveShowcase({ enabled: true }, { publish: !sc.enabled });
                     }}
                     disabled={showcaseSaving || !hasAnyContent}
                     style={{
@@ -23831,10 +23869,44 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   >
                     {showcaseSaving
                       ? t('showcase_editor_saving', locale)
-                      : sc.enabled
-                        ? t('showcase_editor_save', locale)
-                        : t('showcase_editor_save', locale)}
+                      : t('showcase_editor_save', locale)}
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Cover remove confirm dialog */}
+            {showcaseCoverRemoveConfirm && (
+              <div
+                onClick={() => setShowcaseCoverRemoveConfirm(false)}
+                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: '100%', maxWidth: 360, background: C.card, borderRadius: 18,
+                    padding: 22, textAlign: 'center', border: `1px solid ${C.border}`,
+                  }}
+                >
+                  <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{t('showcase_cover_remove_title', locale)}</div>
+                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 18 }}>{t('showcase_cover_remove_desc', locale)}</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => setShowcaseCoverRemoveConfirm(false)}
+                      style={{ flex: 1, padding: '12px 14px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: C.surface, color: C.text, border: `1px solid ${C.border}` }}
+                    >
+                      {t('cancel', locale)}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setShowcaseCoverRemoveConfirm(false);
+                        await removeShowcaseCover();
+                      }}
+                      style={{ flex: 1, padding: '12px 14px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: C.red, color: '#fff', border: 'none' }}
+                    >
+                      {t('showcase_cover_remove_confirm', locale)}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -23888,8 +23960,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const hasSizes = !!sc && !!(sc.sizes.clothing || sc.sizes.shoes || sc.sizes.ring || sc.sizes.other);
         const dg = profileData;
         return (
-          <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 92, overflowY: 'auto', fontFamily: font, color: C.text }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', gap: 12, borderBottom: `1px solid ${C.border}`, background: C.bg, position: 'sticky', top: 0, zIndex: 5 }}>
+          <div style={{ fontFamily: font, color: C.text, animation: 'fadeIn 0.3s ease' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', gap: 12, borderBottom: `1px solid ${C.border}`, background: C.bg }}>
               <button onClick={navBack} style={{ background: 'none', border: 'none', color: C.text, fontSize: 16, cursor: 'pointer', fontFamily: font, padding: '4px 0' }}>
                 ‹ {t('showcase_preview_back', locale)}
               </button>
@@ -23906,7 +23978,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(27,27,31,0.18) 0%, rgba(27,27,31,0.72) 70%, rgba(27,27,31,1) 100%)' }} />
                     </div>
                   ) : (
-                    <div style={{ position: 'relative', width: '100%', height: 180, background: `linear-gradient(180deg, ${C.accent}24 0%, ${C.bg} 100%)` }} />
+                    <div style={{ position: 'relative', width: '100%', height: 200, background: 'linear-gradient(135deg, #2a1f5e 0%, #1a1040 40%, #3d2870 100%)' }}>
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: `linear-gradient(to top, ${C.bg} 0%, transparent 100%)` }} />
+                    </div>
                   )}
                   <div style={{ position: 'relative', marginTop: sc.coverUrl ? -80 : -70, padding: '0 20px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -24001,7 +24075,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const pp = publicProfileData;
         const isOwn = pp?.profile?.username && profileData?.username && pp.profile.username.toLowerCase() === profileData.username.toLowerCase();
         return (
-          <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 90, overflowY: 'auto', fontFamily: font, color: C.text }}>
+          <div style={{ fontFamily: font, color: C.text, animation: 'fadeIn 0.3s ease' }}>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', gap: 12 }}>
               <button onClick={navBack} style={{ background: 'none', border: 'none', color: C.text, fontSize: 16, cursor: 'pointer', fontFamily: font, padding: '4px 0' }}>
@@ -24054,10 +24128,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       }} />
                     </div>
                   ) : (
-                    <div style={{
-                      position: 'relative', width: '100%', height: 180,
-                      background: `linear-gradient(180deg, ${C.accent}24 0%, ${C.bg} 100%)`,
-                    }} />
+                    <div style={{ position: 'relative', width: '100%', height: 200, background: 'linear-gradient(135deg, #2a1f5e 0%, #1a1040 40%, #3d2870 100%)' }}>
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: `linear-gradient(to top, ${C.bg} 0%, transparent 100%)` }} />
+                    </div>
                   )}
                   <div style={{ position: 'relative', marginTop: hasShowcase && showcase?.coverUrl ? -80 : -70, padding: '0 20px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
