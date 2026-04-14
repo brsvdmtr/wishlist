@@ -5845,9 +5845,10 @@ tgRouter.post(
     if (!ctx) return res.status(404).json({ error: 'Item not found' });
     if (ctx.role === 'third_party') return res.status(403).json({ error: 'Forbidden' });
 
-    // Feature gate: comments require PRO — allowed if either owner or commenter has it
-    const ownerEnt = await getUserEntitlement(ctx.item.wishlist.ownerId);
-    const commenterEnt = ctx.role === 'owner' ? ownerEnt : await getUserEntitlement(ctx.user.id);
+    // Feature gate: comments require PRO — allowed if either owner or commenter has it.
+    // Use getEffectiveEntitlements so god-mode is honoured (auto-resolves from DB).
+    const ownerEnt = await getEffectiveEntitlements(ctx.item.wishlist.ownerId);
+    const commenterEnt = ctx.role === 'owner' ? ownerEnt : await getEffectiveEntitlements(ctx.user.id);
     if (!ownerEnt.plan.features.includes('comments') && !commenterEnt.plan.features.includes('comments')) {
       trackEvent('feature_gate_hit_comments', ctx.user.id);
       return res.status(402).json({ error: 'Pro feature', feature: 'comments', planCode: commenterEnt.plan.code });

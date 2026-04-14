@@ -2849,14 +2849,16 @@ function CommentsThread({
                       {new Date(c.createdAt).toLocaleTimeString(toIntlLocale(locale), { hour: '2-digit', minute: '2-digit' })}
                     </span>
                     <div style={{ display: 'flex', gap: 2 }}>
-                      {/* Reply button — only on top-level USER comments, when composer is enabled */}
-                      {!isArchive && c.parentCommentId === null && c.type === 'USER' && (
+                      {/* Reply button — only on other users' top-level USER comments,
+                          when composer is enabled. Hidden on own bubbles (replying to yourself
+                          is nonsensical) and on nested replies (one-level cap). */}
+                      {!isArchive && !isMine(c) && c.parentCommentId === null && c.type === 'USER' && (
                         <button
                           onClick={() => onStartReply(c)}
                           aria-label={t('comments_reply_header', locale)}
                           style={{
                             background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer',
-                            fontSize: 13, lineHeight: 1, color: isMine(c) ? 'rgba(255,255,255,0.55)' : C.accent,
+                            fontSize: 13, lineHeight: 1, color: C.accent,
                           }}
                         >
                           ↩
@@ -7279,7 +7281,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           itemId: entry.itemId, originalCommentId: entry.commentId, parentCommentId: target.parentCommentId,
         });
       }
-      // Scroll + highlight regardless of archive status
+      // Scroll + highlight regardless of archive/ownership status
       requestAnimationFrame(() => {
         const node = commentNodeRefs.current.get(target.id);
         if (node) {
@@ -7290,8 +7292,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // Clear highlight after animation completes
         setTimeout(() => { setHighlightCommentId(prev => prev === target.id ? null : prev); }, 2600);
       });
-      // Enter reply mode only if composer is actually available
-      if (!isArchive && commentRole) {
+      // Enter reply mode only if (a) composer is available and (b) target is not our own comment.
+      // Replying to yourself is nonsensical; we still scroll+highlight so the user sees what the
+      // deeplink pointed at, but we skip the reply-chip.
+      const isOwn = !!myActorHashRef.current && target.authorActorHash === myActorHashRef.current;
+      if (!isArchive && commentRole && !isOwn) {
         setReplyingTo(target);
         trackEvent('comment_reply_mode_entered', {
           itemId: entry.itemId, commentId: target.id, source: 'deeplink',
@@ -7299,9 +7304,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       } else {
         trackEvent('comment_reply_mode_skipped', {
           itemId: entry.itemId, commentId: target.id,
-          reason: isArchive ? 'archive' : 'no_role',
+          reason: isArchive ? 'archive' : isOwn ? 'own_comment' : 'no_role',
         });
-        pushToast(t('comments_reply_target_missing', locale), 'info');
+        if (!isOwn) pushToast(t('comments_reply_target_missing', locale), 'info');
       }
     } else {
       // Target missing (deleted, TTL-gone, or SYSTEM) — surface a toast
