@@ -558,7 +558,7 @@ type GodStats = {
   generatedAt: string;
 };
 
-type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall'
+type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-detail' | 'item-detail' | 'share' | 'guest-view' | 'guest-item-detail' | 'archive' | 'drafts' | 'settings' | 'faq' | 'changelog' | 'legal' | 'legal-doc' | 'my-reservations' | 'profile' | 'public-profile' | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join' | 'santa-chat' | 'santa-polls' | 'santa-exclusions' | 'santa-organizer' | 'santa-receiver-wishlist' | 'onboarding-entry' | 'onboarding-demo' | 'onboarding-complete' | 'onboarding-try' | 'onboarding-success' | 'onboarding-recovery' | 'onboarding-manual' | 'onboarding-catalog' | 'onboarding-create-wishlist' | 'onboarding-share' | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall' | 'gift-notes-onboarding'
 | 'first-share-prompt'
 | 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat'
 | 'curated-view'
@@ -3632,6 +3632,188 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
   );
 }
 
+function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { locale: Locale; onFinishSkip: () => void; onFinishCreate: () => void }) {
+  const [step, setStep] = React.useState(0);
+  const finish = (createFirst: boolean) => {
+    try { window.localStorage.setItem('gift_notes_onboarded', '1'); } catch { /* ok */ }
+    if (createFirst) onFinishCreate(); else onFinishSkip();
+  };
+  const orangeSoft = 'rgba(251,191,36,0.12)';
+  const pinkSoft = 'rgba(236,72,153,0.12)';
+  const greenSoft = 'rgba(52,211,153,0.12)';
+
+  const dots = (
+    <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 20 }}>
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} style={{ width: 20, height: 4, borderRadius: 2, background: i === step ? C.accent : i < step ? `${C.accent}66` : C.surfaceHover }} />
+      ))}
+    </div>
+  );
+  const nextBtn = (
+    <button onClick={() => setStep(step + 1)} style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: `0 4px 16px ${C.accentGlow}` }}>
+      {t('gn_ob_next', locale)}
+    </button>
+  );
+  const skipBtn = (
+    <button onClick={() => finish(false)} style={{ width: '100%', padding: 10, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: font, marginTop: 8 }}>
+      {t('gn_ob_skip', locale)}
+    </button>
+  );
+
+  const wrap: React.CSSProperties = { padding: '24px 20px 20px', minHeight: 'calc(100vh - 60px)', display: 'flex', flexDirection: 'column' };
+  const heroTitle = (s: string): React.CSSProperties => ({ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font, lineHeight: 1.25, textAlign: s === 'center' ? 'center' : 'left' });
+  const heroBody: React.CSSProperties = { fontSize: 14, color: C.textSec, lineHeight: 1.6, maxWidth: 320, margin: '0 auto 16px', textAlign: 'center' };
+
+  if (step === 0) {
+    return (
+      <div style={{ ...wrap, animation: 'fadeIn 0.25s ease' }}>
+        {dots}
+        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+          <div style={{ width: 80, height: 80, borderRadius: 24, background: 'linear-gradient(145deg, rgba(52,211,153,0.2), rgba(52,211,153,0.08))', border: '1px solid rgba(52,211,153,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, margin: '0 auto 16px', color: '#34D399' }}>✓</div>
+          <h2 style={heroTitle('center')}>{t('gn_ob_s1_title', locale)}</h2>
+          <p style={heroBody}>{t('gn_ob_s1_body', locale)}</p>
+        </div>
+        <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>{t('gn_ob_s1_checklist', locale)}</div>
+          {[t('gn_ob_s1_c1', locale), t('gn_ob_s1_c2', locale), t('gn_ob_s1_c3', locale), t('gn_ob_s1_c4', locale)].map((text, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+              <span style={{ color: '#34D399', fontSize: 16, flexShrink: 0 }}>✓</span>
+              <span style={{ fontSize: 14, color: C.text }}>{text}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 'auto' }}>{nextBtn}</div>
+      </div>
+    );
+  }
+
+  if (step === 1) {
+    return (
+      <div style={{ ...wrap, animation: 'fadeIn 0.25s ease' }}>
+        {dots}
+        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>📝</div>
+          <h2 style={heroTitle('center')}>{t('gn_ob_s2_title', locale)}</h2>
+          <p style={heroBody}>{t('gn_ob_s2_body', locale)}</p>
+        </div>
+        <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 12, padding: '10px 12px', boxShadow: '0 0 0 3px rgba(124,106,255,0.12)' }}>
+              <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>{t('gn_ob_s2_label_who', locale)}</div>
+              <div style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{t('gn_ob_s2_demo_person', locale)}</div>
+            </div>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 12px' }}>
+              <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>{t('gn_ob_s2_label_when', locale)}</div>
+              <div style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{t('gn_ob_s2_demo_date', locale)}</div>
+            </div>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 12px' }}>
+              <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{t('gn_ob_s2_label_type', locale)}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ padding: '5px 10px', borderRadius: 8, fontSize: 11, background: C.accent, color: '#fff', fontWeight: 500 }}>{t('gn_ob_s2_chip_bday', locale)}</div>
+                <div style={{ padding: '5px 10px', borderRadius: 8, fontSize: 11, background: C.bg, color: C.textSec, fontWeight: 500 }}>{t('gn_ob_s2_chip_anniv', locale)}</div>
+                <div style={{ padding: '5px 10px', borderRadius: 8, fontSize: 11, background: C.bg, color: C.textSec, fontWeight: 500 }}>{t('gn_ob_s2_chip_holiday', locale)}</div>
+              </div>
+            </div>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 12px' }}>
+              <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{t('gn_ob_s2_label_recurring', locale)}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ padding: '5px 10px', borderRadius: 8, fontSize: 11, background: C.accent, color: '#fff', fontWeight: 500 }}>{t('gn_ob_s2_chip_yearly', locale)}</div>
+                <div style={{ padding: '5px 10px', borderRadius: 8, fontSize: 11, background: C.bg, color: C.textSec, fontWeight: 500 }}>{t('gn_ob_s2_chip_once', locale)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: '12px 14px', background: C.bg, borderRadius: 12, borderLeft: `3px solid ${C.accent}`, fontSize: 13, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>
+          {t('gn_ob_s2_info', locale)}
+        </div>
+        <div style={{ marginTop: 'auto' }}>{nextBtn}{skipBtn}</div>
+      </div>
+    );
+  }
+
+  if (step === 2) {
+    return (
+      <div style={{ ...wrap, animation: 'fadeIn 0.25s ease' }}>
+        {dots}
+        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>💡</div>
+          <h2 style={heroTitle('center')}>{t('gn_ob_s3_title', locale)}</h2>
+          <p style={heroBody}>{t('gn_ob_s3_body', locale)}</p>
+        </div>
+        <div style={{ background: C.card, borderRadius: 14, padding: 14, marginBottom: 12, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: 'linear-gradient(180deg, #FBBF24, #f59e0b)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: orangeSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎂</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t('gn_ob_s3_demo_title', locale)}</div>
+              <div style={{ fontSize: 11, color: C.textMuted }}>{t('gn_ob_s3_demo_sub', locale)}</div>
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#FBBF24', background: orangeSoft, padding: '3px 7px', borderRadius: 6 }}>{t('gn_ob_s3_demo_chip', locale)}</div>
+          </div>
+          {[
+            { text: t('gn_ob_s3_idea_1', locale), price: t('gn_ob_s3_idea_1_price', locale) },
+            { text: t('gn_ob_s3_idea_2', locale), price: t('gn_ob_s3_idea_2_price', locale) },
+            { text: t('gn_ob_s3_idea_3', locale), price: t('gn_ob_s3_idea_3_price', locale) },
+          ].map((idea, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: C.surface, borderRadius: 10, marginTop: 6, borderLeft: `2px solid ${C.accent}` }}>
+              <span style={{ color: C.accent, fontSize: 14, lineHeight: 1 }}>•</span>
+              <span style={{ flex: 1, fontSize: 13, color: C.text }}>{idea.text}</span>
+              <span style={{ fontSize: 11, color: C.textMuted }}>{idea.price}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, marginTop: 6, borderRadius: 10, background: 'transparent', border: `1px dashed ${C.borderLight}`, fontSize: 12, color: C.textMuted }}>
+            {t('gn_ob_s3_add', locale)}
+          </div>
+        </div>
+        <div style={{ padding: '12px 14px', background: C.bg, borderRadius: 12, borderLeft: `3px solid ${C.accent}`, fontSize: 13, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>
+          {t('gn_ob_s3_info', locale)}
+        </div>
+        <div style={{ marginTop: 'auto' }}>{nextBtn}{skipBtn}</div>
+      </div>
+    );
+  }
+
+  // step === 3 — final: timeline + CTA
+  const tl = [
+    { dot: C.accent, label: t('gn_ob_s4_tl1_label', locale), desc: t('gn_ob_s4_tl1_desc', locale), color: C.accent, hasLine: true },
+    { dot: '#FBBF24', label: t('gn_ob_s4_tl2_label', locale), desc: t('gn_ob_s4_tl2_desc', locale), color: '#FBBF24', hasLine: true },
+    { dot: '#F87171', label: t('gn_ob_s4_tl3_label', locale), desc: t('gn_ob_s4_tl3_desc', locale), color: '#F87171', hasLine: true },
+    { dot: '#34D399', label: t('gn_ob_s4_tl4_label', locale), desc: t('gn_ob_s4_tl4_desc', locale), color: '#34D399', hasLine: false },
+  ];
+  return (
+    <div style={{ ...wrap, animation: 'fadeIn 0.25s ease' }}>
+      {dots}
+      <div style={{ textAlign: 'center', marginBottom: 18 }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>🔔</div>
+        <h2 style={heroTitle('center')}>{t('gn_ob_s4_title', locale)}</h2>
+        <p style={heroBody}>{t('gn_ob_s4_body', locale)}</p>
+      </div>
+      <div style={{ background: C.card, borderRadius: 16, padding: '14px 16px 10px', marginBottom: 20 }}>
+        {tl.map((ev, i) => (
+          <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: ev.dot, flexShrink: 0 }} />
+              {ev.hasLine && <div style={{ width: 2, height: 32, background: C.surfaceHover }} />}
+            </div>
+            <div style={{ paddingBottom: ev.hasLine ? 12 : 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: ev.color }}>{ev.label}</div>
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, lineHeight: 1.4 }}>{ev.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 'auto' }}>
+        <button onClick={() => finish(true)} style={{ width: '100%', padding: 14, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: `0 4px 16px ${C.accentGlow}` }}>
+          {t('gn_ob_s4_cta', locale)}
+        </button>
+        <button onClick={() => finish(false)} style={{ width: '100%', padding: 10, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: font, marginTop: 8 }}>
+          {t('gn_ob_s4_skip', locale)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function MiniApp(props: { apiBase: string; botUsername: string; miniappShortName: string }) {
   return (
     <MiniAppErrorBoundary>
@@ -6385,7 +6567,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       } else {
         setScreen('onboarding-try');
       }
-    } else if (screen === 'gift-notes' || screen === 'gift-notes-paywall') {
+    } else if (screen === 'gift-notes' || screen === 'gift-notes-paywall' || screen === 'gift-notes-onboarding') {
       setScreen('my-wishlists');
     } else if (screen === 'gift-notes-occasion') {
       setScreen('gift-notes');
@@ -6555,6 +6737,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       'gift-notes': 'gift-notes',
       'gift-notes-occasion': 'gift-notes',
       'gift-notes-paywall': 'gift-notes',
+      'gift-notes-onboarding': 'gift-notes',
       'santa-hub': 'santa-hub',
       'santa-create': 'santa-hub',
       'santa-campaign': 'santa-hub',
@@ -16904,85 +17087,197 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return null;
       })()}
 
-      {/* Event Calendar — premium onboarding/paywall */}
-      {screen === 'gift-notes-paywall' && (
-        <div style={{ padding: '0 0 calc(90px + env(safe-area-inset-bottom))', animation: 'fadeIn 0.3s ease' }}>
-          {/* Hero zone */}
-          <div style={{ background: 'linear-gradient(160deg, #1a1130 0%, #0d1628 60%, #091520 100%)', padding: '40px 24px 30px', textAlign: 'center', borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}>
-            <div style={{ fontSize: 56, marginBottom: 12, filter: 'drop-shadow(0 0 20px rgba(251,191,36,0.3))' }}>🎁📅</div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#fff', fontFamily: font, margin: '0 0 8px', lineHeight: 1.3 }}>
-              {t('gn_hero_title', locale)}
-            </h1>
-            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5, margin: 0 }}>
-              {t('gn_hero_subtitle', locale)}
-            </p>
-          </div>
-
-          {/* Value features */}
-          <div style={{ padding: '20px 24px 0' }}>
-            {[
-              { icon: '📋', text: t('gn_feature_dates', locale), color: C.accentSoft },
-              { icon: '💡', text: t('gn_feature_ideas', locale), color: 'rgba(251,191,36,0.12)' },
-              { icon: '⏳', text: t('gn_feature_counter', locale), color: 'rgba(52,211,153,0.12)' },
-              { icon: '🎯', text: t('gn_feature_planning', locale), color: 'rgba(96,165,250,0.12)' },
-            ].map((b, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: i < 3 ? `1px solid ${C.border}` : 'none' }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: b.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{b.icon}</div>
-                <span style={{ fontSize: 14, color: C.text, lineHeight: 1.4, fontFamily: font }}>{b.text}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Pricing block */}
-          <div style={{ padding: '20px 24px' }}>
-            <div style={{ background: C.surface, borderRadius: 16, padding: '16px 18px', border: `1px solid ${C.border}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <span style={{ fontSize: 24, fontWeight: 800, color: C.accent, fontFamily: font }}>{gnAccess.priceXtr}</span>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: C.textSec, marginLeft: 6 }}>Stars</span>
-                </div>
-              </div>
-              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{t('gn_purchase_info', locale)}</div>
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}`, fontSize: 12, color: '#34D399', fontWeight: 600 }}>
-                ✓ {t('gn_pro_included', locale)}
+      {/* Gift Calendar — demo-first paywall */}
+      {screen === 'gift-notes-paywall' && (() => {
+        const orangeSoft = 'rgba(251,191,36,0.12)';
+        const pinkSoft = 'rgba(236,72,153,0.12)';
+        const greenSoft = 'rgba(52,211,153,0.12)';
+        const redTxt = '#F87171';
+        const ring = (pct: number, color: string) => {
+          const offset = 107 - (107 * Math.min(Math.max(pct, 0), 1));
+          return (
+            <svg viewBox="0 0 40 40" style={{ position: 'absolute' as const, inset: 0, transform: 'rotate(-90deg)' }}>
+              <circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+              <circle cx="20" cy="20" r="17" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray="107" strokeDashoffset={offset} />
+            </svg>
+          );
+        };
+        const demoCard = (p: { emoji: string; emojiBg: string; stripColor: string; ringColor: string; ringPct: number; daysN: string | number; title: string; person: string; ideasChip?: boolean }) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '12px 14px', position: 'relative' as const, overflow: 'hidden' }}>
+            <div style={{ position: 'absolute' as const, left: 0, top: 0, bottom: 0, width: 3, background: p.stripColor }} />
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: p.emojiBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{p.emoji}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</div>
+              <div style={{ fontSize: 12, color: C.textSec, marginTop: 1 }}>{p.person}</div>
+              {p.ideasChip && <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', fontSize: 10, fontWeight: 600, color: C.accent, background: C.accentSoft, padding: '3px 7px', borderRadius: 6, marginTop: 4 }}>{t('gn_demo_ideas_count', locale)}</span>}
+            </div>
+            <div style={{ width: 40, height: 40, position: 'relative' as const, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {ring(p.ringPct, p.ringColor)}
+              <div style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', zIndex: 1 }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: p.ringColor, lineHeight: 1 }}>{p.daysN}</span>
+                <span style={{ fontSize: 7, fontWeight: 600, color: C.textMuted, marginTop: 1 }}>{t('gn_days_abbr', locale)}</span>
               </div>
             </div>
           </div>
-
-          {/* Sticky CTA */}
-          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom))', background: `linear-gradient(180deg, transparent, ${C.bg} 20%)`, zIndex: 50 }}>
-            <button onClick={async () => {
-              try {
-                const r = await tgFetch('/tg/billing/gift-notes/checkout', { method: 'POST' });
-                if (r.ok) {
-                  const d = await r.json() as { invoiceUrl?: string; alreadyUnlocked?: boolean };
-                  if (d.alreadyUnlocked) {
+        );
+        const benefit = (iconEl: string, iconBg: string, iconColor: string, title: string, body: string) => (
+          <div style={{ padding: 12, borderRadius: 14, background: C.surface, border: `1px solid ${C.border}` }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: iconBg, color: iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, marginBottom: 8 }}>{iconEl}</div>
+            <h4 style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.3, margin: '0 0 2px', fontFamily: font }}>{title}</h4>
+            <p style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.4, margin: 0 }}>{body}</p>
+          </div>
+        );
+        const buyClick = async () => {
+          try {
+            const r = await tgFetch('/tg/billing/gift-notes/checkout', { method: 'POST' });
+            if (r.ok) {
+              const d = await r.json() as { invoiceUrl?: string; alreadyUnlocked?: boolean };
+              if (d.alreadyUnlocked) {
+                const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
+                if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
+                setScreen('gift-notes');
+              } else if (d.invoiceUrl) {
+                try { window.Telegram?.WebApp?.openInvoice?.(d.invoiceUrl, async (status: string) => {
+                  if (status === 'paid') {
                     const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
                     if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
-                    setScreen('gift-notes');
-                  } else if (d.invoiceUrl) {
-                    try { window.Telegram?.WebApp?.openInvoice?.(d.invoiceUrl, async (status: string) => {
-                      if (status === 'paid') {
-                        const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
-                        if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
-                        pushToast(t('gn_access_unlocked', locale), 'success');
-                        setGnLoading(true);
-                        try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
-                        setGnLoading(false);
-                        setScreen('gift-notes');
-                      }
-                    }); } catch { window.open(d.invoiceUrl, '_blank'); }
+                    pushToast(t('gn_access_unlocked', locale), 'success');
+                    setGnLoading(true);
+                    try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
+                    setGnLoading(false);
+                    let onboarded = false;
+                    try { onboarded = !!window.localStorage.getItem('gift_notes_onboarded'); } catch { /* ok */ }
+                    setScreen(onboarded ? 'gift-notes' : 'gift-notes-onboarding');
                   }
-                }
-              } catch { pushToast('Error', 'error'); }
-            }} style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: `0 6px 20px ${C.accentGlow}` }}>
-              ⭐ {t('gn_upsell_cta', locale, { price: gnAccess.priceXtr })}
-            </button>
-            <button onClick={() => setScreen('my-wishlists')} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: font, marginTop: 6 }}>
-              {t('gn_upsell_later', locale)}
-            </button>
+                }); } catch { window.open(d.invoiceUrl, '_blank'); }
+              }
+            }
+          } catch { pushToast('Error', 'error'); }
+        };
+        return (
+          <div style={{ padding: '0 0 calc(110px + env(safe-area-inset-bottom))', animation: 'fadeIn 0.3s ease' }}>
+            {/* Hero with demo stack */}
+            <div style={{
+              padding: '20px 20px 0',
+              textAlign: 'center' as const,
+              background:
+                'radial-gradient(circle at 50% 0%, rgba(124,106,255,0.22) 0%, transparent 60%),' +
+                'radial-gradient(circle at 20% 30%, rgba(236,72,153,0.10) 0%, transparent 40%),' +
+                'radial-gradient(circle at 80% 20%, rgba(251,191,36,0.08) 0%, transparent 40%)',
+            }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: '0.05em', textTransform: 'uppercase' as const, marginBottom: 14, padding: '5px 10px', borderRadius: 20, background: C.accentSoft, border: '1px solid rgba(124,106,255,0.2)' }}>
+                📅 {t('gn_brand', locale)}
+              </div>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, lineHeight: 1.2, margin: '0 0 8px', fontFamily: font }}>
+                {t('gn_hero_title', locale)}
+              </h1>
+              <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, margin: '0 auto 18px', maxWidth: 300 }}>
+                {t('gn_hero_subtitle', locale)}
+              </p>
+
+              {/* Demo card stack */}
+              <div style={{ background: C.card, border: `1px solid ${C.borderLight}`, borderRadius: 20, padding: 14, textAlign: 'left' as const, boxShadow: '0 8px 32px rgba(0,0,0,0.35)', position: 'relative' as const, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 12 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34D399', boxShadow: '0 0 8px #34D399', display: 'inline-block', animation: 'gnDotPulse 2s infinite' }} />
+                  {t('gn_demo_header', locale)}
+                </div>
+                <style>{`@keyframes gnDotPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.15); } }`}</style>
+                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                  {demoCard({ emoji: '🎂', emojiBg: orangeSoft, stripColor: 'linear-gradient(180deg,#FBBF24,#f59e0b)', ringColor: '#FBBF24', ringPct: 0.85, daysN: 3, title: t('gn_demo_title_mom', locale), person: t('gn_demo_person_mom', locale), ideasChip: true })}
+                  {demoCard({ emoji: '💍', emojiBg: pinkSoft, stripColor: `linear-gradient(180deg,${C.accent},#A78BFA)`, ringColor: C.accent, ringPct: 0.58, daysN: 12, title: t('gn_demo_title_anniv', locale), person: t('gn_demo_person_anniv', locale) })}
+                  {demoCard({ emoji: '🎄', emojiBg: greenSoft, stripColor: 'linear-gradient(180deg,#34D399,#6ee7b7)', ringColor: '#34D399', ringPct: 0.05, daysN: 261, title: t('gn_demo_title_ny', locale), person: t('gn_demo_person_ny', locale) })}
+                </div>
+              </div>
+            </div>
+
+            {/* Benefits 2x2 */}
+            <div style={{ padding: '16px 20px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {benefit('🔔', C.accentSoft, C.accent, t('gn_feat_push_title', locale), t('gn_feat_push_body', locale))}
+              {benefit('💡', orangeSoft, '#FBBF24', t('gn_feat_ideas_title', locale), t('gn_feat_ideas_body', locale))}
+              {benefit('🔁', pinkSoft, '#EC4899', t('gn_feat_recurring_title', locale), t('gn_feat_recurring_body', locale))}
+              {benefit('∞', greenSoft, '#34D399', t('gn_feat_unlimited_title', locale), t('gn_feat_unlimited_body', locale))}
+            </div>
+
+            {/* Social proof */}
+            <div style={{ margin: '14px 20px 0', padding: '12px 14px', borderRadius: 14, background: 'linear-gradient(135deg, rgba(124,106,255,0.08), rgba(236,72,153,0.05))', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', flexShrink: 0 }}>
+                {[{ bg: orangeSoft, e: '🎂' }, { bg: pinkSoft, e: '💍' }, { bg: greenSoft, e: '🎄' }].map((a, i) => (
+                  <div key={i} style={{ width: 28, height: 28, borderRadius: '50%', background: a.bg, border: `2px solid ${C.bg}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, marginLeft: i === 0 ? 0 : -8 }}>{a.e}</div>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4 }}>{t('gn_social_proof', locale)}</div>
+            </div>
+
+            {/* Price block */}
+            <div style={{ margin: '18px 20px 0', padding: 18, borderRadius: 18, background: 'linear-gradient(135deg, rgba(124,106,255,0.14) 0%, rgba(124,106,255,0.04) 100%)', border: '1px solid rgba(124,106,255,0.28)', position: 'relative' as const, overflow: 'hidden' }}>
+              <div style={{ position: 'absolute' as const, right: -8, top: -20, fontSize: 80, opacity: 0.06, pointerEvents: 'none' as const }}>⭐</div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#34D399', background: greenSoft, padding: '3px 7px', borderRadius: 5, marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
+                ★ {t('gn_price_ribbon', locale)}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 32, fontWeight: 800, color: C.text, lineHeight: 1, fontFamily: font }}>{gnAccess.priceXtr}<span style={{ color: '#FBBF24' }}>⭐</span></span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.textSec }}>{t('gn_price_approx', locale)}</span>
+              </div>
+              <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('gn_price_subtext', locale)}</div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                {[
+                  { t: t('gn_price_chip_forever_t', locale), b: t('gn_price_chip_forever_b', locale) },
+                  { t: t('gn_price_chip_unlimited_t', locale), b: t('gn_price_chip_unlimited_b', locale) },
+                  { t: t('gn_price_chip_pro_t', locale), b: t('gn_price_chip_pro_b', locale) },
+                ].map((c, i) => (
+                  <div key={i} style={{ flex: 1, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', fontSize: 11, color: C.textSec, textAlign: 'center' as const, lineHeight: 1.3 }}>
+                    <strong style={{ color: C.text, display: 'block', fontWeight: 700 }}>{c.t}</strong>
+                    {c.b}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* FAQ */}
+            <div style={{ padding: '16px 20px 0' }}>
+              {[
+                { q: t('gn_faq_q_notify', locale), a: t('gn_faq_a_notify', locale) },
+                { q: t('gn_faq_q_recurring', locale), a: t('gn_faq_a_recurring', locale) },
+                { q: t('gn_faq_q_pro', locale), a: t('gn_faq_a_pro', locale, { price: gnAccess.priceXtr }) },
+              ].map((f, i) => (
+                <div key={i} style={{ padding: '12px 0', borderTop: i === 0 ? 'none' : `1px solid ${C.border}`, paddingTop: i === 0 ? 0 : 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ width: 16, height: 16, borderRadius: '50%', background: C.accentSoft, color: C.accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>?</span>
+                    {f.q}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5, paddingLeft: 24 }}>{f.a}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Sticky CTA */}
+            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '14px 20px calc(14px + env(safe-area-inset-bottom))', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 50 }}>
+              <button onClick={buyClick} style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: `0 8px 24px ${C.accentGlow}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                ⭐ {t('gn_upsell_cta', locale, { price: gnAccess.priceXtr })}
+              </button>
+              <button onClick={() => setScreen('my-wishlists')} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: font, marginTop: 6 }}>
+                {t('gn_upsell_later', locale)}
+              </button>
+            </div>
           </div>
-        </div>
+        );
+      })()}
+
+      {/* Gift Calendar — post-purchase onboarding (4 steps) */}
+      {screen === 'gift-notes-onboarding' && (
+        <GiftNotesOnboardingContent
+          locale={locale}
+          onFinishSkip={() => setScreen('gift-notes')}
+          onFinishCreate={() => {
+            setGnFormTitle('');
+            setGnFormDate('');
+            setGnFormType('BIRTHDAY');
+            setGnFormRecurrence('YEARLY');
+            setGnFormPerson('');
+            setShowGnCreateOccasion(true);
+            setScreen('gift-notes');
+          }}
+        />
       )}
 
       {/* Occasion list — v3 redesign */}
@@ -17061,45 +17356,69 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
         );
 
+        const isEmpty = !gnLoading && gnOccasions.length === 0;
+        const orangeSoft = 'rgba(251,191,36,0.12)';
+        const pinkSoft = 'rgba(236,72,153,0.12)';
+        const greenSoft = 'rgba(52,211,153,0.12)';
+
+        const templateCard = (p: { emoji: string; emojiBg: string; stripColor: string; title: string; type: 'BIRTHDAY' | 'ANNIVERSARY' | 'HOLIDAY' | 'OTHER'; recurrence: 'YEARLY' | 'NONE' }) => (
+          <div
+            onClick={() => { setGnFormTitle(p.title); setGnFormDate(''); setGnFormType(p.type); setGnFormRecurrence(p.recurrence); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '12px 14px', position: 'relative' as const, overflow: 'hidden', cursor: 'pointer', opacity: 0.9, transition: 'opacity 0.15s, border-color 0.15s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; (e.currentTarget as HTMLElement).style.borderColor = C.accent; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.9'; (e.currentTarget as HTMLElement).style.borderColor = C.border; }}
+          >
+            <div style={{ position: 'absolute' as const, left: 0, top: 0, bottom: 0, width: 3, background: p.stripColor }} />
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: p.emojiBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{p.emoji}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</div>
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{t('gn_empty_template_tap', locale)}</div>
+            </div>
+            <div style={{ color: C.accent, fontSize: 18, fontWeight: 600, flexShrink: 0, paddingRight: 4 }}>＋</div>
+          </div>
+        );
+
         return (
           <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease', display: 'flex', flexDirection: 'column' as const, minHeight: 'calc(100vh - 60px)' }}>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div>
                 <h1 style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, margin: 0 }}>{t('gn_title', locale)}</h1>
-                <div style={{ fontSize: 13, color: C.textSec, marginTop: 2, fontFamily: font }}>{gnOccasions.length} {t('gn_events_count', locale)}{totalIdeas > 0 ? ` · ${totalIdeas} ${t('gn_ideas_count_label', locale)}` : ''}</div>
+                <div style={{ fontSize: 13, color: C.textSec, marginTop: 2, fontFamily: font }}>
+                  {isEmpty
+                    ? t('gn_empty_description', locale)
+                    : `${gnOccasions.length} ${t('gn_events_count', locale)}${totalIdeas > 0 ? ` · ${totalIdeas} ${t('gn_ideas_count_label', locale)}` : ''}`}
+                </div>
               </div>
             </div>
 
             {gnLoading && <div style={{ textAlign: 'center', color: C.textMuted, padding: 20 }}>...</div>}
 
-            {/* Empty state */}
-            {!gnLoading && gnOccasions.length === 0 && (
+            {/* Empty state — template cards + small chips */}
+            {isEmpty && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const }}>
-                <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-                  <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
-                  <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, marginBottom: 4 }}>{t('gn_empty', locale)}</div>
-                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.4, maxWidth: 280, margin: '0 auto' }}>{t('gn_empty_description', locale)}</div>
+                <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 14, marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 10 }}>
+                    💡 {t('gn_inspiration_header', locale)}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                    {templateCard({ emoji: '🎂', emojiBg: orangeSoft, stripColor: 'linear-gradient(180deg,#FBBF24,#f59e0b)', title: t('gn_empty_template_bday', locale), type: 'BIRTHDAY', recurrence: 'YEARLY' })}
+                    {templateCard({ emoji: '💍', emojiBg: pinkSoft, stripColor: 'linear-gradient(180deg,#EC4899,#f472b6)', title: t('gn_empty_template_anniv', locale), type: 'ANNIVERSARY', recurrence: 'YEARLY' })}
+                    {templateCard({ emoji: '🎄', emojiBg: greenSoft, stripColor: 'linear-gradient(180deg,#34D399,#6ee7b7)', title: t('gn_empty_template_holiday', locale), type: 'HOLIDAY', recurrence: 'YEARLY' })}
+                  </div>
                 </div>
-                {/* Inspiration hints */}
-                <div style={{ marginBottom: 'auto' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ color: C.accent }}>💡</span> {t('gn_inspiration_header', locale)}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                    {[
-                      { emoji: '🎂', label: t('gn_type_birthday', locale), type: 'BIRTHDAY' as const },
-                      { emoji: '💍', label: t('gn_type_anniversary', locale), type: 'ANNIVERSARY' as const },
-                      { emoji: '🎄', label: t('occasion_type_newyear', locale), type: 'HOLIDAY' as const },
-                      { emoji: '👶', label: t('occasion_type_birth', locale), type: 'OTHER' as const },
-                      { emoji: '🎓', label: t('occasion_type_graduation', locale), type: 'OTHER' as const },
-                    ].map((hint, i) => (
-                      <div key={i} onClick={() => { setGnFormTitle(hint.label); setGnFormDate(''); setGnFormType(hint.type); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
-                        style={{ padding: '10px 14px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, fontFamily: font, color: C.text }}>
-                        {hint.emoji} {hint.label}
-                      </div>
-                    ))}
-                  </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 'auto' }}>
+                  {[
+                    { label: t('gn_empty_small_birth', locale), title: t('occasion_type_birth', locale), type: 'OTHER' as const, recurrence: 'NONE' as const },
+                    { label: t('gn_empty_small_graduation', locale), title: t('occasion_type_graduation', locale), type: 'OTHER' as const, recurrence: 'NONE' as const },
+                    { label: t('gn_empty_small_housewarming', locale), title: t('occasion_type_housewarming', locale), type: 'OTHER' as const, recurrence: 'NONE' as const },
+                    { label: t('gn_empty_small_other', locale), title: t('gn_type_other', locale), type: 'OTHER' as const, recurrence: 'NONE' as const },
+                  ].map((chip, i) => (
+                    <div key={i} onClick={() => { setGnFormTitle(chip.title); setGnFormDate(''); setGnFormType(chip.type); setGnFormRecurrence(chip.recurrence); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
+                      style={{ padding: '8px 12px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.textSec, cursor: 'pointer', fontFamily: font }}>
+                      {chip.label}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -17114,7 +17433,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', pointerEvents: 'none' }}>
               <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
                 style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
-                + {t('gn_add_occasion', locale)}
+                {isEmpty ? t('gn_empty_cta_custom', locale) : `+ ${t('gn_add_occasion', locale)}`}
               </button>
             </div>
           </div>
