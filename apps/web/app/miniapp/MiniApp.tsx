@@ -6274,60 +6274,51 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData, guestViewReturnToProfileUsername, checkOnboarding, loadPublicProfile, loadProfileSubscribeStatus]);
 
-  // Ref-based handler so we register ONCE for the lifetime of the component.
-  // Re-registering on every navBack identity change caused Telegram SDK to lose
-  // the handler after many onClick/offClick cycles (e.g. sub→unsub→sub rapidly).
-  const navBackRef = useRef(navBack);
-  const screenRef = useRef(screen);
-  useEffect(() => { navBackRef.current = navBack; }, [navBack]);
-  useEffect(() => { screenRef.current = screen; }, [screen]);
-  useEffect(() => {
-    // Retry-based registration so we don't miss the window where SDK isn't
-    // ready yet at component mount. Without retry, an undefined tg on first
-    // render left BackButton.onClick un-registered for the lifetime of the app.
-    let cancelled = false;
-    let registeredTg: NonNullable<typeof window.Telegram>['WebApp'] | null = null;
-    const handler = () => {
-      try {
-        trackEvent('miniapp.backbutton_pressed', { screen: screenRef.current });
-      } catch { /* telemetry must never break Back */ }
-      void navBackRef.current();
-    };
-    const attempt = () => {
-      if (cancelled) return;
-      const tg = window.Telegram?.WebApp;
-      if (!tg?.BackButton) {
-        setTimeout(attempt, 100);
-        return;
-      }
-      tg.BackButton.onClick(handler);
-      registeredTg = tg;
-    };
-    attempt();
-    return () => {
-      cancelled = true;
-      registeredTg?.BackButton?.offClick(handler);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // Combined registration + show/hide: re-register handler on every screen
+  // change. Previous "register once" approach let iOS Telegram silently drop
+  // the handler between screens, so Back did nothing. Re-registering each
+  // time is cheap and makes the button bulletproof.
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
-    if (!tg) return;
-    if ((screen === 'my-wishlists' && !santaWishlistPickerReturnId) || screen === 'loading' || screen === 'error' || screen === 'maintenance') {
+    if (!tg?.BackButton) return;
+    const shouldHide =
+      (screen === 'my-wishlists' && !santaWishlistPickerReturnId) ||
+      screen === 'loading' ||
+      screen === 'error' ||
+      screen === 'maintenance';
+    if (shouldHide) {
       tg.BackButton.hide();
-    } else {
-      tg.BackButton.show();
+      return;
     }
-  }, [screen, santaWishlistPickerReturnId]);
+    const handler = () => {
+      try { trackEvent('miniapp.backbutton_pressed', { screen }); } catch { /* never break Back */ }
+      void navBack();
+    };
+    tg.BackButton.onClick(handler);
+    tg.BackButton.show();
+    return () => {
+      tg.BackButton.offClick(handler);
+    };
+  }, [screen, santaWishlistPickerReturnId, navBack, trackEvent]);
 
   // Scroll-to-top on entering screens that should always render from the top.
-  // Runs AFTER React commits the new screen, which is more reliable than a
-  // sync window.scrollTo in the triggering onClick handler.
+  // iOS Telegram WebView doesn't always honor `window.scrollTo` alone — we
+  // also reset document.documentElement and document.body, and retry on the
+  // next frame in case layout isn't settled yet.
   useEffect(() => {
-    if (screen === 'showcase-preview' || screen === 'public-profile' || screen === 'guest-view') {
-      window.scrollTo(0, 0);
-    }
+    if (screen !== 'showcase-preview' && screen !== 'public-profile' && screen !== 'guest-view') return;
+    const toTop = () => {
+      try { window.scrollTo(0, 0); } catch { /* ignore */ }
+      try { if (document.documentElement) document.documentElement.scrollTop = 0; } catch { /* ignore */ }
+      try { if (document.body) document.body.scrollTop = 0; } catch { /* ignore */ }
+    };
+    toTop();
+    const raf = requestAnimationFrame(toTop);
+    const t = setTimeout(toTop, 50);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
   }, [screen]);
 
   // Onboarding step tracking — fire event when user lands on any onboarding screen
