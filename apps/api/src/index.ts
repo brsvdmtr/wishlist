@@ -621,7 +621,7 @@ publicRouter.get(
         owner: {
           select: {
             firstName: true,
-            profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
+            profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true, profileVisibility: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
           },
         },
         items: {
@@ -709,6 +709,11 @@ publicRouter.get(
       }
     }
 
+    // Owner username is exposed only if the owner's profile is visible (not NOBODY)
+    const ownerUsername = (wishlist.owner?.profile?.profileVisibility !== 'NOBODY' && wishlist.owner?.profile?.username)
+      ? wishlist.owner.profile.username
+      : null;
+
     return res.json({
       wishlist: {
         id: wishlist.id,
@@ -719,6 +724,7 @@ publicRouter.get(
         visibility: (wishlist.visibility as string).toLowerCase(),
         ownerName,
         ownerAvatarUrl,
+        ownerUsername,
       },
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,
@@ -756,7 +762,7 @@ publicRouter.get(
           owner: {
             select: {
               firstName: true,
-              profile: { select: { displayName: true, username: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
+              profile: { select: { displayName: true, username: true, profileVisibility: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
             },
           },
           items: {
@@ -819,6 +825,10 @@ publicRouter.get(
       }
     }
 
+    const ownerUsernameToken = (wishlist.owner?.profile?.profileVisibility !== 'NOBODY' && wishlist.owner?.profile?.username)
+      ? wishlist.owner.profile.username
+      : null;
+
     return res.json({
       wishlist: {
         id: wishlist.id,
@@ -827,6 +837,7 @@ publicRouter.get(
         description: wishlist.description,
         deadline: wishlist.deadline,
         ownerName: ownerNameToken,
+        ownerUsername: ownerUsernameToken,
       },
       items: wishlist.items.map(mapItemForPublic),
       tags: wishlist.tags,

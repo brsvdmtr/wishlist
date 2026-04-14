@@ -603,6 +603,10 @@ const RELEASE_NOTES: ReleaseNote[] = [
       { ru: 'Размеры и любимые бренды — чтобы дарителям было проще выбрать', en: 'Sizes and favourite brands — to make gifting easier' },
       { ru: 'Публичная ссылка на витрину — поделись одним тапом в Telegram', en: 'Public showcase link — share with one tap in Telegram' },
       { ru: 'Прогресс заполнения и предпросмотр перед публикацией', en: 'Progress tracker and preview before publishing' },
+      { ru: '👤 Подписки на профили — подписывайся на чужие витрины, чтобы быстро до них возвращаться', en: '👤 Profile subscriptions — follow other users\' showcases and return to them in one tap' },
+      { ru: 'Вкладка «Подписки» теперь делится на «Вишлисты» и «Профили»', en: '"Subscriptions" tab is now split into "Wishlists" and "Profiles"' },
+      { ru: 'Кнопка «Подписаться» прямо в чужом профиле', en: '"Subscribe" button right inside another user\'s profile' },
+      { ru: 'Тап по аватару владельца в чужом вишлисте — открывает его профиль', en: 'Tap the owner\'s avatar in a shared wishlist — opens their profile' },
     ],
   },
   {
@@ -3962,7 +3966,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   // Guest state
-  const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName: string | null; ownerAvatarUrl: string | null; smartReservationsEnabled?: boolean; smartResTtlHours?: number } | null>(null);
+  const [guestWl, setGuestWl] = useState<{ id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName: string | null; ownerAvatarUrl: string | null; ownerUsername: string | null; smartReservationsEnabled?: boolean; smartResTtlHours?: number } | null>(null);
   const [guestItems, setGuestItems] = useState<GuestItem[]>([]);
 
   // Item detail view (for both owner and guest)
@@ -5499,7 +5503,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // --- Guest API calls
   const loadGuestWishlist = useCallback(async (param: string) => {
     type GuestResponse = {
-      wishlist: { id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName?: string | null; ownerAvatarUrl?: string | null };
+      wishlist: { id: string; slug: string; title: string; description: string | null; deadline: string | null; ownerName?: string | null; ownerAvatarUrl?: string | null; ownerUsername?: string | null };
       items: Array<{
         id: string; title: string; description: string | null; url: string; priceText: string | null;
         imageUrl: string | null;
@@ -5531,7 +5535,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (!json) throw new Error(t('error_load_failed', locale));
 
     const priorityMap: Record<string, 1 | 2 | 3> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
-    setGuestWl({ ...json.wishlist, ownerName: json.wishlist.ownerName ?? null, ownerAvatarUrl: json.wishlist.ownerAvatarUrl ?? null });
+    setGuestWl({ ...json.wishlist, ownerName: json.wishlist.ownerName ?? null, ownerAvatarUrl: json.wishlist.ownerAvatarUrl ?? null, ownerUsername: json.wishlist.ownerUsername ?? null });
     const mappedItems = json.items.map((i) => ({
       id: i.id,
       title: i.title,
@@ -12892,22 +12896,51 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {screen === 'guest-view' && guestWl && (
         <div style={{ padding: '16px 20px 120px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '8px 0 20px' }}>
-            <UserAvatar
-              avatarUrl={guestWl.ownerAvatarUrl}
-              name={guestWl.ownerName ?? '🎁'}
-              size={48}
-              accent={C.accent}
-            />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {guestWl.ownerName && (
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.accent, marginBottom: 2 }}>{guestWl.ownerName}</div>
-              )}
-              <div style={{ fontSize: 18, fontWeight: 700, fontFamily: font, color: C.text }}>{guestWl.title}</div>
-              {guestWl.description && <div style={{ fontSize: 13, color: C.textMuted }}>{guestWl.description}</div>}
-              {guestWl.deadline && (
-                <div style={{ fontSize: 12, color: C.textMuted }}>📅 {fmtDeadline(guestWl.deadline)}</div>
-              )}
-            </div>
+            {(() => {
+              const ownerClickable = !!guestWl.ownerUsername;
+              const openOwnerProfile = () => {
+                const uname = guestWl.ownerUsername;
+                if (!uname) return;
+                setPublicProfileUsername(uname);
+                setPublicProfileSubscribed(false);
+                setPublicProfileError(null);
+                setPublicProfileData(null);
+                void loadProfileSubscribeStatus(uname);
+                void loadPublicProfile(uname);
+                setScreen('public-profile');
+                trackEvent('profile_open_from_guest_view', { username: uname });
+              };
+              return (
+                <>
+                  <div
+                    onClick={ownerClickable ? openOwnerProfile : undefined}
+                    style={{ cursor: ownerClickable ? 'pointer' : 'default', flexShrink: 0 }}
+                  >
+                    <UserAvatar
+                      avatarUrl={guestWl.ownerAvatarUrl}
+                      name={guestWl.ownerName ?? '🎁'}
+                      size={48}
+                      accent={C.accent}
+                    />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {guestWl.ownerName && (
+                      <div
+                        onClick={ownerClickable ? openOwnerProfile : undefined}
+                        style={{ fontSize: 13, fontWeight: 600, color: C.accent, marginBottom: 2, cursor: ownerClickable ? 'pointer' : 'default', display: 'inline-block' }}
+                      >
+                        {guestWl.ownerName}{ownerClickable ? ' ›' : ''}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: font, color: C.text }}>{guestWl.title}</div>
+                    {guestWl.description && <div style={{ fontSize: 13, color: C.textMuted }}>{guestWl.description}</div>}
+                    {guestWl.deadline && (
+                      <div style={{ fontSize: 12, color: C.textMuted }}>📅 {fmtDeadline(guestWl.deadline)}</div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
             {/* Subscribe button — right corner, only for logged-in users */}
             {tgUser && (
               <button
@@ -24521,13 +24554,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const isOwn = pp?.profile?.username && profileData?.username && pp.profile.username.toLowerCase() === profileData.username.toLowerCase();
         return (
           <div style={{ fontFamily: font, color: C.text, animation: 'fadeIn 0.3s ease' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', gap: 12 }}>
-              <button onClick={navBack} style={{ background: 'none', border: 'none', color: C.text, fontSize: 16, cursor: 'pointer', fontFamily: font, padding: '4px 0' }}>
-                ‹ {t('back', locale)}
-              </button>
-            </div>
-
             {publicProfileLoading && (
               <div style={{ padding: '80px 24px', textAlign: 'center' }}>
                 <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
