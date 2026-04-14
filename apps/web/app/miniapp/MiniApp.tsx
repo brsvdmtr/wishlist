@@ -6061,8 +6061,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         setGuestViewReturnToProfileUsername(null);
         setCurrentWl(null);
         setPublicProfileUsername(uname);
+        if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
         setScreen('public-profile');
-        window.scrollTo(0, 0);
         // Reload profile in case subscription state or content changed.
         void loadProfileSubscribeStatus(uname);
         void loadPublicProfile(uname);
@@ -6302,16 +6302,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   }, [screen, santaWishlistPickerReturnId, navBack, trackEvent]);
 
   // Scroll-to-top on entering screens that should always render from the top.
-  // iOS Telegram WebView doesn't always honor `window.scrollTo` alone — we
-  // also reset document.documentElement and document.body, and retry on the
-  // next frame in case layout isn't settled yet.
+  // The app's scroll container is `scrollContainerRef` (position:fixed +
+  // overflowY:auto) — NOT `window`. Previous attempts with window.scrollTo
+  // were silent no-ops. Reset scrollTop on the actual scrollable element,
+  // with a requestAnimationFrame retry in case content isn't laid out yet.
   useEffect(() => {
     if (screen !== 'showcase-preview' && screen !== 'public-profile' && screen !== 'guest-view') return;
-    const toTop = () => {
-      try { window.scrollTo(0, 0); } catch { /* ignore */ }
-      try { if (document.documentElement) document.documentElement.scrollTop = 0; } catch { /* ignore */ }
-      try { if (document.body) document.body.scrollTop = 0; } catch { /* ignore */ }
-    };
+    const sc = scrollContainerRef.current;
+    if (!sc) return;
+    const toTop = () => { sc.scrollTop = 0; };
     toTop();
     const raf = requestAnimationFrame(toTop);
     const t = setTimeout(toTop, 50);
@@ -24268,7 +24267,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <button
                     type="button"
-                    onClick={() => { trackEvent('showcase.preview_opened'); setScreen('showcase-preview'); window.scrollTo(0, 0); }}
+                    onClick={() => {
+                      trackEvent('showcase.preview_opened');
+                      // Reset scroll BEFORE setScreen so there's no visible jump
+                      // while React is committing the new screen. The post-commit
+                      // useEffect is a safety net for any layout-shift edge case.
+                      if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+                      setScreen('showcase-preview');
+                    }}
                     disabled={!hasAnyContent}
                     style={{
                       ...btnSecondary,
