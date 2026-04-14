@@ -4064,6 +4064,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Subscribe CTA state on the public-profile screen
   const [publicProfileSubscribed, setPublicProfileSubscribed] = useState(false);
   const [publicProfileSubInFlight, setPublicProfileSubInFlight] = useState(false);
+  // Remember return-to-profile target when opening a wishlist from a public profile,
+  // so BackButton from guest-view returns to that profile instead of my-wishlists.
+  const [guestViewReturnToProfileUsername, setGuestViewReturnToProfileUsername] = useState<string | null>(null);
 
   // Guest filter & sort state
   const [guestBudgetMax, setGuestBudgetMax] = useState<number | null>(null);
@@ -6052,6 +6055,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       }
     } else if (screen === 'wishlist-detail' || screen === 'guest-view') {
       if (itemReorderMode) cancelItemReorderMode();
+      // If opened from a public profile — return to that profile instead of my-wishlists.
+      if (screen === 'guest-view' && guestViewReturnToProfileUsername) {
+        const uname = guestViewReturnToProfileUsername;
+        setGuestViewReturnToProfileUsername(null);
+        setCurrentWl(null);
+        setPublicProfileUsername(uname);
+        setScreen('public-profile');
+        window.scrollTo(0, 0);
+        // Reload profile in case subscription state or content changed.
+        void loadProfileSubscribeStatus(uname);
+        void loadPublicProfile(uname);
+        return;
+      }
       setCurrentWl(null);
       setScreen('my-wishlists');
       if (screen === 'guest-view') {
@@ -6074,7 +6090,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setScreen('my-wishlists');
       // Deep-link visitors arrive here via profile_{username} startParam;
       // their own wishlists may not be loaded yet, so fetch them now.
-      loadWishlists().catch(() => { /* silent — screen already set */ });
+      // Also trigger onboarding check — new users should land on onboarding,
+      // not on an empty "my wishlists" screen.
+      loadWishlists()
+        .then(async () => {
+          await checkOnboarding();
+        })
+        .catch(() => { /* silent — screen already set */ });
     } else if (screen === 'profile') {
       setScreen('my-wishlists');
     } else if (screen === 'showcase-editor') {
@@ -24206,7 +24228,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <button
                     type="button"
-                    onClick={() => { trackEvent('showcase.preview_opened'); setScreen('showcase-preview'); }}
+                    onClick={() => { trackEvent('showcase.preview_opened'); setScreen('showcase-preview'); window.scrollTo(0, 0); }}
                     disabled={!hasAnyContent}
                     style={{
                       ...btnSecondary,
@@ -24698,6 +24720,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <div key={wl.id}
                           onClick={() => {
                             trackEvent('public_profile.wishlist_opened', { source: 'pinned' });
+                            setGuestViewReturnToProfileUsername(pp.profile.username ?? null);
                             void loadGuestWishlist(wl.slug).then(() => { setScreen('guest-view'); window.scrollTo(0, 0); }).catch(() => {});
                           }}
                           style={{
@@ -24854,6 +24877,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <div key={wl.id}
                           onClick={() => {
                             trackEvent('public_profile.wishlist_opened', { source: 'list' });
+                            setGuestViewReturnToProfileUsername(pp.profile.username ?? null);
                             void loadGuestWishlist(wl.slug).then(() => { setScreen('guest-view'); window.scrollTo(0, 0); }).catch(() => {});
                           }}
                           style={{
