@@ -438,6 +438,19 @@ model UserProfile {
   dontGiftComment     String?
   dontGiftVisible     Boolean   @default(true)
 
+  // PRO Showcase (premium profile & wishlist showcase)
+  showcaseEnabled       Boolean   @default(false)
+  showcaseCoverUrl      String?
+  showcaseBio           String?   @db.VarChar(180)
+  showcasePinnedIds     String[]  @default([])
+  showcasePreferences   String?   @db.VarChar(300)
+  showcaseSizeClothing  String?
+  showcaseSizeShoes     String?
+  showcaseSizeRing      String?
+  showcaseSizeOther     String?
+  showcaseBrands        String[]  @default([])
+  showcaseUpdatedAt     DateTime?
+
   // Support
   supportId String? @unique
 

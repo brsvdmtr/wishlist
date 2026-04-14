@@ -244,7 +244,8 @@ type UpsellContext =
   | 'dont_gift_banner'
   | 'curated_selection'
   | 'smart_reservations'
-  | 'bot_import';
+  | 'bot_import'
+  | 'showcase';
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -545,7 +546,8 @@ type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-d
 | 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail' | 'group-gift-join' | 'group-gift-chat'
 | 'curated-view'
 | 'link-management'
-| 'guest-link-expired';
+| 'guest-link-expired'
+| 'showcase-editor' | 'showcase-preview';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1771,6 +1773,18 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
     subtitle: t('upsell_url_subtitle', locale),
     showTable: false,
     benefits: [t('upsell_url_b1', locale), t('upsell_url_b2', locale), t('upsell_url_b3', locale)],
+  },
+  showcase: {
+    emoji: '✨',
+    title: t('showcase_paywall_title', locale),
+    subtitle: t('showcase_paywall_desc', locale),
+    showTable: false,
+    benefits: [
+      t('showcase_paywall_cover', locale),
+      t('showcase_paywall_pinned', locale),
+      t('showcase_paywall_pref', locale),
+      t('showcase_paywall_antigift', locale),
+    ],
   },
 });
 
@@ -3724,9 +3738,38 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [publicProfileData, setPublicProfileData] = useState<{
     profile: { displayName: string | null; username: string | null; bio: string | null; avatarUrl: string | null; avatarThumbUrl: string | null; isPublic: boolean };
     wishlists: { id: string; slug: string; title: string; deadline: string | null; itemCount: number; reservedCount: number }[];
+    showcase: null | {
+      coverUrl: string | null;
+      bio: string | null;
+      pinned: { id: string; slug: string; title: string; itemCount: number; reservedCount: number }[];
+      preferences: string | null;
+      sizes: { clothing: string | null; shoes: string | null; ring: string | null; other: string | null };
+      brands: string[];
+      antiGift: { presets: string[]; customItems: string[]; comment: string | null } | null;
+      updatedAt: string | null;
+    };
   } | null>(null);
   const [publicProfileLoading, setPublicProfileLoading] = useState(false);
   const [publicProfileError, setPublicProfileError] = useState<string | null>(null);
+  // ── Showcase state ────────────────────────────────────────────────────────
+  type ShowcaseData = {
+    enabled: boolean;
+    coverUrl: string | null;
+    bio: string | null;
+    pinnedIds: string[];
+    preferences: string | null;
+    sizes: { clothing: string | null; shoes: string | null; ring: string | null; other: string | null };
+    brands: string[];
+    updatedAt: string | null;
+  };
+  const [showcaseData, setShowcaseData] = useState<ShowcaseData | null>(null);
+  const [showcaseAvailableWishlists, setShowcaseAvailableWishlists] = useState<{ id: string; slug: string; title: string; itemCount: number }[]>([]);
+  const [showcaseLoading, setShowcaseLoading] = useState(false);
+  const [showcaseSaving, setShowcaseSaving] = useState(false);
+  const [showcaseCoverUploading, setShowcaseCoverUploading] = useState(false);
+  const [showcasePublished, setShowcasePublished] = useState(false);
+  const [showcaseBrandInput, setShowcaseBrandInput] = useState('');
+  const showcaseCoverInputRef = useRef<HTMLInputElement>(null);
   const [titlePressed, setTitlePressed] = useState(false); // pressed-state for tappable item title
   const [editingProfile, setEditingProfile] = useState(false);
   const [editProfileName, setEditProfileName] = useState('');
@@ -4966,6 +5009,111 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   }, [tgFetch, locale, pushToast]);
 
+  /** Load showcase editor data (PRO feature) */
+  const loadShowcase = useCallback(async () => {
+    setShowcaseLoading(true);
+    try {
+      const res = await tgFetch('/tg/me/showcase');
+      if (!res.ok) throw new Error();
+      const data = await res.json() as {
+        isPro: boolean;
+        showcase: ShowcaseData;
+        availableWishlists: { id: string; slug: string; title: string; itemCount: number }[];
+      };
+      setShowcaseData(data.showcase);
+      setShowcaseAvailableWishlists(data.availableWishlists);
+    } catch {
+      pushToast(t('toast_load_error', locale), 'error');
+    } finally {
+      setShowcaseLoading(false);
+    }
+  }, [tgFetch, locale, pushToast]);
+
+  /** Save showcase (PRO-gated) */
+  const saveShowcase = useCallback(async (patch: Partial<{
+    enabled: boolean;
+    bio: string | null;
+    pinnedIds: string[];
+    preferences: string | null;
+    sizeClothing: string | null;
+    sizeShoes: string | null;
+    sizeRing: string | null;
+    sizeOther: string | null;
+    brands: string[];
+  }>, opts?: { publish?: boolean; silent?: boolean }): Promise<boolean> => {
+    setShowcaseSaving(true);
+    try {
+      const res = await tgFetch('/tg/me/showcase', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (res.status === 403) {
+        showUpsell('showcase');
+        return false;
+      }
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { showcase: ShowcaseData };
+      setShowcaseData(data.showcase);
+      if (!opts?.silent) pushToast(t('showcase_editor_saved', locale), 'success');
+      if (opts?.publish) {
+        setShowcasePublished(true);
+        try { window?.dispatchEvent?.(new Event('showcase:published')); } catch { /* noop */ }
+      }
+      return true;
+    } catch {
+      pushToast(t('toast_save_error', locale), 'error');
+      return false;
+    } finally {
+      setShowcaseSaving(false);
+    }
+  }, [tgFetch, locale, pushToast, showUpsell]);
+
+  /** Upload showcase cover (PRO-gated) */
+  const uploadShowcaseCover = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      pushToast(t('item_photo_only_images', locale), 'error');
+      return;
+    }
+    if (file.size > 30 * 1024 * 1024) {
+      pushToast(t('item_photo_too_large', locale), 'error');
+      return;
+    }
+    setShowcaseCoverUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('cover', file);
+      const res = await fetch(`${apiBase}/tg/me/showcase/cover`, {
+        method: 'POST',
+        headers: { 'X-TG-INIT-DATA': initDataRef.current },
+        body: formData,
+      });
+      if (res.status === 403) {
+        showUpsell('showcase');
+        return;
+      }
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { coverUrl: string };
+      setShowcaseData((prev) => prev ? { ...prev, coverUrl: data.coverUrl } : prev);
+      pushToast(t('showcase_editor_saved', locale), 'success');
+    } catch {
+      pushToast(t('toast_save_error', locale), 'error');
+    } finally {
+      setShowcaseCoverUploading(false);
+    }
+  }, [apiBase, locale, pushToast, showUpsell]);
+
+  /** Remove showcase cover (PRO-gated) */
+  const removeShowcaseCover = useCallback(async () => {
+    try {
+      const res = await tgFetch('/tg/me/showcase/cover', { method: 'DELETE' });
+      if (!res.ok) return;
+      setShowcaseData((prev) => prev ? { ...prev, coverUrl: null } : prev);
+    } catch {
+      // silent
+    }
+  }, [tgFetch]);
+
   /** Load a public profile by username (uses unauthenticated /public endpoint) */
   const loadPublicProfile = useCallback(async (username: string) => {
     setPublicProfileLoading(true);
@@ -4983,12 +5131,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       }
       const data = await res.json();
       setPublicProfileData(data);
+      trackEvent('public_profile.viewed', { hasShowcase: !!data.showcase });
     } catch {
       setPublicProfileError('error');
     } finally {
       setPublicProfileLoading(false);
     }
-  }, [apiBase]);
+  }, [apiBase, trackEvent]);
 
   const handleAvatarFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -5813,6 +5962,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setScreen('my-wishlists');
     } else if (screen === 'profile') {
       setScreen('my-wishlists');
+    } else if (screen === 'showcase-editor') {
+      setShowcasePublished(false);
+      setScreen('profile');
+    } else if (screen === 'showcase-preview') {
+      setScreen('showcase-editor');
     } else if (screen === 'faq' || screen === 'changelog' || screen === 'legal') {
       setScreen('settings');
     } else if (screen === 'legal-doc') {
@@ -6055,7 +6209,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         } else { setScreen('gift-notes-paywall'); }
       }
       else if (target === 'santa-hub') { setScreen('santa-hub'); }
-      else if (target === 'profile') { loadProfile(); setScreen('profile'); }
+      else if (target === 'profile') { loadProfile(); loadShowcase(); setScreen('profile'); }
       else if (target === 'settings') { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }
     };
     window.addEventListener('wb-navigate', handler);
@@ -9258,7 +9412,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {/* Avatar → Profile; hat prop adds the seasonal SVG overlay */}
               <button
-                onClick={() => { loadProfile(); setScreen('profile'); }}
+                onClick={() => { loadProfile(); loadShowcase(); setScreen('profile'); }}
                 style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
                 aria-label={t('profile_title', locale)}
               >
@@ -13441,6 +13595,107 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
               {/* Spacer between header and plan */}
               <div style={{ height: 12 }} />
+
+              {/* ── PRO Showcase entry card ── */}
+              {(() => {
+                const isPro = planInfo.code === 'PRO';
+                const isProExpired = !isPro && !!subscription && subscription.status !== 'ACTIVE';
+                const sc = showcaseData;
+                const hasAnyContent = !!sc && (
+                  !!sc.coverUrl || !!sc.bio || (sc.pinnedIds?.length ?? 0) > 0 ||
+                  !!sc.preferences || !!sc.sizes?.clothing || !!sc.sizes?.shoes ||
+                  !!sc.sizes?.ring || !!sc.sizes?.other || (sc.brands?.length ?? 0) > 0
+                );
+                const state: 'locked' | 'expired' | 'empty' | 'partial' | 'full' = !isPro
+                  ? (isProExpired && hasAnyContent ? 'expired' : 'locked')
+                  : (!hasAnyContent ? 'empty' : (sc?.enabled ? 'full' : 'partial'));
+
+                const handleOpen = () => {
+                  if (!isPro) {
+                    trackEvent('showcase.paywall_viewed');
+                    showUpsell('showcase');
+                    return;
+                  }
+                  trackEvent('showcase.editor_opened');
+                  loadShowcase();
+                  setScreen('showcase-editor');
+                };
+
+                return (
+                  <div style={{ marginBottom: 12 }}>
+                    <div
+                      onClick={handleOpen}
+                      style={{
+                        position: 'relative', cursor: 'pointer',
+                        borderRadius: 18,
+                        background: state === 'full'
+                          ? `linear-gradient(135deg, ${C.accent}22, ${C.accent}08)`
+                          : C.card,
+                        border: `1px solid ${state === 'full' ? `${C.accent}40` : C.border}`,
+                        padding: 16, overflow: 'hidden',
+                      }}
+                    >
+                      {/* Cover thumbnail backdrop for full state */}
+                      {state === 'full' && sc?.coverUrl && (
+                        <div style={{
+                          position: 'absolute', inset: 0,
+                          backgroundImage: `linear-gradient(135deg, rgba(27,27,31,0.78), rgba(27,27,31,0.94)), url(${sc.coverUrl})`,
+                          backgroundSize: 'cover', backgroundPosition: 'center',
+                          pointerEvents: 'none',
+                        }} />
+                      )}
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                        <div style={{
+                          width: 44, height: 44, borderRadius: 12,
+                          background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 22, flexShrink: 0,
+                        }}>✨</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                            <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
+                              {t('showcase_entry_title', locale)}
+                            </span>
+                            {!isPro && (
+                              <span style={{
+                                fontSize: 10, fontWeight: 700, color: C.accent,
+                                background: `${C.accent}20`, padding: '2px 6px',
+                                borderRadius: 6, letterSpacing: '0.05em',
+                              }}>PRO</span>
+                            )}
+                            {state === 'expired' && (
+                              <span style={{
+                                fontSize: 10, fontWeight: 700, color: C.textMuted,
+                                background: 'rgba(255,255,255,0.06)', padding: '2px 6px',
+                                borderRadius: 6,
+                              }}>{t('showcase_entry_expired_badge', locale)}</span>
+                            )}
+                            {state === 'full' && (
+                              <span style={{ fontSize: 11, color: C.green }}>● {t('showcase_section_configured', locale)}</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.4 }}>
+                            {state === 'expired'
+                              ? t('showcase_entry_expired_note', locale)
+                              : t('showcase_entry_desc', locale)}
+                          </div>
+                        </div>
+                        <div style={{
+                          color: C.accent, fontSize: 13, fontWeight: 600,
+                          padding: '6px 10px', borderRadius: 10, flexShrink: 0,
+                          background: 'rgba(124,106,255,0.12)',
+                        }}>
+                          {state === 'locked' || state === 'expired'
+                            ? t('showcase_entry_locked_cta', locale)
+                            : state === 'empty'
+                              ? t('showcase_entry_empty_cta', locale)
+                              : t('showcase_entry_full_cta', locale)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* My Plan card — FREE: two semantic blocks; PRO: feature table */}
               {planInfo.code === 'FREE' ? (
@@ -23213,6 +23468,535 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         );
       })()}
 
+      {/* ─────────────────── SHOWCASE EDITOR ─────────────────── */}
+      {screen === 'showcase-editor' && (() => {
+        const sc = showcaseData;
+        const pinnedIds = sc?.pinnedIds ?? [];
+        const hasAnyContent = !!sc && (
+          !!sc.coverUrl || !!sc.bio || pinnedIds.length > 0 ||
+          !!sc.preferences || !!sc.sizes?.clothing || !!sc.sizes?.shoes ||
+          !!sc.sizes?.ring || !!sc.sizes?.other || (sc.brands?.length ?? 0) > 0
+        );
+        const togglePin = (id: string) => {
+          if (!sc) return;
+          const isIn = pinnedIds.includes(id);
+          let next: string[];
+          if (isIn) next = pinnedIds.filter((p) => p !== id);
+          else {
+            if (pinnedIds.length >= 3) {
+              pushToast(t('showcase_section_pinned_limit', locale), 'info');
+              return;
+            }
+            next = [...pinnedIds, id];
+          }
+          setShowcaseData({ ...sc, pinnedIds: next });
+          void saveShowcase({ pinnedIds: next }, { silent: true });
+        };
+        const saveField = (data: Parameters<typeof saveShowcase>[0]) => {
+          void saveShowcase(data, { silent: true });
+        };
+        const sectionStatus = (filled: boolean) => (
+          <span style={{
+            fontSize: 11, fontWeight: 600,
+            color: filled ? C.green : C.textMuted,
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+          }}>
+            <span style={{ fontSize: 9 }}>●</span>
+            {filled ? t('showcase_section_configured', locale) : t('showcase_section_empty', locale)}
+          </span>
+        );
+        const bioLen = (sc?.bio ?? '').length;
+        const prefLen = (sc?.preferences ?? '').length;
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 90, overflowY: 'auto', fontFamily: font, color: C.text }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', gap: 12, borderBottom: `1px solid ${C.border}`, background: C.bg, position: 'sticky', top: 0, zIndex: 5 }}>
+              <button onClick={navBack} style={{ background: 'none', border: 'none', color: C.text, fontSize: 16, cursor: 'pointer', fontFamily: font, padding: '4px 0' }}>
+                ‹ {t('back', locale)}
+              </button>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{t('showcase_editor_title', locale)}</div>
+              <button
+                onClick={() => { trackEvent('showcase.preview_opened'); setScreen('showcase-preview'); }}
+                style={{ background: 'none', border: 'none', color: C.accent, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font }}
+              >
+                {t('showcase_editor_preview', locale)}
+              </button>
+            </div>
+
+            {showcaseLoading && !sc ? (
+              <div style={{ padding: '80px 24px', textAlign: 'center', color: C.textMuted }}>{t('loading', locale)}</div>
+            ) : sc && (
+              <div style={{ padding: '16px 20px 140px' }}>
+                {/* ── Cover ── */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t('showcase_section_cover', locale)}</div>
+                    {sectionStatus(!!sc.coverUrl)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_cover_desc', locale)}</div>
+                  <div
+                    onClick={() => !showcaseCoverUploading && showcaseCoverInputRef.current?.click()}
+                    style={{
+                      width: '100%', height: 160, borderRadius: 14, overflow: 'hidden', cursor: 'pointer',
+                      background: sc.coverUrl
+                        ? `url(${sc.coverUrl}) center/cover no-repeat`
+                        : `linear-gradient(135deg, ${C.accent}24, ${C.accent}08)`,
+                      border: `1px solid ${sc.coverUrl ? 'transparent' : C.border}`,
+                      position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    {!sc.coverUrl && !showcaseCoverUploading && (
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 32, marginBottom: 6 }}>📸</div>
+                        <div style={{ fontSize: 13, color: C.textSec, fontWeight: 600 }}>{t('showcase_section_cover_upload', locale)}</div>
+                      </div>
+                    )}
+                    {showcaseCoverUploading && (
+                      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13 }}>
+                        {t('showcase_section_cover_uploading', locale)}
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    ref={showcaseCoverInputRef} type="file" accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (showcaseCoverInputRef.current) showcaseCoverInputRef.current.value = '';
+                      if (file) await uploadShowcaseCover(file);
+                    }}
+                  />
+                  {sc.coverUrl && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button
+                        onClick={() => showcaseCoverInputRef.current?.click()}
+                        style={{ flex: 1, padding: '10px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: C.surface, color: C.text, border: `1px solid ${C.border}` }}
+                      >
+                        {t('showcase_section_cover_replace', locale)}
+                      </button>
+                      <button
+                        onClick={removeShowcaseCover}
+                        style={{ flex: 1, padding: '10px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: 'transparent', color: C.textMuted, border: `1px solid ${C.border}` }}
+                      >
+                        {t('showcase_section_cover_remove', locale)}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Bio ── */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_bio', locale)}</div>
+                    {sectionStatus(!!sc.bio)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_bio_desc', locale)}</div>
+                  <textarea
+                    value={sc.bio ?? ''}
+                    maxLength={180}
+                    placeholder={t('showcase_section_bio_placeholder', locale)}
+                    onChange={(e) => setShowcaseData({ ...sc, bio: e.target.value })}
+                    onBlur={() => saveField({ bio: sc.bio ?? null })}
+                    rows={3}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12,
+                      background: C.surface, color: C.text, fontSize: 14, fontFamily: font, lineHeight: 1.5,
+                      border: `1px solid ${C.border}`, outline: 'none', resize: 'vertical',
+                    }}
+                  />
+                  <div style={{ textAlign: 'right', fontSize: 11, color: C.textMuted, marginTop: 4 }}>{t('showcase_bio_limit', locale, { count: String(bioLen) })}</div>
+                </div>
+
+                {/* ── Pinned wishlists ── */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_pinned', locale)}</div>
+                    {sectionStatus(pinnedIds.length > 0)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_pinned_desc', locale)}</div>
+                  {showcaseAvailableWishlists.length === 0 ? (
+                    <div style={{ padding: 16, background: C.surface, borderRadius: 12, textAlign: 'center', fontSize: 13, color: C.textMuted }}>
+                      {t('showcase_section_pinned_empty', locale)}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {showcaseAvailableWishlists.map((wl) => {
+                        const isPinned = pinnedIds.includes(wl.id);
+                        return (
+                          <div key={wl.id}
+                            onClick={() => togglePin(wl.id)}
+                            style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              padding: 14, borderRadius: 12, cursor: 'pointer',
+                              background: isPinned ? `${C.accent}14` : C.surface,
+                              border: `1px solid ${isPinned ? `${C.accent}55` : C.border}`,
+                            }}
+                          >
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wl.title}</div>
+                              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{wl.itemCount} {t('wishes_count_short', locale)}</div>
+                            </div>
+                            <div style={{
+                              width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              background: isPinned ? C.accent : 'transparent',
+                              border: `2px solid ${isPinned ? C.accent : C.border}`,
+                              color: '#fff', fontSize: 13, fontWeight: 700,
+                            }}>{isPinned ? '✓' : ''}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Preferences ── */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_preferences', locale)}</div>
+                    {sectionStatus(!!sc.preferences)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_preferences_desc', locale)}</div>
+                  <textarea
+                    value={sc.preferences ?? ''}
+                    maxLength={300}
+                    placeholder={t('showcase_section_preferences_placeholder', locale)}
+                    onChange={(e) => setShowcaseData({ ...sc, preferences: e.target.value })}
+                    onBlur={() => saveField({ preferences: sc.preferences ?? null })}
+                    rows={4}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12,
+                      background: C.surface, color: C.text, fontSize: 14, fontFamily: font, lineHeight: 1.5,
+                      border: `1px solid ${C.border}`, outline: 'none', resize: 'vertical',
+                    }}
+                  />
+                  <div style={{ textAlign: 'right', fontSize: 11, color: C.textMuted, marginTop: 4 }}>{t('showcase_pref_limit', locale, { count: String(prefLen) })}</div>
+                </div>
+
+                {/* ── Sizes ── */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_sizes', locale)}</div>
+                    {sectionStatus(!!(sc.sizes.clothing || sc.sizes.shoes || sc.sizes.ring || sc.sizes.other))}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_sizes_desc', locale)}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {([
+                      ['clothing', 'showcase_size_clothing', 'showcase_size_placeholder_clothing', 'sizeClothing'],
+                      ['shoes', 'showcase_size_shoes', 'showcase_size_placeholder_shoes', 'sizeShoes'],
+                      ['ring', 'showcase_size_ring', 'showcase_size_placeholder_ring', 'sizeRing'],
+                      ['other', 'showcase_size_other', 'showcase_size_placeholder_other', 'sizeOther'],
+                    ] as const).map(([key, labelKey, phKey, patchKey]) => (
+                      <div key={key}>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4, fontWeight: 600 }}>{t(labelKey, locale)}</div>
+                        <input
+                          type="text"
+                          value={(sc.sizes as any)[key] ?? ''}
+                          placeholder={t(phKey, locale)}
+                          onChange={(e) => setShowcaseData({ ...sc, sizes: { ...sc.sizes, [key]: e.target.value } })}
+                          onBlur={() => saveField({ [patchKey]: ((sc.sizes as any)[key] as string)?.trim() || null } as any)}
+                          style={{
+                            width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10,
+                            background: C.surface, color: C.text, fontSize: 14, fontFamily: font,
+                            border: `1px solid ${C.border}`, outline: 'none',
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Brands ── */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_brands', locale)}</div>
+                    {sectionStatus((sc.brands?.length ?? 0) > 0)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('showcase_section_brands_desc', locale)}</div>
+                  {(sc.brands?.length ?? 0) > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                      {sc.brands.map((b, i) => (
+                        <span key={i} style={{
+                          padding: '6px 10px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                          background: C.surface, border: `1px solid ${C.border}`, color: C.text,
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                        }}>
+                          {b}
+                          <span
+                            onClick={() => {
+                              const next = sc.brands.filter((_, j) => j !== i);
+                              setShowcaseData({ ...sc, brands: next });
+                              void saveShowcase({ brands: next }, { silent: true });
+                            }}
+                            style={{ cursor: 'pointer', color: C.textMuted, fontSize: 14, lineHeight: 1, display: 'inline-flex', alignItems: 'center' }}
+                          >×</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="text"
+                      value={showcaseBrandInput}
+                      placeholder={t('showcase_section_brands_placeholder', locale)}
+                      maxLength={40}
+                      disabled={sc.brands.length >= 10}
+                      onChange={(e) => setShowcaseBrandInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const v = showcaseBrandInput.trim();
+                          if (!v) return;
+                          if (sc.brands.length >= 10) { pushToast(t('showcase_brand_limit_reached', locale), 'info'); return; }
+                          if (sc.brands.some((b) => b.toLowerCase() === v.toLowerCase())) { setShowcaseBrandInput(''); return; }
+                          const next = [...sc.brands, v];
+                          setShowcaseData({ ...sc, brands: next });
+                          setShowcaseBrandInput('');
+                          void saveShowcase({ brands: next }, { silent: true });
+                        }
+                      }}
+                      style={{
+                        flex: 1, boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10,
+                        background: C.surface, color: C.text, fontSize: 14, fontFamily: font,
+                        border: `1px solid ${C.border}`, outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const v = showcaseBrandInput.trim();
+                        if (!v) return;
+                        if (sc.brands.length >= 10) { pushToast(t('showcase_brand_limit_reached', locale), 'info'); return; }
+                        if (sc.brands.some((b) => b.toLowerCase() === v.toLowerCase())) { setShowcaseBrandInput(''); return; }
+                        const next = [...sc.brands, v];
+                        setShowcaseData({ ...sc, brands: next });
+                        setShowcaseBrandInput('');
+                        void saveShowcase({ brands: next }, { silent: true });
+                      }}
+                      disabled={!showcaseBrandInput.trim() || sc.brands.length >= 10}
+                      style={{
+                        padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                        background: showcaseBrandInput.trim() && sc.brands.length < 10 ? C.accent : C.surface,
+                        color: showcaseBrandInput.trim() && sc.brands.length < 10 ? '#fff' : C.textMuted,
+                        border: `1px solid ${C.border}`, cursor: showcaseBrandInput.trim() && sc.brands.length < 10 ? 'pointer' : 'default',
+                        fontFamily: font,
+                      }}
+                    >{t('showcase_section_brands_add', locale)}</button>
+                  </div>
+                  {sc.brands.length >= 10 && (
+                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>{t('showcase_section_brands_limit', locale)}</div>
+                  )}
+                </div>
+
+                {/* ── Anti-gifts (managed externally) ── */}
+                <div
+                  onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: 14, borderRadius: 14, background: C.card, cursor: 'pointer',
+                    border: `1px solid ${C.border}`, marginBottom: 20,
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{t('showcase_section_antigift', locale)}</div>
+                      {sectionStatus(!!(profileData?.bio))}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>{t('showcase_section_antigift_desc', locale)}</div>
+                  </div>
+                  <div style={{ color: C.accent, fontSize: 13, fontWeight: 600, padding: '6px 10px', borderRadius: 10, background: 'rgba(124,106,255,0.12)' }}>
+                    {t('showcase_section_antigift_cta', locale)}
+                  </div>
+                </div>
+
+                {/* ── Publish / save bottom bar ── */}
+                <div style={{
+                  position: 'fixed', left: 0, right: 0, bottom: 0, background: `linear-gradient(180deg, rgba(27,27,31,0) 0%, ${C.bg} 30%)`,
+                  padding: '20px 20px calc(20px + env(safe-area-inset-bottom, 0px))', zIndex: 10,
+                }}>
+                  <button
+                    onClick={async () => {
+                      const ok = await saveShowcase({ enabled: true }, { publish: !sc.enabled });
+                      if (ok && !sc.enabled) {
+                        // publish success — stay on editor and show success state
+                      }
+                    }}
+                    disabled={showcaseSaving || !hasAnyContent}
+                    style={{
+                      ...btnPrimary,
+                      background: hasAnyContent ? `linear-gradient(135deg, ${C.accent}, #5B4BD6)` : C.surface,
+                      color: hasAnyContent ? '#fff' : C.textMuted,
+                      opacity: showcaseSaving ? 0.7 : 1,
+                      boxShadow: hasAnyContent ? `0 6px 20px ${C.accent}40` : 'none',
+                    }}
+                  >
+                    {showcaseSaving
+                      ? t('showcase_editor_saving', locale)
+                      : sc.enabled
+                        ? t('showcase_editor_save', locale)
+                        : t('showcase_editor_save', locale)}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Published success overlay */}
+            {showcasePublished && sc && (
+              <div
+                onClick={() => setShowcasePublished(false)}
+                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 120, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: '100%', maxWidth: 560, background: C.card, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+                    padding: '28px 24px calc(24px + env(safe-area-inset-bottom, 0px))', textAlign: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: 44, marginBottom: 12 }}>✨</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>{t('showcase_published_title', locale)}</div>
+                  <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, marginBottom: 20 }}>{t('showcase_published_desc', locale)}</div>
+                  <button
+                    onClick={() => {
+                      trackEvent('showcase.share_clicked');
+                      const username = profileData?.username;
+                      if (!username) { setShowcasePublished(false); return; }
+                      const link = buildTgDeepLink(`profile_${username}`);
+                      if (!link) { setShowcasePublished(false); return; }
+                      const shareText = `${profileData?.displayName || username}\n${t('showcase_share_text', locale)}`;
+                      const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(shareText)}`;
+                      (window as any).Telegram?.WebApp?.openTelegramLink?.(tgShareUrl);
+                      setShowcasePublished(false);
+                    }}
+                    style={{ ...btnPrimary, background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, marginBottom: 8 }}
+                  >{t('showcase_published_share', locale)}</button>
+                  <button
+                    onClick={() => setShowcasePublished(false)}
+                    style={{ ...btnGhost, width: '100%', color: C.textSec }}
+                  >{t('showcase_published_later', locale)}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ─────────────────── SHOWCASE PREVIEW ─────────────────── */}
+      {screen === 'showcase-preview' && (() => {
+        const sc = showcaseData;
+        const pinnedWls = showcaseAvailableWishlists.filter((w) => sc?.pinnedIds.includes(w.id));
+        const otherWls = showcaseAvailableWishlists.filter((w) => !sc?.pinnedIds.includes(w.id));
+        const hasSizes = !!sc && !!(sc.sizes.clothing || sc.sizes.shoes || sc.sizes.ring || sc.sizes.other);
+        const dg = profileData;
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 92, overflowY: 'auto', fontFamily: font, color: C.text }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', gap: 12, borderBottom: `1px solid ${C.border}`, background: C.bg, position: 'sticky', top: 0, zIndex: 5 }}>
+              <button onClick={navBack} style={{ background: 'none', border: 'none', color: C.text, fontSize: 16, cursor: 'pointer', fontFamily: font, padding: '4px 0' }}>
+                ‹ {t('showcase_preview_back', locale)}
+              </button>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.textMuted }}>{t('showcase_preview_title', locale)}</div>
+              <div style={{ width: 60 }} />
+            </div>
+
+            {sc && (
+              <div>
+                {/* Hero A — immersive cover */}
+                <div style={{ position: 'relative' }}>
+                  {sc.coverUrl ? (
+                    <div style={{ position: 'relative', width: '100%', height: 260, backgroundImage: `url(${sc.coverUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+                      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(27,27,31,0.18) 0%, rgba(27,27,31,0.72) 70%, rgba(27,27,31,1) 100%)' }} />
+                    </div>
+                  ) : (
+                    <div style={{ position: 'relative', width: '100%', height: 180, background: `linear-gradient(180deg, ${C.accent}24 0%, ${C.bg} 100%)` }} />
+                  )}
+                  <div style={{ position: 'relative', marginTop: sc.coverUrl ? -80 : -70, padding: '0 20px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <div style={{
+                        width: 92, height: 92, borderRadius: '50%', overflow: 'hidden',
+                        background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: `3px solid ${C.bg}`, boxShadow: `0 6px 24px rgba(0,0,0,0.5)`,
+                      }}>
+                        {dg?.avatarUrl
+                          ? <img src={dg.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <span style={{ fontSize: 42 }}>👤</span>}
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 800, textAlign: 'center', marginTop: 12 }}>{dg?.displayName || dg?.username || ''}</div>
+                      {dg?.username && <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{dg.username}</div>}
+                      {(sc.bio || dg?.bio) && (
+                        <div style={{ fontSize: 14, color: C.textSec, marginTop: 10, textAlign: 'center', lineHeight: 1.5, maxWidth: 440 }}>
+                          {sc.bio || dg?.bio}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ padding: '24px 20px 40px' }}>
+                  {pinnedWls.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {pinnedWls.map((wl) => (
+                          <div key={wl.id} style={{ background: `linear-gradient(135deg, ${C.accent}1A, ${C.card})`, borderRadius: 16, padding: 16, border: `1px solid ${C.accent}35`, position: 'relative' }}>
+                            <div style={{ position: 'absolute', top: 10, right: 12, fontSize: 10, color: C.accent, background: `${C.accent}20`, padding: '2px 7px', borderRadius: 6, fontWeight: 700 }}>★</div>
+                            <div style={{ fontSize: 16, fontWeight: 700 }}>{wl.title}</div>
+                            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{wl.itemCount} {t('wishes_count_short', locale)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {otherWls.length > 0 && (
+                    <>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                        {t('showcase_public_wishlists_title', locale)}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {otherWls.map((wl) => (
+                          <div key={wl.id} style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}` }}>
+                            <div style={{ fontSize: 16, fontWeight: 700 }}>{wl.title}</div>
+                            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{wl.itemCount} {t('wishes_count_short', locale)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {sc.preferences && (
+                    <div style={{ marginTop: 24 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>{t('showcase_public_preferences_title', locale)}</div>
+                      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{sc.preferences}</div>
+                    </div>
+                  )}
+
+                  {hasSizes && (
+                    <div style={{ marginTop: 24 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>{t('showcase_public_sizes_title', locale)}</div>
+                      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {sc.sizes.clothing && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_clothing', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sc.sizes.clothing}</span></div>}
+                        {sc.sizes.shoes && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_shoes', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sc.sizes.shoes}</span></div>}
+                        {sc.sizes.ring && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_ring', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sc.sizes.ring}</span></div>}
+                        {sc.sizes.other && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_other', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sc.sizes.other}</span></div>}
+                      </div>
+                    </div>
+                  )}
+
+                  {sc.brands.length > 0 && (
+                    <div style={{ marginTop: 24 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>{t('showcase_public_brands_title', locale)}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {sc.brands.map((b, i) => (
+                          <span key={i} style={{ padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: C.surface, border: `1px solid ${C.border}`, color: C.text }}>{b}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {screen === 'public-profile' && (() => {
         const pp = publicProfileData;
         const isOwn = pp?.profile?.username && profileData?.username && pp.profile.username.toLowerCase() === profileData.username.toLowerCase();
@@ -23247,65 +24031,207 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
 
-            {pp && !publicProfileLoading && !publicProfileError && (
-              <div style={{ padding: '0 20px 40px' }}>
-                {/* Avatar + Name */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
-                  <div style={{
-                    width: 80, height: 80, borderRadius: '50%', overflow: 'hidden', marginBottom: 12,
-                    background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    border: `2px solid ${C.borderLight}`,
-                  }}>
-                    {pp.profile.avatarUrl
-                      ? <img src={pp.profile.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : <span style={{ fontSize: 36 }}>👤</span>}
+            {pp && !publicProfileLoading && !publicProfileError && (() => {
+              const showcase = pp.showcase;
+              const hasShowcase = !!showcase;
+              const pinnedIds = new Set(showcase?.pinned.map((p) => p.id) ?? []);
+              const nonPinnedWishlists = pp.wishlists.filter((wl) => !pinnedIds.has(wl.id));
+              const sizes = showcase?.sizes;
+              const hasSizes = !!sizes && (!!sizes.clothing || !!sizes.shoes || !!sizes.ring || !!sizes.other);
+              return (
+              <div style={{ padding: 0 }}>
+                {/* ── Hero (Variant A — immersive cover) ── */}
+                <div style={{ position: 'relative' }}>
+                  {hasShowcase && showcase?.coverUrl ? (
+                    <div style={{
+                      position: 'relative', width: '100%', height: 260,
+                      backgroundImage: `url(${showcase.coverUrl})`,
+                      backgroundSize: 'cover', backgroundPosition: 'center',
+                    }}>
+                      <div style={{
+                        position: 'absolute', inset: 0,
+                        background: 'linear-gradient(180deg, rgba(27,27,31,0.18) 0%, rgba(27,27,31,0.72) 70%, rgba(27,27,31,1) 100%)',
+                      }} />
+                    </div>
+                  ) : (
+                    <div style={{
+                      position: 'relative', width: '100%', height: 180,
+                      background: `linear-gradient(180deg, ${C.accent}24 0%, ${C.bg} 100%)`,
+                    }} />
+                  )}
+                  <div style={{ position: 'relative', marginTop: hasShowcase && showcase?.coverUrl ? -80 : -70, padding: '0 20px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <div style={{
+                        width: 92, height: 92, borderRadius: '50%', overflow: 'hidden',
+                        background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: `3px solid ${C.bg}`,
+                        boxShadow: `0 6px 24px rgba(0,0,0,0.5)`,
+                      }}>
+                        {pp.profile.avatarUrl
+                          ? <img src={pp.profile.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <span style={{ fontSize: 42 }}>👤</span>}
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 800, textAlign: 'center', marginTop: 12 }}>{pp.profile.displayName || pp.profile.username || publicProfileUsername}</div>
+                      {pp.profile.username && <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{pp.profile.username}</div>}
+                      {(showcase?.bio || pp.profile.bio) && (
+                        <div style={{ fontSize: 14, color: C.textSec, marginTop: 10, textAlign: 'center', lineHeight: 1.5, maxWidth: 440 }}>
+                          {showcase?.bio || pp.profile.bio}
+                        </div>
+                      )}
+                      {isOwn && <div style={{ fontSize: 12, color: C.accent, marginTop: 10, background: C.accentSoft, padding: '4px 12px', borderRadius: 8 }}>{t('public_profile_this_is_you', locale)}</div>}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 700, textAlign: 'center' }}>{pp.profile.displayName || pp.profile.username || publicProfileUsername}</div>
-                  {pp.profile.username && <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{pp.profile.username}</div>}
-                  {pp.profile.bio && <div style={{ fontSize: 14, color: C.textSec, marginTop: 8, textAlign: 'center', lineHeight: 1.5 }}>{pp.profile.bio}</div>}
-                  {isOwn && <div style={{ fontSize: 12, color: C.accent, marginTop: 8, background: C.accentSoft, padding: '4px 12px', borderRadius: 8 }}>{t('public_profile_this_is_you', locale)}</div>}
                 </div>
 
-                {/* Public wishlists */}
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-                  {t('public_profile_wishlists_title', locale)}
-                </div>
+                <div style={{ padding: '24px 20px 40px' }}>
+                  {/* ── Pinned wishlists ── */}
+                  {hasShowcase && showcase && showcase.pinned.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {showcase.pinned.map((wl) => (
+                          <div key={wl.id}
+                            onClick={() => {
+                              trackEvent('public_profile.wishlist_opened', { source: 'pinned' });
+                              void loadGuestWishlist(wl.slug).then(() => setScreen('guest-view')).catch(() => {});
+                            }}
+                            style={{
+                              background: `linear-gradient(135deg, ${C.accent}1A, ${C.card})`,
+                              borderRadius: 16, padding: 16, cursor: 'pointer',
+                              border: `1px solid ${C.accent}35`, position: 'relative',
+                            }}>
+                            <div style={{ position: 'absolute', top: 10, right: 12, fontSize: 10, color: C.accent, background: `${C.accent}20`, padding: '2px 7px', borderRadius: 6, fontWeight: 700, letterSpacing: '0.04em' }}>★</div>
+                            <div style={{ fontSize: 16, fontWeight: 700 }}>{wl.title}</div>
+                            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
+                              {wl.itemCount} {t('wishes_count_short', locale)} · {wl.reservedCount} {t('reserved_count_short', locale)}
+                            </div>
+                            {wl.itemCount > 0 && (
+                              <div style={{ height: 4, borderRadius: 100, background: C.surface, marginTop: 8 }}>
+                                <div style={{ height: '100%', borderRadius: 100, background: `linear-gradient(90deg, ${C.accent}, ${C.green})`, width: `${Math.min(100, (wl.reservedCount / wl.itemCount) * 100)}%`, transition: 'width 0.5s' }} />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                {pp.wishlists.length === 0 ? (
-                  <div style={{ padding: '32px 16px', textAlign: 'center', background: C.surface, borderRadius: 14 }}>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
-                    <div style={{ fontSize: 14, color: C.textMuted }}>{t('public_profile_no_wishlists', locale)}</div>
+                  {/* ── Other wishlists ── */}
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+                    {hasShowcase && showcase && showcase.pinned.length > 0
+                      ? t('showcase_public_wishlists_title', locale)
+                      : t('public_profile_wishlists_title', locale)}
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {pp.wishlists.map(wl => (
-                      <div key={wl.id}
-                        onClick={() => {
-                          // Open as guest wishlist
-                          void loadGuestWishlist(wl.slug).then(() => setScreen('guest-view')).catch(() => {});
-                        }}
-                        style={{
-                          background: C.card, borderRadius: 14, padding: 16, cursor: 'pointer',
-                          border: `1px solid ${C.border}`,
-                        }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ fontSize: 16, fontWeight: 700 }}>{wl.title}</div>
-                          <span style={{ fontSize: 18, color: C.textMuted }}>›</span>
+
+                  {nonPinnedWishlists.length === 0 && (!hasShowcase || (showcase?.pinned?.length ?? 0) === 0) ? (
+                    <div style={{ padding: '32px 16px', textAlign: 'center', background: C.surface, borderRadius: 14 }}>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                      <div style={{ fontSize: 14, color: C.textMuted }}>{t('public_profile_no_wishlists', locale)}</div>
+                    </div>
+                  ) : nonPinnedWishlists.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {nonPinnedWishlists.map(wl => (
+                        <div key={wl.id}
+                          onClick={() => {
+                            trackEvent('public_profile.wishlist_opened', { source: 'list' });
+                            void loadGuestWishlist(wl.slug).then(() => setScreen('guest-view')).catch(() => {});
+                          }}
+                          style={{
+                            background: C.card, borderRadius: 14, padding: 16, cursor: 'pointer',
+                            border: `1px solid ${C.border}`,
+                          }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ fontSize: 16, fontWeight: 700 }}>{wl.title}</div>
+                            <span style={{ fontSize: 18, color: C.textMuted }}>›</span>
+                          </div>
+                          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
+                            {wl.itemCount} {t('wishes_count_short', locale)} · {wl.reservedCount} {t('reserved_count_short', locale)}
+                          </div>
+                          {wl.itemCount > 0 && (
+                            <div style={{ height: 4, borderRadius: 100, background: C.surface, marginTop: 8 }}>
+                              <div style={{ height: '100%', borderRadius: 100, background: `linear-gradient(90deg, ${C.accent}, ${C.green})`, width: `${Math.min(100, (wl.reservedCount / wl.itemCount) * 100)}%`, transition: 'width 0.5s' }} />
+                            </div>
+                          )}
                         </div>
-                        <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
-                          {wl.itemCount} {t('wishes_count_short', locale)} · {wl.reservedCount} {t('reserved_count_short', locale)}
-                        </div>
-                        {wl.itemCount > 0 && (
-                          <div style={{ height: 4, borderRadius: 100, background: C.surface, marginTop: 8 }}>
-                            <div style={{ height: '100%', borderRadius: 100, background: `linear-gradient(90deg, ${C.accent}, ${C.green})`, width: `${Math.min(100, (wl.reservedCount / wl.itemCount) * 100)}%`, transition: 'width 0.5s' }} />
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {/* ── Preferences ── */}
+                  {hasShowcase && showcase?.preferences && (
+                    <div style={{ marginTop: 24 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                        {t('showcase_public_preferences_title', locale)}
+                      </div>
+                      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                        {showcase.preferences}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Sizes ── */}
+                  {hasShowcase && hasSizes && sizes && (
+                    <div style={{ marginTop: 24 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                        {t('showcase_public_sizes_title', locale)}
+                      </div>
+                      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {sizes.clothing && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_clothing', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sizes.clothing}</span></div>}
+                        {sizes.shoes && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_shoes', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sizes.shoes}</span></div>}
+                        {sizes.ring && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_ring', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sizes.ring}</span></div>}
+                        {sizes.other && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span style={{ color: C.textMuted }}>{t('showcase_size_other', locale)}</span><span style={{ color: C.text, fontWeight: 600 }}>{sizes.other}</span></div>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Brands ── */}
+                  {hasShowcase && showcase && showcase.brands.length > 0 && (
+                    <div style={{ marginTop: 24 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                        {t('showcase_public_brands_title', locale)}
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {showcase.brands.map((b, i) => (
+                          <span key={i} style={{
+                            padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                            background: C.surface, border: `1px solid ${C.border}`, color: C.text,
+                          }}>{b}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Anti-gifts ── */}
+                  {hasShowcase && showcase?.antiGift && (
+                    <div style={{ marginTop: 24 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                        {t('showcase_public_antigift_title', locale)}
+                      </div>
+                      <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}` }}>
+                        {(showcase.antiGift.presets.length > 0 || showcase.antiGift.customItems.length > 0) && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: showcase.antiGift.comment ? 10 : 0 }}>
+                            {showcase.antiGift.presets.map((key) => (
+                              <span key={`p-${key}`} style={{ padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: C.surface, border: `1px solid ${C.border}`, color: C.text, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                                <span>{DONT_GIFT_PRESET_EMOJIS[key] || '🚫'}</span>
+                                {t(`dont_gift_preset_${key}` as any, locale)}
+                              </span>
+                            ))}
+                            {showcase.antiGift.customItems.map((item, i) => (
+                              <span key={`c-${i}`} style={{ padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: C.surface, border: `1px solid ${C.border}`, color: C.text }}>{item}</span>
+                            ))}
+                          </div>
+                        )}
+                        {showcase.antiGift.comment && (
+                          <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                            {showcase.antiGift.comment}
                           </div>
                         )}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+              );
+            })()}
           </div>
         );
       })()}

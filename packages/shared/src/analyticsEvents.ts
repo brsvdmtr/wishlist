@@ -27,6 +27,17 @@ export const ANALYTICS_EVENTS = [
   'share.token_generated',
   'subscription.cancelled',
   'payment.pre_checkout_rejected',
+  'showcase.editor_opened',
+  'showcase.cover_uploaded',
+  'showcase.cover_removed',
+  'showcase.saved',
+  'showcase.published',
+  'showcase.preview_opened',
+  'showcase.share_clicked',
+  'showcase.paywall_viewed',
+  'showcase.upgrade_clicked',
+  'public_profile.viewed',
+  'public_profile.wishlist_opened',
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
