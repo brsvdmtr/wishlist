@@ -6883,6 +6883,22 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     return () => clearTimeout(timer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Periodic telemetry flush + flush on visibility change / pagehide.
+  // Without this, events trackEvent'ed AFTER boot stay buffered in memory
+  // and never reach the server — breaking analytics for every user action.
+  useEffect(() => {
+    const interval = setInterval(() => { flushTelemetry(); }, 10_000);
+    const onHide = () => { flushTelemetry(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+      flushTelemetry(); // final flush on unmount
+    };
+  }, [flushTelemetry]);
+
   // Refresh subscription unread badge when app returns to foreground
   useEffect(() => {
     const refresh = () => {
