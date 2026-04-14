@@ -615,6 +615,7 @@ const RELEASE_NOTES: ReleaseNote[] = [
       { ru: 'Вкладка «Подписки» теперь делится на «Вишлисты» и «Профили»', en: '"Subscriptions" tab is now split into "Wishlists" and "Profiles"' },
       { ru: 'Кнопка «Подписаться» прямо в чужом профиле', en: '"Subscribe" button right inside another user\'s profile' },
       { ru: 'Тап по аватару владельца в чужом вишлисте — открывает его профиль', en: 'Tap the owner\'s avatar in a shared wishlist — opens their profile' },
+      { ru: '📅 Подарочный календарь — новый онбординг после покупки и обновлённый UI пейвола и пустого состояния', en: '📅 Gift Calendar — new post-purchase onboarding and refreshed paywall + empty state UI' },
     ],
   },
   {
