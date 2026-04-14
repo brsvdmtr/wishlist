@@ -6272,7 +6272,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         setScreen('wishlist-detail');
       }
     }
-  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData]);
+  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData, guestViewReturnToProfileUsername, checkOnboarding, loadPublicProfile, loadProfileSubscribeStatus]);
 
   // Ref-based handler so we register ONCE for the lifetime of the component.
   // Re-registering on every navBack identity change caused Telegram SDK to lose
@@ -6296,6 +6296,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       tg.BackButton.show();
     }
   }, [screen, santaWishlistPickerReturnId]);
+
+  // Scroll-to-top on entering screens that should always render from the top.
+  // Runs AFTER React commits the new screen, which is more reliable than a
+  // sync window.scrollTo in the triggering onClick handler.
+  useEffect(() => {
+    if (screen === 'showcase-preview' || screen === 'public-profile' || screen === 'guest-view') {
+      window.scrollTo(0, 0);
+    }
+  }, [screen]);
 
   // Onboarding step tracking — fire event when user lands on any onboarding screen
   useEffect(() => {
