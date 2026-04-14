@@ -448,6 +448,10 @@ model UserProfile {
   showcaseSizeShoes     String?
   showcaseSizeRing      String?
   showcaseSizeOther     String?
+  // Body measurements (cm). Free-text strings so users can add units/comments.
+  showcaseChest         String?
+  showcaseWaist         String?
+  showcaseHips          String?
   showcaseBrands        String[]  @default([])
   showcaseUpdatedAt     DateTime?
 

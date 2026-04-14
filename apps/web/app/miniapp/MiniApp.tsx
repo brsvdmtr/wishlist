@@ -1799,8 +1799,9 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
   },
 });
 
-// Centralized PRO benefits config — single source of truth for all paywall/plan screens
-function getProBenefits(locale: Locale): Array<{ icon: string; title: string; subtitle: string; isNew?: boolean }> {
+// Centralized PRO benefits config — single source of truth for all paywall/plan screens.
+// `isNew` = show the NEW badge. `resSection` = belongs under the "управление бронями" section header.
+function getProBenefits(locale: Locale): Array<{ icon: string; title: string; subtitle: string; isNew?: boolean; resSection?: boolean }> {
   return [
     { icon: '📋', title: t('plan_pro_f1', locale), subtitle: t('plan_pro_sub1', locale) },
     { icon: '🎁', title: t('plan_pro_f2', locale), subtitle: t('plan_pro_sub2', locale) },
@@ -1811,16 +1812,17 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
     { icon: '👁', title: t('plan_pro_f7', locale), subtitle: t('plan_pro_sub7', locale) },
     { icon: '🛡', title: t('plan_pro_f8', locale), subtitle: t('plan_pro_sub8', locale) },
     { icon: '📅', title: t('plan_pro_f9', locale), subtitle: t('plan_pro_sub9', locale) },
+    // Premium profile (showcase) — a general benefit, not a reservation feature.
+    { icon: '✨', title: t('plan_pro_f18', locale), subtitle: t('plan_pro_sub18', locale), isNew: true },
     { icon: '📋', title: t('plan_pro_f15', locale), subtitle: t('plan_pro_sub15', locale), isNew: true },
     { icon: '🚫', title: t('plan_pro_f16', locale), subtitle: t('plan_pro_sub16', locale), isNew: true },
-    { icon: '⏱', title: t('plan_pro_f17', locale), subtitle: t('plan_pro_sub17', locale), isNew: true },
-    { icon: '✨', title: t('plan_pro_f18', locale), subtitle: t('plan_pro_sub18', locale), isNew: true },
     // Reservation Pro features
-    { icon: '📋', title: t('plan_pro_f10', locale), subtitle: t('plan_pro_sub10', locale), isNew: true },
-    { icon: '📝', title: t('plan_pro_f11', locale), subtitle: t('plan_pro_sub11', locale), isNew: true },
-    { icon: '🔔', title: t('plan_pro_f12', locale), subtitle: t('plan_pro_sub12', locale), isNew: true },
-    { icon: '✓', title: t('plan_pro_f13', locale), subtitle: t('plan_pro_sub13', locale), isNew: true },
-    { icon: '🔍', title: t('plan_pro_f14', locale), subtitle: t('plan_pro_sub14', locale), isNew: true },
+    { icon: '⏱', title: t('plan_pro_f17', locale), subtitle: t('plan_pro_sub17', locale), isNew: true, resSection: true },
+    { icon: '📋', title: t('plan_pro_f10', locale), subtitle: t('plan_pro_sub10', locale), isNew: true, resSection: true },
+    { icon: '📝', title: t('plan_pro_f11', locale), subtitle: t('plan_pro_sub11', locale), isNew: true, resSection: true },
+    { icon: '🔔', title: t('plan_pro_f12', locale), subtitle: t('plan_pro_sub12', locale), isNew: true, resSection: true },
+    { icon: '✓', title: t('plan_pro_f13', locale), subtitle: t('plan_pro_sub13', locale), isNew: true, resSection: true },
+    { icon: '🔍', title: t('plan_pro_f14', locale), subtitle: t('plan_pro_sub14', locale), isNew: true, resSection: true },
   ];
 }
 
@@ -3020,10 +3022,10 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
                   {t('plan_pro_block', locale)}
                 </div>
                 {getProBenefits(locale).map((b, i, arr) => {
-                  const firstNew = b.isNew && (i === 0 || !arr[i - 1]?.isNew);
+                  const firstRes = b.resSection && (i === 0 || !arr[i - 1]?.resSection);
                   return (
                     <Fragment key={i}>
-                      {firstNew && (
+                      {firstRes && (
                         <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, marginTop: 8, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                           {t('plan_pro_res_section', locale)}
                         </div>
@@ -3755,7 +3757,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       bio: string | null;
       pinned: { id: string; slug: string; title: string; itemCount: number; reservedCount: number }[];
       preferences: string | null;
-      sizes: { clothing: string | null; shoes: string | null; ring: string | null; other: string | null };
+      sizes: {
+        clothing: string | null; shoes: string | null; ring: string | null; other: string | null;
+        chest: string | null; waist: string | null; hips: string | null;
+      };
       brands: string[];
       antiGift: { presets: string[]; customItems: string[]; comment: string | null } | null;
       updatedAt: string | null;
@@ -3770,7 +3775,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     bio: string | null;
     pinnedIds: string[];
     preferences: string | null;
-    sizes: { clothing: string | null; shoes: string | null; ring: string | null; other: string | null };
+    sizes: {
+      clothing: string | null; shoes: string | null; ring: string | null; other: string | null;
+      chest: string | null; waist: string | null; hips: string | null;
+    };
     brands: string[];
     updatedAt: string | null;
   };
@@ -5052,6 +5060,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     sizeShoes: string | null;
     sizeRing: string | null;
     sizeOther: string | null;
+    chest: string | null;
+    waist: string | null;
+    hips: string | null;
     brands: string[];
   }>, opts?: { publish?: boolean; silent?: boolean }): Promise<boolean> => {
     setShowcaseSaving(true);
@@ -13846,10 +13857,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                         {getProBenefits(locale).map((b, i, arr) => {
-                          const firstNew = b.isNew && (i === 0 || !arr[i - 1]?.isNew);
+                          const firstRes = b.resSection && (i === 0 || !arr[i - 1]?.resSection);
                           return (
                             <Fragment key={i}>
-                              {firstNew && (
+                              {firstRes && (
                                 <div style={{
                                   fontSize: 11, fontWeight: 700, color: C.accent,
                                   textTransform: 'uppercase', letterSpacing: 0.4,
@@ -23485,7 +23496,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {screen === 'showcase-editor' && (() => {
         const sc = showcaseData;
         const pinnedIds = sc?.pinnedIds ?? [];
-        const hasSizes = !!sc && !!(sc.sizes?.clothing || sc.sizes?.shoes || sc.sizes?.ring || sc.sizes?.other);
+        const hasSizes = !!sc && !!(
+          sc.sizes?.clothing || sc.sizes?.shoes || sc.sizes?.ring || sc.sizes?.other ||
+          sc.sizes?.chest || sc.sizes?.waist || sc.sizes?.hips
+        );
         const hasAntiGift = !!dontGiftData && (
           (dontGiftData.presets?.length ?? 0) > 0 ||
           (dontGiftData.customItems?.length ?? 0) > 0 ||
@@ -23809,57 +23823,74 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <span style={sectionIconStyle}>📏</span>
                       <span style={sectionTitleStyle}>{t('showcase_section_sizes', locale)}</span>
                     </div>
-                    {sectionStatus(!!(sc.sizes.clothing || sc.sizes.shoes || sc.sizes.ring || sc.sizes.other))}
+                    {sectionStatus(!!(sc.sizes.clothing || sc.sizes.shoes || sc.sizes.ring || sc.sizes.other || sc.sizes.chest || sc.sizes.waist || sc.sizes.hips))}
                   </div>
                   <div style={sectionDescStyle}>{t('showcase_section_sizes_desc', locale)}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
-                    {([
-                      ['clothing', 'showcase_size_clothing', 'showcase_size_placeholder_clothing', 'sizeClothing'],
-                      ['shoes', 'showcase_size_shoes', 'showcase_size_placeholder_shoes', 'sizeShoes'],
-                      ['ring', 'showcase_size_ring', 'showcase_size_placeholder_ring', 'sizeRing'],
-                      ['other', 'showcase_size_other', 'showcase_size_placeholder_other', 'sizeOther'],
-                    ] as const).map(([key, labelKey, phKey, patchKey]) => {
+                  {(() => {
+                    const sizeInputStyle = (hasVal: boolean): React.CSSProperties => ({
+                      width: '100%', boxSizing: 'border-box',
+                      padding: hasVal ? '10px 32px 10px 12px' : '10px 12px',
+                      borderRadius: 10,
+                      background: C.surface, color: C.text, fontSize: 14, fontFamily: font,
+                      border: `1px solid ${C.borderLight}`, outline: 'none',
+                    });
+                    const sizeClearBtnStyle: React.CSSProperties = {
+                      position: 'absolute', top: '50%', right: 6, transform: 'translateY(-50%)',
+                      width: 22, height: 22, borderRadius: 11, border: 'none',
+                      background: 'rgba(255,255,255,0.08)', color: C.textMuted,
+                      cursor: 'pointer', fontFamily: font, fontSize: 13,
+                      padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                    };
+                    const renderSizeInput = (key: keyof ShowcaseData['sizes'], labelKey: string, phKey: string, patchKey: string) => {
                       const sizeVal = (sc.sizes as any)[key] ?? '';
                       return (
-                      <div key={key}>
-                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4, fontWeight: 600 }}>{t(labelKey, locale)}</div>
-                        <div style={{ position: 'relative' }}>
-                          <input
-                            type="text"
-                            value={sizeVal}
-                            placeholder={t(phKey, locale)}
-                            onChange={(e) => setShowcaseData({ ...sc, sizes: { ...sc.sizes, [key]: e.target.value } })}
-                            onBlur={() => saveField({ [patchKey]: (sizeVal as string)?.trim() || null } as any)}
-                            style={{
-                              width: '100%', boxSizing: 'border-box',
-                              padding: sizeVal ? '10px 32px 10px 12px' : '10px 12px',
-                              borderRadius: 10,
-                              background: C.surface, color: C.text, fontSize: 14, fontFamily: font,
-                              border: `1px solid ${C.borderLight}`, outline: 'none',
-                            }}
-                          />
-                          {sizeVal && (
-                            <button
-                              type="button"
-                              aria-label={t('showcase_input_clear', locale)}
-                              onClick={() => {
-                                setShowcaseData({ ...sc, sizes: { ...sc.sizes, [key]: '' } });
-                                saveField({ [patchKey]: null } as any);
-                              }}
-                              style={{
-                                position: 'absolute', top: '50%', right: 6, transform: 'translateY(-50%)',
-                                width: 22, height: 22, borderRadius: 11, border: 'none',
-                                background: 'rgba(255,255,255,0.08)', color: C.textMuted,
-                                cursor: 'pointer', fontFamily: font, fontSize: 13,
-                                padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
-                              }}
-                            >×</button>
-                          )}
+                        <div key={key}>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4, fontWeight: 600 }}>{t(labelKey, locale)}</div>
+                          <div style={{ position: 'relative' }}>
+                            <input
+                              type="text"
+                              value={sizeVal}
+                              placeholder={t(phKey, locale)}
+                              onChange={(e) => setShowcaseData({ ...sc, sizes: { ...sc.sizes, [key]: e.target.value } })}
+                              onBlur={() => saveField({ [patchKey]: (sizeVal as string)?.trim() || null } as any)}
+                              style={sizeInputStyle(!!sizeVal)}
+                            />
+                            {sizeVal && (
+                              <button
+                                type="button"
+                                aria-label={t('showcase_input_clear', locale)}
+                                onClick={() => {
+                                  setShowcaseData({ ...sc, sizes: { ...sc.sizes, [key]: '' } });
+                                  saveField({ [patchKey]: null } as any);
+                                }}
+                                style={sizeClearBtnStyle}
+                              >×</button>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      );
+                    };
+                    return (
+                      <>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
+                          {renderSizeInput('clothing', 'showcase_size_clothing', 'showcase_size_placeholder_clothing', 'sizeClothing')}
+                          {renderSizeInput('shoes', 'showcase_size_shoes', 'showcase_size_placeholder_shoes', 'sizeShoes')}
+                          {renderSizeInput('ring', 'showcase_size_ring', 'showcase_size_placeholder_ring', 'sizeRing')}
+                          {renderSizeInput('other', 'showcase_size_other', 'showcase_size_placeholder_other', 'sizeOther')}
+                        </div>
+                        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                          <div style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                            {t('showcase_measurements_title', locale)}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                            {renderSizeInput('chest', 'showcase_size_chest', 'showcase_size_placeholder_chest', 'chest')}
+                            {renderSizeInput('waist', 'showcase_size_waist', 'showcase_size_placeholder_waist', 'waist')}
+                            {renderSizeInput('hips', 'showcase_size_hips', 'showcase_size_placeholder_hips', 'hips')}
+                          </div>
+                        </div>
+                      </>
                     );
-                    })}
-                  </div>
+                  })()}
                 </div>
 
                 {/* ── Brands ── */}
@@ -24092,7 +24123,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const sc = showcaseData;
         const pinnedWls = showcaseAvailableWishlists.filter((w) => sc?.pinnedIds.includes(w.id));
         const otherWls = showcaseAvailableWishlists.filter((w) => !sc?.pinnedIds.includes(w.id));
-        const hasSizes = !!sc && !!(sc.sizes.clothing || sc.sizes.shoes || sc.sizes.ring || sc.sizes.other);
+        const hasGarmentSizes = !!sc && !!(sc.sizes.clothing || sc.sizes.shoes || sc.sizes.ring || sc.sizes.other);
+        const hasMeasurements = !!sc && !!(sc.sizes.chest || sc.sizes.waist || sc.sizes.hips);
+        const hasSizes = hasGarmentSizes || hasMeasurements;
         const dg = profileData;
         return (
           <div style={{ fontFamily: font, color: C.text, animation: 'fadeIn 0.3s ease' }}>
@@ -24205,19 +24238,40 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {hasSizes && (
                   <div style={scSectionStyle}>
                     <div style={scSectionTitleStyle}>📏 {t('showcase_public_sizes_title', locale)}</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      {([
-                        ['clothing', sc.sizes.clothing],
-                        ['shoes', sc.sizes.shoes],
-                        ['ring', sc.sizes.ring],
-                        ['other', sc.sizes.other],
-                      ] as const).filter(([, v]) => !!v).map(([key, value]) => (
-                        <div key={key} style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', border: `1px solid ${C.border}` }}>
-                          <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{t(`showcase_size_${key}` as any, locale)}</div>
-                          <div style={{ fontSize: 15, fontWeight: 600 }}>{value}</div>
+                    {hasGarmentSizes && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        {([
+                          ['clothing', sc.sizes.clothing],
+                          ['shoes', sc.sizes.shoes],
+                          ['ring', sc.sizes.ring],
+                          ['other', sc.sizes.other],
+                        ] as const).filter(([, v]) => !!v).map(([key, value]) => (
+                          <div key={key} style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', border: `1px solid ${C.border}` }}>
+                            <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{t(`showcase_size_${key}` as any, locale)}</div>
+                            <div style={{ fontSize: 15, fontWeight: 600 }}>{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {hasMeasurements && (
+                      <div style={{ marginTop: hasGarmentSizes ? 12 : 0 }}>
+                        <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>
+                          {t('showcase_measurements_title', locale)}
                         </div>
-                      ))}
-                    </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                          {([
+                            ['chest', sc.sizes.chest],
+                            ['waist', sc.sizes.waist],
+                            ['hips', sc.sizes.hips],
+                          ] as const).filter(([, v]) => !!v).map(([key, value]) => (
+                            <div key={key} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                              <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{t(`showcase_size_${key}` as any, locale)}</div>
+                              <div style={{ fontSize: 15, fontWeight: 600 }}>{value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -24346,7 +24400,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               const pinnedIds = new Set(showcase?.pinned.map((p) => p.id) ?? []);
               const nonPinnedWishlists = pp.wishlists.filter((wl) => !pinnedIds.has(wl.id));
               const sizes = showcase?.sizes;
-              const hasSizes = !!sizes && (!!sizes.clothing || !!sizes.shoes || !!sizes.ring || !!sizes.other);
+              const hasGarmentSizes = !!sizes && (!!sizes.clothing || !!sizes.shoes || !!sizes.ring || !!sizes.other);
+              const hasMeasurements = !!sizes && (!!sizes.chest || !!sizes.waist || !!sizes.hips);
+              const hasSizes = hasGarmentSizes || hasMeasurements;
               const scSectionStyle: React.CSSProperties = { padding: '0 20px', marginBottom: 20 };
               const scSectionTitleStyle: React.CSSProperties = {
                 fontSize: 13, fontWeight: 600, textTransform: 'uppercase',
@@ -24466,19 +24522,40 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {hasShowcase && hasSizes && sizes && (
                   <div style={scSectionStyle}>
                     <div style={scSectionTitleStyle}>📏 {t('showcase_public_sizes_title', locale)}</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      {([
-                        ['clothing', sizes.clothing],
-                        ['shoes', sizes.shoes],
-                        ['ring', sizes.ring],
-                        ['other', sizes.other],
-                      ] as const).filter(([, v]) => !!v).map(([key, value]) => (
-                        <div key={key} style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', border: `1px solid ${C.border}` }}>
-                          <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{t(`showcase_size_${key}` as any, locale)}</div>
-                          <div style={{ fontSize: 15, fontWeight: 600 }}>{value}</div>
+                    {hasGarmentSizes && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        {([
+                          ['clothing', sizes.clothing],
+                          ['shoes', sizes.shoes],
+                          ['ring', sizes.ring],
+                          ['other', sizes.other],
+                        ] as const).filter(([, v]) => !!v).map(([key, value]) => (
+                          <div key={key} style={{ background: C.surface, borderRadius: 10, padding: '10px 14px', border: `1px solid ${C.border}` }}>
+                            <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{t(`showcase_size_${key}` as any, locale)}</div>
+                            <div style={{ fontSize: 15, fontWeight: 600 }}>{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {hasMeasurements && (
+                      <div style={{ marginTop: hasGarmentSizes ? 12 : 0 }}>
+                        <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, fontWeight: 600 }}>
+                          {t('showcase_measurements_title', locale)}
                         </div>
-                      ))}
-                    </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                          {([
+                            ['chest', sizes.chest],
+                            ['waist', sizes.waist],
+                            ['hips', sizes.hips],
+                          ] as const).filter(([, v]) => !!v).map(([key, value]) => (
+                            <div key={key} style={{ background: C.surface, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                              <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{t(`showcase_size_${key}` as any, locale)}</div>
+                              <div style={{ fontSize: 15, fontWeight: 600 }}>{value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

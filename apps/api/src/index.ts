@@ -866,6 +866,9 @@ publicRouter.get(
         showcaseSizeShoes: true,
         showcaseSizeRing: true,
         showcaseSizeOther: true,
+        showcaseChest: true,
+        showcaseWaist: true,
+        showcaseHips: true,
         showcaseBrands: true,
         showcaseUpdatedAt: true,
         // Anti-gifts (already public via dontGiftVisible)
@@ -873,6 +876,8 @@ publicRouter.get(
         dontGiftCustomItems: true,
         dontGiftComment: true,
         dontGiftVisible: true,
+        // Owner godMode — needed so entitlement check honours god-mode PRO
+        user: { select: { godMode: true } },
       },
     });
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
@@ -921,14 +926,17 @@ publicRouter.get(
       bio: string | null;
       pinned: Array<{ id: string; slug: string; title: string; itemCount: number; reservedCount: number }>;
       preferences: string | null;
-      sizes: { clothing: string | null; shoes: string | null; ring: string | null; other: string | null };
+      sizes: {
+        clothing: string | null; shoes: string | null; ring: string | null; other: string | null;
+        chest: string | null; waist: string | null; hips: string | null;
+      };
       brands: string[];
       antiGift: { presets: string[]; customItems: string[]; comment: string | null } | null;
       updatedAt: string | null;
     } = null;
 
     if (isPublic && profile.showcaseEnabled) {
-      const ownerEnt = await getUserEntitlement(profile.userId);
+      const ownerEnt = await getUserEntitlement(profile.userId, profile.user?.godMode ?? false);
       if (ownerEnt.isPro) {
         // Filter pinned IDs to only include wishlists that are still public
         const pinnedSet = new Set(profile.showcasePinnedIds);
@@ -940,7 +948,10 @@ publicRouter.get(
           !!profile.showcaseSizeClothing ||
           !!profile.showcaseSizeShoes ||
           !!profile.showcaseSizeRing ||
-          !!profile.showcaseSizeOther;
+          !!profile.showcaseSizeOther ||
+          !!profile.showcaseChest ||
+          !!profile.showcaseWaist ||
+          !!profile.showcaseHips;
         showcase = {
           coverUrl: profile.showcaseCoverUrl,
           bio: profile.showcaseBio,
@@ -957,7 +968,10 @@ publicRouter.get(
             shoes: profile.showcaseSizeShoes,
             ring: profile.showcaseSizeRing,
             other: profile.showcaseSizeOther,
-          } : { clothing: null, shoes: null, ring: null, other: null },
+            chest: profile.showcaseChest,
+            waist: profile.showcaseWaist,
+            hips: profile.showcaseHips,
+          } : { clothing: null, shoes: null, ring: null, other: null, chest: null, waist: null, hips: null },
           brands: profile.showcaseBrands ?? [],
           antiGift: profile.dontGiftVisible && (
             (profile.dontGiftPresets?.length ?? 0) > 0 ||
@@ -6820,6 +6834,9 @@ tgRouter.get(
           shoes: profile.showcaseSizeShoes,
           ring: profile.showcaseSizeRing,
           other: profile.showcaseSizeOther,
+          chest: profile.showcaseChest,
+          waist: profile.showcaseWaist,
+          hips: profile.showcaseHips,
         },
         brands: profile.showcaseBrands ?? [],
         updatedAt: profile.showcaseUpdatedAt?.toISOString() ?? null,
@@ -6852,6 +6869,9 @@ tgRouter.patch(
       sizeShoes: z.string().max(50).nullable().optional(),
       sizeRing: z.string().max(50).nullable().optional(),
       sizeOther: z.string().max(100).nullable().optional(),
+      chest: z.string().max(20).nullable().optional(),
+      waist: z.string().max(20).nullable().optional(),
+      hips: z.string().max(20).nullable().optional(),
       brands: z.array(z.string().min(1).max(40)).max(10).optional(),
     });
     const parsed = schema.safeParse(req.body ?? {});
@@ -6896,6 +6916,9 @@ tgRouter.patch(
     if (parsed.data.sizeShoes !== undefined) data.showcaseSizeShoes = parsed.data.sizeShoes ?? null;
     if (parsed.data.sizeRing !== undefined) data.showcaseSizeRing = parsed.data.sizeRing ?? null;
     if (parsed.data.sizeOther !== undefined) data.showcaseSizeOther = parsed.data.sizeOther ?? null;
+    if (parsed.data.chest !== undefined) data.showcaseChest = parsed.data.chest ?? null;
+    if (parsed.data.waist !== undefined) data.showcaseWaist = parsed.data.waist ?? null;
+    if (parsed.data.hips !== undefined) data.showcaseHips = parsed.data.hips ?? null;
     if (brands !== undefined) data.showcaseBrands = brands ?? [];
 
     const updated = await prisma.userProfile.update({
@@ -6920,6 +6943,9 @@ tgRouter.patch(
           shoes: updated.showcaseSizeShoes,
           ring: updated.showcaseSizeRing,
           other: updated.showcaseSizeOther,
+          chest: updated.showcaseChest,
+          waist: updated.showcaseWaist,
+          hips: updated.showcaseHips,
         },
         brands: updated.showcaseBrands ?? [],
         updatedAt: updated.showcaseUpdatedAt?.toISOString() ?? null,
