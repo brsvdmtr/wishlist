@@ -6252,12 +6252,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData]);
 
+  // Ref-based handler so we register ONCE for the lifetime of the component.
+  // Re-registering on every navBack identity change caused Telegram SDK to lose
+  // the handler after many onClick/offClick cycles (e.g. sub→unsub→sub rapidly).
+  const navBackRef = useRef(navBack);
+  useEffect(() => { navBackRef.current = navBack; }, [navBack]);
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (!tg) return;
-    tg.BackButton.onClick(navBack);
-    return () => tg.BackButton.offClick(navBack);
-  }, [navBack]);
+    const handler = () => { void navBackRef.current(); };
+    tg.BackButton.onClick(handler);
+    return () => tg.BackButton.offClick(handler);
+  }, []);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -9867,6 +9873,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       setPublicProfileData(null);
                       void loadPublicProfile(p.username);
                       setScreen('public-profile');
+                      window.scrollTo(0, 0);
                       trackEvent('profile_open_from_subs', { username: p.username });
                     }}
                     style={{
@@ -12908,6 +12915,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 void loadProfileSubscribeStatus(uname);
                 void loadPublicProfile(uname);
                 setScreen('public-profile');
+                window.scrollTo(0, 0);
                 trackEvent('profile_open_from_guest_view', { username: uname });
               };
               return (
@@ -24690,7 +24698,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <div key={wl.id}
                           onClick={() => {
                             trackEvent('public_profile.wishlist_opened', { source: 'pinned' });
-                            void loadGuestWishlist(wl.slug).then(() => setScreen('guest-view')).catch(() => {});
+                            void loadGuestWishlist(wl.slug).then(() => { setScreen('guest-view'); window.scrollTo(0, 0); }).catch(() => {});
                           }}
                           style={{
                             background: C.surface, borderRadius: 12, padding: '14px 16px',
@@ -24846,7 +24854,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <div key={wl.id}
                           onClick={() => {
                             trackEvent('public_profile.wishlist_opened', { source: 'list' });
-                            void loadGuestWishlist(wl.slug).then(() => setScreen('guest-view')).catch(() => {});
+                            void loadGuestWishlist(wl.slug).then(() => { setScreen('guest-view'); window.scrollTo(0, 0); }).catch(() => {});
                           }}
                           style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
