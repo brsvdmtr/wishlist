@@ -1888,7 +1888,7 @@ const ru: Dict = {
   santa_participant_default: 'Участник',
   addon_already_unlocked: 'Уже разблокировано!',
   pro_forever: '✨ PRO навсегда',
-  gn_hero_title: 'Никогда не забудь важную дату',
+  gn_hero_title: 'Никогда не забывай важную дату',
   gn_hero_subtitle: 'Все дни рождения, юбилеи и идеи подарков — в одном месте с напоминаниями.',
   gn_feature_dates: 'Все важные события и даты под рукой',
   gn_feature_ideas: 'Сохраняй идеи подарков заранее',
