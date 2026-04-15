@@ -603,6 +603,16 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-15',
+    date: '15.04.2026',
+    items: [
+      { ru: '💬 Ответы на комментарии — прямо из уведомления от бота', en: '💬 Comment replies — right from the bot notification' },
+      { ru: 'Кнопка «Ответить» под уведомлением — открывает нужное желание и подсвечивает комментарий', en: '"Reply" button under the notification — opens the exact wish and highlights the comment' },
+      { ru: 'Над ответом виден текст исходного комментария — чтобы не потерять контекст', en: 'Preview of the original comment is shown above each reply — so the context isn\'t lost' },
+      { ru: 'Автор исходного комментария получает уведомление об ответе', en: 'The original comment\'s author gets notified about the reply' },
+    ],
+  },
+  {
     id: '2026-04-14',
     date: '14.04.2026',
     items: [
