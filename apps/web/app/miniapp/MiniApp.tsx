@@ -4191,6 +4191,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [changelogSeenId, setChangelogSeenId] = useState<string>(() => {
     try { return window.localStorage.getItem('changelog_seen_id') ?? ''; } catch { return ''; }
   });
+  // Single source of truth for "unseen updates in Settings" — used by the
+  // changelog row AND the settings-gear badge in main nav / PRO profile edit.
+  // Today the only source is new releases; when we add more (e.g. new payment
+  // method, new PRO benefit), extend here: this becomes a count and badge
+  // promotes from dot → number.
+  const hasNewInSettings = RELEASE_NOTES.length > 0 && changelogSeenId !== RELEASE_NOTES[0]!.id;
   const [legalDocId, setLegalDocId] = useState<string | null>(null);
   const [showReportProblemSheet, setShowReportProblemSheet] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
@@ -10155,10 +10161,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* Settings gear */}
               <button
                 onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
-                style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', fontSize: 20, color: C.textMuted, lineHeight: 1 }}
+                style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', fontSize: 20, color: C.textMuted, lineHeight: 1, position: 'relative' as const }}
                 aria-label={t('settings_title', locale)}
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                {hasNewInSettings && <span aria-hidden="true" style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: '50%', background: '#FBBF24' }} />}
               </button>
             </div>
           </div>
@@ -14390,7 +14397,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       border: '1px solid rgba(255,255,255,0.08)',
                     }}
                   >
-                    ⚙️ {t('settings_title', locale)}
+                    <span style={{ position: 'relative' as const, display: 'inline-flex' }}>
+                      ⚙️
+                      {hasNewInSettings && <span aria-hidden="true" style={{ position: 'absolute', top: -1, right: -5, width: 7, height: 7, borderRadius: '50%', background: '#FBBF24' }} />}
+                    </span>
+                    {t('settings_title', locale)}
                   </button>
                   <button
                     onClick={() => {
@@ -16300,7 +16311,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
               {/* Support & Service */}
               <SettingsSection title={t('settings_support_title', locale)}>
-                <SettingsActionRow icon={'\u{1F4CB}'} label={t('settings_changelog', locale)} dot={RELEASE_NOTES.length > 0 && changelogSeenId !== RELEASE_NOTES[0]!.id} onClick={() => {
+                <SettingsActionRow icon={'\u{1F4CB}'} label={t('settings_changelog', locale)} dot={hasNewInSettings} onClick={() => {
                   if (RELEASE_NOTES.length > 0) {
                     const latestId = RELEASE_NOTES[0]!.id;
                     setChangelogSeenId(latestId);
