@@ -6660,7 +6660,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // were silent no-ops. Reset scrollTop on the actual scrollable element,
   // with a requestAnimationFrame retry in case content isn't laid out yet.
   useEffect(() => {
-    if (screen !== 'showcase-preview' && screen !== 'public-profile' && screen !== 'guest-view') return;
+    if (screen !== 'showcase-preview' && screen !== 'public-profile' && screen !== 'guest-view' && screen !== 'changelog') return;
     const sc = scrollContainerRef.current;
     if (!sc) return;
     const toTop = () => { sc.scrollTop = 0; };
@@ -16307,6 +16307,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     try { window.localStorage.setItem('changelog_seen_id', latestId); } catch { /* ok */ }
                   }
                   setChangelogOpenId(null);
+                  // Reset scroll BEFORE setScreen so there's no visible jump
+                  // while React is committing the new screen. The post-commit
+                  // useEffect is a safety net for any layout-shift edge case.
+                  if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
                   setScreen('changelog');
                 }} />
                 <SDivider />
