@@ -69,11 +69,11 @@ function saveState(state) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function fetchWithTimeout(url) {
+async function fetchWithTimeout(url, opts = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, { signal: controller.signal, ...opts });
     clearTimeout(timer);
     return { ok: res.ok, status: res.status };
   } catch (err) {
@@ -175,7 +175,8 @@ async function runChecks() {
     fetchWithTimeout(`${BASE_URL}/`),
     // Check a /tg/ endpoint to detect stuck MAINTENANCE_MODE.
     // Expected: 401 (no auth) = healthy. 503 = maintenance stuck. 0 = down.
-    fetchWithTimeout(`${BASE_URL}/api/tg/bootstrap`),
+    // x-watchdog header lets the API skip error:* telemetry for these probes.
+    fetchWithTimeout(`${BASE_URL}/api/tg/bootstrap`, { headers: { 'x-watchdog': '1' } }),
   ]);
 
   // /tg/bootstrap should return 401 (unauthorized) — that means the route is live.

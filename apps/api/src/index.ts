@@ -2443,6 +2443,10 @@ tgRouter.use((req, res, next) => {
   res.on('finish', () => {
     const status = res.statusCode;
     if (status >= 400) {
+      // Skip internal watchdog health probes — they intentionally trigger a 401
+      // (no init data) to verify the route is reachable, and would otherwise
+      // dominate error:* metrics (~200/day on /tg/bootstrap).
+      if (req.headers['x-watchdog'] === '1') return;
       const route = req.route?.path ? (req.baseUrl + req.route.path) : req.path;
       const method = req.method;
       const userId = req.tgUser?.id != null ? String(req.tgUser.id) : null;
@@ -13457,24 +13461,38 @@ tgRouter.post('/santa/campaigns/:id/inbound/hint/fulfill', asyncHandler(async (r
 }));
 
 // ── Telemetry ingestion ─────────────────────────────────
-const ANALYTICS_EVENTS_ALLOWLIST = new Set([
-  'bot.start_received', 'miniapp.open_attempt', 'miniapp.tg_context_detected',
-  'miniapp.initdata_present', 'miniapp.bootstrap_started', 'miniapp.bootstrap_succeeded',
-  'miniapp.bootstrap_failed', 'miniapp.first_rendered', 'miniapp.boot_timeout',
-  'miniapp.fatal_render_error', 'wishlist.created', 'wishlist.deleted', 'wish.created',
-  'wish.edited', 'wish.deleted', 'wish.completed',
-  'import.started', 'import.succeeded', 'import.failed',
-  'import.bot_started', 'import.bot_succeeded', 'import.bot_failed',
-  'guest.view_opened', 'reservation.succeeded', 'reservation.cancelled',
-  'share.token_generated', 'subscription.cancelled', 'payment.pre_checkout_rejected',
-  'showcase.editor_opened', 'showcase.cover_uploaded', 'showcase.cover_removed',
-  'showcase.saved', 'showcase.published', 'showcase.preview_opened',
-  'showcase.share_clicked', 'showcase.paywall_viewed', 'showcase.upgrade_clicked',
-  'public_profile.viewed', 'public_profile.wishlist_opened',
+// Accept events matching known product-area prefixes + a small exact-match list.
+// This keeps a defensive boundary (rejects random junk) while staying resilient to
+// frontend additions: a new event with a known prefix flows through without a backend
+// deploy. Unknown events are dropped per-event — we never reject the whole batch,
+// because Zod all-or-nothing rejection masked ~40 telemetry 400s/day after 2026-04-13.
+const ANALYTICS_EVENT_PREFIXES = [
+  'miniapp.', 'miniapp_',
+  'showcase.', 'public_profile.',
+  'onboarding.', 'onboarding_',
+  'feature_gate_hit_', 'demo_item_',
+  'gift_notes_', 'gift_occasion_',
+  'first_share_prompt_', 'ready_share_prompt_',
+  'group_gift_', 'addon_', 'category_', 'checkout_',
+  'comment_reply_', 'dont_gift_', 'item_',
+  'profile_', 'promo_winback_', 'selection_',
+  'settings_support_', 'subscription_', 'banner_',
+  'wishlist_', 'share_token_',
+  'wish.', 'wishlist.', 'import.', 'reservation.',
+  'guest.', 'bot.', 'payment.', 'share.',
+  'lifecycle_',
+];
+const ANALYTICS_EVENT_EXACT = new Set<string>([
+  'api_server_error', 'pro_cta_clicked', 'error_boundary_triggered',
 ]);
+function isAllowedAnalyticsEvent(event: string): boolean {
+  if (event.length === 0 || event.length > 80) return false;
+  if (ANALYTICS_EVENT_EXACT.has(event)) return true;
+  return ANALYTICS_EVENT_PREFIXES.some(p => event.startsWith(p));
+}
 
 const telemetryEventSchema = z.object({
-  event: z.string().refine(e => ANALYTICS_EVENTS_ALLOWLIST.has(e), 'Unknown event'),
+  event: z.string().min(1).max(80),
   ts: z.number(),
   props: z.record(z.unknown()).optional(),
 });
@@ -13502,7 +13520,20 @@ tgRouter.post('/telemetry', telemetryLimiter, asyncHandler(async (req, res) => {
   const now = Date.now();
   const oneHourAgo = now - 3_600_000;
 
-  const records = parsed.data.events.map(ev => {
+  // Per-event filter: drop events that don't match the allowlist rather than
+  // rejecting the whole batch. One unknown event used to 400 the entire request
+  // and caused silent analytics loss on the frontend (catch {} in flushTelemetry).
+  const accepted: typeof parsed.data.events = [];
+  const droppedNames: string[] = [];
+  for (const ev of parsed.data.events) {
+    if (isAllowedAnalyticsEvent(ev.event)) accepted.push(ev);
+    else droppedNames.push(ev.event);
+  }
+  if (droppedNames.length > 0) {
+    logger.debug({ dropped: droppedNames, userId }, 'telemetry: dropped unknown events');
+  }
+
+  const records = accepted.map(ev => {
     // Clamp timestamp to last hour
     const ts = Math.max(oneHourAgo, Math.min(now, ev.ts));
     // Truncate props
@@ -13530,7 +13561,7 @@ tgRouter.post('/telemetry', telemetryLimiter, asyncHandler(async (req, res) => {
     await prisma.analyticsEvent.createMany({ data: records });
   }
 
-  return res.json({ ok: true });
+  return res.json({ ok: true, accepted: records.length, dropped: droppedNames.length });
 }));
 
 // POST /tg/analytics/attribution — First-touch source attribution.
@@ -13935,6 +13966,7 @@ const LIFECYCLE_MAX_MARKETING_45D = 5; // max 5 marketing touches in 45 days
 /** Send a Telegram DM via bot API. Returns true if delivered. */
 async function sendLifecycleDM(chatId: string, text: string, webAppUrl?: string): Promise<boolean> {
   if (!BOT_TOKEN_FOR_DM || !chatId) return false;
+  const chatIdTail = String(chatId).slice(-4); // log suffix only, keep PII minimal
   try {
     const body: any = { chat_id: chatId, text, parse_mode: 'HTML' };
     if (webAppUrl) {
@@ -13943,9 +13975,24 @@ async function sendLifecycleDM(chatId: string, text: string, webAppUrl?: string)
     const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN_FOR_DM}/sendMessage`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
-    const data = await r.json() as { ok: boolean };
+    const data = await r.json() as { ok: boolean; error_code?: number; description?: string };
+    if (!data.ok) {
+      // Distinguish "bot blocked by user" (403) from rate-limits/flood (429),
+      // chat-not-found (400) and other Telegram-side rejections.
+      logger.warn(
+        { chatIdTail, httpStatus: r.status, errorCode: data.error_code, description: data.description },
+        'lifecycle DM rejected by Telegram',
+      );
+    }
     return data.ok;
-  } catch { return false; }
+  } catch (err) {
+    // Network-level failure (timeout, DNS, IPv4 block, TLS) — distinct from Telegram rejection.
+    logger.warn(
+      { chatIdTail, err: err instanceof Error ? err.message : String(err) },
+      'lifecycle DM fetch error',
+    );
+    return false;
+  }
 }
 
 /** Classify user into lifecycle segment. Returns null if user is not in any churn segment. */
