@@ -119,6 +119,11 @@ async function main() {
         select: { id: true },
       });
 
+      // Dual-write: seed placement for seed item.
+      await tx.wishlistItemPlacement.create({
+        data: { wishlistId: wl.id, itemId: item.id },
+      });
+
       for (const tagName of seed.tags) {
         const tagId = tagByName.get(tagName);
         if (!tagId) continue;

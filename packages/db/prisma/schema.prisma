@@ -192,6 +192,7 @@ model Wishlist {
 
   owner      User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   items      Item[]
+  placements WishlistItemPlacement[]
   tags       Tag[]
   categories WishlistCategory[]
   wishlistSubscriptions WishlistSubscription[]
@@ -233,6 +234,7 @@ model Item {
 
   wishlist              Wishlist               @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
   category              WishlistCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  placements            WishlistItemPlacement[]
   itemTags              ItemTag[]
   reservationEvents     ReservationEvent[]
   comments              Comment[]
@@ -1411,11 +1413,39 @@ model WishlistCategory {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  wishlist Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  items    Item[]
+  wishlist   Wishlist                @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  items      Item[]
+  placements WishlistItemPlacement[]
 
   @@index([wishlistId, sortOrder])
   @@index([wishlistId, isDefault])
+}
+
+// Per-wishlist placement for a (possibly shared) Item.
+// An Item can live in 1..N wishlists via placement rows. Global fields
+// (title, description, price, image, status, reservation, comments) stay
+// on Item itself. Per-wishlist fields (position, category) live here.
+//
+// Dual-read window: Item.wishlistId / Item.position / Item.categoryId
+// remain authoritative for legacy read paths; every Item has a placement
+// in its wishlistId, backfilled 1-for-1 by migration.
+model WishlistItemPlacement {
+  id         String   @id @default(cuid())
+  wishlistId String
+  itemId     String
+  position   Int      @default(0)
+  categoryId String?
+  addedAt    DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  wishlist Wishlist          @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  item     Item              @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  category WishlistCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@unique([wishlistId, itemId])
+  @@index([itemId])
+  @@index([wishlistId, position])
+  @@index([categoryId])
 }
 
 // ─── Maintenance Recovery ─────────────────────────────────────────────────────

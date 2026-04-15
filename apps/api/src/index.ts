@@ -571,6 +571,197 @@ async function getSystemUser() {
   return prisma.user.upsert({ where: { email }, update: {}, create: { email } });
 }
 
+// ─── Shared-wish placements ──────────────────────────────────────────────────
+// Every Item has a row in WishlistItemPlacement for each wishlist it lives in.
+// During the dual-read migration window, Item.wishlistId / Item.position /
+// Item.categoryId continue to exist on the canonical Item row for legacy
+// reads — placement writes mirror those values for the item's origin wishlist.
+// When an item is placed in additional wishlists, only a placement row is added.
+
+/**
+ * Ensure a placement row exists for (wishlistId, itemId). Upsert-style — safe
+ * to call when unsure whether the placement already exists (e.g. during
+ * legacy create paths that also write Item.wishlistId). Returns the placement.
+ *
+ * @param tx  Prisma transaction/client
+ * @param opts.wishlistId  Target wishlist
+ * @param opts.itemId      Item being placed
+ * @param opts.position    Position within the wishlist (defaults to appended at end)
+ * @param opts.categoryId  Category in target wishlist (null → default category resolved here)
+ */
+/**
+ * Prisma orderBy for placement-based item reads — mirrors ITEM_ORDER_BY but
+ * resolves priority/createdAt from the related Item and position from the
+ * placement (so reordering within a wishlist doesn't affect sibling placements).
+ */
+const PLACEMENT_ORDER_BY = [
+  { item: { priority: 'desc' as const } },
+  { position: 'asc' as const },
+  { item: { createdAt: 'desc' as const } },
+  { item: { id: 'desc' as const } },
+];
+
+async function ensureItemPlacement(
+  tx: Pick<typeof prisma, 'wishlistItemPlacement' | 'wishlistCategory' | 'item'>,
+  opts: { wishlistId: string; itemId: string; position?: number; categoryId?: string | null },
+): Promise<{ id: string; wishlistId: string; itemId: string; position: number; categoryId: string | null }> {
+  // Resolve default category if not provided
+  let categoryId = opts.categoryId ?? null;
+  if (categoryId === null) {
+    const def = await tx.wishlistCategory.findFirst({
+      where: { wishlistId: opts.wishlistId, isDefault: true },
+      select: { id: true },
+    });
+    categoryId = def?.id ?? null;
+  }
+
+  // Resolve position if not provided: max(position) + 1 across active items in wishlist
+  let position = opts.position;
+  if (position === undefined) {
+    const maxPos = await tx.wishlistItemPlacement.aggregate({
+      where: { wishlistId: opts.wishlistId },
+      _max: { position: true },
+    });
+    position = (maxPos._max.position ?? -1) + 1;
+  }
+
+  // Upsert placement — unique (wishlistId, itemId)
+  return tx.wishlistItemPlacement.upsert({
+    where: { wishlistId_itemId: { wishlistId: opts.wishlistId, itemId: opts.itemId } },
+    create: { wishlistId: opts.wishlistId, itemId: opts.itemId, position, categoryId },
+    update: {}, // don't overwrite if already exists
+    select: { id: true, wishlistId: true, itemId: true, position: true, categoryId: true },
+  });
+}
+
+/**
+ * Count how many wishlists an item is currently placed in.
+ * Used to render "🔗 В N" badges and to guard the "remove last placement" flow.
+ */
+async function countItemPlacements(itemId: string): Promise<number> {
+  return prisma.wishlistItemPlacement.count({ where: { itemId } });
+}
+
+/**
+ * Count active-status placements in a wishlist — authoritative capacity source.
+ * Shared wishes count against every host wishlist. Use this instead of
+ * `prisma.item.count({ wishlistId })` so capacity is enforced correctly when
+ * secondary placements exist (their primary Item.wishlistId lives elsewhere).
+ */
+async function countActivePlacementsInWishlist(wishlistId: string): Promise<number> {
+  return prisma.wishlistItemPlacement.count({
+    where: { wishlistId, item: { status: { in: [...ACTIVE_STATUSES] } } },
+  });
+}
+
+/**
+ * Move an item's "primary" placement from one wishlist to another.
+ *
+ * Semantics (used by /items/:id/move, bulk-move, transfer-items):
+ *   - Source placement (on item.wishlistId) is removed.
+ *   - Target placement is created (or kept if it already exists — i.e. item was
+ *     already shared into target, in which case this is effectively "remove from source").
+ *   - Item.wishlistId / position / categoryId are updated to the target so legacy
+ *     reads stay consistent with an existing placement.
+ *   - Other placements (shared into unrelated wishlists) are untouched.
+ *
+ * Returns { moved: true } on success. Callers should guard capacity and ownership
+ * before invoking. Runs in a single transaction.
+ */
+async function relocateItemPrimary(
+  itemId: string,
+  sourceWishlistId: string,
+  targetWishlistId: string,
+): Promise<void> {
+  if (sourceWishlistId === targetWishlistId) return;
+
+  // Resolve target default category + append position once outside the tx
+  // (read path doesn't need to observe them atomically).
+  const [targetDefaultCat, maxPosAgg] = await Promise.all([
+    prisma.wishlistCategory.findFirst({
+      where: { wishlistId: targetWishlistId, isDefault: true },
+      select: { id: true },
+    }),
+    prisma.wishlistItemPlacement.aggregate({
+      where: { wishlistId: targetWishlistId },
+      _max: { position: true },
+    }),
+  ]);
+  const targetCategoryId = targetDefaultCat?.id ?? null;
+  const targetPosition = (maxPosAgg._max.position ?? -1) + 1;
+
+  await prisma.$transaction(async (tx) => {
+    // 1) Remove source placement if present (may already be absent for legacy rows)
+    await tx.wishlistItemPlacement.deleteMany({
+      where: { wishlistId: sourceWishlistId, itemId },
+    });
+
+    // 2) Ensure target placement exists. If already there (item was shared into target),
+    // keep existing position/category — don't disturb the user's ordering in target.
+    await tx.wishlistItemPlacement.upsert({
+      where: { wishlistId_itemId: { wishlistId: targetWishlistId, itemId } },
+      create: {
+        wishlistId: targetWishlistId,
+        itemId,
+        position: targetPosition,
+        categoryId: targetCategoryId,
+      },
+      update: {},
+    });
+
+    // 3) Sync legacy Item columns to the new primary so non-migrated reads stay consistent.
+    const primary = await tx.wishlistItemPlacement.findUnique({
+      where: { wishlistId_itemId: { wishlistId: targetWishlistId, itemId } },
+      select: { position: true, categoryId: true },
+    });
+    await tx.item.update({
+      where: { id: itemId },
+      data: {
+        wishlistId: targetWishlistId,
+        position: primary?.position ?? targetPosition,
+        categoryId: primary?.categoryId ?? targetCategoryId,
+      },
+    });
+  });
+}
+
+/**
+ * Before deleting a wishlist, make sure shared wishes (items placed in THIS wishlist
+ * as their legacy primary + also placed in other wishlists) don't get cascaded away.
+ *
+ * Strategy: for each item whose Item.wishlistId = wishlistIdBeingDeleted AND has another
+ * placement, reassign Item.wishlistId to the oldest remaining placement (matching the
+ * DELETE /items/:id/placements/:wishlistId behaviour). After this, wishlist.delete can
+ * safely cascade — it will only remove placements in this wishlist + items that were
+ * fully homed here.
+ */
+async function reassignPrimaryBeforeWishlistDelete(wishlistId: string): Promise<void> {
+  // Candidate items: primary points to this wishlist
+  const primariesHere = await prisma.item.findMany({
+    where: { wishlistId },
+    select: { id: true },
+  });
+  if (primariesHere.length === 0) return;
+
+  for (const { id } of primariesHere) {
+    const otherPlacement = await prisma.wishlistItemPlacement.findFirst({
+      where: { itemId: id, wishlistId: { not: wishlistId } },
+      orderBy: { addedAt: 'asc' },
+      select: { wishlistId: true, position: true, categoryId: true },
+    });
+    if (!otherPlacement) continue; // item fully homed here — will cascade-delete as expected
+    // Move primary so the item survives the wishlist cascade
+    await prisma.item.update({
+      where: { id },
+      data: {
+        wishlistId: otherPlacement.wishlistId,
+        position: otherPlacement.position,
+        categoryId: otherPlacement.categoryId,
+      },
+    });
+  }
+}
+
 function mapItemForPublic(item: {
   id: string;
   title: string;
@@ -637,27 +828,39 @@ publicRouter.get(
     });
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
 
+    // Placement-based read: shared wishes visible in this wishlist's public view.
+    // IMPORTANT (privacy): we never expose placements in OTHER wishlists — the list is
+    // scoped to this single wishlistId. Other placements are never joined or revealed here.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: Record<string, any> = { wishlistId: wishlist.id, status: { in: [...ACTIVE_STATUSES] } };
+    const itemWhere: Record<string, any> = { status: { in: [...ACTIVE_STATUSES] } };
+    if (queryParsed.data.status) itemWhere.status = queryParsed.data.status;
+    if (queryParsed.data.tag) itemWhere.itemTags = { some: { tagId: queryParsed.data.tag } };
 
-    if (queryParsed.data.status) where.status = queryParsed.data.status;
-    if (queryParsed.data.tag) where.itemTags = { some: { tagId: queryParsed.data.tag } };
-
-    const items = await prisma.item.findMany({
-      where,
-      orderBy: ITEM_ORDER_BY,
-      include: {
-        itemTags: { include: { tag: { select: { id: true, name: true } } } },
-        reservationEvents: {
-          where: { type: 'RESERVED' },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: { comment: true, actorHash: true },
+    const placements = await prisma.wishlistItemPlacement.findMany({
+      where: { wishlistId: wishlist.id, item: itemWhere },
+      orderBy: PLACEMENT_ORDER_BY,
+      select: {
+        position: true,
+        categoryId: true,
+        item: {
+          include: {
+            itemTags: { include: { tag: { select: { id: true, name: true } } } },
+            reservationEvents: {
+              where: { type: 'RESERVED' },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { comment: true, actorHash: true },
+            },
+          },
         },
       },
     });
 
-    return res.json({ items: items.map(mapItemForPublic) });
+    const items = placements.map(p => ({
+      ...mapItemForPublic(p.item),
+      categoryId: p.categoryId,
+    }));
+    return res.json({ items });
   }),
 );
 
@@ -689,9 +892,26 @@ publicRouter.get(
             profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true, profileVisibility: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
           },
         },
-        items: {
-          where: { status: { in: [...ACTIVE_STATUSES] } },
-          orderBy: ITEM_ORDER_BY,
+        tags: { select: { id: true, name: true } },
+        categories: {
+          orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+          select: { id: true, name: true, sortOrder: true, isDefault: true },
+        },
+      },
+    });
+
+    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+
+    // Placement-based items read — shared wishes visible here because this wishlist
+    // has placements for them. Other placements (in other wishlists) are NEVER joined,
+    // so private placements cannot leak via this public endpoint.
+    const itemPlacements = await prisma.wishlistItemPlacement.findMany({
+      where: { wishlistId: wishlist.id, item: { status: { in: [...ACTIVE_STATUSES] } } },
+      orderBy: PLACEMENT_ORDER_BY,
+      select: {
+        position: true,
+        categoryId: true,
+        item: {
           include: {
             itemTags: { include: { tag: { select: { id: true, name: true } } } },
             reservationEvents: {
@@ -702,15 +922,8 @@ publicRouter.get(
             },
           },
         },
-        tags: { select: { id: true, name: true } },
-        categories: {
-          orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
-          select: { id: true, name: true, sortOrder: true, isDefault: true },
-        },
       },
     });
-
-    if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
 
     // PRIVATE wishlists: only subscribers can access
     if (wishlist.visibility === 'PRIVATE') {
@@ -750,7 +963,7 @@ publicRouter.get(
       ? ownerProfile.avatarUrl
       : null;
 
-    trackAnalyticsEvent({ event: 'guest.view_opened', props: { slug, itemCount: wishlist.items.length } });
+    trackAnalyticsEvent({ event: 'guest.view_opened', props: { slug, itemCount: itemPlacements.length } });
 
     // Build dontGift payload respecting per-wishlist mode
     const slugProfile = wishlist.owner?.profile;
@@ -791,7 +1004,10 @@ publicRouter.get(
         ownerAvatarUrl,
         ownerUsername,
       },
-      items: wishlist.items.map(mapItemForPublic),
+      items: itemPlacements.map(p => ({
+        ...mapItemForPublic(p.item),
+        categoryId: p.categoryId,
+      })),
       tags: wishlist.tags,
       categories: wishlist.categories,
       dontGift: slugDontGift,
@@ -830,19 +1046,6 @@ publicRouter.get(
               profile: { select: { displayName: true, username: true, profileVisibility: true, dontGiftPresets: true, dontGiftCustomItems: true, dontGiftComment: true, dontGiftVisible: true } },
             },
           },
-          items: {
-            where: { status: { in: [...ACTIVE_STATUSES] } },
-            orderBy: ITEM_ORDER_BY,
-            include: {
-              itemTags: { include: { tag: { select: { id: true, name: true } } } },
-              reservationEvents: {
-                where: { type: 'RESERVED' },
-                orderBy: { createdAt: 'desc' },
-                take: 1,
-                select: { comment: true, actorHash: true },
-              },
-            },
-          },
           tags: { select: { id: true, name: true } },
           categories: {
             orderBy: [{ isDefault: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -856,6 +1059,27 @@ publicRouter.get(
     }
 
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
+
+    // Placement-based read — privacy note: only placements in THIS wishlist are exposed.
+    const sharePlacements = await prisma.wishlistItemPlacement.findMany({
+      where: { wishlistId: wishlist.id, item: { status: { in: [...ACTIVE_STATUSES] } } },
+      orderBy: PLACEMENT_ORDER_BY,
+      select: {
+        position: true,
+        categoryId: true,
+        item: {
+          include: {
+            itemTags: { include: { tag: { select: { id: true, name: true } } } },
+            reservationEvents: {
+              where: { type: 'RESERVED' },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { comment: true, actorHash: true },
+            },
+          },
+        },
+      },
+    });
 
     // Track link open — fire-and-forget, never blocks response
     prisma.wishlist.update({
@@ -904,7 +1128,10 @@ publicRouter.get(
         ownerName: ownerNameToken,
         ownerUsername: ownerUsernameToken,
       },
-      items: wishlist.items.map(mapItemForPublic),
+      items: sharePlacements.map(p => ({
+        ...mapItemForPublic(p.item),
+        categoryId: p.categoryId,
+      })),
       tags: wishlist.tags,
       categories: (wishlist as any).categories ?? [],
       dontGift: tokenDontGift,
@@ -1345,6 +1572,8 @@ privateRouter.delete(
     const id = req.params.id ?? '';
     if (!id) return res.status(400).json({ error: 'Missing wishlist id' });
     try {
+      // Preserve shared wishes placed elsewhere before cascade-deleting this wishlist.
+      await reassignPrimaryBeforeWishlistDelete(id);
       await prisma.wishlist.delete({ where: { id } });
       return res.json({ ok: true });
     } catch {
@@ -1394,6 +1623,8 @@ privateRouter.post(
         status: true, createdAt: true, updatedAt: true,
       },
     });
+    // Dual-write: mirror into WishlistItemPlacement for shared-wish migration.
+    await ensureItemPlacement(prisma, { wishlistId, itemId: item.id });
 
     return res.status(201).json({ item });
   }),
@@ -3686,6 +3917,9 @@ tgRouter.delete(
       return res.status(409).json({ error: 'wishlist_in_santa_campaign', campaignTitle: activeSantaLink.campaign.title });
     }
 
+    // Preserve shared wishes placed elsewhere before cascade-deleting this wishlist.
+    await reassignPrimaryBeforeWishlistDelete(id);
+
     await prisma.wishlist.delete({ where: { id } });
     trackAnalyticsEvent({ event: 'wishlist.deleted', userId: String(req.tgUser!.id), props: { wishlistId: req.params.id } });
 
@@ -3738,7 +3972,9 @@ tgRouter.post(
     if (target.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
     if (target.archivedAt) return res.status(409).json({ error: 'target_archived', message: 'Target wishlist is archived' });
 
-    // Get reserved items from source
+    // Get reserved items whose PRIMARY is the source (items this wishlist owns).
+    // Items that are also placed elsewhere will reassign via reassignPrimaryBeforeWishlistDelete,
+    // so transfer only needs to rescue items that are genuinely homed here.
     const reservedItems = await prisma.item.findMany({
       where: { wishlistId: sourceId, status: 'RESERVED' },
       select: { id: true },
@@ -3747,26 +3983,30 @@ tgRouter.post(
       return res.json({ transferred: 0, targetWishlistId, targetTitle: target.title });
     }
 
-    // Check target capacity
-    const targetActiveCount = await prisma.item.count({
-      where: { wishlistId: targetWishlistId, status: { in: [...ACTIVE_STATUSES] } },
+    // Target capacity via PLACEMENT count. Items already placed in target (shared)
+    // don't consume a new slot — exclude them from the capacity math.
+    const existingInTarget = await prisma.wishlistItemPlacement.findMany({
+      where: { wishlistId: targetWishlistId, itemId: { in: reservedItems.map((i) => i.id) } },
+      select: { itemId: true },
     });
+    const alreadyInTarget = new Set(existingInTarget.map((p) => p.itemId));
+    const needNewSlot = reservedItems.filter((i) => !alreadyInTarget.has(i.id));
+
+    const targetActiveCount = await countActivePlacementsInWishlist(targetWishlistId);
     const available = ent.plan.items - targetActiveCount;
-    if (available < reservedItems.length) {
+    if (available < needNewSlot.length) {
       return res.status(409).json({
         error: 'insufficient_capacity',
-        message: `Target wishlist can accept ${available} more items but ${reservedItems.length} items need to be transferred`,
+        message: `Target wishlist can accept ${available} more items but ${needNewSlot.length} items need to be transferred`,
         available,
-        needed: reservedItems.length,
+        needed: needNewSlot.length,
       });
     }
 
-    // Move all reserved items to target
-    const itemIds = reservedItems.map((i) => i.id);
-    await prisma.item.updateMany({
-      where: { id: { in: itemIds } },
-      data: { wishlistId: targetWishlistId },
-    });
+    // Migrate each item: delete source placement, upsert target placement, sync legacy Item.wishlistId.
+    for (const item of reservedItems) {
+      await relocateItemPrimary(item.id, sourceId, targetWishlistId);
+    }
 
     return res.json({ transferred: reservedItems.length, targetWishlistId, targetTitle: target.title });
   }),
@@ -4152,14 +4392,21 @@ tgRouter.get(
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' });
     if (wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
-    const items = await prisma.item.findMany({
-      where: { wishlistId: id, status: { in: [...ACTIVE_STATUSES] } },
-      orderBy: ITEM_ORDER_BY,
+    // Placement-based read: each shared wish appears in every wishlist it's placed in,
+    // with per-wishlist position & category (global title/price/status come from Item).
+    const placements = await prisma.wishlistItemPlacement.findMany({
+      where: { wishlistId: id, item: { status: { in: [...ACTIVE_STATUSES] } } },
+      orderBy: PLACEMENT_ORDER_BY,
       select: {
-        id: true, wishlistId: true, title: true, url: true, priceText: true,
-        imageUrl: true, priority: true, position: true, status: true, description: true,
-        sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+        position: true,
         categoryId: true,
+        item: {
+          select: {
+            id: true, title: true, url: true, priceText: true,
+            imageUrl: true, priority: true, status: true, description: true,
+            sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
+          },
+        },
       },
     });
 
@@ -4169,7 +4416,24 @@ tgRouter.get(
       select: { id: true, name: true, sortOrder: true, isDefault: true },
     });
 
-    return res.json({ items: items.map(i => ({ ...mapTgItem(i), categoryId: i.categoryId })), categories });
+    // Attach placement count so the frontend can render the shared badge ("🔗 В N") without an extra round-trip.
+    const itemIds = placements.map(p => p.item.id);
+    const counts = itemIds.length > 0
+      ? await prisma.wishlistItemPlacement.groupBy({
+          by: ['itemId'],
+          where: { itemId: { in: itemIds } },
+          _count: { itemId: true },
+        })
+      : [];
+    const countByItemId = new Map(counts.map(c => [c.itemId, c._count.itemId]));
+
+    const items = placements.map(p => ({
+      ...mapTgItem({ ...p.item, wishlistId: id, position: p.position }),
+      categoryId: p.categoryId,
+      placementCount: countByItemId.get(p.item.id) ?? 1,
+    }));
+
+    return res.json({ items, categories });
   }),
 );
 
@@ -4201,31 +4465,41 @@ tgRouter.post(
     const { groups } = parsed.data;
     const allIds = groups.flatMap(g => g.orderedIds);
 
-    // Verify all IDs belong to this wishlist and match their declared priority
-    const dbItems = await prisma.item.findMany({
-      where: { id: { in: allIds }, wishlistId },
-      select: { id: true, priority: true },
+    // Verify each item has a placement in THIS wishlist and item's priority matches the declared group.
+    // (Priority is global on Item; position is placement-scoped — reordering only touches THIS wishlist.)
+    const placementRows = await prisma.wishlistItemPlacement.findMany({
+      where: { wishlistId, itemId: { in: allIds } },
+      select: { itemId: true, item: { select: { priority: true } } },
     });
-    if (dbItems.length !== allIds.length) {
-      return res.status(400).json({ error: 'Some item IDs are invalid or not in this wishlist' });
+    if (placementRows.length !== allIds.length) {
+      return res.status(400).json({ error: 'Some item IDs are invalid or not placed in this wishlist' });
     }
-    const dbItemMap = new Map(dbItems.map(i => [i.id, i]));
+    const priorityByItemId = new Map(placementRows.map(p => [p.itemId, p.item.priority]));
     for (const group of groups) {
       for (const id of group.orderedIds) {
-        if (dbItemMap.get(id)?.priority !== group.priority) {
+        if (priorityByItemId.get(id) !== group.priority) {
           return res.status(400).json({ error: `Item ${id} does not belong to priority group ${group.priority}` });
         }
       }
     }
 
-    // Transactionally assign positions within each priority group
-    await prisma.$transaction(
-      groups.flatMap(group =>
+    // Transactionally assign positions on BOTH placement (authoritative) and Item (legacy).
+    // Keeping Item.position in sync avoids breaking any read path not yet migrated to placements.
+    await prisma.$transaction([
+      ...groups.flatMap(group =>
+        group.orderedIds.map((id, idx) =>
+          prisma.wishlistItemPlacement.updateMany({
+            where: { wishlistId, itemId: id },
+            data: { position: idx },
+          }),
+        ),
+      ),
+      ...groups.flatMap(group =>
         group.orderedIds.map((id, idx) =>
           prisma.item.update({ where: { id }, data: { position: idx } }),
         ),
       ),
-    );
+    ]);
 
     return res.json({ ok: true });
   }),
@@ -4250,11 +4524,26 @@ tgRouter.get(
         wishlist: { select: { title: true, slug: true } },
       },
     });
+
+    // Attach placement count per item so shared-wish UI can render without N round-trips.
+    // The flat list is per-Item (not per-placement) — shared wishes appear once under their
+    // origin wishlist. UI will show "🔗 В N" next to the title when count > 1.
+    const itemIds = items.map(i => i.id);
+    const counts = itemIds.length > 0
+      ? await prisma.wishlistItemPlacement.groupBy({
+          by: ['itemId'],
+          where: { itemId: { in: itemIds } },
+          _count: { itemId: true },
+        })
+      : [];
+    const countByItemId = new Map(counts.map(c => [c.itemId, c._count.itemId]));
+
     return res.json({
       items: items.map(({ wishlist, ...rest }) => ({
         ...mapTgItem(rest),
         wishlistTitle: wishlist.title,
         wishlistSlug: wishlist.slug,
+        placementCount: countByItemId.get(rest.id) ?? 1,
       })),
     });
   }),
@@ -4424,40 +4713,56 @@ tgRouter.delete(
       });
     }
 
-    // Move items to default, then delete category — in a transaction
+    // Move items to default, then delete category — in a transaction.
+    // Reads use PLACEMENT.categoryId (authoritative); we reassign placements first,
+    // then mirror to Item columns for legacy consistency.
     const movedCount = await prisma.$transaction(async (tx) => {
-      // Get max position in default category to append at end
-      const maxPos = await tx.item.aggregate({
-        where: { categoryId: defaultCat!.id, status: { in: [...ACTIVE_STATUSES] } },
+      // Max position in the default category, scoped to this wishlist — we append here.
+      const maxPos = await tx.wishlistItemPlacement.aggregate({
+        where: { wishlistId: wlId, categoryId: defaultCat!.id },
         _max: { position: true },
       });
       const startPos = (maxPos._max.position ?? -1) + 1;
 
-      // Get items to move, preserving their current order
-      const itemsToMove = await tx.item.findMany({
-        where: { categoryId: catId, status: { in: [...ACTIVE_STATUSES] } },
+      // Active placements to move, preserving their current order.
+      const placementsToMove = await tx.wishlistItemPlacement.findMany({
+        where: {
+          wishlistId: wlId,
+          categoryId: catId,
+          item: { status: { in: [...ACTIVE_STATUSES] } },
+        },
         orderBy: [{ position: 'asc' }],
-        select: { id: true },
+        select: { itemId: true },
       });
 
-      // Update positions sequentially
-      for (let i = 0; i < itemsToMove.length; i++) {
-        await tx.item.update({
-          where: { id: itemsToMove[i]!.id },
+      for (let i = 0; i < placementsToMove.length; i++) {
+        const itemId = placementsToMove[i]!.itemId;
+        await tx.wishlistItemPlacement.update({
+          where: { wishlistId_itemId: { wishlistId: wlId, itemId } },
+          data: { categoryId: defaultCat!.id, position: startPos + i },
+        });
+        // Mirror to legacy Item columns only when this wishlist is the item's primary.
+        await tx.item.updateMany({
+          where: { id: itemId, wishlistId: wlId },
           data: { categoryId: defaultCat!.id, position: startPos + i },
         });
       }
 
-      // Also move any non-active items (archived etc)
+      // Any other placements (non-active items — archived/deleted) in this category:
+      // reassign to default so the row isn't orphaned when the category FK SET NULLs.
+      await tx.wishlistItemPlacement.updateMany({
+        where: { wishlistId: wlId, categoryId: catId },
+        data: { categoryId: defaultCat!.id },
+      });
       await tx.item.updateMany({
-        where: { categoryId: catId },
+        where: { wishlistId: wlId, categoryId: catId },
         data: { categoryId: defaultCat!.id },
       });
 
-      // Delete category
+      // Delete category (FK SET NULL would leave nulls, but we've just reassigned everything).
       await tx.wishlistCategory.delete({ where: { id: catId } });
 
-      return itemsToMove.length;
+      return placementsToMove.length;
     });
 
     trackEvent('wishlist_category_deleted', user.id, { wishlistId: wlId, categoryId: catId, movedItems: movedCount });
@@ -4516,35 +4821,46 @@ tgRouter.post(
     const ent = await getEffectiveEntitlements(user.id);
     if (!ent.isPro) return res.status(402).json({ error: 'Pro required', planCode: ent.plan.code });
 
-    const item = await prisma.item.findUnique({
-      where: { id: itemId },
-      select: { id: true, wishlistId: true, wishlist: { select: { ownerId: true } } },
-    });
-    if (!item) return res.status(404).json({ error: 'Item not found' });
-    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
-
-    // Target category must belong to the same wishlist
+    // Target category defines which wishlist this move applies to.
+    // For shared items, we update the PLACEMENT in that wishlist — placements
+    // in other wishlists keep their own category.
     const targetCat = await prisma.wishlistCategory.findUnique({
       where: { id: parsed.data.categoryId },
-      select: { id: true, wishlistId: true },
+      select: { id: true, wishlistId: true, wishlist: { select: { ownerId: true } } },
     });
-    if (!targetCat || targetCat.wishlistId !== item.wishlistId) {
-      return res.status(400).json({ error: 'Category does not belong to this wishlist' });
+    if (!targetCat) return res.status(404).json({ error: 'Category not found' });
+    if (targetCat.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Item must have a placement in the target wishlist.
+    const placement = await prisma.wishlistItemPlacement.findUnique({
+      where: { wishlistId_itemId: { wishlistId: targetCat.wishlistId, itemId } },
+      select: { id: true },
+    });
+    if (!placement) {
+      return res.status(400).json({ error: 'Item is not placed in the target category\u2019s wishlist' });
     }
 
-    // Append at end of target category
-    const maxPos = await prisma.item.aggregate({
-      where: { categoryId: parsed.data.categoryId, status: { in: [...ACTIVE_STATUSES] } },
+    // Append at end of target category (position scoped to this placement wishlist).
+    const maxPos = await prisma.wishlistItemPlacement.aggregate({
+      where: { categoryId: parsed.data.categoryId },
       _max: { position: true },
     });
+    const newPos = (maxPos._max.position ?? -1) + 1;
 
-    await prisma.item.update({
-      where: { id: itemId },
-      data: { categoryId: parsed.data.categoryId, position: (maxPos._max.position ?? -1) + 1 },
-    });
+    // Dual-write: update placement (authoritative) + mirror to Item for legacy reads.
+    await prisma.$transaction([
+      prisma.wishlistItemPlacement.update({
+        where: { wishlistId_itemId: { wishlistId: targetCat.wishlistId, itemId } },
+        data: { categoryId: parsed.data.categoryId, position: newPos },
+      }),
+      prisma.item.updateMany({
+        where: { id: itemId, wishlistId: targetCat.wishlistId },
+        data: { categoryId: parsed.data.categoryId, position: newPos },
+      }),
+    ]);
 
     trackEvent('wishlist_wish_moved_to_category', user.id, {
-      itemId, wishlistId: item.wishlistId, categoryId: parsed.data.categoryId,
+      itemId, wishlistId: targetCat.wishlistId, categoryId: parsed.data.categoryId,
     });
 
     return res.json({ ok: true });
@@ -4579,32 +4895,38 @@ tgRouter.post(
     });
     if (!wishlist || wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
-    // Only move items that belong to the same wishlist
-    const items = await prisma.item.findMany({
-      where: { id: { in: parsed.data.itemIds }, wishlistId: targetCat.wishlistId },
-      select: { id: true },
+    // Only move items that have a placement in the target wishlist (placement-scoped category).
+    const placements = await prisma.wishlistItemPlacement.findMany({
+      where: { itemId: { in: parsed.data.itemIds }, wishlistId: targetCat.wishlistId },
+      select: { itemId: true },
     });
 
-    const maxPos = await prisma.item.aggregate({
-      where: { categoryId: parsed.data.categoryId, status: { in: [...ACTIVE_STATUSES] } },
+    const maxPos = await prisma.wishlistItemPlacement.aggregate({
+      where: { categoryId: parsed.data.categoryId },
       _max: { position: true },
     });
     let nextPos = (maxPos._max.position ?? -1) + 1;
 
     await prisma.$transaction(async (tx) => {
-      for (const item of items) {
-        await tx.item.update({
-          where: { id: item.id },
-          data: { categoryId: parsed.data.categoryId, position: nextPos++ },
+      for (const pl of placements) {
+        const pos = nextPos++;
+        await tx.wishlistItemPlacement.update({
+          where: { wishlistId_itemId: { wishlistId: targetCat.wishlistId, itemId: pl.itemId } },
+          data: { categoryId: parsed.data.categoryId, position: pos },
+        });
+        // Mirror to legacy Item columns so non-migrated reads stay consistent.
+        await tx.item.updateMany({
+          where: { id: pl.itemId, wishlistId: targetCat.wishlistId },
+          data: { categoryId: parsed.data.categoryId, position: pos },
         });
       }
     });
 
     trackEvent('wishlist_bulk_moved_to_category', user.id, {
-      wishlistId: targetCat.wishlistId, categoryId: parsed.data.categoryId, count: items.length,
+      wishlistId: targetCat.wishlistId, categoryId: parsed.data.categoryId, count: placements.length,
     });
 
-    return res.json({ ok: true, moved: items.length });
+    return res.json({ ok: true, moved: placements.length });
   }),
 );
 
@@ -4623,6 +4945,9 @@ tgRouter.post(
         priority: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         imageUrl: z.string().url().optional(),
         currency: z.enum(['RUB', 'USD', 'EUR', 'GBP']).optional(),
+        // Multi-placement: additional wishlists to place this wish in (variant A — inline checkboxes).
+        // Primary wishlist is the URL :id; additionalWishlistIds is placements beyond it.
+        additionalWishlistIds: z.array(z.string().min(1)).max(20).optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
@@ -4638,12 +4963,43 @@ tgRouter.post(
       return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
     }
 
-    // Per-wishlist item limit = plan base + any permanent item upgrades for this wishlist
+    // Per-wishlist item limit = plan base + any permanent item upgrades for this wishlist.
+    // Capacity counts by PLACEMENT so shared wishes count against each host wishlist.
     const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[wishlistId] ?? 0);
-    const itemCount = await prisma.item.count({ where: { wishlistId, status: { in: [...ACTIVE_STATUSES] } } });
+    const itemCount = await countActivePlacementsInWishlist(wishlistId);
     if (itemCount >= effectiveItemLimit) {
       trackEvent('feature_gate_hit_item_limit', user.id, { plan: ent.plan.code, count: itemCount, limit: effectiveItemLimit });
       return res.status(402).json({ error: 'Plan limit reached', limit: effectiveItemLimit, planCode: ent.plan.code });
+    }
+
+    // Validate additional placement wishlists. Each must be owned by the user, REGULAR,
+    // writable under the plan, not the primary, and have capacity. If any fails → 400/402.
+    // Deduplicate and drop the primary if the client included it (forgiving input).
+    const additionalIds = Array.from(new Set((parsed.data.additionalWishlistIds ?? []).filter(x => x !== wishlistId)));
+    const validatedAdditionals: Array<{ id: string; categoryId: string | null }> = [];
+    if (additionalIds.length > 0) {
+      const targets = await prisma.wishlist.findMany({
+        where: { id: { in: additionalIds } },
+        select: { id: true, ownerId: true, type: true, archivedAt: true },
+      });
+      for (const id of additionalIds) {
+        const t = targets.find(x => x.id === id);
+        if (!t) return res.status(404).json({ error: 'additional wishlist not found', wishlistId: id });
+        if (t.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden', wishlistId: id });
+        if (t.type !== 'REGULAR') return res.status(400).json({ error: 'Cannot place into non-regular wishlist', wishlistId: id });
+        if (t.archivedAt) return res.status(400).json({ error: 'Cannot place into archived wishlist', wishlistId: id });
+        // Writable under plan + capacity check
+        if (!(await isWishlistWritable(user.id, id, ent.effectiveWishlistLimit))) {
+          return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code, wishlistId: id });
+        }
+        const lim = ent.plan.items + (ent.extraItemsPerWishlist[id] ?? 0);
+        const cnt = await countActivePlacementsInWishlist(id);
+        if (cnt >= lim) {
+          trackEvent('feature_gate_hit_item_limit', user.id, { plan: ent.plan.code, count: cnt, limit: lim, context: 'multi_placement' });
+          return res.status(402).json({ error: 'Plan limit reached', limit: lim, planCode: ent.plan.code, wishlistId: id });
+        }
+        validatedAdditionals.push({ id, categoryId: null });
+      }
     }
 
     // Resolve currency: use provided value, or fall back to user's profile default
@@ -4666,8 +5022,21 @@ tgRouter.post(
         currency,
         categoryId: (await prisma.wishlistCategory.findFirst({ where: { wishlistId, isDefault: true }, select: { id: true } }))?.id ?? null,
       },
-      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
+      select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true, categoryId: true },
     });
+
+    // Dual-write: mirror primary placement + create additional placements.
+    await ensureItemPlacement(prisma, { wishlistId, itemId: item.id, position: item.position, categoryId: item.categoryId });
+    for (const { id: addId } of validatedAdditionals) {
+      await ensureItemPlacement(prisma, { wishlistId: addId, itemId: item.id });
+    }
+    if (validatedAdditionals.length > 0) {
+      trackEvent('wish_multi_placement_created', user.id, {
+        itemId: item.id,
+        primaryWishlistId: wishlistId,
+        additionalCount: validatedAdditionals.length,
+      });
+    }
 
     // Canonical analytics: item_created
     const totalUserItems = await prisma.item.count({ where: { wishlist: { ownerId: user.id }, status: { not: 'DELETED' } } });
@@ -4829,21 +5198,26 @@ tgRouter.post(
     );
     const notOwnedIds = itemIds.filter((id) => !items.find((i) => i.id === id) || items.find((i) => i.id === id)?.wishlist.ownerId !== user.id);
 
-    // Check capacity: how many slots are available in the target wishlist
-    const currentTargetCount = await prisma.item.count({
-      where: { wishlistId: targetWishlistId, status: { in: [...ACTIVE_STATUSES] } },
+    // Partition: items already placed in target (shared with it) don't consume a slot —
+    // they just need the source placement removed. Only genuinely-new placements bite capacity.
+    const existingInTarget = await prisma.wishlistItemPlacement.findMany({
+      where: { wishlistId: targetWishlistId, itemId: { in: ownedItems.map((i) => i.id) } },
+      select: { itemId: true },
     });
-    const available = Math.max(0, ent.plan.items - currentTargetCount);
-    const toMove = ownedItems.slice(0, available);
-    const overLimit = ownedItems.slice(available);
+    const alreadyInTarget = new Set(existingInTarget.map((p) => p.itemId));
+    const needNewSlot = ownedItems.filter((i) => !alreadyInTarget.has(i.id));
+    const noNewSlot = ownedItems.filter((i) => alreadyInTarget.has(i.id));
 
-    // Move in a transaction
-    if (toMove.length > 0) {
-      await prisma.$transaction(
-        toMove.map((item) =>
-          prisma.item.update({ where: { id: item.id }, data: { wishlistId: targetWishlistId } }),
-        ),
-      );
+    // Capacity via PLACEMENT count (shared wishes count against each host wishlist).
+    const currentTargetCount = await countActivePlacementsInWishlist(targetWishlistId);
+    const available = Math.max(0, ent.plan.items - currentTargetCount);
+    const movingNew = needNewSlot.slice(0, available);
+    const overLimit = needNewSlot.slice(available);
+    const toMove = [...movingNew, ...noNewSlot];
+
+    // Move each item: delete source placement + upsert target placement + sync legacy Item.wishlistId.
+    for (const item of toMove) {
+      await relocateItemPrimary(item.id, item.wishlistId, targetWishlistId);
     }
 
     const failed = [
@@ -5040,11 +5414,9 @@ tgRouter.post(
 
     const results: Array<{ itemId: string; ok: boolean; code?: string; newItemId?: string }> = [];
 
-    // Capacity check
+    // Capacity check — counts placements so shared wishes in target count too.
     const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[targetWishlistId] ?? 0);
-    const currentTargetCount = await prisma.item.count({
-      where: { wishlistId: targetWishlistId, status: { in: [...ACTIVE_STATUSES] } },
-    });
+    const currentTargetCount = await countActivePlacementsInWishlist(targetWishlistId);
     let available = Math.max(0, effectiveItemLimit - currentTargetCount);
 
     for (const reqId of itemIds) {
@@ -5065,7 +5437,7 @@ tgRouter.post(
         results.push({ itemId: reqId, ok: false, code: 'TARGET_LIMIT_REACHED' });
         continue;
       }
-      // Create clean copy
+      // Create clean copy (semantically a duplicate — new Item row, no shared linkage)
       const copy = await prisma.item.create({
         data: {
           wishlistId: targetWishlistId,
@@ -5083,6 +5455,8 @@ tgRouter.post(
         },
         select: { id: true },
       });
+      // Dual-write: mirror placement for the new Item.
+      await ensureItemPlacement(prisma, { wishlistId: targetWishlistId, itemId: copy.id });
       available--;
       results.push({ itemId: reqId, ok: true, newItemId: copy.id });
     }
@@ -6529,6 +6903,8 @@ async function importUrlForUser(
       sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
     },
   });
+  // Dual-write: mirror into placement table.
+  await ensureItemPlacement(prisma, { wishlistId: draftsWl.id, itemId: item.id });
 
   // Canonical analytics: item created via import in SYSTEM_DRAFTS
   const totalUserItems = await prisma.item.count({ where: { wishlist: { ownerId: userId }, status: { not: 'DELETED' } } });
@@ -6651,30 +7027,39 @@ tgRouter.post(
     if (!targetWl) return res.status(404).json({ error: 'Target wishlist not found' });
     if (targetWl.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
 
-    // Check plan limit on target wishlist (only for REGULAR wishlists)
+    // Check plan limit on target wishlist (only for REGULAR wishlists).
+    // Capacity is counted by PLACEMENT (shared wishes count against every host).
     if (targetWl.type === 'REGULAR') {
       // Check if target wishlist is writable
       if (!(await isWishlistWritable(user.id, targetWl.id, ent.plan.wishlists))) {
         return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
       }
-      const targetItemCount = await prisma.item.count({
-        where: { wishlistId: targetWl.id, status: { in: [...ACTIVE_STATUSES] } },
+      // Skip capacity check if item is already placed in target (no-op move)
+      const alreadyPlaced = await prisma.wishlistItemPlacement.findUnique({
+        where: { wishlistId_itemId: { wishlistId: targetWl.id, itemId: id } },
+        select: { itemId: true },
       });
-      if (targetItemCount >= ent.plan.items) {
-        return res.status(402).json({ error: t('api_wishlist_items_limit', getRequestLocale(req)), limit: ent.plan.items, planCode: ent.plan.code });
+      if (!alreadyPlaced) {
+        const targetItemCount = await countActivePlacementsInWishlist(targetWl.id);
+        if (targetItemCount >= ent.plan.items) {
+          return res.status(402).json({ error: t('api_wishlist_items_limit', getRequestLocale(req)), limit: ent.plan.items, planCode: ent.plan.code });
+        }
       }
     }
 
-    // Move item
-    const updated = await prisma.item.update({
+    // Migrate placement from source (item.wishlistId) to target, keeping other
+    // placements intact for shared wishes. Also syncs legacy Item.wishlistId.
+    await relocateItemPrimary(id, item.wishlistId, parsed.data.targetWishlistId);
+
+    const updated = await prisma.item.findUnique({
       where: { id },
-      data: { wishlistId: parsed.data.targetWishlistId },
       select: {
         id: true, wishlistId: true, title: true, url: true, priceText: true,
         imageUrl: true, priority: true, status: true, description: true,
         sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
       },
     });
+    if (!updated) return res.status(404).json({ error: 'Item not found' });
 
     // Onboarding: demo item moved to a regular wishlist → complete onboarding
     if (item.isDemo && item.originType === 'DEMO' && targetWl.type === 'REGULAR') {
@@ -6735,15 +7120,15 @@ tgRouter.post(
         return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
       }
       const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[targetWl.id] ?? 0);
-      const currentCount = await prisma.item.count({
-        where: { wishlistId: targetWl.id, status: { in: [...ACTIVE_STATUSES] } },
-      });
+      const currentCount = await countActivePlacementsInWishlist(targetWl.id);
       if (currentCount >= effectiveItemLimit) {
         return res.status(402).json({ error: t('api_wishlist_items_limit', getRequestLocale(req)), limit: effectiveItemLimit, planCode: ent.plan.code });
       }
     }
 
-    // Create clean copy — no reservation/comment/hint data
+    // Create clean copy — no reservation/comment/hint data (semantically "duplicate":
+    // a new, independent Item row. This endpoint is the explicit branch for users
+    // who want to split state. To share state across wishlists, use POST /items/:id/placements.)
     const copy = await prisma.item.create({
       data: {
         wishlistId: targetWl.id,
@@ -6765,8 +7150,212 @@ tgRouter.post(
         sourceUrl: true, sourceDomain: true, importMethod: true, currency: true,
       },
     });
+    // Dual-write: mirror placement for the new Item (duplicate starts fresh).
+    await ensureItemPlacement(prisma, { wishlistId: targetWl.id, itemId: copy.id });
+    trackEvent('wish_duplicated', user.id, { sourceItemId: id, newItemId: copy.id, targetWishlistId: targetWl.id });
 
     return res.status(201).json({ item: mapTgItem(copy), targetWishlistTitle: targetWl.title });
+  }),
+);
+
+// ─── Item placements (shared wishes) ─────────────────────────────────────────
+// A Wish (Item row) can be placed in multiple wishlists via WishlistItemPlacement.
+// Title/description/url/price/image/status/reservation/comments are shared across
+// all placements; categoryId and position are per-placement. Capacity is counted
+// in placements (so a shared wish counts against every wishlist it lives in).
+
+// GET /tg/items/:id/placements — list wishlists where this wish is currently placed
+tgRouter.get(
+  '/items/:id/placements',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: { id: true, wishlistId: true, status: true, wishlist: { select: { ownerId: true } } },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const placements = await prisma.wishlistItemPlacement.findMany({
+      where: { itemId: id },
+      orderBy: { addedAt: 'asc' },
+      select: {
+        wishlistId: true,
+        categoryId: true,
+        position: true,
+        addedAt: true,
+        wishlist: { select: { id: true, title: true, type: true, archivedAt: true } },
+        category: { select: { id: true, name: true } },
+      },
+    });
+
+    // Self-heal primary pointer if somehow desynced: if item.wishlistId has no matching
+    // placement, but placements exist, mark the first placement as primary in the response.
+    const hasPrimaryPlacement = placements.some(p => p.wishlistId === item.wishlistId);
+    const primaryWishlistId = hasPrimaryPlacement ? item.wishlistId : placements[0]?.wishlistId ?? null;
+
+    return res.json({
+      placements: placements.map(p => ({
+        wishlistId: p.wishlistId,
+        wishlistTitle: p.wishlist.title,
+        wishlistType: p.wishlist.type,
+        archivedAt: p.wishlist.archivedAt ? p.wishlist.archivedAt.toISOString() : null,
+        categoryId: p.categoryId,
+        categoryName: p.category?.name ?? null,
+        position: p.position,
+        addedAt: p.addedAt.toISOString(),
+        isPrimary: p.wishlistId === primaryWishlistId,
+      })),
+    });
+  }),
+);
+
+// POST /tg/items/:id/placements — place an existing wish into an additional wishlist.
+// Does NOT create a copy: same Item id, shared state, per-placement category & position.
+tgRouter.post(
+  '/items/:id/placements',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const parsed = z.object({ wishlistId: z.string().min(1) }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id);
+
+    // Verify item ownership + status
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: { id: true, status: true, wishlist: { select: { ownerId: true } } },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (item.status === 'DELETED') return res.status(400).json({ error: 'Cannot place a deleted wish' });
+
+    // Verify target wishlist
+    const target = await prisma.wishlist.findUnique({
+      where: { id: parsed.data.wishlistId },
+      select: { id: true, ownerId: true, type: true, archivedAt: true, title: true },
+    });
+    if (!target) return res.status(404).json({ error: 'Wishlist not found' });
+    if (target.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (target.type !== 'REGULAR') return res.status(400).json({ error: 'Cannot place into non-regular wishlist' });
+    if (target.archivedAt) return res.status(400).json({ error: 'Cannot place into archived wishlist' });
+
+    // Already placed there? Idempotent-ish: 409 so the client can re-render without error noise
+    const existing = await prisma.wishlistItemPlacement.findUnique({
+      where: { wishlistId_itemId: { wishlistId: target.id, itemId: id } },
+      select: { wishlistId: true, itemId: true, position: true, categoryId: true },
+    });
+    if (existing) return res.status(409).json({ error: 'Already placed in this wishlist', placement: existing });
+
+    // Plan checks on target
+    if (!(await isWishlistWritable(user.id, target.id, ent.effectiveWishlistLimit))) {
+      return res.status(402).json({ error: 'Wishlist is read-only on current plan', planCode: ent.plan.code });
+    }
+    // Capacity via PLACEMENT count (shared placements count too) + active-status join
+    const effectiveItemLimit = ent.plan.items + (ent.extraItemsPerWishlist[target.id] ?? 0);
+    const currentCount = await prisma.wishlistItemPlacement.count({
+      where: { wishlistId: target.id, item: { status: { in: [...ACTIVE_STATUSES] } } },
+    });
+    if (currentCount >= effectiveItemLimit) {
+      trackEvent('feature_gate_hit_item_limit', user.id, {
+        plan: ent.plan.code, count: currentCount, limit: effectiveItemLimit, context: 'placement_added',
+      });
+      return res.status(402).json({ error: 'Plan limit reached', limit: effectiveItemLimit, planCode: ent.plan.code });
+    }
+
+    const placement = await ensureItemPlacement(prisma, { wishlistId: target.id, itemId: id });
+    const placementCount = await countItemPlacements(id);
+
+    trackEvent('placement_added', user.id, {
+      itemId: id, wishlistId: target.id, totalPlacements: placementCount,
+    });
+
+    return res.status(201).json({
+      placement: {
+        wishlistId: placement.wishlistId,
+        itemId: placement.itemId,
+        position: placement.position,
+        categoryId: placement.categoryId,
+      },
+      placementCount,
+      targetWishlistTitle: target.title,
+    });
+  }),
+);
+
+// DELETE /tg/items/:id/placements/:wishlistId — remove the wish from one wishlist.
+// If it's the last placement, return 409 (client should delete the wish instead).
+// If the removed placement is the legacy primary (Item.wishlistId), reassign to the
+// oldest remaining placement so downstream legacy reads stay consistent.
+tgRouter.delete(
+  '/items/:id/placements/:wishlistId',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    const wishlistId = req.params.wishlistId ?? '';
+    if (!id || !wishlistId) return res.status(400).json({ error: 'Missing params' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    // Verify item + ownership (through any placement or primary wishlist)
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: { id: true, wishlistId: true, wishlist: { select: { ownerId: true } } },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.wishlist.ownerId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    // Verify placement exists on that wishlist
+    const placement = await prisma.wishlistItemPlacement.findUnique({
+      where: { wishlistId_itemId: { wishlistId, itemId: id } },
+      select: { wishlistId: true, itemId: true },
+    });
+    if (!placement) return res.status(404).json({ error: 'Placement not found' });
+
+    // Last-placement guard: user must delete the item itself instead of this placement.
+    const total = await countItemPlacements(id);
+    if (total <= 1) {
+      return res.status(409).json({ error: 'last_placement', message: 'Cannot remove last placement — delete the wish instead' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.wishlistItemPlacement.delete({
+        where: { wishlistId_itemId: { wishlistId, itemId: id } },
+      });
+
+      // If this was the legacy primary, reassign to oldest remaining placement so
+      // Item.wishlistId / position / categoryId stay consistent with an existing placement.
+      if (item.wishlistId === wishlistId) {
+        const nextPrimary = await tx.wishlistItemPlacement.findFirst({
+          where: { itemId: id },
+          orderBy: { addedAt: 'asc' },
+          select: { wishlistId: true, position: true, categoryId: true },
+        });
+        if (nextPrimary) {
+          await tx.item.update({
+            where: { id },
+            data: {
+              wishlistId: nextPrimary.wishlistId,
+              position: nextPrimary.position,
+              categoryId: nextPrimary.categoryId,
+            },
+          });
+        }
+      }
+    });
+
+    const placementCount = await countItemPlacements(id);
+    trackEvent('placement_removed', user.id, {
+      itemId: id, wishlistId, totalPlacements: placementCount,
+    });
+
+    return res.json({ ok: true, placementCount });
   }),
 );
 
@@ -8053,6 +8642,8 @@ tgRouter.post(
       },
       select: { id: true, wishlistId: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, priority: true, position: true, status: true, description: true, sourceUrl: true, sourceDomain: true, importMethod: true },
     });
+    // Dual-write: placement for demo item.
+    await ensureItemPlacement(prisma, { wishlistId: draftsWl.id, itemId: demoItem.id });
 
     // Upsert onboarding state
     const v1Meta: OnboardingMeta = { onboardingVariant: 'v1_demo' };
@@ -8331,6 +8922,8 @@ tgRouter.post(
         importMethod: 'onboarding_manual',
       },
     });
+    // Dual-write: placement for onboarding-manual item.
+    await ensureItemPlacement(prisma, { wishlistId: draftsWl.id, itemId: item.id });
 
     const newMeta: OnboardingMeta = {
       ...meta,
@@ -8399,6 +8992,8 @@ tgRouter.post(
           // NOT isDemo — catalog selections are real user intent
         },
       });
+      // Dual-write: placement for each catalog-created item.
+      await ensureItemPlacement(prisma, { wishlistId: draftsWl.id, itemId: item.id });
       createdIds.push(item.id);
     }
 
@@ -8501,18 +9096,24 @@ tgRouter.post(
       ...(meta.catalogItemIds ?? []),
     ];
 
-    // Move items from SYSTEM_DRAFTS to the new wishlist
+    // Move items from SYSTEM_DRAFTS to the new wishlist.
+    // Onboarding items have a single placement in drafts; we reuse relocateItemPrimary
+    // so placements migrate alongside Item.wishlistId (otherwise placement-based reads
+    // would still show the items in drafts and hide them from the new wishlist).
     let movedCount = 0;
     if (itemIdsToMove.length > 0) {
-      const result = await prisma.item.updateMany({
+      const eligibleItems = await prisma.item.findMany({
         where: {
           id: { in: itemIdsToMove },
           wishlist: { ownerId: user.id, type: 'SYSTEM_DRAFTS' },
           status: { in: ['AVAILABLE', 'RESERVED'] },
         },
-        data: { wishlistId: wishlist.id },
+        select: { id: true, wishlistId: true },
       });
-      movedCount = result.count;
+      for (const item of eligibleItems) {
+        await relocateItemPrimary(item.id, item.wishlistId, wishlist.id);
+      }
+      movedCount = eligibleItems.length;
     }
 
     // Update onboarding state

@@ -273,6 +273,8 @@ type Item = {
   importMethod?: string | null;
   currency?: 'RUB' | 'USD';
   categoryId?: string | null;
+  /** How many wishlists this wish is placed in. 1 = single, >1 = shared (render "🔗 В N" badge). */
+  placementCount?: number;
 };
 
 type GuestItem = Item & { reservedByDisplayName: string | null; reservedByActorHash: string | null };
@@ -2082,6 +2084,20 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel 
             lineHeight: 1.3, paddingRight: 8,
           }}>
             {item.title}
+            {(item.placementCount ?? 1) > 1 && (
+              <span
+                title={locale === 'ru' ? 'Общее желание — в нескольких списках' : 'Shared wish — in multiple wishlists'}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  marginLeft: 6, padding: '1px 6px', borderRadius: 6,
+                  fontSize: 10, fontWeight: 700, lineHeight: 1.2,
+                  color: C.accent, background: C.accentSoft,
+                  verticalAlign: 'baseline', whiteSpace: 'nowrap',
+                }}
+              >
+                🔗 {locale === 'ru' ? 'В ' : 'In '}{item.placementCount}
+              </span>
+            )}
           </div>
           <span style={{
             flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
@@ -2257,6 +2273,20 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
           textDecoration: isPurchased ? 'line-through' : 'none', fontFamily: font,
         }}>
           {item.title}
+          {(item.placementCount ?? 1) > 1 && (
+            <span
+              title={locale === 'ru' ? 'Общее желание — в нескольких списках' : 'Shared wish — in multiple wishlists'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                marginLeft: 6, padding: '1px 6px', borderRadius: 6,
+                fontSize: 10, fontWeight: 700, lineHeight: 1.2,
+                color: '#a599ff', background: 'rgba(124,106,255,0.12)',
+                verticalAlign: 'baseline', whiteSpace: 'nowrap',
+              }}
+            >
+              🔗 {locale === 'ru' ? 'В ' : 'In '}{item.placementCount}
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 5 }}>
@@ -2415,6 +2445,20 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
 
         <div style={{ fontSize: 17, fontWeight: 700, color: isPurchased ? '#666' : '#fff', lineHeight: 1.3, letterSpacing: '-0.01em', fontFamily: font, textDecoration: isPurchased ? 'line-through' : 'none' }}>
           {item.title}
+          {(item.placementCount ?? 1) > 1 && (
+            <span
+              title={locale === 'ru' ? 'Общее желание — в нескольких списках' : 'Shared wish — in multiple wishlists'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                marginLeft: 8, padding: '2px 8px', borderRadius: 8,
+                fontSize: 11, fontWeight: 700, lineHeight: 1.2,
+                color: '#a599ff', background: 'rgba(124,106,255,0.14)',
+                verticalAlign: 'middle', whiteSpace: 'nowrap',
+              }}
+            >
+              🔗 {locale === 'ru' ? 'В ' : 'In '}{item.placementCount}
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
@@ -4314,6 +4358,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [itemCurrency, setItemCurrency] = useState<'RUB' | 'USD' | 'EUR' | 'GBP'>('RUB');
   const [defaultCurrency, setDefaultCurrency] = useState<'RUB' | 'USD' | 'EUR' | 'GBP'>('RUB');
   const [itemImageUrl, setItemImageUrl] = useState(''); // existing/saved URL from DB
+  // Multi-placement on CREATE (variant A): pick other wishlists to place this wish in.
+  // Ignored on edit (editing a shared wish doesn't add/remove placements here).
+  const [itemAdditionalWishlistIds, setItemAdditionalWishlistIds] = useState<string[]>([]);
 
   // Photo upload state
   const [itemPhotoFile, setItemPhotoFile] = useState<File | null>(null);
@@ -4484,6 +4531,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [movingItem, setMovingItem] = useState<Item | null>(null);
   const [showCopyPicker, setShowCopyPicker] = useState(false);
   const [copyingItem, setCopyingItem] = useState<Item | null>(null);
+  // "Где размещено" sheet — shows all wishlists where the current item is placed,
+  // lets owner add/remove placements. Last-placement removal is blocked server-side (409).
+  const [showPlacementsSheet, setShowPlacementsSheet] = useState(false);
+  const [placementsForItem, setPlacementsForItem] = useState<Item | null>(null);
+  const [placementsList, setPlacementsList] = useState<Array<{
+    wishlistId: string; wishlistTitle: string; wishlistType: string; archivedAt: string | null;
+    categoryId: string | null; categoryName: string | null; position: number; addedAt: string; isPrimary: boolean;
+  }>>([]);
+  const [placementsLoading, setPlacementsLoading] = useState(false);
+  const [showPlacementAddPicker, setShowPlacementAddPicker] = useState(false);
   const [showItemMenu, setShowItemMenu] = useState(false);
   const [currencyExpanded, setCurrencyExpanded] = useState(false);
   const [pendingMoveItemId, setPendingMoveItemId] = useState<string | null>(null);
@@ -5763,6 +5820,88 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       pushToast(t('toast_move_error_generic', locale), 'error');
     }
   }, [tgFetch, pushToast, wishlists, loadDrafts, loadWishlists, draftsItems]);
+
+  // Open "Где размещено" sheet for the given item and fetch placements.
+  const openPlacementsSheet = useCallback(async (item: Item) => {
+    setPlacementsForItem(item);
+    setShowPlacementsSheet(true);
+    setPlacementsLoading(true);
+    try {
+      const res = await tgFetch(`/tg/items/${item.id}/placements`);
+      if (!res.ok) {
+        pushToast(t('toast_error_generic', locale), 'error');
+        setPlacementsList([]);
+        return;
+      }
+      const json = await res.json() as { placements: typeof placementsList };
+      setPlacementsList(json.placements);
+    } catch {
+      pushToast(t('toast_error_generic', locale), 'error');
+      setPlacementsList([]);
+    } finally {
+      setPlacementsLoading(false);
+    }
+  }, [tgFetch, pushToast, locale]);
+
+  const handleAddPlacement = useCallback(async (targetWishlistId: string) => {
+    if (!placementsForItem) return;
+    try {
+      const res = await tgFetch(`/tg/items/${placementsForItem.id}/placements`, {
+        method: 'POST',
+        body: JSON.stringify({ wishlistId: targetWishlistId }),
+      });
+      if (res.status === 402) {
+        const body = await res.json().catch(() => ({})) as { error?: string; planCode?: string };
+        if (body.planCode === 'FREE') {
+          showUpsell('item_limit', { auto: true, wishlistId: targetWishlistId });
+        } else {
+          pushToast(t('toast_max_items', locale, { n: planLimits.items + (addOns.extraItemsPerWishlist?.[targetWishlistId] ?? 0) }), 'error');
+        }
+        return;
+      }
+      if (res.status === 409) {
+        pushToast(locale === 'ru' ? 'Уже добавлено в этот список' : 'Already in this wishlist', 'info');
+        return;
+      }
+      if (!res.ok) {
+        pushToast(t('toast_error_generic', locale), 'error');
+        return;
+      }
+      const json = await res.json() as { placementCount: number; targetWishlistTitle: string };
+      pushToast(locale === 'ru' ? `Добавлено в «${json.targetWishlistTitle}»` : `Added to "${json.targetWishlistTitle}"`, 'success');
+      // Refresh the sheet and nudge the card counter on the current wishlist.
+      await openPlacementsSheet(placementsForItem);
+      setWishlists(prev => prev.map(wl => wl.id === targetWishlistId ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
+      if (currentWl) await loadItems(currentWl.id);
+      setShowPlacementAddPicker(false);
+    } catch {
+      pushToast(t('toast_error_generic', locale), 'error');
+    }
+  }, [placementsForItem, tgFetch, pushToast, locale, showUpsell, planLimits.items, addOns.extraItemsPerWishlist, openPlacementsSheet, currentWl, loadItems]);
+
+  const handleRemovePlacement = useCallback(async (wishlistId: string) => {
+    if (!placementsForItem) return;
+    try {
+      const res = await tgFetch(`/tg/items/${placementsForItem.id}/placements/${wishlistId}`, { method: 'DELETE' });
+      if (res.status === 409) {
+        pushToast(locale === 'ru'
+          ? 'Это последний список — удалите желание целиком'
+          : 'This is the last wishlist — delete the wish instead', 'error');
+        return;
+      }
+      if (!res.ok) {
+        pushToast(t('toast_error_generic', locale), 'error');
+        return;
+      }
+      const removedTitle = placementsList.find(p => p.wishlistId === wishlistId)?.wishlistTitle ?? '';
+      pushToast(locale === 'ru' ? `Убрано из «${removedTitle}»` : `Removed from "${removedTitle}"`, 'success');
+      await openPlacementsSheet(placementsForItem);
+      setWishlists(prev => prev.map(wl => wl.id === wishlistId ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
+      if (currentWl) await loadItems(currentWl.id);
+    } catch {
+      pushToast(t('toast_error_generic', locale), 'error');
+    }
+  }, [placementsForItem, placementsList, tgFetch, pushToast, locale, openPlacementsSheet, currentWl, loadItems]);
 
   const handleArchiveDraft = useCallback(async (item: Item) => {
     const res = await tgFetch(`/tg/items/${item.id}`, { method: 'DELETE' });
@@ -8290,6 +8429,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const resetItemForm = () => {
     setItemTitle(''); setItemDescription(''); setItemUrl(''); setItemPrice(''); setItemPriority(2); setItemCurrency(defaultCurrency); setItemImageUrl('');
+    setItemAdditionalWishlistIds([]);
     setItemPhotoFile(null);
     if (itemPhotoLocalUrl) URL.revokeObjectURL(itemPhotoLocalUrl);
     setItemPhotoLocalUrl(null);
@@ -8392,6 +8532,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         priority: itemPriority,
         currency: itemCurrency,
         // imageUrl is managed via dedicated photo endpoints — not sent here
+        // Multi-placement on CREATE only — ignored on edit
+        ...(!editingItem && itemAdditionalWishlistIds.length > 0
+          ? { additionalWishlistIds: itemAdditionalWishlistIds }
+          : {}),
       };
 
       if (editingItem) {
@@ -8453,10 +8597,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         }
 
         // Reload from API to get correct sorted position
-        setWishlists((prev) => prev.map((wl) => wl.id === currentWl!.id ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
+        const additionalIds = (!editingItem && itemAdditionalWishlistIds.length > 0)
+          ? itemAdditionalWishlistIds
+          : [];
+        setWishlists((prev) => prev.map((wl) => {
+          if (wl.id === currentWl!.id) return { ...wl, itemCount: wl.itemCount + 1 };
+          if (additionalIds.includes(wl.id)) return { ...wl, itemCount: wl.itemCount + 1 };
+          return wl;
+        }));
         await loadItems(currentWl!.id);
-        trackEvent('item_created', { wishlistId: currentWl!.id });
-        pushToast(t('item_added', locale), 'success');
+        trackEvent('item_created', { wishlistId: currentWl!.id, placements: 1 + additionalIds.length });
+        if (additionalIds.length > 0) {
+          pushToast(locale === 'ru'
+            ? `Добавлено в ${1 + additionalIds.length} списков`
+            : `Added to ${1 + additionalIds.length} wishlists`, 'success');
+        } else {
+          pushToast(t('item_added', locale), 'success');
+        }
 
         // First Share Prompt: navigate to prompt if this was the first real regular wish
         if (json.showFirstSharePrompt && json.promptData) {
@@ -12258,8 +12415,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
                     <span style={{ width: 22, textAlign: 'center' }}>↗</span> {t('item_move_short', locale)}
                   </div>
+                  <div onClick={() => { void openPlacementsSheet(viewingItem as Item); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
+                    <span style={{ width: 22, textAlign: 'center' }}>🔗</span> {locale === 'ru' ? 'Где размещено' : 'Where placed'}
+                    {((viewingItem as Item).placementCount ?? 1) > 1 && (
+                      <span style={{ marginLeft: 'auto', fontSize: 12, color: C.accent, fontWeight: 700 }}>{(viewingItem as Item).placementCount}</span>
+                    )}
+                  </div>
                   <div onClick={() => { setCopyingItem(viewingItem as Item); setShowCopyPicker(true); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
-                    <span style={{ width: 22, textAlign: 'center' }}>📋</span> {t('item_copy_short', locale)}
+                    <span style={{ width: 22, textAlign: 'center' }}>📋</span> {locale === 'ru' ? 'Дублировать' : 'Duplicate'}
                   </div>
                   {hasUserCategories && (
                     <div onClick={() => { setShowItemMenu(false); setShowCatPicker({ itemIds: [viewingItem!.id] }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
@@ -17739,11 +17902,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       </BottomSheet>
 
       {/* ── Copy item to wishlist picker — triggered from item-detail ── */}
-      <BottomSheet isOpen={showCopyPicker} onClose={() => { setShowCopyPicker(false); setCopyingItem(null); }} title={t('item_copy_title', locale)}>
+      <BottomSheet isOpen={showCopyPicker} onClose={() => { setShowCopyPicker(false); setCopyingItem(null); }} title={locale === 'ru' ? 'Дублировать в…' : 'Duplicate to…'}>
         {(() => {
           const copyTargets = getWritableTargets(wishlists, { currentWlId: currentWl?.id, draftsWlId: draftsWishlistId });
+          const isShared = (copyingItem?.placementCount ?? 1) > 1;
           return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {isShared && (
+            <div style={{
+              padding: '10px 12px', borderRadius: 10, marginBottom: 4,
+              background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)',
+              fontSize: 12, color: '#fbbf24', lineHeight: 1.4,
+            }}>
+              {locale === 'ru'
+                ? '⚠️ Это общее желание. Дубликат — отдельное желание без синхронизации. Чтобы добавить в ещё один список с синхронизацией, используй «Где размещено».'
+                : '⚠️ This is a shared wish. A duplicate is independent (no sync). To add another placement that syncs, use "Where placed".'}
+            </div>
+          )}
           {copyTargets.map((wl) => (
             <button
               key={wl.id}
@@ -17785,6 +17960,129 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
           )}
         </div>
+          );
+        })()}
+      </BottomSheet>
+
+      {/* ── "Где размещено" — list placements + add/remove per wishlist ── */}
+      <BottomSheet
+        isOpen={showPlacementsSheet}
+        onClose={() => { setShowPlacementsSheet(false); setPlacementsForItem(null); setPlacementsList([]); setShowPlacementAddPicker(false); }}
+        title={locale === 'ru' ? 'Где размещено' : 'Where placed'}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {placementsLoading && (
+            <div style={{ textAlign: 'center', padding: '24px 16px', color: C.textMuted, fontSize: 14 }}>…</div>
+          )}
+          {!placementsLoading && placementsList.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '24px 16px', color: C.textMuted, fontSize: 14 }}>
+              {locale === 'ru' ? 'Нет размещений' : 'No placements'}
+            </div>
+          )}
+          {!placementsLoading && placementsList.map(p => (
+            <div key={p.wishlistId} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '12px 14px', borderRadius: 12,
+              background: C.surface, border: `1px solid ${C.border}`,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.wishlistTitle}
+                  {p.isPrimary && (
+                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: C.accent }}>
+                      {locale === 'ru' ? '• основной' : '• primary'}
+                    </span>
+                  )}
+                </div>
+                {p.categoryName && (
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>📂 {p.categoryName}</div>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  if (placementsList.length <= 1) {
+                    pushToast(locale === 'ru'
+                      ? 'Это последний список — удалите желание целиком'
+                      : 'Last wishlist — delete the wish instead', 'error');
+                    return;
+                  }
+                  void handleRemovePlacement(p.wishlistId);
+                }}
+                disabled={placementsList.length <= 1}
+                style={{
+                  background: 'none', border: 'none', cursor: placementsList.length <= 1 ? 'not-allowed' : 'pointer',
+                  color: placementsList.length <= 1 ? C.textMuted : C.red,
+                  fontSize: 14, padding: 6, opacity: placementsList.length <= 1 ? 0.4 : 1,
+                }}
+                title={locale === 'ru' ? 'Убрать из списка' : 'Remove from list'}
+              >✕</button>
+            </div>
+          ))}
+          {!placementsLoading && placementsForItem && (() => {
+            const alreadyPlacedIds = new Set(placementsList.map(p => p.wishlistId));
+            const available = wishlists.filter(wl =>
+              !alreadyPlacedIds.has(wl.id) &&
+              wl.id !== draftsWishlistId &&
+              !wl.readOnly,
+            );
+            if (available.length === 0) return null;
+            return (
+              <button
+                onClick={() => setShowPlacementAddPicker(true)}
+                style={{
+                  marginTop: 8, padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
+                  background: 'rgba(124,106,255,0.08)', color: C.accent,
+                  border: `1px dashed ${C.accent}55`,
+                  fontSize: 14, fontWeight: 600, fontFamily: font,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <span>➕</span>
+                {locale === 'ru' ? 'Добавить в другой список' : 'Add to another wishlist'}
+              </button>
+            );
+          })()}
+        </div>
+      </BottomSheet>
+
+      {/* ── Placement "add to another wishlist" picker ── */}
+      <BottomSheet
+        isOpen={showPlacementAddPicker}
+        onClose={() => setShowPlacementAddPicker(false)}
+        title={locale === 'ru' ? 'В какой список?' : 'Which wishlist?'}
+      >
+        {(() => {
+          const alreadyPlacedIds = new Set(placementsList.map(p => p.wishlistId));
+          const available = wishlists.filter(wl =>
+            !alreadyPlacedIds.has(wl.id) &&
+            wl.id !== draftsWishlistId &&
+            !wl.readOnly,
+          );
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {available.map(wl => (
+                <button
+                  key={wl.id}
+                  onClick={() => { void handleAddPlacement(wl.id); }}
+                  style={{
+                    ...btnGhost, width: '100%', textAlign: 'start', padding: '14px 16px',
+                    borderRadius: 12, background: C.surface, border: `1px solid ${C.border}`,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{wl.title}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted }}>{t('wishes_count', locale, { count: wl.itemCount })}</div>
+                  </div>
+                  <span style={{ color: C.textMuted }}>›</span>
+                </button>
+              ))}
+              {available.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '24px 16px', color: C.textMuted, fontSize: 14 }}>
+                  {locale === 'ru' ? 'Нет других списков' : 'No other wishlists'}
+                </div>
+              )}
+            </div>
           );
         })()}
       </BottomSheet>
@@ -19744,6 +20042,54 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               })}
             </div>
           </div>
+          {/* Also add to (multi-placement) — CREATE only; skip when editing or no other writable wishlists */}
+          {!editingItem && (() => {
+            const otherRegular = getWritableTargets(wishlists, { currentWlId: currentWl?.id, draftsWlId: draftsWishlistId });
+            if (otherRegular.length === 0) return null;
+            return (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>
+                  {locale === 'ru' ? 'Добавить также в' : 'Also add to'}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
+                  {otherRegular.map(wl => {
+                    const checked = itemAdditionalWishlistIds.includes(wl.id);
+                    return (
+                      <label key={wl.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 12px', borderRadius: 12,
+                        background: checked ? 'rgba(124,106,255,0.10)' : '#1c1c22',
+                        border: `1.5px solid ${checked ? 'rgba(124,106,255,0.35)' : 'rgba(255,255,255,0.06)'}`,
+                        cursor: 'pointer', userSelect: 'none',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setItemAdditionalWishlistIds(prev => e.target.checked
+                              ? Array.from(new Set([...prev, wl.id]))
+                              : prev.filter(x => x !== wl.id),
+                            );
+                          }}
+                          style={{ width: 16, height: 16, accentColor: '#7C6AFF', flexShrink: 0 }}
+                        />
+                        <span style={{ fontSize: 14, fontWeight: 500, color: checked ? '#fff' : C.textSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {wl.title}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {itemAdditionalWishlistIds.length > 0 && (
+                  <div style={{ fontSize: 10, color: '#3a3a44', marginTop: 6 }}>
+                    {locale === 'ru'
+                      ? `Желание появится в ${1 + itemAdditionalWishlistIds.length} списках одновременно`
+                      : `This wish will appear in ${1 + itemAdditionalWishlistIds.length} wishlists`}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {/* Submit — with priority emoji */}
           <button
             style={{
