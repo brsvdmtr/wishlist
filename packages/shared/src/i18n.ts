@@ -2532,6 +2532,8 @@ const ru: Dict = {
   showcase_input_clear: 'Очистить',
   plan_pro_f18: 'Премиум-профиль',
   plan_pro_sub18: 'Обложка, избранные вишлисты, предпочтения и размеры — личная страница для подарков.',
+  plan_pro_f19: 'Тайная бронь',
+  plan_pro_sub19: 'Бронируй чужое желание так, чтобы владелец не узнал. Сохраняй подарки в секрете.',
 };
 
 const en: Dict = {
@@ -4866,6 +4868,8 @@ const en: Dict = {
   showcase_input_clear: 'Clear',
   plan_pro_f18: 'Premium profile',
   plan_pro_sub18: 'Cover image, pinned wishlists, preferences and sizes — a personal gift showcase.',
+  plan_pro_f19: 'Secret reservation',
+  plan_pro_sub19: 'Reserve a friend\'s wish without them noticing. Save gifts on the side.',
 };
 
 // ─── Additional locale dictionaries ──────────────────────────────────────────

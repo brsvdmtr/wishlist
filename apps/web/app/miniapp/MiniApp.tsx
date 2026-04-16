@@ -1908,6 +1908,8 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
     { icon: '📅', title: t('plan_pro_f9', locale), subtitle: t('plan_pro_sub9', locale) },
     // Premium profile (showcase) — a general benefit, not a reservation feature.
     { icon: '✨', title: t('plan_pro_f18', locale), subtitle: t('plan_pro_sub18', locale), isNew: true },
+    // Secret reservation — general PRO benefit (also available standalone via stars).
+    { icon: '🔒', title: t('plan_pro_f19', locale), subtitle: t('plan_pro_sub19', locale), isNew: true },
     { icon: '📋', title: t('plan_pro_f15', locale), subtitle: t('plan_pro_sub15', locale), isNew: true },
     { icon: '🚫', title: t('plan_pro_f16', locale), subtitle: t('plan_pro_sub16', locale), isNew: true },
     // Reservation Pro features
@@ -11667,19 +11669,115 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     )
                   )}
 
-                  {reservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
+                  {reservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && secretReservations.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                       <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
                       <div style={{ fontSize: 14, color: C.textMuted }}>{t('reservations_loading', locale)}</div>
                     </div>
                   )}
-                  {!reservationsLoading && !santaReservationItemsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
+                  {!reservationsLoading && !santaReservationItemsLoading && !secretReservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && secretReservations.length === 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '48px 24px', minHeight: 300 }}>
                       <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
                       <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('reservations_empty_title', locale)}</div>
                       <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>{t('reservations_empty_hint', locale)}</div>
                     </div>
                   )}
+                  {/* ── Secret reservations sub-section (top, above Santa & Public) ── */}
+                  {secretReservations.length > 0 && (() => {
+                    const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: SecretReservationDTO[] }> = {};
+                    for (const r of secretReservations) {
+                      const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, ownerAvatarUrl: r.ownerAvatarUrl, items: [] });
+                      g.items.push(r);
+                    }
+                    const activeCount = secretReservations.length;
+                    const hasUnseen = secretReservations.some(s => s.hasUnacknowledgedUpdates || s.derivedState === 'PUBLIC_RESERVED_BY_OTHER');
+                    let secretIdx = 0;
+                    return (
+                      <div style={{ marginBottom: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#A78BFA', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {t('sr_list_section_secret', locale)}
+                            <span style={{ fontSize: 10, fontWeight: 500, color: C.textMuted, textTransform: 'none', letterSpacing: 0, marginLeft: 2 }}>
+                              {activeCount} {pluralize(activeCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
+                            </span>
+                            {hasUnseen && (
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#A78BFA', boxShadow: '0 0 8px rgba(167,139,250,0.7)', marginLeft: 2 }} />
+                            )}
+                          </div>
+                        </div>
+                        {Object.entries(groups).map(([ownerId, group]) => (
+                          <div key={ownerId} style={{ marginBottom: 14 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                              <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName || t('api_user_fallback', locale)} size={30} accent="#A78BFA" />
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
+                                <div style={{ fontSize: 11, color: C.textMuted }}>
+                                  {group.items.length} {pluralize(group.items.length, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {group.items.map((sr) => {
+                                const delay = secretIdx * 0.06;
+                                secretIdx++;
+                                const it = sr.current;
+                                const state = sr.derivedState;
+                                const badge = state === 'ITEM_UPDATED' ? { text: t('sr_badge_updated', locale), bg: 'rgba(96,165,250,0.14)', color: '#60A5FA', border: 'rgba(96,165,250,0.26)' }
+                                  : state === 'PUBLIC_RESERVED_BY_OTHER' ? { text: t('sr_badge_conflict', locale), bg: 'rgba(251,191,36,0.14)', color: '#FBBF24', border: 'rgba(251,191,36,0.26)' }
+                                  : state === 'ITEM_FULFILLED' ? { text: t('sr_badge_fulfilled', locale), bg: 'rgba(52,211,153,0.14)', color: '#34D399', border: 'rgba(52,211,153,0.26)' }
+                                  : state === 'ITEM_UNAVAILABLE' ? { text: t('sr_badge_unavailable', locale), bg: 'rgba(248,113,113,0.14)', color: '#F87171', border: 'rgba(248,113,113,0.26)' }
+                                  : { text: t('sr_badge_active', locale), bg: 'rgba(167,139,250,0.14)', color: '#A78BFA', border: 'rgba(167,139,250,0.26)' };
+                                return (
+                                  <div
+                                    key={sr.id}
+                                    onClick={() => {
+                                      setViewingSecretReservation(sr);
+                                      setSecretDetailOrigin('my-reservations');
+                                      setScreen('secret-reservation-detail');
+                                      trackEvent('secret_res.detail_opened', { from: 'my_reservations_list', state });
+                                      void refreshSecretReservationDetail(sr.id);
+                                    }}
+                                    style={{
+                                      background: C.card,
+                                      border: `1px solid ${state === 'ACTIVE' ? 'rgba(167,139,250,0.22)' : C.border}`,
+                                      borderLeft: state === 'ACTIVE' ? '3px solid #A78BFA' : undefined,
+                                      borderRadius: 14,
+                                      padding: 14,
+                                      cursor: 'pointer',
+                                      WebkitTapHighlightColor: 'transparent',
+                                      animation: `fadeIn 0.3s ease ${delay}s both`,
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', gap: 12 }}>
+                                      <div style={{
+                                        width: 56, height: 56, borderRadius: 12, background: C.surface, overflow: 'hidden',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0,
+                                      }}>
+                                        {it.imageUrl
+                                          ? <img src={it.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                          : '🎁'}
+                                      </div>
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>{it.title}</div>
+                                        {(it.price != null || sr.snapshot.priceText) && (
+                                          <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>
+                                            <strong style={{ color: C.text }}>{it.price != null ? fmtPrice(it.price, locale, it.currency ?? 'RUB') : sr.snapshot.priceText}</strong>
+                                          </div>
+                                        )}
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 100, fontSize: 10, fontWeight: 600, background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
+                                          {badge.text}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   {/* Santa reservations sub-section */}
                   {santaReservationItems.length > 0 && (() => {
                     const campGroups: Record<string, { campaignTitle: string; campaignStatus: string; items: SantaReservationItem[] }> = {};
@@ -12915,10 +13013,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
         );
         return (
-          <div style={{ padding: '16px 0 calc(110px + env(safe-area-inset-bottom))', animation: 'fadeIn 0.3s ease' }}>
+          <div style={{ padding: '0 0 calc(110px + env(safe-area-inset-bottom))', animation: 'fadeIn 0.3s ease' }}>
             {/* Hero */}
             <div style={{
-              padding: '4px 20px 0',
+              padding: '20px 20px 0',
               textAlign: 'center' as const,
               background:
                 'radial-gradient(circle at 50% 0%, rgba(167,139,250,0.22) 0%, transparent 60%),' +
@@ -16304,6 +16402,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         { label: t('settings_lite_share', locale), desc: t('settings_desc_lite_share', locale) },
                         { label: t('settings_dont_gift', locale), desc: t('settings_desc_dont_gift', locale) },
                         { label: t('smart_res_section_title', locale), desc: t('smart_res_toggle_hint', locale) },
+                        { label: `🔒 ${t('plan_pro_f19', locale)}`, desc: t('plan_pro_sub19', locale) },
                       ].map((row) => (
                         <div key={row.label}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
