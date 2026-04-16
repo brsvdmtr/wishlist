@@ -593,9 +593,11 @@ const btnGhost: React.CSSProperties = { ...btnBase, background: 'transparent', c
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '14px 16px', borderRadius: 12,
   border: `1px solid ${C.borderLight}`, background: C.surface,
-  color: C.text, fontSize: 16, fontFamily: font, outline: 'none', boxSizing: 'border-box',
+  color: C.text, fontSize: 16, lineHeight: '22px', fontFamily: font, outline: 'none', boxSizing: 'border-box',
   // iOS WKWebView (Telegram): explicit user-select + touch-action so the native
   // selection handles work even when ancestor touchmove handlers exist.
+  // Explicit lineHeight is required — without it, fontWeight + letterSpacing
+  // cause the WebKit caret to render displaced vertically in focused inputs.
   WebkitUserSelect: 'text', userSelect: 'text', touchAction: 'auto',
 };
 
@@ -1894,6 +1896,9 @@ function BottomSheet({ isOpen, onClose, title, children }: {
   // stops honouring preventDefault() after that point. Fix: always preventDefault
   // and drive el.scrollTop + el.style.transform directly — zero React re-renders
   // in the hot path means buttery-smooth 60 fps on the GPU compositor thread.
+  //
+  // Momentum: on touchend we compute velocity from recent dy samples and animate
+  // scrollTop decay via requestAnimationFrame, mimicking native iOS inertia.
   useEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet || !isOpen) return;
@@ -1902,6 +1907,16 @@ function BottomSheet({ isOpen, onClose, title, children }: {
     let cumulativeMove = 0; // track total finger movement to decide blur threshold
     // Blur the keyboard at most once per gesture (prevents redundant calls)
     let blurFired = false;
+    // Track recent move samples to compute exit velocity (px / ms).
+    let samples: Array<{ t: number; y: number }> = [];
+    let momentumFrame: number | null = null;
+
+    const cancelMomentum = () => {
+      if (momentumFrame !== null) {
+        cancelAnimationFrame(momentumFrame);
+        momentumFrame = null;
+      }
+    };
 
     const setTranslate = (y: number) => {
       sheet.style.transform = y === 0 ? '' : `translateY(${y}px)`;
@@ -1909,10 +1924,12 @@ function BottomSheet({ isOpen, onClose, title, children }: {
 
     const onStart = (e: TouchEvent) => {
       if (!e.touches[0]) return;
+      cancelMomentum(); // tapping during fling stops it (like native iOS)
       prevY = e.touches[0].clientY;
       dismissOffset = 0;
       cumulativeMove = 0;
       blurFired = false;
+      samples = [{ t: performance.now(), y: prevY }];
       // Freeze any in-progress spring-back transition
       sheet.style.transition = 'none';
     };
@@ -1933,6 +1950,11 @@ function BottomSheet({ isOpen, onClose, title, children }: {
       const currentY = e.touches[0].clientY;
       const dy = currentY - prevY; // positive = finger moved down
       prevY = currentY;
+
+      // Track last ~100ms of finger samples for velocity computation at end.
+      const now = performance.now();
+      samples.push({ t: now, y: currentY });
+      while (samples.length > 0 && now - samples[0]!.t > 100) samples.shift();
 
       // Dismiss keyboard on significant scroll — but NOT on micro-movements
       // that happen naturally when tapping a field. This prevents the keyboard
@@ -1982,18 +2004,68 @@ function BottomSheet({ isOpen, onClose, title, children }: {
         sheet.style.transition = 'transform 0.22s ease-in';
         setTranslate(sheet.offsetHeight + 40);
         setTimeout(() => onCloseRef.current(), 220);
-      } else if (dismissOffset > 0) {
+        dismissOffset = 0;
+        return;
+      }
+      if (dismissOffset > 0) {
         // Spring back
         sheet.style.transition = 'transform 0.3s cubic-bezier(0.32,0.72,0,1)';
         setTranslate(0);
+        dismissOffset = 0;
+        return;
       }
       dismissOffset = 0;
+
+      // Compute exit velocity from last samples (px / ms).
+      if (samples.length < 2) return;
+      const first = samples[0]!;
+      const last = samples[samples.length - 1]!;
+      const dt = last.t - first.t;
+      if (dt <= 0) return;
+      let velocity = (last.y - first.y) / dt; // positive = down finger → content up
+      // Ignore tiny swipes (likely taps).
+      if (Math.abs(velocity) < 0.12) return;
+
+      // Apply inertia with exponential decay. Scroll direction is opposite of
+      // finger direction: finger up (neg dy) → scroll content down.
+      const decay = 0.95; // ~50% every ~13 frames @ 60fps = ~220ms feel
+      let last_t = performance.now();
+      const tick = () => {
+        const nowT = performance.now();
+        const frameDt = nowT - last_t;
+        last_t = nowT;
+        // dy per frame (px): velocity * frameDt (approx)
+        const delta = velocity * frameDt;
+        // Invert: fingers moving up (dy<0, velocity<0) → content moves up (scrollTop++)
+        const nextTop = sheet.scrollTop - delta;
+        const maxTop = sheet.scrollHeight - sheet.clientHeight;
+        if (nextTop <= 0) {
+          sheet.scrollTop = 0;
+          momentumFrame = null;
+          return;
+        }
+        if (nextTop >= maxTop) {
+          sheet.scrollTop = maxTop;
+          momentumFrame = null;
+          return;
+        }
+        sheet.scrollTop = nextTop;
+        // Decay velocity (per frame @ ~16ms). Use per-ms decay for frame-rate independence.
+        velocity *= Math.pow(decay, frameDt / 16);
+        if (Math.abs(velocity) < 0.02) {
+          momentumFrame = null;
+          return;
+        }
+        momentumFrame = requestAnimationFrame(tick);
+      };
+      momentumFrame = requestAnimationFrame(tick);
     };
 
     sheet.addEventListener('touchstart', onStart, { passive: true });
     sheet.addEventListener('touchmove', onMove, { passive: false });
     sheet.addEventListener('touchend', onEnd, { passive: true });
     return () => {
+      cancelMomentum();
       sheet.removeEventListener('touchstart', onStart);
       sheet.removeEventListener('touchmove', onMove);
       sheet.removeEventListener('touchend', onEnd);
@@ -2021,6 +2093,8 @@ function BottomSheet({ isOpen, onClose, title, children }: {
           padding: 24, zIndex: 101, maxHeight: '85vh', overflowY: 'auto',
           animation: 'slideUp 0.3s ease',
           willChange: 'transform',
+          overscrollBehavior: 'contain' as never,
+          WebkitOverflowScrolling: 'touch' as never,
         }}
       >
         <div style={{ width: 40, height: 4, background: C.textMuted, borderRadius: 100, margin: '0 auto 16px', opacity: 0.3, cursor: 'grab' }} />
@@ -5845,12 +5919,29 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const handleAddPlacement = useCallback(async (targetWishlistId: string) => {
     if (!placementsForItem) return;
+    const target = wishlists.find(w => w.id === targetWishlistId);
+    if (!target) return;
+    // Optimistic add — instantly move row between groups, no network wait.
+    const optimistic = {
+      wishlistId: target.id,
+      wishlistTitle: target.title,
+      wishlistType: 'REGULAR',
+      archivedAt: null,
+      categoryId: null,
+      categoryName: null,
+      position: 0,
+      addedAt: new Date().toISOString(),
+      isPrimary: false,
+    };
+    const snapshot = placementsList;
+    setPlacementsList(prev => [...prev, optimistic]);
     try {
       const res = await tgFetch(`/tg/items/${placementsForItem.id}/placements`, {
         method: 'POST',
         body: JSON.stringify({ wishlistId: targetWishlistId }),
       });
       if (res.status === 402) {
+        setPlacementsList(snapshot);
         const body = await res.json().catch(() => ({})) as { error?: string; planCode?: string };
         if (body.planCode === 'FREE') {
           showUpsell('item_limit', { auto: true, wishlistId: targetWishlistId });
@@ -5860,56 +5951,63 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return;
       }
       if (res.status === 409) {
+        // Already placed — keep optimistic state, just toast.
         pushToast(locale === 'ru' ? 'Уже добавлено в этот список' : 'Already in this wishlist', 'info');
         return;
       }
       if (!res.ok) {
+        setPlacementsList(snapshot);
         pushToast(t('toast_error_generic', locale), 'error');
         return;
       }
       const json = await res.json() as { placementCount: number; targetWishlistTitle: string };
       pushToast(locale === 'ru' ? `Добавлено в «${json.targetWishlistTitle}»` : `Added to "${json.targetWishlistTitle}"`, 'success');
-      // Refresh the sheet and nudge the card counter on the current wishlist.
-      await openPlacementsSheet(placementsForItem);
       setWishlists(prev => prev.map(wl => wl.id === targetWishlistId ? { ...wl, itemCount: wl.itemCount + 1 } : wl));
       if (currentWl) await loadItems(currentWl.id);
     } catch {
+      setPlacementsList(snapshot);
       pushToast(t('toast_error_generic', locale), 'error');
     }
-  }, [placementsForItem, tgFetch, pushToast, locale, showUpsell, planLimits.items, addOns.extraItemsPerWishlist, openPlacementsSheet, currentWl, loadItems]);
+  }, [placementsForItem, placementsList, wishlists, tgFetch, pushToast, locale, showUpsell, planLimits.items, addOns.extraItemsPerWishlist, currentWl, loadItems]);
 
   const handleRemovePlacement = useCallback(async (wishlistId: string) => {
     if (!placementsForItem) return;
+    const snapshot = placementsList;
+    const removed = snapshot.find(p => p.wishlistId === wishlistId);
+    if (!removed) return;
+    // Optimistic remove — instantly move row between groups, no network wait.
+    setPlacementsList(prev => prev.filter(p => p.wishlistId !== wishlistId));
     try {
       const res = await tgFetch(`/tg/items/${placementsForItem.id}/placements/${wishlistId}`, { method: 'DELETE' });
       if (res.status === 409) {
+        setPlacementsList(snapshot);
         pushToast(locale === 'ru'
           ? 'Это последний список — удалите желание целиком'
           : 'This is the last wishlist — delete the wish instead', 'error');
         return;
       }
       if (!res.ok) {
+        setPlacementsList(snapshot);
         pushToast(t('toast_error_generic', locale), 'error');
         return;
       }
-      const removedTitle = placementsList.find(p => p.wishlistId === wishlistId)?.wishlistTitle ?? '';
-      const remaining = Math.max(0, placementsList.length - 1);
+      const remaining = Math.max(0, snapshot.length - 1);
       const remainingLabel = locale === 'ru'
         ? `${remaining} ${pluralize(remaining, 'wishlist\u2019е', 'wishlist\u2019ах', 'wishlist\u2019ах', 'ru')}`
         : `${remaining} wishlist${remaining === 1 ? '' : 's'}`;
       pushToast(
         locale === 'ru'
-          ? `Убрано из «${removedTitle}». Осталось в ${remainingLabel}.`
-          : `Removed from "${removedTitle}". Still in ${remainingLabel}.`,
+          ? `Убрано из «${removed.wishlistTitle}». Осталось в ${remainingLabel}.`
+          : `Removed from "${removed.wishlistTitle}". Still in ${remainingLabel}.`,
         'warning',
       );
-      await openPlacementsSheet(placementsForItem);
       setWishlists(prev => prev.map(wl => wl.id === wishlistId ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
       if (currentWl) await loadItems(currentWl.id);
     } catch {
+      setPlacementsList(snapshot);
       pushToast(t('toast_error_generic', locale), 'error');
     }
-  }, [placementsForItem, placementsList, tgFetch, pushToast, locale, openPlacementsSheet, currentWl, loadItems]);
+  }, [placementsForItem, placementsList, tgFetch, pushToast, locale, currentWl, loadItems]);
 
   const handleArchiveDraft = useCallback(async (item: Item) => {
     const res = await tgFetch(`/tg/items/${item.id}`, { method: 'DELETE' });
@@ -13890,7 +13988,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     transition: 'all 0.18s',
                     background: isActive ? C.accent : C.surface,
                     color: isActive ? '#fff' : C.text,
-                    opacity: pro && planInfo.code !== 'PRO' ? 0.75 : 1,
                   }}
                 >
                   {label}
@@ -18067,6 +18164,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             padding: '10px 12px', borderRadius: 12,
                             background: '#1c1c22', border: '1.5px solid rgba(255,255,255,0.06)',
                             cursor: 'pointer', userSelect: 'none',
+                            animation: 'fadeIn 0.22s ease both',
+                            transition: 'background 0.18s ease, border-color 0.18s ease',
                           }}
                         >
                           {renderCheckbox(true)}
@@ -18108,6 +18207,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             padding: '10px 12px', borderRadius: 12,
                             background: '#1c1c22', border: '1.5px solid rgba(255,255,255,0.06)',
                             cursor: 'pointer', userSelect: 'none',
+                            animation: 'fadeIn 0.22s ease both',
+                            transition: 'background 0.18s ease, border-color 0.18s ease',
                           }}
                         >
                           {renderCheckbox(false)}
@@ -18630,7 +18731,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
               fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
-              opacity: planInfo.code === 'FREE' ? 0.7 : 1,
             }}
           >
             <span style={{ fontSize: 20 }}>📂</span>
@@ -19972,6 +20072,35 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             </div>
           )}
+          {/* Single-placement promo: "Добавить в ещё →" — for non-shared items */}
+          {editingItem && (editingItem.placementCount ?? 1) === 1 && (() => {
+            const ownerWl = wishlists.find(w => w.id === editingItem.wishlistId);
+            if (!ownerWl) return null;
+            return (
+              <div>
+                <div
+                  onClick={() => { setShowItemForm(false); void openPlacementsSheet(editingItem); }}
+                  style={{
+                    background: '#1c1c22', border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: 14, padding: '12px 14px',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(124,106,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>📋</div>
+                  <div style={{ flex: 1, fontSize: 14, color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ownerWl.title}</div>
+                  <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, flexShrink: 0 }}>
+                    {locale === 'ru' ? 'Добавить в ещё →' : 'Add to more →'}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6, lineHeight: 1.4 }}>
+                  {locale === 'ru'
+                    ? 'Только в одном wishlist\u2019е. Можно добавить в другие — желание станет общим.'
+                    : 'Only in one wishlist. Add to others to turn it into a shared wish.'}
+                </div>
+              </div>
+            );
+          })()}
           {/* Title */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_name', locale)}</div>
@@ -19995,6 +20124,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 14, padding: '12px 38px 12px 14px', lineHeight: '20px' }}
                 placeholder={t('item_url_placeholder', locale)}
                 defaultValue={itemUrl}
+                onInput={(e) => setItemUrl(e.currentTarget.value)}
                 onBlur={(e) => setItemUrl(e.target.value)}
                 autoCapitalize="none" autoCorrect="off" spellCheck={false}
               />
@@ -20022,18 +20152,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={{ position: 'relative' as const }}>
               <textarea
                 key={`desc-${itemFieldKey}`}
-                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: 1.4, fontSize: 14, paddingRight: 38 }}
+                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: '20px', fontSize: 14, paddingRight: 38 }}
                 maxLength={500}
                 placeholder={t('item_description_placeholder', locale)}
                 defaultValue={itemDescription}
                 ref={itemDescTextareaRef}
-                onInput={(e) => growTextarea(e.currentTarget)}
+                onInput={(e) => { growTextarea(e.currentTarget); setItemDescription(e.currentTarget.value); }}
                 onBlur={(e) => setItemDescription(e.target.value)}
                 onFocus={(e) => handleTextareaFocus(e.currentTarget)}
               />
               {itemDescription && <button type="button" aria-label="Clear" onClick={() => { setItemDescription(''); setItemFieldKey(k => k + 1); }} style={{ position: 'absolute', right: 6, top: 8, background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
             </div>
-            <div style={{ fontSize: 10, color: '#3a3a44', textAlign: 'right', marginTop: 3 }}>{itemDescription.length}/500</div>
+            {itemDescription.length >= 450 && <div style={{ fontSize: 10, color: itemDescription.length >= 480 ? C.orange : '#3a3a44', textAlign: 'right', marginTop: 3 }}>{itemDescription.length}/500</div>}
           </div>
           {/* Photo picker — refreshed */}
           {(() => {
@@ -20347,7 +20477,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 placeholder={t('item_description_placeholder', locale)}
                 defaultValue={itemDescription}
                 ref={itemDescTextareaRef}
-                onInput={(e) => growTextarea(e.currentTarget)}
+                onInput={(e) => { growTextarea(e.currentTarget); setItemDescription(e.currentTarget.value); }}
                 onBlur={(e) => setItemDescription(e.target.value)}
                 onFocus={(e) => handleTextareaFocus(e.currentTarget)}
               />
@@ -20358,7 +20488,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_url', locale)}</label>
             <div style={{ position: 'relative' as const }}>
-              <input key={`url-orig-${itemFieldKey}`} ref={itemUrlInputRef} style={{ ...inputStyle, paddingRight: 38 }} placeholder="https://…" defaultValue={itemUrl} onBlur={(e) => setItemUrl(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+              <input key={`url-orig-${itemFieldKey}`} ref={itemUrlInputRef} style={{ ...inputStyle, paddingRight: 38 }} placeholder="https://…" defaultValue={itemUrl} onInput={(e) => setItemUrl(e.currentTarget.value)} onBlur={(e) => setItemUrl(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
               {itemUrl && <button type="button" aria-label="Clear" onClick={() => { setItemUrl(''); setItemFieldKey(k => k + 1); }} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
             </div>
           </div>
