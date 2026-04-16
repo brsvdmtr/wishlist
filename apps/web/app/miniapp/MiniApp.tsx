@@ -6833,18 +6833,29 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setScreen('my-wishlists');
     } else if (screen === 'secret-reservation-detail') {
       // Return to origin (guest-item-detail when deep-linked from a wish card,
-      // else My Reservations). Clear origin + viewing state so a fresh open
-      // later won't leak stale context.
+      // else the home "My Reservations" tab — standalone my-reservations screen
+      // is deprecated in favour of the home tab). Clear origin + viewing state
+      // so a fresh open later won't leak stale context.
       const origin = secretDetailOrigin;
       setSecretDetailOrigin(null);
       setViewingSecretReservation(null);
-      setScreen(origin === 'guest-item-detail' ? 'guest-item-detail' : 'my-reservations');
+      if (origin === 'guest-item-detail') {
+        setScreen('guest-item-detail');
+      } else {
+        setHomeTab('reservations');
+        setScreen('my-wishlists');
+      }
     } else if (screen === 'secret-reservation-paywall') {
       // If we were deep-linked from a wish card, return there so the user can
-      // try again after unlock. Otherwise fall back to My Reservations.
+      // try again after unlock. Otherwise fall back to home "My Reservations".
       const returnItem = secretPaywallReturnItem;
       setSecretPaywallReturnItem(null);
-      setScreen(returnItem ? 'guest-item-detail' : 'my-reservations');
+      if (returnItem) {
+        setScreen('guest-item-detail');
+      } else {
+        setHomeTab('reservations');
+        setScreen('my-wishlists');
+      }
     } else if (screen === 'drafts') {
       if (draftsSelectMode) {
         setDraftsSelectMode(false);
@@ -9540,11 +9551,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       // Close confirm sheet IMMEDIATELY on success — the lingering sheet was the #1 UX bug.
       setSecretConfirmItem(null);
       // Optimistic counter bump so the "My Reservations" badge reflects the change
-      // even before loadReservations() finishes its network round-trip.
+      // even before the detail/list fetch finishes.
       setReservationsCount((prev) => prev + 1);
       if (!opts?.silent) pushToast(t('sr_toast_saved', locale), 'success');
-      // Re-fetch in background so secretReservations list includes the new entry
-      // (with derived state, diffs, snapshot, owner info) on the next render.
+      // Fetch the full DTO for the just-created SR and prepend to local list
+      // synchronously — bulletproof against any race where the list-endpoint
+      // hasn't propagated yet, or where the background `loadReservations`
+      // call is still in flight when the user navigates to "My Reservations".
+      try {
+        const detailRes = await tgFetch(`/tg/secret-reservations/${json.id}`);
+        if (detailRes.ok) {
+          const dto = await detailRes.json() as SecretReservationDTO;
+          setSecretReservations((prev) =>
+            prev.some((r) => r.id === dto.id) ? prev : [dto, ...prev]
+          );
+        }
+      } catch {
+        /* ignore — background loadReservations below will reconcile */
+      }
+      // Background full refresh so aggregate counts (regular + santa + secret)
+      // stay in sync with the server's authoritative total.
       void loadReservations();
       return json;
     } catch {
@@ -9568,12 +9594,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setSecretCancelItem(null);
       // If user is on this secret reservation's detail screen — return them to
       // the screen they came from (guest-item-detail when they deep-linked via
-      // "Open my secret reservation", else my-reservations list).
+      // "Open my secret reservation", else home "My Reservations" tab).
       setViewingSecretReservation((prev) => {
         if (prev && prev.id === sr.id) {
           const origin = secretDetailOrigin;
           setSecretDetailOrigin(null);
-          setScreen(origin === 'guest-item-detail' ? 'guest-item-detail' : 'my-reservations');
+          if (origin === 'guest-item-detail') {
+            setScreen('guest-item-detail');
+          } else {
+            setHomeTab('reservations');
+            setScreen('my-wishlists');
+          }
           return null;
         }
         return prev;
@@ -9623,13 +9654,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setReservationsCount((prev) => Math.max(0, prev - 1));
       pushToast(t('sr_toast_promoted', locale), 'success');
       // Close sheet; if user was on detail — return to origin (guest-item-detail
-      // when opened from a wish card, else the My Reservations list).
+      // when opened from a wish card, else the home "My Reservations" tab).
       setSecretPromoteItem(null);
       setViewingSecretReservation((prev) => {
         if (prev && prev.id === sr.id) {
           const origin = secretDetailOrigin;
           setSecretDetailOrigin(null);
-          setScreen(origin === 'guest-item-detail' ? 'guest-item-detail' : 'my-reservations');
+          if (origin === 'guest-item-detail') {
+            setScreen('guest-item-detail');
+          } else {
+            setHomeTab('reservations');
+            setScreen('my-wishlists');
+          }
           return null;
         }
         return prev;
@@ -11606,7 +11642,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {homeTab === 'reservations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {/* Active/History segment */}
-              <div style={{ display: 'flex', margin: '14px 0 0', background: C.surface, borderRadius: 10, padding: 3, gap: 2 }}>
+              <div style={{ display: 'flex', margin: '4px 0 0', background: C.surface, borderRadius: 10, padding: 3, gap: 2 }}>
                 <button onClick={() => setResTab('active')} style={{
                   flex: 1, padding: '7px 0', borderRadius: 8, fontSize: 13, fontWeight: 600, textAlign: 'center', border: 'none', cursor: 'pointer', fontFamily: font,
                   background: resTab === 'active' ? C.accent : 'transparent', color: resTab === 'active' ? '#fff' : C.textSec,
@@ -11625,7 +11661,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
               {/* Active tab */}
               {resTab === 'active' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 18 }}>
                   {/* Filters bar */}
                   {reservationBeta && reservations.length > 0 && (
                     reservationPro ? (
@@ -13115,7 +13151,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {addonCheckoutLoading ? '…' : t('sr_paywall_cta', locale, { price: secretAccess.priceXtr })}
               </button>
               <button
-                onClick={() => { setSecretPaywallReturnItem(null); setScreen(secretPaywallReturnItem ? 'guest-item-detail' : 'my-reservations'); }}
+                onClick={() => {
+                  const hadReturnItem = Boolean(secretPaywallReturnItem);
+                  setSecretPaywallReturnItem(null);
+                  if (hadReturnItem) {
+                    setScreen('guest-item-detail');
+                  } else {
+                    setHomeTab('reservations');
+                    setScreen('my-wishlists');
+                  }
+                }}
                 style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: font, marginTop: 6 }}
               >
                 {t('sr_paywall_later', locale)}
