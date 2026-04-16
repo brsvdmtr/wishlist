@@ -15162,9 +15162,22 @@ const LIFECYCLE_PROMO_COOLDOWN_DAYS = 60; // max 1 promo offer per 60 days
 const LIFECYCLE_MSG_COOLDOWN_HOURS = 72; // min 72h between messages
 const LIFECYCLE_MAX_MARKETING_45D = 5; // max 5 marketing touches in 45 days
 
-/** Send a Telegram DM via bot API. Returns true if delivered. */
-async function sendLifecycleDM(chatId: string, text: string, webAppUrl?: string): Promise<boolean> {
-  if (!BOT_TOKEN_FOR_DM || !chatId) return false;
+/**
+ * Outcome classification for a lifecycle DM send attempt.
+ *   'delivered'         — Telegram accepted, message on its way
+ *   'bot_blocked'       — user blocked the bot (403). Permanent. Auto-unsubscribe.
+ *   'chat_not_found'    — chat deleted / user deactivated (400 with specific descr).
+ *                          Permanent for this episode, but keep marketing opt-in
+ *                          since the user may return via /start.
+ *   'permanent_failure' — other non-retryable TG rejection.
+ *   'transient_failure' — 429 / 5xx / network. Caller MUST leave the touch in
+ *                          a pending state (no sentAt) so the next cycle retries.
+ */
+type SendDmOutcome = 'delivered' | 'bot_blocked' | 'chat_not_found' | 'permanent_failure' | 'transient_failure';
+
+/** Send a Telegram DM via bot API. Returns a classified outcome. */
+async function sendLifecycleDM(chatId: string, text: string, webAppUrl?: string): Promise<SendDmOutcome> {
+  if (!BOT_TOKEN_FOR_DM || !chatId) return 'permanent_failure';
   const chatIdTail = String(chatId).slice(-4); // log suffix only, keep PII minimal
   try {
     const body: any = { chat_id: chatId, text, parse_mode: 'HTML' };
@@ -15175,22 +15188,37 @@ async function sendLifecycleDM(chatId: string, text: string, webAppUrl?: string)
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
     const data = await r.json() as { ok: boolean; error_code?: number; description?: string };
-    if (!data.ok) {
-      // Distinguish "bot blocked by user" (403) from rate-limits/flood (429),
-      // chat-not-found (400) and other Telegram-side rejections.
-      logger.warn(
-        { chatIdTail, httpStatus: r.status, errorCode: data.error_code, description: data.description },
-        'lifecycle DM rejected by Telegram',
-      );
+    if (data.ok) return 'delivered';
+
+    // Classify Telegram-side rejection. See
+    // https://core.telegram.org/bots/api#making-requests for error codes.
+    const code = data.error_code ?? r.status;
+    const desc = (data.description ?? '').toLowerCase();
+    let outcome: SendDmOutcome;
+    if (code === 403) {
+      // "Forbidden: bot was blocked by the user"
+      outcome = 'bot_blocked';
+    } else if (code === 400 && (desc.includes('chat not found') || desc.includes('user is deactivated'))) {
+      outcome = 'chat_not_found';
+    } else if (code === 429 || code >= 500) {
+      // Flood-control / Telegram-side transient. Retry next cycle.
+      outcome = 'transient_failure';
+    } else {
+      outcome = 'permanent_failure';
     }
-    return data.ok;
+
+    logger.warn(
+      { chatIdTail, httpStatus: r.status, errorCode: code, description: data.description, outcome },
+      'lifecycle DM rejected by Telegram',
+    );
+    return outcome;
   } catch (err) {
-    // Network-level failure (timeout, DNS, IPv4 block, TLS) — distinct from Telegram rejection.
+    // Network-level failure (timeout, DNS, IPv4 block, TLS) — always transient.
     logger.warn(
       { chatIdTail, err: err instanceof Error ? err.message : String(err) },
-      'lifecycle DM fetch error',
+      'lifecycle DM fetch error (transient)',
     );
-    return false;
+    return 'transient_failure';
   }
 }
 
@@ -15462,17 +15490,54 @@ setInterval(async () => {
       const webAppUrl = touch.deepLinkPayload
         ? `${MINI_APP_URL_FOR_DM}?startapp=${touch.deepLinkPayload}`
         : MINI_APP_URL_FOR_DM;
-      const delivered = await sendLifecycleDM(candidate.telegramChatId, msgText, webAppUrl);
+      const outcome = await sendLifecycleDM(candidate.telegramChatId, msgText, webAppUrl);
+      const delivered = outcome === 'delivered';
 
-      // Update touch
+      // Transient failures: leave the touch record untouched (sentAt=null) so the
+      // next cycle re-attempts with the same episodeKey/touchNumber. The earlier
+      // version stamped sentAt+stoppedAt on every failure, which permanently
+      // sank the touch for the rest of the monthly episode (root cause of
+      // lifecycle scheduler sending 0/333 candidates for days).
+      if (outcome === 'transient_failure') {
+        touchesFailed++;
+        logger.info(
+          { outcome, segment, touchNumber: nextTouchNumber, userId: candidate.id.slice(0, 8) },
+          'lifecycle touch transient failure; will retry next cycle',
+        );
+        continue;
+      }
+
+      // Permanent outcome: stamp sentAt and, if not delivered, the appropriate
+      // stopReason so this episode's touch isn't revisited.
+      const deliveryStopReason = delivered
+        ? null
+        : outcome === 'bot_blocked' ? 'bot_blocked'
+        : outcome === 'chat_not_found' ? 'chat_not_found'
+        : 'delivery_failed';
+
       await prisma.lifecycleTouch.update({
         where: { id: touch.id },
         data: {
           sentAt: new Date(),
           delivered,
-          ...(delivered ? {} : { stoppedAt: new Date(), stopReason: 'delivery_failed' }),
+          ...(deliveryStopReason ? { stoppedAt: new Date(), stopReason: deliveryStopReason } : {}),
         },
       });
+
+      // Auto-unsubscribe users who've blocked the bot. Without this they stay in
+      // the candidate pool every cycle, producing 403s that have no chance of
+      // converting and polluting delivery metrics. Marketing can be re-enabled
+      // by the user from settings if they return.
+      if (outcome === 'bot_blocked') {
+        await prisma.userProfile.upsert({
+          where: { userId: candidate.id },
+          update: { notifyMarketing: false },
+          create: { userId: candidate.id, notifyMarketing: false },
+        }).catch((err) => logger.warn(
+          { err, userId: candidate.id.slice(0, 8) },
+          'failed to auto-unsubscribe bot-blocked user',
+        ));
+      }
 
       if (delivered) {
         trackEvent(`lifecycle_${segment.toLowerCase()}_touch${nextTouchNumber}`, candidate.id, {
@@ -15481,7 +15546,7 @@ setInterval(async () => {
       }
 
       if (delivered) touchesSent++; else touchesFailed++;
-      logger.info({ delivered, segment, touchNumber: nextTouchNumber, userId: candidate.id.slice(0, 8), promo: actuallyOfferPromo }, 'lifecycle touch sent');
+      logger.info({ delivered, outcome, segment, touchNumber: nextTouchNumber, userId: candidate.id.slice(0, 8), promo: actuallyOfferPromo }, 'lifecycle touch sent');
     }
 
     logger.info({ candidatesFound: candidates.length, touchesSent, touchesFailed, durationMs: Date.now() - cycleStart }, 'lifecycle_cycle_completed');
