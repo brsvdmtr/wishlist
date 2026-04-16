@@ -9472,10 +9472,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setSecretCancelling(true);
     try {
       const res = await tgFetch(`/tg/secret-reservations/${sr.id}/cancel`, { method: 'POST', body: '{}' });
-      if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return false; }
+      // 409 "Not active" means already cancelled — idempotent success path (clears UI)
+      if (!res.ok && res.status !== 409) { pushToast(t('toast_error_generic', locale), 'error'); return false; }
       setSecretReservations((prev) => prev.filter((r) => r.id !== sr.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
-      pushToast(t('sr_toast_cancelled', locale), 'success');
+      if (res.ok) pushToast(t('sr_toast_cancelled', locale), 'success');
+      // Close the confirm sheet
+      setSecretCancelItem(null);
+      // If user is on this secret reservation's detail screen — return to list
+      setViewingSecretReservation((prev) => {
+        if (prev && prev.id === sr.id) {
+          setScreen('my-reservations');
+          return null;
+        }
+        return prev;
+      });
       return true;
     } finally {
       setSecretCancelling(false);
@@ -9511,7 +9522,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       if (res.status === 409) {
         // Another user publicly reserved first
         pushToast(t('sr_promote_conflict_title', locale), 'error');
-        // Refresh so banner updates with PUBLIC_RESERVED_BY_OTHER
+        // Close sheet, refresh so banner updates with PUBLIC_RESERVED_BY_OTHER
+        setSecretPromoteItem(null);
         void loadReservations();
         return false;
       }
@@ -9519,6 +9531,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setSecretReservations((prev) => prev.filter((r) => r.id !== sr.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
       pushToast(t('sr_toast_promoted', locale), 'success');
+      // Close sheet; if user was on detail — return to list
+      setSecretPromoteItem(null);
+      setViewingSecretReservation((prev) => {
+        if (prev && prev.id === sr.id) {
+          setScreen('my-reservations');
+          return null;
+        }
+        return prev;
+      });
       // Refresh full reservations so the new public one shows up
       void loadReservations();
       return true;
@@ -14136,6 +14157,28 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
                         {t('reserve_btn', locale)}
                       </button>
+                      {/* 🔒 Secret reservation CTA — directly under the primary "Reserve" for a cleaner stack */}
+                      {(() => {
+                        const existing = secretReservations.find((r) => r.itemId === viewingItem.id);
+                        const label = existing ? t('sr_cta_open_secret', locale) : t('sr_cta_reserve_secretly', locale);
+                        return (
+                          <button
+                            onClick={() => startSecretReservationFlow(viewingItem)}
+                            style={{
+                              width: '100%', padding: '14px 24px', borderRadius: 16,
+                              border: '1px solid rgba(167,139,250,0.22)',
+                              background: 'rgba(167,139,250,0.12)', color: '#A78BFA',
+                              fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                            }}
+                          >
+                            {label}
+                            {!existing && !secretAccess.unlocked && planInfo.code === 'FREE' && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)', padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5, marginLeft: 4 }}>PRO</span>
+                            )}
+                          </button>
+                        );
+                      })()}
                       <button onClick={() => {
                         trackEvent('group_gift_cta_clicked', { itemId: viewingItem.id });
                         // Check entitlement first
@@ -14171,33 +14214,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         style={{ ...btnSecondary, width: '100%', borderRadius: 16, padding: '14px 24px', fontSize: 15 }}>
                         {'👥 ' + t('gg_cta', locale)}
                       </button>
-                      {/* 🔒 Secret reservation CTA — third option, styled with secret accent */}
-                      {(() => {
-                        const existing = secretReservations.find((r) => r.itemId === viewingItem.id);
-                        const label = existing ? t('sr_cta_open_secret', locale) : t('sr_cta_reserve_secretly', locale);
-                        return (
-                          <button
-                            onClick={() => startSecretReservationFlow(viewingItem)}
-                            style={{
-                              width: '100%', padding: '14px 24px', borderRadius: 16,
-                              border: '1px solid rgba(167,139,250,0.22)',
-                              background: 'rgba(167,139,250,0.12)', color: '#A78BFA',
-                              fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                            }}
-                          >
-                            {label}
-                            {!existing && !secretAccess.unlocked && planInfo.code === 'FREE' && (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)', padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5, marginLeft: 4 }}>PRO</span>
-                            )}
-                          </button>
-                        );
-                      })()}
                       <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, padding: '0 8px' }}>
                         {t('gg_cta_hint', locale)}
-                      </div>
-                      <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, padding: '0 8px' }}>
-                        {t('sr_short_tagline', locale)}
                       </div>
                     </div>
                   )}
@@ -14995,7 +15013,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 // Shared guest card renderer
                 const renderGuestCard = (item: GuestItem, i: number, totalItems: number) => {
                   const itemUnreadCount = guestUnreadItemCounts[item.id] ?? 0;
+                  const hasSecret = secretReservations.some((r) => r.itemId === item.id);
                   const useNewCards = CARD_REDESIGN_ENABLED;
+                  // Purple 🔒 chip shown top-left when user has an active secret reservation on this item
+                  const secretChip = hasSecret ? (
+                    <span style={{
+                      position: 'absolute' as const, top: 8, left: 8, zIndex: 10,
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '3px 8px', borderRadius: 100,
+                      background: 'rgba(167,139,250,0.92)', color: '#fff',
+                      fontSize: 10, fontWeight: 700, fontFamily: font, letterSpacing: 0.2,
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      pointerEvents: 'none' as const,
+                      backdropFilter: 'blur(6px)',
+                      WebkitBackdropFilter: 'blur(6px)',
+                    }}>🔒 {t('sr_reserved_at', locale)}</span>
+                  ) : null;
                   if (useNewCards) {
                     const cardMode = resolveCardMode(totalItems, undefined, false);
                     const stagger = cardMode === 'compact' ? 0.04 : 0.08;
@@ -15012,6 +15046,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           myActorHash={myActorHashRef.current}
                           locale={locale}
                         />
+                        {secretChip}
                         {itemUnreadCount > 0 && (
                           <span style={{
                             position: 'absolute', top: -6, right: -6, zIndex: 10,
@@ -15037,6 +15072,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         myActorHash={myActorHashRef.current}
                         locale={locale}
                       />
+                      {secretChip}
                       {itemUnreadCount > 0 && (
                         <span style={{
                           position: 'absolute', top: 6, right: 6, zIndex: 10,
