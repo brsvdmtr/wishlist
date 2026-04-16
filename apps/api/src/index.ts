@@ -3305,11 +3305,13 @@ tgRouter.get(
     }
     const ownerNames = new Map<string, string>();
     const ownerAvatarUrls = new Map<string, string | null>();
+    const ownerUsernames = new Map<string, string | null>();
     await Promise.all(
       [...uniqueOwners.entries()].map(async ([ownerId, owner]) => {
         ownerNames.set(ownerId, await resolveUserFirstName(owner, locale));
         const profile = owner.profile;
         ownerAvatarUrls.set(ownerId, (profile?.avatarPublic !== false && profile?.avatarUrl) ? profile.avatarUrl : null);
+        ownerUsernames.set(ownerId, profile?.username ?? null);
       }),
     );
 
@@ -3349,6 +3351,7 @@ tgRouter.get(
         ownerId,
         ownerName: ownerNames.get(ownerId) ?? t('api_user_fallback', locale),
         ownerAvatarUrl: ownerAvatarUrls.get(ownerId) ?? null,
+        ownerUsername: ownerUsernames.get(ownerId) ?? null,
       };
     });
 
@@ -3419,6 +3422,7 @@ tgRouter.get(
     const ownerName = await resolveUserFirstName(owner, locale);
     const profile = owner.profile;
     const ownerAvatarUrl = (profile?.avatarPublic !== false && profile?.avatarUrl) ? profile.avatarUrl : null;
+    const ownerUsername = profile?.username ?? null;
 
     const hasUnacknowledgedUpdates = derived.state === 'ITEM_UPDATED'
       && (!row.updatesAcknowledgedAt || row.updatesAcknowledgedAt < row.item.updatedAt);
@@ -3441,6 +3445,7 @@ tgRouter.get(
       ownerId: owner.id,
       ownerName,
       ownerAvatarUrl,
+      ownerUsername,
     });
   }),
 );

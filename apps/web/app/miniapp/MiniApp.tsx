@@ -380,6 +380,7 @@ type SecretReservationDTO = {
   ownerId: string;
   ownerName: string;
   ownerAvatarUrl: string | null;
+  ownerUsername: string | null;
 };
 
 type HomeTab = 'wishlists' | 'wishes' | 'reservations';
@@ -639,6 +640,12 @@ const RELEASE_NOTES: ReleaseNote[] = [
     id: '2026-04-16',
     date: '16.04.2026',
     items: [
+      { ru: '🔒 PRO: Тайная бронь — бронируй чужое желание так, чтобы владелец не узнал', en: '🔒 PRO: Secret reservation — reserve a friend\'s wish without them noticing' },
+      { ru: 'Без уведомлений и меток на карточке — для владельца всё выглядит как было', en: 'No notifications, no card markers — everything looks the same to the owner' },
+      { ru: 'Сохрани подарок «под сукно», вернись к нему в любой момент через раздел «Тайные брони»', en: 'Save a gift on the side and come back anytime via the "Secret reservations" section' },
+      { ru: 'Если владелец изменит желание — увидишь что поменялось; если кто-то публично забронировал — тоже подскажем', en: 'If the owner edits the wish — you\'ll see the diff; if someone else publicly reserves it — we\'ll tell you' },
+      { ru: 'В любой момент можно перевести в публичную бронь одним тапом', en: 'Promote a secret reservation to a public one in one tap at any time' },
+      { ru: 'Доступно в PRO или разово за звёзды', en: 'Included in PRO, or available as a one-time unlock for Stars' },
       { ru: '🔗 Общее желание — одно желание в нескольких вишлистах', en: '🔗 Shared wish — one wish across multiple wishlists' },
       { ru: 'При создании или редактировании — отметь, в какие ещё вишлисты добавить', en: 'When creating or editing a wish — pick additional wishlists to add it to' },
       { ru: 'Изменения (цена, фото, описание) синхронизируются во всех вишлистах автоматически', en: 'Changes (price, photo, description) sync across all wishlists automatically' },
@@ -2254,7 +2261,7 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel 
   );
 }
 
-function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, locale }: { item: GuestItem; onTap: (item: GuestItem) => void; onReserve: (item: GuestItem) => void; onUnreserve: (item: GuestItem) => void; myActorHash: string; locale: Locale }) {
+function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, locale, secretByMe }: { item: GuestItem; onTap: (item: GuestItem) => void; onReserve: (item: GuestItem) => void; onUnreserve: (item: GuestItem) => void; myActorHash: string; locale: Locale; secretByMe?: boolean }) {
   const isPurchased = item.status === 'purchased';
   const isReserved = item.status === 'reserved';
   const isReservedByMe = isReserved && !!myActorHash && item.reservedByActorHash === myActorHash;
@@ -2285,17 +2292,28 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
           {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
           {item.url && <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, color: C.accent, background: C.accentSoft, padding: '2px 8px', borderRadius: 6, textDecoration: 'none' }}>{t('link_label', locale)}</a>}
         </div>
-        <div style={{ marginTop: 10 }}>
-          {item.status === 'available' && (
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {item.status === 'available' && !secretByMe && (
             <button onClick={(e) => { e.stopPropagation(); onReserve(item); }} style={{ ...btnPrimary, width: 'auto', padding: '8px 16px', fontSize: 13 }}>{t('reserve_btn', locale)}</button>
           )}
+          {secretByMe && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '6px 12px', borderRadius: 10,
+              background: 'rgba(167,139,250,0.14)', color: '#A78BFA',
+              border: '1px solid rgba(167,139,250,0.25)',
+              fontSize: 13, fontWeight: 600,
+            }}>
+              {t('sr_card_chip_secret', locale)}
+            </span>
+          )}
           {isReservedByMe && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <>
               <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>
                 {t('reserved_by_me', locale)}
               </span>
               <button onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ background: 'none', border: 'none', padding: '6px 8px', fontSize: 12, color: C.textMuted, cursor: 'pointer', fontFamily: font }}>{t('cancel', locale)}</button>
-            </div>
+            </>
           )}
           {isReserved && !isReservedByMe && (
             <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.orangeSoft, color: C.orange, fontSize: 13, fontWeight: 600 }}>
@@ -2319,7 +2337,7 @@ function resolveCardMode(itemCount: number, cardDisplayMode: string | undefined,
   return itemCount <= 5 ? 'showcase' : 'compact';
 }
 
-function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve, onUnreserve, myActorHash }: {
+function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve, onUnreserve, myActorHash, secretByMe }: {
   item: Item | GuestItem;
   onTap: (item: any) => void;
   locale: Locale;
@@ -2328,6 +2346,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
   onReserve?: (item: any) => void;
   onUnreserve?: (item: any) => void;
   myActorHash?: string;
+  secretByMe?: boolean;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const isPurchased = item.status === 'purchased';
@@ -2430,7 +2449,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
             </span>
           )}
           {/* Status chips */}
-          {isGuest && item.status === 'available' && onReserve && (
+          {isGuest && item.status === 'available' && onReserve && !secretByMe && (
             <button
               onClick={(e) => { e.stopPropagation(); onReserve(item); }}
               style={{
@@ -2441,6 +2460,16 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
             >
               {t('reserve_btn', locale)}
             </button>
+          )}
+          {isGuest && secretByMe && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              fontSize: 10, padding: '2px 8px', borderRadius: 6, fontWeight: 700,
+              color: '#A78BFA', background: 'rgba(167,139,250,0.12)',
+              border: '1px solid rgba(167,139,250,0.22)', whiteSpace: 'nowrap',
+            }}>
+              {t('sr_card_chip_secret', locale)}
+            </span>
           )}
           {isGuest && isReservedByMe && (
             <>
@@ -2477,7 +2506,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
   );
 }
 
-function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve, onUnreserve, myActorHash }: {
+function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve, onUnreserve, myActorHash, secretByMe }: {
   item: Item | GuestItem;
   onTap: (item: any) => void;
   locale: Locale;
@@ -2486,6 +2515,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
   onReserve?: (item: any) => void;
   onUnreserve?: (item: any) => void;
   myActorHash?: string;
+  secretByMe?: boolean;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const isPurchased = item.status === 'purchased';
@@ -2612,8 +2642,8 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
         )}
 
         {/* Status / action row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-          {isGuest && item.status === 'available' && onReserve && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          {isGuest && item.status === 'available' && onReserve && !secretByMe && (
             <button
               onClick={(e) => { e.stopPropagation(); onReserve(item); }}
               style={{
@@ -2626,6 +2656,16 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
             >
               {t('reserve_btn', locale)}
             </button>
+          )}
+          {isGuest && secretByMe && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+              background: 'linear-gradient(135deg, rgba(167,139,250,0.18), rgba(167,139,250,0.08))',
+              color: '#C4A7FF', border: '1px solid rgba(167,139,250,0.25)',
+            }}>
+              {t('sr_card_chip_secret', locale)}
+            </span>
           )}
           {isGuest && isReservedByMe && (
             <>
@@ -4465,6 +4505,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [secretErrorKind, setSecretErrorKind] = useState<null | 'own_item' | 'already_public'>(null);
   // Paywall return context — after unlock we can return to create-flow
   const [secretPaywallReturnItem, setSecretPaywallReturnItem] = useState<Item | GuestItem | null>(null);
+  // Detail-screen origin tracking — so Back / post-action nav returns to the correct parent screen.
+  // 'guest-item-detail' when user opened the detail via "Open my secret reservation" from a guest wish card;
+  // 'my-reservations' when opened from the reservations list. Null when we can't determine (fallback to my-reservations).
+  const [secretDetailOrigin, setSecretDetailOrigin] = useState<'my-reservations' | 'guest-item-detail' | null>(null);
+  // Fullscreen image lightbox (opened from secret-reservation-detail photo tap)
+  const [secretPhotoOpen, setSecretPhotoOpen] = useState(false);
 
   // Home hub tab navigation
   const [homeTab, setHomeTab] = useState<HomeTab>('wishlists');
@@ -6728,6 +6774,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (bulkSelectionMode) { setBulkSelectionMode(false); setBulkSelectedIds(new Set()); return; }
     if (itemReorderMode) { cancelItemReorderMode(); return; }
     if (reorderMode) { cancelReorderMode(); return; }
+    // Secret reservation: close any open sheets/overlays before the full
+    // screen-level back navigation runs. This matches user expectation that
+    // "back" dismisses the topmost UI layer, not the whole screen.
+    if (secretPhotoOpen) { setSecretPhotoOpen(false); return; }
+    if (secretConfirmItem) { setSecretConfirmItem(null); return; }
+    if (secretCancelItem) { setSecretCancelItem(null); return; }
+    if (secretPromoteItem) { setSecretPromoteItem(null); return; }
+    if (secretErrorKind) { setSecretErrorKind(null); return; }
+    if (showSecretOnboarding) {
+      // Silent dismiss — parity with the in-sheet "Skip" button, minus the server call
+      // (we don't want to mark onboarding seen on a Back press, user may want to see it again).
+      setShowSecretOnboarding(false);
+      setSecretOnboardingNext(null);
+      return;
+    }
     if (screen === 'item-detail') {
       setViewingItem(null);
       if (fromDrafts) {
@@ -6768,6 +6829,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       }
     } else if (screen === 'my-reservations') {
       setScreen('my-wishlists');
+    } else if (screen === 'secret-reservation-detail') {
+      // Return to origin (guest-item-detail when deep-linked from a wish card,
+      // else My Reservations). Clear origin + viewing state so a fresh open
+      // later won't leak stale context.
+      const origin = secretDetailOrigin;
+      setSecretDetailOrigin(null);
+      setViewingSecretReservation(null);
+      setScreen(origin === 'guest-item-detail' ? 'guest-item-detail' : 'my-reservations');
+    } else if (screen === 'secret-reservation-paywall') {
+      // If we were deep-linked from a wish card, return there so the user can
+      // try again after unlock. Otherwise fall back to My Reservations.
+      const returnItem = secretPaywallReturnItem;
+      setSecretPaywallReturnItem(null);
+      setScreen(returnItem ? 'guest-item-detail' : 'my-reservations');
     } else if (screen === 'drafts') {
       if (draftsSelectMode) {
         setDraftsSelectMode(false);
@@ -6997,7 +7072,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       replyEntryRef.current = null;
       setScreen('my-wishlists');
     }
-  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData, guestViewReturnToProfileUsername, checkOnboarding, loadPublicProfile, loadProfileSubscribeStatus, currentWl]);
+  }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData, guestViewReturnToProfileUsername, checkOnboarding, loadPublicProfile, loadProfileSubscribeStatus, currentWl, secretPhotoOpen, secretConfirmItem, secretCancelItem, secretPromoteItem, secretErrorKind, showSecretOnboarding, secretDetailOrigin, secretPaywallReturnItem]);
 
   // Ref holding the latest Back action. Kept fresh by the effect just below so
   // the registered BackButton handler always sees current state (e.g. whether
@@ -9438,18 +9513,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       if (res.status === 403) {
         const err = await res.json().catch(() => ({ error: 'unknown' }));
         if (err.error === 'secret_reservations_required') {
+          setSecretConfirmItem(null);
           setSecretPaywallReturnItem(item);
           setScreen('secret-reservation-paywall');
           trackEvent('secret_res.paywall_open', { itemId: item.id, trigger: 'create_attempt' });
           return null;
         }
         if (err.error === 'own_item') {
+          setSecretConfirmItem(null);
           setSecretErrorKind('own_item');
           return null;
         }
       }
       if (res.status === 409) {
         pushToast(t('sr_state_unavailable_title', locale), 'error');
+        setSecretConfirmItem(null);
         return null;
       }
       if (!res.ok) {
@@ -9457,7 +9535,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return null;
       }
       const json = await res.json() as { id: string; alreadyReserved?: boolean };
+      // Close confirm sheet IMMEDIATELY on success — the lingering sheet was the #1 UX bug.
+      setSecretConfirmItem(null);
+      // Optimistic counter bump so the "My Reservations" badge reflects the change
+      // even before loadReservations() finishes its network round-trip.
+      setReservationsCount((prev) => prev + 1);
       if (!opts?.silent) pushToast(t('sr_toast_saved', locale), 'success');
+      // Re-fetch in background so secretReservations list includes the new entry
+      // (with derived state, diffs, snapshot, owner info) on the next render.
       void loadReservations();
       return json;
     } catch {
@@ -9479,10 +9564,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       if (res.ok) pushToast(t('sr_toast_cancelled', locale), 'success');
       // Close the confirm sheet
       setSecretCancelItem(null);
-      // If user is on this secret reservation's detail screen — return to list
+      // If user is on this secret reservation's detail screen — return them to
+      // the screen they came from (guest-item-detail when they deep-linked via
+      // "Open my secret reservation", else my-reservations list).
       setViewingSecretReservation((prev) => {
         if (prev && prev.id === sr.id) {
-          setScreen('my-reservations');
+          const origin = secretDetailOrigin;
+          setSecretDetailOrigin(null);
+          setScreen(origin === 'guest-item-detail' ? 'guest-item-detail' : 'my-reservations');
           return null;
         }
         return prev;
@@ -9491,7 +9580,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     } finally {
       setSecretCancelling(false);
     }
-  }, [tgFetch, pushToast, locale]);
+  }, [tgFetch, pushToast, locale, secretDetailOrigin]);
 
   const handleSecretReservationAck = useCallback(async (sr: SecretReservationDTO) => {
     try {
@@ -9531,11 +9620,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setSecretReservations((prev) => prev.filter((r) => r.id !== sr.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
       pushToast(t('sr_toast_promoted', locale), 'success');
-      // Close sheet; if user was on detail — return to list
+      // Close sheet; if user was on detail — return to origin (guest-item-detail
+      // when opened from a wish card, else the My Reservations list).
       setSecretPromoteItem(null);
       setViewingSecretReservation((prev) => {
         if (prev && prev.id === sr.id) {
-          setScreen('my-reservations');
+          const origin = secretDetailOrigin;
+          setSecretDetailOrigin(null);
+          setScreen(origin === 'guest-item-detail' ? 'guest-item-detail' : 'my-reservations');
           return null;
         }
         return prev;
@@ -9546,7 +9638,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     } finally {
       setSecretPromoting(false);
     }
-  }, [tgFetch, pushToast, locale, loadReservations]);
+  }, [tgFetch, pushToast, locale, loadReservations, secretDetailOrigin]);
 
   // Refresh single secret reservation detail (on open or after actions)
   const refreshSecretReservationDetail = useCallback(async (id: string) => {
@@ -9562,6 +9654,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   }, [tgFetch]);
 
+  // Auto-acknowledge pending updates when user opens the detail screen.
+  // We show the diff banner on THIS view; ack silently so the banner doesn't
+  // reappear next time (no more useless "Accept update" button, per UX feedback).
+  // Fire-and-forget, debounced by presence check to avoid repeated calls.
+  useEffect(() => {
+    if (screen !== 'secret-reservation-detail') return;
+    const sr = viewingSecretReservation;
+    if (!sr || !sr.hasUnacknowledgedUpdates) return;
+    const srId = sr.id;
+    const timer = setTimeout(() => {
+      void tgFetch(`/tg/secret-reservations/${srId}/acknowledge`, { method: 'POST', body: '{}' })
+        .then((res) => {
+          if (!res.ok) return null;
+          return res.json() as Promise<{ snapshot: SecretReservationSnapshot; updatesAcknowledgedAt: string }>;
+        })
+        .then((json) => {
+          if (!json) return;
+          // Update list entry but KEEP current detail view unchanged — user is
+          // still looking at the diff banner, reshuffling it mid-read is ugly.
+          // On next navigation + re-open, the ack flag will clear the banner.
+          setSecretReservations((prev) => prev.map((r) => r.id === srId ? {
+            ...r,
+            updatesAcknowledgedAt: json.updatesAcknowledgedAt,
+            hasUnacknowledgedUpdates: false,
+          } : r));
+        })
+        .catch(() => { /* silent */ });
+    }, 600); // small delay so user notices the banner before ack
+    return () => clearTimeout(timer);
+  }, [screen, viewingSecretReservation, tgFetch]);
+
   /**
    * Entry point: user clicked "🔒 Reserve secretly" on guest-item-detail.
    * Decides onboarding → confirm → create. Handles existing-reservation redirects.
@@ -9571,6 +9694,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     const existing = secretReservations.find((r) => r.itemId === item.id);
     if (existing) {
       setViewingSecretReservation(existing);
+      setSecretDetailOrigin('guest-item-detail');
       setScreen('secret-reservation-detail');
       trackEvent('secret_res.detail_opened', { from: 'guest_item_detail_has_existing', state: existing.derivedState });
       void refreshSecretReservationDetail(existing.id);
@@ -12222,6 +12346,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             key={sr.id}
                             onClick={() => {
                               setViewingSecretReservation(sr);
+                              setSecretDetailOrigin('my-reservations');
                               setScreen('secret-reservation-detail');
                               trackEvent('secret_res.detail_opened', { from: 'my_reservations_list', state });
                               // Refresh in background for freshest diff (fires secret_res.item_open on backend)
@@ -12443,31 +12568,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const isUnavailable = state === 'ITEM_UNAVAILABLE';
         const snap = sr.snapshot;
         const cur = sr.current;
-        const showSnapshotValues = isUnavailable; // snapshot is the "memory" when item is gone
+        // When item was deleted, fall back to snapshot for display (memory).
+        const showSnapshotValues = isUnavailable;
         const title = showSnapshotValues ? snap.title : cur.title;
         const priceText = showSnapshotValues
           ? snap.priceText
           : (cur.price != null ? fmtPrice(cur.price, locale, cur.currency ?? 'RUB') : snap.priceText);
         const imageUrl = showSnapshotValues ? snap.imageUrl : (cur.imageUrl || snap.imageUrl);
         const url = showSnapshotValues ? snap.url : (cur.url || snap.url);
-        const fmtDate = (iso: string) => {
-          try {
-            return new Date(iso).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
-          } catch { return iso; }
+        const description = showSnapshotValues ? snap.description : (cur.description || snap.description);
+        const ownerClickable = !!sr.ownerUsername;
+        const openOwnerProfile = () => {
+          const uname = sr.ownerUsername;
+          if (!uname) return;
+          setPublicProfileUsername(uname);
+          setPublicProfileSubscribed(false);
+          setPublicProfileError(null);
+          setPublicProfileData(null);
+          void loadProfileSubscribeStatus(uname);
+          void loadPublicProfile(uname);
+          setScreen('public-profile');
+          window.scrollTo(0, 0);
+          trackEvent('profile_open_from_secret_reservation', { username: uname });
         };
 
         return (
-          <div style={{ padding: '8px 16px 120px' }}>
-            {/* Header: back + title */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0 14px', borderBottom: `1px solid ${C.border}`, marginBottom: 16 }}>
-              <button
-                onClick={() => { setScreen('my-reservations'); setViewingSecretReservation(null); }}
-                style={{ background: 'none', border: 'none', color: '#A78BFA', fontSize: 24, cursor: 'pointer', padding: 0, lineHeight: 1 }}
-                aria-label={t('back_btn', locale)}
-              >‹</button>
-              <div style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font }}>{t('sr_detail_title', locale)}</div>
-            </div>
-
+          <div style={{ padding: '16px 16px 120px' }}>
             {/* Privacy banner */}
             <div style={{
               padding: '12px 14px', borderRadius: 14,
@@ -12485,37 +12611,97 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             </div>
 
-            {/* Current wish snapshot card — image header + title + price + owner chip */}
-            <div style={{
-              width: '100%', height: 180, borderRadius: 18,
-              background: imageUrl
-                ? `linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,0.4) 100%), url(${imageUrl}) center/cover no-repeat`
-                : 'linear-gradient(135deg, rgba(124,106,255,0.2), rgba(167,139,250,0.15))',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56, marginBottom: 16,
-              opacity: (isUnavailable || isFulfilled) ? 0.7 : 1,
-            }}>
+            {/* Hero image — tap to open fullscreen */}
+            <div
+              onClick={imageUrl ? () => setSecretPhotoOpen(true) : undefined}
+              style={{
+                width: '100%', height: 200, borderRadius: 18,
+                background: imageUrl
+                  ? `url(${imageUrl}) center/cover no-repeat`
+                  : 'linear-gradient(135deg, rgba(124,106,255,0.2), rgba(167,139,250,0.15))',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56, marginBottom: 16,
+                opacity: (isUnavailable || isFulfilled) ? 0.7 : 1,
+                cursor: imageUrl ? 'pointer' : 'default',
+                WebkitTapHighlightColor: 'transparent',
+              }}
+            >
               {!imageUrl && '🎁'}
             </div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, marginBottom: 4, fontFamily: font, color: C.text, lineHeight: 1.2 }}>{title}</h1>
-            {priceText && (
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.accent, marginBottom: 10 }}>{priceText}</div>
-            )}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+
+            {/* Title + price side by side (title left, price top-right) */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+              <h1 style={{
+                flex: 1, minWidth: 0,
+                fontSize: 22, fontWeight: 700, margin: 0, fontFamily: font, color: C.text, lineHeight: 1.25,
+              }}>{title}</h1>
+              {priceText && (
+                <div style={{ fontSize: 17, fontWeight: 700, color: C.accent, whiteSpace: 'nowrap', paddingTop: 3 }}>
+                  {priceText}
+                </div>
+              )}
+            </div>
+
+            {/* Owner chip (clickable if username) + privacy chip */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div
+                onClick={ownerClickable ? openOwnerProfile : undefined}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '5px 12px 5px 5px', borderRadius: 100,
+                  background: C.surface, border: `1px solid ${C.border}`,
+                  cursor: ownerClickable ? 'pointer' : 'default',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                <UserAvatar avatarUrl={sr.ownerAvatarUrl} name={sr.ownerName} size={22} accent="#A78BFA" />
+                <span style={{ fontSize: 12, fontWeight: 600, color: ownerClickable ? C.accent : C.textSec }}>
+                  {t('sr_detail_from_label', locale)} {sr.ownerName}{ownerClickable ? ' ›' : ''}
+                </span>
+              </div>
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 11, padding: '4px 10px', borderRadius: 100,
+                fontSize: 11, padding: '5px 12px', borderRadius: 100,
                 background: 'rgba(167,139,250,0.14)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.25)',
                 fontWeight: 600,
               }}>
-                {t('sr_privacy_chip', locale).replace(/·.*/, '').trim()}
-              </span>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 11, color: C.textMuted, padding: '4px 10px', borderRadius: 100, background: C.surface,
-              }}>
-                {t('sr_detail_chip_owner', locale, { name: sr.ownerName })}
+                🔒 {t('sr_detail_privacy_banner_title', locale)}
               </span>
             </div>
+
+            {/* URL chip (inline, above description) */}
+            {url && (
+              <div style={{ marginBottom: 14 }}>
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
+                    color: C.accent, background: C.accentSoft, padding: '8px 14px',
+                    borderRadius: 12, textDecoration: 'none',
+                    maxWidth: '100%', overflow: 'hidden',
+                  }}
+                >
+                  <span style={{ flexShrink: 0 }}>🔗</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {url.replace(/^https?:\/\//, '')}
+                  </span>
+                </a>
+              </div>
+            )}
+
+            {/* Description */}
+            {description && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font, marginBottom: 8 }}>
+                  {t('sr_detail_description_title', locale)}
+                </div>
+                <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  {description}
+                </div>
+              </div>
+            )}
 
             {/* State-specific banner */}
             {isUpdated && (
@@ -12557,16 +12743,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     );
                   })}
                 </div>
-                <button
-                  onClick={() => void handleSecretReservationAck(sr)}
-                  style={{
-                    marginTop: 10, width: '100%', padding: '8px 14px', border: '1px solid rgba(96,165,250,0.22)',
-                    borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                    background: 'rgba(96,165,250,0.14)', color: '#60A5FA',
-                  }}
-                >
-                  ✓ {t('sr_diff_ack_cta', locale)}
-                </button>
               </div>
             )}
 
@@ -12637,22 +12813,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
 
-            {/* Meta block */}
-            <div style={{
-              padding: '12px 14px', borderRadius: 12, background: C.surface,
-              fontSize: 12, color: C.textMuted, lineHeight: 1.7, marginBottom: 16,
-            }}>
-              <div><span style={{ color: C.textSec }}>{t('sr_detail_meta_saved', locale)}:</span> {fmtDate(sr.createdAt)}</div>
-              {isActive && (
-                <div>
-                  <span style={{ color: C.textSec }}>{t('sr_detail_meta_status', locale)}:</span>{' '}
-                  <span style={{ color: '#34D399' }}>{t('sr_detail_meta_status_available', locale)}</span>
-                </div>
-              )}
-            </div>
-
             {/* Actions */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
               {/* Promote CTA — available when ACTIVE or ITEM_UPDATED (but not conflict / fulfilled / unavailable) */}
               {(isActive || isUpdated) && (
                 <button
@@ -12667,24 +12829,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 </button>
               )}
 
-              {/* Open wish link — if url present & item not unavailable */}
-              {url && !isUnavailable && (
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    width: '100%', padding: '12px 24px', border: `1.5px solid ${C.border}`, borderRadius: 14,
-                    fontSize: 14, fontWeight: 500, color: C.textSec, cursor: 'pointer',
-                    background: 'transparent', fontFamily: 'inherit', textAlign: 'center',
-                    textDecoration: 'none', boxSizing: 'border-box', display: 'block',
-                  }}
-                >
-                  {t('sr_detail_open_wish', locale)}
-                </a>
-              )}
-
-              {/* Cancel — always available for ACTIVE/UPDATED/CONFLICT. For FULFILLED/UNAVAILABLE — "remove from list" */}
+              {/* Cancel — for ACTIVE/UPDATED/CONFLICT. For FULFILLED/UNAVAILABLE — "remove from list" */}
               <button
                 onClick={() => setSecretCancelItem(sr)}
                 style={{
@@ -12694,10 +12839,50 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 }}
               >
                 {(isFulfilled || isUnavailable)
-                  ? `🗑 ${t('sr_cta_cancel', locale)}`
+                  ? t('sr_cta_remove_from_list', locale)
                   : t('sr_cta_cancel_icon', locale)}
               </button>
             </div>
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          SECRET RESERVATION — FULLSCREEN PHOTO LIGHTBOX
+          ══════════════════════════════════════════════ */}
+      {secretPhotoOpen && viewingSecretReservation && (() => {
+        const sr = viewingSecretReservation;
+        const isUnavailable = sr.derivedState === 'ITEM_UNAVAILABLE';
+        const img = isUnavailable ? sr.snapshot.imageUrl : (sr.current.imageUrl || sr.snapshot.imageUrl);
+        if (!img) return null;
+        return (
+          <div
+            onClick={() => setSecretPhotoOpen(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 300,
+              background: 'rgba(0,0,0,0.92)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 20,
+              animation: 'fadeIn 0.2s ease',
+            }}
+          >
+            <img
+              src={img}
+              alt=""
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 12 }}
+            />
+            <button
+              onClick={(e) => { e.stopPropagation(); setSecretPhotoOpen(false); }}
+              aria-label={t('sr_photo_close', locale)}
+              style={{
+                position: 'absolute', top: 'calc(20px + env(safe-area-inset-top))', right: 20,
+                width: 40, height: 40, borderRadius: '50%',
+                background: 'rgba(255,255,255,0.15)', color: '#fff',
+                border: 'none', fontSize: 22, lineHeight: 1, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              }}
+            >×</button>
           </div>
         );
       })()}
@@ -12730,17 +12915,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
         );
         return (
-          <div style={{ padding: '0 0 calc(110px + env(safe-area-inset-bottom))', animation: 'fadeIn 0.3s ease' }}>
-            {/* Header with back */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px 8px' }}>
-              <button
-                onClick={() => { setSecretPaywallReturnItem(null); setScreen(secretPaywallReturnItem ? 'guest-item-detail' : 'my-reservations'); }}
-                style={{ background: 'none', border: 'none', color: secretColor, fontSize: 24, cursor: 'pointer', padding: 0, lineHeight: 1 }}
-                aria-label={t('back_btn', locale)}
-              >‹</button>
-              <div style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font }}>{t('sr_title', locale)}</div>
-            </div>
-
+          <div style={{ padding: '16px 0 calc(110px + env(safe-area-inset-bottom))', animation: 'fadeIn 0.3s ease' }}>
             {/* Hero */}
             <div style={{
               padding: '4px 20px 0',
@@ -15015,21 +15190,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   const itemUnreadCount = guestUnreadItemCounts[item.id] ?? 0;
                   const hasSecret = secretReservations.some((r) => r.itemId === item.id);
                   const useNewCards = CARD_REDESIGN_ENABLED;
-                  // Purple 🔒 chip shown top-left when user has an active secret reservation on this item
-                  const secretChip = hasSecret ? (
-                    <span style={{
-                      position: 'absolute' as const, top: 8, left: 8, zIndex: 10,
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      padding: '3px 8px', borderRadius: 100,
-                      background: 'rgba(167,139,250,0.92)', color: '#fff',
-                      fontSize: 10, fontWeight: 700, fontFamily: font, letterSpacing: 0.2,
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                      border: '1px solid rgba(255,255,255,0.18)',
-                      pointerEvents: 'none' as const,
-                      backdropFilter: 'blur(6px)',
-                      WebkitBackdropFilter: 'blur(6px)',
-                    }}>🔒 {t('sr_reserved_at', locale)}</span>
-                  ) : null;
                   if (useNewCards) {
                     const cardMode = resolveCardMode(totalItems, undefined, false);
                     const stagger = cardMode === 'compact' ? 0.04 : 0.08;
@@ -15045,8 +15205,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           onUnreserve={handleUnreserve}
                           myActorHash={myActorHashRef.current}
                           locale={locale}
+                          secretByMe={hasSecret}
                         />
-                        {secretChip}
                         {itemUnreadCount > 0 && (
                           <span style={{
                             position: 'absolute', top: -6, right: -6, zIndex: 10,
@@ -15071,8 +15231,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         onUnreserve={handleUnreserve}
                         myActorHash={myActorHashRef.current}
                         locale={locale}
+                        secretByMe={hasSecret}
                       />
-                      {secretChip}
                       {itemUnreadCount > 0 && (
                         <span style={{
                           position: 'absolute', top: 6, right: 6, zIndex: 10,
@@ -22460,6 +22620,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
       {/* ══════════════════════════════════════════════
           SECRET RESERVATION — CONFIRM CREATE SHEET
+          (matches mockup: title row with icon, subtitle with wish name + price,
+           dark bullet block with 2 green checks + 1 orange warn, stacked buttons)
           ══════════════════════════════════════════════ */}
       <BottomSheet
         isOpen={!!secretConfirmItem}
@@ -22468,55 +22630,74 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       >
         {secretConfirmItem && (() => {
           const it = secretConfirmItem;
-          const priceLine = it.price != null ? ` · ${fmtPrice(it.price, locale, it.currency ?? 'RUB')}` : '';
+          const priceText = it.price != null ? fmtPrice(it.price, locale, it.currency ?? 'RUB') : null;
+          const subtitle = priceText
+            ? t('sr_confirm_subtitle_with_price', locale, { title: it.title, price: priceText })
+            : t('sr_confirm_subtitle', locale, { title: it.title });
           return (
-            <div style={{ textAlign: 'center' as const, padding: '4px 0 0' }}>
-              <div style={{
-                width: 56, height: 56, borderRadius: 16,
-                background: 'rgba(167,139,250,0.14)', border: '1px solid rgba(167,139,250,0.26)',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 26, margin: '0 auto 12px', color: '#A78BFA',
-              }}>🔒</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8, fontFamily: font }}>
-                {t('sr_confirm_title', locale)}
+            <div style={{ padding: '4px 0 0' }}>
+              {/* Title row — icon + title on same line */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: 'rgba(167,139,250,0.14)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 18, flexShrink: 0,
+                }}>🔒</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: font }}>
+                  {t('sr_confirm_title', locale)}
+                </div>
               </div>
+
+              {/* Subtitle — wish name + price + short explanation */}
               <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 14 }}>
-                <strong style={{ color: C.text }}>{it.title}</strong>{priceLine}
+                {subtitle}
               </div>
-              <div style={{ background: C.card, borderRadius: 12, padding: 12, marginBottom: 16, textAlign: 'left' as const }}>
-                {[
-                  { icon: '👻', text: t('sr_paywall_benefit1_title', locale) },
-                  { icon: '💾', text: t('sr_paywall_benefit2_title', locale) },
-                  { icon: '🎁', text: t('sr_paywall_benefit4_title', locale) },
-                ].map((b, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
-                    <span style={{ fontSize: 15, width: 22, textAlign: 'center' as const, flexShrink: 0 }}>{b.icon}</span>
-                    <span style={{ fontSize: 13, color: C.text }}>{b.text}</span>
-                  </div>
-                ))}
+
+              {/* Dark bullet block — 2 green checks + 1 orange warn */}
+              <div style={{
+                padding: '10px 12px', borderRadius: 12, background: C.bg,
+                marginBottom: 14,
+              }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 12, color: C.textSec }}>
+                  <span style={{ color: '#34D399', flexShrink: 0, fontWeight: 700 }}>✓</span>
+                  <span>{t('sr_confirm_bullet_yes_1', locale)}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 12, color: C.textSec }}>
+                  <span style={{ color: '#34D399', flexShrink: 0, fontWeight: 700 }}>✓</span>
+                  <span>{t('sr_confirm_bullet_yes_2', locale)}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, fontSize: 12, color: C.textSec }}>
+                  <span style={{ color: '#FBBF24', flexShrink: 0, fontWeight: 700 }}>!</span>
+                  <span>{t('sr_confirm_bullet_warn', locale)}</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setSecretConfirmItem(null)}
-                  disabled={secretCreating}
-                  style={{ ...btnSecondary, flex: 1 }}
-                >
-                  {t('sr_confirm_cancel', locale)}
-                </button>
-                <button
-                  onClick={() => void handleSecretReservationCreate(it)}
-                  disabled={secretCreating}
-                  style={{
-                    flex: 2, padding: '12px', borderRadius: 12, border: 'none',
-                    background: 'linear-gradient(135deg, #A78BFA 0%, #C4A7FF 100%)',
-                    color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-                    fontFamily: font, opacity: secretCreating ? 0.6 : 1,
-                    boxShadow: '0 4px 14px rgba(167,139,250,0.32)',
-                  }}
-                >
-                  {secretCreating ? '…' : t('sr_confirm_cta', locale)}
-                </button>
-              </div>
+
+              {/* Stacked buttons: primary on top (full-width), secondary below */}
+              <button
+                onClick={() => void handleSecretReservationCreate(it)}
+                disabled={secretCreating}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: 14, border: 'none',
+                  background: 'linear-gradient(135deg, #A78BFA 0%, #C4A7FF 100%)',
+                  color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer',
+                  fontFamily: font, opacity: secretCreating ? 0.6 : 1,
+                  boxShadow: '0 4px 14px rgba(167,139,250,0.32)',
+                }}
+              >
+                {secretCreating ? '…' : t('sr_confirm_cta', locale)}
+              </button>
+              <button
+                onClick={() => setSecretConfirmItem(null)}
+                disabled={secretCreating}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: 12, border: 'none',
+                  background: 'transparent', color: C.textMuted, fontSize: 14, fontWeight: 500,
+                  cursor: 'pointer', fontFamily: font, marginTop: 8,
+                }}
+              >
+                {t('sr_confirm_cancel', locale)}
+              </button>
             </div>
           );
         })()}
