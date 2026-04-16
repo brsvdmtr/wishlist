@@ -607,6 +607,18 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-16',
+    date: '16.04.2026',
+    items: [
+      { ru: '🔗 Общее желание — одно желание в нескольких вишлистах', en: '🔗 Shared wish — one wish across multiple wishlists' },
+      { ru: 'При создании или редактировании — отметь, в какие ещё вишлисты добавить', en: 'When creating or editing a wish — pick additional wishlists to add it to' },
+      { ru: 'Изменения (цена, фото, описание) синхронизируются во всех вишлистах автоматически', en: 'Changes (price, photo, description) sync across all wishlists automatically' },
+      { ru: 'Бронь общего желания скрывает его во всех вишлистах сразу', en: 'Reserving a shared wish hides it from all wishlists at once' },
+      { ru: 'Видно на карточке: «в N вишлистах» — тап покажет список', en: '"in N wishlists" label on the card — tap to see the list' },
+      { ru: 'В списке желаний теперь есть «Добавить в ещё» — быстрая раздача по вишлистам', en: 'New "Add to more" shortcut in the wishes list — quick placement into other wishlists' },
+    ],
+  },
+  {
     id: '2026-04-15',
     date: '15.04.2026',
     items: [
@@ -1708,11 +1720,10 @@ function ProBadge({ style }: { style?: React.CSSProperties } = {}) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
-      fontSize: 9, fontWeight: 800, letterSpacing: 0.6,
+      fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
       padding: '2px 7px', borderRadius: 5,
-      background: `linear-gradient(135deg, ${C.accent}20, ${C.accent}12)`,
-      border: `1px solid ${C.accent}30`,
-      color: C.accent,
+      background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)',
+      color: '#fff',
       lineHeight: 1, verticalAlign: 'middle', ...style,
     }}>PRO</span>
   );
@@ -13417,7 +13428,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         >
                           <span style={{ fontSize: 18 }}>{item.icon}</span>
                           <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.textSec }}>{item.label}</div>
-                          <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, background: C.accentSoft, color: C.accent, fontWeight: 700 }}>PRO</span>
+                          <ProBadge />
                         </div>
                       ))}
                     </div>
@@ -14764,13 +14775,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
                               {t('showcase_entry_title', locale)}
                             </span>
-                            {!isPro && (
-                              <span style={{
-                                fontSize: 10, fontWeight: 700, color: C.accent,
-                                background: `${C.accent}20`, padding: '2px 6px',
-                                borderRadius: 6, letterSpacing: '0.05em',
-                              }}>PRO</span>
-                            )}
+                            {!isPro && <ProBadge />}
                             {state === 'expired' && (
                               <span style={{
                                 fontSize: 10, fontWeight: 700, color: C.textMuted,
@@ -16281,13 +16286,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{resolveOwnerName(profileData, tgUser)}</span>
-                      {settingsData.isPro && (
-                        <span style={{
-                          background: `linear-gradient(135deg, ${C.accent}, #A78BFA)`,
-                          color: '#fff', fontSize: 10, fontWeight: 700,
-                          padding: '2px 8px', borderRadius: 6, letterSpacing: 0.5, lineHeight: '16px',
-                        }}>PRO</span>
-                      )}
+                      {settingsData.isPro && <ProBadge />}
                     </div>
                     {(profileData?.username || tgUser?.username) && (
                       <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>
@@ -19600,9 +19599,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{opt.label}</span>
-                            {opt.pro && !isPro && (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: C.accent, background: C.accentSoft, padding: '2px 6px', borderRadius: 6 }}>PRO</span>
-                            )}
+                            {opt.pro && !isPro && <ProBadge />}
                           </div>
                           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{opt.desc}</div>
                         </div>
@@ -20101,17 +20098,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             );
           })()}
-          {/* Title */}
+          {/* Title — uncontrolled to fix iOS caret on fast input-switch */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_name', locale)}</div>
             <div style={{ position: 'relative' as const }}>
               <input
+                key={`title-${itemFieldKey}`}
                 style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 15, fontWeight: 500, padding: '12px 38px 12px 14px', lineHeight: '22px' }}
                 placeholder={t('item_name_placeholder', locale)}
-                value={itemTitle}
-                onChange={(e) => setItemTitle(e.target.value)}
+                defaultValue={itemTitle}
+                onInput={(e) => setItemTitle(e.currentTarget.value)}
+                onBlur={(e) => setItemTitle(e.target.value)}
               />
-              {itemTitle && <button type="button" aria-label="Clear" onClick={() => setItemTitle('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+              {itemTitle && <button type="button" aria-label="Clear" onClick={() => { setItemTitle(''); setItemFieldKey(k => k + 1); }} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
             </div>
           </div>
           {/* URL with hint + preview — uncontrolled to fix iOS selection */}
@@ -20463,8 +20462,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_name', locale)}</label>
             <div style={{ position: 'relative' as const }}>
-              <input style={{ ...inputStyle, paddingRight: 38 }} placeholder={t('item_name_placeholder', locale)} value={itemTitle} onChange={(e) => setItemTitle(e.target.value)} />
-              {itemTitle && <button type="button" aria-label="Clear" onClick={() => setItemTitle('')} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
+              <input key={`title-orig-${itemFieldKey}`} style={{ ...inputStyle, paddingRight: 38 }} placeholder={t('item_name_placeholder', locale)} defaultValue={itemTitle} onInput={(e) => setItemTitle(e.currentTarget.value)} onBlur={(e) => setItemTitle(e.target.value)} />
+              {itemTitle && <button type="button" aria-label="Clear" onClick={() => { setItemTitle(''); setItemFieldKey(k => k + 1); }} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
             </div>
           </div>
           <div>
