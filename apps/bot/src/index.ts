@@ -852,6 +852,7 @@ if (!token) {
           'gift_notes_unlock',
           'reservation_pro_unlock',
           'smart_reservations_unlock',
+          'secret_reservation_unlock',
         ]);
         if (!skuCode || !KNOWN_SKUS.has(skuCode)) {
           logger.warn({ skuCode, reason: 'unknown_sku' }, 'pre_checkout rejected');
@@ -1013,6 +1014,7 @@ if (!token) {
           reservation_pro_unlock: 'reservation_pro_unlock',
           group_gift_unlock: 'group_gift_unlock',
           smart_reservations_unlock: 'smart_reservations_unlock',
+          secret_reservation_unlock: 'secret_reservation_unlock',
         };
         const SKU_CREDITS: Record<string, { key: 'hintCredits' | 'importCredits'; amount: number }> = {
           hints_pack_5:   { key: 'hintCredits',   amount: 5  },
@@ -1030,6 +1032,7 @@ if (!token) {
           reservation_pro_unlock: 50,
           group_gift_unlock: 79,
           smart_reservations_unlock: 15,
+          secret_reservation_unlock: 24,
         };
 
         await prisma.$transaction(async (tx) => {

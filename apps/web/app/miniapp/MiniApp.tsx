@@ -354,6 +354,34 @@ type SantaReservationItem = Item & {
   assignmentId: string;
 };
 
+type SecretReservationSnapshot = {
+  title: string;
+  url: string | null;
+  priceText: string | null;
+  currency: string | null;
+  imageUrl: string | null;
+  description: string | null;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  status: string;
+};
+type SecretReservationDerivedState = 'ACTIVE' | 'ITEM_UPDATED' | 'PUBLIC_RESERVED_BY_OTHER' | 'ITEM_FULFILLED' | 'ITEM_UNAVAILABLE';
+type SecretReservationDTO = {
+  id: string;
+  itemId: string;
+  wishlistId: string;
+  snapshot: SecretReservationSnapshot;
+  current: Item;
+  derivedState: SecretReservationDerivedState;
+  diffFields: string[];
+  hasUnacknowledgedUpdates: boolean;
+  note: string | null;
+  createdAt: string;
+  updatesAcknowledgedAt: string | null;
+  ownerId: string;
+  ownerName: string;
+  ownerAvatarUrl: string | null;
+};
+
 type HomeTab = 'wishlists' | 'wishes' | 'reservations';
 
 type AllItem = Item & {
@@ -567,6 +595,7 @@ type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-d
 | 'link-management'
 | 'guest-link-expired'
 | 'item-unavailable'
+| 'secret-reservation-detail' | 'secret-reservation-paywall'
 | 'showcase-editor' | 'showcase-preview';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' | 'warning' };
 
@@ -616,7 +645,6 @@ const RELEASE_NOTES: ReleaseNote[] = [
       { ru: 'Бронь общего желания скрывает его во всех вишлистах сразу', en: 'Reserving a shared wish hides it from all wishlists at once' },
       { ru: 'Видно на карточке: «в N вишлистах» — тап покажет список', en: '"in N wishlists" label on the card — tap to see the list' },
       { ru: 'В списке желаний теперь есть «Добавить в ещё» — быстрая раздача по вишлистам', en: 'New "Add to more" shortcut in the wishes list — quick placement into other wishlists' },
-      { ru: '↩️ При выходе из редактирования желания с несохранёнными изменениями — спросим, сохранить их или нет', en: '↩️ When leaving the wish editor with unsaved changes — we\'ll ask whether to save or discard them' },
     ],
   },
   {
@@ -4412,6 +4440,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [santaReservationItems, setSantaReservationItems] = useState<SantaReservationItem[]>([]);
   const [santaReservationItemsLoading, setSantaReservationItemsLoading] = useState(false);
 
+  // Secret reservations (premium feature — private notes on others' wishes, owner never notified)
+  const [secretReservations, setSecretReservations] = useState<SecretReservationDTO[]>([]);
+  const [secretReservationsLoading, setSecretReservationsLoading] = useState(false);
+  const [secretAccess, setSecretAccess] = useState<{ unlocked: boolean; unlockType: string | null; priceXtr: number }>({ unlocked: false, unlockType: null, priceXtr: 24 });
+  const [viewingSecretReservation, setViewingSecretReservation] = useState<SecretReservationDTO | null>(null);
+  const [secretReservationDetailLoading, setSecretReservationDetailLoading] = useState(false);
+  // Secret-reservation onboarding (first-use 3-step sheet)
+  const [showSecretOnboarding, setShowSecretOnboarding] = useState(false);
+  const [secretOnboardingStep, setSecretOnboardingStep] = useState<1 | 2 | 3>(1);
+  const [secretOnboardingDontShow, setSecretOnboardingDontShow] = useState(false);
+  const [secretOnboardingNext, setSecretOnboardingNext] = useState<null | (() => void)>(null);
+  const [secretOnboardingSeen, setSecretOnboardingSeen] = useState(false);
+  // Confirm-sheet before creating secret reservation
+  const [secretConfirmItem, setSecretConfirmItem] = useState<Item | GuestItem | null>(null);
+  const [secretCreating, setSecretCreating] = useState(false);
+  // Promote-to-public confirm sheet
+  const [secretPromoteItem, setSecretPromoteItem] = useState<SecretReservationDTO | null>(null);
+  const [secretPromoting, setSecretPromoting] = useState(false);
+  // Cancel confirm sheet
+  const [secretCancelItem, setSecretCancelItem] = useState<SecretReservationDTO | null>(null);
+  const [secretCancelling, setSecretCancelling] = useState(false);
+  // Error sheets (own item / already public by me)
+  const [secretErrorKind, setSecretErrorKind] = useState<null | 'own_item' | 'already_public'>(null);
+  // Paywall return context — after unlock we can return to create-flow
+  const [secretPaywallReturnItem, setSecretPaywallReturnItem] = useState<Item | GuestItem | null>(null);
+
   // Home hub tab navigation
   const [homeTab, setHomeTab] = useState<HomeTab>('wishlists');
   const [homeReturnTab, setHomeReturnTab] = useState<HomeTab | null>(null);
@@ -5067,6 +5121,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setSubscription(json.subscription);
     if ((json as any).giftNotes) setGnAccess((json as any).giftNotes);
     if ((json as any).groupGift) setGgAccess((json as any).groupGift);
+    if ((json as any).secretReservations) setSecretAccess((json as any).secretReservations);
     if ((json as any).cardDisplayMode) setCardDisplayMode((json as any).cardDisplayMode);
     if ((json as any).proSource !== undefined) setProSource((json as any).proSource);
     if ((json as any).promoPro !== undefined) setPromoPro((json as any).promoPro);
@@ -5093,10 +5148,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const loadReservations = useCallback(async () => {
     setReservationsLoading(true);
     setSantaReservationItemsLoading(true);
+    setSecretReservationsLoading(true);
     try {
-      const [res, santaRes] = await Promise.all([
+      const [res, santaRes, secretRes] = await Promise.all([
         tgFetch('/tg/reservations'),
         tgFetch('/tg/santa/my-reservations'),
+        tgFetch('/tg/secret-reservations'),
       ]);
       if (res.ok) {
         const json = await res.json() as { reservations: ReservationItem[]; reservationPro?: boolean; reservationBeta?: boolean };
@@ -5105,13 +5162,22 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         if (json.reservationBeta !== undefined) setReservationBeta(json.reservationBeta);
         const santaJson = santaRes.ok ? await santaRes.json() as { reservations: SantaReservationItem[] } : { reservations: [] };
         setSantaReservationItems(santaJson.reservations);
-        setReservationsCount(json.reservations.length + santaJson.reservations.length);
+        let secretCount = 0;
+        if (secretRes.ok) {
+          const secretJson = await secretRes.json() as { secretReservations: SecretReservationDTO[]; unlocked: boolean; unlockType: string | null; priceXtr: number; onboardingSeen: boolean };
+          setSecretReservations(secretJson.secretReservations);
+          setSecretAccess({ unlocked: secretJson.unlocked, unlockType: secretJson.unlockType, priceXtr: secretJson.priceXtr });
+          setSecretOnboardingSeen(secretJson.onboardingSeen);
+          secretCount = secretJson.secretReservations.length;
+        }
+        setReservationsCount(json.reservations.length + santaJson.reservations.length + secretCount);
       }
     } catch {
       // silent
     } finally {
       setReservationsLoading(false);
       setSantaReservationItemsLoading(false);
+      setSecretReservationsLoading(false);
     }
   }, [tgFetch]);
 
@@ -6548,6 +6614,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setGgAccess(prev => ({ ...prev, unlocked: true }));
           pushToast(t('addon_already_unlocked', locale), 'success');
         }
+        if (skuCode === 'secret_reservation_unlock') {
+          setSecretAccess(prev => ({ ...prev, unlocked: true, unlockType: prev.unlockType ?? 'ONE_TIME' }));
+          pushToast(t('addon_already_unlocked', locale), 'success');
+        }
         setAddonCheckoutLoading(false);
         return;
       }
@@ -6608,6 +6678,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           if (skuCode === 'reservation_pro_unlock') {
             setReservationPro(true);
           }
+          // Sync secret reservation access after purchase
+          if (skuCode === 'secret_reservation_unlock') {
+            setSecretAccess(prev => ({ ...prev, unlocked: true, unlockType: 'ONE_TIME' }));
+            // If we were on paywall with a pending item, resume the create flow
+            setSecretPaywallReturnItem(pending => {
+              if (pending) {
+                setScreen('guest-item-detail');
+                setSecretConfirmItem(pending);
+              }
+              return null;
+            });
+          }
           const toastKey: string = skuCode.startsWith('extra_wishlist') ? 'addon_activated_wishlist'
             : skuCode.startsWith('extra_subscription') ? 'addon_activated_subscription'
             : skuCode.startsWith('extra_items') ? 'addon_activated_items'
@@ -6615,6 +6697,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             : skuCode.startsWith('import') ? 'addon_activated_imports'
             : skuCode === 'gift_notes_unlock' ? 'addon_activated_gift_notes'
             : skuCode === 'reservation_pro_unlock' ? 'addon_activated_reservation_pro'
+            : skuCode === 'secret_reservation_unlock' ? 'addon_activated_secret_reservation'
             : 'addon_activated_seasonal';
           if (synced) {
             pushToast(t(toastKey as Parameters<typeof t>[0], locale), 'success');
@@ -9344,6 +9427,155 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   };
 
+  // ── Secret Reservation handlers ──────────────────────────────────────────
+  const handleSecretReservationCreate = useCallback(async (item: Item | GuestItem, opts?: { note?: string | null; silent?: boolean }) => {
+    setSecretCreating(true);
+    try {
+      const res = await tgFetch(`/tg/items/${item.id}/secret-reserve`, {
+        method: 'POST',
+        body: JSON.stringify({ note: opts?.note ?? null }),
+      });
+      if (res.status === 403) {
+        const err = await res.json().catch(() => ({ error: 'unknown' }));
+        if (err.error === 'secret_reservations_required') {
+          setSecretPaywallReturnItem(item);
+          setScreen('secret-reservation-paywall');
+          trackEvent('secret_res.paywall_open', { itemId: item.id, trigger: 'create_attempt' });
+          return null;
+        }
+        if (err.error === 'own_item') {
+          setSecretErrorKind('own_item');
+          return null;
+        }
+      }
+      if (res.status === 409) {
+        pushToast(t('sr_state_unavailable_title', locale), 'error');
+        return null;
+      }
+      if (!res.ok) {
+        pushToast(t('toast_error_generic', locale), 'error');
+        return null;
+      }
+      const json = await res.json() as { id: string; alreadyReserved?: boolean };
+      if (!opts?.silent) pushToast(t('sr_toast_saved', locale), 'success');
+      void loadReservations();
+      return json;
+    } catch {
+      pushToast(t('toast_error_generic', locale), 'error');
+      return null;
+    } finally {
+      setSecretCreating(false);
+    }
+  }, [tgFetch, pushToast, trackEvent, locale, loadReservations]);
+
+  const handleSecretReservationCancel = useCallback(async (sr: SecretReservationDTO) => {
+    setSecretCancelling(true);
+    try {
+      const res = await tgFetch(`/tg/secret-reservations/${sr.id}/cancel`, { method: 'POST', body: '{}' });
+      if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return false; }
+      setSecretReservations((prev) => prev.filter((r) => r.id !== sr.id));
+      setReservationsCount((prev) => Math.max(0, prev - 1));
+      pushToast(t('sr_toast_cancelled', locale), 'success');
+      return true;
+    } finally {
+      setSecretCancelling(false);
+    }
+  }, [tgFetch, pushToast, locale]);
+
+  const handleSecretReservationAck = useCallback(async (sr: SecretReservationDTO) => {
+    try {
+      const res = await tgFetch(`/tg/secret-reservations/${sr.id}/acknowledge`, { method: 'POST', body: '{}' });
+      if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return false; }
+      const json = await res.json() as { snapshot: SecretReservationSnapshot; updatesAcknowledgedAt: string };
+      // Update list entry and currently-viewing entry
+      setSecretReservations((prev) => prev.map((r) => r.id === sr.id ? {
+        ...r, snapshot: json.snapshot, updatesAcknowledgedAt: json.updatesAcknowledgedAt,
+        derivedState: 'ACTIVE', diffFields: [], hasUnacknowledgedUpdates: false,
+      } : r));
+      setViewingSecretReservation((prev) => prev && prev.id === sr.id ? {
+        ...prev, snapshot: json.snapshot, updatesAcknowledgedAt: json.updatesAcknowledgedAt,
+        derivedState: 'ACTIVE', diffFields: [], hasUnacknowledgedUpdates: false,
+      } : prev);
+      pushToast(t('sr_toast_ack', locale), 'success');
+      return true;
+    } catch {
+      pushToast(t('toast_error_generic', locale), 'error');
+      return false;
+    }
+  }, [tgFetch, pushToast, locale]);
+
+  const handleSecretReservationPromote = useCallback(async (sr: SecretReservationDTO) => {
+    setSecretPromoting(true);
+    try {
+      const res = await tgFetch(`/tg/secret-reservations/${sr.id}/promote`, { method: 'POST', body: '{}' });
+      if (res.status === 409) {
+        // Another user publicly reserved first
+        pushToast(t('sr_promote_conflict_title', locale), 'error');
+        // Refresh so banner updates with PUBLIC_RESERVED_BY_OTHER
+        void loadReservations();
+        return false;
+      }
+      if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return false; }
+      setSecretReservations((prev) => prev.filter((r) => r.id !== sr.id));
+      setReservationsCount((prev) => Math.max(0, prev - 1));
+      pushToast(t('sr_toast_promoted', locale), 'success');
+      // Refresh full reservations so the new public one shows up
+      void loadReservations();
+      return true;
+    } finally {
+      setSecretPromoting(false);
+    }
+  }, [tgFetch, pushToast, locale, loadReservations]);
+
+  // Refresh single secret reservation detail (on open or after actions)
+  const refreshSecretReservationDetail = useCallback(async (id: string) => {
+    setSecretReservationDetailLoading(true);
+    try {
+      const res = await tgFetch(`/tg/secret-reservations/${id}`);
+      if (res.ok) {
+        const json = await res.json() as SecretReservationDTO & { status: string };
+        setViewingSecretReservation(json);
+      }
+    } finally {
+      setSecretReservationDetailLoading(false);
+    }
+  }, [tgFetch]);
+
+  /**
+   * Entry point: user clicked "🔒 Reserve secretly" on guest-item-detail.
+   * Decides onboarding → confirm → create. Handles existing-reservation redirects.
+   */
+  const startSecretReservationFlow = useCallback((item: Item | GuestItem) => {
+    // If user already has secret reservation for this item → redirect to its detail
+    const existing = secretReservations.find((r) => r.itemId === item.id);
+    if (existing) {
+      setViewingSecretReservation(existing);
+      setScreen('secret-reservation-detail');
+      trackEvent('secret_res.detail_opened', { from: 'guest_item_detail_has_existing', state: existing.derivedState });
+      void refreshSecretReservationDetail(existing.id);
+      return;
+    }
+    // No access → paywall (with return context)
+    if (!secretAccess.unlocked) {
+      setSecretPaywallReturnItem(item);
+      setScreen('secret-reservation-paywall');
+      trackEvent('secret_res.paywall_open', { itemId: item.id, trigger: 'cta_tap' });
+      return;
+    }
+    // First time → show onboarding; after "got it" open confirm sheet
+    if (!secretOnboardingSeen) {
+      setSecretOnboardingStep(1);
+      setSecretOnboardingDontShow(true);
+      setSecretOnboardingNext(() => () => setSecretConfirmItem(item));
+      setShowSecretOnboarding(true);
+      trackEvent('secret_res.onboarding_view', { itemId: item.id, step: 1 });
+      return;
+    }
+    // Onboarded & unlocked → confirm sheet
+    setSecretConfirmItem(item);
+    trackEvent('secret_res.confirm_open', { itemId: item.id });
+  }, [secretReservations, secretAccess.unlocked, secretOnboardingSeen, refreshSecretReservationDetail, trackEvent]);
+
   // ── Reservation Pro handlers ─────────────────────────────────────────────
   const handleResMetaUpdate = async (itemId: string, data: { note?: string | null; purchased?: boolean }) => {
     try {
@@ -11899,14 +12131,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </p>
           </div>
 
-          {reservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
+          {reservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && secretReservations.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px 24px' }}>
               <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
               <div style={{ fontSize: 14, color: C.textMuted }}>{t('reservations_loading', locale)}</div>
             </div>
           )}
 
-          {!reservationsLoading && !santaReservationItemsLoading && reservations.length === 0 && santaReservationItems.length === 0 && (
+          {!reservationsLoading && !santaReservationItemsLoading && !secretReservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && secretReservations.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px 24px' }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>🎁</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('reservations_empty_title', locale)}</div>
@@ -11915,6 +12147,106 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             </div>
           )}
+
+          {/* ── Secret reservations section (top, above Santa & Public) ── */}
+          {secretReservations.length > 0 && (() => {
+            // Group by ownerId (same pattern as public reservations below)
+            const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: SecretReservationDTO[] }> = {};
+            for (const r of secretReservations) {
+              const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, ownerAvatarUrl: r.ownerAvatarUrl, items: [] });
+              g.items.push(r);
+            }
+            const activeCount = secretReservations.length;
+            const hasUnseen = secretReservations.some(s => s.hasUnacknowledgedUpdates || s.derivedState === 'PUBLIC_RESERVED_BY_OTHER');
+            let secretIdx = 0;
+            return (
+              <div style={{ marginBottom: 28 }}>
+                {/* Section header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#A78BFA', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {t('sr_list_section_secret', locale)}
+                    <span style={{ fontSize: 11, fontWeight: 500, color: C.textMuted, textTransform: 'none', letterSpacing: 0, marginLeft: 2 }}>
+                      {activeCount} {pluralize(activeCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
+                    </span>
+                    {hasUnseen && (
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#A78BFA', boxShadow: '0 0 8px rgba(167,139,250,0.7)', marginLeft: 2 }} />
+                    )}
+                  </div>
+                </div>
+                {Object.entries(groups).map(([ownerId, group]) => (
+                  <div key={ownerId} style={{ marginBottom: 20 }}>
+                    {/* Owner avatar + name (matches public section styling) */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      <UserAvatar avatarUrl={group.ownerAvatarUrl} name={group.ownerName || t('api_user_fallback', locale)} size={30} accent="#A78BFA" />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: font }}>{group.ownerName}</div>
+                        <div style={{ fontSize: 11, color: C.textMuted }}>
+                          {group.items.length} {pluralize(group.items.length, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {group.items.map((sr) => {
+                        const delay = secretIdx * 0.06;
+                        secretIdx++;
+                        const it = sr.current;
+                        const state = sr.derivedState;
+                        const badge = state === 'ITEM_UPDATED' ? { text: t('sr_badge_updated', locale), bg: 'rgba(96,165,250,0.14)', color: '#60A5FA', border: 'rgba(96,165,250,0.26)' }
+                          : state === 'PUBLIC_RESERVED_BY_OTHER' ? { text: t('sr_badge_conflict', locale), bg: 'rgba(251,191,36,0.14)', color: '#FBBF24', border: 'rgba(251,191,36,0.26)' }
+                          : state === 'ITEM_FULFILLED' ? { text: t('sr_badge_fulfilled', locale), bg: 'rgba(52,211,153,0.14)', color: '#34D399', border: 'rgba(52,211,153,0.26)' }
+                          : state === 'ITEM_UNAVAILABLE' ? { text: t('sr_badge_unavailable', locale), bg: 'rgba(248,113,113,0.14)', color: '#F87171', border: 'rgba(248,113,113,0.26)' }
+                          : { text: t('sr_badge_active', locale), bg: 'rgba(167,139,250,0.14)', color: '#A78BFA', border: 'rgba(167,139,250,0.26)' };
+                        return (
+                          <div
+                            key={sr.id}
+                            onClick={() => {
+                              setViewingSecretReservation(sr);
+                              setScreen('secret-reservation-detail');
+                              trackEvent('secret_res.detail_opened', { from: 'my_reservations_list', state });
+                              // Refresh in background for freshest diff (fires secret_res.item_open on backend)
+                              void refreshSecretReservationDetail(sr.id);
+                            }}
+                            style={{
+                              background: C.card,
+                              border: `1px solid ${state === 'ACTIVE' ? 'rgba(167,139,250,0.22)' : C.border}`,
+                              borderLeft: state === 'ACTIVE' ? '3px solid #A78BFA' : undefined,
+                              borderRadius: 16,
+                              padding: 14,
+                              cursor: 'pointer',
+                              WebkitTapHighlightColor: 'transparent',
+                              animation: `fadeIn 0.3s ease ${delay}s both`,
+                            }}
+                          >
+                            <div style={{ display: 'flex', gap: 12 }}>
+                              <div style={{
+                                width: 56, height: 56, borderRadius: 12, background: C.surface, overflow: 'hidden',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0,
+                              }}>
+                                {it.imageUrl
+                                  ? <img src={it.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  : '🎁'}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>{it.title}</div>
+                                {(it.price != null || sr.snapshot.priceText) && (
+                                  <div style={{ fontSize: 13, color: C.textSec, marginBottom: 6 }}>
+                                    <strong style={{ color: C.text }}>{it.price != null ? fmtPrice(it.price, locale, it.currency ?? 'RUB') : sr.snapshot.priceText}</strong>
+                                  </div>
+                                )}
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 100, fontSize: 10, fontWeight: 600, background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
+                                  {badge.text}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* ── Santa reservations section ── */}
           {santaReservationItems.length > 0 && (() => {
@@ -12076,6 +12408,428 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           })()}
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════
+          SECRET RESERVATION DETAIL
+          ══════════════════════════════════════════════ */}
+      {screen === 'secret-reservation-detail' && viewingSecretReservation && (() => {
+        const sr = viewingSecretReservation;
+        const state = sr.derivedState;
+        const isActive = state === 'ACTIVE';
+        const isUpdated = state === 'ITEM_UPDATED';
+        const isConflict = state === 'PUBLIC_RESERVED_BY_OTHER';
+        const isFulfilled = state === 'ITEM_FULFILLED';
+        const isUnavailable = state === 'ITEM_UNAVAILABLE';
+        const snap = sr.snapshot;
+        const cur = sr.current;
+        const showSnapshotValues = isUnavailable; // snapshot is the "memory" when item is gone
+        const title = showSnapshotValues ? snap.title : cur.title;
+        const priceText = showSnapshotValues
+          ? snap.priceText
+          : (cur.price != null ? fmtPrice(cur.price, locale, cur.currency ?? 'RUB') : snap.priceText);
+        const imageUrl = showSnapshotValues ? snap.imageUrl : (cur.imageUrl || snap.imageUrl);
+        const url = showSnapshotValues ? snap.url : (cur.url || snap.url);
+        const fmtDate = (iso: string) => {
+          try {
+            return new Date(iso).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
+          } catch { return iso; }
+        };
+
+        return (
+          <div style={{ padding: '8px 16px 120px' }}>
+            {/* Header: back + title */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0 14px', borderBottom: `1px solid ${C.border}`, marginBottom: 16 }}>
+              <button
+                onClick={() => { setScreen('my-reservations'); setViewingSecretReservation(null); }}
+                style={{ background: 'none', border: 'none', color: '#A78BFA', fontSize: 24, cursor: 'pointer', padding: 0, lineHeight: 1 }}
+                aria-label={t('back_btn', locale)}
+              >‹</button>
+              <div style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font }}>{t('sr_detail_title', locale)}</div>
+            </div>
+
+            {/* Privacy banner */}
+            <div style={{
+              padding: '12px 14px', borderRadius: 14,
+              background: 'rgba(167,139,250,0.14)', border: '1px solid rgba(167,139,250,0.25)',
+              marginBottom: 16, display: 'flex', gap: 10, alignItems: 'flex-start',
+            }}>
+              <span style={{ fontSize: 16, color: '#A78BFA' }}>🔒</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 2 }}>
+                  {t('sr_detail_privacy_banner_title', locale)}
+                </div>
+                <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>
+                  {t('sr_detail_privacy_banner_body', locale)}
+                </div>
+              </div>
+            </div>
+
+            {/* Current wish snapshot card — image header + title + price + owner chip */}
+            <div style={{
+              width: '100%', height: 180, borderRadius: 18,
+              background: imageUrl
+                ? `linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,0.4) 100%), url(${imageUrl}) center/cover no-repeat`
+                : 'linear-gradient(135deg, rgba(124,106,255,0.2), rgba(167,139,250,0.15))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56, marginBottom: 16,
+              opacity: (isUnavailable || isFulfilled) ? 0.7 : 1,
+            }}>
+              {!imageUrl && '🎁'}
+            </div>
+            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, marginBottom: 4, fontFamily: font, color: C.text, lineHeight: 1.2 }}>{title}</h1>
+            {priceText && (
+              <div style={{ fontSize: 17, fontWeight: 700, color: C.accent, marginBottom: 10 }}>{priceText}</div>
+            )}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 11, padding: '4px 10px', borderRadius: 100,
+                background: 'rgba(167,139,250,0.14)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.25)',
+                fontWeight: 600,
+              }}>
+                {t('sr_privacy_chip', locale).replace(/·.*/, '').trim()}
+              </span>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 11, color: C.textMuted, padding: '4px 10px', borderRadius: 100, background: C.surface,
+              }}>
+                {t('sr_detail_chip_owner', locale, { name: sr.ownerName })}
+              </span>
+            </div>
+
+            {/* State-specific banner */}
+            {isUpdated && (
+              <div style={{
+                padding: '12px 14px', borderRadius: 14, marginBottom: 14,
+                background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.22)',
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#60A5FA', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  ✏️ {t('sr_state_updated_title', locale)}
+                </div>
+                <div style={{ fontSize: 12, color: C.textSec, marginBottom: 8, lineHeight: 1.5 }}>
+                  {t('sr_state_updated_body', locale)}
+                </div>
+                <div style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.7 }}>
+                  {sr.diffFields.map((field) => {
+                    const oldVal = (snap as any)[field];
+                    const newVal = (cur as any)[field];
+                    const fieldKey = ({
+                      title: 'sr_diff_field_title',
+                      url: 'sr_diff_field_url',
+                      priceText: 'sr_diff_field_priceText',
+                      currency: 'sr_diff_field_currency',
+                      imageUrl: 'sr_diff_field_imageUrl',
+                      description: 'sr_diff_field_description',
+                      priority: 'sr_diff_field_priority',
+                    } as Record<string, string>)[field];
+                    const label = fieldKey ? t(fieldKey, locale) : field;
+                    const short = (v: unknown) => {
+                      const s = v == null ? '—' : String(v);
+                      return s.length > 42 ? s.slice(0, 40) + '…' : s;
+                    };
+                    return (
+                      <div key={field} style={{ marginBottom: 2 }}>
+                        <span style={{ color: C.textMuted }}>{label}: </span>
+                        <s style={{ color: C.textMuted }}>{short(oldVal)}</s>
+                        {' → '}
+                        <strong style={{ color: '#60A5FA' }}>{short(newVal)}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => void handleSecretReservationAck(sr)}
+                  style={{
+                    marginTop: 10, width: '100%', padding: '8px 14px', border: '1px solid rgba(96,165,250,0.22)',
+                    borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                    background: 'rgba(96,165,250,0.14)', color: '#60A5FA',
+                  }}
+                >
+                  ✓ {t('sr_diff_ack_cta', locale)}
+                </button>
+              </div>
+            )}
+
+            {isConflict && (
+              <div style={{
+                padding: '12px 14px', borderRadius: 14, marginBottom: 14,
+                background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.26)',
+                display: 'flex', gap: 10, alignItems: 'flex-start',
+              }}>
+                <span style={{ fontSize: 16 }}>⚠️</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#FBBF24', marginBottom: 4 }}>
+                    {t('sr_state_conflict_title', locale)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5 }}>
+                    {t('sr_state_conflict_body', locale)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isFulfilled && (
+              <div style={{
+                padding: '12px 14px', borderRadius: 14, marginBottom: 14,
+                background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.22)',
+                display: 'flex', gap: 10, alignItems: 'flex-start',
+              }}>
+                <span style={{ fontSize: 16 }}>🎉</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#34D399', marginBottom: 4 }}>
+                    {t('sr_state_fulfilled_title', locale)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5 }}>
+                    {t('sr_state_fulfilled_body', locale)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isUnavailable && (
+              <div style={{
+                padding: '12px 14px', borderRadius: 14, marginBottom: 14,
+                background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.26)',
+                display: 'flex', gap: 10, alignItems: 'flex-start',
+              }}>
+                <span style={{ fontSize: 16 }}>🗑</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#F87171', marginBottom: 4 }}>
+                    {t('sr_state_unavailable_title', locale)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5 }}>
+                    {t('sr_state_unavailable_body', locale)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* User's personal note (read-only for now) */}
+            {sr.note && (
+              <div style={{
+                padding: '12px 14px', borderRadius: 12, background: C.bg, marginBottom: 14,
+                fontSize: 13, color: C.textSec, lineHeight: 1.5,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                  {t('sr_detail_note_label', locale)}
+                </div>
+                {sr.note}
+              </div>
+            )}
+
+            {/* Meta block */}
+            <div style={{
+              padding: '12px 14px', borderRadius: 12, background: C.surface,
+              fontSize: 12, color: C.textMuted, lineHeight: 1.7, marginBottom: 16,
+            }}>
+              <div><span style={{ color: C.textSec }}>{t('sr_detail_meta_saved', locale)}:</span> {fmtDate(sr.createdAt)}</div>
+              {isActive && (
+                <div>
+                  <span style={{ color: C.textSec }}>{t('sr_detail_meta_status', locale)}:</span>{' '}
+                  <span style={{ color: '#34D399' }}>{t('sr_detail_meta_status_available', locale)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Promote CTA — available when ACTIVE or ITEM_UPDATED (but not conflict / fulfilled / unavailable) */}
+              {(isActive || isUpdated) && (
+                <button
+                  onClick={() => setSecretPromoteItem(sr)}
+                  style={{
+                    width: '100%', padding: '14px 24px', border: 'none', borderRadius: 14,
+                    fontSize: 15, fontWeight: 600, color: '#fff', cursor: 'pointer',
+                    background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, fontFamily: 'inherit',
+                  }}
+                >
+                  🎁 {t('sr_cta_promote', locale)}
+                </button>
+              )}
+
+              {/* Open wish link — if url present & item not unavailable */}
+              {url && !isUnavailable && (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    width: '100%', padding: '12px 24px', border: `1.5px solid ${C.border}`, borderRadius: 14,
+                    fontSize: 14, fontWeight: 500, color: C.textSec, cursor: 'pointer',
+                    background: 'transparent', fontFamily: 'inherit', textAlign: 'center',
+                    textDecoration: 'none', boxSizing: 'border-box', display: 'block',
+                  }}
+                >
+                  {t('sr_detail_open_wish', locale)}
+                </a>
+              )}
+
+              {/* Cancel — always available for ACTIVE/UPDATED/CONFLICT. For FULFILLED/UNAVAILABLE — "remove from list" */}
+              <button
+                onClick={() => setSecretCancelItem(sr)}
+                style={{
+                  width: '100%', padding: '12px 24px', border: '1.5px solid rgba(248,113,113,0.12)', borderRadius: 14,
+                  fontSize: 14, fontWeight: 500, color: '#F87171', cursor: 'pointer',
+                  background: 'rgba(248,113,113,0.12)', fontFamily: 'inherit',
+                }}
+              >
+                {(isFulfilled || isUnavailable)
+                  ? `🗑 ${t('sr_cta_cancel', locale)}`
+                  : t('sr_cta_cancel_icon', locale)}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          SECRET RESERVATION PAYWALL
+          ══════════════════════════════════════════════ */}
+      {screen === 'secret-reservation-paywall' && (() => {
+        const secretColor = '#A78BFA';
+        const secretSoft = 'rgba(167,139,250,0.14)';
+        const secretBorder = 'rgba(167,139,250,0.26)';
+        const blueSoft = 'rgba(96,165,250,0.12)';
+        const greenSoft = 'rgba(52,211,153,0.12)';
+        const yellowSoft = 'rgba(251,191,36,0.12)';
+        const demoRow = (emoji: string, name: string, sub: string) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 12px', marginBottom: 8 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: secretSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{emoji}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+              <div style={{ fontSize: 11, color: C.textSec, marginTop: 1 }}>{sub}</div>
+            </div>
+            <span style={{ fontSize: 14, color: secretColor, flexShrink: 0 }}>🔒</span>
+          </div>
+        );
+        const benefit = (iconEl: string, iconBg: string, iconColor: string, title: string, body: string) => (
+          <div style={{ padding: 12, borderRadius: 14, background: C.surface, border: `1px solid ${C.border}` }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: iconBg, color: iconColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, marginBottom: 8 }}>{iconEl}</div>
+            <h4 style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.3, margin: '0 0 2px', fontFamily: font }}>{title}</h4>
+            <p style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.4, margin: 0 }}>{body}</p>
+          </div>
+        );
+        return (
+          <div style={{ padding: '0 0 calc(110px + env(safe-area-inset-bottom))', animation: 'fadeIn 0.3s ease' }}>
+            {/* Header with back */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px 8px' }}>
+              <button
+                onClick={() => { setSecretPaywallReturnItem(null); setScreen(secretPaywallReturnItem ? 'guest-item-detail' : 'my-reservations'); }}
+                style={{ background: 'none', border: 'none', color: secretColor, fontSize: 24, cursor: 'pointer', padding: 0, lineHeight: 1 }}
+                aria-label={t('back_btn', locale)}
+              >‹</button>
+              <div style={{ fontSize: 17, fontWeight: 600, color: C.text, fontFamily: font }}>{t('sr_title', locale)}</div>
+            </div>
+
+            {/* Hero */}
+            <div style={{
+              padding: '4px 20px 0',
+              textAlign: 'center' as const,
+              background:
+                'radial-gradient(circle at 50% 0%, rgba(167,139,250,0.22) 0%, transparent 60%),' +
+                'radial-gradient(circle at 20% 30%, rgba(124,106,255,0.10) 0%, transparent 40%)',
+            }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: secretColor, letterSpacing: '0.05em', textTransform: 'uppercase' as const, marginBottom: 14, padding: '5px 10px', borderRadius: 20, background: secretSoft, border: `1px solid ${secretBorder}` }}>
+                {t('sr_paywall_brand', locale)}
+              </div>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, lineHeight: 1.2, margin: '0 0 8px', fontFamily: font }}>
+                {t('sr_paywall_title', locale)}
+              </h1>
+              <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, margin: '0 auto 18px', maxWidth: 300 }}>
+                {t('sr_paywall_sub', locale)}
+              </p>
+
+              {/* Demo stack */}
+              <div style={{ background: C.card, border: `1px solid ${C.borderLight}`, borderRadius: 20, padding: 14, textAlign: 'left' as const, boxShadow: '0 8px 32px rgba(0,0,0,0.35)', position: 'relative' as const, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 12 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: secretColor, boxShadow: `0 0 8px ${secretColor}`, display: 'inline-block', animation: 'srDotPulse 2s infinite' }} />
+                  {t('sr_paywall_demo_header', locale)}
+                </div>
+                <style>{`@keyframes srDotPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.15); } }`}</style>
+                {demoRow('🎧', 'Sony WH-1000XM5', locale === 'ru' ? 'Мама · 29 990 ₽ · 3 дня назад' : 'Mom · $299 · 3 days ago')}
+                {demoRow('📖', locale === 'ru' ? 'Мартин «Игра престолов»' : '"Game of Thrones" book', locale === 'ru' ? 'Алексей · 1 890 ₽ · 5 дней назад' : 'Alex · $19 · 5 days ago')}
+                {demoRow('☕', locale === 'ru' ? 'Кофемашина DeLonghi' : 'DeLonghi coffee machine', locale === 'ru' ? 'Катя · 54 990 ₽ · вчера' : 'Kate · $549 · yesterday')}
+              </div>
+            </div>
+
+            {/* Benefits 2x2 */}
+            <div style={{ padding: '16px 20px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {benefit('👻', secretSoft, secretColor, t('sr_paywall_benefit1_title', locale), t('sr_paywall_benefit1_body', locale))}
+              {benefit('💾', C.accentSoft, C.accent, t('sr_paywall_benefit2_title', locale), t('sr_paywall_benefit2_body', locale))}
+              {benefit('🛎', blueSoft, '#60A5FA', t('sr_paywall_benefit3_title', locale), t('sr_paywall_benefit3_body', locale))}
+              {benefit('🎁', greenSoft, '#34D399', t('sr_paywall_benefit4_title', locale), t('sr_paywall_benefit4_body', locale))}
+            </div>
+
+            {/* Honest caveat */}
+            <div style={{ margin: '14px 20px 0', padding: '12px 14px', borderRadius: 14, background: yellowSoft, border: '1px solid rgba(251,191,36,0.22)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+              <div>
+                <strong style={{ color: C.text, display: 'block', marginBottom: 2, fontSize: 13 }}>{t('sr_paywall_caveat_title', locale)}</strong>
+                <span style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5 }}>{t('sr_paywall_caveat_body', locale)}</span>
+              </div>
+            </div>
+
+            {/* Price block */}
+            <div style={{ margin: '18px 20px 0', padding: 18, borderRadius: 18, background: `linear-gradient(135deg, ${secretSoft} 0%, rgba(167,139,250,0.04) 100%)`, border: `1px solid ${secretBorder}`, position: 'relative' as const, overflow: 'hidden' }}>
+              <div style={{ position: 'absolute' as const, right: -8, top: -20, fontSize: 80, opacity: 0.06, pointerEvents: 'none' as const }}>🔒</div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#34D399', background: greenSoft, padding: '3px 7px', borderRadius: 5, marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
+                {t('sr_paywall_price_ribbon', locale)}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 32, fontWeight: 800, color: C.text, lineHeight: 1, fontFamily: font }}>{secretAccess.priceXtr}<span style={{ color: '#FBBF24' }}>⭐</span></span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.textSec }}>{t('sr_paywall_price_once', locale)}</span>
+              </div>
+              <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('sr_paywall_price_sub', locale)}</div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                {[
+                  { t: t('sr_paywall_chip1_top', locale), b: t('sr_paywall_chip1_bottom', locale) },
+                  { t: t('sr_paywall_chip2_top', locale), b: t('sr_paywall_chip2_bottom', locale) },
+                  { t: t('sr_paywall_chip3_top', locale), b: t('sr_paywall_chip3_bottom', locale) },
+                ].map((c, i) => (
+                  <div key={i} style={{ flex: 1, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', fontSize: 11, color: C.textSec, textAlign: 'center' as const, lineHeight: 1.3 }}>
+                    <strong style={{ color: C.text, display: 'block', fontWeight: 700 }}>{c.t}</strong>
+                    {c.b}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* FAQ */}
+            <div style={{ padding: '16px 20px 0' }}>
+              {[
+                { q: t('sr_paywall_faq_q1', locale), a: t('sr_paywall_faq_a1', locale) },
+                { q: t('sr_paywall_faq_q2', locale), a: t('sr_paywall_faq_a2', locale) },
+                { q: t('sr_paywall_faq_q3', locale), a: t('sr_paywall_faq_a3', locale) },
+                { q: t('sr_paywall_faq_q4', locale), a: t('sr_paywall_faq_a4', locale) },
+              ].map((f, i) => (
+                <div key={i} style={{ padding: '12px 0', borderTop: i === 0 ? 'none' : `1px solid ${C.border}`, paddingTop: i === 0 ? 0 : 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ width: 16, height: 16, borderRadius: '50%', background: secretSoft, color: secretColor, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>?</span>
+                    {f.q}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5, paddingLeft: 24 }}>{f.a}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Sticky CTA */}
+            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '14px 20px calc(14px + env(safe-area-inset-bottom))', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 50 }}>
+              <button
+                disabled={addonCheckoutLoading}
+                onClick={() => void handleBuyAddon('secret_reservation_unlock')}
+                style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${secretColor} 0%, #C4A7FF 100%)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgba(167,139,250,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: addonCheckoutLoading ? 0.6 : 1 }}
+              >
+                {addonCheckoutLoading ? '…' : t('sr_paywall_cta', locale, { price: secretAccess.priceXtr })}
+              </button>
+              <button
+                onClick={() => { setSecretPaywallReturnItem(null); setScreen(secretPaywallReturnItem ? 'guest-item-detail' : 'my-reservations'); }}
+                style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: font, marginTop: 6 }}
+              >
+                {t('sr_paywall_later', locale)}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ══════════════════════════════════════════════
           OWNER — WISHLIST DETAIL
@@ -13417,8 +14171,33 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         style={{ ...btnSecondary, width: '100%', borderRadius: 16, padding: '14px 24px', fontSize: 15 }}>
                         {'👥 ' + t('gg_cta', locale)}
                       </button>
+                      {/* 🔒 Secret reservation CTA — third option, styled with secret accent */}
+                      {(() => {
+                        const existing = secretReservations.find((r) => r.itemId === viewingItem.id);
+                        const label = existing ? t('sr_cta_open_secret', locale) : t('sr_cta_reserve_secretly', locale);
+                        return (
+                          <button
+                            onClick={() => startSecretReservationFlow(viewingItem)}
+                            style={{
+                              width: '100%', padding: '14px 24px', borderRadius: 16,
+                              border: '1px solid rgba(167,139,250,0.22)',
+                              background: 'rgba(167,139,250,0.12)', color: '#A78BFA',
+                              fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                            }}
+                          >
+                            {label}
+                            {!existing && !secretAccess.unlocked && planInfo.code === 'FREE' && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)', padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5, marginLeft: 4 }}>PRO</span>
+                            )}
+                          </button>
+                        );
+                      })()}
                       <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, padding: '0 8px' }}>
                         {t('gg_cta_hint', locale)}
+                      </div>
+                      <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, padding: '0 8px' }}>
+                        {t('sr_short_tagline', locale)}
                       </div>
                     </div>
                   )}
@@ -13441,9 +14220,36 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     </>
                   )}
                   {viewingItem.status === 'reserved' && !(!!myActorHashRef.current && (viewingItem as GuestItem).reservedByActorHash === myActorHashRef.current) && (
-                    <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
-                      {t('already_reserved', locale)}
-                    </span>
+                    <>
+                      <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.orangeSoft, color: C.orange, fontSize: 14, fontWeight: 600 }}>
+                        {t('already_reserved', locale)}
+                      </span>
+                      {/* 🔒 Secret reservation still available even when publicly reserved by someone else */}
+                      {(() => {
+                        const existing = secretReservations.find((r) => r.itemId === viewingItem.id);
+                        const label = existing ? t('sr_cta_open_secret', locale) : t('sr_cta_save_secret_still', locale);
+                        return (
+                          <button
+                            onClick={() => startSecretReservationFlow(viewingItem)}
+                            style={{
+                              width: '100%', padding: '14px 24px', borderRadius: 16,
+                              border: '1px solid rgba(167,139,250,0.22)',
+                              background: 'rgba(167,139,250,0.12)', color: '#A78BFA',
+                              fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                            }}
+                          >
+                            {label}
+                            {!existing && !secretAccess.unlocked && planInfo.code === 'FREE' && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)', padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5, marginLeft: 4 }}>PRO</span>
+                            )}
+                          </button>
+                        );
+                      })()}
+                      <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, padding: '0 8px' }}>
+                        {t('sr_cta_save_secret_hint', locale)}
+                      </div>
+                    </>
                   )}
                   {viewingItem.status === 'purchased' && (
                     <span style={{ display: 'inline-block', padding: '10px 16px', borderRadius: 12, background: C.greenSoft, color: C.green, fontSize: 14, fontWeight: 600 }}>
@@ -18892,8 +19698,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             }}
           >
             <span style={{ fontSize: 20 }}>📂</span>
-            <span style={{ flex: 1 }}>{t('cat_create', locale)}</span>
-            {planInfo.code === 'FREE' && <ProBadge />}
+            {t('cat_create', locale)}
+            {planInfo.code === 'FREE' && <ProBadge style={{ marginLeft: 'auto' }} />}
           </button>
           {/* Manage categories (reorder) — only when user categories exist */}
           {hasUserCategories && (
@@ -18968,13 +19774,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           >
             <span style={{ fontSize: 20 }}>🚫</span>
             {t('dont_gift_banner_title', locale)}
-            {planInfo.code === 'FREE' && (
-              <span style={{
-                fontSize: 10, fontWeight: 700, color: '#fff', marginLeft: 'auto',
-                background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)',
-                padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5,
-              }}>PRO</span>
-            )}
+            {planInfo.code === 'FREE' && <ProBadge style={{ marginLeft: 'auto' }} />}
           </button>
           {/* Smart Reservations per-wishlist settings */}
           <button
@@ -18996,11 +19796,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <span style={{ fontSize: 20 }}>⏰</span>
             {t('smart_res_section_title', locale)}
             {planInfo.code === 'FREE' && !(addOns.smartReservationsWishlists ?? []).includes(currentWl?.id ?? '') && (
-              <span style={{
-                fontSize: 10, fontWeight: 700, color: '#fff', marginLeft: 'auto',
-                background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)',
-                padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5,
-              }}>PRO</span>
+              <ProBadge style={{ marginLeft: 'auto' }} />
             )}
             {currentWl?.smartReservationsEnabled && (
               <span style={{ fontSize: 10, fontWeight: 600, color: C.green, marginLeft: 'auto' }}>✓</span>
@@ -19020,13 +19816,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           >
             <span style={{ fontSize: 20 }}>📋</span>
             {t('curated_share_btn', locale)}
-            {planInfo.code === 'FREE' && (
-              <span style={{
-                fontSize: 10, fontWeight: 700, color: '#fff', marginLeft: 'auto',
-                background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)',
-                padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5,
-              }}>PRO</span>
-            )}
+            {planInfo.code === 'FREE' && <ProBadge style={{ marginLeft: 'auto' }} />}
           </button>
           {/* Archive wishlist */}
           <button
@@ -21477,6 +22267,394 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             style={{ ...btnGhost, marginTop: 4 }}
           >
             {t('cancel', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* ══════════════════════════════════════════════
+          SECRET RESERVATION — ONBOARDING (3 steps)
+          ══════════════════════════════════════════════ */}
+      {showSecretOnboarding && (() => {
+        const secretColor = '#A78BFA';
+        const secretSoft = 'rgba(167,139,250,0.14)';
+        const secretBorder = 'rgba(167,139,250,0.26)';
+        const step = secretOnboardingStep;
+        const totalSteps = 3;
+
+        const closeWith = async (action: 'completed' | 'dismissed') => {
+          try {
+            await tgFetch('/tg/secret-reservations/onboarding/seen', {
+              method: 'POST',
+              body: JSON.stringify({ action }),
+            });
+          } catch { /* silent */ }
+          setSecretOnboardingSeen(true);
+          setShowSecretOnboarding(false);
+          trackEvent(action === 'dismissed' ? 'secret_res.onboarding_dismiss' : 'secret_res.onboarding_completed', { step });
+          if (action === 'completed' && secretOnboardingNext) {
+            const next = secretOnboardingNext;
+            setSecretOnboardingNext(null);
+            next();
+          } else {
+            setSecretOnboardingNext(null);
+          }
+        };
+
+        const goNext = () => {
+          if (step < totalSteps) {
+            const newStep = (step + 1) as 1 | 2 | 3;
+            setSecretOnboardingStep(newStep);
+            trackEvent('secret_res.onboarding_view', { step: newStep });
+          }
+        };
+        const goBack = () => {
+          if (step > 1) setSecretOnboardingStep((step - 1) as 1 | 2 | 3);
+        };
+
+        const dots = (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 20 }}>
+            {[1, 2, 3].map((i) => (
+              <div key={i} style={{ width: 20, height: 4, borderRadius: 2, background: i === step ? secretColor : i < step ? `${secretColor}66` : C.surfaceHover }} />
+            ))}
+          </div>
+        );
+
+        const heroIcon = step === 1 ? '🔒' : step === 2 ? '👻' : '⚠️';
+        const heroBg = step === 3 ? 'rgba(251,191,36,0.14)' : secretSoft;
+        const heroColor = step === 3 ? '#FBBF24' : secretColor;
+        const title = step === 1 ? t('sr_onb_s1_title', locale) : step === 2 ? t('sr_onb_s2_title', locale) : t('sr_onb_s3_head', locale);
+        const body = step === 1 ? t('sr_onb_s1_body_v2', locale) : step === 2 ? t('sr_onb_s2_body', locale) : t('sr_onb_s3_body_v2', locale);
+
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 300,
+            background: C.bg, overflow: 'auto',
+            animation: 'fadeIn 0.25s ease',
+          }}>
+            <div style={{ padding: '24px 20px calc(160px + env(safe-area-inset-bottom))', minHeight: '100vh', display: 'flex', flexDirection: 'column' as const, maxWidth: 480, margin: '0 auto' }}>
+              {dots}
+
+              <div style={{ textAlign: 'center' as const, marginBottom: 20 }}>
+                <div style={{
+                  width: 88, height: 88, borderRadius: 26,
+                  background: heroBg, border: `1px solid ${step === 3 ? 'rgba(251,191,36,0.26)' : secretBorder}`,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 40, margin: '0 auto 16px', color: heroColor,
+                }}>
+                  {heroIcon}
+                </div>
+                <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1.25, margin: '0 0 8px', fontFamily: font }}>{title}</h2>
+                <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, maxWidth: 320, margin: '0 auto' }}>{body}</p>
+              </div>
+
+              {step === 2 && (
+                <div style={{ background: C.card, borderRadius: 16, padding: 14, marginBottom: 16 }}>
+                  {[
+                    { icon: '🔕', text: t('sr_onb_s2_bullet1', locale) },
+                    { icon: '🎴', text: t('sr_onb_s2_bullet2', locale) },
+                    { icon: '📊', text: t('sr_onb_s2_bullet3', locale) },
+                  ].map((bullet, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 10, background: secretSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>{bullet.icon}</div>
+                      <span style={{ fontSize: 14, color: C.text }}>{bullet.text}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {step === 3 && (
+                <div style={{ padding: '12px 14px', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: 14, marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <span style={{ fontSize: 16, flexShrink: 0 }}>💡</span>
+                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5 }}>{t('sr_paywall_caveat_body', locale)}</div>
+                </div>
+              )}
+
+              <div style={{ flex: 1 }} />
+            </div>
+
+            {/* Sticky bottom CTA */}
+            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '14px 20px calc(14px + env(safe-area-inset-bottom))', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 310 }}>
+              <div style={{ maxWidth: 480, margin: '0 auto' }}>
+                {step === totalSteps ? (
+                  <>
+                    <button
+                      onClick={() => void closeWith('completed')}
+                      style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${secretColor} 0%, #C4A7FF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 4px 16px rgba(167,139,250,0.32)' }}
+                    >
+                      {t('sr_onb_final_cta', locale)}
+                    </button>
+                    <button
+                      onClick={() => void closeWith('dismissed')}
+                      style={{ width: '100%', padding: '10px', border: 'none', background: 'transparent', color: C.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: font, marginTop: 6 }}
+                    >
+                      {t('sr_onb_skip', locale)}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={goNext}
+                      style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${secretColor} 0%, #C4A7FF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 4px 16px rgba(167,139,250,0.32)' }}
+                    >
+                      {t('sr_onb_next', locale)}
+                    </button>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                      {step > 1 && (
+                        <button
+                          onClick={goBack}
+                          style={{ flex: 1, padding: '10px', border: 'none', background: 'transparent', color: C.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: font }}
+                        >
+                          {t('sr_onb_back', locale)}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => void closeWith('dismissed')}
+                        style={{ flex: 1, padding: '10px', border: 'none', background: 'transparent', color: C.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: font }}
+                      >
+                        {t('sr_onb_skip', locale)}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          SECRET RESERVATION — CONFIRM CREATE SHEET
+          ══════════════════════════════════════════════ */}
+      <BottomSheet
+        isOpen={!!secretConfirmItem}
+        onClose={() => { if (!secretCreating) setSecretConfirmItem(null); }}
+        title=""
+      >
+        {secretConfirmItem && (() => {
+          const it = secretConfirmItem;
+          const priceLine = it.price != null ? ` · ${fmtPrice(it.price, locale, it.currency ?? 'RUB')}` : '';
+          return (
+            <div style={{ textAlign: 'center' as const, padding: '4px 0 0' }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: 16,
+                background: 'rgba(167,139,250,0.14)', border: '1px solid rgba(167,139,250,0.26)',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 26, margin: '0 auto 12px', color: '#A78BFA',
+              }}>🔒</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8, fontFamily: font }}>
+                {t('sr_confirm_title', locale)}
+              </div>
+              <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 14 }}>
+                <strong style={{ color: C.text }}>{it.title}</strong>{priceLine}
+              </div>
+              <div style={{ background: C.card, borderRadius: 12, padding: 12, marginBottom: 16, textAlign: 'left' as const }}>
+                {[
+                  { icon: '👻', text: t('sr_paywall_benefit1_title', locale) },
+                  { icon: '💾', text: t('sr_paywall_benefit2_title', locale) },
+                  { icon: '🎁', text: t('sr_paywall_benefit4_title', locale) },
+                ].map((b, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+                    <span style={{ fontSize: 15, width: 22, textAlign: 'center' as const, flexShrink: 0 }}>{b.icon}</span>
+                    <span style={{ fontSize: 13, color: C.text }}>{b.text}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setSecretConfirmItem(null)}
+                  disabled={secretCreating}
+                  style={{ ...btnSecondary, flex: 1 }}
+                >
+                  {t('sr_confirm_cancel', locale)}
+                </button>
+                <button
+                  onClick={() => void handleSecretReservationCreate(it)}
+                  disabled={secretCreating}
+                  style={{
+                    flex: 2, padding: '12px', borderRadius: 12, border: 'none',
+                    background: 'linear-gradient(135deg, #A78BFA 0%, #C4A7FF 100%)',
+                    color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                    fontFamily: font, opacity: secretCreating ? 0.6 : 1,
+                    boxShadow: '0 4px 14px rgba(167,139,250,0.32)',
+                  }}
+                >
+                  {secretCreating ? '…' : t('sr_confirm_cta', locale)}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </BottomSheet>
+
+      {/* ══════════════════════════════════════════════
+          SECRET RESERVATION — PROMOTE TO PUBLIC SHEET
+          ══════════════════════════════════════════════ */}
+      <BottomSheet
+        isOpen={!!secretPromoteItem}
+        onClose={() => { if (!secretPromoting) setSecretPromoteItem(null); }}
+        title=""
+      >
+        {secretPromoteItem && (() => {
+          const sr = secretPromoteItem;
+          const title = sr.current.title || sr.snapshot.title;
+          const isConflict = sr.derivedState === 'PUBLIC_RESERVED_BY_OTHER';
+          return (
+            <div style={{ textAlign: 'center' as const, padding: '4px 0 0' }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: 16,
+                background: isConflict ? 'rgba(251,191,36,0.14)' : C.accentSoft,
+                border: `1px solid ${isConflict ? 'rgba(251,191,36,0.26)' : C.border}`,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 26, margin: '0 auto 12px', color: isConflict ? '#FBBF24' : C.accent,
+              }}>{isConflict ? '⚠️' : '🎁'}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8, fontFamily: font }}>
+                {isConflict ? t('sr_promote_conflict_title', locale) : t('sr_promote_sheet_title', locale)}
+              </div>
+              <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 14 }}>
+                {isConflict
+                  ? t('sr_promote_conflict_body', locale)
+                  : t('sr_promote_sheet_subtitle', locale, { title })}
+              </div>
+              {!isConflict && (
+                <div style={{ background: C.card, borderRadius: 12, padding: 12, marginBottom: 16, textAlign: 'left' as const }}>
+                  {[
+                    { icon: '🔔', text: t('sr_promote_sheet_b1', locale) },
+                    { icon: '📌', text: t('sr_promote_sheet_b3', locale) },
+                    { icon: '🔄', text: t('sr_promote_sheet_b2', locale) },
+                  ].map((b, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+                      <span style={{ fontSize: 15, width: 22, textAlign: 'center' as const, flexShrink: 0 }}>{b.icon}</span>
+                      <span style={{ fontSize: 13, color: C.text }}>{b.text}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setSecretPromoteItem(null)}
+                  disabled={secretPromoting}
+                  style={{ ...btnSecondary, flex: 1 }}
+                >
+                  {isConflict ? t('sr_promote_conflict_keep', locale) : t('cancel', locale)}
+                </button>
+                {!isConflict && (
+                  <button
+                    onClick={() => void handleSecretReservationPromote(sr)}
+                    disabled={secretPromoting}
+                    style={{
+                      flex: 2, padding: '12px', borderRadius: 12, border: 'none',
+                      background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
+                      color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                      fontFamily: font, opacity: secretPromoting ? 0.6 : 1,
+                    }}
+                  >
+                    {secretPromoting ? '…' : t('sr_promote_cta_confirm', locale)}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+      </BottomSheet>
+
+      {/* ══════════════════════════════════════════════
+          SECRET RESERVATION — CANCEL CONFIRM SHEET
+          ══════════════════════════════════════════════ */}
+      <BottomSheet
+        isOpen={!!secretCancelItem}
+        onClose={() => { if (!secretCancelling) setSecretCancelItem(null); }}
+        title=""
+      >
+        {secretCancelItem && (() => {
+          const sr = secretCancelItem;
+          const isTerminal = sr.derivedState === 'ITEM_FULFILLED' || sr.derivedState === 'ITEM_UNAVAILABLE';
+          return (
+            <div style={{ textAlign: 'center' as const, padding: '4px 0 0' }}>
+              <div style={{ fontSize: 44, marginBottom: 10 }}>{isTerminal ? '🗑' : '🔓'}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 8, fontFamily: font }}>
+                {t('sr_cancel_confirm_title', locale)}
+              </div>
+              <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 20 }}>
+                {t('sr_cancel_confirm_body', locale)}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setSecretCancelItem(null)}
+                  disabled={secretCancelling}
+                  style={{ ...btnSecondary, flex: 1 }}
+                >
+                  {t('cancel', locale)}
+                </button>
+                <button
+                  onClick={() => void handleSecretReservationCancel(sr)}
+                  disabled={secretCancelling}
+                  style={{
+                    flex: 2, padding: '12px', borderRadius: 12, border: 'none',
+                    background: C.redSoft, color: C.red, fontSize: 14, fontWeight: 700,
+                    cursor: 'pointer', fontFamily: font, opacity: secretCancelling ? 0.6 : 1,
+                  }}
+                >
+                  {secretCancelling ? '…' : t('sr_cancel_confirm_cta', locale)}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </BottomSheet>
+
+      {/* ══════════════════════════════════════════════
+          SECRET RESERVATION — ERROR SHEETS
+          ══════════════════════════════════════════════ */}
+      <BottomSheet
+        isOpen={secretErrorKind === 'own_item'}
+        onClose={() => setSecretErrorKind(null)}
+        title=""
+      >
+        <div style={{ textAlign: 'center' as const, padding: '4px 0 0' }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 16,
+            background: 'rgba(248,113,113,0.14)', border: '1px solid rgba(248,113,113,0.26)',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 26, margin: '0 auto 12px', color: '#F87171',
+          }}>🚫</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 8, fontFamily: font }}>
+            {t('sr_err_own_item_title', locale)}
+          </div>
+          <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 20 }}>
+            {t('sr_err_own_item_body', locale)}
+          </div>
+          <button
+            onClick={() => setSecretErrorKind(null)}
+            style={{ ...btnPrimary, width: '100%' }}
+          >
+            {t('sr_onb_got_it', locale)}
+          </button>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
+        isOpen={secretErrorKind === 'already_public'}
+        onClose={() => setSecretErrorKind(null)}
+        title=""
+      >
+        <div style={{ textAlign: 'center' as const, padding: '4px 0 0' }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 16,
+            background: C.accentSoft, border: `1px solid ${C.border}`,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 26, margin: '0 auto 12px', color: C.accent,
+          }}>🎁</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 8, fontFamily: font }}>
+            {t('sr_err_already_public_title', locale)}
+          </div>
+          <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 20 }}>
+            {t('sr_err_already_public_body', locale)}
+          </div>
+          <button
+            onClick={() => setSecretErrorKind(null)}
+            style={{ ...btnPrimary, width: '100%' }}
+          >
+            {t('sr_onb_got_it', locale)}
           </button>
         </div>
       </BottomSheet>

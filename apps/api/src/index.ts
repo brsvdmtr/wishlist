@@ -1951,6 +1951,8 @@ const GIFT_NOTES_PRICE_XTR = parseInt(process.env.GIFT_NOTES_PRICE_XTR ?? '19', 
 const GIFT_NOTES_SKU = 'gift_notes_unlock';
 const GROUP_GIFT_PRICE_XTR = parseInt(process.env.GROUP_GIFT_PRICE_XTR ?? '79', 10);
 const GROUP_GIFT_SKU = 'group_gift_unlock';
+const SECRET_RESERVATION_PRICE_XTR = parseInt(process.env.SECRET_RESERVATION_PRICE_XTR ?? '24', 10);
+const SECRET_RESERVATION_SKU = 'secret_reservation_unlock';
 
 // ─── One-time SKU catalogue ──────────────────────────────────────────────────
 const ONE_TIME_SKUS = {
@@ -1967,6 +1969,7 @@ const ONE_TIME_SKUS = {
   reservation_pro_unlock:  { code: 'reservation_pro_unlock',  price: 50, type: 'permanent' as const, addonType: 'reservation_pro_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: false },
   group_gift_unlock:       { code: 'group_gift_unlock',       price: GROUP_GIFT_PRICE_XTR, type: 'permanent' as const, addonType: 'group_gift_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: false },
   smart_reservations_unlock: { code: 'smart_reservations_unlock', price: 15, type: 'permanent' as const, addonType: 'smart_reservations_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: true },
+  secret_reservation_unlock: { code: 'secret_reservation_unlock', price: SECRET_RESERVATION_PRICE_XTR, type: 'permanent' as const, addonType: 'secret_reservation_unlock' as string | null, creditKey: null as 'hint' | 'import' | null, creditAmount: 0, targetRequired: false },
 } as const;
 
 type SkuCode = keyof typeof ONE_TIME_SKUS;
@@ -2104,6 +2107,13 @@ async function getEffectiveEntitlements(userId: string, godMode?: boolean) {
       unlocked: godMode || addOns.some(a => a.addonType === GROUP_GIFT_SKU),
       priceXtr: GROUP_GIFT_PRICE_XTR,
     },
+    // Secret Reservations access: PRO users get it, or one-time unlock via UserAddOn
+    hasSecretReservations: base.isPro || resolvedGodMode || addOns.some(a => a.addonType === SECRET_RESERVATION_SKU),
+    secretReservations: {
+      unlocked: base.isPro || resolvedGodMode || addOns.some(a => a.addonType === SECRET_RESERVATION_SKU),
+      unlockType: base.isPro ? 'PRO' as const : addOns.some(a => a.addonType === SECRET_RESERVATION_SKU) ? 'ONE_TIME' as const : resolvedGodMode ? 'GOD' as const : null,
+      priceXtr: SECRET_RESERVATION_PRICE_XTR,
+    },
   };
 }
 
@@ -2112,6 +2122,16 @@ function requireGiftNotes(ent: Awaited<ReturnType<typeof getEffectiveEntitlement
   if (!ent.hasGiftNotes) {
     trackEvent('feature_gate_hit_gift_notes');
     res.status(403).json({ error: 'gift_notes_required' });
+    return false;
+  }
+  return true;
+}
+
+/** Gate helper: Secret Reservations feature required */
+function requireSecretReservations(ent: Awaited<ReturnType<typeof getEffectiveEntitlements>>, res: any): boolean {
+  if (!ent.hasSecretReservations) {
+    trackEvent('feature_gate_hit_secret_reservations');
+    res.status(403).json({ error: 'secret_reservations_required' });
     return false;
   }
   return true;
@@ -2170,6 +2190,7 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
     event.startsWith('first_share_prompt_') ||
     event.startsWith('ready_share_prompt_') ||
     event.startsWith('group_gift_') ||
+    event.startsWith('secret_res.') ||
     event.startsWith('showcase.') ||
     event.startsWith('public_profile.') ||
     event.startsWith('error:');
@@ -2554,6 +2575,87 @@ function mapTgItem(item: {
   };
 }
 
+// ─── Secret Reservation helpers ──────────────────────────────────────────────
+type SecretReservationSnapshot = {
+  title: string;
+  url: string | null;
+  priceText: string | null;
+  currency: string | null;
+  imageUrl: string | null;
+  description: string | null;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  status: string;
+};
+
+function buildSecretReservationSnapshot(item: {
+  title: string;
+  url: string | null;
+  priceText: string | null;
+  currency: string | null;
+  imageUrl: string | null;
+  description: string | null;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  status: string;
+}): SecretReservationSnapshot {
+  return {
+    title: item.title,
+    url: item.url,
+    priceText: item.priceText,
+    currency: item.currency,
+    imageUrl: item.imageUrl,
+    description: item.description,
+    priority: item.priority,
+    status: item.status,
+  };
+}
+
+type SecretReservationDerivedState =
+  | 'ACTIVE'
+  | 'ITEM_UPDATED'
+  | 'PUBLIC_RESERVED_BY_OTHER'
+  | 'ITEM_FULFILLED'
+  | 'ITEM_UNAVAILABLE';
+
+function deriveSecretReservationState(args: {
+  snapshot: SecretReservationSnapshot;
+  reserverUserId: string;
+  currentItem: {
+    status: string;
+    title: string;
+    url: string | null;
+    priceText: string | null;
+    currency: string | null;
+    imageUrl: string | null;
+    description: string | null;
+    priority: 'LOW' | 'MEDIUM' | 'HIGH';
+    reserverUserId: string | null;
+    archivedAt: Date | null;
+  };
+}): { state: SecretReservationDerivedState; diffFields: string[] } {
+  const { snapshot, reserverUserId, currentItem } = args;
+  if (currentItem.archivedAt) return { state: 'ITEM_UNAVAILABLE', diffFields: [] };
+  if (currentItem.status === 'PURCHASED') return { state: 'ITEM_FULFILLED', diffFields: [] };
+  if (
+    currentItem.status === 'RESERVED'
+    && currentItem.reserverUserId
+    && currentItem.reserverUserId !== reserverUserId
+  ) {
+    return { state: 'PUBLIC_RESERVED_BY_OTHER', diffFields: [] };
+  }
+
+  const diffFields: string[] = [];
+  if (snapshot.title !== currentItem.title) diffFields.push('title');
+  if ((snapshot.url ?? null) !== (currentItem.url ?? null)) diffFields.push('url');
+  if ((snapshot.priceText ?? null) !== (currentItem.priceText ?? null)) diffFields.push('priceText');
+  if ((snapshot.currency ?? null) !== (currentItem.currency ?? null)) diffFields.push('currency');
+  if ((snapshot.imageUrl ?? null) !== (currentItem.imageUrl ?? null)) diffFields.push('imageUrl');
+  if ((snapshot.description ?? null) !== (currentItem.description ?? null)) diffFields.push('description');
+  if (snapshot.priority !== currentItem.priority) diffFields.push('priority');
+
+  if (diffFields.length > 0) return { state: 'ITEM_UPDATED', diffFields };
+  return { state: 'ACTIVE', diffFields: [] };
+}
+
 async function getOrCreateTgUser(tgUser: TelegramUser) {
   return prisma.user.upsert({
     where: { telegramId: String(tgUser.id) },
@@ -2844,6 +2946,7 @@ tgRouter.get(
       promoPro: ent.promoPro,
       giftNotes: ent.giftNotes,
       groupGift: ent.groupGift,
+      secretReservations: ent.secretReservations,
       cardDisplayMode: ent.isPro ? (userProfile?.cardDisplayMode ?? 'auto') : 'auto',
       godMode: user.godMode,
       canGodMode: user.telegramId
@@ -3147,6 +3250,493 @@ tgRouter.get(
     }));
 
     return res.json({ history });
+  }),
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Secret Reservations — owner is never notified. Privacy-isolated table.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /tg/secret-reservations — list all active secret reservations for current user
+tgRouter.get(
+  '/secret-reservations',
+  asyncHandler(async (req, res) => {
+    const locale = getRequestLocale(req);
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+
+    const [rows, onboardingState] = await Promise.all([
+      prisma.secretReservation.findMany({
+        where: { reserverUserId: user.id, status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          item: {
+            select: {
+              id: true, wishlistId: true, title: true, url: true, priceText: true,
+              currency: true, imageUrl: true, description: true, priority: true,
+              status: true, reserverUserId: true, archivedAt: true, updatedAt: true,
+              sourceUrl: true, sourceDomain: true, importMethod: true,
+              wishlist: {
+                select: {
+                  owner: {
+                    select: {
+                      id: true, firstName: true, telegramChatId: true,
+                      profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.userOnboardingState.findUnique({
+        where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: 'secret_reservation', version: 1 } },
+        select: { status: true },
+      }),
+    ]);
+    const onboardingSeen = onboardingState?.status === 'COMPLETED' || onboardingState?.status === 'DISMISSED';
+
+    // Resolve owner names + avatars
+    const uniqueOwners = new Map<string, typeof rows[0]['item']['wishlist']['owner']>();
+    for (const r of rows) {
+      const owner = r.item.wishlist.owner;
+      if (!uniqueOwners.has(owner.id)) uniqueOwners.set(owner.id, owner);
+    }
+    const ownerNames = new Map<string, string>();
+    const ownerAvatarUrls = new Map<string, string | null>();
+    await Promise.all(
+      [...uniqueOwners.entries()].map(async ([ownerId, owner]) => {
+        ownerNames.set(ownerId, await resolveUserFirstName(owner, locale));
+        const profile = owner.profile;
+        ownerAvatarUrls.set(ownerId, (profile?.avatarPublic !== false && profile?.avatarUrl) ? profile.avatarUrl : null);
+      }),
+    );
+
+    const secretReservations = rows.map(r => {
+      const snap = r.snapshot as SecretReservationSnapshot;
+      const derived = deriveSecretReservationState({
+        snapshot: snap,
+        reserverUserId: user.id,
+        currentItem: {
+          status: r.item.status,
+          title: r.item.title,
+          url: r.item.url ?? null,
+          priceText: r.item.priceText,
+          currency: r.item.currency,
+          imageUrl: r.item.imageUrl,
+          description: r.item.description,
+          priority: r.item.priority,
+          reserverUserId: r.item.reserverUserId,
+          archivedAt: r.item.archivedAt,
+        },
+      });
+      const ownerId = r.item.wishlist.owner.id;
+      const hasUnacknowledgedUpdates = derived.state === 'ITEM_UPDATED'
+        && (!r.updatesAcknowledgedAt || r.updatesAcknowledgedAt < r.item.updatedAt);
+      return {
+        id: r.id,
+        itemId: r.itemId,
+        wishlistId: r.item.wishlistId,
+        snapshot: snap,
+        current: mapTgItem(r.item as any),
+        derivedState: derived.state,
+        diffFields: derived.diffFields,
+        hasUnacknowledgedUpdates,
+        note: r.note,
+        createdAt: r.createdAt.toISOString(),
+        updatesAcknowledgedAt: r.updatesAcknowledgedAt?.toISOString() ?? null,
+        ownerId,
+        ownerName: ownerNames.get(ownerId) ?? t('api_user_fallback', locale),
+        ownerAvatarUrl: ownerAvatarUrls.get(ownerId) ?? null,
+      };
+    });
+
+    return res.json({
+      secretReservations,
+      unlocked: ent.hasSecretReservations,
+      priceXtr: ent.secretReservations.priceXtr,
+      unlockType: ent.secretReservations.unlockType,
+      onboardingSeen,
+    });
+  }),
+);
+
+// GET /tg/secret-reservations/:id — single detail with full diff for detail screen
+tgRouter.get(
+  '/secret-reservations/:id',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing id' });
+    const locale = getRequestLocale(req);
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const row = await prisma.secretReservation.findUnique({
+      where: { id },
+      include: {
+        item: {
+          select: {
+            id: true, wishlistId: true, title: true, url: true, priceText: true,
+            currency: true, imageUrl: true, description: true, priority: true,
+            status: true, reserverUserId: true, archivedAt: true,
+            sourceUrl: true, sourceDomain: true, importMethod: true, updatedAt: true,
+            wishlist: {
+              select: {
+                owner: {
+                  select: {
+                    id: true, firstName: true, telegramChatId: true,
+                    profile: { select: { displayName: true, username: true, avatarUrl: true, avatarPublic: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    if (row.reserverUserId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const snap = row.snapshot as SecretReservationSnapshot;
+    const derived = deriveSecretReservationState({
+      snapshot: snap,
+      reserverUserId: user.id,
+      currentItem: {
+        status: row.item.status,
+        title: row.item.title,
+        url: row.item.url ?? null,
+        priceText: row.item.priceText,
+        currency: row.item.currency,
+        imageUrl: row.item.imageUrl,
+        description: row.item.description,
+        priority: row.item.priority,
+        reserverUserId: row.item.reserverUserId,
+        archivedAt: row.item.archivedAt,
+      },
+    });
+
+    const owner = row.item.wishlist.owner;
+    const ownerName = await resolveUserFirstName(owner, locale);
+    const profile = owner.profile;
+    const ownerAvatarUrl = (profile?.avatarPublic !== false && profile?.avatarUrl) ? profile.avatarUrl : null;
+
+    const hasUnacknowledgedUpdates = derived.state === 'ITEM_UPDATED'
+      && (!row.updatesAcknowledgedAt || row.updatesAcknowledgedAt < row.item.updatedAt);
+
+    trackEvent('secret_res.item_open', user.id, { secretReservationId: id, derivedState: derived.state });
+
+    return res.json({
+      id: row.id,
+      itemId: row.itemId,
+      wishlistId: row.item.wishlistId,
+      status: row.status,
+      snapshot: snap,
+      current: mapTgItem(row.item as any),
+      derivedState: derived.state,
+      diffFields: derived.diffFields,
+      hasUnacknowledgedUpdates,
+      note: row.note,
+      createdAt: row.createdAt.toISOString(),
+      updatesAcknowledgedAt: row.updatesAcknowledgedAt?.toISOString() ?? null,
+      ownerId: owner.id,
+      ownerName,
+      ownerAvatarUrl,
+    });
+  }),
+);
+
+// POST /tg/items/:id/secret-reserve — create a secret reservation
+tgRouter.post(
+  '/items/:id/secret-reserve',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing item id' });
+
+    const parsed = z.object({
+      note: z.string().max(500).nullable().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const ent = await getEffectiveEntitlements(user.id, user.godMode);
+    if (!requireSecretReservations(ent, res)) return;
+
+    const item = await prisma.item.findUnique({
+      where: { id },
+      select: {
+        id: true, title: true, url: true, priceText: true, currency: true,
+        imageUrl: true, description: true, priority: true, status: true,
+        archivedAt: true, wishlistId: true, wishlist: { select: { ownerId: true } },
+      },
+    });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    // Can't secret-reserve your own item
+    if (item.wishlist.ownerId === user.id) {
+      trackEvent('secret_res.own_item_blocked', user.id, { itemId: id });
+      return res.status(403).json({ error: 'own_item' });
+    }
+    if (item.archivedAt) return res.status(409).json({ error: 'item_unavailable' });
+
+    // Idempotent: if user already has an active secret reservation for this item, return it
+    const existing = await prisma.secretReservation.findUnique({
+      where: { itemId_reserverUserId: { itemId: id, reserverUserId: user.id } },
+    });
+    if (existing) {
+      if (existing.status === 'ACTIVE') {
+        trackEvent('secret_res.duplicate_blocked', user.id, { itemId: id, secretReservationId: existing.id });
+        return res.status(200).json({ id: existing.id, alreadyReserved: true });
+      }
+      // Re-activate a previously cancelled one
+      const snapshot = buildSecretReservationSnapshot({
+        title: item.title,
+        url: item.url ?? null,
+        priceText: item.priceText,
+        currency: item.currency,
+        imageUrl: item.imageUrl,
+        description: item.description,
+        priority: item.priority,
+        status: item.status,
+      });
+      const reactivated = await prisma.secretReservation.update({
+        where: { id: existing.id },
+        data: {
+          status: 'ACTIVE',
+          snapshot: snapshot as any,
+          note: parsed.data.note ?? null,
+          cancelledAt: null,
+          fulfilledAt: null,
+          convertedAt: null,
+          updatesAcknowledgedAt: null,
+        },
+      });
+      trackEvent('secret_res.created', user.id, { itemId: id, secretReservationId: reactivated.id, reactivated: true });
+      return res.json({ id: reactivated.id, alreadyReserved: false, reactivated: true });
+    }
+
+    const snapshot = buildSecretReservationSnapshot({
+      title: item.title,
+      url: item.url ?? null,
+      priceText: item.priceText,
+      currency: item.currency,
+      imageUrl: item.imageUrl,
+      description: item.description,
+      priority: item.priority,
+      status: item.status,
+    });
+
+    const created = await prisma.secretReservation.create({
+      data: {
+        itemId: id,
+        reserverUserId: user.id,
+        status: 'ACTIVE',
+        snapshot: snapshot as any,
+        note: parsed.data.note ?? null,
+      },
+    });
+
+    trackEvent('secret_res.created', user.id, { itemId: id, secretReservationId: created.id });
+    return res.json({ id: created.id, alreadyReserved: false });
+  }),
+);
+
+// POST /tg/secret-reservations/:id/cancel — cancel (soft-delete)
+tgRouter.post(
+  '/secret-reservations/:id/cancel',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const row = await prisma.secretReservation.findUnique({ where: { id } });
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    if (row.reserverUserId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (row.status !== 'ACTIVE') return res.status(409).json({ error: 'Not active' });
+
+    await prisma.secretReservation.update({
+      where: { id },
+      data: { status: 'CANCELLED', cancelledAt: new Date() },
+    });
+
+    trackEvent('secret_res.cancelled', user.id, { secretReservationId: id, itemId: row.itemId });
+    return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/secret-reservations/:id/acknowledge — mark updates as seen
+tgRouter.post(
+  '/secret-reservations/:id/acknowledge',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing id' });
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const row = await prisma.secretReservation.findUnique({
+      where: { id },
+      include: { item: { select: { status: true, title: true, url: true, priceText: true, currency: true, imageUrl: true, description: true, priority: true } } },
+    });
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    if (row.reserverUserId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (row.status !== 'ACTIVE') return res.status(409).json({ error: 'Not active' });
+
+    // Update snapshot to the current item state + acknowledge timestamp
+    const snapshot = buildSecretReservationSnapshot({
+      title: row.item.title,
+      url: row.item.url ?? null,
+      priceText: row.item.priceText,
+      currency: row.item.currency,
+      imageUrl: row.item.imageUrl,
+      description: row.item.description,
+      priority: row.item.priority,
+      status: row.item.status,
+    });
+    await prisma.secretReservation.update({
+      where: { id },
+      data: { snapshot: snapshot as any, updatesAcknowledgedAt: new Date() },
+    });
+
+    trackEvent('secret_res.update_ack', user.id, { secretReservationId: id, itemId: row.itemId });
+    return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/secret-reservations/:id/promote — convert to public reservation (owner gets notified)
+tgRouter.post(
+  '/secret-reservations/:id/promote',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing id' });
+
+    const parsed = z.object({
+      displayName: z.string().min(1).max(64).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const tgUser = req.tgUser!;
+    const actorHash = tgActorHash(tgUser.id);
+    const displayName = parsed.data.displayName ?? tgUser.first_name;
+
+    const user = await getOrCreateTgUser(tgUser);
+    const row = await prisma.secretReservation.findUnique({
+      where: { id },
+      select: { id: true, itemId: true, reserverUserId: true, status: true },
+    });
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    if (row.reserverUserId !== user.id) return res.status(403).json({ error: 'Forbidden' });
+    if (row.status !== 'ACTIVE') return res.status(409).json({ error: 'Not active' });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const item = await tx.item.findUnique({
+        where: { id: row.itemId },
+        select: { status: true, reservationEpoch: true, wishlistId: true, title: true, archivedAt: true },
+      });
+      if (!item) return { kind: 'not_found' as const };
+      if (item.archivedAt) return { kind: 'item_unavailable' as const };
+      if (item.status !== 'AVAILABLE') return { kind: 'conflict' as const };
+
+      // Mark secret reservation as converted
+      await tx.secretReservation.update({
+        where: { id },
+        data: { status: 'CONVERTED_TO_PUBLIC', convertedAt: new Date() },
+      });
+
+      // Create public reservation (mirrors /items/:id/reserve logic, minus smart res + participant cap)
+      const newEpoch = item.reservationEpoch + 1;
+      await tx.item.update({
+        where: { id: row.itemId },
+        data: { status: 'RESERVED', reservationEpoch: newEpoch, reserverUserId: user.id },
+      });
+      await tx.reservationEvent.create({
+        data: { itemId: row.itemId, type: 'RESERVED', actorHash, comment: displayName },
+      });
+      await tx.comment.create({
+        data: { itemId: row.itemId, type: 'SYSTEM', text: t('api_system_reserved', getRequestLocale(req)), reservationEpoch: newEpoch },
+      });
+      await tx.comment.updateMany({
+        where: { itemId: row.itemId, scheduledDeleteAt: { not: null } },
+        data: { scheduledDeleteAt: null },
+      });
+      return { kind: 'ok' as const, wishlistId: item.wishlistId, title: item.title };
+    });
+
+    if (result.kind === 'not_found') return res.status(404).json({ error: 'Item not found' });
+    if (result.kind === 'item_unavailable') return res.status(409).json({ error: 'item_unavailable' });
+    if (result.kind === 'conflict') return res.status(409).json({ error: 'Item is not available' });
+
+    // Notify owner (public reservation flow — owner now sees a reservation)
+    const itemData = await prisma.item.findUnique({
+      where: { id: row.itemId },
+      select: { wishlist: { select: { ownerId: true } } },
+    });
+    if (itemData) {
+      const owner = await prisma.user.findUnique({
+        where: { id: itemData.wishlist.ownerId },
+        select: { telegramChatId: true },
+      });
+      if (owner?.telegramChatId) {
+        const notifLocale: Locale = 'ru';
+        void sendTgNotification(owner.telegramChatId, t('notif_reserved', notifLocale, { name: displayName, title: result.title }));
+      }
+    }
+
+    // Ensure ReservationMeta exists for the public flow
+    void prisma.reservationMeta.upsert({
+      where: { itemId_reserverUserId: { itemId: row.itemId, reserverUserId: user.id } },
+      create: { itemId: row.itemId, reserverUserId: user.id },
+      update: { active: true, endedAt: null, endReason: null },
+    }).catch(() => {});
+
+    trackEvent('secret_res.promoted_to_public', user.id, { secretReservationId: id, itemId: row.itemId });
+    return res.json({ ok: true });
+  }),
+);
+
+// POST /tg/secret-reservations/onboarding/seen — mark onboarding as seen (don't show again)
+tgRouter.post(
+  '/secret-reservations/onboarding/seen',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      action: z.enum(['completed', 'dismissed']).default('completed'),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const now = new Date();
+    const status = parsed.data.action === 'dismissed' ? 'DISMISSED' : 'COMPLETED';
+
+    await prisma.userOnboardingState.upsert({
+      where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: 'secret_reservation', version: 1 } },
+      create: {
+        userId: user.id,
+        onboardingKey: 'secret_reservation',
+        version: 1,
+        status,
+        startedAt: now,
+        completedAt: parsed.data.action === 'completed' ? now : null,
+        dismissedAt: parsed.data.action === 'dismissed' ? now : null,
+      },
+      update: {
+        status,
+        completedAt: parsed.data.action === 'completed' ? now : undefined,
+        dismissedAt: parsed.data.action === 'dismissed' ? now : undefined,
+      },
+    });
+
+    trackEvent(parsed.data.action === 'dismissed' ? 'secret_res.onboarding_dismiss' : 'secret_res.onboarding_completed', user.id);
+    return res.json({ ok: true });
+  }),
+);
+
+// GET /tg/secret-reservations/onboarding/status — has user seen the onboarding?
+tgRouter.get(
+  '/secret-reservations/onboarding/status',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const state = await prisma.userOnboardingState.findUnique({
+      where: { userId_onboardingKey_version: { userId: user.id, onboardingKey: 'secret_reservation', version: 1 } },
+      select: { status: true },
+    });
+    return res.json({ seen: state?.status === 'COMPLETED' || state?.status === 'DISMISSED' });
   }),
 );
 
@@ -10337,6 +10927,9 @@ tgRouter.post(
     if (skuCode === 'smart_reservations_unlock') {
       const hasIt = ent.addOns.some(a => a.addonType === 'smart_reservations_unlock' && a.targetId === targetId);
       if (hasIt || ent.isPro) return res.json({ alreadyUnlocked: true });
+    }
+    if (skuCode === 'secret_reservation_unlock') {
+      if (ent.hasSecretReservations) return res.json({ alreadyUnlocked: true });
     }
 
     const botToken = process.env.BOT_TOKEN;

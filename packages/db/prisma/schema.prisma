@@ -157,6 +157,7 @@ model User {
   curatedSelectionSubscriptions  CuratedSelectionSubscription[]
   profileSubscriptions           ProfileSubscription[]        @relation("ProfileSubscriber")
   profileSubscribers             ProfileSubscription[]        @relation("ProfileTarget")
+  secretReservations             SecretReservation[]
 }
 
 model Wishlist {
@@ -242,6 +243,7 @@ model Item {
   hints                 Hint[]
   santaItemReservations SantaItemReservation[]
   reservationMeta       ReservationMeta[]
+  secretReservations    SecretReservation[]
   groupGift             GroupGift?
 
   @@index([wishlistId])
@@ -1402,6 +1404,43 @@ model ReservationMeta {
   @@index([reserverUserId, active])
   @@index([reminderAt, reminderSent])
   @@index([isSmartRes, active, expiresAt])
+}
+
+// ─── Secret Reservation ──────────────────────────────────────────────────────
+// Privacy-isolated from ReservationMeta / ReservationEvent.
+// Creating / cancelling a SecretReservation MUST NOT touch Item.status,
+// reserverUserId, reservationEpoch, or fire sendTgNotification.
+// Derived statuses (ITEM_UPDATED / ITEM_DELETED / PUBLIC_RESERVED_BY_OTHER / ITEM_UNAVAILABLE /
+// ITEM_FULFILLED) are computed at read time by comparing current Item state vs `snapshot`.
+enum SecretReservationStatus {
+  ACTIVE               // normal happy state
+  CANCELLED            // user explicitly cancelled
+  FULFILLED            // user marked own reservation as purchased/gifted
+  CONVERTED_TO_PUBLIC  // user promoted secret reservation → public reservation
+}
+
+model SecretReservation {
+  id                    String   @id @default(cuid())
+  itemId                String
+  reserverUserId        String
+  status                SecretReservationStatus @default(ACTIVE)
+  // Snapshot of item fields at the time of secret reservation, used for diff detection:
+  // { title, priceAmount, currency, url, imageUrl, description, priority, quantity }
+  snapshot              Json
+  updatesAcknowledgedAt DateTime?
+  note                  String?  @db.VarChar(500)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  cancelledAt           DateTime?
+  fulfilledAt           DateTime?
+  convertedAt           DateTime?
+
+  item     Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  reserver User @relation(fields: [reserverUserId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, reserverUserId])
+  @@index([reserverUserId, status])
+  @@index([itemId])
 }
 
 model WishlistCategory {
