@@ -616,6 +616,7 @@ const RELEASE_NOTES: ReleaseNote[] = [
       { ru: 'Бронь общего желания скрывает его во всех вишлистах сразу', en: 'Reserving a shared wish hides it from all wishlists at once' },
       { ru: 'Видно на карточке: «в N вишлистах» — тап покажет список', en: '"in N wishlists" label on the card — tap to see the list' },
       { ru: 'В списке желаний теперь есть «Добавить в ещё» — быстрая раздача по вишлистам', en: 'New "Add to more" shortcut in the wishes list — quick placement into other wishlists' },
+      { ru: '↩️ При выходе из редактирования желания с несохранёнными изменениями — спросим, сохранить их или нет', en: '↩️ When leaving the wish editor with unsaved changes — we\'ll ask whether to save or discard them' },
     ],
   },
   {
@@ -1716,15 +1717,25 @@ function renderSantaAlias(adjectiveKey: string, animalKey: string, locale: strin
 // PRO UPSELL SYSTEM
 // ═══════════════════════════════════════════════════════
 
+// ─── Design System: ProBadge ──────────────────────────
+// Small filled-gradient "PRO" pill used to mark paid features.
+// Fixed dimensions (height 20, padding 0 8) guarantee identical
+// rendering across all parent contexts (flex rows, inline text,
+// buttons, list items). DO NOT override height/padding via `style`.
+// Use ProBadge wherever you need to tag something as PRO.
 function ProBadge({ style }: { style?: React.CSSProperties } = {}) {
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
-      padding: '2px 7px', borderRadius: 5,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      height: 20, minHeight: 20, padding: '0 8px',
+      borderRadius: 5,
       background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)',
       color: '#fff',
-      lineHeight: 1, verticalAlign: 'middle', ...style,
+      fontSize: 10, fontWeight: 700, letterSpacing: 0.5, lineHeight: 1,
+      whiteSpace: 'nowrap', flexShrink: 0,
+      verticalAlign: 'middle',
+      boxSizing: 'border-box',
+      ...style,
     }}>PRO</span>
   );
 }
@@ -4456,6 +4467,22 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [photoPickerImgErr, setPhotoPickerImgErr] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  // Snapshot of the item form's initial state (captured when the sheet opens).
+  // Used by the Telegram BackButton handler to detect unsaved changes and
+  // prompt the user (save / discard / cancel) before closing the sheet.
+  const itemFormSnapshotRef = useRef<{
+    title: string;
+    description: string;
+    url: string;
+    price: string;
+    priority: 1 | 2 | 3;
+    currency: 'RUB' | 'USD' | 'EUR' | 'GBP';
+    imageUrl: string;
+    additionalWishlistIds: string[];
+    photoDeleted: boolean;
+    hasNewPhoto: boolean;
+  } | null>(null);
+
   // Anti-spam throttle for upsell sheets
   const upsellLastShownRef = useRef<Partial<Record<UpsellContext, number>>>({});
   const upsellAutoShownThisSession = useRef(false);
@@ -6889,6 +6916,92 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData, guestViewReturnToProfileUsername, checkOnboarding, loadPublicProfile, loadProfileSubscribeStatus, currentWl]);
 
+  // Ref holding the latest Back action. Kept fresh by the effect just below so
+  // the registered BackButton handler always sees current state (e.g. whether
+  // the item form sheet is open, whether it has unsaved changes) without
+  // forcing re-registration on every render — which previously dropped the
+  // handler on iOS Telegram.
+  const backActionRef = useRef<() => void | Promise<void>>(() => {});
+
+  useEffect(() => {
+    backActionRef.current = async () => {
+      try { trackEvent('miniapp.backbutton_pressed', { screen }); } catch { /* never break Back */ }
+
+      // Item form sheet open: intercept Back. Previously the underlying
+      // screen navigated away while the sheet stayed visible (confusing).
+      // Now: if clean — close sheet + navigate; if dirty — prompt first.
+      if (showItemForm) {
+        const closeAndNav = () => {
+          blurActiveField();
+          setShowItemForm(false);
+          resetItemForm();
+          // Defer the screen nav until after the sheet begins its close
+          // animation; otherwise state toggles clash and the sheet can flicker.
+          setTimeout(() => { void navBack(); }, 50);
+        };
+
+        if (!isItemFormDirty()) {
+          closeAndNav();
+          return;
+        }
+
+        const tg = window.Telegram?.WebApp as unknown as {
+          showPopup?: (
+            p: {
+              title?: string;
+              message: string;
+              buttons?: Array<{ id?: string; type?: 'default' | 'ok' | 'close' | 'cancel' | 'destructive'; text?: string }>;
+            },
+            callback?: (btnId?: string) => void,
+          ) => void;
+        } | undefined;
+
+        if (!tg?.showPopup) {
+          // Older Telegram client without showPopup — per spec fallback, just
+          // close the sheet without saving.
+          closeAndNav();
+          return;
+        }
+
+        const isRu = locale === 'ru';
+        try {
+          tg.showPopup({
+            title: isRu ? 'Несохранённые изменения' : 'Unsaved changes',
+            message: isRu
+              ? 'В желании есть несохранённые изменения. Сохранить их перед выходом?'
+              : 'You have unsaved changes. Save them before leaving?',
+            buttons: [
+              { id: 'save', type: 'default', text: isRu ? 'Сохранить' : 'Save' },
+              { id: 'discard', type: 'destructive', text: isRu ? 'Не сохранять' : 'Discard' },
+              { id: 'cancel', type: 'cancel' },
+            ],
+          }, (btnId?: string) => {
+            if (btnId === 'save') {
+              if (!itemTitle.trim()) {
+                // Empty title can't be saved — treat Save as Discard.
+                closeAndNav();
+              } else {
+                // handleSaveItem already closes the sheet on success.
+                void handleSaveItem().finally(() => {
+                  setTimeout(() => { void navBack(); }, 50);
+                });
+              }
+            } else if (btnId === 'discard') {
+              closeAndNav();
+            }
+            // 'cancel' or dismissed — do nothing, sheet stays open.
+          });
+        } catch {
+          // showPopup threw (another popup active, bad version) — fallback.
+          closeAndNav();
+        }
+        return;
+      }
+
+      await navBack();
+    };
+  });
+
   // Combined registration + show/hide: re-register handler on every screen
   // change. Previous "register once" approach let iOS Telegram silently drop
   // the handler between screens, so Back did nothing. Re-registering each
@@ -6905,16 +7018,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       tg.BackButton.hide();
       return;
     }
-    const handler = () => {
-      try { trackEvent('miniapp.backbutton_pressed', { screen }); } catch { /* never break Back */ }
-      void navBack();
-    };
+    const handler = () => { void backActionRef.current(); };
     tg.BackButton.onClick(handler);
     tg.BackButton.show();
     return () => {
       tg.BackButton.offClick(handler);
     };
-  }, [screen, santaWishlistPickerReturnId, navBack, trackEvent]);
+  }, [screen, santaWishlistPickerReturnId]);
 
   // Scroll-to-top on entering screens that should always render from the top.
   // The app's scroll container is `scrollContainerRef` (position:fixed +
@@ -8767,6 +8877,55 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setLoading(false);
       setPhotoUploading(false);
     }
+  };
+
+  // Capture a snapshot of the item form's state whenever the sheet opens.
+  // Subsequent state changes are ignored (intentionally: we compare against
+  // the opening state to detect "dirty"). Cleared when the sheet closes.
+  useEffect(() => {
+    if (showItemForm) {
+      itemFormSnapshotRef.current = {
+        title: itemTitle,
+        description: itemDescription,
+        url: itemUrl,
+        price: itemPrice,
+        priority: itemPriority,
+        currency: itemCurrency,
+        imageUrl: itemImageUrl,
+        additionalWishlistIds: [...itemAdditionalWishlistIds],
+        photoDeleted: itemPhotoDeleted,
+        hasNewPhoto: !!itemPhotoFile,
+      };
+    } else {
+      itemFormSnapshotRef.current = null;
+    }
+    // Capture only on open/close transitions; downstream edits mutate state
+    // but must not overwrite the snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showItemForm]);
+
+  // Dirty check for the item form. Reads live values from uncontrolled input
+  // refs (URL + description) because their state lags until blur.
+  const isItemFormDirty = (): boolean => {
+    const snap = itemFormSnapshotRef.current;
+    if (!snap) return false;
+    const liveUrl = itemUrlInputRef.current?.value ?? itemUrl;
+    const liveDesc = itemDescTextareaRef.current?.value ?? itemDescription;
+    const sameIds =
+      itemAdditionalWishlistIds.length === snap.additionalWishlistIds.length &&
+      itemAdditionalWishlistIds.every((id) => snap.additionalWishlistIds.includes(id));
+    return (
+      itemTitle !== snap.title ||
+      liveDesc !== snap.description ||
+      liveUrl !== snap.url ||
+      itemPrice !== snap.price ||
+      itemPriority !== snap.priority ||
+      itemCurrency !== snap.currency ||
+      itemImageUrl !== snap.imageUrl ||
+      !sameIds ||
+      itemPhotoDeleted !== snap.photoDeleted ||
+      !!itemPhotoFile !== snap.hasNewPhoto
+    );
   };
 
   const handleDeleteItem = async (item: Item) => {
@@ -20098,15 +20257,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             );
           })()}
-          {/* Title — uncontrolled to fix iOS caret on fast input-switch */}
+          {/* Title — uncontrolled to fix iOS caret on fast input-switch.
+             fontSize stays at 16 (inputStyle default) to avoid iOS auto-zoom
+             on focus, which otherwise causes screen jitter and caret loss. */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_name', locale)}</div>
             <div style={{ position: 'relative' as const }}>
               <input
                 key={`title-${itemFieldKey}`}
-                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 15, fontWeight: 500, padding: '12px 38px 12px 14px', lineHeight: '22px' }}
+                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', padding: '12px 38px 12px 14px' }}
                 placeholder={t('item_name_placeholder', locale)}
                 defaultValue={itemTitle}
+                onFocus={(e) => {
+                  // iOS: after tapping a field the caret can land at index 0 when the
+                  // browser has just resolved an auto-zoom. Snap to end for non-empty
+                  // values so the user always sees the caret where they expect.
+                  const el = e.currentTarget;
+                  const len = el.value.length;
+                  if (len > 0) {
+                    requestAnimationFrame(() => { try { el.setSelectionRange(len, len); } catch {} });
+                  }
+                }}
                 onInput={(e) => setItemTitle(e.currentTarget.value)}
                 onBlur={(e) => setItemTitle(e.target.value)}
               />
@@ -20462,7 +20633,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('item_name', locale)}</label>
             <div style={{ position: 'relative' as const }}>
-              <input key={`title-orig-${itemFieldKey}`} style={{ ...inputStyle, paddingRight: 38 }} placeholder={t('item_name_placeholder', locale)} defaultValue={itemTitle} onInput={(e) => setItemTitle(e.currentTarget.value)} onBlur={(e) => setItemTitle(e.target.value)} />
+              <input
+                key={`title-orig-${itemFieldKey}`}
+                style={{ ...inputStyle, paddingRight: 38 }}
+                placeholder={t('item_name_placeholder', locale)}
+                defaultValue={itemTitle}
+                onFocus={(e) => {
+                  const el = e.currentTarget;
+                  const len = el.value.length;
+                  if (len > 0) {
+                    requestAnimationFrame(() => { try { el.setSelectionRange(len, len); } catch {} });
+                  }
+                }}
+                onInput={(e) => setItemTitle(e.currentTarget.value)}
+                onBlur={(e) => setItemTitle(e.target.value)}
+              />
               {itemTitle && <button type="button" aria-label="Clear" onClick={() => { setItemTitle(''); setItemFieldKey(k => k + 1); }} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 16, cursor: 'pointer', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>}
             </div>
           </div>
