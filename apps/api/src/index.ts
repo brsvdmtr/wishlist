@@ -14,7 +14,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { prisma, Prisma } from '@wishlist/db';
+import {
+  prisma,
+  Prisma,
+  markFirstWishlist,
+  markFirstItem,
+  tryQualifyAttribution,
+  processReward,
+  ensureReferralCode,
+  loadReferralConfig,
+  invalidateReferralConfigCache,
+  checkRewardCap,
+  isInRollout,
+  sweepExpiredPendingAttributions,
+  REWARD_CAP_MONTHLY_WINDOW_DAYS,
+  REWARD_CAP_YEARLY_WINDOW_DAYS,
+} from '@wishlist/db';
 import logger from './logger';
 import pinoHttp from 'pino-http';
 import { parseUrl, validateUrl } from './url-parser.js';
@@ -1787,6 +1802,430 @@ privateRouter.delete(
 );
 
 // ═══════════════════════════════════════════════════════
+// REFERRAL ADMIN ENDPOINTS (auth: X-ADMIN-KEY)
+// ═══════════════════════════════════════════════════════
+//
+// Observability + runbook surface for the referral program. All endpoints
+// are mounted on privateRouter, so requireAdmin middleware gates them via
+// the shared ADMIN_KEY env var. Pairs with the SQL runbook in
+// docs/referral-runbook.md for queries that don't need an HTTP endpoint.
+
+// GET /admin/referral/trace/:attributionId
+// Full debug trace for a single attribution — status timeline, fraud signals,
+// config snapshot frozen at attribution time, and any rewards it produced.
+// Used by support to explain "why wasn't my reward granted?" cases without
+// opening a psql session.
+privateRouter.get(
+  '/admin/referral/trace/:attributionId',
+  asyncHandler(async (req, res) => {
+    const id = req.params.attributionId ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing attribution id' });
+    const att = await prisma.referralAttribution.findUnique({
+      where: { id },
+      include: {
+        inviter: { select: { id: true, telegramId: true, createdAt: true, profile: { select: { referralCode: true, displayName: true } } } },
+        invited: { select: { id: true, telegramId: true, createdAt: true, profile: { select: { firstBotStartAt: true, firstWishlistAt: true, firstItemAt: true, referredAt: true, displayName: true } } } },
+        rewards: {
+          select: { id: true, status: true, rewardValueDays: true, grantStrategy: true, previousExpiryAt: true, newExpiryAt: true, idempotencyKey: true, grantedAt: true, revokedAt: true, revokedReason: true, grantedByAdminId: true, revokedByAdminId: true },
+          orderBy: { grantedAt: 'desc' },
+        },
+      },
+    });
+    if (!att) return res.status(404).json({ error: 'Attribution not found' });
+
+    // Build a status-transition timeline from the stored per-transition
+    // timestamps. Ordered chronologically — caller gets a replay of the
+    // attribution's lifecycle in one array.
+    const transitions: Array<{ status: string; at: string }> = [];
+    transitions.push({ status: 'ATTRIBUTED', at: att.attributedAt.toISOString() });
+    if (att.qualifiedAt) transitions.push({ status: 'QUALIFIED', at: att.qualifiedAt.toISOString() });
+    if (att.rewardedAt) transitions.push({ status: 'REWARDED', at: att.rewardedAt.toISOString() });
+    if (att.rejectedAt) transitions.push({ status: `REJECTED:${att.rejectReason ?? '?'}`, at: att.rejectedAt.toISOString() });
+
+    return res.json({
+      attribution: {
+        id: att.id,
+        status: att.status,
+        rejectReason: att.rejectReason,
+        referralCode: att.referralCode,
+        source: att.source,
+        attributedAt: att.attributedAt.toISOString(),
+        qualifiedAt: att.qualifiedAt?.toISOString() ?? null,
+        rewardedAt: att.rewardedAt?.toISOString() ?? null,
+        rejectedAt: att.rejectedAt?.toISOString() ?? null,
+        windowDeadlineAt: att.windowDeadlineAt.toISOString(),
+        fraudScore: att.fraudScore,
+        triggeredSignals: att.triggeredSignals,
+        configVersion: att.configVersion,
+        configSnapshot: att.configSnapshot,
+        // Hashes are safe to surface in admin context (already PII-scrubbed).
+        ipHash: att.ipHash,
+        deviceFingerprintHash: att.deviceFingerprintHash,
+        timezone: att.timezone,
+        locale: att.locale,
+        telegramClient: att.telegramClient,
+        platform: att.platform,
+      },
+      inviter: att.inviter,
+      invitee: att.invited,
+      rewards: att.rewards.map((r) => ({
+        ...r,
+        previousExpiryAt: r.previousExpiryAt?.toISOString() ?? null,
+        newExpiryAt: r.newExpiryAt?.toISOString() ?? null,
+        grantedAt: r.grantedAt.toISOString(),
+        revokedAt: r.revokedAt?.toISOString() ?? null,
+      })),
+      transitions,
+    });
+  }),
+);
+
+// GET /admin/referral/trace/by-user/:userId
+// Convenience: returns both sides of the referral graph for one user —
+// the attribution where they were the invitee (if any) plus the attributions
+// they created as inviter (paginated, newest-first). Answers "show me
+// everything about user X's referral activity" in one call.
+privateRouter.get(
+  '/admin/referral/trace/by-user/:userId',
+  asyncHandler(async (req, res) => {
+    const userId = req.params.userId ?? '';
+    if (!userId) return res.status(400).json({ error: 'Missing user id' });
+    const [asInvitee, asInviter, rewards, profile] = await Promise.all([
+      prisma.referralAttribution.findUnique({
+        where: { invitedUserId: userId },
+        select: { id: true, inviterUserId: true, referralCode: true, status: true, rejectReason: true, attributedAt: true, qualifiedAt: true, rewardedAt: true, rejectedAt: true, fraudScore: true },
+      }),
+      prisma.referralAttribution.findMany({
+        where: { inviterUserId: userId },
+        select: { id: true, invitedUserId: true, referralCode: true, status: true, rejectReason: true, attributedAt: true, qualifiedAt: true, rewardedAt: true, fraudScore: true },
+        orderBy: { attributedAt: 'desc' },
+        take: 50,
+      }),
+      prisma.referralReward.findMany({
+        where: { userId },
+        select: { id: true, attributionId: true, status: true, rewardValueDays: true, grantedAt: true, revokedAt: true, revokedReason: true },
+        orderBy: { grantedAt: 'desc' },
+        take: 50,
+      }),
+      prisma.userProfile.findUnique({
+        where: { userId },
+        select: { referralCode: true, referralCodeCreatedAt: true, referredByUserId: true, referredAt: true, firstBotStartAt: true, firstWishlistAt: true, firstItemAt: true },
+      }),
+    ]);
+    return res.json({ userId, profile, asInvitee, asInviter, rewards });
+  }),
+);
+
+// GET /admin/referral/funnel
+// Aggregate funnel counts for a time window. Default = last 30 days.
+// Query: ?since=<iso>&until=<iso>
+// Returns each stage + step-to-step conversion ratios. Backed by single GROUP BY
+// passes on indexed columns so it runs fast even on large tables.
+privateRouter.get(
+  '/admin/referral/funnel',
+  asyncHandler(async (req, res) => {
+    const DAY_MS = 86_400_000;
+    const now = new Date();
+    const parseDate = (raw: unknown, fallback: Date): Date => {
+      if (typeof raw !== 'string' || !raw) return fallback;
+      const d = new Date(raw);
+      return Number.isNaN(d.getTime()) ? fallback : d;
+    };
+    const since = parseDate(req.query.since, new Date(now.getTime() - 30 * DAY_MS));
+    const until = parseDate(req.query.until, now);
+
+    const rangeFilter = { attributedAt: { gte: since, lt: until } };
+
+    const [statusCounts, rejectReasonCounts, rewardAgg] = await Promise.all([
+      prisma.referralAttribution.groupBy({
+        by: ['status'],
+        where: rangeFilter,
+        _count: { _all: true },
+      }),
+      prisma.referralAttribution.groupBy({
+        by: ['rejectReason'],
+        where: { ...rangeFilter, rejectReason: { not: null } },
+        _count: { _all: true },
+      }),
+      prisma.referralReward.aggregate({
+        where: { grantedAt: { gte: since, lt: until }, status: 'GRANTED' },
+        _count: { _all: true },
+        _sum: { rewardValueDays: true },
+      }),
+    ]);
+
+    const byStatus: Record<string, number> = {
+      ATTRIBUTED: 0, PENDING_ACTIVATION: 0, QUALIFIED: 0, REWARDED: 0, REJECTED: 0, FRAUD_REVIEW: 0,
+    };
+    for (const r of statusCounts) byStatus[r.status] = r._count._all;
+
+    const totalAttributed = Object.values(byStatus).reduce((a, b) => a + b, 0);
+    const reachedQualified = byStatus.QUALIFIED! + byStatus.REWARDED!;
+    const reachedRewarded = byStatus.REWARDED!;
+
+    // Conversion ratios — guarded against division by zero. All fractions
+    // rounded to 4 decimals so dashboards render readable numbers.
+    const pct = (n: number, d: number) => d === 0 ? 0 : Math.round((n / d) * 10000) / 10000;
+
+    return res.json({
+      window: { since: since.toISOString(), until: until.toISOString() },
+      attributions: {
+        total: totalAttributed,
+        byStatus,
+      },
+      rejectReasons: Object.fromEntries(
+        rejectReasonCounts.map((r) => [r.rejectReason ?? 'UNKNOWN', r._count._all]),
+      ),
+      rewards: {
+        count: rewardAgg._count._all,
+        totalDaysGranted: rewardAgg._sum.rewardValueDays ?? 0,
+      },
+      conversions: {
+        attributed_to_qualified: pct(reachedQualified, totalAttributed),
+        attributed_to_rewarded: pct(reachedRewarded, totalAttributed),
+        qualified_to_rewarded: pct(reachedRewarded, reachedQualified),
+      },
+    });
+  }),
+);
+
+// GET /admin/referral/fraud-review
+// List attributions parked in FRAUD_REVIEW state, newest-first. Payload
+// includes the stored signals and weights so an admin can decide without
+// a separate lookup. Paged with keyset on (fraudScore DESC, id DESC) —
+// highest-risk surfaces first.
+privateRouter.get(
+  '/admin/referral/fraud-review',
+  asyncHandler(async (req, res) => {
+    const querySchema = z.object({
+      limit: z.coerce.number().int().min(1).max(100).optional(),
+    });
+    const parsed = querySchema.safeParse(req.query);
+    if (!parsed.success) return zodError(res, parsed.error);
+    const limit = parsed.data.limit ?? 50;
+
+    const rows = await prisma.referralAttribution.findMany({
+      where: { status: 'FRAUD_REVIEW' },
+      orderBy: [{ fraudScore: 'desc' }, { id: 'desc' }],
+      take: limit,
+      select: {
+        id: true, fraudScore: true, triggeredSignals: true,
+        attributedAt: true, qualifiedAt: true, windowDeadlineAt: true,
+        referralCode: true, ipHash: true, deviceFingerprintHash: true,
+        inviter: { select: { id: true, telegramId: true } },
+        invited: { select: { id: true, telegramId: true } },
+      },
+    });
+    return res.json({
+      items: rows.map((r) => ({
+        ...r,
+        attributedAt: r.attributedAt.toISOString(),
+        qualifiedAt: r.qualifiedAt?.toISOString() ?? null,
+        windowDeadlineAt: r.windowDeadlineAt.toISOString(),
+      })),
+      count: rows.length,
+    });
+  }),
+);
+
+// POST /admin/referral/fraud-review/:id/resolve
+// Admin decision on a FRAUD_REVIEW attribution. `decision: "approve"` grants
+// the reward (via processReward); `decision: "reject"` marks it REJECTED
+// with FRAUD_REJECTED. Either way, analytics event fires for audit trail.
+privateRouter.post(
+  '/admin/referral/fraud-review/:id/resolve',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing attribution id' });
+    const parsed = z.object({
+      decision: z.enum(['approve', 'reject']),
+      adminNote: z.string().max(500).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const att = await prisma.referralAttribution.findUnique({
+      where: { id },
+      select: { id: true, status: true, inviterUserId: true, fraudScore: true },
+    });
+    if (!att) return res.status(404).json({ error: 'Attribution not found' });
+    if (att.status !== 'FRAUD_REVIEW') {
+      return res.status(409).json({ error: `Attribution not in FRAUD_REVIEW (current: ${att.status})` });
+    }
+
+    if (parsed.data.decision === 'reject') {
+      await prisma.referralAttribution.update({
+        where: { id },
+        data: { status: 'REJECTED', rejectReason: 'FRAUD_REJECTED', rejectedAt: new Date() },
+      });
+      // Two events: fraud_resolved is the audit trail for the admin action;
+      // referral.rejected keeps the terminal-state funnel dashboard consistent
+      // (parallel to auto_rejected / cap_rejected emissions in runReferralProgressHook).
+      trackAnalyticsEvent({
+        event: 'referral.fraud_resolved',
+        userId: att.inviterUserId,
+        props: { attributionId: id, decision: 'reject', adminNote: parsed.data.adminNote ?? null, fraudScore: att.fraudScore },
+      });
+      trackAnalyticsEvent({
+        event: 'referral.rejected',
+        userId: att.inviterUserId,
+        props: { attributionId: id, reason: 'FRAUD_REJECTED', source: 'admin_review', fraudScore: att.fraudScore },
+      });
+      return res.json({ ok: true, decision: 'reject' });
+    }
+
+    // Approve path: force the attribution back to QUALIFIED, then call
+    // processReward with skipFraudCheck=true. Without the flag, fresh fraud
+    // scoring would just bounce the attribution right back into FRAUD_REVIEW
+    // (infinite loop). Cap check still runs — admin overrides fraud, not
+    // spending limits.
+    await prisma.referralAttribution.update({
+      where: { id },
+      data: { status: 'QUALIFIED' },
+    });
+    const decision = await processReward(prisma, id, { skipFraudCheck: true });
+    trackAnalyticsEvent({
+      event: 'referral.fraud_resolved',
+      userId: att.inviterUserId,
+      props: { attributionId: id, decision: 'approve', adminNote: parsed.data.adminNote ?? null, fraudScore: att.fraudScore, rewardResult: decision.kind },
+    });
+    return res.json({ ok: true, decision: 'approve', reward: decision });
+  }),
+);
+
+// POST /admin/referral/reward/:id/revoke
+// Revoke a granted reward. Marks the ReferralReward row REVOKED with a
+// reason + admin id, but does NOT touch the Subscription (a day-grant that
+// was already consumed is consumed). For clawback, adjust subscription
+// manually via /wishlists admin endpoints or psql.
+privateRouter.post(
+  '/admin/referral/reward/:id/revoke',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing reward id' });
+    const parsed = z.object({
+      reason: z.string().min(1).max(500),
+      adminId: z.string().max(200).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    const existing = await prisma.referralReward.findUnique({
+      where: { id },
+      select: { id: true, status: true, userId: true, attributionId: true, rewardValueDays: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Reward not found' });
+    if (existing.status === 'REVOKED') {
+      return res.status(409).json({ error: 'Reward already revoked' });
+    }
+
+    await prisma.referralReward.update({
+      where: { id },
+      data: {
+        status: 'REVOKED',
+        revokedAt: new Date(),
+        revokedReason: parsed.data.reason,
+        revokedByAdminId: parsed.data.adminId ?? null,
+      },
+    });
+    trackAnalyticsEvent({
+      event: 'referral.reward_revoked',
+      userId: existing.userId,
+      props: { rewardId: id, attributionId: existing.attributionId, days: existing.rewardValueDays, reason: parsed.data.reason, adminId: parsed.data.adminId ?? null },
+    });
+    return res.json({ ok: true });
+  }),
+);
+
+// GET /admin/referral/config — full config row
+// PATCH /admin/referral/config — partial update + cache invalidation
+//
+// Admin operates on the singleton `default` row. PATCH accepts a subset of
+// fields; anything missing is left untouched. After any write we call
+// invalidateReferralConfigCache() so the next request sees the new value
+// without waiting for the 60s TTL.
+privateRouter.get(
+  '/admin/referral/config',
+  asyncHandler(async (_req, res) => {
+    const config = await loadReferralConfig(prisma);
+    return res.json({ config });
+  }),
+);
+
+privateRouter.patch(
+  '/admin/referral/config',
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      enabled: z.boolean().optional(),
+      rewardDaysInviter: z.number().int().min(1).max(365).optional(),
+      grantStrategy: z.enum(['stack', 'replace']).optional(),
+      requireWishlist: z.boolean().optional(),
+      requireItem: z.boolean().optional(),
+      qualificationWindowDays: z.number().int().min(1).max(90).optional(),
+      monthlyRewardCap: z.number().int().min(0).max(1000).optional(),
+      yearlyRewardCap: z.number().int().min(0).max(10000).optional(),
+      fraudAutoRejectThreshold: z.number().int().min(0).max(100).optional(),
+      fraudReviewThreshold: z.number().int().min(0).max(100).optional(),
+      fraudReviewEnabled: z.boolean().optional(),
+      fraudSignalWeights: z.record(z.string(), z.number().int().min(0).max(100)).optional(),
+      showInviteeNamesInUi: z.boolean().optional(),
+      entryPointProfile: z.boolean().optional(),
+      entryPointPaywall: z.boolean().optional(),
+      entryPointHomeBanner: z.boolean().optional(),
+      entryPointPostShare: z.boolean().optional(),
+      notifyInviterArrival: z.boolean().optional(),
+      notifyInviterStepProgress: z.boolean().optional(),
+      notifyInviterReward: z.boolean().optional(),
+      notifyInviteeWelcome: z.boolean().optional(),
+      rolloutPercent: z.number().int().min(0).max(100).optional(),
+      configVersion: z.string().max(64).optional(),
+      updatedByAdminId: z.string().max(200).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return zodError(res, parsed.error);
+
+    // Sanity: reviewThreshold should not exceed autoRejectThreshold. If the
+    // admin sends both and they cross, reject — otherwise we'd silently
+    // create a dead zone where no fraud review fires.
+    const existing = await loadReferralConfig(prisma);
+    const reviewT = parsed.data.fraudReviewThreshold ?? existing.fraudReviewThreshold;
+    const autoT = parsed.data.fraudAutoRejectThreshold ?? existing.fraudAutoRejectThreshold;
+    if (reviewT > autoT) {
+      return res.status(400).json({ error: 'fraudReviewThreshold must be <= fraudAutoRejectThreshold' });
+    }
+
+    const data: Prisma.ReferralProgramConfigUpdateInput = {
+      ...parsed.data,
+      fraudSignalWeights: parsed.data.fraudSignalWeights as Prisma.InputJsonValue | undefined,
+      updatedAt: new Date(),
+    };
+    const updated = await prisma.referralProgramConfig.update({
+      where: { id: 'default' },
+      data,
+    });
+    invalidateReferralConfigCache();
+    trackAnalyticsEvent({
+      event: 'referral.config_changed',
+      props: { fields: Object.keys(parsed.data), adminId: parsed.data.updatedByAdminId ?? null, configVersion: updated.configVersion },
+    });
+    return res.json({ config: updated });
+  }),
+);
+
+// POST /admin/referral/sweep
+// Manual trigger for the expired-attribution sweeper. Cron will typically
+// run this every 15 min via a scheduled job; this endpoint lets an admin
+// force it from a runbook during incident response.
+privateRouter.post(
+  '/admin/referral/sweep',
+  asyncHandler(async (_req, res) => {
+    const result = await sweepExpiredPendingAttributions(prisma);
+    trackAnalyticsEvent({
+      event: 'referral.qualification_timeout',
+      props: { expired: result.expired, source: 'admin_sweep' },
+    });
+    return res.json({ ok: true, result });
+  }),
+);
+
+// ═══════════════════════════════════════════════════════
 // TELEGRAM MINI APP ENDPOINTS
 // ═══════════════════════════════════════════════════════
 
@@ -2239,6 +2678,178 @@ function trackAnalyticsEvent(params: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: { event: params.event, userId: params.userId ?? null, props: props ? (props as any) : undefined },
   }).catch((e) => logger.debug({ err: e, event: params.event }, 'analytics write failed'));
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Best-effort Telegram notification to an inviter that their referral reward
+ * was granted. Resolves the inviter's locale from their UserProfile so the
+ * message is in their preferred language. Uses the shared sendTgBotMessage
+ * helper (raw Telegram API via BOT_TOKEN).
+ */
+async function notifyReferralInviterRewarded(inviterUserId: string, daysGranted: number): Promise<void> {
+  try {
+    const config = await loadReferralConfig(prisma);
+    if (!config.notifyInviterReward) return;
+    const user = await prisma.user.findUnique({
+      where: { id: inviterUserId },
+      select: {
+        telegramChatId: true,
+        profile: { select: { languageMode: true, manualLanguage: true } },
+      },
+    });
+    if (!user?.telegramChatId) return;
+    const locale = resolveEffectiveLocale(
+      user.profile
+        ? { languageMode: user.profile.languageMode as any, manualLanguage: user.profile.manualLanguage as any }
+        : null,
+    );
+    const text = t('bot_referral_inviter_rewarded', locale, { days: String(daysGranted) });
+    // sendTgBotMessage returns false on any Telegram-side failure (API error,
+    // network, bot blocked). Emit the matching event so delivery dashboards
+    // reflect reality, not intent.
+    const delivered = await sendTgBotMessage(user.telegramChatId, text);
+    trackAnalyticsEvent({
+      event: delivered
+        ? 'referral.bot_notification_sent'
+        : 'referral.bot_notification_delivery_failed',
+      userId: inviterUserId,
+      props: { type: 'reward', daysGranted },
+    });
+  } catch (err) {
+    logger.warn({ err, inviterUserId }, '[referral] reward notification failed');
+  }
+}
+
+// ─── Referral qualify + reward pipeline (fire-and-forget) ────────────────────
+//
+// Called after wishlist.created and item.created. Does three things in order:
+//   1. Marks the appropriate firstWishlistAt / firstItemAt milestone (idempotent).
+//   2. Runs tryQualifyAttribution — if both milestones present and within the
+//      window, transitions PENDING_ACTIVATION → QUALIFIED.
+//   3. If qualified, runs processReward — fraud + cap checks, then grant or
+//      reject. Writes ReferralAttribution.status and ReferralReward rows.
+//
+// Wrapped in try/catch so any referral-side failure never breaks the primary
+// request. Emits analytics for every terminal outcome so Slice 6 observability
+// can reconstruct the funnel.
+async function runReferralProgressHook(
+  userId: string,
+  milestone: 'first_wishlist' | 'first_item',
+): Promise<void> {
+  try {
+    if (milestone === 'first_wishlist') {
+      await markFirstWishlist(prisma, userId);
+      trackAnalyticsEvent({ event: 'referral.first_wishlist_created', userId });
+    } else {
+      await markFirstItem(prisma, userId);
+      trackAnalyticsEvent({ event: 'referral.first_item_created', userId });
+    }
+
+    const qualified = await tryQualifyAttribution(prisma, userId);
+    if (qualified.kind !== 'qualified') return;
+
+    trackAnalyticsEvent({
+      event: 'referral.qualification_criteria_met',
+      userId,
+      props: { attributionId: qualified.attributionId, milestone },
+    });
+    trackAnalyticsEvent({
+      event: 'referral.qualified',
+      userId,
+      props: { attributionId: qualified.attributionId, inviterUserId: qualified.inviterUserId },
+    });
+
+    const decision = await processReward(prisma, qualified.attributionId);
+    switch (decision.kind) {
+      case 'rewarded':
+        trackAnalyticsEvent({
+          event: 'referral.rewarded',
+          userId: qualified.inviterUserId,
+          props: {
+            attributionId: qualified.attributionId,
+            rewardId: decision.rewardId,
+            daysGranted: decision.daysGranted,
+            newExpiryAt: decision.newExpiryAt.toISOString(),
+          },
+        });
+        trackAnalyticsEvent({
+          event: 'referral.pro_subscription_extended',
+          userId: qualified.inviterUserId,
+          props: { attributionId: qualified.attributionId, daysGranted: decision.daysGranted },
+        });
+        // Fire-and-forget: notify inviter via Telegram
+        void notifyReferralInviterRewarded(qualified.inviterUserId, decision.daysGranted);
+        break;
+      case 'auto_rejected':
+        trackAnalyticsEvent({
+          event: 'referral.rejected',
+          userId: qualified.inviterUserId,
+          props: {
+            attributionId: qualified.attributionId,
+            reason: 'FRAUD_REJECTED',
+            fraudScore: decision.fraudScore,
+            signalCount: decision.signals.length,
+          },
+        });
+        break;
+      case 'review_queued':
+        trackAnalyticsEvent({
+          event: 'referral.fraud_review_queued',
+          userId: qualified.inviterUserId,
+          props: {
+            attributionId: qualified.attributionId,
+            fraudScore: decision.fraudScore,
+            signalCount: decision.signals.length,
+          },
+        });
+        break;
+      case 'cap_rejected':
+        trackAnalyticsEvent({
+          event: 'referral.rejected',
+          userId: qualified.inviterUserId,
+          props: {
+            attributionId: qualified.attributionId,
+            reason: 'REWARD_CAP_REACHED',
+            capReason: decision.reason,
+            monthlyUsed: decision.monthlyUsed,
+            yearlyUsed: decision.yearlyUsed,
+          },
+        });
+        trackAnalyticsEvent({
+          event: 'referral.cap_check_performed',
+          userId: qualified.inviterUserId,
+          props: { reason: decision.reason, monthlyUsed: decision.monthlyUsed, yearlyUsed: decision.yearlyUsed },
+        });
+        break;
+      case 'already_granted':
+        trackAnalyticsEvent({
+          event: 'referral.idempotency_hit',
+          userId: qualified.inviterUserId,
+          props: { attributionId: qualified.attributionId, context: 'processReward' },
+        });
+        break;
+      case 'not_qualified':
+        // Shouldn't happen — tryQualifyAttribution returned qualified. Log defensively.
+        logger.warn(
+          { userId, attributionId: qualified.attributionId },
+          '[referral] processReward returned not_qualified immediately after qualify',
+        );
+        trackAnalyticsEvent({
+          event: 'referral.attribution_invariant_violation',
+          userId: qualified.inviterUserId,
+          props: { attributionId: qualified.attributionId, context: 'qualified_then_not_qualified' },
+        });
+        break;
+    }
+  } catch (e) {
+    logger.error({ err: e, userId, milestone }, '[referral] progress hook failed');
+    trackAnalyticsEvent({
+      event: 'referral.reward_grant_failed',
+      userId,
+      props: { milestone, error: e instanceof Error ? e.message : String(e) },
+    });
+  }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2849,6 +3460,434 @@ async function attributeLifecycleReturn(userId: string): Promise<{
     return { touch: { id: touch.id, segment: touch.segment, offerCode: touch.offerCode, targetCompletedAt: touch.targetCompletedAt ?? (justCompleted ? new Date() : null) }, justCompleted };
   } catch { return empty; }
 }
+
+// ─── Referral program — user-facing API ──────────────────────────────────────
+// Endpoints (all auth-gated via tgRouter):
+//   GET /tg/referral/me             — inviter code + quick stats + reward caps
+//   GET /tg/referral/history        — cursor-paged list of this user's invitees
+//   GET /tg/referral/stats          — richer aggregated counters + lifetime reward days
+//   GET /tg/referral/rules-config   — program config snapshot (safe public subset)
+//
+// Design choices:
+// • `/me` ensures a referralCode only when the program is active for the user
+//   (config.enabled AND isInRollout). Otherwise it reads whatever's persisted.
+// • PII guard: invitee display names are gated by config.showInviteeNamesInUi.
+// • Pagination: keyset on (attributedAt DESC, id DESC) so inserts at head are
+//   stable for an open session.
+
+// Must match the actual Telegram bot username (without @) for deep links.
+// Prefer TELEGRAM_BOT_USERNAME (container-specific) over NEXT_PUBLIC_BOT_USERNAME
+// (shared with web). Fallback keeps dev working; prod MUST set the env var.
+const REFERRAL_BOT_USERNAME =
+  process.env.TELEGRAM_BOT_USERNAME
+  ?? process.env.NEXT_PUBLIC_BOT_USERNAME
+  ?? 'WishHub_bot';
+
+type ReferralConfigRow = Awaited<ReturnType<typeof loadReferralConfig>>;
+
+type ReferralStatusCounts = {
+  /** Legacy pre-Slice-2 default; treat as PENDING_ACTIVATION. Should have 0 rows after migration. */
+  ATTRIBUTED: number;
+  PENDING_ACTIVATION: number;
+  QUALIFIED: number;
+  REWARDED: number;
+  REJECTED: number;
+  FRAUD_REVIEW: number;
+};
+
+/** Aggregate ReferralAttribution.status counts for a given inviter. Zero-filled. */
+async function referralStatusCounts(inviterUserId: string): Promise<ReferralStatusCounts> {
+  const rows = await prisma.referralAttribution.groupBy({
+    by: ['status'],
+    where: { inviterUserId },
+    _count: { _all: true },
+  });
+  const counts: ReferralStatusCounts = {
+    ATTRIBUTED: 0,
+    PENDING_ACTIVATION: 0,
+    QUALIFIED: 0,
+    REWARDED: 0,
+    REJECTED: 0,
+    FRAUD_REVIEW: 0,
+  };
+  for (const r of rows) counts[r.status] = r._count._all;
+  return counts;
+}
+
+/** Build the PRO deep-link referral URL for a given code. */
+function buildReferralLink(code: string): string {
+  return `https://t.me/${REFERRAL_BOT_USERNAME}?start=ref_${code}`;
+}
+
+/**
+ * Build the share text in Russian. The frontend may override for i18n, but
+ * we return a ready-to-paste string so share-sheet flows work without a round-trip.
+ */
+function buildReferralShareText(code: string, daysPerRef: number): string {
+  const link = buildReferralLink(code);
+  return `Присоединяйся к WishBoard по моей ссылке — получим по ${daysPerRef} дней PRO каждому 🎁\n${link}`;
+}
+
+/** Lightweight cap snapshot for UI "3/3 used this month" display. */
+async function referralCapsSnapshot(userId: string, config: ReferralConfigRow) {
+  const cap = await checkRewardCap(prisma, userId);
+  return {
+    monthlyUsed: cap.monthlyUsed,
+    monthlyCap: config.monthlyRewardCap,
+    yearlyUsed: cap.yearlyUsed,
+    yearlyCap: config.yearlyRewardCap,
+    atMonthlyCap: cap.monthlyUsed >= config.monthlyRewardCap,
+    atYearlyCap: cap.yearlyUsed >= config.yearlyRewardCap,
+  };
+}
+
+// GET /tg/referral/me — inviter code + stats summary + reward caps snapshot
+tgRouter.get(
+  '/referral/me',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const config = await loadReferralConfig(prisma);
+    const inRollout = isInRollout(user.id, config.rolloutPercent);
+    const programActive = config.enabled && inRollout;
+
+    // Ensure a code only when the program is live for this user.
+    // For out-of-rollout or disabled-program users we return the persisted
+    // code (if any from an earlier active window) but do NOT allocate a new one.
+    let code: string | null;
+    if (programActive) {
+      try {
+        code = await ensureReferralCode(prisma, user.id);
+      } catch (e) {
+        logger.error({ err: e, userId: user.id }, '[referral] ensureReferralCode failed on /me');
+        trackAnalyticsEvent({
+          event: 'referral.code_generation_failed',
+          userId: user.id,
+          props: { context: '/tg/referral/me' },
+        });
+        code = null;
+      }
+    } else {
+      const profile = await prisma.userProfile.findUnique({
+        where: { userId: user.id },
+        select: { referralCode: true },
+      });
+      code = profile?.referralCode ?? null;
+    }
+
+    // Was this user attributed to someone else? (Invitee perspective for "invited by" UI)
+    const selfAttribution = await prisma.referralAttribution.findUnique({
+      where: { invitedUserId: user.id },
+      select: { status: true, attributedAt: true, qualifiedAt: true, rewardedAt: true },
+    });
+
+    // Fan out counts + caps + PRO expiry in parallel.
+    const [counts, caps, sub] = await Promise.all([
+      referralStatusCounts(user.id),
+      referralCapsSnapshot(user.id, config),
+      prisma.subscription.findFirst({
+        where: {
+          userId: user.id,
+          planCode: PRO_PLAN_CODE,
+          status: { in: ['ACTIVE', 'CANCELLED'] },
+          currentPeriodEnd: { gt: new Date() },
+        },
+        orderBy: { currentPeriodEnd: 'desc' },
+        select: { currentPeriodEnd: true },
+      }),
+    ]);
+
+    const link = code ? buildReferralLink(code) : null;
+    const shareText = code ? buildReferralShareText(code, config.rewardDaysInviter) : null;
+
+    // totalAttributions: every attribution ever created (including fraud/rejected).
+    // successful: qualified + rewarded — the count that matters for the user.
+    const totalAttributions =
+      counts.ATTRIBUTED +
+      counts.PENDING_ACTIVATION +
+      counts.QUALIFIED +
+      counts.REWARDED +
+      counts.REJECTED +
+      counts.FRAUD_REVIEW;
+
+    const successful = counts.QUALIFIED + counts.REWARDED;
+
+    return res.json({
+      enabled: programActive,
+      programEnabled: config.enabled,
+      inRollout,
+      rolloutPercent: config.rolloutPercent,
+      code,
+      link,
+      shareText,
+      stats: {
+        totalAttributions,
+        successful,
+        // ATTRIBUTED is legacy (see ReferralStatusCounts); collapse into pending.
+        pendingActivation: counts.ATTRIBUTED + counts.PENDING_ACTIVATION,
+        qualified: counts.QUALIFIED,
+        rewarded: counts.REWARDED,
+        pendingReview: counts.FRAUD_REVIEW,
+        rejected: counts.REJECTED,
+      },
+      caps,
+      reward: {
+        daysPerRef: config.rewardDaysInviter,
+        strategy: config.grantStrategy,
+      },
+      // Invitee-safe status mapping: we don't expose FRAUD_REVIEW raw — an
+      // adversarial user could detect they are under review. Collapse to opaque buckets.
+      attributedByInviter: selfAttribution
+        ? {
+            status:
+              selfAttribution.status === 'REWARDED' || selfAttribution.status === 'QUALIFIED'
+                ? ('success' as const)
+                : selfAttribution.status === 'REJECTED' || selfAttribution.status === 'FRAUD_REVIEW'
+                  ? ('not_credited' as const)
+                  : ('pending' as const),
+            attributedAt: selfAttribution.attributedAt.toISOString(),
+            qualifiedAt: selfAttribution.qualifiedAt?.toISOString() ?? null,
+            rewardedAt: selfAttribution.rewardedAt?.toISOString() ?? null,
+          }
+        : null,
+      proExpiryAt: sub?.currentPeriodEnd.toISOString() ?? null,
+      configVersion: config.configVersion,
+    });
+  }),
+);
+
+// GET /tg/referral/history — keyset-paged list of invitees (inviter perspective)
+//   Query: ?limit=20 (1..50) &before=<attributionId>
+//   Returns newest attributions first; use last item's id as `before` for next page.
+//   Consistent with /tg/santa/campaigns/:id/chat which uses `?before=`.
+tgRouter.get(
+  '/referral/history',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+
+    const querySchema = z.object({
+      limit: z.coerce.number().int().min(1).max(50).optional(),
+      before: z.string().max(64).optional(),
+    });
+    const parsed = querySchema.safeParse(req.query);
+    if (!parsed.success) return zodError(res, parsed.error);
+    const limit = parsed.data.limit ?? 20;
+    const cursor = parsed.data.before || null; // empty string → no cursor
+
+    const config = await loadReferralConfig(prisma);
+
+    // Resolve cursor to a keyset pair (attributedAt, id)
+    let cursorAttributedAt: Date | null = null;
+    let cursorId: string | null = null;
+    if (cursor) {
+      const row = await prisma.referralAttribution.findFirst({
+        where: { id: cursor, inviterUserId: user.id },
+        select: { id: true, attributedAt: true },
+      });
+      if (row) {
+        cursorAttributedAt = row.attributedAt;
+        cursorId = row.id;
+      }
+      // Unknown cursor → treat as "no cursor" (don't 400; frontend may send stale id).
+    }
+
+    const rows = await prisma.referralAttribution.findMany({
+      where: {
+        inviterUserId: user.id,
+        ...(cursorAttributedAt && cursorId
+          ? {
+              OR: [
+                { attributedAt: { lt: cursorAttributedAt } },
+                { attributedAt: cursorAttributedAt, id: { lt: cursorId } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ attributedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      select: {
+        id: true,
+        status: true,
+        rejectReason: true,
+        attributedAt: true,
+        qualifiedAt: true,
+        rewardedAt: true,
+        rejectedAt: true,
+        invitedUserId: true,
+        invited: {
+          select: {
+            firstName: true,
+            profile: {
+              select: {
+                displayName: true,
+                firstBotStartAt: true,
+                firstWishlistAt: true,
+                firstItemAt: true,
+              },
+            },
+          },
+        },
+        rewards: {
+          where: { status: 'GRANTED' },
+          select: { id: true, rewardValueDays: true, grantedAt: true },
+          orderBy: { grantedAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    const hasMore = rows.length > limit;
+    if (hasMore) rows.pop();
+
+    const showNames = config.showInviteeNamesInUi;
+
+    const items = rows.map((r) => {
+      const profile = r.invited.profile;
+      const displayName = showNames
+        ? (profile?.displayName ?? r.invited.firstName ?? null)
+        : null;
+      const reward = r.rewards[0];
+      return {
+        id: r.id,
+        status: r.status,
+        rejectReason: r.rejectReason,
+        attributedAt: r.attributedAt.toISOString(),
+        qualifiedAt: r.qualifiedAt?.toISOString() ?? null,
+        rewardedAt: r.rewardedAt?.toISOString() ?? null,
+        rejectedAt: r.rejectedAt?.toISOString() ?? null,
+        invitedDisplayName: displayName,
+        progress: {
+          firstBotStart: !!profile?.firstBotStartAt,
+          firstWishlist: !!profile?.firstWishlistAt,
+          firstItem: !!profile?.firstItemAt,
+        },
+        reward: reward
+          ? {
+              id: reward.id,
+              days: reward.rewardValueDays,
+              grantedAt: reward.grantedAt.toISOString(),
+            }
+          : null,
+      };
+    });
+
+    return res.json({
+      items,
+      // hasMore ⇒ rows.length was limit+1, popped to limit ≥ 1 — safe to index.
+      nextBefore: hasMore ? items[items.length - 1]!.id : null,
+      limit,
+    });
+  }),
+);
+
+// GET /tg/referral/stats — aggregated counters + rolling windows + total reward days
+tgRouter.get(
+  '/referral/stats',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const config = await loadReferralConfig(prisma);
+
+    const now = new Date();
+    const DAY_MS = 86_400_000;
+    const monthAgo = new Date(now.getTime() - REWARD_CAP_MONTHLY_WINDOW_DAYS * DAY_MS);
+    const yearAgo = new Date(now.getTime() - REWARD_CAP_YEARLY_WINDOW_DAYS * DAY_MS);
+
+    const [counts, totalDaysRow, monthlyUsed, yearlyUsed] = await Promise.all([
+      referralStatusCounts(user.id),
+      prisma.referralReward.aggregate({
+        where: { userId: user.id, status: 'GRANTED' },
+        _sum: { rewardValueDays: true },
+      }),
+      prisma.referralReward.count({
+        where: { userId: user.id, status: 'GRANTED', grantedAt: { gte: monthAgo } },
+      }),
+      prisma.referralReward.count({
+        where: { userId: user.id, status: 'GRANTED', grantedAt: { gte: yearAgo } },
+      }),
+    ]);
+
+    const totalAttributions =
+      counts.ATTRIBUTED +
+      counts.PENDING_ACTIVATION +
+      counts.QUALIFIED +
+      counts.REWARDED +
+      counts.REJECTED +
+      counts.FRAUD_REVIEW;
+
+    const successful = counts.QUALIFIED + counts.REWARDED;
+
+    return res.json({
+      lifetime: {
+        totalAttributions,
+        successful,
+        // ATTRIBUTED is legacy (see ReferralStatusCounts); collapse into pending.
+        pendingActivation: counts.ATTRIBUTED + counts.PENDING_ACTIVATION,
+        qualified: counts.QUALIFIED,
+        rewarded: counts.REWARDED,
+        pendingReview: counts.FRAUD_REVIEW,
+        rejected: counts.REJECTED,
+        totalRewardDays: totalDaysRow._sum.rewardValueDays ?? 0,
+      },
+      rolling30d: {
+        used: monthlyUsed,
+        cap: config.monthlyRewardCap,
+        atCap: monthlyUsed >= config.monthlyRewardCap,
+      },
+      rolling365d: {
+        used: yearlyUsed,
+        cap: config.yearlyRewardCap,
+        atCap: yearlyUsed >= config.yearlyRewardCap,
+      },
+      reward: {
+        daysPerRef: config.rewardDaysInviter,
+        strategy: config.grantStrategy,
+      },
+      configVersion: config.configVersion,
+    });
+  }),
+);
+
+// GET /tg/referral/rules-config — program config snapshot (safe public subset)
+// Exposed to the client so rules screens + entry-point gating stay in sync with admin.
+// Deliberately OMITS fraud thresholds, signal weights, and bot-notification toggles.
+tgRouter.get(
+  '/referral/rules-config',
+  asyncHandler(async (req, res) => {
+    const user = await getOrCreateTgUser(req.tgUser!);
+    const config = await loadReferralConfig(prisma);
+    const inRollout = isInRollout(user.id, config.rolloutPercent);
+
+    // Config is per-user (isInRollout), but changes rarely (admin edits).
+    // Short private cache reduces redundant fetches during a single user session.
+    res.set('Cache-Control', 'private, max-age=60');
+    return res.json({
+      enabled: config.enabled,
+      inRollout,
+      rolloutPercent: config.rolloutPercent,
+      reward: {
+        daysPerRef: config.rewardDaysInviter,
+        strategy: config.grantStrategy,
+      },
+      qualification: {
+        requireWishlist: config.requireWishlist,
+        requireItem: config.requireItem,
+        windowDays: config.qualificationWindowDays,
+      },
+      caps: {
+        monthly: config.monthlyRewardCap,
+        yearly: config.yearlyRewardCap,
+      },
+      ui: {
+        showInviteeNamesInUi: config.showInviteeNamesInUi,
+        entryPointProfile: config.entryPointProfile,
+        entryPointPaywall: config.entryPointPaywall,
+        entryPointHomeBanner: config.entryPointHomeBanner,
+        entryPointPostShare: config.entryPointPostShare,
+      },
+      configVersion: config.configVersion,
+    });
+  }),
+);
+// ─────────────────────────────────────────────────────────────────────────────
 
 // GET /tg/wishlists — my wishlists
 tgRouter.get(
@@ -4372,6 +5411,10 @@ tgRouter.post(
 
     trackAnalyticsEvent({ event: 'wishlist.created', userId: user.id, props: { source: 'miniapp' } });
 
+    // Referral: mark firstWishlist milestone + drive qualify/reward pipeline
+    // if this user was referred. Fire-and-forget; never blocks the response.
+    void runReferralProgressHook(user.id, 'first_wishlist');
+
     return res.status(201).json({
       wishlist: { ...wishlist, deadline: wishlist.deadline?.toISOString() ?? null, itemCount: 0, reservedCount: 0 },
     });
@@ -5640,6 +6683,14 @@ tgRouter.post(
       platform: 'miniapp', isFirstItem: totalUserItems === 1,
     });
     if (totalUserItems === 1) trackEvent('first_item_created', user.id, { itemId: item.id, wishlistType: wishlist.type, source: 'manual', platform: 'miniapp' });
+
+    // Referral: mark firstItem milestone + drive qualify/reward pipeline if
+    // this user was referred. Only counts items created in REGULAR wishlists
+    // (qualifying criteria is real product engagement, not SYSTEM_DRAFTS / SHOWCASE).
+    // Fire-and-forget; never blocks the response.
+    if (wishlist.type === 'REGULAR') {
+      void runReferralProgressHook(user.id, 'first_item');
+    }
 
     // First Share Prompt: is this the user's first real item in a REGULAR wishlist?
     let showFirstSharePrompt = false;
@@ -15150,6 +16201,28 @@ setInterval(async () => {
     logger.error({ err }, 'degradation purge job failed');
   }
 }, 60 * 60 * 1000);
+
+// ─── Referral program: expired-attribution sweeper (every 15 min) ────────────
+// Flips PENDING_ACTIVATION rows past windowDeadlineAt → REJECTED with
+// QUALIFICATION_TIMEOUT. Drains up to SWEEP_BATCH_SIZE × SWEEP_MAX_ITERATIONS
+// per run so a backlog spike is absorbed without ad-hoc scripts. Emits a single
+// aggregated analytics event per run; per-user funnel events are already
+// covered by the attribution/qualified/rewarded events.
+const REFERRAL_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
+setInterval(async () => {
+  try {
+    const result = await sweepExpiredPendingAttributions(prisma);
+    if (result.expired > 0) {
+      logger.info({ expired: result.expired }, '[referral] sweep: expired pending attributions');
+      trackAnalyticsEvent({
+        event: 'referral.qualification_timeout',
+        props: { expired: result.expired, source: 'cron' },
+      });
+    }
+  } catch (err) {
+    logger.error({ err }, '[referral] sweep failed');
+  }
+}, REFERRAL_SWEEP_INTERVAL_MS);
 
 // ─── Lifecycle / Win-back scheduler (hourly) ─────────────────────────────────
 // Scans users, classifies into segments S1–S4, creates LifecycleTouch records,

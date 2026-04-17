@@ -31,6 +31,14 @@ services:
       WEB_ORIGIN: ${WEB_ORIGIN}
       ADMIN_KEY: ${ADMIN_KEY}
       BOT_TOKEN: ${BOT_TOKEN}
+      # Bot username for building referral deep links (t.me/<name>?start=ref_XXX).
+      # Defaults to WishHub_bot (matches .env.example & web container).
+      TELEGRAM_BOT_USERNAME: ${NEXT_PUBLIC_BOT_USERNAME:-WishHub_bot}
+      # REQUIRED in production: >=16-char secret for hashing IPs/fingerprints in
+      # ReferralAttribution. Without it, apps/api crashes on import (referral.ts
+      # throws if NODE_ENV=production and salt is unset). Rotate = re-hash
+      # existing rows (acceptable — hashes are only used for fraud clustering).
+      REFERRAL_IP_HASH_SALT: ${REFERRAL_IP_HASH_SALT}
       AUTH_SECRET: ${AUTH_SECRET:-}
       SYSTEM_USER_EMAIL: ${SYSTEM_USER_EMAIL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -98,6 +106,10 @@ services:
       ADMIN_ALERT_CHAT_IDS: ${ADMIN_ALERT_CHAT_IDS:-}
       SUPPORT_CHAT_ID: ${SUPPORT_CHAT_ID:-}
       MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
+      # Bot imports @wishlist/db (for tryCreateAttribution, resolveReferralCode),
+      # which loads referral.ts → throws on import if salt is unset in prod.
+      # MUST match the value set on the api container so hashes are consistent.
+      REFERRAL_IP_HASH_SALT: ${REFERRAL_IP_HASH_SALT}
     depends_on:
       api:
         condition: service_started

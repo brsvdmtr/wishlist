@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { Telegraf, Markup, TelegramError } from 'telegraf';
 import fs from 'node:fs';
 import path from 'node:path';
-import { prisma } from '@wishlist/db';
+import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig } from '@wishlist/db';
 import { t, detectLocale, resolveEffectiveLocale, type Locale } from '@wishlist/shared';
 import logger from './logger';
 
@@ -663,6 +663,130 @@ if (!token) {
         ]));
       } catch (err) {
         logger.error({ err }, 'hint deep link error');
+        return ctx.reply(t('bot_error', locale));
+      }
+    }
+    if (payload?.startsWith('ref_')) {
+      // ── Referral deep link: ?start=ref_<CODE> ──────────────────────────────
+      // Flow:
+      //   1. Parse code, resolve to inviter.
+      //   2. Resolve/create the invitee user (already upserted at top of /start).
+      //   3. Call tryCreateAttribution — first-touch, idempotent.
+      //   4. Mark firstBotStartAt for the invitee (funnel tracking).
+      //   5. Notify inviter if config says so.
+      //   6. Reply to invitee with Mini App button.
+      const refCode = payload.slice('ref_'.length);
+      try {
+        const inviter = await resolveReferralCode(prisma, refCode);
+
+        // Always log the event — even if code is invalid.
+        prisma.analyticsEvent.create({
+          data: {
+            event: inviter ? 'referral.start_command_received' : 'referral.code_invalid',
+            userId: telegramId,
+            props: { refCode, hasInviter: !!inviter },
+          },
+        }).catch(() => {});
+
+        if (!inviter) {
+          logger.info({ telegramId, refCode }, '[referral] invalid code in /start');
+          return ctx.reply(t('bot_referral_code_invalid', locale));
+        }
+
+        // Resolve invitee user (already upserted earlier in this handler).
+        const invitee = await prisma.user.findUnique({
+          where: { telegramId },
+          select: { id: true },
+        });
+        if (!invitee) {
+          // Extremely unlikely — upsert at top of /start should have created it.
+          logger.warn({ telegramId }, '[referral] invitee user not found after upsert');
+          return ctx.reply(
+            t('bot_referral_welcome', locale),
+            Markup.inlineKeyboard([
+              Markup.button.webApp(t('bot_referral_open_btn', locale), MINI_APP_URL),
+            ]),
+          );
+        }
+
+        // Attribution — fire-and-forget semantics; don't let attribution failure
+        // block the invitee's experience. Log all outcomes for observability.
+        const attrResult = await tryCreateAttribution(prisma, {
+          inviterUserId: inviter.inviterUserId,
+          inviteeUserId: invitee.id,
+          referralCode: refCode,
+          locale: ctx.from.language_code ?? undefined,
+        });
+
+        logger.info({ telegramId, inviterUserId: inviter.inviterUserId, kind: attrResult.kind }, '[referral] attribution result');
+        prisma.analyticsEvent.create({
+          data: {
+            event: attrResult.kind === 'attributed'
+              ? 'referral.attributed'
+              : 'referral.attribution_rejected_on_write',
+            userId: invitee.id,
+            props: { refCode, inviterUserId: inviter.inviterUserId, kind: attrResult.kind },
+          },
+        }).catch(() => {});
+
+        // Mark firstBotStartAt for funnel tracking (idempotent — writes once).
+        await markFirstBotStart(prisma, invitee.id).catch((err) => {
+          logger.warn({ err, userId: invitee.id }, '[referral] markFirstBotStart failed');
+        });
+
+        // ── Notify inviter (if config says so) ────────────────────────────────
+        if (attrResult.kind === 'attributed') {
+          try {
+            const config = await loadReferralConfig(prisma);
+            if (config.notifyInviterArrival) {
+              const inviterUser = await prisma.user.findUnique({
+                where: { id: inviter.inviterUserId },
+                select: {
+                  telegramChatId: true,
+                  profile: { select: { languageMode: true, manualLanguage: true } },
+                },
+              });
+              if (inviterUser?.telegramChatId) {
+                const inviterLocale = resolveEffectiveLocale(
+                  inviterUser.profile
+                    ? { languageMode: inviterUser.profile.languageMode as any, manualLanguage: inviterUser.profile.manualLanguage as any }
+                    : null,
+                );
+                // Only emit `sent` analytics if Telegram actually accepted
+                // the message — otherwise bot_notification_sent counts drift
+                // above real deliveries and the dashboard lies.
+                const delivered = await bot.telegram.sendMessage(
+                  inviterUser.telegramChatId,
+                  t('bot_referral_inviter_arrival', inviterLocale),
+                ).then(() => true).catch((err) => {
+                  logger.warn({ err, inviterUserId: inviter.inviterUserId }, '[referral] inviter arrival notification failed');
+                  return false;
+                });
+                prisma.analyticsEvent.create({
+                  data: {
+                    event: delivered
+                      ? 'referral.bot_notification_sent'
+                      : 'referral.bot_notification_delivery_failed',
+                    userId: inviter.inviterUserId,
+                    props: { type: 'arrival' },
+                  },
+                }).catch(() => {});
+              }
+            }
+          } catch (err) {
+            logger.warn({ err }, '[referral] inviter notification error');
+          }
+        }
+
+        // Reply to invitee with Mini App button.
+        return ctx.reply(
+          t('bot_referral_welcome', locale),
+          Markup.inlineKeyboard([
+            Markup.button.webApp(t('bot_referral_open_btn', locale), MINI_APP_URL),
+          ]),
+        );
+      } catch (err) {
+        logger.error({ err, refCode }, '[referral] ref deep link error');
         return ctx.reply(t('bot_error', locale));
       }
     }

@@ -597,7 +597,8 @@ type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-d
 | 'guest-link-expired'
 | 'item-unavailable'
 | 'secret-reservation-detail' | 'secret-reservation-paywall'
-| 'showcase-editor' | 'showcase-preview';
+| 'showcase-editor' | 'showcase-preview'
+| 'referral' | 'referral-history';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' | 'warning' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -1772,6 +1773,68 @@ function ProBadge({ style }: { style?: React.CSSProperties } = {}) {
       boxSizing: 'border-box',
       ...style,
     }}>PRO</span>
+  );
+}
+
+/**
+ * Small tile that appears on the profile screen advertising the referral
+ * program. Reads from preloaded rules-config (loaded once at app init).
+ * Hides itself when the program isn't active for this user (out of rollout /
+ * disabled) or when `ui.entryPointProfile` is false in admin config.
+ * Impression fires once per profile-screen mount for funnel data.
+ */
+function ReferralProfileTileFromConfig({ config, locale, onOpen, trackEvent }: {
+  config: { enabled: boolean; inRollout: boolean; reward: { daysPerRef: number }; ui: { entryPointProfile: boolean } } | null;
+  locale: Locale;
+  onOpen: () => void;
+  trackEvent: (event: string, props?: Record<string, unknown>) => void;
+}) {
+  const impressionFiredRef = useRef(false);
+  const shouldRender = !!config && config.enabled && config.inRollout && config.ui.entryPointProfile;
+  useEffect(() => {
+    if (shouldRender && !impressionFiredRef.current) {
+      impressionFiredRef.current = true;
+      trackEvent('referral.entry_point_impression', { entryPoint: 'profile_tile' });
+    }
+  }, [shouldRender, trackEvent]);
+  if (!shouldRender || !config) return null;
+  const days = config.reward.daysPerRef;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div
+        onClick={onOpen}
+        style={{
+          position: 'relative', cursor: 'pointer',
+          borderRadius: 18,
+          background: `linear-gradient(135deg, ${C.accent}22, ${C.accent}08)`,
+          border: `1px solid ${C.accent}40`,
+          padding: 16, overflow: 'hidden',
+        }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12,
+            background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 22, flexShrink: 0,
+          }}>🎁</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>
+              {t('referral_profile_tile_title', locale)}
+            </div>
+            <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.4 }}>
+              {t('referral_profile_tile_desc', locale, { days: String(days) })}
+            </div>
+          </div>
+          <div style={{
+            color: C.accent, fontSize: 13, fontWeight: 600,
+            padding: '6px 10px', borderRadius: 10, flexShrink: 0,
+            background: 'rgba(124,106,255,0.12)',
+          }}>
+            {t('referral_profile_tile_cta', locale)}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -3226,7 +3289,7 @@ function getAddonOffers(locale: Locale): Record<string, { title: string; tag: st
 // PRO UPSELL SHEET (context-aware)
 // ═══════════════════════════════════════════════════════
 
-function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, availableSkus, cappedAddonCodes, locale }: {
+function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, availableSkus, cappedAddonCodes, locale, referralConfig, onOpenReferral, onReferralImpression }: {
   state: UpsellSheetState;
   onClose: () => void;
   onUpgrade: () => void;
@@ -3236,8 +3299,34 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
   availableSkus: SkuInfo[];
   cappedAddonCodes: string[];
   locale: Locale;
+  // Structural — we only use these fields from the full config.
+  referralConfig: {
+    enabled: boolean;
+    inRollout: boolean;
+    reward: { daysPerRef: number };
+    ui: { entryPointPaywall: boolean };
+  } | null;
+  onOpenReferral: () => void;
+  onReferralImpression: (context: string) => void;
 }) {
   const content = state ? getUpsellContent(locale)[state.context] : null;
+  // Fire impression when the paywall becomes visible AND the referral alt
+  // CTA would render. Debounced per-open via ref so we don't double-fire on
+  // re-renders within the same paywall open. Resets on close.
+  const paywallImpressionFiredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!state) {
+      paywallImpressionFiredRef.current = null;
+      return;
+    }
+    const shouldRender = !!(referralConfig?.enabled && referralConfig.inRollout && referralConfig.ui.entryPointPaywall);
+    if (!shouldRender) return;
+    // Only fire once per (context, paywall-open) pair.
+    const key = state.context;
+    if (paywallImpressionFiredRef.current === key) return;
+    paywallImpressionFiredRef.current = key;
+    onReferralImpression(key);
+  }, [state, referralConfig, onReferralImpression]);
   return (
     <BottomSheet isOpen={state !== null} onClose={onClose}>
       {content && (
@@ -3421,6 +3510,53 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
           >
             {checkoutLoading ? t('upsell_checkout_loading', locale) : t('upsell_cta', locale)}
           </button>
+
+          {/* ── Referral alt CTA — secondary, "or get it free by inviting" ──
+              Only shown when the program is live AND the paywall entry-point
+              is enabled in config. Never replaces the primary Stars CTA —
+              keeps paid conversion as the main path. Impression fires via
+              inner component — once per paywall mount when visible. */}
+          {referralConfig && referralConfig.enabled && referralConfig.inRollout && referralConfig.ui.entryPointPaywall && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{
+                position: 'relative', textAlign: 'center', marginBottom: 12,
+              }}>
+                <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: C.border }} />
+                <span style={{
+                  position: 'relative', background: C.card, padding: '0 12px',
+                  fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600,
+                }}>
+                  {t('referral_paywall_alt_divider', locale)}
+                </span>
+              </div>
+              <div
+                onClick={onOpenReferral}
+                style={{
+                  padding: 14, borderRadius: 16,
+                  background: `linear-gradient(135deg, ${C.accent}1a, ${C.accent}06)`,
+                  border: `1px solid ${C.accent}32`,
+                  cursor: 'pointer',
+                  display: 'flex', gap: 10, alignItems: 'center',
+                  textAlign: 'start',
+                }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 12,
+                  background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 20, flexShrink: 0,
+                }}>🎁</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2 }}>
+                    {t('referral_paywall_alt_title', locale)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>
+                    {t('referral_paywall_alt_sub', locale, { days: String(referralConfig.reward.daysPerRef) })}
+                  </div>
+                </div>
+                <div style={{ color: C.accent, fontSize: 16, flexShrink: 0 }}>›</div>
+              </div>
+            </div>
+          )}
 
           {/* ── One-time add-on offers (for limit-gate contexts) ── */}
           {(() => {
@@ -4303,6 +4439,109 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   } | null>(null);
   const [publicProfileLoading, setPublicProfileLoading] = useState(false);
   const [publicProfileError, setPublicProfileError] = useState<string | null>(null);
+  // ── Referral program state ────────────────────────────────────────────────
+  // Matches GET /tg/referral/me response shape (apps/api/src/index.ts).
+  type ReferralMe = {
+    enabled: boolean;
+    programEnabled: boolean;
+    inRollout: boolean;
+    rolloutPercent: number;
+    code: string | null;
+    link: string | null;
+    shareText: string | null;
+    stats: {
+      totalAttributions: number;
+      successful: number;
+      pendingActivation: number;
+      qualified: number;
+      rewarded: number;
+      pendingReview: number;
+      rejected: number;
+    };
+    caps: {
+      monthlyUsed: number;
+      monthlyCap: number;
+      yearlyUsed: number;
+      yearlyCap: number;
+      atMonthlyCap: boolean;
+      atYearlyCap: boolean;
+    };
+    reward: { daysPerRef: number; strategy: string };
+    attributedByInviter: {
+      status: 'success' | 'not_credited' | 'pending';
+      attributedAt: string;
+      qualifiedAt: string | null;
+      rewardedAt: string | null;
+    } | null;
+    proExpiryAt: string | null;
+    configVersion: string;
+  };
+  // Matches GET /tg/referral/history response shape.
+  type ReferralHistoryItem = {
+    id: string;
+    status: 'ATTRIBUTED' | 'PENDING_ACTIVATION' | 'QUALIFIED' | 'REWARDED' | 'REJECTED' | 'FRAUD_REVIEW';
+    rejectReason: string | null;
+    attributedAt: string;
+    qualifiedAt: string | null;
+    rewardedAt: string | null;
+    rejectedAt: string | null;
+    invitedDisplayName: string | null;
+    progress: { firstBotStart: boolean; firstWishlist: boolean; firstItem: boolean };
+    reward: { id: string; days: number; grantedAt: string } | null;
+  };
+  type ReferralHistoryPage = { items: ReferralHistoryItem[]; nextBefore: string | null; limit: number };
+  // Minimal config subset from GET /tg/referral/rules-config. Loaded once at
+  // app init and used by entry-points (paywall alt CTA, home banner, post-share)
+  // to decide whether to render without hitting /me — that endpoint has wider
+  // response and side-effects (may allocate a code). rules-config is HTTP-cached
+  // for 60s so browsers reuse it across entry-point renders in the same session.
+  type ReferralRulesConfig = {
+    enabled: boolean;
+    inRollout: boolean;
+    rolloutPercent: number;
+    reward: { daysPerRef: number; strategy: string };
+    qualification: { requireWishlist: boolean; requireItem: boolean; windowDays: number };
+    caps: { monthly: number; yearly: number };
+    ui: {
+      showInviteeNamesInUi: boolean;
+      entryPointProfile: boolean;
+      entryPointPaywall: boolean;
+      entryPointHomeBanner: boolean;
+      entryPointPostShare: boolean;
+    };
+    configVersion: string;
+  };
+  const [referralRulesConfig, setReferralRulesConfig] = useState<ReferralRulesConfig | null>(null);
+  const [referralMe, setReferralMe] = useState<ReferralMe | null>(null);
+  const [referralMeLoading, setReferralMeLoading] = useState(false);
+  const [referralMeError, setReferralMeError] = useState<string | null>(null);
+  const [referralHistory, setReferralHistory] = useState<ReferralHistoryItem[]>([]);
+  const [referralHistoryCursor, setReferralHistoryCursor] = useState<string | null>(null);
+  const [referralHistoryLoading, setReferralHistoryLoading] = useState(false);
+  const [referralHistoryHasMore, setReferralHistoryHasMore] = useState(false);
+  const [referralShareSheet, setReferralShareSheet] = useState(false);
+  const [referralRulesOpen, setReferralRulesOpen] = useState(false);
+  // Track which screen user came from so Back returns there (same pattern as
+  // settingsOriginScreen). Entry points: 'profile' / 'my-wishlists' (banner) /
+  // wherever paywall was shown. Defaults to 'profile' for direct opens.
+  const [referralOriginScreen, setReferralOriginScreen] = useState<Screen>('profile');
+  // Shown once to invitees whose attribution succeeded (attributedByInviter.status === 'pending')
+  // right after the first app open. Writes a localStorage flag to never repeat.
+  const [referralCelebrationOpen, setReferralCelebrationOpen] = useState(false);
+  // Home banner — user-dismissable with localStorage persistence. Re-shows
+  // after 14 days if user hasn't opened the referral screen in the meantime.
+  const [referralHomeBannerDismissed, setReferralHomeBannerDismissed] = useState<boolean>(() => {
+    try {
+      const ts = window.localStorage.getItem('referral_home_banner_dismissed_at');
+      if (!ts) return false;
+      const age = Date.now() - parseInt(ts, 10);
+      return age < 14 * 86_400_000; // still within 14-day cooldown
+    } catch { return false; }
+  });
+  // Fire an impression event once per session when the home banner first
+  // becomes visible. Ref-guarded so re-renders don't re-fire.
+  const referralHomeBannerImpressionFiredRef = useRef(false);
+
   // ── Showcase state ────────────────────────────────────────────────────────
   type ShowcaseData = {
     enabled: boolean;
@@ -5730,6 +5969,97 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   }, [tgFetch, locale, pushToast]);
 
+  // ── Referral program loaders ────────────────────────────────────────────
+  /**
+   * Load GET /tg/referral/rules-config. Called once on app init. Silent on
+   * failure — entry-points just won't render, which is the correct fallback.
+   */
+  const loadReferralRulesConfig = useCallback(async () => {
+    try {
+      const res = await tgFetch('/tg/referral/rules-config');
+      if (!res.ok) return;
+      const data = await res.json() as ReferralRulesConfig;
+      setReferralRulesConfig(data);
+    } catch {
+      trackEvent('referral.config_fetch_failed');
+    }
+  }, [tgFetch, trackEvent]);
+
+  /**
+   * Load GET /tg/referral/me (code, stats, caps, attributedByInviter).
+   * Called on referral-screen mount and after a successful share (to refresh
+   * any counters that may have advanced in the interim).
+   */
+  const loadReferralMe = useCallback(async () => {
+    setReferralMeLoading(true);
+    setReferralMeError(null);
+    try {
+      const res = await tgFetch('/tg/referral/me');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as ReferralMe;
+      setReferralMe(data);
+    } catch (e) {
+      setReferralMeError(e instanceof Error ? e.message : 'load_failed');
+      trackEvent('referral.screen_load_failed', { context: 'me' });
+    } finally {
+      setReferralMeLoading(false);
+    }
+  }, [tgFetch, trackEvent]);
+
+  /**
+   * Load a page of referral history. `reset=true` clears the list and resets
+   * the cursor; otherwise append to the existing list using `referralHistoryCursor`.
+   */
+  const loadReferralHistory = useCallback(async (reset: boolean = false) => {
+    setReferralHistoryLoading(true);
+    try {
+      const cursor = reset ? null : referralHistoryCursor;
+      const qs = new URLSearchParams({ limit: '20' });
+      if (cursor) qs.set('before', cursor);
+      const res = await tgFetch(`/tg/referral/history?${qs.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as ReferralHistoryPage;
+      setReferralHistory((prev) => reset ? data.items : [...prev, ...data.items]);
+      setReferralHistoryCursor(data.nextBefore);
+      setReferralHistoryHasMore(!!data.nextBefore);
+    } catch {
+      trackEvent('referral.history_load_failed');
+    } finally {
+      setReferralHistoryLoading(false);
+    }
+  }, [tgFetch, referralHistoryCursor, trackEvent]);
+
+  /**
+   * Open the main referral screen. Triggered from entry points (profile tile,
+   * home banner, paywall alt CTA). Remembers the current screen so Back
+   * returns the user there (same UX pattern as settingsOriginScreen).
+   * Always re-loads /referral/me — the server is the source of truth for
+   * caps & stats, and cheap enough to refetch.
+   */
+  const openReferralScreen = useCallback((entryPoint?: string) => {
+    if (entryPoint) {
+      trackEvent('referral.entry_point_clicked', { entryPoint });
+    }
+    trackEvent('referral.screen_opened', { entryPoint: entryPoint ?? 'direct' });
+    // Only memoize non-referral screens as origin — otherwise a re-open from
+    // within the referral subgraph would clobber the actual entry screen.
+    if (screen !== 'referral' && screen !== 'referral-history') {
+      setReferralOriginScreen(screen);
+    }
+    setScreen('referral');
+    void loadReferralMe();
+  }, [trackEvent, loadReferralMe, screen]);
+
+  /** Open full history screen — separate paged view. */
+  const openReferralHistoryScreen = useCallback(() => {
+    trackEvent('referral.history_opened');
+    setReferralHistory([]);
+    setReferralHistoryCursor(null);
+    setReferralHistoryHasMore(false);
+    setScreen('referral-history');
+    void loadReferralHistory(true);
+  }, [trackEvent, loadReferralHistory]);
+
   /** Load showcase editor data (PRO feature) */
   const loadShowcase = useCallback(async () => {
     setShowcaseLoading(true);
@@ -6914,6 +7244,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       setScreen('profile');
     } else if (screen === 'showcase-preview') {
       setScreen('showcase-editor');
+    } else if (screen === 'referral') {
+      // If any sheet/modal is open on the referral screen — close it first.
+      if (referralShareSheet) { setReferralShareSheet(false); return; }
+      if (referralRulesOpen) { setReferralRulesOpen(false); return; }
+      // Return to the screen the user came from (profile, my-wishlists, etc.).
+      setScreen(referralOriginScreen);
+    } else if (screen === 'referral-history') {
+      setScreen('referral');
     } else if (screen === 'faq' || screen === 'changelog' || screen === 'legal') {
       setScreen('settings');
     } else if (screen === 'legal-doc') {
@@ -7793,6 +8131,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       }).catch(() => { /* non-critical */ });
       // Pre-load Santa season info
       loadSantaSeason().catch(() => {});
+      // Pre-load Referral program config. Drives entry-point visibility
+      // (profile tile, paywall alt CTA, home banner). Fail-silent — entry
+      // points hide when config is null.
+      loadReferralRulesConfig().catch(() => {});
+      // Pre-load referral state once too, so we can detect freshly-attributed
+      // invitees and fire the celebration modal on their first open. The load
+      // is silent-on-failure; only users with attribution will see the UI.
+      loadReferralMe().catch(() => {});
     };
     tryInit();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -7833,6 +8179,46 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       flushTelemetry(); // final flush on unmount
     };
   }, [flushTelemetry]);
+
+  // Home-banner impression — fires once when the banner becomes visible
+  // (program enabled + rollout + admin flag + not dismissed + ≥1 wishlist
+  // + currently on my-wishlists screen). Ref-guarded so subsequent renders
+  // don't re-fire.
+  useEffect(() => {
+    if (referralHomeBannerImpressionFiredRef.current) return;
+    const visible = !!referralRulesConfig?.enabled
+      && referralRulesConfig.inRollout
+      && referralRulesConfig.ui.entryPointHomeBanner
+      && !referralHomeBannerDismissed
+      && wishlists.length >= 1
+      && screen === 'my-wishlists';
+    if (!visible) return;
+    referralHomeBannerImpressionFiredRef.current = true;
+    trackEvent('referral.entry_point_impression', { entryPoint: 'home_banner' });
+  }, [referralRulesConfig, referralHomeBannerDismissed, wishlists.length, screen, trackEvent]);
+
+  // Referral celebration — one-time modal for freshly-attributed invitees.
+  // Fires ONLY on 'pending' status: attribution recorded, invitee hasn't yet
+  // created wishlist+item. Copy says "when you create a wishlist, your friend
+  // gets PRO" — which is accurate only in this state.
+  //
+  // We don't celebrate 'success' (friend already rewarded — modal copy would
+  // be wrong) or 'not_credited' (rejected — would be confusing to invitee).
+  // Uses localStorage to avoid showing twice. Silent-fail on storage errors.
+  useEffect(() => {
+    if (!referralMe?.attributedByInviter) return;
+    const status = referralMe.attributedByInviter.status;
+    if (status !== 'pending') return;
+    let seen = false;
+    try { seen = window.localStorage.getItem('referral_celebration_seen_v1') === '1'; } catch {}
+    if (seen) return;
+    // Delay slightly so the modal doesn't fight the initial screen paint.
+    const timer = setTimeout(() => {
+      setReferralCelebrationOpen(true);
+      trackEvent('referral.celebration_viewed', { status });
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [referralMe, trackEvent]);
 
   // Refresh subscription unread badge when app returns to foreground
   useEffect(() => {
@@ -11344,6 +11730,60 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </div>
                 </div>
                 <span style={{ fontSize: 20, color: C.orange }}>›</span>
+              </div>
+            )}
+
+            {/* ── Referral home banner ──────────────────────────────────────
+                Shown to active users (≥1 wishlist) when program is live AND
+                `ui.entryPointHomeBanner` is on AND the user hasn't dismissed
+                it in the last 14 days. Close button writes a timestamp;
+                re-shows after cooldown if not yet converted. */}
+            {referralRulesConfig?.enabled
+              && referralRulesConfig.inRollout
+              && referralRulesConfig.ui.entryPointHomeBanner
+              && !referralHomeBannerDismissed
+              && wishlists.length >= 1
+              && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '14px 16px',
+                borderRadius: 14,
+                background: `linear-gradient(135deg, ${C.accent}22, ${C.accent}08)`,
+                border: `1px solid ${C.accent}2a`,
+                animation: 'fadeIn 0.3s ease',
+                cursor: 'pointer',
+              }}>
+                <div
+                  onClick={() => openReferralScreen('home_banner')}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12,
+                    background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 20, flexShrink: 0, color: '#fff',
+                  }}>🎁</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                      {t('referral_home_banner_title', locale)}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2, lineHeight: 1.3 }}>
+                      {t('referral_home_banner_sub', locale, { days: String(referralRulesConfig.reward.daysPerRef) })}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setReferralHomeBannerDismissed(true);
+                    try { window.localStorage.setItem('referral_home_banner_dismissed_at', String(Date.now())); } catch {}
+                    trackEvent('referral.home_banner_dismissed');
+                  }}
+                  aria-label="Dismiss"
+                  style={{
+                    width: 28, height: 28, borderRadius: 8, background: 'transparent',
+                    border: 'none', color: C.textMuted, fontSize: 18, cursor: 'pointer', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>×</button>
               </div>
             )}
 
@@ -16019,6 +16459,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* Spacer between header and plan */}
               <div style={{ height: 12 }} />
 
+              {/* ── Referral program entry tile ── */}
+              {/* Config is preloaded in app init (loadReferralRulesConfig).
+                  Tile hides when program is off for this user (out of rollout
+                  / disabled) or when entryPointProfile is false in admin config.
+                  Impression fires once per profile-screen mount for funnel data. */}
+              <ReferralProfileTileFromConfig
+                config={referralRulesConfig}
+                locale={locale}
+                onOpen={() => openReferralScreen('profile_tile')}
+                trackEvent={trackEvent}
+              />
+
               {/* ── PRO Showcase entry card ── */}
               {(() => {
                 const isPro = planInfo.code === 'PRO';
@@ -17403,6 +17855,512 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           )}
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════
+          REFERRAL PROGRAM — main screen
+          ══════════════════════════════════════════════ */}
+      {screen === 'referral' && (() => {
+        // ── Local helpers ───────────────────────────────────────────────
+        const copyLink = async () => {
+          if (!referralMe?.link) return;
+          try {
+            await navigator.clipboard.writeText(referralMe.link);
+            pushToast(t('referral_link_copied_toast', locale), 'success');
+            trackEvent('referral.link_copied');
+          } catch {
+            // Fallback for older WebViews
+            const ta = document.createElement('textarea');
+            ta.value = referralMe.link;
+            ta.style.position = 'fixed'; ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); pushToast(t('referral_link_copied_toast', locale), 'success'); trackEvent('referral.link_copied'); } catch {}
+            document.body.removeChild(ta);
+          }
+        };
+        const shareToTelegram = () => {
+          if (!referralMe?.link || !referralMe?.shareText) return;
+          // Use Telegram's native share flow: openTelegramLink with a t.me/share/url?url=&text=
+          // Fallback: window.open(shareUrl) if WebApp API missing.
+          const tg = (window as any).Telegram?.WebApp;
+          const text = referralMe.shareText;
+          // tg://msg_url will open the share picker natively inside Telegram.
+          const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralMe.link)}&text=${encodeURIComponent(text)}`;
+          trackEvent('referral.share_intent', { channel: 'telegram' });
+          if (tg?.openTelegramLink) {
+            tg.openTelegramLink(shareUrl);
+          } else {
+            window.open(shareUrl, '_blank');
+          }
+          trackEvent('referral.share_completed', { channel: 'telegram' });
+          setReferralShareSheet(false);
+        };
+        const systemShare = async () => {
+          if (!referralMe?.link || !referralMe?.shareText) return;
+          trackEvent('referral.share_intent', { channel: 'system' });
+          // navigator.share is widely supported in modern Telegram WebViews.
+          if (typeof navigator.share === 'function') {
+            try {
+              await navigator.share({ title: 'WishBoard', text: referralMe.shareText, url: referralMe.link });
+              trackEvent('referral.share_completed', { channel: 'system' });
+            } catch (err: unknown) {
+              // User cancelled — no analytics noise, just no-op.
+              const name = (err as { name?: string } | null)?.name;
+              if (name !== 'AbortError') {
+                trackEvent('referral.share_failed', { channel: 'system', error: String(err) });
+              }
+            }
+          } else {
+            // Fallback: copy + toast.
+            await copyLink();
+          }
+          setReferralShareSheet(false);
+        };
+
+        // ── Header (shared) ─────────────────────────────────────────────
+        const ScreenHeader = (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>
+              {t('referral_screen_title', locale)}
+            </div>
+          </div>
+        );
+
+        // ── Loading / error / disabled states ───────────────────────────
+        if (referralMeLoading && !referralMe) {
+          return (
+            <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+              {ScreenHeader}
+              <div style={{ textAlign: 'center', padding: 40, color: C.textMuted, fontSize: 14 }}>
+                {t('referral_loading', locale)}
+              </div>
+            </div>
+          );
+        }
+        if (referralMeError && !referralMe) {
+          return (
+            <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+              {ScreenHeader}
+              <div style={{ textAlign: 'center', padding: 40, color: C.textMuted, fontSize: 14 }}>
+                <div style={{ marginBottom: 12 }}>{t('referral_error', locale)}</div>
+                <button
+                  onClick={() => { void loadReferralMe(); }}
+                  style={{ padding: '10px 20px', borderRadius: 12, background: C.surface, border: `1px solid ${C.border}`, color: C.accent, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                  {t('referral_error_retry', locale)}
+                </button>
+              </div>
+            </div>
+          );
+        }
+        if (!referralMe) return null;
+
+        // Program disabled / out of rollout: show minimal placeholder.
+        if (!referralMe.enabled) {
+          return (
+            <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+              {ScreenHeader}
+              <div style={{ textAlign: 'center', padding: '40px 24px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 20 }}>
+                <div style={{ fontSize: 48, marginBottom: 14 }}>🎁</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 8 }}>
+                  {t('referral_disabled_title', locale)}
+                </div>
+                <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5, maxWidth: 320, margin: '0 auto' }}>
+                  {t('referral_disabled_body', locale)}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // ── Active program UI ───────────────────────────────────────────
+        const daysPerRef = referralMe.reward.daysPerRef;
+        const hasInvited = referralMe.stats.totalAttributions > 0;
+        const atCap = referralMe.caps.atMonthlyCap || referralMe.caps.atYearlyCap;
+        const totalRewardDays = referralMe.stats.rewarded * daysPerRef;
+
+        // Format a cap-reset date: 1st of next month. Keep local-calendar arithmetic
+        // so the label matches the user's wall-clock — server uses rolling 30d, but
+        // for UX we show the month boundary, which is close enough.
+        const now = new Date();
+        const capResetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const monthNamesRu = ['янв', 'февр', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сент', 'окт', 'нояб', 'дек'];
+        const monthNamesEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const capResetLabel = locale === 'ru'
+          ? `${capResetDate.getDate()} ${monthNamesRu[capResetDate.getMonth()]}`
+          : `${monthNamesEn[capResetDate.getMonth()]} ${capResetDate.getDate()}`;
+
+        // Pending attribution cards (from history cache if loaded; otherwise a
+        // placeholder derived from /me stats). For the main screen we only show
+        // the aggregate — detailed progress lives on the history screen.
+        const showProgressStrip = referralMe.stats.pendingActivation > 0;
+
+        return (
+          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+            {ScreenHeader}
+
+            {/* ── Hero ────────────────────────────────────────────────── */}
+            <div style={{
+              position: 'relative',
+              textAlign: 'center',
+              padding: hasInvited ? '18px 16px 16px' : '28px 20px 24px',
+              marginBottom: 14,
+              borderRadius: 20,
+              background: `radial-gradient(circle at 50% 0%, ${C.accent}22 0%, transparent 60%), ${C.card}`,
+              border: `1px solid ${C.border}`,
+              overflow: 'hidden',
+            }}>
+              <div style={{ fontSize: hasInvited ? 32 : 44, marginBottom: hasInvited ? 6 : 10 }}>🎁</div>
+              <div style={{ fontSize: hasInvited ? 17 : 22, fontWeight: 800, color: C.text, lineHeight: 1.2, marginBottom: hasInvited ? 0 : 6, letterSpacing: '-0.01em' }}>
+                {hasInvited
+                  ? t('referral_hero_title_active', locale, { days: String(daysPerRef) })
+                  : t('referral_hero_title_empty', locale)}
+              </div>
+              {!hasInvited && (
+                <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.45, maxWidth: 320, margin: '0 auto' }}>
+                  {t('referral_hero_subtitle', locale, { days: String(daysPerRef) })}
+                </div>
+              )}
+            </div>
+
+            {/* ── Stats strip (only when has progress) ────────────────── */}
+            {hasInvited && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                <div style={{ flex: 1, padding: '14px 10px', borderRadius: 14, background: C.accentSoft, border: `1px solid ${C.accent}28`, textAlign: 'center' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, lineHeight: 1 }}>{referralMe.stats.totalAttributions}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
+                    {t('referral_stat_invited', locale)}
+                  </div>
+                </div>
+                <div style={{ flex: 1, padding: '14px 10px', borderRadius: 14, background: C.surface, border: `1px solid ${C.border}`, textAlign: 'center' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1 }}>{referralMe.stats.pendingActivation + referralMe.stats.qualified}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
+                    {t('referral_stat_in_progress', locale)}
+                  </div>
+                </div>
+                <div style={{ flex: 1, padding: '14px 10px', borderRadius: 14, background: C.greenSoft, border: `1px solid rgba(52,211,153,0.25)`, textAlign: 'center' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.green, lineHeight: 1 }}>+{totalRewardDays}</div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
+                    {t('referral_stat_reward_days', locale)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Cap indicator ──────────────────────────────────────── */}
+            {hasInvited && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 12,
+                borderRadius: 12, background: atCap ? 'rgba(251,191,36,0.1)' : C.surface,
+                border: `1px solid ${atCap ? 'rgba(251,191,36,0.25)' : C.border}`,
+                fontSize: 12, color: atCap ? C.orange : C.textSec, lineHeight: 1.4,
+              }}>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  {Array.from({ length: referralMe.caps.monthlyCap }).map((_, i) => (
+                    <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: i < referralMe.caps.monthlyUsed ? C.accent : 'rgba(255,255,255,0.12)' }} />
+                  ))}
+                </div>
+                <span style={{ flex: 1 }}>
+                  {atCap
+                    ? t('referral_cap_at_limit', locale)
+                    : t('referral_cap_label', locale, { used: String(referralMe.caps.monthlyUsed), cap: String(referralMe.caps.monthlyCap) })}
+                </span>
+                <span style={{ color: C.textMuted, flexShrink: 0, fontSize: 11 }}>
+                  {t('referral_cap_reset_fmt', locale, { date: capResetLabel })}
+                </span>
+              </div>
+            )}
+
+            {/* ── Link display ──────────────────────────────────────── */}
+            {referralMe.link && (
+              <div
+                onClick={copyLink}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+                  marginBottom: 10, borderRadius: 12, background: C.surface, border: `1px solid ${C.border}`,
+                  cursor: 'pointer',
+                }}>
+                <div style={{ fontSize: 16, flexShrink: 0 }}>🔗</div>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.textSec, fontFamily: 'ui-monospace, SFMono-Regular, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {referralMe.link.replace(/^https?:\/\//, '')}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.accent, flexShrink: 0 }}>
+                  {t('referral_link_copy_btn', locale)}
+                </div>
+              </div>
+            )}
+
+            {/* ── Primary/Secondary CTAs ────────────────────────────── */}
+            <button
+              onClick={shareToTelegram}
+              disabled={!referralMe.link}
+              style={{
+                width: '100%', padding: '14px 20px', marginBottom: 8, borderRadius: 14,
+                background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, color: '#fff',
+                fontSize: 15, fontWeight: 700, border: 'none', cursor: referralMe.link ? 'pointer' : 'default',
+                fontFamily: font, opacity: referralMe.link ? 1 : 0.5,
+                boxShadow: `0 4px 20px ${C.accent}30`,
+              }}>
+              {t('referral_share_tg_btn', locale)}
+            </button>
+            <button
+              onClick={() => { setReferralShareSheet(true); trackEvent('referral.share_action_sheet_opened'); }}
+              disabled={!referralMe.link}
+              style={{
+                width: '100%', padding: '12px 20px', marginBottom: 16, borderRadius: 14,
+                background: C.surface, color: C.text, fontSize: 14, fontWeight: 600,
+                border: `1px solid ${C.border}`, cursor: referralMe.link ? 'pointer' : 'default',
+                fontFamily: font, opacity: referralMe.link ? 1 : 0.5,
+              }}>
+              {t('referral_share_other_btn', locale)}
+            </button>
+
+            {/* ── Pending progress strip (compact — details on history) */}
+            {showProgressStrip && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 10 }}>
+                  {t('referral_progress_section', locale)}
+                </div>
+                <div style={{ padding: '12px 14px', borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.orange}`, fontSize: 13, color: C.text, display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: C.orangeSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>⏳</div>
+                  <div style={{ flex: 1, fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
+                    {t('referral_event_pending', locale)}
+                    <span style={{ color: C.textMuted, marginLeft: 6, fontSize: 12 }}>
+                      · {referralMe.stats.pendingActivation + referralMe.stats.qualified}
+                    </span>
+                  </div>
+                  <div
+                    onClick={openReferralHistoryScreen}
+                    style={{ color: C.accent, fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                    →
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── History preview / empty state ─────────────────────── */}
+            {!hasInvited && (
+              <div style={{
+                padding: 16, borderRadius: 14, background: C.surface, border: `1px solid ${C.border}`,
+                textAlign: 'center', color: C.textMuted, fontSize: 13, lineHeight: 1.5, marginBottom: 18,
+              }}>
+                {t('referral_empty_progress', locale)}
+              </div>
+            )}
+
+            {hasInvited && referralMe.stats.rewarded > 0 && (
+              <button
+                onClick={openReferralHistoryScreen}
+                style={{
+                  width: '100%', padding: '12px 16px', marginBottom: 16, borderRadius: 12,
+                  background: 'transparent', color: C.accent, fontSize: 14, fontWeight: 600,
+                  border: `1px solid ${C.accent}40`, cursor: 'pointer', fontFamily: font,
+                }}>
+                {t('referral_history_full_btn', locale)} →
+              </button>
+            )}
+
+            {/* ── How it works ─────────────────────────────────────── */}
+            <div style={{
+              padding: '14px 16px', borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, marginBottom: 10,
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>
+                {t('referral_how_title', locale)}
+              </div>
+              {[1, 2, 3].map((n) => (
+                <div key={n} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: n === 3 ? 0 : 10 }}>
+                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: C.accentSoft, color: C.accent, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n}</div>
+                  <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.45, flex: 1 }}>
+                    {n === 1 && t('referral_how_step_1', locale)}
+                    {n === 2 && t('referral_how_step_2', locale)}
+                    {n === 3 && t('referral_how_step_3', locale, { days: String(daysPerRef) })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Rules link ───────────────────────────────────────── */}
+            <button
+              onClick={() => { setReferralRulesOpen(true); trackEvent('referral.rules_opened'); }}
+              style={{
+                width: '100%', padding: 10, borderRadius: 12, background: 'transparent',
+                color: C.textMuted, fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer', fontFamily: font,
+              }}>
+              {t('referral_rules_btn', locale)}
+            </button>
+
+            {/* ── Share sheet (bottom overlay) ────────────────────── */}
+            {referralShareSheet && referralMe.link && (
+              <div
+                onClick={() => setReferralShareSheet(false)}
+                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 90, animation: 'fadeIn 0.2s ease' }}>
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0,
+                    background: C.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+                    padding: '8px 16px 24px', maxWidth: 520, margin: '0 auto',
+                    animation: 'slideUp 0.25s ease',
+                  }}>
+                  <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: '8px auto 16px' }} />
+                  <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 4 }}>
+                    {t('referral_share_sheet_title', locale)}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4, marginBottom: 16 }}>
+                    {t('referral_share_sheet_sub', locale)}
+                  </div>
+                  {[
+                    { ic: '✈️', bg: 'rgba(51,144,236,0.15)', title: t('referral_share_sheet_tg_title', locale), sub: t('referral_share_sheet_tg_sub', locale), onClick: shareToTelegram },
+                    { ic: '📋', bg: C.surface, title: t('referral_share_sheet_copy_title', locale), sub: referralMe.link.replace(/^https?:\/\//, ''), onClick: async () => { await copyLink(); setReferralShareSheet(false); } },
+                    { ic: '↗', bg: C.accentSoft, title: t('referral_share_sheet_other_title', locale), sub: t('referral_share_sheet_other_sub', locale), onClick: systemShare },
+                  ].map((row, i) => (
+                    <div
+                      key={i}
+                      onClick={row.onClick}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14, marginBottom: 8, borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, cursor: 'pointer' }}>
+                      <div style={{ width: 42, height: 42, borderRadius: 12, background: row.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{row.ic}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 2 }}>{row.title}</div>
+                        <div style={{ fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.sub}</div>
+                      </div>
+                      <div style={{ color: C.textMuted, fontSize: 18, flexShrink: 0 }}>›</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Rules sheet ───────────────────────────────────── */}
+            {referralRulesOpen && (
+              <div
+                onClick={() => setReferralRulesOpen(false)}
+                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 90, animation: 'fadeIn 0.2s ease' }}>
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0,
+                    background: C.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+                    padding: '8px 20px 28px', maxWidth: 520, margin: '0 auto', maxHeight: '85vh', overflowY: 'auto',
+                    animation: 'slideUp 0.25s ease',
+                  }}>
+                  <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: '8px auto 16px' }} />
+                  <div style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 14 }}>
+                    {t('referral_rules_title', locale)}
+                  </div>
+                  {[
+                    { t: t('referral_rules_reward_t', locale), b: t('referral_rules_reward_b', locale, { days: String(daysPerRef) }) },
+                    // Prefer the live config value for windowDays (admin can change it).
+                    // Falls back to the spec default of 14 if rules-config hasn't loaded.
+                    { t: t('referral_rules_qualify_t', locale), b: t('referral_rules_qualify_b', locale, { windowDays: String(referralRulesConfig?.qualification.windowDays ?? 14) }) },
+                    { t: t('referral_rules_cap_t', locale), b: t('referral_rules_cap_b', locale, { monthly: String(referralMe.caps.monthlyCap), yearly: String(referralMe.caps.yearlyCap) }) },
+                    { t: t('referral_rules_fraud_t', locale), b: t('referral_rules_fraud_b', locale) },
+                  ].map((row, i) => (
+                    <div key={i} style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 4 }}>{row.t}</div>
+                      <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5 }}>{row.b}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════
+          REFERRAL HISTORY — paged invitee list
+          ══════════════════════════════════════════════ */}
+      {screen === 'referral-history' && (() => {
+        const headerJsx = (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>
+              {t('referral_history_section', locale)}
+            </div>
+          </div>
+        );
+        if (referralHistoryLoading && referralHistory.length === 0) {
+          return (
+            <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+              {headerJsx}
+              <div style={{ textAlign: 'center', padding: 40, color: C.textMuted, fontSize: 14 }}>
+                {t('referral_loading', locale)}
+              </div>
+            </div>
+          );
+        }
+        if (referralHistory.length === 0) {
+          return (
+            <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+              {headerJsx}
+              <div style={{ textAlign: 'center', padding: 40, color: C.textMuted, fontSize: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14 }}>
+                {t('referral_history_empty', locale)}
+              </div>
+            </div>
+          );
+        }
+
+        const fmtDate = (iso: string | null) => {
+          if (!iso) return '';
+          const d = new Date(iso);
+          return locale === 'ru'
+            ? `${d.getDate()} ${['янв','февр','мар','апр','мая','июн','июл','авг','сент','окт','нояб','дек'][d.getMonth()]}`
+            : `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]} ${d.getDate()}`;
+        };
+
+        return (
+          <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
+            {headerJsx}
+            {referralHistory.map((r) => {
+              const isRewarded = r.status === 'REWARDED';
+              const isRejected = r.status === 'REJECTED' || r.status === 'FRAUD_REVIEW';
+              const isPending = r.status === 'PENDING_ACTIVATION' || r.status === 'ATTRIBUTED' || r.status === 'QUALIFIED';
+              const badgeBg = isRewarded ? C.greenSoft : isRejected ? C.redSoft : C.orangeSoft;
+              const badgeColor = isRewarded ? C.green : isRejected ? C.red : C.orange;
+              const badgeText = isRewarded
+                ? t('referral_badge_rewarded', locale, { days: String(r.reward?.days ?? 30) })
+                : isRejected
+                  ? t('referral_badge_rejected', locale)
+                  : t('referral_badge_pending', locale);
+              const title = isRewarded
+                ? t('referral_event_rewarded', locale)
+                : isRejected
+                  ? t('referral_event_rejected', locale)
+                  : t('referral_event_pending', locale);
+              const meta = isRewarded && r.reward
+                ? t('referral_event_rewarded_meta', locale, { days: String(r.reward.days), date: fmtDate(r.reward.grantedAt) })
+                : fmtDate(r.attributedAt);
+              return (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 14, marginBottom: 8, borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, borderLeft: `3px solid ${badgeColor}` }}>
+                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: C.textMuted, flexShrink: 0 }}>
+                    {r.invitedDisplayName ? r.invitedDisplayName[0]!.toUpperCase() : '👤'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                      {r.invitedDisplayName ?? title}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{meta}</div>
+                  </div>
+                  <div style={{ padding: '4px 9px', borderRadius: 8, fontSize: 11, fontWeight: 700, background: badgeBg, color: badgeColor, flexShrink: 0 }}>
+                    {badgeText}
+                  </div>
+                </div>
+              );
+            })}
+            {referralHistoryHasMore && (
+              <button
+                onClick={() => { void loadReferralHistory(false); }}
+                disabled={referralHistoryLoading}
+                style={{
+                  width: '100%', padding: '12px 16px', marginTop: 8, borderRadius: 12,
+                  background: C.surface, color: C.accent, fontSize: 14, fontWeight: 600,
+                  border: `1px solid ${C.border}`, cursor: referralHistoryLoading ? 'default' : 'pointer', fontFamily: font,
+                  opacity: referralHistoryLoading ? 0.6 : 1,
+                }}>
+                {referralHistoryLoading ? t('referral_loading', locale) : t('referral_history_full_btn', locale)}
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ══════════════════════════════════════════════
           SETTINGS
@@ -22199,6 +23157,49 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         </div>
       </BottomSheet>
 
+      {/* ── Referral celebration modal (shown once to freshly-attributed invitees) ── */}
+      {referralCelebrationOpen && referralMe && (
+        <div
+          onClick={() => {
+            setReferralCelebrationOpen(false);
+            try { window.localStorage.setItem('referral_celebration_seen_v1', '1'); } catch {}
+          }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 95, animation: 'fadeIn 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: C.card, borderRadius: 24, padding: '28px 24px',
+              maxWidth: 360, width: '100%', textAlign: 'center',
+              border: `1px solid ${C.accent}40`,
+              animation: 'fadeIn 0.3s ease',
+              boxShadow: `0 20px 60px rgba(0,0,0,0.5), 0 0 80px ${C.accent}30`,
+            }}>
+            <div style={{ fontSize: 56, marginBottom: 14, lineHeight: 1 }}>🎁</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 10, lineHeight: 1.2, letterSpacing: '-0.01em' }}>
+              {t('referral_celebration_title', locale)}
+            </div>
+            <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, marginBottom: 22 }}>
+              {t('referral_celebration_body', locale, { days: String(referralMe.reward.daysPerRef) })}
+            </div>
+            <button
+              onClick={() => {
+                trackEvent('referral.celebration_cta_clicked');
+                setReferralCelebrationOpen(false);
+                try { window.localStorage.setItem('referral_celebration_seen_v1', '1'); } catch {}
+                setScreen('my-wishlists');
+              }}
+              style={{
+                width: '100%', padding: '14px 20px', borderRadius: 14,
+                background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, color: '#fff',
+                fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: font,
+                boxShadow: `0 4px 20px ${C.accent}40`,
+              }}>
+              {t('referral_celebration_cta', locale)}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── PRO UPSELL BOTTOM SHEET (CONTEXT-AWARE) ── */}
       <ProUpsellSheet
         state={upsellSheet}
@@ -22216,6 +23217,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         availableSkus={availableSkus}
         cappedAddonCodes={cappedAddonCodes}
         locale={locale}
+        referralConfig={referralRulesConfig}
+        onOpenReferral={() => {
+          if (upsellSheet) trackEvent(`referral.entry_point_clicked`, { entryPoint: `paywall_${upsellSheet.context}` });
+          setUpsellSheet(null);
+          openReferralScreen('paywall');
+        }}
+        onReferralImpression={(context) => {
+          trackEvent('referral.entry_point_impression', { entryPoint: `paywall_${context}` });
+        }}
       />
 
       {/* ── CANCEL SUBSCRIPTION CONFIRMATION ── */}

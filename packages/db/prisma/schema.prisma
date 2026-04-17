@@ -101,19 +101,57 @@ enum SubscribePolicy {
 }
 
 enum WishlistVisibility {
-  LINK_ONLY       // accessible via link, not shown in public profile (default)
-  PUBLIC_PROFILE  // shown on owner's public profile (PRO)
-  PRIVATE         // new users cannot access; existing subscribers retain access (PRO)
+  LINK_ONLY // accessible via link, not shown in public profile (default)
+  PUBLIC_PROFILE // shown on owner's public profile (PRO)
+  PRIVATE // new users cannot access; existing subscribers retain access (PRO)
 }
 
 enum AllowSubscriptions {
-  ALL    // anyone with wishlist access can subscribe
+  ALL // anyone with wishlist access can subscribe
   NOBODY // no new subscriptions allowed
 }
 
 enum CommentPolicy {
-  ALL         // anyone with wishlist access can comment
+  ALL // anyone with wishlist access can comment
   SUBSCRIBERS // only subscribers can comment
+}
+
+// Referral program — attribution lifecycle
+// ATTRIBUTED: invitee clicked link, came into bot, got tied to inviter
+// PENDING_ACTIVATION: attribution recorded, waiting for qualifying action (wishlist + item)
+// QUALIFIED: invitee did qualifying action within window — ready to reward
+// REWARDED: inviter received PRO days — terminal success
+// REJECTED: auto-rejected (not new user / prior wishlist / cap reached / timeout)
+// FRAUD_REVIEW: fraud score crossed threshold, waiting for admin
+enum ReferralAttributionStatus {
+  ATTRIBUTED
+  PENDING_ACTIVATION
+  QUALIFIED
+  REWARDED
+  REJECTED
+  FRAUD_REVIEW
+}
+
+// Referral reject reasons — enum keeps matrix tight; new values need matrix update in S12
+enum ReferralRejectReason {
+  INVITEE_NOT_NEW_USER
+  INVITEE_HAD_PRIOR_DIALOG
+  INVITEE_HAD_PRIOR_WISHLIST
+  INVITEE_HAD_PRIOR_ITEM
+  INVITEE_ALREADY_ATTRIBUTED
+  SELF_REFERRAL_DETECTED
+  REWARD_CAP_REACHED
+  QUALIFICATION_TIMEOUT
+  PROGRAM_DISABLED
+  SYSTEM_CONFLICT
+  FRAUD_REJECTED
+  INVITER_BANNED
+  INVITER_DELETED
+}
+
+enum ReferralRewardStatus {
+  GRANTED
+  REVOKED
 }
 
 model User {
@@ -126,49 +164,54 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  wishlists              Wishlist[]
-  subscriptions          Subscription[]
-  paymentEvents          PaymentEvent[]
-  commentReadCursors     CommentReadCursor[]
-  hints                  Hint[]
-  profile                UserProfile?
-  wishlistSubscriptions  WishlistSubscription[]
-  supportTickets         SupportTicket[]
-  addOns                 UserAddOn[]
-  credits                UserCredits?
-  purchases              Purchase[]
-  welcomeSent            Boolean              @default(true)
-  santaTestMode          Boolean              @default(false)
-  ownedSantaCampaigns            SantaCampaign[]              @relation("OwnedSantaCampaigns")
-  santaParticipations            SantaParticipant[]           @relation("SantaParticipations")
-  santaNotifications             SantaNotification[]          @relation("SantaNotifications")
-  santaExclusionGroupMemberships SantaExclusionGroupMember[]  @relation("ExclusionGroupMemberships")
+  wishlists                      Wishlist[]
+  subscriptions                  Subscription[]
+  paymentEvents                  PaymentEvent[]
+  commentReadCursors             CommentReadCursor[]
+  hints                          Hint[]
+  profile                        UserProfile?
+  wishlistSubscriptions          WishlistSubscription[]
+  supportTickets                 SupportTicket[]
+  addOns                         UserAddOn[]
+  credits                        UserCredits?
+  purchases                      Purchase[]
+  welcomeSent                    Boolean                        @default(true)
+  santaTestMode                  Boolean                        @default(false)
+  ownedSantaCampaigns            SantaCampaign[]                @relation("OwnedSantaCampaigns")
+  santaParticipations            SantaParticipant[]             @relation("SantaParticipations")
+  santaNotifications             SantaNotification[]            @relation("SantaNotifications")
+  santaExclusionGroupMemberships SantaExclusionGroupMember[]    @relation("ExclusionGroupMemberships")
   onboardingStates               UserOnboardingState[]
   promoRedemptions               PromoRedemption[]
   degradationState               DegradationState?
   lifecycleTouches               LifecycleTouch[]
-  giftOccasions                  GiftOccasion[]       @relation("GiftOccasionsOwner")
-  giftOccasionIdeas              GiftOccasionIdea[]   @relation("GiftOccasionIdeasOwner")
+  giftOccasions                  GiftOccasion[]                 @relation("GiftOccasionsOwner")
+  giftOccasionIdeas              GiftOccasionIdea[]             @relation("GiftOccasionIdeasOwner")
   maintenanceExposures           MaintenanceExposure[]
-  groupGiftsOrganized            GroupGift[]              @relation("GroupGiftOrganizer")
-  groupGiftParticipations        GroupGiftParticipant[]   @relation("GroupGiftParticipations")
-  groupGiftMessages              GroupGiftMessage[]       @relation("GroupGiftMessages")
+  groupGiftsOrganized            GroupGift[]                    @relation("GroupGiftOrganizer")
+  groupGiftParticipations        GroupGiftParticipant[]         @relation("GroupGiftParticipations")
+  groupGiftMessages              GroupGiftMessage[]             @relation("GroupGiftMessages")
   curatedSelections              CuratedSelection[]
   curatedSelectionSubscriptions  CuratedSelectionSubscription[]
-  profileSubscriptions           ProfileSubscription[]        @relation("ProfileSubscriber")
-  profileSubscribers             ProfileSubscription[]        @relation("ProfileTarget")
+  profileSubscriptions           ProfileSubscription[]          @relation("ProfileSubscriber")
+  profileSubscribers             ProfileSubscription[]          @relation("ProfileTarget")
   secretReservations             SecretReservation[]
+
+  // Referral program
+  referralAttributionsAsInviter ReferralAttribution[] @relation("ReferralInviter")
+  referralAttributionsAsInvitee ReferralAttribution[] @relation("ReferralInvitee")
+  referralRewards               ReferralReward[]
 }
 
 model Wishlist {
-  id          String    @id @default(cuid())
-  slug        String    @unique
-  shareToken     String?   @unique
-  shareOpenCount Int       @default(0)  // incremented on each GET /public/share/:token call
-  ownerId     String
-  title       String
-  description String?
-  deadline    DateTime?
+  id                 String             @id @default(cuid())
+  slug               String             @unique
+  shareToken         String?            @unique
+  shareOpenCount     Int                @default(0) // incremented on each GET /public/share/:token call
+  ownerId            String
+  title              String
+  description        String?
+  deadline           DateTime?
   archivedAt         DateTime?
   position           Int                @default(0)
   visibility         WishlistVisibility @default(LINK_ONLY)
@@ -187,17 +230,17 @@ model Wishlist {
 
   // Smart Reservations
   smartReservationsEnabled Boolean @default(false)
-  smartResTtlHours        Int     @default(72)
-  smartResAllowExtend     Boolean @default(true)
-  smartResMaxExtensions   Int     @default(2)
+  smartResTtlHours         Int     @default(72)
+  smartResAllowExtend      Boolean @default(true)
+  smartResMaxExtensions    Int     @default(2)
 
-  owner      User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  items      Item[]
-  placements WishlistItemPlacement[]
-  tags       Tag[]
-  categories WishlistCategory[]
+  owner                 User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  items                 Item[]
+  placements            WishlistItemPlacement[]
+  tags                  Tag[]
+  categories            WishlistCategory[]
   wishlistSubscriptions WishlistSubscription[]
-  santaParticipants     SantaParticipant[]    @relation("SantaLinkedWishlists")
+  santaParticipants     SantaParticipant[]      @relation("SantaLinkedWishlists")
   curatedSelections     CuratedSelection[]
 
   @@index([ownerId])
@@ -205,15 +248,15 @@ model Wishlist {
 }
 
 model Item {
-  id               String     @id @default(cuid())
+  id               String         @id @default(cuid())
   wishlistId       String
   title            String
   url              String
-  description      String?    @db.VarChar(500)
+  description      String?        @db.VarChar(500)
   priceText        String?
-  currency         Currency   @default(RUB)
+  currency         Currency       @default(RUB)
   commentOwner     String?
-  priority         Priority   @default(MEDIUM)
+  priority         Priority       @default(MEDIUM)
   deadline         DateTime?
   imageUrl         String?
   sourceUrl        String?
@@ -223,18 +266,18 @@ model Item {
   originType       ItemOriginType @default(MANUAL)
   originVariantKey String?
   becameRealAt     DateTime?
-  status           ItemStatus @default(AVAILABLE)
-  reservationEpoch Int        @default(0)
-  position         Int        @default(0)
+  status           ItemStatus     @default(AVAILABLE)
+  reservationEpoch Int            @default(0)
+  position         Int            @default(0)
   categoryId       String?
   reserverUserId   String?
   archivedAt       DateTime?
   purgeAfter       DateTime?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
-  wishlist              Wishlist               @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  category              WishlistCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  wishlist              Wishlist                @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  category              WishlistCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   placements            WishlistItemPlacement[]
   itemTags              ItemTag[]
   reservationEvents     ReservationEvent[]
@@ -385,85 +428,99 @@ model Hint {
 }
 
 model UserProfile {
-  id              String  @id @default(cuid())
-  userId          String  @unique
+  id     String @id @default(cuid())
+  userId String @unique
 
   // Identity
   displayName     String?
-  username        String?  @unique
-  bio             String?  @db.VarChar(300)
+  username        String?   @unique
+  bio             String?   @db.VarChar(300)
   avatarUrl       String?
   avatarThumbUrl  String?
   avatarUpdatedAt DateTime?
-  avatarPublic    Boolean  @default(true)
+  avatarPublic    Boolean   @default(true)
   birthday        DateTime?
-  hideYear        Boolean  @default(false)
+  hideYear        Boolean   @default(false)
 
   // Settings — Currency
   defaultCurrency Currency @default(RUB)
 
   // Settings — Notifications
-  notifyComments       Boolean @default(true)
-  notifyReservations   Boolean @default(true)
-  notifySubscriptions  Boolean @default(true)
-  notifyMarketing      Boolean @default(true)
+  notifyComments      Boolean @default(true)
+  notifyReservations  Boolean @default(true)
+  notifySubscriptions Boolean @default(true)
+  notifyMarketing     Boolean @default(true)
 
   // Settings — Privacy
-  profileVisibility   ProfileVisibility @default(ALL)
-  subscribePolicy     SubscribePolicy   @default(ALL)
-  commentsEnabled     Boolean @default(true)
-  hintsEnabled        Boolean @default(true)
+  profileVisibility ProfileVisibility @default(ALL)
+  subscribePolicy   SubscribePolicy   @default(ALL)
+  commentsEnabled   Boolean           @default(true)
+  hintsEnabled      Boolean           @default(true)
 
   // Settings — Language
   // `language` is legacy — no longer used as effective locale source.
-  language            String?
+  language       String?
   // 'auto' = follow Telegram language_code; 'manual' = use manualLanguage
-  languageMode        String   @default("auto")
+  languageMode   String  @default("auto")
   // Locale chosen by user when languageMode='manual'. Null in auto mode.
-  manualLanguage      String?
+  manualLanguage String?
 
   // Settings — App Behavior
-  newWishlistPosition String  @default("bottom")
-  cardDisplayMode     String  @default("auto")  // auto | showcase | compact
+  newWishlistPosition String @default("bottom")
+  cardDisplayMode     String @default("auto") // auto | showcase | compact
 
   // Growth prompts
-  firstWishSharePromptShown       Boolean @default(false)
-  readyWishlistSharePromptShown   Boolean @default(false)
+  firstWishSharePromptShown     Boolean @default(false)
+  readyWishlistSharePromptShown Boolean @default(false)
 
   // Derived market segmentation (computed from language on every request)
-  normalizedLocale      String?   // Canonical locale: ru | en | zh-CN | hi | es | ar
-  marketBucket          String?   // Market bucket: ru | ar | en | hi | zh-CN | es | other_known | unknown
-  supportedImportRegion Boolean?  // true if user is in a market where URL import works reliably
+  normalizedLocale      String? // Canonical locale: ru | en | zh-CN | hi | es | ar
+  marketBucket          String? // Market bucket: ru | ar | en | hi | zh-CN | es | other_known | unknown
+  supportedImportRegion Boolean? // true if user is in a market where URL import works reliably
 
   // First-touch acquisition attribution (source tagging for traffic analysis)
-  firstAcquisitionSource          String?
-  firstAcquisitionMedium          String?
-  firstAcquisitionCampaign        String?
-  firstAcquisitionRef             String?
-  firstAcquisitionAt              DateTime?
+  firstAcquisitionSource   String?
+  firstAcquisitionMedium   String?
+  firstAcquisitionCampaign String?
+  firstAcquisitionRef      String?
+  firstAcquisitionAt       DateTime?
+
+  // Referral program — owner-side fields
+  // referralCode: stable 5-6 char code for this user's ?start=ref_<code> link (lazy-generated)
+  // referredByUserId: who invited this user (null for organic). Locked first-touch.
+  // referredAt: when attribution was recorded.
+  // firstBotStartAt / firstWishlistAt / firstItemAt: timestamps for qualifying-action detection
+  //   and for invitee_had_prior_* gating. Written once, never updated.
+  referralCode          String?   @unique
+  referralCodeCreatedAt DateTime?
+  referredByUserId      String?
+  referredAt            DateTime?
+  firstBotStartAt       DateTime?
+  firstWishlistAt       DateTime?
+  firstItemAt           DateTime?
 
   // Don't Gift
-  dontGiftPresets     String[]  @default([])
-  dontGiftCustomItems String[]  @default([])
+  dontGiftPresets     String[] @default([])
+  dontGiftCustomItems String[] @default([])
   dontGiftComment     String?
-  dontGiftVisible     Boolean   @default(true)
+  dontGiftVisible     Boolean  @default(true)
 
   // PRO Showcase (premium profile & wishlist showcase)
-  showcaseEnabled       Boolean   @default(false)
-  showcaseCoverUrl      String?
-  showcaseBio           String?   @db.VarChar(180)
-  showcasePinnedIds     String[]  @default([])
-  showcasePreferences   String?   @db.VarChar(300)
-  showcaseSizeClothing  String?
-  showcaseSizeShoes     String?
-  showcaseSizeRing      String?
-  showcaseSizeOther     String?
+  showcaseEnabled      Boolean   @default(false)
+  showcaseCoverUrl     String?
+  showcaseBio          String?   @db.VarChar(180)
+  showcasePinnedIds    String[]  @default([])
+  showcasePreferences  String?   @db.VarChar(300)
+  showcaseSizeClothing String?
+  showcaseSizeShoes    String?
+  showcaseSizeRing     String?
+  showcaseSizeOther    String?
   // Body measurements (cm). Free-text strings so users can add units/comments.
-  showcaseChest         String?
-  showcaseWaist         String?
-  showcaseHips          String?
-  showcaseBrands        String[]  @default([])
-  showcaseUpdatedAt     DateTime?
+  showcaseChest        String?
+  showcaseWaist        String?
+  showcaseHips         String?
+  showcaseBrands       String[]  @default([])
+  showcaseUpdatedAt    DateTime?
 
   // Support
   supportId String? @unique
@@ -481,9 +538,9 @@ model WishlistSubscription {
   createdAt      DateTime  @default(now())
   lastNotifiedAt DateTime?
 
-  wishlist  Wishlist             @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  subscriber User               @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
-  unreads   SubscriptionUnread[]
+  wishlist   Wishlist             @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  subscriber User                 @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  unreads    SubscriptionUnread[]
 
   @@unique([wishlistId, subscriberId])
   @@index([subscriberId])
@@ -505,13 +562,13 @@ model SubscriptionUnread {
 // Follow another user's public profile (showcase). Separate from WishlistSubscription —
 // this is a "follow the person" relation, independent of any specific wishlist.
 model ProfileSubscription {
-  id            String   @id @default(cuid())
-  subscriberId  String
-  targetUserId  String
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  subscriberId String
+  targetUserId String
+  createdAt    DateTime @default(now())
 
   subscriber User @relation("ProfileSubscriber", fields: [subscriberId], references: [id], onDelete: Cascade)
-  target     User @relation("ProfileTarget",     fields: [targetUserId], references: [id], onDelete: Cascade)
+  target     User @relation("ProfileTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
 
   @@unique([subscriberId, targetUserId])
   @@index([subscriberId])
@@ -658,14 +715,14 @@ model Purchase {
 // ─────────────────────────────────────────────────────────────
 
 model PromoCampaign {
-  id            String   @id @default(cuid())
-  code          String   @unique           // canonical: WISHPRO
-  rewardType    String   @default("promo_pro") // promo_pro | future types
-  durationDays  Int      @default(30)
-  isActive      Boolean  @default(true)
-  maxRedemptions Int?                       // null = unlimited
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(cuid())
+  code           String   @unique // canonical: WISHPRO
+  rewardType     String   @default("promo_pro") // promo_pro | future types
+  durationDays   Int      @default(30)
+  isActive       Boolean  @default(true)
+  maxRedemptions Int? // null = unlimited
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   redemptions PromoRedemption[]
 }
@@ -680,8 +737,8 @@ model PromoRedemption {
   expiresAt       DateTime?
   failureReason   String?
   source          String?               @default("miniapp") // miniapp | bot | winback
-  offeredAt       DateTime?             // when lifecycle system offered promo to this user
-  offeredVia      String?               // lifecycle touch ID or manual
+  offeredAt       DateTime? // when lifecycle system offered promo to this user
+  offeredVia      String? // lifecycle touch ID or manual
   reminder3dSent  Boolean               @default(false)
   reminderExpSent Boolean               @default(false)
   createdAt       DateTime              @default(now())
@@ -698,16 +755,16 @@ model PromoRedemption {
 
 // Degradation state after PRO/promo-PRO expiration
 model DegradationState {
-  id              String           @id @default(cuid())
-  userId          String           @unique
-  phase           DegradationPhase @default(NONE)
-  graceEndsAt     DateTime?        // 14 days after downgrade
-  archivedAt      DateTime?        // when items were archived
-  purgeScheduledAt DateTime?       // 90 days after archive
-  archivedWishlistIds String?      // JSON array of archived wishlist IDs
-  archivedItemIds     String?      // JSON array of archived item IDs
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id                  String           @id @default(cuid())
+  userId              String           @unique
+  phase               DegradationPhase @default(NONE)
+  graceEndsAt         DateTime? // 14 days after downgrade
+  archivedAt          DateTime? // when items were archived
+  purgeScheduledAt    DateTime? // 90 days after archive
+  archivedWishlistIds String? // JSON array of archived wishlist IDs
+  archivedItemIds     String? // JSON array of archived item IDs
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -717,27 +774,27 @@ model DegradationState {
 // ─────────────────────────────────────────────────────────────
 
 model LifecycleTouch {
-  id              String    @id @default(cuid())
-  userId          String
-  segment         String    // S1, S2, S3, S4
-  episodeKey      String    // unique per churn episode (e.g. "S3_userId_2026-03")
-  touchNumber     Int       // 1, 2, 3
-  scheduledFor    DateTime
-  sentAt          DateTime?
-  delivered       Boolean   @default(false)
-  targetAction    String?   // create_wishlist, add_item, return_visit, share
-  offerCode       String?   // WISHPRO or null — only on eligible touches
-  messageKind     String    // activation, winback, promo_offer
-  deepLinkPayload String?   // startapp payload for CTA button
-  stoppedAt       DateTime?
-  stopReason      String?   // returned, target_completed, unsubscribed, delivery_failed, bought_pro
+  id                  String    @id @default(cuid())
+  userId              String
+  segment             String // S1, S2, S3, S4
+  episodeKey          String // unique per churn episode (e.g. "S3_userId_2026-03")
+  touchNumber         Int // 1, 2, 3
+  scheduledFor        DateTime
+  sentAt              DateTime?
+  delivered           Boolean   @default(false)
+  targetAction        String? // create_wishlist, add_item, return_visit, share
+  offerCode           String? // WISHPRO or null — only on eligible touches
+  messageKind         String // activation, winback, promo_offer
+  deepLinkPayload     String? // startapp payload for CTA button
+  stoppedAt           DateTime?
+  stopReason          String? // returned, target_completed, unsubscribed, delivery_failed, bought_pro
   // Attribution tracking
   returnedAt          DateTime? // when user came back after this touch
   targetCompletedAt   DateTime? // when user completed segment target action
-  targetCompletedType String?   // e.g. created_wishlist, added_item, updated_wishlist
+  targetCompletedType String? // e.g. created_wishlist, added_item, updated_wishlist
   promoRedeemedAt     DateTime? // when WISHPRO was activated after this touch
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -775,26 +832,26 @@ enum SantaParticipantStatus {
 }
 
 enum SantaGiftStatus {
-  PENDING                // giver hasn't decided yet (initial state)
-  BUYING                 // legacy — treated as SELECTED_OUTSIDE in new flows; kept for backwards compat
+  PENDING // giver hasn't decided yet (initial state)
+  BUYING // legacy — treated as SELECTED_OUTSIDE in new flows; kept for backwards compat
   SELECTED_FROM_WISHLIST // giver chose an item from receiver's wishlist
-  SELECTED_OUTSIDE       // giver chose something not from the wishlist
-  DECLINED_TO_SAY        // giver confirms participation but won't disclose selection
-  SENT                   // gift physically sent / handed over; receiver can now confirm
-  RECEIVED               // receiver confirmed — terminal; unlocks personal reveal
-  MISSED_DEADLINE        // auto-set by cron when drawAt passed and giver hasn't acted; recoverable
-  ORPHANED               // terminal: giver's exit request was approved while round was ACTIVE
+  SELECTED_OUTSIDE // giver chose something not from the wishlist
+  DECLINED_TO_SAY // giver confirms participation but won't disclose selection
+  SENT // gift physically sent / handed over; receiver can now confirm
+  RECEIVED // receiver confirmed — terminal; unlocks personal reveal
+  MISSED_DEADLINE // auto-set by cron when drawAt passed and giver hasn't acted; recoverable
+  ORPHANED // terminal: giver's exit request was approved while round was ACTIVE
 }
 
 enum SantaParticipantRole {
   PARTICIPANT // default role
-  ADMIN       // elevated role — can perform organizer actions alongside the owner
+  ADMIN // elevated role — can perform organizer actions alongside the owner
 }
 
 enum SantaExitRequestStatus {
-  PENDING   // submitted, awaiting organizer decision
-  APPROVED  // organizer approved; participant removed + assignment orphaned if applicable
-  DENIED    // organizer denied; participant stays JOINED
+  PENDING // submitted, awaiting organizer decision
+  APPROVED // organizer approved; participant removed + assignment orphaned if applicable
+  DENIED // organizer denied; participant stays JOINED
 }
 
 enum SantaDrawStatus {
@@ -805,10 +862,10 @@ enum SantaDrawStatus {
 }
 
 enum SantaHintStatus {
-  PENDING    // giver requested, receiver hasn't responded yet
-  FULFILLED  // receiver selected wishlist items; giver can see them
-  EXPIRED    // TTL exceeded (48h) without receiver response
-  CANCELLED  // campaign cancelled or draw context invalidated
+  PENDING // giver requested, receiver hasn't responded yet
+  FULFILLED // receiver selected wishlist items; giver can see them
+  EXPIRED // TTL exceeded (48h) without receiver response
+  CANCELLED // campaign cancelled or draw context invalidated
 }
 
 enum SantaNotificationType {
@@ -819,20 +876,20 @@ enum SantaNotificationType {
   HINT_REQUEST
   HINT_RESPONDED
   CAMPAIGN_CANCELLED
-  GIFT_RECEIVED      // sent to giver when receiver marks their gift RECEIVED
-  REVEAL_UNLOCKED    // sent to receiver after they confirm RECEIVED (their reveal is ready)
-  DEADLINE_WARNING   // sent to giver ~3 days before drawAt if still PENDING
-  DEADLINE_MISSED    // sent to giver when their status is auto-updated to MISSED_DEADLINE
-  CHAT_MESSAGE             // new message in campaign chat (suppressed by mute)
-  POLL_CREATED             // new poll opened in campaign (suppressed by mute)
-  EXIT_REQUEST_SUBMITTED   // participant submitted an exit request (sent to organizers)
-  EXIT_REQUEST_APPROVED    // organizer approved participant's exit request (sent to participant)
-  EXIT_REQUEST_DENIED      // organizer denied participant's exit request (sent to participant)
+  GIFT_RECEIVED // sent to giver when receiver marks their gift RECEIVED
+  REVEAL_UNLOCKED // sent to receiver after they confirm RECEIVED (their reveal is ready)
+  DEADLINE_WARNING // sent to giver ~3 days before drawAt if still PENDING
+  DEADLINE_MISSED // sent to giver when their status is auto-updated to MISSED_DEADLINE
+  CHAT_MESSAGE // new message in campaign chat (suppressed by mute)
+  POLL_CREATED // new poll opened in campaign (suppressed by mute)
+  EXIT_REQUEST_SUBMITTED // participant submitted an exit request (sent to organizers)
+  EXIT_REQUEST_APPROVED // organizer approved participant's exit request (sent to participant)
+  EXIT_REQUEST_DENIED // organizer denied participant's exit request (sent to participant)
 }
 
 enum SantaChatMessageType {
-  USER    // regular participant message
-  SYSTEM  // system-generated event message (no sender)
+  USER // regular participant message
+  SYSTEM // system-generated event message (no sender)
 }
 
 /// Singleton global master switch for Secret Santa.
@@ -872,36 +929,36 @@ model SantaSeasonConfig {
 }
 
 model SantaCampaign {
-  id          String              @id @default(cuid())
-  title       String
-  description String?
-  type        SantaCampaignType   @default(CLASSIC)
-  status      SantaCampaignStatus @default(DRAFT)
-  ownerId     String
+  id           String              @id @default(cuid())
+  title        String
+  description  String?
+  type         SantaCampaignType   @default(CLASSIC)
+  status       SantaCampaignStatus @default(DRAFT)
+  ownerId      String
   // inviteToken is always non-null. Revocation = campaign CANCELLED status. No rotation in Batch 1.
-  inviteToken String              @unique @default(cuid())
-  minBudget   Int?
-  maxBudget   Int?
-  currency    String              @default("RUB")
-  drawAt      DateTime?
-  seasonYear  Int
-  cancelledAt DateTime?
+  inviteToken  String              @unique @default(cuid())
+  minBudget    Int?
+  maxBudget    Int?
+  currency     String              @default("RUB")
+  drawAt       DateTime?
+  seasonYear   Int
+  cancelledAt  DateTime?
   cancelReason String?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 
   // currentRoundId: the single authoritative pointer to the live/most-recent round.
   // null  = no completed draw yet (DRAFT / OPEN / LOCKED pre-first-draw).
   // set   = atomically after drawStatus → DONE in the draw endpoint.
   // never cleared when starting next round (old round stays visible as history).
   // updated to new round.id when next draw completes.
-  currentRoundId  String?                @unique
+  currentRoundId String? @unique
 
   // onDelete: Restrict — prevents user account deletion while owning an active campaign.
-  owner           User                   @relation("OwnedSantaCampaigns", fields: [ownerId], references: [id], onDelete: Restrict)
-  currentRound    SantaRound?            @relation("CampaignCurrentRound", fields: [currentRoundId], references: [id], onDelete: SetNull)
+  owner           User                  @relation("OwnedSantaCampaigns", fields: [ownerId], references: [id], onDelete: Restrict)
+  currentRound    SantaRound?           @relation("CampaignCurrentRound", fields: [currentRoundId], references: [id], onDelete: SetNull)
   participants    SantaParticipant[]
-  rounds          SantaRound[]           @relation("CampaignRounds")
+  rounds          SantaRound[]          @relation("CampaignRounds")
   chatMessages    SantaChatMessage[]
   readCursors     SantaChatReadCursor[]
   chatMutes       SantaChatMute[]
@@ -927,19 +984,19 @@ model SantaParticipant {
   joinedAt         DateTime               @default(now())
   leftAt           DateTime?
 
-  campaign         SantaCampaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  user             User                   @relation("SantaParticipations", fields: [userId], references: [id], onDelete: Cascade)
+  campaign             SantaCampaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user                 User                    @relation("SantaParticipations", fields: [userId], references: [id], onDelete: Cascade)
   // onDelete: SetNull — DB-level emergency fallback only. Service layer blocks wishlist deletion if linked to active campaign.
-  linkedWishlist   Wishlist?              @relation("SantaLinkedWishlists", fields: [linkedWishlistId], references: [id], onDelete: SetNull)
-  giverAssignments    SantaAssignment[]   @relation("GiverAssignments")
-  receiverAssignments SantaAssignment[]   @relation("ReceiverAssignments")
-  chatMessages     SantaChatMessage[]
-  readCursors      SantaChatReadCursor[]
-  chatMutes        SantaChatMute[]
-  pollVotes        SantaPollVote[]
-  createdPolls     SantaPoll[]              @relation("PollCreator")
-  giverHintRequests    SantaHintRequest[]   @relation("HintGiverRequests")
-  receiverHintRequests SantaHintRequest[]   @relation("HintReceiverRequests")
+  linkedWishlist       Wishlist?               @relation("SantaLinkedWishlists", fields: [linkedWishlistId], references: [id], onDelete: SetNull)
+  giverAssignments     SantaAssignment[]       @relation("GiverAssignments")
+  receiverAssignments  SantaAssignment[]       @relation("ReceiverAssignments")
+  chatMessages         SantaChatMessage[]
+  readCursors          SantaChatReadCursor[]
+  chatMutes            SantaChatMute[]
+  pollVotes            SantaPollVote[]
+  createdPolls         SantaPoll[]             @relation("PollCreator")
+  giverHintRequests    SantaHintRequest[]      @relation("HintGiverRequests")
+  receiverHintRequests SantaHintRequest[]      @relation("HintReceiverRequests")
   exitRequests         SantaExitRequest[]
   aliases              SantaParticipantAlias[]
 
@@ -958,9 +1015,9 @@ model SantaRound {
   drawnAt     DateTime?
   createdAt   DateTime        @default(now())
 
-  campaign     SantaCampaign     @relation("CampaignRounds", fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign     SantaCampaign           @relation("CampaignRounds", fields: [campaignId], references: [id], onDelete: Cascade)
   // currentOf: back-relation for SantaCampaign.currentRound (at most one campaign at a time)
-  currentOf    SantaCampaign?    @relation("CampaignCurrentRound")
+  currentOf    SantaCampaign?          @relation("CampaignCurrentRound")
   assignments  SantaAssignment[]
   polls        SantaPoll[]
   hintRequests SantaHintRequest[]
@@ -984,9 +1041,9 @@ model SantaAssignment {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
-  round        SantaRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  giver        SantaParticipant @relation("GiverAssignments", fields: [giverParticipantId], references: [id], onDelete: Cascade)
-  receiver     SantaParticipant @relation("ReceiverAssignments", fields: [receiverParticipantId], references: [id], onDelete: Cascade)
+  round                 SantaRound             @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  giver                 SantaParticipant       @relation("GiverAssignments", fields: [giverParticipantId], references: [id], onDelete: Cascade)
+  receiver              SantaParticipant       @relation("ReceiverAssignments", fields: [receiverParticipantId], references: [id], onDelete: Cascade)
   giftProgress          SantaGiftProgress[]
   hintRequests          SantaHintRequest[]
   santaItemReservations SantaItemReservation[]
@@ -1004,7 +1061,7 @@ model SantaGiftProgress {
   note         String?
   createdAt    DateTime        @default(now())
 
-  assignment   SantaAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignment SantaAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
 
   @@index([assignmentId])
 }
@@ -1026,7 +1083,7 @@ model SantaExclusion {
 model SantaExclusionGroup {
   id         String   @id @default(cuid())
   campaignId String
-  label      String   // organizer-defined name, e.g. "Family", "Same team"
+  label      String // organizer-defined name, e.g. "Family", "Same team"
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -1070,7 +1127,7 @@ model SantaExclusionGroupMember {
 //   - giverParticipantId is stored in DB but NEVER returned in any API response to receiver
 //   - Receiver endpoints use campaignId only — server resolves assignment internally
 model SantaHintRequest {
-  id                    String          @id @default(cuid())
+  id                    String @id @default(cuid())
   // Campaign and round context — for lifecycle management and campaign-centric receiver lookup
   campaignId            String
   roundId               String
@@ -1080,22 +1137,22 @@ model SantaHintRequest {
   giverParticipantId    String
   receiverParticipantId String
 
-  status                SantaHintStatus @default(PENDING)
+  status             SantaHintStatus @default(PENDING)
   // Wishlist item IDs selected by receiver. Null until FULFILLED. Max 3 items.
   // Stored as JSON array of item IDs; items validated against receiver's wishlist at fulfill time.
-  selectedItemIds       Json?           // String[]
-  requestedAt           DateTime        @default(now())
-  fulfilledAt           DateTime?
-  expiresAt             DateTime        // requestedAt + 48h; set at creation
-  cancelledAt           DateTime?
+  selectedItemIds    Json? // String[]
+  requestedAt        DateTime        @default(now())
+  fulfilledAt        DateTime?
+  expiresAt          DateTime // requestedAt + 48h; set at creation
+  cancelledAt        DateTime?
   // Tracks whether HINT_REQUEST notification was sent to receiver (prevents duplicate sends)
-  notificationSentAt    DateTime?
+  notificationSentAt DateTime?
 
-  campaign              SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  round                 SantaRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  assignment            SantaAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  giverParticipant      SantaParticipant @relation("HintGiverRequests", fields: [giverParticipantId], references: [id], onDelete: Cascade)
-  receiverParticipant   SantaParticipant @relation("HintReceiverRequests", fields: [receiverParticipantId], references: [id], onDelete: Cascade)
+  campaign            SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  round               SantaRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  assignment          SantaAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  giverParticipant    SantaParticipant @relation("HintGiverRequests", fields: [giverParticipantId], references: [id], onDelete: Cascade)
+  receiverParticipant SantaParticipant @relation("HintReceiverRequests", fields: [receiverParticipantId], references: [id], onDelete: Cascade)
 
   @@index([assignmentId, status])
   @@index([receiverParticipantId, status])
@@ -1108,11 +1165,11 @@ model SantaHintRequest {
 model SantaChatMessage {
   id            String               @id @default(cuid())
   campaignId    String
-  participantId String               // null-ish for SYSTEM: participantId = owner's participant id, body = ""
+  participantId String // null-ish for SYSTEM: participantId = owner's participant id, body = ""
   body          String
   messageType   SantaChatMessageType @default(USER)
-  systemEvent   String?              // e.g. 'participant_joined', 'draw_done', 'campaign_cancelled'
-  payload       Json?                // structured data for system messages, e.g. {"displayName":"Ivan"}
+  systemEvent   String? // e.g. 'participant_joined', 'draw_done', 'campaign_cancelled'
+  payload       Json? // structured data for system messages, e.g. {"displayName":"Ivan"}
   createdAt     DateTime             @default(now())
 
   campaign    SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
@@ -1123,12 +1180,12 @@ model SantaChatMessage {
 
 // Read cursor for unread count. Unread = messages WHERE (createdAt, id) > cursor pair.
 model SantaChatReadCursor {
-  id                String           @id @default(cuid())
+  id                String    @id @default(cuid())
   campaignId        String
   participantId     String
   lastReadMessageId String?
   lastReadAt        DateTime?
-  updatedAt         DateTime         @updatedAt
+  updatedAt         DateTime  @updatedAt
 
   campaign    SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -1139,10 +1196,10 @@ model SantaChatReadCursor {
 // Per-participant mute for campaign chat. Suppresses CHAT_MESSAGE + POLL_CREATED notifications.
 // Does NOT suppress service notifications (draw, reveal, hints, deadlines, cancelled).
 model SantaChatMute {
-  id            String           @id @default(cuid())
+  id            String   @id @default(cuid())
   campaignId    String
   participantId String
-  mutedAt       DateTime         @default(now())
+  mutedAt       DateTime @default(now())
 
   campaign    SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -1151,31 +1208,31 @@ model SantaChatMute {
 }
 
 model SantaPoll {
-  id                     String            @id @default(cuid())
-  campaignId             String            // Primary scoping field — required
-  roundId                String?           // Optional; kept for round-specific context
+  id                     String    @id @default(cuid())
+  campaignId             String // Primary scoping field — required
+  roundId                String? // Optional; kept for round-specific context
   question               String
-  options                Json              // String[] — immutable after create
-  isAnonymous            Boolean           @default(false)
+  options                Json // String[] — immutable after create
+  isAnonymous            Boolean   @default(false)
   createdByParticipantId String?
   deadlineAt             DateTime?
   closedAt               DateTime?
-  createdAt              DateTime          @default(now())
+  createdAt              DateTime  @default(now())
 
-  campaign   SantaCampaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  round      SantaRound?       @relation(fields: [roundId], references: [id], onDelete: SetNull)
-  createdBy  SantaParticipant? @relation("PollCreator", fields: [createdByParticipantId], references: [id], onDelete: SetNull)
-  votes      SantaPollVote[]
+  campaign  SantaCampaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  round     SantaRound?       @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  createdBy SantaParticipant? @relation("PollCreator", fields: [createdByParticipantId], references: [id], onDelete: SetNull)
+  votes     SantaPollVote[]
 
   @@index([campaignId])
 }
 
 model SantaPollVote {
-  id            String           @id @default(cuid())
+  id            String   @id @default(cuid())
   pollId        String
   participantId String
   optionIndex   Int
-  createdAt     DateTime         @default(now())
+  createdAt     DateTime @default(now())
 
   poll        SantaPoll        @relation(fields: [pollId], references: [id], onDelete: Cascade)
   participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -1199,20 +1256,20 @@ model SantaNotification {
 
   campaign SantaCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   user     User          @relation("SantaNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  // Partial unique index on (userId, type, dedupeKey) WHERE dedupeKey IS NOT NULL
+  // is managed via raw SQL migration — not representable in Prisma schema syntax.
 
   @@index([userId, readAt])
   @@index([campaignId])
-  // Partial unique index on (userId, type, dedupeKey) WHERE dedupeKey IS NOT NULL
-  // is managed via raw SQL migration — not representable in Prisma schema syntax.
 }
 
 model SantaAdminAuditLog {
-  id         String        @id @default(cuid())
+  id         String   @id @default(cuid())
   campaignId String
   actorId    String
   action     String
   payload    Json?
-  createdAt  DateTime      @default(now())
+  createdAt  DateTime @default(now())
 
   campaign SantaCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
@@ -1223,14 +1280,14 @@ model SantaAdminAuditLog {
 // After approval the participant is set to REMOVED and any non-terminal ACTIVE-round
 // assignment from that participant is set to ORPHANED (terminal).
 model SantaExitRequest {
-  id            String                  @id @default(cuid())
+  id            String                 @id @default(cuid())
   campaignId    String
   participantId String
-  roundId       String?                 // round active at request time (context only)
+  roundId       String? // round active at request time (context only)
   reason        String?
-  status        SantaExitRequestStatus  @default(PENDING)
+  status        SantaExitRequestStatus @default(PENDING)
   resolvedAt    DateTime?
-  createdAt     DateTime                @default(now())
+  createdAt     DateTime               @default(now())
 
   campaign    SantaCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   participant SantaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -1247,7 +1304,7 @@ model AnalyticsEvent {
   id        String   @id @default(cuid())
   event     String
   userId    String?
-  props     Json?    // structured event properties for god-mode queries (variant_key, etc.)
+  props     Json? // structured event properties for god-mode queries (variant_key, etc.)
   createdAt DateTime @default(now())
 
   @@index([event, createdAt])
@@ -1259,10 +1316,10 @@ model AnalyticsEvent {
 // SELECTED_FROM_WISHLIST gift status and auto-sync back to PENDING on removal.
 // Distinct from general ReservationEvent — receiver identity is never exposed.
 model SantaItemReservation {
-  id           String          @id @default(cuid())
+  id           String   @id @default(cuid())
   assignmentId String
   itemId       String
-  createdAt    DateTime        @default(now())
+  createdAt    DateTime @default(now())
 
   assignment SantaAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   item       Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
@@ -1280,10 +1337,10 @@ model SantaParticipantAlias {
   id            String   @id @default(cuid())
   roundId       String
   participantId String
-  alias         String   // pre-rendered RU: "Сонный жираф"
-  emoji         String   // "🦒"
-  adjectiveKey  String   // "sleepy"
-  animalKey     String   // "giraffe"
+  alias         String // pre-rendered RU: "Сонный жираф"
+  emoji         String // "🦒"
+  adjectiveKey  String // "sleepy"
+  animalKey     String // "giraffe"
   createdAt     DateTime @default(now())
 
   round       SantaRound       @relation(fields: [roundId], references: [id], onDelete: Cascade)
@@ -1303,13 +1360,13 @@ model SantaParticipantAlias {
 model UserOnboardingState {
   id               String           @id @default(cuid())
   userId           String
-  onboardingKey    String           // e.g. "hello_activation"
-  version          Int              // 1 — increment to re-show to all users
+  onboardingKey    String // e.g. "hello_activation"
+  version          Int // 1 — increment to re-show to all users
   status           OnboardingStatus @default(NOT_STARTED)
-  variantKey       String?          // assigned once on POST /start; never re-assigned
-  entryPoint       String?          // 'auto_after_first_wishlist' | 'organic_returning_underactivated' | 'forced_rollout_test' | 'manual_cta'
-  demoItemId       String?          // FK to the specific demo item for this onboarding state
-  completionReason String?          // 'demo_converted' | 'real_item_created' | 'demo_deleted_then_real_created'
+  variantKey       String? // assigned once on POST /start; never re-assigned
+  entryPoint       String? // 'auto_after_first_wishlist' | 'organic_returning_underactivated' | 'forced_rollout_test' | 'manual_cta'
+  demoItemId       String? // FK to the specific demo item for this onboarding state
+  completionReason String? // 'demo_converted' | 'real_item_created' | 'demo_deleted_then_real_created'
   metaJson         Json?
   startedAt        DateTime?
   completedAt      DateTime?
@@ -1333,7 +1390,7 @@ model GiftOccasion {
   ownerUserId String
   title       String
   type        String    @default("OTHER") // BIRTHDAY, ANNIVERSARY, HOLIDAY, OTHER
-  personName  String?   // free text, no linked user requirement
+  personName  String? // free text, no linked user requirement
   eventDate   DateTime? @db.Date
   recurrence  String    @default("NONE") // NONE, YEARLY, MONTHLY
   note        String?
@@ -1375,28 +1432,28 @@ model GiftOccasionIdea {
 
 // ─── Reservation Pro: private notes, purchased flag, reminders, history ──────
 model ReservationMeta {
-  id              String    @id @default(cuid())
-  itemId          String
-  reserverUserId  String
-  note            String?   @db.VarChar(500)
-  purchased       Boolean   @default(false)
-  purchasedAt     DateTime?
-  reminderAt      DateTime?
-  reminderSent    Boolean   @default(false)
-  reminderDates   Json?     // string[] of all scheduled reminder ISO dates
+  id                    String    @id @default(cuid())
+  itemId                String
+  reserverUserId        String
+  note                  String?   @db.VarChar(500)
+  purchased             Boolean   @default(false)
+  purchasedAt           DateTime?
+  reminderAt            DateTime?
+  reminderSent          Boolean   @default(false)
+  reminderDates         Json? // string[] of all scheduled reminder ISO dates
   // History tracking — when the reservation ends, these fields get populated
-  active          Boolean   @default(true)
-  endedAt         DateTime?
-  endReason       String?   // 'unreserved' | 'completed' | 'archived'
+  active                Boolean   @default(true)
+  endedAt               DateTime?
+  endReason             String? // 'unreserved' | 'completed' | 'archived'
   // Smart Reservations
-  expiresAt              DateTime?
-  extensionCount         Int       @default(0)
-  isSmartRes             Boolean   @default(false)
-  smartResTtlHours       Int?      // snapshot of wishlist TTL at creation
-  smartResMaxExtensions  Int?      // snapshot of max extensions at creation
-  smartResAllowExtend    Boolean?  // snapshot of allow extend at creation
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  expiresAt             DateTime?
+  extensionCount        Int       @default(0)
+  isSmartRes            Boolean   @default(false)
+  smartResTtlHours      Int? // snapshot of wishlist TTL at creation
+  smartResMaxExtensions Int? // snapshot of max extensions at creation
+  smartResAllowExtend   Boolean? // snapshot of allow extend at creation
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
@@ -1413,14 +1470,14 @@ model ReservationMeta {
 // Derived statuses (ITEM_UPDATED / ITEM_DELETED / PUBLIC_RESERVED_BY_OTHER / ITEM_UNAVAILABLE /
 // ITEM_FULFILLED) are computed at read time by comparing current Item state vs `snapshot`.
 enum SecretReservationStatus {
-  ACTIVE               // normal happy state
-  CANCELLED            // user explicitly cancelled
-  FULFILLED            // user marked own reservation as purchased/gifted
-  CONVERTED_TO_PUBLIC  // user promoted secret reservation → public reservation
+  ACTIVE // normal happy state
+  CANCELLED // user explicitly cancelled
+  FULFILLED // user marked own reservation as purchased/gifted
+  CONVERTED_TO_PUBLIC // user promoted secret reservation → public reservation
 }
 
 model SecretReservation {
-  id                    String   @id @default(cuid())
+  id                    String                  @id @default(cuid())
   itemId                String
   reserverUserId        String
   status                SecretReservationStatus @default(ACTIVE)
@@ -1428,9 +1485,9 @@ model SecretReservation {
   // { title, priceAmount, currency, url, imageUrl, description, priority, quantity }
   snapshot              Json
   updatesAcknowledgedAt DateTime?
-  note                  String?  @db.VarChar(500)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  note                  String?                 @db.VarChar(500)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
   cancelledAt           DateTime?
   fulfilledAt           DateTime?
   convertedAt           DateTime?
@@ -1490,16 +1547,16 @@ model WishlistItemPlacement {
 // ─── Maintenance Recovery ─────────────────────────────────────────────────────
 
 model MaintenanceIncident {
-  id                    String    @id @default(cuid())
-  startedAt             DateTime  @default(now())
-  endedAt               DateTime?
-  status                String    @default("active") // active | recovering | recovered
-  recoveryConfirmedAt   DateTime?
-  lastMaintenanceSignalAt DateTime @default(now())
-  exposureCount         Int       @default(0)
-  notificationsSent     Int       @default(0)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  id                      String    @id @default(cuid())
+  startedAt               DateTime  @default(now())
+  endedAt                 DateTime?
+  status                  String    @default("active") // active | recovering | recovered
+  recoveryConfirmedAt     DateTime?
+  lastMaintenanceSignalAt DateTime  @default(now())
+  exposureCount           Int       @default(0)
+  notificationsSent       Int       @default(0)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   exposures MaintenanceExposure[]
 
@@ -1508,18 +1565,18 @@ model MaintenanceIncident {
 }
 
 model MaintenanceExposure {
-  id              String    @id @default(cuid())
-  incidentId      String
-  userId          String
-  surface         String    // 'miniapp' | 'bot'
-  locale          String    @default("ru")
-  telegramChatId  String?
-  firstSeenAt     DateTime  @default(now())
-  lastSeenAt      DateTime  @default(now())
-  notifiedAt      DateTime?
-  returnedAt      DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  incidentId     String
+  userId         String
+  surface        String // 'miniapp' | 'bot'
+  locale         String    @default("ru")
+  telegramChatId String?
+  firstSeenAt    DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+  notifiedAt     DateTime?
+  returnedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   incident MaintenanceIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1545,7 +1602,7 @@ model GroupGift {
   id              String          @id @default(cuid())
   itemId          String          @unique
   organizerUserId String
-  targetAmount    Int             // whole units (e.g. 32990 = 32 990 ₽)
+  targetAmount    Int // whole units (e.g. 32990 = 32 990 ₽)
   currency        Currency        @default(RUB)
   deadline        DateTime?       @db.Date
   note            String?         @db.VarChar(500)
@@ -1571,7 +1628,7 @@ model GroupGiftParticipant {
   id          String   @id @default(cuid())
   groupGiftId String
   userId      String
-  amount      Int      // pledged amount in whole units
+  amount      Int // pledged amount in whole units
   displayName String
   joinedAt    DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -1600,18 +1657,18 @@ model GroupGiftMessage {
 }
 
 model CuratedSelection {
-  id             String    @id @default(cuid())
-  wishlistId     String
-  ownerId        String
-  title          String    @db.VarChar(100)
-  shareToken     String    @unique
-  viewCount      Int       @default(0)
-  deactivatedAt  DateTime?
-  expiresAt      DateTime
-  createdAt      DateTime  @default(now())
+  id            String    @id @default(cuid())
+  wishlistId    String
+  ownerId       String
+  title         String    @db.VarChar(100)
+  shareToken    String    @unique
+  viewCount     Int       @default(0)
+  deactivatedAt DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
 
-  wishlist  Wishlist               @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
-  owner     User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  wishlist      Wishlist                       @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  owner         User                           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   items         CuratedSelectionItem[]
   subscriptions CuratedSelectionSubscription[]
 
@@ -1622,16 +1679,16 @@ model CuratedSelection {
 }
 
 model CuratedSelectionItem {
-  id                  String  @id @default(cuid())
-  curatedSelectionId  String
-  originalItemId      String?
-  position            Int     @default(0)
-  title               String
-  priceText           String?
-  currency            Currency @default(RUB)
-  imageUrl            String?
-  url                 String?
-  description         String? @db.VarChar(500)
+  id                 String   @id @default(cuid())
+  curatedSelectionId String
+  originalItemId     String?
+  position           Int      @default(0)
+  title              String
+  priceText          String?
+  currency           Currency @default(RUB)
+  imageUrl           String?
+  url                String?
+  description        String?  @db.VarChar(500)
 
   curatedSelection CuratedSelection @relation(fields: [curatedSelectionId], references: [id], onDelete: Cascade)
 
@@ -1639,10 +1696,10 @@ model CuratedSelectionItem {
 }
 
 model CuratedSelectionSubscription {
-  id                   String   @id @default(cuid())
-  curatedSelectionId   String
-  subscriberId         String
-  createdAt            DateTime @default(now())
+  id                 String   @id @default(cuid())
+  curatedSelectionId String
+  subscriberId       String
+  createdAt          DateTime @default(now())
 
   curatedSelection CuratedSelection @relation(fields: [curatedSelectionId], references: [id], onDelete: Cascade)
   subscriber       User             @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
@@ -1650,4 +1707,158 @@ model CuratedSelectionSubscription {
   @@unique([curatedSelectionId, subscriberId])
   @@index([subscriberId])
   @@index([curatedSelectionId])
+}
+
+// ====================================================================
+// REFERRAL PROGRAM — data model
+// ====================================================================
+// See /mockups/referral-program.html for the full spec + observability.
+// Attribution is first-touch, locked. Inviter gets 30 PRO days when invitee
+// completes a qualifying action (first wishlist + first item) within a window.
+
+// One attribution record per (inviter, invitee) pair. Unique on invitedUserId
+// to enforce "invitee can only be referred by one person, ever".
+model ReferralAttribution {
+  id            String @id @default(cuid())
+  inviterUserId String
+  invitedUserId String @unique
+  referralCode  String
+  // Where the link came from. Currently always 'telegram' (via bot /start payload).
+  // Reserved for future: web-share, qr, native-share, etc.
+  source        String @default("telegram")
+
+  // Default = PENDING_ACTIVATION (invitee created + linked, awaiting qualifying
+  // actions). The `ATTRIBUTED` enum value is reserved for future pre-user-
+  // creation click events (e.g. web-share lands before /start is fired). All
+  // current code paths enter via tryCreateAttribution which sets this state
+  // explicitly — the default exists only as a safety net.
+  status       ReferralAttributionStatus @default(PENDING_ACTIVATION)
+  rejectReason ReferralRejectReason?
+
+  // Lifecycle timestamps — each set once on transition, never updated.
+  attributedAt     DateTime  @default(now())
+  qualifiedAt      DateTime?
+  rewardedAt       DateTime?
+  rejectedAt       DateTime?
+  // Deadline for qualifying action — config.qualificationWindowDays after attribution.
+  // Cron sweeps for attributions with status=PENDING_ACTIVATION where now > windowDeadlineAt.
+  windowDeadlineAt DateTime
+
+  // Fraud — score is cumulative weights of triggered signals (0..100).
+  // triggeredSignals is JSON array of { signal, weight, details }.
+  // configVersion locks which config/weights were in effect for reproducibility.
+  fraudScore       Int     @default(0)
+  triggeredSignals Json?
+  configVersion    String?
+  configSnapshot   Json?
+
+  // Device/network snapshot at attribution time — for fraud-ring debugging.
+  // Hashed (sha256 + rotating salt) so we never store PII. Snapshots kept per-
+  // attribution (not joined at read time) so clusters remain queryable even
+  // if the salt rotates later.
+  ipHash                String?
+  deviceFingerprintHash String?
+  timezone              String?
+  locale                String?
+  telegramClient        String?
+  platform              String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inviter User             @relation("ReferralInviter", fields: [inviterUserId], references: [id], onDelete: Cascade)
+  invited User             @relation("ReferralInvitee", fields: [invitedUserId], references: [id], onDelete: Cascade)
+  rewards ReferralReward[]
+
+  @@index([inviterUserId, status])
+  @@index([referralCode])
+  @@index([status, windowDeadlineAt])
+  @@index([status, fraudScore])
+  @@index([ipHash])
+  @@index([deviceFingerprintHash])
+  @@index([createdAt])
+}
+
+// One record per granted reward. Decoupled from ReferralAttribution so we can
+// have revoke history + support partial/admin manual grants later.
+// idempotencyKey enforces exactly-once grant per (attribution, reason).
+model ReferralReward {
+  id              String               @id @default(cuid())
+  userId          String
+  attributionId   String?
+  rewardType      String               @default("pro_days")
+  rewardValueDays Int
+  status          ReferralRewardStatus @default(GRANTED)
+
+  // Strategy applied when granting: 'stack' (added to existing expiry) or 'replace' (set to now + days).
+  grantStrategy    String    @default("stack")
+  previousExpiryAt DateTime?
+  newExpiryAt      DateTime?
+
+  idempotencyKey   String    @unique
+  grantedAt        DateTime  @default(now())
+  revokedAt        DateTime?
+  revokedReason    String?
+  // Admin who granted/revoked manually — null for system grants.
+  grantedByAdminId String?
+  revokedByAdminId String?
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attribution ReferralAttribution? @relation(fields: [attributionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([attributionId])
+  @@index([grantedAt])
+}
+
+// Singleton config table — all values tweakable without deploy.
+// Every config change increments configVersion for reproducibility of old events.
+// Only ONE row expected (enforced by unique id='default' constant).
+model ReferralProgramConfig {
+  id      String  @id @default("default")
+  enabled Boolean @default(false)
+
+  // Reward mechanics
+  rewardDaysInviter Int    @default(30)
+  grantStrategy     String @default("stack") // stack | replace
+
+  // Qualifying action requirements
+  requireWishlist         Boolean @default(true)
+  requireItem             Boolean @default(true)
+  qualificationWindowDays Int     @default(14)
+
+  // Rate limits / caps
+  monthlyRewardCap Int @default(3)
+  yearlyRewardCap  Int @default(12)
+
+  // Fraud thresholds
+  fraudAutoRejectThreshold Int     @default(80)
+  fraudReviewThreshold     Int     @default(40)
+  fraudReviewEnabled       Boolean @default(true)
+
+  // Signal weights — tweakable; writable from admin. Each key matches fraud signal name.
+  fraudSignalWeights Json @default("{\"ip_cluster\":30,\"device_fingerprint\":25,\"velocity\":20,\"inactive_invitee\":15,\"same_tz_cluster\":10,\"self_referral\":100,\"suspicious_onboarding\":25,\"account_age_delta\":20}")
+
+  // UI toggles
+  showInviteeNamesInUi Boolean @default(false)
+  entryPointProfile    Boolean @default(true)
+  entryPointPaywall    Boolean @default(true)
+  entryPointHomeBanner Boolean @default(true)
+  entryPointPostShare  Boolean @default(true)
+
+  // Bot notification toggles
+  notifyInviterArrival      Boolean @default(true)
+  notifyInviterStepProgress Boolean @default(false)
+  notifyInviterReward       Boolean @default(true)
+  notifyInviteeWelcome      Boolean @default(false)
+
+  // Rollout gating — % of users exposed in soft launch. 0..100.
+  rolloutPercent Int @default(10)
+
+  // Opaque version ID incremented server-side on every update — referenced
+  // from AnalyticsEvent.configVersion so old events can be reproduced exactly.
+  configVersion String @default("v1")
+
+  updatedAt        DateTime @updatedAt
+  updatedByAdminId String?
 }
