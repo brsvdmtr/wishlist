@@ -1,0 +1,149 @@
+name: Admin Ops (Referral)
+
+# Manual admin operations for the referral program. Trigger from Actions tab
+# ("Admin Ops (Referral)" → Run workflow → pick action + inputs) when you
+# can't SSH directly (edge-firewall block, travelling, etc.).
+#
+# Why a workflow instead of a one-off curl? The Actions runner has a
+# stable, non-blocked IP pool into the VPS, and inputs are auditable in
+# the run history.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - bump-rollout
+          - heal-attribution
+          - reset-test-data
+          - funnel-snapshot
+          - retest-reset
+      rollout_percent:
+        description: 'Rollout percent (for bump-rollout, 0–100)'
+        required: false
+        default: '100'
+        type: string
+      attribution_id:
+        description: 'Attribution id (for heal-attribution)'
+        required: false
+        type: string
+      test_user_telegram_id:
+        description: 'Test user telegramId (for reset-test-data / retest-reset)'
+        required: false
+        default: '8747175307'
+        type: string
+      inviter_user_id:
+        description: 'Inviter User.id (for retest-reset — rolls back their PRO bonus)'
+        required: false
+        default: 'cmlpsrf4e0000ikxja0lu9tuz'
+        type: string
+
+concurrency:
+  group: admin-ops
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Execute admin action over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          ACTION: ${{ inputs.action }}
+          ROLLOUT: ${{ inputs.rollout_percent }}
+          ATTR_ID: ${{ inputs.attribution_id }}
+          TEST_TGID: ${{ inputs.test_user_telegram_id }}
+          INVITER_ID: ${{ inputs.inviter_user_id }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          envs: ACTION,ROLLOUT,ATTR_ID,TEST_TGID,INVITER_ID
+          script: |
+            set -euo pipefail
+            source /opt/wishlist/.env
+            PSQL="docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist"
+            API="http://localhost:3001"
+
+            case "$ACTION" in
+
+              bump-rollout)
+                echo "=== PATCH rolloutPercent → ${ROLLOUT}% ==="
+                curl -sf -X PATCH \
+                  -H "X-ADMIN-KEY: $ADMIN_KEY" \
+                  -H "Content-Type: application/json" \
+                  "$API/admin/referral/config" \
+                  -d "{\"rolloutPercent\":${ROLLOUT},\"updatedByAdminId\":\"github-actions\"}" \
+                  | head -c 400
+                echo
+                ;;
+
+              heal-attribution)
+                if [ -z "$ATTR_ID" ]; then
+                  echo "ERROR: attribution_id input is required"
+                  exit 1
+                fi
+                echo "=== Current attribution state ==="
+                $PSQL -c "SELECT id, status, \"rejectReason\", \"invitedUserId\" FROM \"ReferralAttribution\" WHERE id='${ATTR_ID}';"
+
+                echo "=== Mark all milestones for invitee (idempotent) ==="
+                $PSQL -c "UPDATE \"UserProfile\" SET \"firstBotStartAt\" = COALESCE(\"firstBotStartAt\", NOW()), \"firstWishlistAt\" = COALESCE(\"firstWishlistAt\", NOW()), \"firstItemAt\" = COALESCE(\"firstItemAt\", NOW()) WHERE \"userId\" = (SELECT \"invitedUserId\" FROM \"ReferralAttribution\" WHERE id='${ATTR_ID}') RETURNING \"firstBotStartAt\", \"firstWishlistAt\", \"firstItemAt\";"
+
+                echo "=== Retry qualify + reward ==="
+                curl -sf -X POST \
+                  -H "X-ADMIN-KEY: $ADMIN_KEY" \
+                  "$API/admin/referral/attribution/${ATTR_ID}/retry-qualify"
+                echo
+                ;;
+
+              reset-test-data)
+                if [ -z "$TEST_TGID" ]; then
+                  echo "ERROR: test_user_telegram_id input is required"
+                  exit 1
+                fi
+                echo "=== Delete test user (CASCADE removes attribution) ==="
+                $PSQL -c "DELETE FROM \"User\" WHERE \"telegramId\" = '${TEST_TGID}' RETURNING id;"
+                echo "=== Remaining User records with this telegramId ==="
+                $PSQL -c "SELECT COUNT(*) FROM \"User\" WHERE \"telegramId\" = '${TEST_TGID}';"
+                ;;
+
+              retest-reset)
+                # Full reset for a repeat test: delete test user + last reward + roll back inviter's PRO by 30d.
+                # Used when dmitriy wants to test the full flow from scratch.
+                if [ -z "$TEST_TGID" ] || [ -z "$INVITER_ID" ]; then
+                  echo "ERROR: test_user_telegram_id and inviter_user_id are both required"
+                  exit 1
+                fi
+                echo "=== Delete test user ==="
+                $PSQL -c "DELETE FROM \"User\" WHERE \"telegramId\" = '${TEST_TGID}' RETURNING id, \"telegramId\";"
+
+                echo "=== Delete latest reward to this inviter ==="
+                $PSQL -c "DELETE FROM \"ReferralReward\" WHERE id = (SELECT id FROM \"ReferralReward\" WHERE \"userId\" = '${INVITER_ID}' ORDER BY \"grantedAt\" DESC LIMIT 1) RETURNING id, \"rewardValueDays\", \"grantedAt\";"
+
+                echo "=== Roll back inviter's PRO by 30 days (only the most-recent extension) ==="
+                $PSQL -c "UPDATE \"Subscription\" SET \"currentPeriodEnd\" = \"currentPeriodEnd\" - INTERVAL '30 days' WHERE \"userId\" = '${INVITER_ID}' AND \"planCode\" = 'PRO' AND \"currentPeriodEnd\" > NOW() RETURNING id, \"currentPeriodEnd\";"
+
+                echo "=== Post-reset state check ==="
+                $PSQL -c "SELECT COUNT(*) AS remaining_attributions FROM \"ReferralAttribution\" WHERE \"inviterUserId\" = '${INVITER_ID}';"
+                ;;
+
+              funnel-snapshot)
+                echo "=== Referral funnel (last 30d) ==="
+                curl -sf -H "X-ADMIN-KEY: $ADMIN_KEY" "$API/admin/referral/funnel" | head -c 2000
+                echo
+                echo "=== Current config ==="
+                curl -sf -H "X-ADMIN-KEY: $ADMIN_KEY" "$API/admin/referral/config" | head -c 2000
+                echo
+                ;;
+
+              *)
+                echo "ERROR: Unknown action '$ACTION'"
+                exit 1
+                ;;
+            esac
+
+            echo "=== Done ==="
