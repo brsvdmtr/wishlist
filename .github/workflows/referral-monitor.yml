@@ -107,14 +107,7 @@ jobs:
 
             echo "=== REPORT ==="
             echo "$REPORT"
-
-            # Save to step outputs (multi-line escaping)
-            {
-              echo "status=$STATUS"
-              echo "report<<REPORT_EOF"
-              echo "$REPORT"
-              echo "REPORT_EOF"
-            } >> "$GITHUB_OUTPUT"
+            echo "=== STATUS: $STATUS ==="
 
             # Fire Telegram alert ONLY on anomalies — clean days stay quiet.
             if [ "$STATUS" = "anomalies" ] && [ -n "${ADMIN_ALERT_CHAT_IDS:-}" ] && [ -n "${BOT_TOKEN:-}" ]; then
@@ -129,12 +122,11 @@ jobs:
               done
             fi
 
-      - name: Surface report to workflow summary
+      - name: Link to full SSH log
         if: always()
         run: |
           echo "### Referral daily health check" >> "$GITHUB_STEP_SUMMARY"
-          echo "Status: **${{ steps.check.outputs.status || 'unknown' }}**" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ steps.check.outputs.report || 'No report — step may have failed' }}" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Full report is in the **Referral health check** step above — scroll to \`=== REPORT ===\` markers for the human-readable summary." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "On anomaly days, a Telegram alert is also sent to \`ADMIN_ALERT_CHAT_IDS\`." >> "$GITHUB_STEP_SUMMARY"
