@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-04-10. Verified from source code.
+> Date: 2026-04-17. Verified from source code.
 
 ---
 
@@ -41,7 +41,7 @@ packages/shared/src/
 
 `MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook. There is no routing library. ~300 `useState` calls and 240+ in the main component.
 
-### Screen Type Union (46 screens)
+### Screen Type Union (54 screens)
 
 ```typescript
 type Screen =
@@ -63,11 +63,20 @@ type Screen =
   | 'santa-hub' | 'santa-create' | 'santa-campaign' | 'santa-join'
   | 'santa-chat' | 'santa-polls' | 'santa-exclusions'
   | 'santa-organizer' | 'santa-receiver-wishlist'
-  // Gift Notes (3)
+  // Gift Notes (4)
   | 'gift-notes' | 'gift-notes-occasion' | 'gift-notes-paywall'
+  | 'gift-notes-onboarding'
   // Group Gift (5)
   | 'group-gift-paywall' | 'group-gift-create' | 'group-gift-detail'
   | 'group-gift-join' | 'group-gift-chat'
+  // Showcase (2)
+  | 'showcase-editor' | 'showcase-preview'
+  // Secret Reservations (2)
+  | 'secret-reservation-detail' | 'secret-reservation-paywall'
+  // Referral (2)
+  | 'referral' | 'referral-history'
+  // Utility (1)
+  | 'item-unavailable'
   // Settings extras (4)
   | 'faq' | 'changelog' | 'legal' | 'legal-doc';
 ```
@@ -143,7 +152,7 @@ Full Secret Santa campaign system with group chat, polls, exclusions, and gift t
 | 32 | `santa-organizer` | Organizer summary dashboard: participant statuses, exit requests (approve/deny) |
 | 33 | `santa-receiver-wishlist` | View the receiver's wishlist items within a Santa campaign context; reserve items for gift |
 
-#### Gift Notes (3)
+#### Gift Notes (4)
 
 Occasion-based gift idea tracker. Requires add-on purchase (`gift_notes_unlock`).
 
@@ -152,6 +161,7 @@ Occasion-based gift idea tracker. Requires add-on purchase (`gift_notes_unlock`)
 | 34 | `gift-notes` | List of gift occasions (birthdays, holidays, etc.). Create/edit occasions with recurrence |
 | 35 | `gift-notes-occasion` | Detail view for a single occasion: ideas list, add/complete/delete ideas, edit occasion metadata, complete/archive/delete occasion |
 | 36 | `gift-notes-paywall` | Paywall gate for Gift Notes add-on purchase via Telegram Stars |
+| 37 | `gift-notes-onboarding` | 4-step demo-first onboarding for the Gift Notes feature, shown on first access. Walks through occasions, ideas, reminders, and the paywall CTA |
 
 #### Group Gift (5)
 
@@ -159,11 +169,44 @@ Full group gift collection system with shared contributions, chat, and invite li
 
 | # | Screen | Description |
 |---|--------|-------------|
-| 37 | `group-gift-paywall` | Purchase screen for `group_gift_unlock` (79 Stars). Shows features list, buy button |
-| 38 | `group-gift-create` | Create form: target amount, deadline (optional), note, initial contribution amount |
-| 39 | `group-gift-detail` | Main dashboard: progress bar, participants list with amounts, chat button, share button. Organizer sees management section (edit payment details, complete, cancel). Participant sees own amount editor and leave option |
-| 40 | `group-gift-join` | Join screen via invite link: shows item, organizer name, progress, amount input |
-| 41 | `group-gift-chat` | Chat messages between participants. Supports USER and SYSTEM message types. Auto-polls every 5s |
+| 38 | `group-gift-paywall` | Purchase screen for `group_gift_unlock` (79 Stars). Shows features list, buy button |
+| 39 | `group-gift-create` | Create form: target amount, deadline (optional), note, initial contribution amount |
+| 40 | `group-gift-detail` | Main dashboard: progress bar, participants list with amounts, chat button, share button. Organizer sees management section (edit payment details, complete, cancel). Participant sees own amount editor and leave option |
+| 41 | `group-gift-join` | Join screen via invite link: shows item, organizer name, progress, amount input |
+| 42 | `group-gift-chat` | Chat messages between participants. Supports USER and SYSTEM message types. Auto-polls every 5s |
+
+#### Showcase (2)
+
+PRO profile showcase editor and preview. Accessible from the profile screen.
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 43 | `showcase-editor` | PRO profile showcase editor: upload cover photo, set bio, pin up to 3 wishlists, configure sizing preferences and brand preferences |
+| 44 | `showcase-preview` | Preview of how your profile showcase appears to other users before publishing |
+
+#### Secret Reservations (2)
+
+Add-on (`secret_reservation_unlock`, 24 XTR one-time) that lets guests reserve an item without the owner seeing who reserved it.
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 45 | `secret-reservation-detail` | Detail view for a secret reservation: shows item snapshot, reservation status, option to cancel (releases item), acknowledge item updates, or promote to a public reservation |
+| 46 | `secret-reservation-paywall` | Paywall for the Secret Reservation add-on (24 XTR one-time purchase). Shown when a guest attempts a secret reserve without the unlock |
+
+#### Referral (2)
+
+Invite-a-friend screen and attribution history. Feature-flagged off by default (`ReferralProgramConfig.enabled = false`).
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 47 | `referral` | Invite-a-friend screen: displays unique referral link, share button, and stats on invited friends |
+| 48 | `referral-history` | History of referral attributions and their reward status (pending / qualified / rewarded) |
+
+#### Utility (1)
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 49 | `item-unavailable` | Shown when a wish item is no longer accessible (deleted, moved, or access revoked). Provides a back-navigation option |
 
 #### Settings Extras (4)
 
@@ -171,16 +214,16 @@ Additional screens accessible from the settings area.
 
 | # | Screen | Description |
 |---|--------|-------------|
-| 42 | `faq` | FAQ screen in settings |
-| 43 | `changelog` | Release notes / What's New |
-| 44 | `legal` | Legal documents list |
-| 45 | `legal-doc` | Single legal document view |
+| 50 | `faq` | FAQ screen in settings |
+| 51 | `changelog` | Release notes / What's New |
+| 52 | `legal` | Legal documents list |
+| 53 | `legal-doc` | Single legal document view |
 
 #### Onboarding Extra (1)
 
 | # | Screen | Description |
 |---|--------|-------------|
-| 46 | `onboarding-manual` | Manual item creation in onboarding |
+| 54 | `onboarding-manual` | Manual item creation in onboarding |
 
 ---
 

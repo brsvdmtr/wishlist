@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-04-17 — Weekly Documentation Update
+
+**7 docs updated** to reflect changes from ~50 commits (April 10–17):
+
+- **CURRENT_PRODUCT_STATE.md** — added 13 new features, updated counts (67 models / 35 enums / 54 screens / 14 SKUs)
+- **DATA_MODEL.md** — added 9 new models, 4 new enums, new fields on User/UserProfile/Wishlist/ReservationMeta/Comment
+- **API_REFERENCE.md** — added ~40 new endpoints (showcase, curated selections, secret reservations, item placements, referral, profile subscriptions, don't gift per-wishlist, link management)
+- **MONETIZATION.md** — added 2 new SKUs (secret_reservation_unlock 24 XTR, smart_reservations_unlock 39 XTR), 14 total
+- **FRONTEND_MAP.md** — added 8 new screens (gift-notes-onboarding, showcase-editor, showcase-preview, referral, referral-history, secret-reservation-detail, secret-reservation-paywall, item-unavailable), 54 total
+- **USER_FLOWS.md** — added 7 new flows (Secret Reservations, Smart Reservations, Showcase, Curated Selections, Profile Subscriptions, Referral Program, Item Placements), 34 total
+- **CHANGELOG_DOCS.md** — this entry
+
+**Key shipped features:**
+
+- Showcase — PRO premium profile with cover, bio, sizing preferences, pinned wishlists
+- Curated Selections ("часть вишлиста") — share a subset of items via PRO temp link with subscriptions
+- Smart Reservations — time-limited reservations with auto-release, reminders, extensions (per-wishlist add-on)
+- Secret Reservations — reserve items without owner seeing who reserved (24 XTR add-on)
+- Item Placements — share a single wish across multiple wishlists
+- Profile Subscriptions — follow users' public profiles
+- Referral Program (gated) — invite-a-friend PRO rewards, fraud detection, admin dashboard
+- Per-wishlist Don't Gift — three-mode settings (global/custom/disabled) per wishlist
+- Comment Quick Reply — threaded replies from notifications
+- Link Management — view and revoke all active share links
+- Gift Notes onboarding — demo-first paywall and 4-step onboarding
+
+---
+
 ## 2026-04-10 — Weekly Documentation Update
 
 **19 docs updated** to reflect changes from 35 commits (April 3--10):

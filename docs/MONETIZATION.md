@@ -1,7 +1,7 @@
 # MONETIZATION
 
 > Source of truth for plans, limits, entitlements, billing flow, and paywall content.
-> Last updated: 2026-04-10 · Branch: main
+> Last updated: 2026-04-17 · Branch: main
 
 ---
 
@@ -90,6 +90,9 @@ All limits and feature gates are **enforced server-side**. The client performs p
 | `commentPolicy=SUBSCRIBERS` | `PATCH /tg/wishlists/:id` | `isPro` → 403 |
 | Notification settings (comments, subscriptions) | `PATCH /tg/me/settings` | `isPro` — silently ignored if FREE |
 | New wishlist position `bottom` | `PATCH /tg/me/settings` | `isPro` — silently ignored if FREE |
+| Showcase (public profile page) | `PATCH /tg/me/showcase` | `isPro` → 403 |
+| Curated Selections | `POST /tg/curated-selections` | `isPro` → 403 |
+| Profile Subscriptions | `POST /tg/profiles/:id/subscribe` | `isPro` → 403 |
 
 ### Reservation PRO — Beta-gated via `hasReservationPro()`
 
@@ -134,6 +137,8 @@ extraItemsPerWishlist[wId]  = Σ(UserAddOn where addonType IN ('item_slot_5','it
 hintCredits                 = UserCredits.hintCredits (PRO bypasses)
 importCredits               = UserCredits.importCredits (PRO bypasses)
 hasGiftNotes                = isPro OR UserAddOn(addonType='gift_notes_unlock') exists
+hasSecretReservation        = UserAddOn(addonType='secret_reservation_unlock') exists
+hasSmartReservations[wId]   = UserAddOn(addonType='smart_reservations_unlock' AND targetId=wId) exists
 ```
 
 **God Mode:** Virtual PRO for testing/development. Activated via `GOD_MODE_TELEGRAM_IDS` env var. No billing involved. Visible in Settings as "⚡ Режим бога".
@@ -207,6 +212,8 @@ When user taps "Отменить продление", a bottom sheet appears lis
 | **Guest sort (recommended)** | `MiniApp.tsx` | Client-only; upsell on click if FREE |
 | **Subscribe to wishlist** | `MiniApp.tsx` | Shows count "X из Y"; upsell on 402 |
 | **Wishlist privacy settings** | `MiniApp.tsx` | OPTIONS silently ignored server-side if FREE |
+| **showcase-editor / showcase-preview** | `MiniApp.tsx` | Locked behind PRO; upsell on access |
+| **secret-reservation-paywall** | `MiniApp.tsx` | Add-on paywall (24 XTR) |
 
 ---
 
@@ -292,7 +299,7 @@ These are server-side enforced but not shown on the main paywall (intentionally)
 
 One-time purchases via Telegram Stars. Defined in `ONE_TIME_SKUS` constant in `apps/api/src/index.ts`.
 
-### SKU Catalogue
+### SKU Catalogue (14 add-on SKUs)
 
 | SKU Code | Price (XTR) | Type | Effect |
 |----------|-------------|------|--------|
@@ -308,6 +315,8 @@ One-time purchases via Telegram Stars. Defined in `ONE_TIME_SKUS` constant in `a
 | `gift_notes_unlock` | 19 | permanent | Unlock Gift Notes feature |
 | `reservation_pro_unlock` | 50 | permanent | Unlock reservation PRO features (purchase status tracking, notes, reminders, history) |
 | `group_gift_unlock` | 79 | permanent | Unlock ability to create group gift collections. Not included in PRO subscription |
+| `secret_reservation_unlock` | 24 | permanent | Unlock secret reservations — reserve an item without the owner seeing who reserved it |
+| `smart_reservations_unlock` | 39 | permanent | Per-wishlist: enable time-limited reservations with auto-release and reminders (targetId required) |
 
 ### Add-on Caps (`ADDON_CAPS`)
 
@@ -392,7 +401,46 @@ One-time unlock (79 XTR). **Not bundled with PRO subscription** -- purchased sep
 
 ---
 
-## 15. Promo System
+## 15. Secret Reservations Monetization
+
+One-time unlock (24 XTR). Available to all users (FREE and PRO) as an add-on.
+
+- **Price**: 24 Telegram Stars (permanent)
+- **SKU**: `secret_reservation_unlock`
+- **Access**: Add-on only — not included in PRO subscription. Any user can purchase.
+- **Gate**: `hasSecretReservation()` — checks for `UserAddOn(addonType='secret_reservation_unlock')`
+- **Features unlocked**: Reserve a wish item without the owner seeing who made the reservation. Includes onboarding flow.
+- **Screens**: secret-reservation-detail, secret-reservation-paywall
+
+### Secret Reservations API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/tg/billing/addon/checkout` | Body: `{ sku: 'secret_reservation_unlock' }` |
+| `POST` | `/tg/billing/addon/sync` | Verify purchase |
+
+---
+
+## 16. Smart Reservations Monetization
+
+Per-wishlist unlock (39 XTR each). Available to all users as an add-on.
+
+- **Price**: 39 Telegram Stars per wishlist (permanent, per-wishlist)
+- **SKU**: `smart_reservations_unlock`
+- **Access**: Add-on only — not included in PRO subscription. `targetId` (wishlist ID) is required at checkout.
+- **Gate**: `hasSmartReservations(wishlistId)` — checks for `UserAddOn(addonType='smart_reservations_unlock' AND targetId=wishlistId)`
+- **Features unlocked**: Time-limited reservations with configurable TTL, auto-release on expiry, reminders, and extensions. Wishlist settings control: TTL hours, max extensions, allow-extend flag.
+
+### Smart Reservations API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/tg/billing/addon/checkout` | Body: `{ sku: 'smart_reservations_unlock', targetId: wishlistId }` |
+| `POST` | `/tg/billing/addon/sync` | Verify purchase |
+
+---
+
+## 17. Promo System
 
 Promo codes (e.g. `WISHPRO`) grant entitlements without Telegram Stars payment.
 
@@ -424,7 +472,7 @@ When PRO access expires (subscription lapses, promo grant expires), a `Degradati
 
 ---
 
-## 16. Lifecycle Messaging
+## 18. Lifecycle Messaging
 
 The system sends targeted messages via bot DM based on user lifecycle state:
 - **Winback**: Users who had PRO and lost it receive re-engagement messages with promo codes

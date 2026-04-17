@@ -1,6 +1,6 @@
 # API_REFERENCE.md — Complete Endpoint Reference
 
-> Last updated: 2026-04-10. Verified from `apps/api/src/index.ts` (~14,800 lines, 180+ route handlers).
+> Last updated: 2026-04-17. Verified from `apps/api/src/index.ts` (~14,800 lines, 180+ route handlers).
 
 ---
 
@@ -61,6 +61,12 @@ No authentication required. Rate limited.
 | GET | `/public/wishlists/:slug/items` | Fetch items for a wishlist by slug. Query params: `status` (AVAILABLE/RESERVED/PURCHASED), `tag` (tag id). Response: `{ items[] }` |
 | GET | `/public/share/:token` | Resolve share token to wishlist + items. Increments `shareOpenCount` (fire-and-forget). 404 if token not found. Response same shape as `/public/wishlists/:slug` |
 | GET | `/public/profiles/:username` | Public user profile. Respects `profileVisibility`: NOBODY returns 404. ALL includes `wishlists[]` (PUBLIC_PROFILE, non-archived only). Respects `avatarPublic` setting. Response: `{ profile, wishlists[] }` |
+
+### Curated Selections (public)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/public/selections/:token` | Fetch a curated selection by share token. Returns items list for guest display |
 
 ### Reservations (anonymous / public page)
 
@@ -246,7 +252,7 @@ Allows users to specify items they don't want to receive as gifts. Visible on pu
 | POST | `/tg/billing/addon/checkout` | Auth user | Create Stars invoice for a one-time SKU. Body: `{ skuCode, targetId? }`. Validates caps. Response: `{ invoiceUrl, sessionId }` |
 | POST | `/tg/billing/addon/sync` | Auth user | Return current add-ons and credits after purchase |
 
-**12 Add-on SKUs:**
+**14 Add-on SKUs:**
 
 | SKU Code | Price (XTR) | Type | Target | Description |
 |----------|-------------|------|--------|-------------|
@@ -262,6 +268,8 @@ Allows users to specify items they don't want to receive as gifts. Visible on pu
 | `gift_notes_unlock` | 19 | permanent | no | Unlock Gift Notes feature |
 | `reservation_pro_unlock` | 50 | permanent | no | Unlock Reservation PRO feature |
 | `group_gift_unlock` | 79 | permanent | no | Unlock Group Gift feature |
+| `secret_reservation_unlock` | 24 | permanent | no | Unlock Secret Reservations feature |
+| `smart_reservations_unlock` | 39 | permanent | wishlist | Unlock Smart Reservations for a specific wishlist |
 
 ### Gift Notes (19 XTR one-time unlock)
 
@@ -466,6 +474,91 @@ Collaborative gift collection. Requires `group_gift_unlock` add-on (checked via 
 | PATCH | `/tg/group-gifts/:id/pinned` | Organizer | Update pinned payment info. Body: `{ pinnedInfo: string (max 1000) }`. Posts SYSTEM message. **403** if not organizer. Response: `{ ok: true }` |
 | GET | `/tg/group-gifts/:id/messages` | Member | Get chat messages (cursor-based pagination). Query: `?cursor=ISO8601&limit=N` (default 50, max 100). Returns messages in ascending order. **403** if not a member. Response: `{ messages[], hasMore: boolean }` |
 | POST | `/tg/group-gifts/:id/messages` | Member | Send a chat message. Body: `{ text: string (1-2000 chars) }`. **403** if not a member. Response: Message object (201) |
+
+### Item Placements (cross-wishlist sharing)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/tg/items/:id/placements` | List all wishlist placements for this item |
+| POST | `/tg/items/:id/placements` | Add item to another wishlist (create placement). Body: `{ wishlistId, categoryId? }` |
+| DELETE | `/tg/items/:id/placements/:wishlistId` | Remove item from a wishlist placement |
+
+### Smart Reservations
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/tg/items/:id/extend-reservation` | Extend an active smart reservation. Body: `{}`. Returns updated `expiresAt` |
+
+### Secret Reservations (24 XTR add-on)
+
+Requires `secret_reservation_unlock` add-on.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/tg/items/:id/secret-reserve` | Create a secret reservation. Body: `{ note? }` |
+| GET | `/tg/secret-reservations` | List all my active/historical secret reservations |
+| GET | `/tg/secret-reservations/:id` | Get secret reservation detail (with item snapshot diff) |
+| POST | `/tg/secret-reservations/:id/cancel` | Cancel a secret reservation |
+| POST | `/tg/secret-reservations/:id/acknowledge` | Mark item updates as seen |
+| POST | `/tg/secret-reservations/:id/promote` | Promote to a public reservation (converts to normal reserve) |
+| GET | `/tg/secret-reservations/onboarding/status` | Whether user has seen the secret reservation onboarding |
+| POST | `/tg/secret-reservations/onboarding/seen` | Mark onboarding as seen |
+
+### Curated Selections (PRO)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/tg/wishlists/:id/selections` | List all curated selections for a wishlist |
+| POST | `/tg/wishlists/:id/selections` | Create a curated selection. Body: `{ title, itemIds[], expiresInDays? }`. PRO required |
+| GET | `/tg/selections/:id` | Get curated selection detail |
+| DELETE | `/tg/selections/:id` | Deactivate (revoke) a curated selection |
+| GET | `/tg/selections/by-token/:token` | Get curated selection by share token (in-app guest view) |
+| GET | `/tg/selections/subscribed` | List curated selections I'm subscribed to |
+| GET | `/tg/selections/:id/subscribe` | Check subscription status |
+| POST | `/tg/selections/:id/subscribe` | Subscribe to a curated selection |
+| DELETE | `/tg/selections/:id/subscribe` | Unsubscribe from a curated selection |
+
+### Profile Subscriptions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/tg/me/profile-subscriptions` | List profiles I'm following |
+| GET | `/tg/profiles/:username/subscribe` | Check if I'm following a profile |
+| POST | `/tg/profiles/:username/subscribe` | Follow a user's profile |
+| DELETE | `/tg/profiles/:username/subscribe` | Unfollow a user's profile |
+
+### Showcase (PRO)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/tg/me/showcase` | Get my showcase data (cover, bio, pinned wishlists, sizing) |
+| PUT | `/tg/me/showcase` | Update showcase settings. Body: `{ showcaseBio?, showcasePinnedIds?, showcasePreferences?, showcaseSizeClothing?, showcaseSizeShoes?, showcaseSizeRing?, showcaseSizeOther?, showcaseBrands?, showcaseChest?, showcaseWaist?, showcaseHips?, showcaseEnabled? }` |
+| PUT | `/tg/me/profile/avatar` | Upload profile avatar (multipart/form-data) |
+| DELETE | `/tg/me/profile/avatar` | Remove profile avatar |
+| PUT | `/tg/me/showcase/cover` | Upload showcase cover photo (multipart/form-data) |
+| DELETE | `/tg/me/showcase/cover` | Remove showcase cover photo |
+
+### Link Management
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/tg/me/active-links` | List all active share links (wishlists + curated selections). Returns `{ wishlists[], selections[] }` |
+
+### Per-wishlist Don't Gift
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/tg/wishlists/:id/dont-gift` | Get per-wishlist don't gift settings |
+| PATCH | `/tg/wishlists/:id/dont-gift` | Update per-wishlist don't gift. Body: `{ dontGiftMode?, dontGiftPresets?, dontGiftCustomItems?, dontGiftComment? }` |
+
+### Referral Program
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/tg/referral/me` | Get my referral code and stats (invited count, in-progress, rewarded days) |
+| GET | `/tg/referral/history` | List my referral attribution history |
+| GET | `/tg/referral/stats` | Aggregated referral stats for godmode dashboard |
+| GET | `/tg/referral/rules-config` | Get public-facing referral rules (reward days, qualification window) |
 
 ---
 

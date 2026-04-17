@@ -1,6 +1,6 @@
 # WishBoard — User Flows
 
-> Source of truth for all user journeys. Last updated: 2026-04-10 · Branch: main
+> Source of truth for all user journeys. Last updated: 2026-04-17 · Branch: main
 >
 > This document reflects the product as implemented, not aspirational features.
 
@@ -35,6 +35,13 @@
 25. [Group Gift (Совместный подарок)](#flow-25-group-gift-совместный-подарок)
 26. [Wishlist Categories](#flow-26-wishlist-categories)
 27. [Don't Gift (Не дарить)](#flow-27-dont-gift-не-дарить)
+28. [Secret Reservations](#flow-28-secret-reservations)
+29. [Smart Reservations](#flow-29-smart-reservations)
+30. [Showcase (PRO profile)](#flow-30-showcase-pro-profile)
+31. [Curated Selections](#flow-31-curated-selections)
+32. [Profile Subscriptions](#flow-32-profile-subscriptions)
+33. [Referral Program](#flow-33-referral-program)
+34. [Item Placements (cross-wishlist)](#flow-34-item-placements-cross-wishlist)
 
 ---
 
@@ -967,3 +974,259 @@ This flow manages what happens when a user loses PRO access (subscription expire
 - FREE users do not see the Don't Gift configuration section in settings. The feature is PRO-only.
 - If visibility is toggled off, the Don't Gift block is hidden from guests even if preferences are configured.
 - Don't Gift preferences persist across plan changes but are only visible to guests while the user has an active PRO subscription.
+
+---
+
+## Flow 28: Secret Reservations
+
+**Actor:** Guest viewing a friend's wishlist who wants to reserve an item without revealing their identity to the owner.
+
+**Precondition:** The guest must have the `secret_reservation_unlock` add-on active (24 XTR one-time purchase) or have unlocked it via onboarding.
+
+### Purchase gate
+
+1. Guest opens a friend's wishlist and taps on an item.
+2. On `guest-item-detail`, guest taps the **"Забронировать тайно"** button.
+3. **If not unlocked:** The app navigates to `secret-reservation-paywall`.
+4. App sends `POST /tg/billing/addon/checkout` with `{ skuCode: 'secret_reservation_unlock' }`.
+5. Server generates a Telegram Stars invoice for **24 XTR** (type: permanent).
+6. User completes payment via Telegram Stars. App calls `POST /tg/billing/addon/sync` to activate the add-on.
+
+### Reservation
+
+7. After the add-on is active, the guest confirms the secret reservation.
+8. App sends the reservation request with a secret flag.
+9. **On success:** The item is marked as reserved. The **owner sees the item is reserved but does NOT see who reserved it** — only that a secret reservation is in place.
+10. The guest's reservation appears in **My secret reservations**, accessible from the profile screen or settings.
+
+### Managing a secret reservation (`secret-reservation-detail`)
+
+11. Guest opens their secret reservation detail view.
+12. Available actions:
+    - **Cancel** — releases the item back to available. Owner receives a notification that the reservation was cancelled (no identity revealed).
+    - **Acknowledge item updates** — if the owner edits the item (price, title, etc.), the guest can acknowledge the change.
+    - **Promote to public reservation** — converts the secret reservation into a normal (named) reservation; the guest's display name becomes visible to the owner.
+
+**Edge cases:**
+- The owner never learns the identity of the secret reserver unless the guest explicitly promotes to a public reservation.
+- If the item is deleted or archived while secretly reserved, the guest sees `item-unavailable` on next open.
+- Only one secret reservation per item per guest is allowed; attempting a second shows an informational message.
+
+---
+
+## Flow 29: Smart Reservations
+
+**Actor:** Wishlist owner who wants reservations to auto-expire if not followed through; guests who make time-limited reservations.
+
+**Precondition:** The `smart_reservations_unlock` add-on must be active for the specific wishlist (39 XTR per wishlist).
+
+### Setup (owner)
+
+1. Owner opens a wishlist and navigates to its **Settings** menu.
+2. Owner finds the **Smart Reservations** toggle.
+3. **If not unlocked:** A paywall is shown. App sends `POST /tg/billing/addon/checkout` with `{ skuCode: 'smart_reservations_unlock', targetId: wishlistId }`.
+4. Server generates a Telegram Stars invoice for **39 XTR** per wishlist.
+5. After payment, owner calls `POST /tg/billing/addon/sync` and the toggle activates for that wishlist.
+6. Owner configures:
+   - **TTL** (hours) — how long a reservation stays active before auto-release.
+   - **Allow extend** — whether guests may extend their reservation timer.
+   - **Max extensions** — maximum number of times a guest can extend.
+
+### Guest reservation with timer
+
+7. Guest opens a wishlist with Smart Reservations enabled and reserves an item.
+8. The `item-detail` (guest view: `guest-item-detail`) shows **timer info**: time remaining until auto-release.
+9. If the reservation expires: the item is **auto-released** back to available, and the **owner receives a notification**.
+10. If `allowExtend = true` and the guest has not reached `maxExtensions`: the guest can tap **Extend** to reset the timer.
+
+**Edge cases:**
+- TTL is evaluated by a server-side cron; the client displays a countdown based on the server-returned `expiresAt` timestamp.
+- Extensions are tracked per-reservation; exceeding `maxExtensions` disables the extend button.
+- Disabling Smart Reservations on a wishlist does not immediately release existing active timers; they run to completion.
+
+---
+
+## Flow 30: Showcase (PRO profile)
+
+**Actor:** Authenticated PRO user who wants to customize their public profile appearance.
+
+**Precondition:** Active PRO subscription required.
+
+### Entry
+
+1. User opens the **Profile** screen.
+2. User taps **"Настроить витрину"** (Customize showcase).
+3. **If FREE:** A PRO upsell sheet is shown. Flow ends unless user upgrades.
+
+### Editing (`showcase-editor`)
+
+4. User lands on `showcase-editor`, which shows the current showcase state.
+5. Editable fields:
+   - **Cover photo** — upload a banner image displayed at the top of the public profile.
+   - **Bio** — freeform text describing the user.
+   - **Pinned wishlists** — select up to 3 wishlists to feature prominently on the public profile.
+   - **Sizing preferences** — clothing/shoe sizes visible to gift-givers.
+   - **Brand preferences** — preferred brands or stores (free text or chips).
+6. User saves changes. App sends `PATCH /tg/me/showcase` with the updated fields.
+
+### Preview (`showcase-preview`)
+
+7. From `showcase-editor`, user taps **"Preview"** to open `showcase-preview`.
+8. The preview renders exactly how the public profile will look to a visitor — cover photo, bio, pinned wishlists, sizing, brands.
+9. User can return to `showcase-editor` to adjust before publishing.
+
+### Guest view
+
+10. When any user views a public profile via `public-profile`, the showcase data is displayed: cover photo, bio, pinned wishlists, sizing info, brand preferences.
+
+**Edge cases:**
+- If the PRO subscription lapses, the showcase data is retained but no longer displayed to guests until PRO is restored.
+- Cover photo upload uses the same multipart endpoint pattern as item photos.
+
+---
+
+## Flow 31: Curated Selections
+
+**Actor:** Authenticated PRO owner who wants to share a hand-picked subset of items from a wishlist.
+
+**Precondition:** Active PRO subscription required.
+
+### Creating a curated selection
+
+1. Owner opens a **wishlist detail** view.
+2. Owner enters item-selection mode (e.g. long-press or a selection action).
+3. Owner selects the desired items.
+4. Owner taps **"Поделиться подборкой"** (Share selection).
+5. **If FREE:** A PRO upsell sheet is shown.
+6. Owner optionally enters a name for the selection.
+7. App sends `POST /tg/wishlists/:id/curated-selections` with `{ itemIds, name? }`.
+8. Server creates a curated selection record with a unique `token` and returns the share link:
+   ```
+   https://{APP_HOST}/p/{token}
+   ```
+9. Owner copies or shares the link via Telegram.
+
+### Guest access
+
+10. Guest opens `/p/{token}` in a browser or within the app (deep link: `curated_{token}`).
+11. The page/screen shows **only the selected items** from the wishlist — no other items are visible.
+12. Guest can **subscribe** to the curated selection to receive update notifications when items change.
+
+### Link management
+
+13. Owner can view and revoke all active share tokens (wishlists + curated selections) from **Settings → Link Management**.
+14. Revoking a curated selection token immediately makes the `/p/{token}` URL return 404.
+
+**Edge cases:**
+- A curated selection is a snapshot of item IDs; if the owner later deletes an item, it disappears from the selection view.
+- Multiple curated selections can exist for the same wishlist simultaneously.
+- Guests who subscribed to a deactivated selection stop receiving notifications.
+
+---
+
+## Flow 32: Profile Subscriptions
+
+**Actor:** Any authenticated user who wants to follow another user's profile.
+
+### Subscribing
+
+1. User navigates to another user's `public-profile` screen.
+2. User taps the **"Подписаться"** (Subscribe) button.
+3. App sends `POST /tg/profiles/:userId/subscribe`.
+4. **On success:** The profile appears in the **"Профили"** sub-tab within **Settings → Subscriptions**.
+
+### Subscriptions view (Settings)
+
+5. The Subscriptions section in Settings is split into two sub-tabs:
+   - **Wishlists** — wishlists the user follows (existing behavior).
+   - **Profiles** — user profiles the user follows (new).
+6. Each profile entry shows the followed user's avatar, display name, and a link to their public profile.
+
+### Unsubscribing
+
+7. User taps on a followed profile entry (or visits their `public-profile`).
+8. User taps **"Отписаться"** (Unsubscribe).
+9. App sends `DELETE /tg/profiles/:userId/subscribe` (or equivalent).
+10. The profile is removed from the Profiles sub-tab.
+
+**Edge cases:**
+- Subscribing to your own profile is not supported.
+- If the followed user makes their profile private, the entry remains in the list but the profile content is inaccessible.
+
+---
+
+## Flow 33: Referral Program
+
+**Actor:** Authenticated user who wants to invite friends and earn PRO rewards.
+
+> **Current status:** Feature-flagged off globally via `ReferralProgramConfig.enabled = false`. Entry points are rendered but the program is inactive for all users.
+
+### Entry points
+
+- Profile screen banner
+- Post-share banner (shown after sharing a wishlist)
+- Paywall screen (referral CTA)
+- Home screen banner (feature-flagged separately, currently hidden)
+
+### Referral screen (`referral`)
+
+1. User taps any referral entry point and lands on the `referral` screen.
+2. The screen displays:
+   - The user's **unique referral link** (e.g. `https://t.me/{BOT_USERNAME}?start=ref_{code}`).
+   - A **Share** button to send the link via Telegram.
+   - **Stats** showing how many friends have been invited and their qualification status.
+
+### Qualification logic
+
+3. Invitee clicks the referral link and starts the bot (the `ref_{code}` start parameter is captured server-side).
+4. Invitee must meet both conditions within **14 days** of joining:
+   - Create at least one wishlist.
+   - Add at least one item to any wishlist.
+5. When both conditions are met, the invitee's entry is marked as **qualified**.
+6. The inviter receives **30 days of PRO** as a reward (credited automatically by the server).
+
+### Referral history (`referral-history`)
+
+7. User taps "View history" or a history link on the `referral` screen.
+8. `referral-history` shows a list of attribution entries, each with:
+   - Invitee's anonymized identifier (e.g. first name or masked username).
+   - Status: `pending` (joined, not yet qualified) / `qualified` (criteria met) / `rewarded` (PRO credited).
+   - Date of joining and date of qualification (if applicable).
+
+**Edge cases:**
+- The 14-day qualification window starts from the invitee's first bot interaction, not from when the referral link was shared.
+- Self-referral (user uses their own referral link) is rejected server-side.
+- Multiple referrals from the same user stack: each qualified invitee generates a separate 30-day PRO extension.
+- While `enabled = false`, the referral link is visible but qualification and reward processing are paused.
+
+---
+
+## Flow 34: Item Placements (cross-wishlist)
+
+**Actor:** Authenticated owner who wants an item to appear in multiple wishlists simultaneously.
+
+### Adding an item to additional wishlists
+
+1. Owner opens an item (via `item-detail`).
+2. Owner selects the **"Добавить в вишлист"** (Add to wishlist) action from the item menu.
+3. A wishlist picker appears showing all of the owner's wishlists, with the item's current wishlist(s) marked.
+4. Owner selects one or more additional wishlists.
+5. App sends the placement request; server creates `WishlistItemPlacement` junction records linking the item to each selected wishlist.
+6. The item now appears in all placed wishlists.
+
+### Behavior of placed items
+
+- **Changes are reflected everywhere:** editing the item's title, description, price, photo, or priority in any wishlist updates it across all placements.
+- **Reservation state is shared:** if a guest reserves the item from one wishlist, it appears as reserved in all wishlists that contain it.
+- **Removal is per-placement:** removing the item from one wishlist removes only that placement; other wishlists retain the item.
+
+### Removing a placement
+
+7. Owner opens the item in a wishlist where it is placed (but not the "home" wishlist).
+8. Owner selects **"Убрать из вишлиста"** (Remove from this wishlist).
+9. App sends the remove-placement request; only the junction record for that wishlist is deleted. The item itself is not deleted.
+
+**Edge cases:**
+- An item always has at least one home wishlist; removing the last placement deletes the item from the system (or moves it to Drafts, depending on configuration).
+- Item limits are counted per wishlist; placing an item in an additional wishlist counts toward that wishlist's item cap.
+- The `item-detail` screen shows a list of all wishlists the item is currently placed in.

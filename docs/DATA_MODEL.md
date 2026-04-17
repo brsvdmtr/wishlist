@@ -1,8 +1,8 @@
 # Data Model — Wishlist Telegram Mini App
 
-_Last updated: 2026-04-10_
+_Last updated: 2026-04-17_
 
-> **58 models, 31 enums** (PostgreSQL 16, managed by Prisma ORM)
+> **67 models, 35 enums** (PostgreSQL 16, managed by Prisma ORM)
 
 ---
 
@@ -330,6 +330,55 @@ Lifecycle state of a group gift collection.
 | `COMPLETED` | Target reached or organizer closed the collection|
 | `CANCELLED` | Organizer cancelled the collection               |
 
+### `SecretReservationStatus`
+Lifecycle state of a secret reservation (owner cannot see who reserved).
+
+| Value                  | Meaning                                      |
+|------------------------|----------------------------------------------|
+| `ACTIVE`               | Secret reservation is active                 |
+| `CANCELLED`            | Reserver cancelled                           |
+| `FULFILLED`            | Item was purchased by the reserver           |
+| `CONVERTED_TO_PUBLIC`  | Promoted to a public reservation             |
+
+### `ReferralAttributionStatus`
+State of a referral attribution record linking an inviter to an invitee.
+
+| Value                | Meaning                                                              |
+|----------------------|----------------------------------------------------------------------|
+| `ATTRIBUTED`         | Invitee clicked link and entered bot                                 |
+| `PENDING_ACTIVATION` | Waiting for qualifying action (wishlist + item)                      |
+| `QUALIFIED`          | Qualifying action done within window — ready to reward               |
+| `REWARDED`           | Inviter received PRO days — terminal success                         |
+| `REJECTED`           | Auto-rejected (various reasons)                                      |
+| `FRAUD_REVIEW`       | Fraud score crossed threshold, manual review needed                  |
+
+### `ReferralRejectReason`
+Reason for auto-rejecting a referral attribution.
+
+| Value                        | Meaning                                              |
+|------------------------------|------------------------------------------------------|
+| `INVITEE_NOT_NEW_USER`       | Invitee already had an account                       |
+| `INVITEE_HAD_PRIOR_DIALOG`   | Invitee had prior bot interaction                    |
+| `INVITEE_HAD_PRIOR_WISHLIST` | Invitee already had a wishlist                       |
+| `INVITEE_HAD_PRIOR_ITEM`     | Invitee already had an item                          |
+| `INVITEE_ALREADY_ATTRIBUTED` | Invitee was already attributed to another inviter    |
+| `SELF_REFERRAL_DETECTED`     | Inviter and invitee are the same user                |
+| `REWARD_CAP_REACHED`         | Inviter hit monthly or yearly reward cap             |
+| `QUALIFICATION_TIMEOUT`      | Invitee did not qualify within the 14-day window     |
+| `PROGRAM_DISABLED`           | Referral program was disabled                        |
+| `SYSTEM_CONFLICT`            | Internal conflict preventing attribution             |
+| `FRAUD_REJECTED`             | Manual rejection after fraud review                  |
+| `INVITER_BANNED`             | Inviter account is banned                            |
+| `INVITER_DELETED`            | Inviter account was deleted                          |
+
+### `ReferralRewardStatus`
+State of a PRO days reward granted to an inviter.
+
+| Value     | Meaning                   |
+|-----------|---------------------------|
+| `GRANTED` | Reward granted            |
+| `REVOKED` | Reward revoked by admin   |
+
 ---
 
 ## Models
@@ -349,6 +398,7 @@ A registered user, identified primarily by their Telegram account.
 | `updatedAt`      | DateTime  | Yes      | auto    |                                                                    |
 
 | `santaTestMode`  | Boolean   | Yes      | `false` | When `true`, bypasses Santa season restrictions for testing          |
+| `welcomeSent`    | Boolean   | Yes      | `true`  | Tracks whether the welcome /start message was delivered              |
 
 **Relations:**
 - `wishlists[]` → `Wishlist` (owned wishlists)
@@ -415,9 +465,30 @@ Extended preferences and privacy settings for a user. Created lazily on the firs
 | `dontGiftPresets`      | String[]           | Yes      | `[]`         | Preset "don't gift me" categories                                     |
 | `dontGiftCustomItems`  | String[]           | Yes      | `[]`         | Custom free-text "don't gift me" items                                |
 | `dontGiftComment`      | String             | No       | —            | Free-text comment about gift preferences                              |
-| `dontGiftVisible`      | Boolean            | Yes      | `true`       | Whether the "don't gift" section is visible to others                 |
-| `createdAt`            | DateTime           | Yes      | now          |                                                                       |
-| `updatedAt`            | DateTime           | Yes      | auto         |                                                                       |
+| `dontGiftVisible`          | Boolean            | Yes      | `true`       | Whether the "don't gift" section is visible to others                 |
+| `showcaseEnabled`          | Boolean            | Yes      | `false`      | Whether showcase is published                                         |
+| `showcaseCoverUrl`         | String             | No       | —            | Cover photo URL                                                       |
+| `showcaseBio`              | VarChar(180)       | No       | —            | Showcase bio                                                          |
+| `showcasePinnedIds`        | String[]           | Yes      | `[]`         | Pinned wishlist IDs (max 3)                                           |
+| `showcasePreferences`      | VarChar(300)       | No       | —            | Free text preferences                                                 |
+| `showcaseSizeClothing`     | String             | No       | —            | Clothing size                                                         |
+| `showcaseSizeShoes`        | String             | No       | —            | Shoe size                                                             |
+| `showcaseSizeRing`         | String             | No       | —            | Ring size                                                             |
+| `showcaseSizeOther`        | String             | No       | —            | Other size                                                            |
+| `showcaseBrands`           | String[]           | Yes      | `[]`         | Preferred brands                                                      |
+| `showcaseUpdatedAt`        | DateTime           | No       | —            | Last showcase update                                                  |
+| `showcaseChest`            | String             | No       | —            | Chest measurement                                                     |
+| `showcaseWaist`            | String             | No       | —            | Waist measurement                                                     |
+| `showcaseHips`             | String             | No       | —            | Hips measurement                                                      |
+| `referralCode`             | String             | No       | —            | Unique personal referral code                                         |
+| `referralCodeCreatedAt`    | DateTime           | No       | —            | When referral code was created                                        |
+| `referredByUserId`         | String             | No       | —            | User ID of who invited this user                                      |
+| `referredAt`               | DateTime           | No       | —            | When user was attributed to an inviter                                |
+| `firstBotStartAt`          | DateTime           | No       | —            | First /start event timestamp                                          |
+| `firstWishlistAt`          | DateTime           | No       | —            | Timestamp of first wishlist creation                                  |
+| `firstItemAt`              | DateTime           | No       | —            | Timestamp of first item creation                                      |
+| `createdAt`                | DateTime           | Yes      | now          |                                                                       |
+| `updatedAt`                | DateTime           | Yes      | auto         |                                                                       |
 
 ---
 
@@ -442,7 +513,15 @@ An ordered collection of wish items owned by a user.
 | `createdAt`          | DateTime              | Yes      | now          |                                                                                |
 | `updatedAt`          | DateTime              | Yes      | auto         |                                                                                |
 
-| `shareOpenCount`     | Int                   | Yes      | `0`          | Incremented on each `GET /public/share/:token` call                    |
+| `shareOpenCount`          | Int                   | Yes      | `0`          | Incremented on each `GET /public/share/:token` call                    |
+| `dontGiftMode`            | String                | Yes      | `"global"`   | `"global"` / `"custom"` / `"disabled"` — per-wishlist Don't Gift mode  |
+| `dontGiftPresets`         | String[]              | Yes      | `[]`         | Preset categories when mode=custom                                      |
+| `dontGiftCustomItems`     | String[]              | Yes      | `[]`         | Custom items when mode=custom                                           |
+| `dontGiftComment`         | String                | No       | —            | Free-text comment when mode=custom                                      |
+| `smartReservationsEnabled`| Boolean               | Yes      | `false`      | Whether smart reservations (timed auto-release) are active              |
+| `smartResTtlHours`        | Int                   | Yes      | `72`         | Hours until auto-release                                                |
+| `smartResAllowExtend`     | Boolean               | Yes      | `true`       | Whether reservers can extend their reservation                          |
+| `smartResMaxExtensions`   | Int                   | Yes      | `2`          | Max number of extensions per reservation                                |
 
 **Relations:**
 - `owner` → `User`
@@ -539,12 +618,18 @@ Per-reservation metadata for PRO features: private notes, purchased flag, remind
 | `reminderSent`   | Boolean  | Yes      | false   | Whether the reminder has been sent                                  |
 | `active`         | Boolean  | Yes      | true    | false = reservation ended (history)                                 |
 | `endedAt`        | DateTime | No       | —       | When the reservation ended                                          |
-| `endReason`      | String   | No       | —       | `'unreserved'` / `'completed'` / `'archived'`                      |
-| `createdAt`      | DateTime | Yes      | now     |                                                                     |
-| `updatedAt`      | DateTime | Yes      | auto    |                                                                     |
+| `endReason`           | String   | No       | —       | `'unreserved'` / `'completed'` / `'archived'`                       |
+| `isSmartRes`          | Boolean  | Yes      | `false` | Whether this reservation has a smart-res timer                      |
+| `expiresAt`           | DateTime | No       | —       | When this reservation auto-releases (smart res)                     |
+| `extensionCount`      | Int      | Yes      | `0`     | How many times the reservation has been extended                    |
+| `smartResTtlHours`    | Int      | No       | —       | TTL snapshot from wishlist settings at reserve time                 |
+| `smartResAllowExtend` | Boolean  | No       | —       | Allow-extend snapshot from wishlist settings at reserve time        |
+| `smartResMaxExtensions`| Int     | No       | —       | Max-extensions snapshot from wishlist settings at reserve time      |
+| `createdAt`           | DateTime | Yes      | now     |                                                                     |
+| `updatedAt`           | DateTime | Yes      | auto    |                                                                     |
 
 **Unique constraint:** `(itemId, reserverUserId)`
-**Indexes:** `(reserverUserId, active)`, `(reminderAt, reminderSent)`
+**Indexes:** `(reserverUserId, active)`, `(reminderAt, reminderSent)`, `(isSmartRes, active, expiresAt)`
 
 ---
 
@@ -575,7 +660,10 @@ A private message in the thread between an item's owner and the current reserver
 | `text`              | VarChar(300)   | Yes      | —       |                                                                                                     |
 | `reservationEpoch`  | Int            | Yes      | `0`     | Must match `Item.reservationEpoch` to be visible; isolates comments per reservation cycle            |
 | `scheduledDeleteAt` | DateTime       | No       | —       | Set to `now + 30 days` at creation; background job purges after this date                           |
+| `parentCommentId`   | String         | No       | —       | FK → `Comment` (ON DELETE SET NULL). Enables one-level threaded replies                             |
 | `createdAt`         | DateTime       | Yes      | now     |                                                                                                     |
+
+**Index:** `parentCommentId`
 
 ---
 
@@ -1091,6 +1179,146 @@ A chat message within a group gift conversation.
 
 ---
 
+### `WishlistItemPlacement`
+Junction table that allows a single item to appear in multiple wishlists. Enables cross-list item references without duplicating item records.
+
+| Field        | Type     | Required | Default | Notes                                            |
+|--------------|----------|----------|---------|--------------------------------------------------|
+| `id`         | String   | Yes      | cuid    |                                                  |
+| `wishlistId` | String   | Yes      | —       | FK → `Wishlist` (CASCADE delete)                 |
+| `itemId`     | String   | Yes      | —       | FK → `Item` (CASCADE delete)                     |
+| `position`   | Int      | Yes      | `0`     | Sort order within the target wishlist            |
+| `categoryId` | String   | No       | —       | FK → `WishlistCategory` (SET NULL)               |
+| `addedAt`    | DateTime | Yes      | now     |                                                  |
+| `updatedAt`  | DateTime | Yes      | auto    |                                                  |
+
+**Unique constraint:** `(wishlistId, itemId)`
+**Indexes:** `itemId`, `(wishlistId, position)`, `categoryId`
+
+---
+
+### `SecretReservation`
+A reservation where the wishlist owner cannot see who reserved the item. The reserver's identity is hidden from the owner for the duration of the reservation.
+
+| Field                    | Type                      | Required | Default  | Notes                                                    |
+|--------------------------|---------------------------|----------|----------|----------------------------------------------------------|
+| `id`                     | String                    | Yes      | cuid     |                                                          |
+| `itemId`                 | String                    | Yes      | —        | FK → `Item` (CASCADE delete)                             |
+| `reserverUserId`         | String                    | Yes      | —        | FK → `User` (CASCADE delete)                             |
+| `status`                 | `SecretReservationStatus` | Yes      | `ACTIVE` |                                                          |
+| `snapshot`               | JSONB                     | Yes      | —        | Item data snapshot at reservation time                   |
+| `updatesAcknowledgedAt`  | DateTime                  | No       | —        | When reserver last acknowledged item changes             |
+| `note`                   | VarChar(500)              | No       | —        | Private note to self                                     |
+| `createdAt`              | DateTime                  | Yes      | now      |                                                          |
+| `updatedAt`              | DateTime                  | Yes      | auto     |                                                          |
+| `cancelledAt`            | DateTime                  | No       | —        |                                                          |
+| `fulfilledAt`            | DateTime                  | No       | —        |                                                          |
+| `convertedAt`            | DateTime                  | No       | —        | When promoted to a public reservation                    |
+
+**Unique constraint:** `(itemId, reserverUserId)`
+**Indexes:** `(reserverUserId, status)`, `itemId`
+
+---
+
+### `ProfileSubscription`
+A follow relationship where one user subscribes to another user's public profile/showcase.
+
+| Field          | Type     | Required | Default | Notes                                     |
+|----------------|----------|----------|---------|-------------------------------------------|
+| `id`           | String   | Yes      | cuid    |                                           |
+| `subscriberId` | String   | Yes      | —       | FK → `User` (CASCADE delete)              |
+| `targetUserId` | String   | Yes      | —       | FK → `User` (CASCADE delete)              |
+| `createdAt`    | DateTime | Yes      | now     |                                           |
+
+**Unique constraint:** `(subscriberId, targetUserId)`
+**Indexes:** `subscriberId`, `targetUserId`
+
+---
+
+### `CuratedSelection`
+A temporary share link containing a curated subset of items from a wishlist. PRO feature; owner controls expiry and can revoke early.
+
+| Field           | Type         | Required | Default | Notes                                     |
+|-----------------|--------------|----------|---------|-------------------------------------------|
+| `id`            | String       | Yes      | cuid    |                                           |
+| `wishlistId`    | String       | Yes      | —       | FK → `Wishlist` (CASCADE delete)          |
+| `ownerId`       | String       | Yes      | —       | FK → `User` (CASCADE delete)              |
+| `title`         | VarChar(100) | Yes      | —       | Display name                              |
+| `shareToken`    | String       | Yes      | —       | Unique token for public link              |
+| `viewCount`     | Int          | Yes      | `0`     | Total views                               |
+| `deactivatedAt` | DateTime     | No       | —       | When owner revoked the link               |
+| `expiresAt`     | DateTime     | Yes      | —       | Auto-expiry timestamp                     |
+| `createdAt`     | DateTime     | Yes      | now     |                                           |
+
+**Indexes:** `ownerId`, `wishlistId`, `shareToken` (unique), `expiresAt`
+
+---
+
+### `CuratedSelectionItem`
+An item snapshot within a curated selection. Snapshots are taken at creation time; `originalItemId` is nullable to support deleted source items.
+
+| Field               | Type         | Required | Default | Notes                                              |
+|---------------------|--------------|----------|---------|----------------------------------------------------|
+| `id`                | String       | Yes      | cuid    |                                                    |
+| `curatedSelectionId`| String       | Yes      | —       | FK → `CuratedSelection` (CASCADE delete)           |
+| `originalItemId`    | String       | No       | —       | Source item ID (no FK; nullable for deleted items) |
+| `position`          | Int          | Yes      | `0`     |                                                    |
+| `title`             | String       | Yes      | —       | Snapshot                                           |
+| `priceText`         | String       | No       | —       | Snapshot                                           |
+| `currency`          | `Currency`   | Yes      | `RUB`   | Snapshot                                           |
+| `imageUrl`          | String       | No       | —       | Snapshot                                           |
+| `url`               | String       | No       | —       | Snapshot                                           |
+| `description`       | VarChar(500) | No       | —       | Snapshot                                           |
+
+**Index:** `curatedSelectionId`
+
+---
+
+### `CuratedSelectionSubscription`
+A user subscribing to a curated selection to receive updates when the selection changes.
+
+| Field               | Type     | Required | Default | Notes                                         |
+|---------------------|----------|----------|---------|-----------------------------------------------|
+| `id`                | String   | Yes      | cuid    |                                               |
+| `curatedSelectionId`| String   | Yes      | —       | FK → `CuratedSelection` (CASCADE delete)      |
+| `subscriberId`      | String   | Yes      | —       | FK → `User` (CASCADE delete)                  |
+| `createdAt`         | DateTime | Yes      | now     |                                               |
+
+**Unique constraint:** `(curatedSelectionId, subscriberId)`
+**Indexes:** `subscriberId`, `curatedSelectionId`
+
+---
+
+### Referral Models
+
+The referral subsystem enables invite-a-friend PRO rewards. It is gated behind `ReferralProgramConfig.enabled` (default `false`).
+
+### `ReferralAttribution`
+Records the referral relationship between an inviter and invitee. One record per invitee (unique on `invitedUserId`). Tracks qualification state, fraud signals, and program config snapshot.
+
+Key fields: `inviterUserId` (FK → `User`), `invitedUserId` (FK → `User`, unique), `referralCode`, `source`, `status` (`ReferralAttributionStatus`), `windowDeadlineAt` (14-day qualification deadline), `fraudScore`, `ipHash`, `deviceFingerprintHash`, fraud signal JSONB, config snapshot fields.
+
+**Unique constraint:** `invitedUserId`
+**Indexes:** `inviterUserId`, `status`, `windowDeadlineAt`
+
+---
+
+### `ReferralReward`
+Records a PRO days reward granted to an inviter. Idempotent on `idempotencyKey`.
+
+Key fields: `userId` (FK → `User`), `attributionId` (nullable FK → `ReferralAttribution`), `rewardType` (default `"pro_days"`), `rewardValueDays`, `status` (`ReferralRewardStatus`), `grantStrategy`, `previousExpiryAt`, `newExpiryAt`, `grantedAt`, `revokedAt`, `idempotencyKey` (unique).
+
+**Indexes:** `userId`, `attributionId`, `status`
+
+---
+
+### `ReferralProgramConfig`
+Singleton configuration row (`id = "default"`) controlling all referral program parameters. All referral logic reads from this record.
+
+Key fields: `enabled` (default `false`), `rewardDaysInviter` (default `30`), `qualificationWindowDays` (default `14`), `monthlyRewardCap` (default `3`), `yearlyRewardCap` (default `12`), `fraudAutoRejectThreshold` (default `80`), fraud signal weights (JSONB), entry point toggles, notification toggles, `rolloutPercent` (default `10`).
+
+---
+
 ## Entity Relationship Overview
 
 ```
@@ -1101,11 +1329,12 @@ User ─────────────────────────
   │              ├── contains ──► Item                        ││
   │              │                  │                         ││
   │              │                  ├──► ReservationEvent     ││
-  │              │                  ├──► Comment              ││
+  │              │                  ├──► Comment (threaded)   ││
   │              │                  ├──► CommentReadCursor ◄──┤│
   │              │                  ├──► ItemTag              ││
   │              │                  ├──► Hint ◄───────────────┤│
   │              │                  ├──► SantaItemReservation ││
+  │              │                  ├──► SecretReservation ◄──┤│
   │              │                  └──► GroupGift?           ││
   │              │                         │                  ││
   │              │                         ├──► Participant[] ││
@@ -1113,6 +1342,9 @@ User ─────────────────────────
   │              │                                            ││
   │              ├── has ──► WishlistCategory[] ◄── Item      ││
   │              ├── has ──► Tag ◄── ItemTag                  ││
+  │              ├── has ──► CuratedSelection[]               ││
+  │              │              ├──► CuratedSelectionItem[]   ││
+  │              │              └──► CuratedSelectionSubscription[] ◄──┤│
   │              │                                            ││
   │              └── followed by ──► WishlistSubscription ◄───┘│
   │                                     └──► SubscriptionUnread │
@@ -1138,11 +1370,17 @@ User ─────────────────────────
   │                                                             │
   ├── has ──► PromoRedemption ◄── PromoCampaign                 │
   ├── has ──► DegradationState (tracks PRO→FREE transitions)    │
-  └── has ──► LifecycleTouch[] (winback / engagement messaging) │
+  ├── has ──► LifecycleTouch[] (winback / engagement messaging) │
+  ├── follows ──► ProfileSubscription[] (profile follows)       │
+  └── has ──► ReferralAttribution (as invitee, unique)          │
+               └──► ReferralReward[] (PRO days to inviter)      │
+                                                                │
+Item ──► WishlistItemPlacement[] ──► Wishlist (cross-list refs) │
                                                                 │
 SupportSession (standalone, TTL-based routing)                  │
 ServiceHeartbeat (standalone, liveness ping)                    │
 AnalyticsEvent (standalone, god-mode metrics)                   │
+ReferralProgramConfig (singleton config, id="default")          │
 SantaGlobalConfig / SantaSeasonConfig / SantaSeasonalBroadcastLog │
 ```
 
@@ -1183,6 +1421,17 @@ SantaGlobalConfig / SantaSeasonConfig / SantaSeasonalBroadcastLog │
 | GroupGift -> GroupGiftParticipant      | 1 : many         | Participants in a group gift                   |
 | GroupGift -> GroupGiftMessage          | 1 : many         | Chat messages in a group gift                  |
 | User -> GroupGiftParticipant           | 1 : many         | User's group gift participations               |
+| Wishlist × Item → WishlistItemPlacement | many : many    | Allows one item to appear in multiple wishlists |
+| Item → SecretReservation               | 1 : many         | Hidden reservations (unique per item+reserver) |
+| User → SecretReservation               | 1 : many         | Secret reservations made by this user          |
+| User × User → ProfileSubscription      | many : many      | Profile/showcase follow relationships          |
+| Wishlist → CuratedSelection            | 1 : many         | Curated item subsets (PRO feature)             |
+| CuratedSelection → CuratedSelectionItem | 1 : many        | Snapshotted items within a selection           |
+| CuratedSelection → CuratedSelectionSubscription | 1 : many | Subscribers watching a selection             |
+| User → ReferralAttribution (inviter)   | 1 : many         | Referrals sent by this user                    |
+| User → ReferralAttribution (invitee)   | 1 : 0..1         | Unique; one attribution per invitee            |
+| ReferralAttribution → ReferralReward   | 1 : many         | PRO day rewards from successful referrals      |
+| User → ReferralReward                  | 1 : many         | All rewards granted to this user               |
 
 ---
 
@@ -1204,7 +1453,28 @@ SantaGlobalConfig / SantaSeasonConfig / SantaSeasonalBroadcastLog │
 | `GroupGiftParticipant` | `userId`                            | Fetch participations by user                              |
 | `GroupGiftParticipant` | `groupGiftId`                       | Fetch participants for a group gift                       |
 | `GroupGiftMessage` | `(groupGiftId, createdAt)`              | Chronological message listing within a group gift         |
-| `GroupGiftMessage` | `senderUserId`                          | Fetch messages by sender                                  |
+| `GroupGiftMessage`       | `senderUserId`                            | Fetch messages by sender                                  |
+| `ReservationMeta`        | `(isSmartRes, active, expiresAt)`         | Smart-res expiry sweep job                                |
+| `SecretReservation`      | `(reserverUserId, status)`                | Fetch active secret reservations by reserver              |
+| `SecretReservation`      | `itemId`                                  | Fetch secret reservations for an item                     |
+| `WishlistItemPlacement`  | `itemId`                                  | All placements for an item                                |
+| `WishlistItemPlacement`  | `(wishlistId, position)`                  | Ordered item listing via placements                       |
+| `WishlistItemPlacement`  | `categoryId`                              | Placements by category                                    |
+| `ProfileSubscription`    | `subscriberId`                            | Fetch profiles followed by a user                         |
+| `ProfileSubscription`    | `targetUserId`                            | Fetch followers of a profile                              |
+| `CuratedSelection`       | `ownerId`                                 | Fetch selections by owner                                 |
+| `CuratedSelection`       | `wishlistId`                              | Fetch selections for a wishlist                           |
+| `CuratedSelection`       | `shareToken`                              | Public link lookup (unique)                               |
+| `CuratedSelection`       | `expiresAt`                               | Expiry cleanup job                                        |
+| `CuratedSelectionItem`   | `curatedSelectionId`                      | Items within a selection                                  |
+| `CuratedSelectionSubscription` | `subscriberId`                      | Selections a user subscribes to                           |
+| `CuratedSelectionSubscription` | `curatedSelectionId`                | Subscribers of a selection                                |
+| `ReferralAttribution`    | `inviterUserId`                           | Referrals sent by a user                                  |
+| `ReferralAttribution`    | `status`                                  | Filter attributions by status                             |
+| `ReferralAttribution`    | `windowDeadlineAt`                        | Qualification deadline sweep                              |
+| `ReferralReward`         | `userId`                                  | Rewards granted to a user                                 |
+| `ReferralReward`         | `attributionId`                           | Rewards for a specific attribution                        |
+| `ReferralReward`         | `status`                                  | Filter rewards by status                                  |
 
 ---
 
