@@ -586,6 +586,36 @@ type GodStats = {
     };
   };
   sourceBreakdown?: { source: string; count: number }[];
+  referral?: {
+    enabled: boolean;
+    rolloutPercent: number;
+    rewardDays: number;
+    caps: { monthly: number; yearly: number };
+    lifetime: {
+      totalAttributions: number;
+      byStatus: Record<string, number>;
+      rewardedCount: number;
+      totalDaysGranted: number;
+    };
+    rolling7d: {
+      attributions: number;
+      byStatus: Record<string, number>;
+      rewardedCount: number;
+      daysGranted: number;
+    };
+    rolling24h: {
+      attributions: number;
+      byStatus: Record<string, number>;
+    };
+    conversions: {
+      attributed_to_qualified: number;
+      attributed_to_rewarded: number;
+      qualified_to_rewarded: number;
+    };
+    rejectReasons: Record<string, number>;
+    topInviters: { userId: string; telegramId: string | null; name: string | null; rewardedCount: number }[];
+    fraudReviewQueue: number;
+  };
   generatedAt: string;
 };
 
@@ -17738,6 +17768,143 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               <SectionDivider />
 
                               {/* ═══════════════════════════════════════════
+                                  D2. REFERRAL PROGRAM — лайфтайм + 24ч + 7д
+                                  ═══════════════════════════════════════════ */}
+                              {godStats.referral && (() => {
+                                const r = godStats.referral;
+                                const pct1 = (v: number) => `${(v * 100).toFixed(1)}%`;
+                                // Colour the conv rate: high=green, mid=amber, low=red. Shows
+                                // at-a-glance health without reading raw percentages.
+                                const convColor = (v: number) => v >= 0.25 ? '#34C759' : v >= 0.1 ? '#FFB340' : '#FF6B6B';
+                                return (
+                                  <>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                      <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 0.3, textTransform: 'uppercase' }}>Рефералка</span>
+                                      <span style={{
+                                        fontSize: 9, padding: '1px 6px', borderRadius: 4, fontWeight: 700,
+                                        background: r.enabled ? 'rgba(52,199,89,0.15)' : 'rgba(255,107,107,0.15)',
+                                        color: r.enabled ? '#34C759' : '#FF6B6B',
+                                      }}>{r.enabled ? `ON · ${r.rolloutPercent}%` : 'OFF'}</span>
+                                      <span style={{ fontSize: 9, color: C.textMuted, marginLeft: 'auto' }}>
+                                        +{r.rewardDays}д · cap {r.caps.monthly}/мес
+                                      </span>
+                                    </div>
+
+                                    {/* Row 1: Лайфтайм totals */}
+                                    <SectionCard>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                                        <div>
+                                          <div style={{ fontSize: 9, color: C.textMuted }}>Всего привлечений</div>
+                                          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{r.lifetime.totalAttributions}</div>
+                                        </div>
+                                        <div>
+                                          <div style={{ fontSize: 9, color: C.textMuted }}>Засчитано</div>
+                                          <div style={{ fontSize: 15, fontWeight: 700, color: '#34C759', fontVariantNumeric: 'tabular-nums' }}>{r.lifetime.rewardedCount}</div>
+                                        </div>
+                                        <div>
+                                          <div style={{ fontSize: 9, color: C.textMuted }}>Выдано дней</div>
+                                          <div style={{ fontSize: 15, fontWeight: 700, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{r.lifetime.totalDaysGranted}</div>
+                                        </div>
+                                        <div>
+                                          <div style={{ fontSize: 9, color: C.textMuted }}>В очереди фрод</div>
+                                          <div style={{ fontSize: 15, fontWeight: 700, color: r.fraudReviewQueue > 0 ? '#FFB340' : C.textMuted, fontVariantNumeric: 'tabular-nums' }}>{r.fraudReviewQueue}</div>
+                                        </div>
+                                      </div>
+                                    </SectionCard>
+
+                                    {/* Row 2: rolling windows */}
+                                    <SectionCard style={{ marginTop: 4 }}>
+                                      <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 4 }}>За последние 24ч / 7д</div>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                                        <div>
+                                          <div style={{ fontSize: 9, color: C.textMuted }}>24ч · attributions</div>
+                                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{r.rolling24h.attributions}</div>
+                                        </div>
+                                        <div>
+                                          <div style={{ fontSize: 9, color: C.textMuted }}>24ч · rewarded</div>
+                                          <div style={{ fontSize: 13, fontWeight: 600, color: '#34C759', fontVariantNumeric: 'tabular-nums' }}>{r.rolling24h.byStatus.REWARDED}</div>
+                                        </div>
+                                        <div>
+                                          <div style={{ fontSize: 9, color: C.textMuted }}>7д · attributions</div>
+                                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{r.rolling7d.attributions}</div>
+                                        </div>
+                                        <div>
+                                          <div style={{ fontSize: 9, color: C.textMuted }}>7д · rewarded</div>
+                                          <div style={{ fontSize: 13, fontWeight: 600, color: '#34C759', fontVariantNumeric: 'tabular-nums' }}>{r.rolling7d.rewardedCount}</div>
+                                        </div>
+                                      </div>
+                                    </SectionCard>
+
+                                    {/* Row 3: Status breakdown (lifetime) + conversions */}
+                                    <SectionCard style={{ marginTop: 4 }}>
+                                      <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 4 }}>Статусы · лайфтайм</div>
+                                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                                        {[
+                                          { key: 'PENDING_ACTIVATION', label: 'Ожидают', color: '#FFB340' },
+                                          { key: 'QUALIFIED', label: 'Квалиф.', color: C.accent },
+                                          { key: 'REWARDED', label: 'Награда', color: '#34C759' },
+                                          { key: 'REJECTED', label: 'Отклон.', color: '#FF6B6B' },
+                                          { key: 'FRAUD_REVIEW', label: 'Фрод', color: '#FFB340' },
+                                        ].map((s) => (
+                                          <div key={s.key} style={{
+                                            padding: '3px 8px', borderRadius: 6, fontSize: 9, fontWeight: 600,
+                                            background: r.lifetime.byStatus[s.key]! > 0 ? `${s.color}22` : C.surface,
+                                            color: r.lifetime.byStatus[s.key]! > 0 ? s.color : C.textMuted,
+                                            fontVariantNumeric: 'tabular-nums',
+                                          }}>
+                                            {s.label} · <b>{r.lifetime.byStatus[s.key] ?? 0}</b>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 3 }}>Конверсии · лайфтайм</div>
+                                      <div style={{ display: 'flex', gap: 10, fontSize: 10, fontVariantNumeric: 'tabular-nums' }}>
+                                        <span>→ Квал. <b style={{ color: convColor(r.conversions.attributed_to_qualified) }}>{pct1(r.conversions.attributed_to_qualified)}</b></span>
+                                        <span>→ Награда <b style={{ color: convColor(r.conversions.attributed_to_rewarded) }}>{pct1(r.conversions.attributed_to_rewarded)}</b></span>
+                                        <span>Квал.→Нагр. <b style={{ color: convColor(r.conversions.qualified_to_rewarded) }}>{pct1(r.conversions.qualified_to_rewarded)}</b></span>
+                                      </div>
+                                    </SectionCard>
+
+                                    {/* Row 4: Reject reasons (only if any) */}
+                                    {Object.keys(r.rejectReasons).length > 0 && (
+                                      <SectionCard style={{ marginTop: 4 }}>
+                                        <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 4 }}>Причины отклонений · лайфтайм</div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                          {Object.entries(r.rejectReasons)
+                                            .sort((a, b) => b[1] - a[1])
+                                            .map(([reason, count]) => (
+                                              <span key={reason} style={{
+                                                fontSize: 9, padding: '2px 7px', borderRadius: 5, fontWeight: 600,
+                                                background: C.surface, color: C.textSec, fontVariantNumeric: 'tabular-nums',
+                                              }}>
+                                                {reason.replace('INVITEE_', '').replace('_', ' ').toLowerCase()} · <b style={{ color: C.text }}>{count}</b>
+                                              </span>
+                                            ))}
+                                        </div>
+                                      </SectionCard>
+                                    )}
+
+                                    {/* Row 5: Top inviters (only if any) */}
+                                    {r.topInviters.length > 0 && (
+                                      <SectionCard style={{ marginTop: 4 }}>
+                                        <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 4 }}>Топ-инвайтеры · по наградам</div>
+                                        {r.topInviters.map((ti, idx) => (
+                                          <div key={ti.userId} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0', fontSize: 10 }}>
+                                            <span style={{ width: 14, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>{idx + 1}.</span>
+                                            <span style={{ flex: 1, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                              {ti.name ?? (ti.telegramId ? `tg:${ti.telegramId}` : ti.userId.slice(0, 8))}
+                                            </span>
+                                            <span style={{ color: '#34C759', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>+{ti.rewardedCount}</span>
+                                          </div>
+                                        ))}
+                                      </SectionCard>
+                                    )}
+
+                                    <SectionDivider />
+                                  </>
+                                );
+                              })()}
+
+                              {/* ═══════════════════════════════════════════
                                   E. RETENTION / WIN-BACK / DEBUG — collapsed by default
                                   ═══════════════════════════════════════════ */}
                               <CollapsibleBlock
@@ -18328,20 +18495,97 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               const meta = isRewarded && r.reward
                 ? t('referral_event_rewarded_meta', locale, { days: String(r.reward.days), date: fmtDate(r.reward.grantedAt) })
                 : fmtDate(r.attributedAt);
+
+              // ── Pending progress breakdown ───────────────────────────────
+              // For pending attributions, show a concrete checklist of steps
+              // so the inviter knows exactly what their friend still has to
+              // do (and can nudge them with a specific ask). Steps follow the
+              // qualify order: bot start → wishlist → item. First step is
+              // implicit (arrived via ref link = bot start already done).
+              const p = r.progress;
+              const DAY_MS_LOCAL = 86_400_000;
+              const windowEndMs = (() => {
+                // Attribution window = 14 days by default; server puts the
+                // exact deadline in windowDeadlineAt on the row, but history
+                // payload doesn't carry it — derive from attributedAt + config.
+                const attributedMs = new Date(r.attributedAt).getTime();
+                const windowDays = referralRulesConfig?.qualification.windowDays ?? 14;
+                return attributedMs + windowDays * DAY_MS_LOCAL;
+              })();
+              const daysLeft = Math.ceil((windowEndMs - Date.now()) / DAY_MS_LOCAL);
+              const expiresSoonLabel =
+                daysLeft <= 0 ? t('referral_progress_expired', locale)
+                : daysLeft === 0 ? t('referral_progress_expires_today', locale)
+                : t('referral_progress_expires_in', locale, { days: String(daysLeft) });
+              const nextActionHint = !p.firstBotStart
+                ? t('referral_progress_arrived', locale)  // shouldn't happen — bot start marks on /start ref_
+                : !p.firstWishlist ? t('referral_progress_need_wishlist', locale)
+                : !p.firstItem ? t('referral_progress_need_item', locale)
+                : null; // both done — should be QUALIFIED, not pending
+
               return (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 14, marginBottom: 8, borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, borderLeft: `3px solid ${badgeColor}` }}>
-                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: C.textMuted, flexShrink: 0 }}>
-                    {r.invitedDisplayName ? r.invitedDisplayName[0]!.toUpperCase() : '👤'}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
-                      {r.invitedDisplayName ?? title}
+                <div key={r.id} style={{ padding: 14, marginBottom: 8, borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, borderLeft: `3px solid ${badgeColor}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: C.textMuted, flexShrink: 0 }}>
+                      {r.invitedDisplayName ? r.invitedDisplayName[0]!.toUpperCase() : '👤'}
                     </div>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{meta}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                        {r.invitedDisplayName ?? title}
+                      </div>
+                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{meta}</div>
+                    </div>
+                    <div style={{ padding: '4px 9px', borderRadius: 8, fontSize: 11, fontWeight: 700, background: badgeBg, color: badgeColor, flexShrink: 0 }}>
+                      {badgeText}
+                    </div>
                   </div>
-                  <div style={{ padding: '4px 9px', borderRadius: 8, fontSize: 11, fontWeight: 700, background: badgeBg, color: badgeColor, flexShrink: 0 }}>
-                    {badgeText}
-                  </div>
+
+                  {/* Pending-only: per-step checklist + "what's next" hint + deadline */}
+                  {isPending && (
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                      {/* Steps with ticks */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {[
+                          { done: p.firstBotStart, label: t('referral_progress_arrived', locale) },
+                          { done: p.firstWishlist, label: t('referral_progress_need_wishlist', locale) },
+                          { done: p.firstItem, label: t('referral_progress_need_item', locale) },
+                        ].map((step, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{
+                              width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                              background: step.done ? C.greenSoft : C.surface,
+                              border: `1px solid ${step.done ? C.green : C.border}`,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 11, color: step.done ? C.green : 'transparent',
+                              fontWeight: 700,
+                            }}>
+                              {step.done ? '✓' : ''}
+                            </div>
+                            <span style={{
+                              fontSize: 12, lineHeight: 1.3,
+                              color: step.done ? C.textMuted : C.text,
+                              textDecoration: step.done ? 'line-through' : 'none',
+                              flex: 1,
+                            }}>
+                              {step.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* "What's next" hint + deadline */}
+                      {nextActionHint && (
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          gap: 10, marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.border}`,
+                          fontSize: 11, color: C.textMuted,
+                        }}>
+                          <span style={{ color: C.orange, fontWeight: 600 }}>→ {nextActionHint}</span>
+                          <span style={{ flexShrink: 0 }}>{expiresSoonLabel}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

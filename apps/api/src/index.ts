@@ -2209,6 +2209,60 @@ privateRouter.patch(
   }),
 );
 
+// POST /admin/referral/attribution/:id/retry-qualify
+// Manual healer for attributions stuck in PENDING_ACTIVATION despite the
+// invitee meeting the criteria. Scenarios:
+//  • Historical bug where a milestone endpoint didn't fire runReferralProgressHook
+//    (e.g. onboarding create-wishlist before we added the hook).
+//  • Operator manually set firstWishlistAt/firstItemAt to correct a stuck state.
+// Runs the same pipeline as the normal qualify path: tryQualifyAttribution
+// (requires milestones now) + processReward (fraud + cap + grant).
+privateRouter.post(
+  '/admin/referral/attribution/:id/retry-qualify',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id ?? '';
+    if (!id) return res.status(400).json({ error: 'Missing attribution id' });
+    const att = await prisma.referralAttribution.findUnique({
+      where: { id },
+      select: { id: true, invitedUserId: true, inviterUserId: true, status: true },
+    });
+    if (!att) return res.status(404).json({ error: 'Attribution not found' });
+    if (att.status !== 'PENDING_ACTIVATION') {
+      return res.status(409).json({ error: `Attribution not in PENDING_ACTIVATION (current: ${att.status})` });
+    }
+    const qualified = await tryQualifyAttribution(prisma, att.invitedUserId);
+    if (qualified.kind !== 'qualified') {
+      return res.json({ ok: false, qualifyResult: qualified });
+    }
+    trackAnalyticsEvent({
+      event: 'referral.qualified',
+      userId: att.invitedUserId,
+      props: { attributionId: att.id, inviterUserId: att.inviterUserId, source: 'admin_retry' },
+    });
+    const decision = await processReward(prisma, qualified.attributionId);
+    if (decision.kind === 'rewarded') {
+      trackAnalyticsEvent({
+        event: 'referral.rewarded',
+        userId: att.inviterUserId,
+        props: {
+          attributionId: qualified.attributionId,
+          rewardId: decision.rewardId,
+          daysGranted: decision.daysGranted,
+          newExpiryAt: decision.newExpiryAt.toISOString(),
+          source: 'admin_retry',
+        },
+      });
+      trackAnalyticsEvent({
+        event: 'referral.pro_subscription_extended',
+        userId: att.inviterUserId,
+        props: { attributionId: qualified.attributionId, daysGranted: decision.daysGranted, source: 'admin_retry' },
+      });
+      void notifyReferralInviterRewarded(att.inviterUserId, decision.daysGranted);
+    }
+    return res.json({ ok: true, qualifyResult: qualified, rewardResult: decision });
+  }),
+);
+
 // POST /admin/referral/sweep
 // Manual trigger for the expired-attribution sweeper. Cron will typically
 // run this every 15 min via a scheduled job; this endpoint lets an admin
@@ -10781,6 +10835,17 @@ tgRouter.post(
       moved_count: movedCount,
     });
 
+    // Referral: onboarding's create-wishlist goes through a separate code path
+    // from POST /tg/wishlists, so the referral hook wouldn't fire otherwise.
+    // Both markers are applicable here: the wishlist is REGULAR, and if any
+    // onboarding items got attached (template/try-import/catalog), those count
+    // as the user's "first items" — by the time this endpoint returns, both
+    // qualification criteria are met.
+    void runReferralProgressHook(user.id, 'first_wishlist');
+    if (movedCount > 0) {
+      void runReferralProgressHook(user.id, 'first_item');
+    }
+
     return res.status(201).json({
       wishlist: { ...wishlist, itemCount: movedCount, reservedCount: 0 },
       movedCount,
@@ -11393,6 +11458,111 @@ tgRouter.get(
     `;
     const sourceBreakdown = sourceBreakdownRaw.map(r => ({ source: r.source, count: Number(r.count) }));
 
+    // ── Referral program metrics (lifetime + last 7d + last 24h) ──────────
+    // Five panels: config snapshot, lifetime counts by status, rolling
+    // windows (24h / 7d), conversions (attributed → qualified → rewarded),
+    // and top reject reasons. All from indexed columns — no scans.
+    const referralConfig = await loadReferralConfig(prisma);
+    const [
+      refStatusAll,
+      refStatus24h,
+      refStatus7d,
+      refRewardAgg,
+      refRewardAgg7d,
+      refRejectReasons,
+      refTopInviterRows,
+    ] = await Promise.all([
+      prisma.referralAttribution.groupBy({ by: ['status'], _count: { _all: true } }),
+      prisma.referralAttribution.groupBy({
+        by: ['status'], where: { attributedAt: { gte: cut24 } }, _count: { _all: true },
+      }),
+      prisma.referralAttribution.groupBy({
+        by: ['status'], where: { attributedAt: { gte: cut7 } }, _count: { _all: true },
+      }),
+      prisma.referralReward.aggregate({
+        where: { status: 'GRANTED' },
+        _count: { _all: true }, _sum: { rewardValueDays: true },
+      }),
+      prisma.referralReward.aggregate({
+        where: { status: 'GRANTED', grantedAt: { gte: cut7 } },
+        _count: { _all: true }, _sum: { rewardValueDays: true },
+      }),
+      prisma.referralAttribution.groupBy({
+        by: ['rejectReason'],
+        where: { rejectReason: { not: null } },
+        _count: { _all: true },
+      }),
+      // Top-5 inviters by rewarded count (lifetime). Helps spot power-users
+      // and potential outliers for fraud investigation.
+      prisma.$queryRaw<Array<{ inviterUserId: string; count: bigint }>>`
+        SELECT "inviterUserId", COUNT(*)::int AS count
+        FROM "ReferralAttribution"
+        WHERE status = 'REWARDED'
+        GROUP BY "inviterUserId"
+        ORDER BY count DESC
+        LIMIT 5`,
+    ]);
+
+    const fillStatusBuckets = (rows: typeof refStatusAll) => {
+      const b = { ATTRIBUTED: 0, PENDING_ACTIVATION: 0, QUALIFIED: 0, REWARDED: 0, REJECTED: 0, FRAUD_REVIEW: 0 };
+      for (const r of rows) b[r.status] = r._count._all;
+      return b;
+    };
+    const refAll = fillStatusBuckets(refStatusAll);
+    const refDay = fillStatusBuckets(refStatus24h);
+    const refWk = fillStatusBuckets(refStatus7d);
+    const refTotalAttr = Object.values(refAll).reduce((a, b) => a + b, 0);
+    const refReached = refAll.QUALIFIED + refAll.REWARDED;
+
+    // Best-effort resolution of top-inviter telegramIds for the dashboard.
+    const topInviterIds = refTopInviterRows.map(r => r.inviterUserId);
+    const topInviterUsers = topInviterIds.length === 0 ? [] : await prisma.user.findMany({
+      where: { id: { in: topInviterIds } },
+      select: { id: true, telegramId: true, firstName: true, profile: { select: { displayName: true } } },
+    });
+    const topInvitersEnriched = refTopInviterRows.map(r => {
+      const u = topInviterUsers.find(x => x.id === r.inviterUserId);
+      return {
+        userId: r.inviterUserId,
+        telegramId: u?.telegramId ?? null,
+        name: u?.profile?.displayName ?? u?.firstName ?? null,
+        rewardedCount: Number(r.count),
+      };
+    });
+
+    const referralMetrics = {
+      enabled: referralConfig.enabled,
+      rolloutPercent: referralConfig.rolloutPercent,
+      rewardDays: referralConfig.rewardDaysInviter,
+      caps: { monthly: referralConfig.monthlyRewardCap, yearly: referralConfig.yearlyRewardCap },
+      lifetime: {
+        totalAttributions: refTotalAttr,
+        byStatus: refAll,
+        rewardedCount: refRewardAgg._count._all,
+        totalDaysGranted: refRewardAgg._sum.rewardValueDays ?? 0,
+      },
+      rolling7d: {
+        attributions: Object.values(refWk).reduce((a, b) => a + b, 0),
+        byStatus: refWk,
+        rewardedCount: refRewardAgg7d._count._all,
+        daysGranted: refRewardAgg7d._sum.rewardValueDays ?? 0,
+      },
+      rolling24h: {
+        attributions: Object.values(refDay).reduce((a, b) => a + b, 0),
+        byStatus: refDay,
+      },
+      conversions: {
+        attributed_to_qualified: pct(refReached, refTotalAttr),
+        attributed_to_rewarded: pct(refAll.REWARDED, refTotalAttr),
+        qualified_to_rewarded: pct(refAll.REWARDED, refReached),
+      },
+      rejectReasons: Object.fromEntries(
+        refRejectReasons.map(r => [r.rejectReason ?? 'UNKNOWN', r._count._all]),
+      ),
+      topInviters: topInvitersEnriched,
+      fraudReviewQueue: refAll.FRAUD_REVIEW,
+    };
+
     return res.json({
       overview: {
         totalUsers,
@@ -11556,6 +11726,7 @@ tgRouter.get(
         diagnosis: { dbAlerts, eventAlerts },
       },
       ...(sourceBreakdown.length > 0 && { sourceBreakdown }),
+      referral: referralMetrics,
       generatedAt: now.toISOString(),
     });
   }),
