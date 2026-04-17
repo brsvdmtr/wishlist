@@ -1,12 +1,16 @@
-name: Admin Ops (Referral)
+name: Admin Ops
 
-# Manual admin operations for the referral program. Trigger from Actions tab
-# ("Admin Ops (Referral)" → Run workflow → pick action + inputs) when you
-# can't SSH directly (edge-firewall block, travelling, etc.).
+# Manual operations on the Wishlist prod VPS — trigger from the Actions
+# tab (or `gh workflow run admin-ops.yml -f action=<...>`). Designed for
+# situations where the developer IP is edge-firewalled and can't SSH,
+# but any ops action works fine here even when SSH works.
 #
-# Why a workflow instead of a one-off curl? The Actions runner has a
-# stable, non-blocked IP pool into the VPS, and inputs are auditable in
-# the run history.
+# Why a workflow instead of one-off curl? Actions runners have a stable,
+# non-blocked IP pool into the VPS, and every run is audit-logged — so
+# "delete test user" or "run SQL" leaves a trace with who/when/what.
+#
+# SECURITY: only repo admins can workflow_dispatch. The shell/SQL actions
+# run as root on prod — treat them like a live psql session.
 on:
   workflow_dispatch:
     inputs:
@@ -15,29 +19,69 @@ on:
         required: true
         type: choice
         options:
+          # Referral-specific
           - bump-rollout
           - heal-attribution
           - reset-test-data
-          - funnel-snapshot
           - retest-reset
+          - funnel-snapshot
+          # General ops
+          - tail-logs
+          - run-sql
+          - exec-shell
+          - container-status
+      # Referral inputs
       rollout_percent:
-        description: 'Rollout percent (for bump-rollout, 0–100)'
+        description: '[bump-rollout] Rollout percent (0–100)'
         required: false
         default: '100'
         type: string
       attribution_id:
-        description: 'Attribution id (for heal-attribution)'
+        description: '[heal-attribution] Attribution id'
         required: false
         type: string
       test_user_telegram_id:
-        description: 'Test user telegramId (for reset-test-data / retest-reset)'
+        description: '[reset-test-data / retest-reset] Test user telegramId'
         required: false
         default: '8747175307'
         type: string
       inviter_user_id:
-        description: 'Inviter User.id (for retest-reset — rolls back their PRO bonus)'
+        description: '[retest-reset] Inviter User.id (rolls back their PRO bonus)'
         required: false
         default: 'cmlpsrf4e0000ikxja0lu9tuz'
+        type: string
+      # Logs
+      log_service:
+        description: '[tail-logs] Container: api / bot / web / postgres'
+        required: false
+        default: 'api'
+        type: choice
+        options:
+          - api
+          - bot
+          - web
+          - postgres
+      log_lines:
+        description: '[tail-logs] Number of lines'
+        required: false
+        default: '100'
+        type: string
+      log_grep:
+        description: '[tail-logs] Optional grep pattern (egrep, pre-tail)'
+        required: false
+        default: ''
+        type: string
+      # Free-form SQL (runs on the wishlist database)
+      sql_query:
+        description: '[run-sql] SQL query — runs as-is via docker exec psql. Wrap in SELECT for safety.'
+        required: false
+        default: ''
+        type: string
+      # Free-form shell (runs on the VPS as root)
+      shell_command:
+        description: '[exec-shell] Bash command — runs as root on the VPS. Escapes $ as \\$.'
+        required: false
+        default: ''
         type: string
 
 concurrency:
@@ -58,11 +102,16 @@ jobs:
           ATTR_ID: ${{ inputs.attribution_id }}
           TEST_TGID: ${{ inputs.test_user_telegram_id }}
           INVITER_ID: ${{ inputs.inviter_user_id }}
+          LOG_SVC: ${{ inputs.log_service }}
+          LOG_LINES: ${{ inputs.log_lines }}
+          LOG_GREP: ${{ inputs.log_grep }}
+          SQL_QUERY: ${{ inputs.sql_query }}
+          SHELL_CMD: ${{ inputs.shell_command }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          envs: ACTION,ROLLOUT,ATTR_ID,TEST_TGID,INVITER_ID
+          envs: ACTION,ROLLOUT,ATTR_ID,TEST_TGID,INVITER_ID,LOG_SVC,LOG_LINES,LOG_GREP,SQL_QUERY,SHELL_CMD
           script: |
             set -euo pipefail
             source /opt/wishlist/.env
@@ -83,52 +132,33 @@ jobs:
                 ;;
 
               heal-attribution)
-                if [ -z "$ATTR_ID" ]; then
-                  echo "ERROR: attribution_id input is required"
-                  exit 1
-                fi
+                if [ -z "$ATTR_ID" ]; then echo "ERROR: attribution_id input is required"; exit 1; fi
                 echo "=== Current attribution state ==="
                 $PSQL -c "SELECT id, status, \"rejectReason\", \"invitedUserId\" FROM \"ReferralAttribution\" WHERE id='${ATTR_ID}';"
-
                 echo "=== Mark all milestones for invitee (idempotent) ==="
                 $PSQL -c "UPDATE \"UserProfile\" SET \"firstBotStartAt\" = COALESCE(\"firstBotStartAt\", NOW()), \"firstWishlistAt\" = COALESCE(\"firstWishlistAt\", NOW()), \"firstItemAt\" = COALESCE(\"firstItemAt\", NOW()) WHERE \"userId\" = (SELECT \"invitedUserId\" FROM \"ReferralAttribution\" WHERE id='${ATTR_ID}') RETURNING \"firstBotStartAt\", \"firstWishlistAt\", \"firstItemAt\";"
-
                 echo "=== Retry qualify + reward ==="
-                curl -sf -X POST \
-                  -H "X-ADMIN-KEY: $ADMIN_KEY" \
-                  "$API/admin/referral/attribution/${ATTR_ID}/retry-qualify"
+                curl -sf -X POST -H "X-ADMIN-KEY: $ADMIN_KEY" "$API/admin/referral/attribution/${ATTR_ID}/retry-qualify"
                 echo
                 ;;
 
               reset-test-data)
-                if [ -z "$TEST_TGID" ]; then
-                  echo "ERROR: test_user_telegram_id input is required"
-                  exit 1
-                fi
+                if [ -z "$TEST_TGID" ]; then echo "ERROR: test_user_telegram_id input is required"; exit 1; fi
                 echo "=== Delete test user (CASCADE removes attribution) ==="
                 $PSQL -c "DELETE FROM \"User\" WHERE \"telegramId\" = '${TEST_TGID}' RETURNING id;"
-                echo "=== Remaining User records with this telegramId ==="
-                $PSQL -c "SELECT COUNT(*) FROM \"User\" WHERE \"telegramId\" = '${TEST_TGID}';"
+                $PSQL -c "SELECT COUNT(*) AS remaining FROM \"User\" WHERE \"telegramId\" = '${TEST_TGID}';"
                 ;;
 
               retest-reset)
-                # Full reset for a repeat test: delete test user + last reward + roll back inviter's PRO by 30d.
-                # Used when dmitriy wants to test the full flow from scratch.
-                if [ -z "$TEST_TGID" ] || [ -z "$INVITER_ID" ]; then
-                  echo "ERROR: test_user_telegram_id and inviter_user_id are both required"
-                  exit 1
-                fi
+                if [ -z "$TEST_TGID" ] || [ -z "$INVITER_ID" ]; then echo "ERROR: test_user_telegram_id + inviter_user_id required"; exit 1; fi
                 echo "=== Delete test user ==="
                 $PSQL -c "DELETE FROM \"User\" WHERE \"telegramId\" = '${TEST_TGID}' RETURNING id, \"telegramId\";"
-
                 echo "=== Delete latest reward to this inviter ==="
                 $PSQL -c "DELETE FROM \"ReferralReward\" WHERE id = (SELECT id FROM \"ReferralReward\" WHERE \"userId\" = '${INVITER_ID}' ORDER BY \"grantedAt\" DESC LIMIT 1) RETURNING id, \"rewardValueDays\", \"grantedAt\";"
-
-                echo "=== Roll back inviter's PRO by 30 days (only the most-recent extension) ==="
+                echo "=== Roll back inviter's PRO by 30 days (if currently extended) ==="
                 $PSQL -c "UPDATE \"Subscription\" SET \"currentPeriodEnd\" = \"currentPeriodEnd\" - INTERVAL '30 days' WHERE \"userId\" = '${INVITER_ID}' AND \"planCode\" = 'PRO' AND \"currentPeriodEnd\" > NOW() RETURNING id, \"currentPeriodEnd\";"
-
-                echo "=== Post-reset state check ==="
-                $PSQL -c "SELECT COUNT(*) AS remaining_attributions FROM \"ReferralAttribution\" WHERE \"inviterUserId\" = '${INVITER_ID}';"
+                echo "=== Remaining attributions for inviter ==="
+                $PSQL -c "SELECT COUNT(*) FROM \"ReferralAttribution\" WHERE \"inviterUserId\" = '${INVITER_ID}';"
                 ;;
 
               funnel-snapshot)
@@ -138,6 +168,46 @@ jobs:
                 echo "=== Current config ==="
                 curl -sf -H "X-ADMIN-KEY: $ADMIN_KEY" "$API/admin/referral/config" | head -c 2000
                 echo
+                ;;
+
+              tail-logs)
+                # -L = follow links, but docker compose logs already outputs; we want a non-tail snapshot.
+                # No --follow → single shot.
+                CONTAINER="wishlist-prod-${LOG_SVC}-1"
+                echo "=== Last ${LOG_LINES} lines of ${CONTAINER} ==="
+                if [ -n "$LOG_GREP" ]; then
+                  # Pull a wider window then grep; gives us matched lines even if recent ones don't match.
+                  docker logs --tail "$(( LOG_LINES * 5 ))" "$CONTAINER" 2>&1 | grep -E "$LOG_GREP" | tail -n "$LOG_LINES" || true
+                else
+                  docker logs --tail "$LOG_LINES" "$CONTAINER" 2>&1 || true
+                fi
+                ;;
+
+              run-sql)
+                if [ -z "$SQL_QUERY" ]; then echo "ERROR: sql_query input is required"; exit 1; fi
+                echo "=== SQL (as root on wishlist DB) ==="
+                echo "Query: $SQL_QUERY"
+                echo "---"
+                $PSQL -c "$SQL_QUERY"
+                ;;
+
+              exec-shell)
+                if [ -z "$SHELL_CMD" ]; then echo "ERROR: shell_command input is required"; exit 1; fi
+                echo "=== Shell (as root on VPS) ==="
+                echo "Command: $SHELL_CMD"
+                echo "---"
+                eval "$SHELL_CMD"
+                ;;
+
+              container-status)
+                echo "=== Containers ==="
+                docker ps --filter name=wishlist-prod --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+                echo "=== Uptime / load ==="
+                uptime
+                echo "=== Disk ==="
+                df -h / | tail -1
+                echo "=== Memory ==="
+                free -h | head -3
                 ;;
 
               *)
