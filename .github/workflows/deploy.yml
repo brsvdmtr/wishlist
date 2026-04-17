@@ -34,16 +34,65 @@ jobs:
             cd /opt/wishlist
             echo "=== Pull latest ==="
             git fetch origin main
+            PREV_SHA=$(git rev-parse HEAD)
             git reset --hard origin/main
+            NEW_SHA=$(git rev-parse HEAD)
             git log --oneline -3
-            echo "=== Rebuild containers ==="
-            # Rebuild api, bot, web together — shared packages mean any one
-            # of them might need dependency changes from the others. Memory
-            # limit prevents the build from OOM'ing on a 2GB VPS.
-            docker compose -f docker-compose.prod.yml build \
-              --memory 768m api bot web
-            echo "=== Restart with new images ==="
-            docker compose -f docker-compose.prod.yml up -d api bot web
+
+            echo "=== Detect changed services ==="
+            # Only rebuild images whose source actually changed — rebuilding
+            # all three on a 2GB VPS causes transient 502s as containers get
+            # recreated under memory pressure. Changed-service list drives
+            # both `build` and `up -d`.
+            #
+            # Path → service mapping:
+            #   apps/api/**, packages/db/**, packages/shared/**, pnpm-lock.yaml,
+            #   Dockerfile.api   → api
+            #   apps/bot/**, packages/db/**, packages/shared/**, pnpm-lock.yaml,
+            #   Dockerfile.bot   → bot
+            #   apps/web/**, packages/shared/**, pnpm-lock.yaml,
+            #   Dockerfile.web   → web
+            #   docker-compose.prod.yml → all three (compose spec itself changed)
+            #   .github/**              → none (CI-only change)
+            CHANGED=$(git diff --name-only "$PREV_SHA" "$NEW_SHA" || echo "")
+            echo "Changed files:"
+            echo "$CHANGED"
+
+            SERVICES=""
+            if echo "$CHANGED" | grep -qE '^docker-compose\.prod\.yml$'; then
+              SERVICES="api bot web"
+            else
+              if echo "$CHANGED" | grep -qE '^(apps/api/|packages/(db|shared)/|pnpm-lock\.yaml$|Dockerfile\.api$)'; then
+                SERVICES="$SERVICES api"
+              fi
+              if echo "$CHANGED" | grep -qE '^(apps/bot/|packages/(db|shared)/|pnpm-lock\.yaml$|Dockerfile\.bot$)'; then
+                SERVICES="$SERVICES bot"
+              fi
+              if echo "$CHANGED" | grep -qE '^(apps/web/|packages/shared/|pnpm-lock\.yaml$|Dockerfile\.web$)'; then
+                SERVICES="$SERVICES web"
+              fi
+            fi
+
+            # Dedupe (packages/db/** matches both api+bot patterns above).
+            SERVICES=$(echo "$SERVICES" | tr ' ' '\n' | sort -u | tr '\n' ' ' | xargs || true)
+
+            if [ -z "$SERVICES" ]; then
+              echo "=== No service-level changes (probably CI/docs-only). Skipping rebuild. ==="
+              echo "=== Container status ==="
+              docker ps --filter name=wishlist-prod --format '{{.Names}}\t{{.Status}}'
+              echo "=== Deploy OK (no-op) ==="
+              exit 0
+            fi
+
+            echo "=== Rebuilding services: $SERVICES ==="
+            # Build sequentially (default) not in parallel — parallel build of
+            # 3 Node.js images OOM'd the 2GB VPS, knocking api/web offline
+            # for several minutes. Memory limit + serial keeps RAM under
+            # 1.5GB during build.
+            docker compose -f docker-compose.prod.yml build --memory 768m $SERVICES
+            echo "=== Restart changed services with new images ==="
+            docker compose -f docker-compose.prod.yml up -d $SERVICES
+
             echo "=== Wait for services ==="
             sleep 15
             echo "=== Health check ==="
@@ -53,4 +102,4 @@ jobs:
             echo "=== Failed migrations (expect 0) ==="
             docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -At -c \
               "SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;"
-            echo "=== Deploy OK ==="
+            echo "=== Deploy OK (rebuilt: $SERVICES) ==="
