@@ -33,7 +33,7 @@ import {
 import logger from './logger';
 import pinoHttp from 'pino-http';
 import { parseUrl, validateUrl } from './url-parser.js';
-import { t, detectLocale, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, getOnboardingMeta, type OnboardingMeta, type OnboardingVariant, type AcquisitionPath, type CatalogTemplate, getCatalogForSegment, deriveMarketBucket, isSupportedImportRegion, type MarketBucket, MARKET_BUCKET_LABELS } from '@wishlist/shared';
+import { t, detectLocale, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, getOnboardingMeta, type OnboardingMeta, type OnboardingVariant, type AcquisitionPath, type CatalogTemplate, getCatalogForSegment, deriveMarketBucket, isSupportedImportRegion, type MarketBucket, MARKET_BUCKET_LABELS, ANALYTICS_EVENTS } from '@wishlist/shared';
 
 // Prefer app-local .env when running from repo root (pnpm dev),
 // but also support running from within apps/api (pnpm -C apps/api dev).
@@ -2643,21 +2643,11 @@ function trackEvent(event: string, userId?: string, props?: Record<string, unkno
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Product analytics event helper ──────────────────────────────────────────
-const ANALYTICS_EVENTS_SET = new Set([
-  'bot.start_received', 'miniapp.open_attempt', 'miniapp.tg_context_detected',
-  'miniapp.initdata_present', 'miniapp.bootstrap_started', 'miniapp.bootstrap_succeeded',
-  'miniapp.bootstrap_failed', 'miniapp.first_rendered', 'miniapp.boot_timeout',
-  'miniapp.fatal_render_error', 'wishlist.created', 'wishlist.deleted', 'wish.created',
-  'wish.edited', 'wish.deleted', 'wish.completed',
-  'import.started', 'import.succeeded', 'import.failed',
-  'import.bot_started', 'import.bot_succeeded', 'import.bot_failed',
-  'guest.view_opened', 'reservation.succeeded', 'reservation.cancelled',
-  'share.token_generated', 'subscription.cancelled', 'payment.pre_checkout_rejected',
-  'showcase.editor_opened', 'showcase.cover_uploaded', 'showcase.cover_removed',
-  'showcase.saved', 'showcase.published', 'showcase.preview_opened',
-  'showcase.share_clicked', 'showcase.paywall_viewed', 'showcase.upgrade_clicked',
-  'public_profile.viewed', 'public_profile.wishlist_opened',
-]);
+// Allowlist is sourced from @wishlist/shared so API + frontend + any other
+// consumer stay in sync. Adding a new event: add it to packages/shared/src/
+// analyticsEvents.ts and rebuild shared. Events not in this set are silently
+// dropped — gate intentionally keeps the AnalyticsEvent table schemaful.
+const ANALYTICS_EVENTS_SET = new Set<string>(ANALYTICS_EVENTS);
 
 function trackAnalyticsEvent(params: {
   event: string;
