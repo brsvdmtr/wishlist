@@ -30,6 +30,10 @@ on:
           - run-sql
           - exec-shell
           - container-status
+          - health-check
+          - restart-service
+          - resolve-migration
+          - edit-env-var
       # Referral inputs
       rollout_percent:
         description: '[bump-rollout] Rollout percent (0–100)'
@@ -83,6 +87,33 @@ on:
         required: false
         default: ''
         type: string
+      # Restart a specific container without rebuild
+      restart_target:
+        description: '[restart-service] Container to restart (no rebuild)'
+        required: false
+        default: 'api'
+        type: choice
+        options:
+          - api
+          - bot
+          - web
+      # Prisma: resolve a failed migration by marking it applied
+      migration_name:
+        description: '[resolve-migration] Migration dir name (e.g. 20260425000000_add_referral_program)'
+        required: false
+        default: ''
+        type: string
+      # .env editor
+      env_key:
+        description: '[edit-env-var] Name of env var in /opt/wishlist/.env'
+        required: false
+        default: ''
+        type: string
+      env_value:
+        description: '[edit-env-var] New value (leave blank to delete the var)'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: admin-ops
@@ -107,11 +138,15 @@ jobs:
           LOG_GREP: ${{ inputs.log_grep }}
           SQL_QUERY: ${{ inputs.sql_query }}
           SHELL_CMD: ${{ inputs.shell_command }}
+          RESTART_TARGET: ${{ inputs.restart_target }}
+          MIGRATION_NAME: ${{ inputs.migration_name }}
+          ENV_KEY: ${{ inputs.env_key }}
+          ENV_VALUE: ${{ inputs.env_value }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          envs: ACTION,ROLLOUT,ATTR_ID,TEST_TGID,INVITER_ID,LOG_SVC,LOG_LINES,LOG_GREP,SQL_QUERY,SHELL_CMD
+          envs: ACTION,ROLLOUT,ATTR_ID,TEST_TGID,INVITER_ID,LOG_SVC,LOG_LINES,LOG_GREP,SQL_QUERY,SHELL_CMD,RESTART_TARGET,MIGRATION_NAME,ENV_KEY,ENV_VALUE
           script: |
             set -euo pipefail
             source /opt/wishlist/.env
@@ -208,6 +243,77 @@ jobs:
                 df -h / | tail -1
                 echo "=== Memory ==="
                 free -h | head -3
+                ;;
+
+              health-check)
+                # Post-deploy 6-point health check from CLAUDE.md. Run this after
+                # any risky change to catch regressions that show up only under
+                # real-traffic conditions.
+                echo "=== 1. Failed migrations (expect 0 rows) ==="
+                $PSQL -c "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;"
+                echo "=== 2. API /health ==="
+                curl -sf "$API/health" && echo
+                echo "=== 3. Containers ==="
+                docker ps --filter name=wishlist-prod --format '{{.Names}} {{.Status}}'
+                echo "=== 4. Bot heartbeat (updatedAt should be recent) ==="
+                $PSQL -c "SELECT * FROM \"ServiceHeartbeat\" ORDER BY \"updatedAt\" DESC LIMIT 1;"
+                echo "=== 5. Last lifecycle touch (should be < 2 days ago) ==="
+                $PSQL -c "SELECT MAX(\"sentAt\") as last_lifecycle_touch FROM \"LifecycleTouch\";"
+                echo "=== 6. Error events spike (last 24h) ==="
+                $PSQL -c "SELECT event, COUNT(*) FROM \"AnalyticsEvent\" WHERE event LIKE 'error:%' AND \"createdAt\" >= NOW() - INTERVAL '1 day' GROUP BY event ORDER BY count DESC;"
+                ;;
+
+              restart-service)
+                # Restart a single container WITHOUT rebuilding the image. Useful
+                # when you just need a fresh process (env var edit, Telegram API
+                # reconnect after IPv6 blip, in-memory cache reset) without the
+                # 3-5 min cost of a full rebuild deploy.
+                if [ -z "$RESTART_TARGET" ]; then echo "ERROR: restart_target input is required"; exit 1; fi
+                CONTAINER="wishlist-prod-${RESTART_TARGET}-1"
+                echo "=== Restart ${CONTAINER} ==="
+                docker restart "$CONTAINER"
+                sleep 5
+                docker ps --filter "name=${CONTAINER}" --format '{{.Names}} {{.Status}}'
+                ;;
+
+              resolve-migration)
+                # Marks a failed migration as applied. Use when a migration
+                # errored mid-apply (disk full / OOM during CREATE INDEX) but
+                # you've manually confirmed the schema is correct. CLAUDE.md
+                # references this exact command for post-deploy recovery.
+                if [ -z "$MIGRATION_NAME" ]; then echo "ERROR: migration_name input is required"; exit 1; fi
+                echo "=== Resolve migration: ${MIGRATION_NAME} ==="
+                docker exec wishlist-prod-api-1 /app/packages/db/node_modules/.bin/prisma migrate resolve \
+                  --applied "${MIGRATION_NAME}" \
+                  --schema=/app/packages/db/prisma/schema.prisma
+                echo "=== Post-resolve: failed migrations (expect 0) ==="
+                $PSQL -c "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;"
+                ;;
+
+              edit-env-var)
+                # Non-interactive editor for /opt/wishlist/.env. Idempotent:
+                # replaces existing line matching KEY=... or appends if absent.
+                # Empty value deletes the line. Requires container restart to
+                # pick up the change — remind the operator in the output.
+                if [ -z "$ENV_KEY" ]; then echo "ERROR: env_key input is required"; exit 1; fi
+                ENV_FILE="/opt/wishlist/.env"
+                # Shell escape for use in sed replacement
+                ESCAPED=$(printf '%s\n' "$ENV_VALUE" | sed -e 's/[\/&]/\\&/g')
+                if [ -z "$ENV_VALUE" ]; then
+                  echo "=== Delete ${ENV_KEY} from .env ==="
+                  sed -i.bak "/^${ENV_KEY}=/d" "$ENV_FILE"
+                else
+                  echo "=== Set ${ENV_KEY}=<value> in .env ==="
+                  if grep -q "^${ENV_KEY}=" "$ENV_FILE"; then
+                    sed -i.bak "s/^${ENV_KEY}=.*/${ENV_KEY}=${ESCAPED}/" "$ENV_FILE"
+                  else
+                    echo "${ENV_KEY}=${ENV_VALUE}" >> "$ENV_FILE"
+                  fi
+                fi
+                echo "=== Current value (tail) ==="
+                grep "^${ENV_KEY}=" "$ENV_FILE" | sed 's/=.*/=***/' || echo "(not set)"
+                echo "=== IMPORTANT: restart affected containers to pick up the change ==="
+                echo "Run admin-ops again with action=restart-service + restart_target=<api|bot|web>"
                 ;;
 
               *)
