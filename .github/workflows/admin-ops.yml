@@ -34,6 +34,9 @@ on:
           - restart-service
           - resolve-migration
           - edit-env-var
+          - download-file
+          - upload-file
+          - watch-logs
       # Referral inputs
       rollout_percent:
         description: '[bump-rollout] Rollout percent (0–100)'
@@ -114,6 +117,23 @@ on:
         required: false
         default: ''
         type: string
+      # File ops
+      file_path:
+        description: '[download-file / upload-file] Absolute path on server (e.g. /opt/wishlist/.env)'
+        required: false
+        default: ''
+        type: string
+      file_content_b64:
+        description: '[upload-file] Base64-encoded file content'
+        required: false
+        default: ''
+        type: string
+      # Live log follow (time-capped)
+      watch_duration_sec:
+        description: '[watch-logs] How long to stream (seconds, max 300)'
+        required: false
+        default: '60'
+        type: string
 
 concurrency:
   group: admin-ops
@@ -142,11 +162,14 @@ jobs:
           MIGRATION_NAME: ${{ inputs.migration_name }}
           ENV_KEY: ${{ inputs.env_key }}
           ENV_VALUE: ${{ inputs.env_value }}
+          FILE_PATH: ${{ inputs.file_path }}
+          FILE_CONTENT_B64: ${{ inputs.file_content_b64 }}
+          WATCH_DURATION: ${{ inputs.watch_duration_sec }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          envs: ACTION,ROLLOUT,ATTR_ID,TEST_TGID,INVITER_ID,LOG_SVC,LOG_LINES,LOG_GREP,SQL_QUERY,SHELL_CMD,RESTART_TARGET,MIGRATION_NAME,ENV_KEY,ENV_VALUE
+          envs: ACTION,ROLLOUT,ATTR_ID,TEST_TGID,INVITER_ID,LOG_SVC,LOG_LINES,LOG_GREP,SQL_QUERY,SHELL_CMD,RESTART_TARGET,MIGRATION_NAME,ENV_KEY,ENV_VALUE,FILE_PATH,FILE_CONTENT_B64,WATCH_DURATION
           script: |
             set -euo pipefail
             source /opt/wishlist/.env
@@ -314,6 +337,70 @@ jobs:
                 grep "^${ENV_KEY}=" "$ENV_FILE" | sed 's/=.*/=***/' || echo "(not set)"
                 echo "=== IMPORTANT: restart affected containers to pick up the change ==="
                 echo "Run admin-ops again with action=restart-service + restart_target=<api|bot|web>"
+                ;;
+
+              download-file)
+                # Read ANY file from the server. Output is base64 for safety
+                # (binary-clean, newline-safe, quote-safe). Decode with
+                # `base64 -d` locally. Prints size + path + content markers
+                # for easy parsing in workflow logs.
+                if [ -z "$FILE_PATH" ]; then echo "ERROR: file_path input is required"; exit 1; fi
+                if [ ! -f "$FILE_PATH" ] && [ ! -L "$FILE_PATH" ]; then
+                  echo "ERROR: File not found: $FILE_PATH"
+                  exit 1
+                fi
+                SIZE=$(stat -c%s "$FILE_PATH" 2>/dev/null || wc -c <"$FILE_PATH")
+                echo "=== File: $FILE_PATH ($SIZE bytes) ==="
+                echo "=== BEGIN BASE64 ==="
+                base64 -w 0 "$FILE_PATH"
+                echo
+                echo "=== END BASE64 ==="
+                # Also show head if it looks like text (first 512 bytes, printable)
+                if file -b "$FILE_PATH" | grep -qE 'text|ASCII|UTF-8|JSON'; then
+                  echo "=== Preview (first 40 lines) ==="
+                  head -40 "$FILE_PATH"
+                fi
+                ;;
+
+              upload-file)
+                # Write an arbitrary file onto the server. Content is passed
+                # base64-encoded for safety (binary-clean, newline-safe).
+                # Creates parent dir if missing. Preserves mode 0644.
+                if [ -z "$FILE_PATH" ]; then echo "ERROR: file_path input is required"; exit 1; fi
+                if [ -z "$FILE_CONTENT_B64" ]; then echo "ERROR: file_content_b64 input is required"; exit 1; fi
+                DIR=$(dirname "$FILE_PATH")
+                mkdir -p "$DIR"
+                # Backup if file exists
+                if [ -f "$FILE_PATH" ]; then
+                  cp "$FILE_PATH" "${FILE_PATH}.bak.$(date +%s)"
+                  echo "=== Backed up existing file to ${FILE_PATH}.bak.<ts> ==="
+                fi
+                # Decode + write atomically via temp file
+                TMP=$(mktemp)
+                echo "$FILE_CONTENT_B64" | base64 -d > "$TMP"
+                mv "$TMP" "$FILE_PATH"
+                chmod 0644 "$FILE_PATH"
+                SIZE=$(stat -c%s "$FILE_PATH")
+                echo "=== Wrote $SIZE bytes to $FILE_PATH ==="
+                echo "=== Preview (first 20 lines) ==="
+                head -20 "$FILE_PATH" 2>/dev/null || echo "(binary file)"
+                ;;
+
+              watch-logs)
+                # Live-follow container logs for N seconds then exit cleanly.
+                # Useful for catching transient errors during a known window
+                # (e.g. right after a restart, during a test). Capped at 300s
+                # (workflow max-runtime is 10min; leaves headroom).
+                CONTAINER="wishlist-prod-${LOG_SVC}-1"
+                DURATION=$(( WATCH_DURATION > 300 ? 300 : WATCH_DURATION ))
+                echo "=== Streaming logs from ${CONTAINER} for ${DURATION}s ==="
+                # Use timeout + follow. Add grep filter if provided.
+                if [ -n "$LOG_GREP" ]; then
+                  timeout "$DURATION" docker logs -f --tail 20 "$CONTAINER" 2>&1 | grep -E "$LOG_GREP" || true
+                else
+                  timeout "$DURATION" docker logs -f --tail 20 "$CONTAINER" 2>&1 || true
+                fi
+                echo "=== Stream ended after ${DURATION}s ==="
                 ;;
 
               *)
