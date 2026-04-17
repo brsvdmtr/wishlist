@@ -10811,10 +10811,15 @@ tgRouter.post(
       select: { id: true, slug: true, title: true, description: true, deadline: true },
     });
 
-    // Collect all onboarding item IDs to move
+    // Collect all onboarding item IDs to move.
+    // Bug history: manualItemIds was missing here, so items the user added
+    // through the /onboarding/manual-add path stayed in SYSTEM_DRAFTS forever
+    // (invisible in the new REGULAR wishlist) — also blocked referral
+    // first_item crediting because move logic drove that hook.
     const itemIdsToMove: string[] = [
       ...(meta.tryImportedItemIds ?? []),
       ...(meta.catalogItemIds ?? []),
+      ...(meta.manualItemIds ?? []),
     ];
 
     // Move items from SYSTEM_DRAFTS to the new wishlist.
