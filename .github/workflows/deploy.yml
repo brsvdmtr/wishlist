@@ -1,0 +1,56 @@
+name: Deploy to Timeweb
+
+# Auto-deploy on push to main — SSHes from GitHub Actions runner into the
+# Wishlist prod VPS and runs git pull + docker rebuild + health check.
+# The runner's IP is outside Timeweb's edge-firewall blocklist (unlike a
+# developer's home IP), so this works even when a dev is SSH-blocked.
+#
+# Manual trigger: workflow_dispatch (Actions tab → "Deploy to Timeweb" → Run)
+# Concurrency: only one deploy at a time; subsequent pushes queue.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            cd /opt/wishlist
+            echo "=== Pull latest ==="
+            git fetch origin main
+            git reset --hard origin/main
+            git log --oneline -3
+            echo "=== Rebuild containers ==="
+            # Rebuild api, bot, web together — shared packages mean any one
+            # of them might need dependency changes from the others. Memory
+            # limit prevents the build from OOM'ing on a 2GB VPS.
+            docker compose -f docker-compose.prod.yml build \
+              --memory 768m api bot web
+            echo "=== Restart with new images ==="
+            docker compose -f docker-compose.prod.yml up -d api bot web
+            echo "=== Wait for services ==="
+            sleep 15
+            echo "=== Health check ==="
+            curl -sf http://localhost:3001/health || { echo "API health check failed"; exit 1; }
+            echo "=== Container status ==="
+            docker ps --filter name=wishlist-prod --format '{{.Names}}\t{{.Status}}'
+            echo "=== Failed migrations (expect 0) ==="
+            docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -At -c \
+              "SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;"
+            echo "=== Deploy OK ==="
