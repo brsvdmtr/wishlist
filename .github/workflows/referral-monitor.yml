@@ -1,0 +1,140 @@
+name: Referral Health Monitor
+
+# Daily referral-program health check. Runs itself at 07:07 UTC (10:07 MSK)
+# without any developer intervention. Posts anomalies to the admin Telegram
+# chat via BOT_TOKEN. Clean days silent (no notification spam).
+#
+# Scope: 7 days from launch (2026-04-17 → 2026-04-24). After that the user
+# can manually disable by removing this file or setting workflow as disabled
+# in GitHub UI. The `on: schedule` trigger has no built-in auto-expiry —
+# unlike CronCreate — so removal is explicit.
+#
+# Also runnable on demand via workflow_dispatch (Actions tab → Run workflow)
+# for ad-hoc health snapshots.
+
+on:
+  schedule:
+    # 07:07 UTC daily = 10:07 MSK. Off-hour (not :00/:30) so we don't pile
+    # onto the minute where every other scheduled workflow in the world fires.
+    - cron: '7 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: referral-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Referral health check
+        id: check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+            source /opt/wishlist/.env
+            PSQL="docker exec wishlist-prod-postgres-1 psql -U wishlist -d wishlist -At"
+            API="http://localhost:3001"
+
+            echo "=== 1. Config ==="
+            CFG=$(curl -sf -H "X-ADMIN-KEY: $ADMIN_KEY" "$API/admin/referral/config")
+            ENABLED=$(echo "$CFG" | python3 -c 'import json,sys;print(json.load(sys.stdin)["config"]["enabled"])')
+            ROLLOUT=$(echo "$CFG" | python3 -c 'import json,sys;print(json.load(sys.stdin)["config"]["rolloutPercent"])')
+            echo "enabled=$ENABLED rolloutPercent=$ROLLOUT"
+
+            echo "=== 2. Attribution totals ==="
+            NEW_24H=$($PSQL -c "SELECT COUNT(*) FROM \"ReferralAttribution\" WHERE \"attributedAt\" >= NOW() - INTERVAL '24 hours';")
+            TOTAL_PENDING=$($PSQL -c "SELECT COUNT(*) FROM \"ReferralAttribution\" WHERE status = 'PENDING_ACTIVATION';")
+            TOTAL_REWARDED=$($PSQL -c "SELECT COUNT(*) FROM \"ReferralAttribution\" WHERE status = 'REWARDED';")
+            TOTAL_REJECTED=$($PSQL -c "SELECT COUNT(*) FROM \"ReferralAttribution\" WHERE status = 'REJECTED';")
+            FRAUD_QUEUE=$($PSQL -c "SELECT COUNT(*) FROM \"ReferralAttribution\" WHERE status = 'FRAUD_REVIEW';")
+            REJECTED_24H=$($PSQL -c "SELECT COUNT(*) FROM \"ReferralAttribution\" WHERE status = 'REJECTED' AND \"attributedAt\" >= NOW() - INTERVAL '24 hours';")
+
+            echo "new_24h=$NEW_24H pending=$TOTAL_PENDING rewarded=$TOTAL_REWARDED rejected=$TOTAL_REJECTED fraud_queue=$FRAUD_QUEUE rejected_24h=$REJECTED_24H"
+
+            echo "=== 3. Critical events in last 24h ==="
+            GRANT_FAILED=$($PSQL -c "SELECT COUNT(*) FROM \"AnalyticsEvent\" WHERE event = 'referral.reward_grant_failed' AND \"createdAt\" >= NOW() - INTERVAL '24 hours';")
+            INVARIANT_VIOLATION=$($PSQL -c "SELECT COUNT(*) FROM \"AnalyticsEvent\" WHERE event = 'referral.attribution_invariant_violation' AND \"createdAt\" >= NOW() - INTERVAL '24 hours';")
+            NOTIF_FAILED=$($PSQL -c "SELECT COUNT(*) FROM \"AnalyticsEvent\" WHERE event = 'referral.bot_notification_delivery_failed' AND \"createdAt\" >= NOW() - INTERVAL '24 hours';")
+            echo "grant_failed=$GRANT_FAILED invariant_violation=$INVARIANT_VIOLATION notification_delivery_failed=$NOTIF_FAILED"
+
+            echo "=== 4. Health ==="
+            FAILED_MIG=$($PSQL -c "SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL;")
+            ERR_SPIKE=$($PSQL -c "SELECT COUNT(*) FROM \"AnalyticsEvent\" WHERE event LIKE 'error:%' AND \"createdAt\" >= NOW() - INTERVAL '24 hours';")
+            HEALTH=$(curl -sf "$API/health" || echo "FAIL")
+            CONTAINERS_UP=$(docker ps --filter name=wishlist-prod --filter status=running -q | wc -l | tr -d ' ')
+            echo "failed_migrations=$FAILED_MIG error_events_24h=$ERR_SPIKE health=$HEALTH containers_up=$CONTAINERS_UP"
+
+            echo "=== 5. Anomaly assessment ==="
+            ANOMALIES=()
+            [ "$ENABLED" != "True" ] && ANOMALIES+=("referral.enabled is $ENABLED (expected true)")
+            [ "$ROLLOUT" -lt 100 ] && ANOMALIES+=("rolloutPercent=$ROLLOUT <100 (intentional? otherwise rollback)")
+            [ "$FRAUD_QUEUE" -gt 0 ] && ANOMALIES+=("$FRAUD_QUEUE attributions in FRAUD_REVIEW — admin action needed")
+            [ "$GRANT_FAILED" -gt 0 ] && ANOMALIES+=("$GRANT_FAILED referral.reward_grant_failed events in 24h")
+            [ "$INVARIANT_VIOLATION" -gt 0 ] && ANOMALIES+=("$INVARIANT_VIOLATION referral.attribution_invariant_violation events in 24h — critical")
+            [ "$FAILED_MIG" -gt 0 ] && ANOMALIES+=("$FAILED_MIG failed DB migrations")
+            [ "$CONTAINERS_UP" -lt 4 ] && ANOMALIES+=("only $CONTAINERS_UP/4 containers up")
+            [ "$ERR_SPIKE" -gt 20 ] && ANOMALIES+=("error:* events in 24h: $ERR_SPIKE (threshold 20)")
+            # Rejection rate >30% only meaningful when new_24h is not trivial
+            if [ "$NEW_24H" -ge 10 ]; then
+              REJ_PCT=$(( REJECTED_24H * 100 / NEW_24H ))
+              [ "$REJ_PCT" -gt 30 ] && ANOMALIES+=("rejection rate last 24h: ${REJ_PCT}% (${REJECTED_24H}/${NEW_24H}) — investigate rejectReason")
+            fi
+
+            # Build report
+            DATE=$(date -u '+%Y-%m-%d')
+            if [ ${#ANOMALIES[@]} -eq 0 ]; then
+              REPORT="✅ Referral OK ${DATE}
+              attrs_total: $(( TOTAL_PENDING + TOTAL_REWARDED + TOTAL_REJECTED + FRAUD_QUEUE ))
+              new_24h: $NEW_24H
+              rewarded: $TOTAL_REWARDED
+              rejected: $TOTAL_REJECTED
+              fraud_queue: $FRAUD_QUEUE"
+              STATUS="clean"
+            else
+              REPORT="🔴 Referral anomalies ${DATE}"$'\n'
+              for a in "${ANOMALIES[@]}"; do REPORT+="• $a"$'\n'; done
+              REPORT+=$'\n'"stats: new_24h=$NEW_24H rewarded=$TOTAL_REWARDED rejected=$TOTAL_REJECTED fraud=$FRAUD_QUEUE"
+              STATUS="anomalies"
+            fi
+
+            echo "=== REPORT ==="
+            echo "$REPORT"
+
+            # Save to step outputs (multi-line escaping)
+            {
+              echo "status=$STATUS"
+              echo "report<<REPORT_EOF"
+              echo "$REPORT"
+              echo "REPORT_EOF"
+            } >> "$GITHUB_OUTPUT"
+
+            # Fire Telegram alert ONLY on anomalies — clean days stay quiet.
+            if [ "$STATUS" = "anomalies" ] && [ -n "${ADMIN_ALERT_CHAT_IDS:-}" ] && [ -n "${BOT_TOKEN:-}" ]; then
+              echo "=== Sending Telegram alert to ADMIN_ALERT_CHAT_IDS ==="
+              for chat_id in $(echo "$ADMIN_ALERT_CHAT_IDS" | tr ',' ' '); do
+                curl -sf -X POST \
+                  "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+                  -d "chat_id=${chat_id}" \
+                  --data-urlencode "text=$REPORT" \
+                  --data-urlencode "parse_mode=HTML" \
+                  -o /dev/null && echo "sent to $chat_id" || echo "send failed for $chat_id"
+              done
+            fi
+
+      - name: Surface report to workflow summary
+        if: always()
+        run: |
+          echo "### Referral daily health check" >> "$GITHUB_STEP_SUMMARY"
+          echo "Status: **${{ steps.check.outputs.status || 'unknown' }}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.check.outputs.report || 'No report — step may have failed' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
