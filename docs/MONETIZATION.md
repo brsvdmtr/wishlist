@@ -316,7 +316,7 @@ One-time purchases via Telegram Stars. Defined in `ONE_TIME_SKUS` constant in `a
 | `reservation_pro_unlock` | 50 | permanent | Unlock reservation PRO features (purchase status tracking, notes, reminders, history) |
 | `group_gift_unlock` | 79 | permanent | Unlock ability to create group gift collections. Not included in PRO subscription |
 | `secret_reservation_unlock` | 24 | permanent | Unlock secret reservations — reserve an item without the owner seeing who reserved it |
-| `smart_reservations_unlock` | 39 | permanent | Per-wishlist: enable time-limited reservations with auto-release and reminders (targetId required) |
+| `smart_reservations_unlock` | 15 | permanent | Per-wishlist: enable time-limited reservations with auto-release and reminders (targetId required) |
 
 ### Add-on Caps (`ADDON_CAPS`)
 
@@ -423,9 +423,9 @@ One-time unlock (24 XTR). Available to all users (FREE and PRO) as an add-on.
 
 ## 16. Smart Reservations Monetization
 
-Per-wishlist unlock (39 XTR each). Available to all users as an add-on.
+Per-wishlist unlock (15 XTR each). Available to all users as an add-on.
 
-- **Price**: 39 Telegram Stars per wishlist (permanent, per-wishlist)
+- **Price**: 15 Telegram Stars per wishlist (permanent, per-wishlist)
 - **SKU**: `smart_reservations_unlock`
 - **Access**: Add-on only — not included in PRO subscription. `targetId` (wishlist ID) is required at checkout.
 - **Gate**: `hasSmartReservations(wishlistId)` — checks for `UserAddOn(addonType='smart_reservations_unlock' AND targetId=wishlistId)`

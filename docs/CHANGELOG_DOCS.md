@@ -8,11 +8,11 @@
 
 **7 docs updated** to reflect changes from ~50 commits (April 10–17):
 
-- **CURRENT_PRODUCT_STATE.md** — added 13 new features, updated counts (67 models / 35 enums / 54 screens / 14 SKUs)
+- **CURRENT_PRODUCT_STATE.md** — added 13 new features, updated counts (67 models / 35 enums / 58 screens / 14 SKUs)
 - **DATA_MODEL.md** — added 9 new models, 4 new enums, new fields on User/UserProfile/Wishlist/ReservationMeta/Comment
 - **API_REFERENCE.md** — added ~40 new endpoints (showcase, curated selections, secret reservations, item placements, referral, profile subscriptions, don't gift per-wishlist, link management)
-- **MONETIZATION.md** — added 2 new SKUs (secret_reservation_unlock 24 XTR, smart_reservations_unlock 39 XTR), 14 total
-- **FRONTEND_MAP.md** — added 8 new screens (gift-notes-onboarding, showcase-editor, showcase-preview, referral, referral-history, secret-reservation-detail, secret-reservation-paywall, item-unavailable), 54 total
+- **MONETIZATION.md** — added 2 new SKUs (secret_reservation_unlock 24 XTR, smart_reservations_unlock 15 XTR), 14 total
+- **FRONTEND_MAP.md** — added 12 new screens (gift-notes-onboarding, first-share-prompt, curated-view, link-management, guest-link-expired, item-unavailable, secret-reservation-detail, secret-reservation-paywall, showcase-editor, showcase-preview, referral, referral-history), 58 total
 - **USER_FLOWS.md** — added 7 new flows (Secret Reservations, Smart Reservations, Showcase, Curated Selections, Profile Subscriptions, Referral Program, Item Placements), 34 total
 - **CHANGELOG_DOCS.md** — this entry
 

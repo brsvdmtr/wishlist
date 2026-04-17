@@ -41,7 +41,7 @@ See also: `docs/MONETIZATION.md`
 ## Scale
 
 - **67 Prisma models**, **35 enums**
-- **54 screens** in the Mini App
+- **58 screens** in the Mini App
 - **14 add-on SKUs**
 
 ## Lifecycle & Retention

@@ -41,7 +41,7 @@ packages/shared/src/
 
 `MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook. There is no routing library. ~300 `useState` calls and 240+ in the main component.
 
-### Screen Type Union (54 screens)
+### Screen Type Union (58 screens)
 
 ```typescript
 type Screen =
@@ -73,10 +73,12 @@ type Screen =
   | 'showcase-editor' | 'showcase-preview'
   // Secret Reservations (2)
   | 'secret-reservation-detail' | 'secret-reservation-paywall'
+  // Curated Selections (2)
+  | 'curated-view' | 'guest-link-expired'
   // Referral (2)
   | 'referral' | 'referral-history'
-  // Utility (1)
-  | 'item-unavailable'
+  // Utility (3)
+  | 'item-unavailable' | 'first-share-prompt' | 'link-management'
   // Settings extras (4)
   | 'faq' | 'changelog' | 'legal' | 'legal-doc';
 ```
@@ -193,20 +195,31 @@ Add-on (`secret_reservation_unlock`, 24 XTR one-time) that lets guests reserve a
 | 45 | `secret-reservation-detail` | Detail view for a secret reservation: shows item snapshot, reservation status, option to cancel (releases item), acknowledge item updates, or promote to a public reservation |
 | 46 | `secret-reservation-paywall` | Paywall for the Secret Reservation add-on (24 XTR one-time purchase). Shown when a guest attempts a secret reserve without the unlock |
 
+#### Curated Selections (2)
+
+PRO feature — share a curated subset of wishlist items via a temporary token link (`часть вишлиста`).
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 47 | `curated-view` | In-app guest view of a curated selection (by deep link or tap from notification). Shows title, owner, selected items snapshot, subscribe button |
+| 48 | `guest-link-expired` | Shown when a guest opens an expired or revoked curated selection link. Explains the link is no longer active |
+
 #### Referral (2)
 
 Invite-a-friend screen and attribution history. Feature-flagged off by default (`ReferralProgramConfig.enabled = false`).
 
 | # | Screen | Description |
 |---|--------|-------------|
-| 47 | `referral` | Invite-a-friend screen: displays unique referral link, share button, and stats on invited friends |
-| 48 | `referral-history` | History of referral attributions and their reward status (pending / qualified / rewarded) |
+| 49 | `referral` | Invite-a-friend screen: displays unique referral link, share button, and stats on invited friends |
+| 50 | `referral-history` | History of referral attributions and their reward status (pending / qualified / rewarded) |
 
-#### Utility (1)
+#### Utility (3)
 
 | # | Screen | Description |
 |---|--------|-------------|
-| 49 | `item-unavailable` | Shown when a wish item is no longer accessible (deleted, moved, or access revoked). Provides a back-navigation option |
+| 51 | `item-unavailable` | Shown when a wish item is no longer accessible (deleted, moved, or access revoked). Provides a back-navigation option |
+| 52 | `first-share-prompt` | Celebratory prompt shown after user's first real wish is added — invites them to share the wishlist with friends |
+| 53 | `link-management` | Settings subscreen listing all active share links (wishlists + curated selections) with per-link detail sheets, view counters, and revoke controls |
 
 #### Settings Extras (4)
 
@@ -214,16 +227,16 @@ Additional screens accessible from the settings area.
 
 | # | Screen | Description |
 |---|--------|-------------|
-| 50 | `faq` | FAQ screen in settings |
-| 51 | `changelog` | Release notes / What's New |
-| 52 | `legal` | Legal documents list |
-| 53 | `legal-doc` | Single legal document view |
+| 54 | `faq` | FAQ screen in settings |
+| 55 | `changelog` | Release notes / What's New |
+| 56 | `legal` | Legal documents list |
+| 57 | `legal-doc` | Single legal document view |
 
 #### Onboarding Extra (1)
 
 | # | Screen | Description |
 |---|--------|-------------|
-| 54 | `onboarding-manual` | Manual item creation in onboarding |
+| 58 | `onboarding-manual` | Manual item creation in onboarding |
 
 ---
 
