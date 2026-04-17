@@ -747,11 +747,25 @@ if (!token) {
                 },
               });
               if (inviterUser?.telegramChatId) {
-                const inviterLocale = resolveEffectiveLocale(
-                  inviterUser.profile
-                    ? { languageMode: inviterUser.profile.languageMode as any, manualLanguage: inviterUser.profile.manualLanguage as any }
-                    : null,
-                );
+                // Resolve inviter's locale. For MANUAL mode → use stored pick.
+                // For AUTO mode → query Telegram getChat for live language_code
+                // (without it, normalizeLocale(undefined) defaults to 'en',
+                // which is wrong for our mostly-Russian user base).
+                // Fallback 'ru' if getChat fails.
+                let inviterLocale: Locale = 'ru';
+                const prof = inviterUser.profile;
+                if (prof?.languageMode === 'manual' && prof.manualLanguage) {
+                  inviterLocale = prof.manualLanguage as Locale;
+                } else {
+                  try {
+                    const chat = await bot.telegram.getChat(inviterUser.telegramChatId) as { language_code?: string };
+                    if (chat.language_code) {
+                      inviterLocale = detectLocale(chat.language_code);
+                    }
+                  } catch (err) {
+                    logger.warn({ err, inviterUserId: inviter.inviterUserId }, '[referral] getChat for locale resolution failed — defaulting to ru');
+                  }
+                }
                 // Only emit `sent` analytics if Telegram actually accepted
                 // the message — otherwise bot_notification_sent counts drift
                 // above real deliveries and the dashboard lies.

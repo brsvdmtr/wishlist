@@ -2726,6 +2726,41 @@ function trackAnalyticsEvent(params: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Resolve a user's effective locale for proactive notifications (i.e. when
+ * there's no `ctx.from.language_code` available because the user isn't the
+ * active actor). Resolution order:
+ *   1. profile.manualLanguage (MANUAL mode) — user's explicit pick
+ *   2. Telegram getChat language_code (AUTO mode) — authoritative live value
+ *   3. 'ru' fallback — matches our user base (overwhelmingly Russian)
+ *
+ * Without (2), AUTO-mode users got English messages because normalizeLocale(undefined)
+ * returns 'en' — wrong for our base. One getChat call per notification is a
+ * tolerable cost for a rare event (referral rewards).
+ */
+async function resolveProactiveUserLocale(
+  profile: { languageMode: string; manualLanguage: string | null } | null,
+  telegramChatId: string | null,
+): Promise<Locale> {
+  if (profile?.languageMode === 'manual' && profile.manualLanguage) {
+    return profile.manualLanguage as Locale;
+  }
+  if (telegramChatId && process.env.BOT_TOKEN) {
+    try {
+      const resp = await fetch(
+        `https://api.telegram.org/bot${process.env.BOT_TOKEN}/getChat?chat_id=${telegramChatId}`,
+      );
+      const data = await resp.json() as { ok: boolean; result?: { language_code?: string } };
+      if (data.ok && data.result?.language_code) {
+        return normalizeLocale(data.result.language_code);
+      }
+    } catch {
+      // fall through to fallback
+    }
+  }
+  return 'ru';
+}
+
+/**
  * Best-effort Telegram notification to an inviter that their referral reward
  * was granted. Resolves the inviter's locale from their UserProfile so the
  * message is in their preferred language. Uses the shared sendTgBotMessage
@@ -2743,11 +2778,7 @@ async function notifyReferralInviterRewarded(inviterUserId: string, daysGranted:
       },
     });
     if (!user?.telegramChatId) return;
-    const locale = resolveEffectiveLocale(
-      user.profile
-        ? { languageMode: user.profile.languageMode as any, manualLanguage: user.profile.manualLanguage as any }
-        : null,
-    );
+    const locale = await resolveProactiveUserLocale(user.profile, user.telegramChatId);
     const text = t('bot_referral_inviter_rewarded', locale, { days: String(daysGranted) });
     // sendTgBotMessage returns false on any Telegram-side failure (API error,
     // network, bot blocked). Emit the matching event so delivery dashboards

@@ -8229,16 +8229,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   // Referral celebration — one-time modal for freshly-attributed invitees.
   // Fires ONLY on 'pending' status: attribution recorded, invitee hasn't yet
-  // created wishlist+item. Copy says "when you create a wishlist, your friend
-  // gets PRO" — which is accurate only in this state.
-  //
-  // We don't celebrate 'success' (friend already rewarded — modal copy would
-  // be wrong) or 'not_credited' (rejected — would be confusing to invitee).
-  // Uses localStorage to avoid showing twice. Silent-fail on storage errors.
+  // created wishlist+item. Suppressed during onboarding screens — otherwise
+  // the modal fights the onboarding flow and its CTA becomes redundant (user
+  // is about to create a wishlist anyway). Fires on first non-onboarding
+  // screen visit. Uses localStorage to avoid repeating.
   useEffect(() => {
     if (!referralMe?.attributedByInviter) return;
     const status = referralMe.attributedByInviter.status;
+    // Only celebrate 'pending' — 'success' means friend already got PRO (body
+    // copy would be wrong) and 'not_credited' means rejected (confusing).
     if (status !== 'pending') return;
+    // Don't show during boot / onboarding — wait for the user to land on a
+    // real screen (my-wishlists is the landing screen after onboarding).
+    const onboardingOrBoot = screen === 'loading' || screen === 'error' || screen === 'maintenance' || screen.startsWith('onboarding-');
+    if (onboardingOrBoot) return;
     let seen = false;
     try { seen = window.localStorage.getItem('referral_celebration_seen_v1') === '1'; } catch {}
     if (seen) return;
@@ -8248,7 +8252,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       trackEvent('referral.celebration_viewed', { status });
     }, 1200);
     return () => clearTimeout(timer);
-  }, [referralMe, trackEvent]);
+  }, [referralMe, trackEvent, screen]);
 
   // Refresh subscription unread badge when app returns to foreground
   useEffect(() => {
@@ -17790,25 +17794,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                       </span>
                                     </div>
 
-                                    {/* Row 1: Лайфтайм totals */}
+                                    {/* Row 1: Лайфтайм totals — labels reserve fixed height so numbers
+                                        line up even when one label wraps to 2 lines */}
                                     <SectionCard>
                                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-                                        <div>
-                                          <div style={{ fontSize: 9, color: C.textMuted }}>Всего привлечений</div>
-                                          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{r.lifetime.totalAttributions}</div>
-                                        </div>
-                                        <div>
-                                          <div style={{ fontSize: 9, color: C.textMuted }}>Засчитано</div>
-                                          <div style={{ fontSize: 15, fontWeight: 700, color: '#34C759', fontVariantNumeric: 'tabular-nums' }}>{r.lifetime.rewardedCount}</div>
-                                        </div>
-                                        <div>
-                                          <div style={{ fontSize: 9, color: C.textMuted }}>Выдано дней</div>
-                                          <div style={{ fontSize: 15, fontWeight: 700, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{r.lifetime.totalDaysGranted}</div>
-                                        </div>
-                                        <div>
-                                          <div style={{ fontSize: 9, color: C.textMuted }}>В очереди фрод</div>
-                                          <div style={{ fontSize: 15, fontWeight: 700, color: r.fraudReviewQueue > 0 ? '#FFB340' : C.textMuted, fontVariantNumeric: 'tabular-nums' }}>{r.fraudReviewQueue}</div>
-                                        </div>
+                                        {[
+                                          { label: 'Всего\nпривлечений', value: r.lifetime.totalAttributions, color: C.text },
+                                          { label: 'Засчитано', value: r.lifetime.rewardedCount, color: '#34C759' },
+                                          { label: 'Выдано\nдней', value: r.lifetime.totalDaysGranted, color: C.accent },
+                                          { label: 'В очереди\nфрод', value: r.fraudReviewQueue, color: r.fraudReviewQueue > 0 ? '#FFB340' : C.textMuted },
+                                        ].map((cell, i) => (
+                                          <div key={i} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                                            <div style={{ fontSize: 9, color: C.textMuted, minHeight: 24, lineHeight: 1.2, whiteSpace: 'pre-line' }}>{cell.label}</div>
+                                            <div style={{ fontSize: 15, fontWeight: 700, color: cell.color, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{cell.value}</div>
+                                          </div>
+                                        ))}
                                       </div>
                                     </SectionCard>
 
@@ -17816,22 +17816,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                     <SectionCard style={{ marginTop: 4 }}>
                                       <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 4 }}>За последние 24ч / 7д</div>
                                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-                                        <div>
-                                          <div style={{ fontSize: 9, color: C.textMuted }}>24ч · attributions</div>
-                                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{r.rolling24h.attributions}</div>
-                                        </div>
-                                        <div>
-                                          <div style={{ fontSize: 9, color: C.textMuted }}>24ч · rewarded</div>
-                                          <div style={{ fontSize: 13, fontWeight: 600, color: '#34C759', fontVariantNumeric: 'tabular-nums' }}>{r.rolling24h.byStatus.REWARDED}</div>
-                                        </div>
-                                        <div>
-                                          <div style={{ fontSize: 9, color: C.textMuted }}>7д · attributions</div>
-                                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{r.rolling7d.attributions}</div>
-                                        </div>
-                                        <div>
-                                          <div style={{ fontSize: 9, color: C.textMuted }}>7д · rewarded</div>
-                                          <div style={{ fontSize: 13, fontWeight: 600, color: '#34C759', fontVariantNumeric: 'tabular-nums' }}>{r.rolling7d.rewardedCount}</div>
-                                        </div>
+                                        {[
+                                          { label: '24ч · attributions', value: r.rolling24h.attributions, color: C.text },
+                                          { label: '24ч · rewarded', value: r.rolling24h.byStatus.REWARDED, color: '#34C759' },
+                                          { label: '7д · attributions', value: r.rolling7d.attributions, color: C.text },
+                                          { label: '7д · rewarded', value: r.rolling7d.rewardedCount, color: '#34C759' },
+                                        ].map((cell, i) => (
+                                          <div key={i} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                                            <div style={{ fontSize: 9, color: C.textMuted, minHeight: 12, lineHeight: 1.2 }}>{cell.label}</div>
+                                            <div style={{ fontSize: 13, fontWeight: 600, color: cell.color, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{cell.value}</div>
+                                          </div>
+                                        ))}
                                       </div>
                                     </SectionCard>
 
@@ -23427,10 +23422,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
             <button
               onClick={() => {
+                // Dismiss-only — no navigation. The user is already on a real
+                // screen (celebration is suppressed during onboarding, so by
+                // the time it fires they're on my-wishlists or similar).
+                // Forcing a nav would yank them out of wherever they're
+                // exploring the app.
                 trackEvent('referral.celebration_cta_clicked');
                 setReferralCelebrationOpen(false);
                 try { window.localStorage.setItem('referral_celebration_seen_v1', '1'); } catch {}
-                setScreen('my-wishlists');
               }}
               style={{
                 width: '100%', padding: '14px 20px', borderRadius: 14,
