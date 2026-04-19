@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, SectionHeader } from '@wishlist/ui';
+import { Banner, Button, Card, SectionHeader } from '@wishlist/ui';
 import { initSentry, captureException } from './sentry';
 
 // ═══════════════════════════════════════════════════════
@@ -2291,13 +2291,12 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel 
   const isPurchased = item.status === 'purchased';
   const isReserved = item.status === 'reserved';
   return (
-    <div
+    <Card
+      variant="interactive"
       onClick={() => onTap(item)}
       style={{
-        background: C.card, borderRadius: 14, padding: 16,
         display: 'flex', gap: 14, alignItems: 'flex-start',
-        border: `1px solid ${C.border}`, opacity: isPurchased ? 0.5 : 1,
-        cursor: 'pointer',
+        opacity: isPurchased ? 0.5 : 1,
         WebkitTapHighlightColor: 'transparent',
       }}
     >
@@ -2353,7 +2352,7 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel 
           </div>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -2362,13 +2361,13 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
   const isReserved = item.status === 'reserved';
   const isReservedByMe = isReserved && !!myActorHash && item.reservedByActorHash === myActorHash;
   return (
-    <div
+    <Card
+      variant="interactive"
       onClick={() => onTap(item)}
       style={{
-        background: C.card, borderRadius: 14, padding: 16,
         display: 'flex', gap: 14, alignItems: 'flex-start',
-        border: `1px solid ${C.border}`, opacity: isPurchased ? 0.5 : 1,
-        cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+        opacity: isPurchased ? 0.5 : 1,
+        WebkitTapHighlightColor: 'transparent',
       }}
     >
       <ItemThumb item={item} />
@@ -2419,7 +2418,7 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
           {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>{t('status_gifted', locale)}</span>}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -20343,7 +20342,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               )}
 
               {ideas.map((idea: any, i: number) => (
-                <div key={idea.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', marginBottom: 8, opacity: idea.status === 'DONE' ? 0.5 : 1, animation: `fadeIn 0.3s ease ${0.05 + i * 0.03}s both` }}>
+                <Card key={idea.id} variant="default" style={{ padding: '14px 16px', marginBottom: 8, opacity: idea.status === 'DONE' ? 0.5 : 1, animation: `fadeIn 0.3s ease ${0.05 + i * 0.03}s both` }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: C.text, textDecoration: idea.status === 'DONE' ? 'line-through' : 'none', lineHeight: 1.35, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{idea.text}</div>
                   {idea.link && <div style={{ fontSize: 12, color: C.accent, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{idea.link}</div>}
                   {idea.price != null && <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginTop: 4 }}>{idea.price.toLocaleString()} {idea.currency ?? '₽'}</div>}
@@ -20355,7 +20354,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}`, { method: 'DELETE' }); await refreshOccasion(); }}
                       style={{ fontSize: 11, fontWeight: 600, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✕</button>
                   </div>
-                </div>
+                </Card>
               ))}
 
               {/* Add idea CTA — fixed at bottom */}
@@ -28856,7 +28855,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {sc.preferences && (
                   <div style={scSectionStyle}>
                     <div style={scSectionTitleStyle}>💡 {t('showcase_public_preferences_title', locale)}</div>
-                    <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{sc.preferences}</div>
+                    <Card variant="default" style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{sc.preferences}</Card>
                   </div>
                 )}
 
@@ -29161,9 +29160,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {hasShowcase && showcase?.preferences && (
                   <div style={scSectionStyle}>
                     <div style={scSectionTitleStyle}>💡 {t('showcase_public_preferences_title', locale)}</div>
-                    <div style={{ background: C.card, borderRadius: 14, padding: 16, border: `1px solid ${C.border}`, fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                    <Card variant="default" style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                       {showcase.preferences}
-                    </div>
+                    </Card>
                   </div>
                 )}
 

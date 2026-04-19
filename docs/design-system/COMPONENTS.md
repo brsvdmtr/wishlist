@@ -108,30 +108,43 @@ on click by default. Override with `haptic={null}` (disable) or
 
 ## Card
 
+**Status (per-variant):** `default` / `interactive` are **`canonical`**
+(promoted 2026-04-19, 5 live call-sites). `flat` / `current` / `hero`
+are `provisional`.
+
 ```tsx
 <Card>{/* default: radius 14, padding 16, bordered */}</Card>
-<Card variant="flat" padding="lg">Flat surface</Card>
-<Card variant="interactive" onClick={open}>Clickable</Card>
-<Card variant="current">Active / selected state</Card>
-<Card variant="hero" padding="lg">Paywall hero with gradient + deep shadow</Card>
+<Card variant="interactive" onClick={open}>Clickable item card</Card>
+<Card variant="flat" padding="lg">Flat surface (provisional)</Card>
+<Card variant="current">Active / selected state (provisional)</Card>
+<Card variant="hero" padding="lg">Paywall hero (provisional)</Card>
 ```
 
 **Codified in:** all v2 mockups. Hero variant in `v2-paywall.html`;
 current variant in `v2-home-all-tabs.html` (active wishlist).
 
-### Variants (approved)
+### Variants
 
-| Variant | Background | Border | Used for |
-|---------|-----------|--------|----------|
-| `default` | `colors.card` | 1px `colors.border` | Standard content cards |
-| `flat` | `colors.surface` | none | Container-in-container nesting |
-| `interactive` | same as default + cursor | same | Tappable cards (wishlist rows) |
-| `current` | `gradients.accentStateTint` | 1px accent-30% + inset ring | Active / selected state |
-| `hero` | `gradients.paywallHero` | none + `shadows.paywallHero` | Paywall hero, other premium surfaces |
+| Variant | Background | Border | Used for | Status |
+|---------|-----------|--------|----------|--------|
+| `default` | `colors.card` | 1px `colors.border` | Standard content cards | canonical |
+| `interactive` | same as default + cursor + transition | same | Tappable cards (wishlist rows) | canonical |
+| `flat` | `colors.surface` | none | Container-in-container nesting | provisional |
+| `current` | `gradients.accentStateTint` | 1px accent-30% + inset ring | Active / selected state | provisional |
+| `hero` | `gradients.paywallHero` | none + `shadows.paywallHero` | Paywall hero, other premium surfaces | provisional |
 
 ### Padding scale
 
 `none` (0) · `sm` (12) · `md` (16, default) · `lg` (20).
+
+### Anti-patterns
+
+- ❌ `<div style={{ background: C.card, borderRadius: 14, padding: 16, border: ... }}>` in new code — use `<Card>`.
+- ❌ Style overrides of `background`, `border`, `borderRadius` — pick a
+  different variant. Only positional props (`margin`, `opacity`,
+  `animation`, `WebkitTapHighlightColor`) belong in `style`.
+- ❌ Passing `onClick` to `variant="default"` — use `variant="interactive"`
+  so you get cursor + hover transition.
 
 ---
 

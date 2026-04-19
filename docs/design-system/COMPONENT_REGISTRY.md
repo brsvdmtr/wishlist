@@ -70,17 +70,28 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
 
 ### `Card`
 
-- **Status:** `provisional`
+- **Status (per-variant):**
+  - `default` / `interactive` → **`canonical`** (promoted 2026-04-19, 5 call-sites)
+  - `flat` / `current` / `hero` → `provisional`
 - **Implementation:** [packages/ui/src/Card.tsx](../../packages/ui/src/Card.tsx)
 - **Approval source:** all v2 mockups (default/flat/interactive/current);
-  `v2-paywall.html` (hero)
+  `v2-paywall.html` (hero) + [DESIGN_DECISIONS.md#2026-04-19--card-wave-1-adoption--defaultinteractive-variants-promoted-to-canonical](./DESIGN_DECISIONS.md#2026-04-19--card-wave-1-adoption--defaultinteractive-variants-promoted-to-canonical)
 - **Target visual direction:** `matches-approved-mockup`
-- **Can be promoted to canonical:** `not-yet` for full set (hero needs
-  first-migration validation); **`yes` for `default` / `flat` /
-  `interactive` subset** — these can promote independently
-- **Promotion blockers:**
-  - `hero` variant needs first paywall migration
-  - `current` variant adoption count (used only in home-all-tabs so far)
+- **API:** `variant` · `padding` · `style` (unchanged since Phase 1)
+- **Adoption:** 5 call-sites in MiniApp.tsx (`WishItemCardOwner`,
+  `WishItemCardGuest`, gift-notes idea card, showcase preferences × 2).
+- **Promotion blockers (for remaining variants):**
+  - `flat` — no real call-site yet to validate `background: surface`
+    pattern. Also drift: prod has "card bg + no border" pattern that
+    doesn't match either `default` (has border) or `flat` (different bg).
+    Open question in future Card wave.
+  - `current` — visual target codified in mockups but no prod adoption.
+  - `hero` — waits for paywall migration.
+- **Migration notes:** `<div style={{ background: C.card, borderRadius:
+  14, padding: 16, border: '1px solid C.border' }}>` → `<Card variant="default">`.
+  Add `variant="interactive"` + `onClick` for clickable cards. Keep
+  positional style (`marginBottom`, `opacity`, `animation`,
+  `WebkitTapHighlightColor`) via `style` prop.
 
 ### `Sheet`
 
@@ -255,16 +266,16 @@ Status updated 2026-04-19 after North Star approval.
 ### Completed
 - ✅ **`SectionHeader`** — canonical 2026-04-19
 - ✅ **`Banner` neutral tones** (`info` / `success` / `warning` / `danger`) — canonical 2026-04-19
+- ✅ **`Card` default + interactive** — canonical 2026-04-19
 
 ### Next up
-1. **`Card` default / flat / interactive** → split from hero; needs 3+ adoptions
-2. **`Chip`** → after 3+ adoptions
-3. **`Button`** → after Wave-1 MiniApp.tsx migration validates `primary-gradient` + haptic
-4. **`ListRow`** → after state-matrix adoption in real call-sites
-5. **`Card variant="hero"`** → after first paywall migration
-6. **`Banner tone="promo"`** → same (follows paywall migration)
-7. **`Sheet`** → after BottomSheet iOS behavior absorption
-8. **`CounterBadge`, `StatTile`, `AvatarStack`** → after adoption validates APIs
+1. **`Chip`** → after 3+ adoptions
+2. **`Button`** primary/secondary/ghost → after review (gap #1 `primary-gradient-deep` and gap #2 `danger-solid` to resolve separately)
+3. **`ListRow`** → after state-matrix adoption in real call-sites
+4. **`Card flat` / `current`** → after adoption validates in real surfaces
+5. **`Card variant="hero"` / `Banner tone="promo"`** → after paywall migration
+6. **`Sheet`** → after BottomSheet iOS behavior absorption
+7. **`CounterBadge`, `StatTile`, `AvatarStack`** → after adoption validates APIs
 
 ---
 

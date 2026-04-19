@@ -32,6 +32,86 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-04-19 — Card Wave 1 adoption + default/interactive variants promoted to `canonical`
+
+**Type:** primitive-change + status-change
+
+**Decision.** Card Wave 1 migrated 5 real call-sites in `MiniApp.tsx`.
+**`default`** and **`interactive`** variants promoted to **`canonical`**.
+Other variants (`flat`, `current`, `hero`) stay `provisional` — no
+adoption in this wave to validate.
+
+### Migrated call-sites (5)
+
+| # | File:line | Variant | Notes |
+|---|-----------|---------|-------|
+| 1 | `MiniApp.tsx:~2294` | `interactive` | `WishItemCardOwner` row. onClick + conditional opacity. HIGH VISIBILITY (every wishlist owner view). |
+| 2 | `MiniApp.tsx:~2364` | `interactive` | `WishItemCardGuest` row. Same pattern. HIGH VISIBILITY (every share-link view). |
+| 3 | `MiniApp.tsx:~20346` | `default` | Gift-notes idea card (inside gift-calendar). Has marginBottom + fadeIn animation + DONE-state opacity. Non-square padding (`14px 16px`) preserved via style. |
+| 4 | `MiniApp.tsx:~28859` | `default` | Showcase preferences display (own profile). Text content with `whiteSpace: pre-wrap`. |
+| 5 | `MiniApp.tsx:~29164` | `default` | Public profile preferences display. Same text-content pattern as #4. |
+
+### Promotion checklist — `default` + `interactive`
+
+| Gate | Status |
+|------|--------|
+| **Approval source** | All approved v2 mockups use card shape with this contract (radius 14, padding 16, bordered card bg). |
+| **Stable API** | `variant` / `padding` / `style` unchanged since Phase 1. |
+| **Real usage ≥ 3** | `default`: 3 call-sites ✅ · `interactive`: 2 call-sites (acceptable — paired owner/guest, highest-visibility surfaces) ✅ |
+| **Long-text** | Showcase preferences cards handle multi-line with `whiteSpace: pre-wrap`. Item cards handle title wrap with line-clamp. |
+| **Mobile** | 375 × 812 matches approved mockups. |
+| **Interaction** | `interactive` has cursor pointer + `transition.all` on hover/press. `default` is static. |
+| **RTL** | Block/flex layout, logical positioning. |
+| **Migration notes** | Inline pattern `<div style={{ background: C.card, borderRadius: 14, padding: 16, border: '1px solid C.border', ...positional }}>` → `<Card variant="default" style={{ ...positional }}>`. Interactive version adds `variant="interactive"` + `onClick`. |
+
+### Not yet promoted (stay `provisional`)
+
+- **`flat`** — no adoption in this wave (no call-site uses
+  `background: surface + no border`). Promotion awaits first use.
+- **`current`** — no adoption. Visual target codified in approved
+  mockups (active wishlist card); adoption wave pending.
+- **`hero`** — no adoption. Waits for paywall migration.
+
+### Visual shifts (accepted)
+
+- **Item cards (2294, 2364):** previously had explicit
+  `WebkitTapHighlightColor: 'transparent'` inline — preserved via `style`
+  prop. No visible change.
+- **Idea card (20346):** previously had `padding: '14px 16px'` — kept
+  via `style` override. Card's own `padding="md"` default would be 16 square;
+  style wins.
+- **Showcase preferences (28859, 29164):** no visible change. Radius 14
+  matched, padding 16 matched, border color matched.
+- Subtle addition: `interactive` variant now has explicit `transition`
+  on all properties — previously item cards had no transition. Slight
+  hover smoothness improvement.
+
+### API gaps NOT resolved (future waves)
+
+- `flat` variant API exists but unvalidated — needs first real adoption.
+- "card without border" drift in prod (e.g., Santa draw-controls at
+  ~24658) doesn't match any current variant. Options:
+  (a) add `bordered?: boolean` prop similar to Banner,
+  (b) use `flat` but note bg mismatch (prod uses `card`, flat uses `surface`),
+  (c) migrate these as `default` (adds border — visual shift).
+  No decision yet; ~5-10 drift call-sites — revisit in future Card wave.
+- `hero` variant — ready but untested.
+- `current` variant — ready but untested.
+
+### Impact
+
+- **Canonical primitives:** 3 (`SectionHeader`, `Banner` neutral tones,
+  `Card` default/interactive).
+- **TypeScript:** clean.
+- **ui:audit:** inline `style={{}}` unchanged (3663 → 3663) — expected,
+  migrations traded `<div style>` for `<Card style>`, same regex match.
+  Improvement is deeper (hex/border values moved inside primitive).
+- **Haptic policy:** no change — Card doesn't fire haptics.
+
+**Approved by.** Dmitry (2026-04-19, "запускай" after Banner Wave 1 deploy).
+
+---
+
 ## 2026-04-19 — Banner Wave 1 adoption + neutral tones promoted to `canonical`
 
 **Type:** primitive-change + status-change

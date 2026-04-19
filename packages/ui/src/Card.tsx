@@ -2,11 +2,11 @@ import React, { forwardRef, type HTMLAttributes, type CSSProperties, type ReactN
 import { colors, radius, spacingSemantic, transition, shadows, gradients } from '@wishlist/ui-tokens';
 
 /**
- * @status provisional — variants codified in approved v2 mockups.
- * - `default` / `flat` / `interactive`: every v2 mockup
- * - `current`: `v2-home-all-tabs.html` (active wishlist card)
- * - `hero`: `v2-paywall.html` hero (promo gradient + deep shadow)
- * See `docs/design-system/COMPONENT_REGISTRY.md`.
+ * @status per-variant:
+ *   - `default` / `interactive` → **canonical** (2026-04-19, 5 live call-sites)
+ *   - `flat` / `current` / `hero` → `provisional`
+ *
+ * Approval: `DESIGN_DECISIONS.md#2026-04-19--card-wave-1-adoption--defaultinteractive-variants-promoted-to-canonical`.
  */
 export type CardVariant =
   | 'default'
