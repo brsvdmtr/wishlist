@@ -1,0 +1,3647 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Общее желание в нескольких wishlist'ах — Mockups</title>
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --blue: #60A5FA;
+    --blue-soft: rgba(96,165,250,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+    --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font);
+    background: #111;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.4;
+    padding-bottom: 60px;
+  }
+
+  /* Page header */
+  .page-header {
+    padding: 32px 20px 10px;
+    max-width: 860px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .page-title {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+  }
+  .page-subtitle {
+    font-size: 14px;
+    color: var(--text-sec);
+    margin-top: 10px;
+    line-height: 1.55;
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .pill-principle {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 6px 12px;
+    border-radius: 10px;
+    margin-top: 14px;
+  }
+
+  /* Navigation */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(17,17,17,0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-light);
+    padding: 12px 20px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    margin-top: 24px;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-btn {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-sec);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: var(--font);
+    transition: all 0.15s;
+  }
+  .nav-btn:hover { background: rgba(255,255,255,0.04); }
+  .nav-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* Sections */
+  .mockup-section { display: none; padding: 28px 20px 60px; max-width: 1320px; margin: 0 auto; }
+  .mockup-section.active { display: block; }
+
+  .section-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+  .section-subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+    line-height: 1.55;
+    max-width: 740px;
+  }
+
+  .variant-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    margin: 28px 0 12px;
+    padding: 6px 12px;
+    background: var(--accent-soft);
+    border-radius: 8px;
+    display: inline-block;
+  }
+  .variant-label.muted { color: var(--text-sec); background: var(--surface); }
+  .variant-label.green { color: var(--green); background: var(--green-soft); }
+  .variant-label.orange { color: var(--orange); background: var(--orange-soft); }
+  .variant-label.red { color: var(--red); background: var(--red-soft); }
+  .variant-label.blue { color: var(--blue); background: var(--blue-soft); }
+
+  /* Phone grid */
+  .phone-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 380px));
+    gap: 28px;
+    justify-content: flex-start;
+    margin-top: 16px;
+  }
+  .phone-wrap { display: flex; flex-direction: column; }
+  .phone-caption {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-sec);
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .phone-note {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 10px;
+    line-height: 1.55;
+    text-align: center;
+    padding: 0 8px;
+  }
+  .phone-note strong { color: var(--text-sec); }
+
+  /* Phone frame */
+  .phone {
+    background: var(--bg);
+    border-radius: 24px;
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    width: 100%;
+    max-width: 380px;
+    position: relative;
+  }
+  .phone-status {
+    height: 38px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-sec);
+    border-bottom: 1px solid var(--border);
+  }
+  .phone-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .phone-header .back { font-size: 20px; color: var(--accent); line-height: 1; }
+  .phone-header .hdr-title { font-size: 16px; font-weight: 600; flex: 1; }
+  .phone-header .hdr-action { font-size: 13px; color: var(--accent); font-weight: 500; }
+  .phone-header .hdr-close { font-size: 20px; color: var(--text-muted); line-height: 1; }
+  .phone-content {
+    min-height: 640px;
+    overflow-y: auto;
+    padding-bottom: 16px;
+  }
+  .phone-content.short { min-height: auto; }
+
+  /* Buttons */
+  .btn {
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: var(--font);
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.15s;
+    text-decoration: none;
+    width: 100%;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--accent-soft); color: var(--accent); }
+  .btn-ghost { background: transparent; color: var(--text-sec); }
+  .btn-danger { background: var(--red-soft); color: var(--red); }
+  .btn-danger-solid { background: var(--red); color: #fff; }
+  .btn-outline { background: transparent; border: 1px solid var(--border-light); color: var(--text); }
+  .btn-small { padding: 8px 14px; border-radius: 10px; font-size: 12px; width: auto; }
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+  .btn-row .btn { flex: 1; }
+  .btn-sticky-bottom {
+    padding: 14px 16px 16px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+  }
+  .btn-sticky-bottom .btn { flex: 1; }
+
+  /* Chips */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 500;
+    background: var(--surface);
+    color: var(--text-sec);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .chip.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
+  .chip.green { background: var(--green-soft); color: var(--green); border-color: transparent; }
+  .chip.orange { background: var(--orange-soft); color: var(--orange); border-color: transparent; }
+  .chip.blue { background: var(--blue-soft); color: var(--blue); border-color: transparent; }
+  .chip.red { background: var(--red-soft); color: var(--red); border-color: transparent; }
+
+  /* ===== Wish card in list ===== */
+  .wish-card {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: var(--surface);
+    border-radius: 14px;
+    margin: 0 16px 10px;
+    border: 1px solid var(--border);
+    align-items: flex-start;
+    position: relative;
+  }
+  .wish-card .thumb {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    background: var(--card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .wish-card .thumb.gradient-blue { background: linear-gradient(135deg, #5B8DEF, #3B6AD0); }
+  .wish-card .thumb.gradient-pink { background: linear-gradient(135deg, #F472B6, #C084FC); }
+  .wish-card .thumb.gradient-gold { background: linear-gradient(135deg, #FBBF24, #F59E0B); }
+  .wish-card .thumb.gradient-green { background: linear-gradient(135deg, #34D399, #10B981); }
+  .wish-card .thumb.gradient-indigo { background: linear-gradient(135deg, #818CF8, #6366F1); }
+  .wish-card .body { flex: 1; min-width: 0; }
+  .wish-card .title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .wish-card .title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .wish-card .meta-row {
+    font-size: 12px;
+    color: var(--text-sec);
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .wish-card .meta-row .sep { opacity: 0.4; }
+  .wish-card .tags-row {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .wish-card .mini-tag {
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 7px;
+    background: var(--surface-hover);
+    color: var(--text-sec);
+    font-weight: 500;
+  }
+  .wish-card .mini-tag.accent { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .wish-card .mini-tag.green { background: var(--green-soft); color: var(--green); }
+  .wish-card .mini-tag.orange { background: var(--orange-soft); color: var(--orange); }
+  .wish-card .price {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 4px;
+  }
+
+  /* Shared badge variants */
+  .shared-badge-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 2px 6px;
+    border-radius: 6px;
+    letter-spacing: 0.2px;
+  }
+  .shared-badge-corner {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .shared-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 3px 9px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+  .shared-count {
+    font-weight: 700;
+    background: rgba(124,106,255,0.25);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 2px;
+  }
+
+  /* List group */
+  .list-group {
+    background: var(--surface);
+    border-radius: 14px;
+    margin: 12px 16px;
+    overflow: hidden;
+  }
+  .list-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 14px;
+    border-top: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .list-row:first-child { border-top: none; }
+  .list-row .list-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .list-row .list-icon.accent { background: var(--accent-soft); color: var(--accent); }
+  .list-row .list-icon.green { background: var(--green-soft); }
+  .list-row .list-icon.orange { background: var(--orange-soft); color: var(--orange); }
+  .list-row .list-icon.red { background: var(--red-soft); color: var(--red); }
+  .list-row .list-icon.blue { background: var(--blue-soft); color: var(--blue); }
+  .list-row .list-body { flex: 1; min-width: 0; }
+  .list-row .list-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .list-row .list-sub {
+    font-size: 12px;
+    color: var(--text-sec);
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .list-row .list-trail { color: var(--text-muted); font-size: 16px; display: flex; align-items: center; gap: 6px; }
+  .list-row .list-trail.danger { color: var(--red); }
+  .list-row.dim { opacity: 0.55; cursor: not-allowed; }
+
+  /* Sheet / bottom-sheet */
+  .sheet {
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    overflow: hidden;
+  }
+  .sheet-handle {
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    margin: 10px auto 0;
+  }
+  .sheet-title {
+    font-size: 17px;
+    font-weight: 700;
+    text-align: center;
+    padding: 14px 20px 6px;
+  }
+  .sheet-subtitle {
+    font-size: 13px;
+    color: var(--text-sec);
+    text-align: center;
+    padding: 0 20px 14px;
+    line-height: 1.55;
+  }
+  .sheet-subtitle strong { color: var(--text); }
+  .sheet-body { padding: 0 8px 8px; }
+  .sheet-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    margin: 6px auto 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+  }
+  .sheet-icon.accent { background: var(--accent-soft); color: var(--accent); }
+  .sheet-icon.orange { background: var(--orange-soft); color: var(--orange); }
+  .sheet-icon.red { background: var(--red-soft); color: var(--red); }
+  .sheet-icon.green { background: var(--green-soft); color: var(--green); }
+  .sheet-icon.blue { background: var(--blue-soft); color: var(--blue); }
+
+  /* Inputs */
+  .input-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin: 14px 16px 6px;
+    display: block;
+  }
+  .input-field {
+    width: calc(100% - 32px);
+    margin: 0 16px 4px;
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 11px 14px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: var(--font);
+    outline: none;
+    display: block;
+  }
+  textarea.input-field { resize: none; min-height: 60px; line-height: 1.5; }
+  .input-field.with-value { color: var(--text); }
+  .input-help {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin: 4px 16px 0;
+    line-height: 1.45;
+  }
+  .input-help.accent { color: var(--accent); }
+
+  /* Checkbox row (for multi-select wishlists) */
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .check-row:first-child { border-top: none; }
+  .check-row .cx {
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    border: 1.5px solid var(--border-light);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 14px;
+    transition: all 0.15s;
+  }
+  .check-row .cx.on {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .check-row .cx.locked {
+    background: var(--surface-hover);
+    border-color: var(--border-light);
+    color: var(--text-muted);
+  }
+  .check-row .cx.disabled { opacity: 0.4; }
+  .check-row .cr-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .check-row .cr-body { flex: 1; min-width: 0; }
+  .check-row .cr-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .check-row .cr-sub {
+    font-size: 11.5px;
+    color: var(--text-sec);
+    margin-top: 2px;
+  }
+  .check-row .cr-trail {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .check-row.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .check-row .tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+  }
+
+  /* Annotation / callouts */
+  .annotation {
+    background: var(--surface);
+    padding: 12px 14px;
+    border-radius: 12px;
+    border-left: 3px solid var(--accent);
+    font-size: 12.5px;
+    color: var(--text-sec);
+    line-height: 1.55;
+    margin: 0 16px;
+  }
+  .annotation strong { color: var(--text); }
+  .annotation.warn { border-left-color: var(--orange); }
+  .annotation.danger { border-left-color: var(--red); }
+  .annotation.ok { border-left-color: var(--green); }
+  .annotation.info { border-left-color: var(--blue); }
+
+  /* Shared info block (used in edit & card) */
+  .shared-block {
+    margin: 12px 16px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(124,106,255,0.10), rgba(124,106,255,0.02));
+    border: 1px solid rgba(124,106,255,0.22);
+    border-radius: 14px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .shared-block .sb-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .shared-block .sb-body { flex: 1; }
+  .shared-block .sb-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .shared-block .sb-text {
+    font-size: 12.5px;
+    color: var(--text-sec);
+    line-height: 1.55;
+  }
+  .shared-block .sb-link {
+    color: var(--accent);
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Empty states */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+  }
+  .empty-icon {
+    font-size: 52px;
+    margin-bottom: 16px;
+    opacity: 0.9;
+  }
+  .empty-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .empty-desc {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.5;
+    margin-bottom: 20px;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Model diagram */
+  .model-viz {
+    margin: 12px 0 40px;
+    padding: 36px 24px;
+    background: var(--surface);
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .model-wish-node {
+    background: linear-gradient(135deg, #7C6AFF, #a78bfa);
+    color: #fff;
+    padding: 20px 28px;
+    border-radius: 18px;
+    display: inline-block;
+    font-weight: 700;
+    box-shadow: 0 8px 32px rgba(124,106,255,0.3);
+    position: relative;
+    margin: 0 auto;
+  }
+  .model-wish-node .mwn-label { font-size: 11px; opacity: 0.85; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
+  .model-wish-node .mwn-title { font-size: 16px; margin-bottom: 8px; }
+  .model-wish-node .mwn-sub { font-size: 12px; opacity: 0.85; display: flex; gap: 10px; flex-wrap: wrap; }
+  .model-wish-node .mwn-sub span { background: rgba(255,255,255,0.15); padding: 2px 7px; border-radius: 5px; font-weight: 500; }
+  .model-center {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 44px;
+    position: relative;
+  }
+  .model-connectors {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    position: relative;
+  }
+  .model-connectors::before {
+    content: '';
+    position: absolute;
+    top: -28px;
+    left: 50%;
+    width: 2px;
+    height: 24px;
+    background: linear-gradient(to bottom, var(--accent), transparent);
+  }
+  .model-placement {
+    background: var(--card);
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+    padding: 14px 16px;
+    width: 160px;
+    position: relative;
+    text-align: left;
+  }
+  .model-placement::before {
+    content: '';
+    position: absolute;
+    top: -26px;
+    left: 50%;
+    width: 2px;
+    height: 26px;
+    background: linear-gradient(to bottom, transparent, var(--accent));
+    transform: translateX(-50%);
+  }
+  .model-placement .mp-label {
+    font-size: 9.5px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .model-placement .mp-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .model-placement .mp-local {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .model-placement .mp-local b { color: var(--text-sec); }
+
+  /* Shared/local split */
+  .split-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 24px;
+  }
+  @media (min-width: 720px) {
+    .split-grid { grid-template-columns: 1fr 1fr; }
+  }
+  .split-col {
+    background: var(--surface);
+    border-radius: 16px;
+    padding: 22px 24px;
+    border: 1px solid var(--border);
+  }
+  .split-col.shared { border-left: 3px solid var(--accent); }
+  .split-col.local { border-left: 3px solid var(--orange); }
+  .split-col .sc-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .split-col .sc-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+  .split-col.shared .sc-icon { background: var(--accent-soft); color: var(--accent); }
+  .split-col.local .sc-icon { background: var(--orange-soft); color: var(--orange); }
+  .split-col .sc-desc {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+    line-height: 1.55;
+  }
+  .split-col ul { list-style: none; padding: 0; }
+  .split-col li {
+    font-size: 13px;
+    color: var(--text-sec);
+    padding: 7px 0;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .split-col li:first-child { border-top: none; padding-top: 3px; }
+  .split-col li::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .split-col.shared li::before { background: var(--accent); }
+  .split-col.local li::before { background: var(--orange); }
+  .split-col li strong { color: var(--text); font-weight: 600; }
+
+  /* Decisions grid */
+  .decisions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-top: 20px;
+  }
+  @media (min-width: 860px) {
+    .decisions { grid-template-columns: 1fr 1fr; }
+  }
+  .decision {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 18px 22px;
+    border: 1px solid var(--border);
+  }
+  .decision-num {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--accent);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .decision-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+  .decision-text {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.6;
+  }
+  .decision-text strong { color: var(--text); }
+  .decision-choice {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .decision-pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .decision-pill.muted { background: var(--surface-hover); color: var(--text-muted); }
+
+  /* Privacy diagram */
+  .privacy-diagram {
+    background: var(--surface);
+    border-radius: 16px;
+    padding: 20px 22px;
+    border: 1px solid var(--border);
+    margin-top: 14px;
+  }
+  .priv-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    align-items: stretch;
+  }
+  .priv-wl {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .priv-wl.public { border-color: rgba(52,211,153,0.3); }
+  .priv-wl.private { border-color: rgba(248,113,113,0.3); }
+  .priv-wl .pwl-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .priv-wl .pwl-title { font-size: 12.5px; font-weight: 700; }
+  .priv-wl .pwl-tag {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 5px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  .priv-wl.public .pwl-tag { background: var(--green-soft); color: var(--green); }
+  .priv-wl.private .pwl-tag { background: var(--red-soft); color: var(--red); }
+  .priv-wl .pwl-item {
+    font-size: 11px;
+    color: var(--text-sec);
+    padding: 5px 8px;
+    background: var(--surface);
+    border-radius: 6px;
+    margin-top: 4px;
+  }
+  .priv-wl .pwl-item.highlight { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .priv-viewer {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .priv-case {
+    background: var(--card);
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  .priv-case .pcase-header {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .priv-case .pcase-header .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .priv-case.ok .dot { background: var(--green); }
+  .priv-case.bad .dot { background: var(--red); }
+  .priv-case .pcase-text {
+    font-size: 12px;
+    color: var(--text-sec);
+    line-height: 1.55;
+  }
+  .priv-case .pcase-text strong { color: var(--text); }
+
+  /* Warning inside sheet */
+  .sheet-warn {
+    margin: 0 16px 12px;
+    padding: 10px 12px;
+    background: var(--orange-soft);
+    border-radius: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    border-left: 3px solid var(--orange);
+  }
+  .sheet-warn.danger { background: var(--red-soft); border-left-color: var(--red); }
+  .sheet-warn .sw-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .sheet-warn .sw-text { font-size: 12px; color: var(--text-sec); line-height: 1.5; }
+  .sheet-warn .sw-text strong { color: var(--text); }
+
+  /* Confirmation overlay (full phone) */
+  .confirm-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .confirm-sheet {
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    padding: 24px 20px 16px;
+    text-align: center;
+  }
+  .confirm-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 14px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+  }
+  .confirm-icon.accent { background: var(--accent-soft); color: var(--accent); }
+  .confirm-icon.orange { background: var(--orange-soft); color: var(--orange); }
+  .confirm-icon.red { background: var(--red-soft); color: var(--red); }
+  .confirm-icon.green { background: var(--green-soft); color: var(--green); }
+  .confirm-icon.blue { background: var(--blue-soft); color: var(--blue); }
+  .confirm-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .confirm-desc {
+    font-size: 13.5px;
+    color: var(--text-sec);
+    line-height: 1.55;
+    margin-bottom: 16px;
+    max-width: 300px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .confirm-desc strong { color: var(--text); }
+  .confirm-meta {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text-sec);
+    margin-bottom: 14px;
+    text-align: left;
+  }
+  .confirm-meta .cm-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+  }
+  .confirm-meta .cm-row strong { color: var(--text); font-weight: 600; }
+  .confirm-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Action-menu sheet */
+  .action-sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    cursor: pointer;
+    border-top: 1px solid var(--border);
+  }
+  .action-sheet-item:first-of-type { border-top: none; }
+  .action-sheet-item .as-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+    background: var(--card);
+    color: var(--text-sec);
+  }
+  .action-sheet-item .as-icon.accent { background: var(--accent-soft); color: var(--accent); }
+  .action-sheet-item .as-icon.red { background: var(--red-soft); color: var(--red); }
+  .action-sheet-item .as-icon.orange { background: var(--orange-soft); color: var(--orange); }
+  .action-sheet-item .as-icon.green { background: var(--green-soft); color: var(--green); }
+  .action-sheet-item .as-body { flex: 1; }
+  .action-sheet-item .as-title { font-size: 14.5px; font-weight: 600; color: var(--text); }
+  .action-sheet-item .as-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+  .action-sheet-item.danger .as-title { color: var(--red); }
+  .action-sheet-divider {
+    height: 6px;
+    background: rgba(0,0,0,0.18);
+    margin: 2px 0;
+  }
+
+  /* Tag for wishlist scope */
+  .wl-privacy-tag {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 5px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  .wl-privacy-tag.public { background: var(--green-soft); color: var(--green); }
+  .wl-privacy-tag.private { background: var(--red-soft); color: var(--red); }
+
+  /* Pricing / hero for concept section */
+  .concept-hero {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-top: 20px;
+  }
+  .concept-principle {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 18px 20px;
+    border: 1px solid var(--border);
+  }
+  .concept-principle .cp-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    margin-bottom: 10px;
+  }
+  .concept-principle.a .cp-icon { background: var(--accent-soft); color: var(--accent); }
+  .concept-principle.b .cp-icon { background: var(--green-soft); color: var(--green); }
+  .concept-principle.c .cp-icon { background: var(--orange-soft); color: var(--orange); }
+  .concept-principle.d .cp-icon { background: var(--blue-soft); color: var(--blue); }
+  .concept-principle .cp-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .concept-principle .cp-text { font-size: 13px; color: var(--text-sec); line-height: 1.6; }
+  @media (min-width: 720px) {
+    .concept-hero { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* Info line under input (copy helper) */
+  .input-hint-block {
+    margin: 8px 16px 0;
+    padding: 12px 14px;
+    background: var(--accent-soft);
+    border-radius: 10px;
+    font-size: 12.5px;
+    color: var(--text-sec);
+    line-height: 1.55;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .input-hint-block .ihb-icon {
+    color: var(--accent);
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .input-hint-block strong { color: var(--text); }
+  .input-hint-block .ihb-second {
+    display: block;
+    color: var(--text-muted);
+    margin-top: 6px;
+    font-size: 11.5px;
+  }
+
+  /* Section group heading inside phone */
+  .section-group-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    margin: 16px 16px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .section-group-title .count {
+    font-size: 11px;
+    color: var(--text-sec);
+    background: var(--surface);
+    padding: 2px 8px;
+    border-radius: 10px;
+    letter-spacing: 0;
+  }
+
+  /* Mini wish preview in sheet */
+  .mini-wish-preview {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 16px 14px;
+    padding: 10px 12px;
+    background: var(--card);
+    border-radius: 10px;
+  }
+  .mini-wish-preview .mwp-thumb {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #F472B6, #C084FC);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .mini-wish-preview .mwp-body { flex: 1; min-width: 0; }
+  .mini-wish-preview .mwp-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mini-wish-preview .mwp-sub {
+    font-size: 11px;
+    color: var(--text-sec);
+    margin-top: 2px;
+  }
+
+  /* Footer note */
+  .footer-note {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 40px 20px 0;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+  }
+
+  /* Comments block (for reservations/comments propagation demo) */
+  .comment-block {
+    margin: 10px 16px;
+    padding: 10px 12px;
+    background: var(--card);
+    border-radius: 10px;
+    display: flex;
+    gap: 10px;
+  }
+  .comment-block .cm-av {
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #60A5FA, #3B82F6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .comment-block .cm-text {
+    flex: 1;
+    font-size: 12.5px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .comment-block .cm-name { font-weight: 600; }
+  .comment-block .cm-meta {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-top: 3px;
+  }
+  .comment-block .cm-meta .ctx {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* Status-row (reservation / comment counters at card level) */
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 11.5px;
+  }
+  .status-row .sr-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-sec);
+  }
+  .status-row .sr-item.orange { color: var(--orange); }
+  .status-row .sr-item.green { color: var(--green); }
+  .status-row .sr-item.accent { color: var(--accent); }
+
+</style>
+</head>
+<body>
+
+<!-- Page header -->
+<div class="page-header">
+  <div class="page-title">Общее желание в нескольких wishlist'ах</div>
+  <div class="page-subtitle">
+    Одна каноничная сущность — множество размещений. Изменения карточки, бронь, комментарии и статус
+    синхронизируются во всех wishlist'ах, где желание размещено. Порядок и категория — локальные.
+  </div>
+  <div class="pill-principle">Canonical Wish × N Placements</div>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button class="nav-btn active" data-target="concept">1. Концепция</button>
+  <button class="nav-btn" data-target="create">2. Создание</button>
+  <button class="nav-btn" data-target="badge">3. Карточка</button>
+  <button class="nav-btn" data-target="edit">4. Редактирование</button>
+  <button class="nav-btn" data-target="actions">5. Меню действий</button>
+  <button class="nav-btn" data-target="placements">6. Где размещено</button>
+  <button class="nav-btn" data-target="add-copy">7. Добавить vs Копия</button>
+  <button class="nav-btn" data-target="confirms">8. Подтверждения</button>
+  <button class="nav-btn" data-target="delete">9. Удаление</button>
+  <button class="nav-btn" data-target="public">10. Публичный вид</button>
+  <button class="nav-btn" data-target="edge">11. Edge-states</button>
+  <button class="nav-btn" data-target="decisions">12. Решения</button>
+</div>
+
+<!-- ========== SECTION 1: CONCEPT ========== -->
+<section id="concept" class="mockup-section active">
+  <div class="section-title">1. Концепция модели</div>
+  <div class="section-subtitle">
+    Желание — это сущность пользователя. Wishlist — контейнер с размещениями (placement'ами).
+    Одно желание может одновременно жить в нескольких wishlist'ах, оставаясь одной сущностью, а не копией.
+  </div>
+
+  <!-- Model diagram -->
+  <div class="model-viz">
+    <div class="model-center">
+      <div class="model-wish-node">
+        <div class="mwn-label">ОДНО ЖЕЛАНИЕ</div>
+        <div class="mwn-title">iPhone 17 Pro · Titanium</div>
+        <div class="mwn-sub">
+          <span>💰 129 990 ₽</span>
+          <span>🔗 Ссылка</span>
+          <span>📦 Бронь</span>
+          <span>💬 3 комментария</span>
+        </div>
+      </div>
+    </div>
+    <div class="model-connectors">
+      <div class="model-placement">
+        <div class="mp-label">📂 Wishlist A</div>
+        <div class="mp-title">День рождения</div>
+        <div class="mp-local">
+          <b>Порядок:</b> 2<br>
+          <b>Категория:</b> Электроника
+        </div>
+      </div>
+      <div class="model-placement">
+        <div class="mp-label">📂 Wishlist B</div>
+        <div class="mp-title">На новую квартиру</div>
+        <div class="mp-local">
+          <b>Порядок:</b> 7<br>
+          <b>Категория:</b> Техника
+        </div>
+      </div>
+      <div class="model-placement">
+        <div class="mp-label">📂 Wishlist C</div>
+        <div class="mp-title">Идеи на будущее</div>
+        <div class="mp-local">
+          <b>Порядок:</b> 1<br>
+          <b>Категория:</b> —
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shared vs local grid -->
+  <div class="split-grid">
+    <div class="split-col shared">
+      <div class="sc-title">
+        <div class="sc-icon">🔗</div>
+        Общее во всех wishlist'ах
+      </div>
+      <div class="sc-desc">Эти поля и состояния живут на уровне wish. Изменил в одном месте — применилось везде.</div>
+      <ul>
+        <li><strong>Название, описание</strong></li>
+        <li><strong>Ссылка, фото, цена, валюта</strong></li>
+        <li><strong>Статус</strong> (активно / куплено / архив)</li>
+        <li><strong>Бронь</strong> (резерв, TTL, освобождение)</li>
+        <li><strong>Комментарии и reply</strong> — один общий тред</li>
+        <li><strong>Marketplace-данные</strong> (refresh, sourceType)</li>
+        <li><strong>Архивация, удаление</strong></li>
+      </ul>
+    </div>
+    <div class="split-col local">
+      <div class="sc-title">
+        <div class="sc-icon">📂</div>
+        Локальное для каждого wishlist
+      </div>
+      <div class="sc-desc">Это свойства размещения, а не желания. В разных wishlist'ах могут отличаться.</div>
+      <ul>
+        <li><strong>Порядок</strong> (position в списке)</li>
+        <li><strong>Категория</strong> внутри wishlist</li>
+        <li><strong>Локальный pin / highlight</strong></li>
+        <li>(резерв на будущее) placement-specific note</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Core principles -->
+  <div class="variant-label">Ключевые принципы</div>
+  <div class="concept-hero">
+    <div class="concept-principle a">
+      <div class="cp-icon">🎯</div>
+      <div class="cp-title">Одно желание — одна сущность</div>
+      <div class="cp-text">
+        Нет «копий с синком». Есть одна каноничная Wish-запись.
+        UI никогда не создаёт shared-behavior через бэкграунд-синхронизацию.
+      </div>
+    </div>
+    <div class="concept-principle b">
+      <div class="cp-icon">🔒</div>
+      <div class="cp-title">Privacy по контексту входа</div>
+      <div class="cp-text">
+        Публичный зритель, пришедший через public-wishlist A, никогда не узнаёт,
+        что то же желание лежит в private-wishlist B того же владельца.
+      </div>
+    </div>
+    <div class="concept-principle c">
+      <div class="cp-icon">🧬</div>
+      <div class="cp-title">«Копия» — отдельное действие</div>
+      <div class="cp-text">
+        Если пользователь хочет независимую карточку — есть явное
+        «Создать отдельную копию». Это другой сценарий, не дефолт.
+      </div>
+    </div>
+    <div class="concept-principle d">
+      <div class="cp-icon">🚫</div>
+      <div class="cp-title">Нет orphan-wishes</div>
+      <div class="cp-text">
+        У каждой Wish должен быть хотя бы один placement. Убрал последнее размещение —
+        желание удаляется полностью (после явного подтверждения).
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== SECTION 2: CREATE ========== -->
+<section id="create" class="mockup-section">
+  <div class="section-title">2. Создание желания в нескольких wishlist'ах</div>
+  <div class="section-subtitle">
+    На экране создания желания пользователь выбирает один или несколько wishlist'ов.
+    Если выбрано больше одного — под списком появляется явное пояснение «это будет одно общее желание».
+  </div>
+
+  <div class="phone-grid">
+
+    <!-- V1: Full create form with multi-select -->
+    <div class="phone-wrap">
+      <div class="phone-caption">A. Форма создания (multi-select inline)</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">✕</div>
+          <div class="hdr-title">Новое желание</div>
+          <div class="hdr-action">Сохранить</div>
+        </div>
+        <div class="phone-content short">
+          <label class="input-label">Название</label>
+          <input class="input-field with-value" value="iPhone 17 Pro · Titanium">
+
+          <label class="input-label">Ссылка</label>
+          <input class="input-field with-value" value="https://apple.com/ru/iphone-17-pro">
+
+          <label class="input-label">Цена</label>
+          <input class="input-field with-value" value="129 990 ₽">
+
+          <label class="input-label">В каких wishlist'ах разместить</label>
+          <div class="list-group" style="margin-top: 6px; margin-bottom: 4px;">
+            <div class="check-row">
+              <div class="cx on">✓</div>
+              <div class="cr-icon" style="background: #5D4FC7;">🎂</div>
+              <div class="cr-body">
+                <div class="cr-title">День рождения</div>
+                <div class="cr-sub">23 желания · публичный</div>
+              </div>
+            </div>
+            <div class="check-row">
+              <div class="cx on">✓</div>
+              <div class="cr-icon" style="background: #3B6AD0;">🏠</div>
+              <div class="cr-body">
+                <div class="cr-title">На новую квартиру</div>
+                <div class="cr-sub">41 желание · приватный</div>
+              </div>
+            </div>
+            <div class="check-row">
+              <div class="cx">&nbsp;</div>
+              <div class="cr-icon" style="background: #10B981;">🧠</div>
+              <div class="cr-body">
+                <div class="cr-title">Идеи на будущее</div>
+                <div class="cr-sub">8 желаний · приватный</div>
+              </div>
+            </div>
+            <div class="check-row">
+              <div class="cx">&nbsp;</div>
+              <div class="cr-icon" style="background: #FBBF24;">🎄</div>
+              <div class="cr-body">
+                <div class="cr-title">Новый год</div>
+                <div class="cr-sub">0 желаний · публичный</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="input-hint-block">
+            <div class="ihb-icon">🔗</div>
+            <div>
+              <strong>Это будет одно общее желание.</strong>
+              Если ты изменишь описание, цену, ссылку, статус или кто-то забронирует подарок — изменения применятся во всех выбранных wishlist'ах.
+              <span class="ihb-second">Порядок и категория в каждом wishlist могут отличаться.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Выбрано 2 → показан info-блок. Если выбран один wishlist — блок можно скрыть (желание не становится shared).
+      </div>
+    </div>
+
+    <!-- V2: Compact with chip row -->
+    <div class="phone-wrap">
+      <div class="phone-caption">B. Компакт: строка с чипами</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">✕</div>
+          <div class="hdr-title">Новое желание</div>
+          <div class="hdr-action">Сохранить</div>
+        </div>
+        <div class="phone-content short">
+          <label class="input-label">Название</label>
+          <input class="input-field with-value" value="iPhone 17 Pro · Titanium">
+
+          <label class="input-label">Ссылка</label>
+          <input class="input-field with-value" value="https://apple.com/ru/iphone-17-pro">
+
+          <label class="input-label">Цена</label>
+          <input class="input-field with-value" value="129 990 ₽">
+
+          <label class="input-label">Wishlist'ы</label>
+          <div style="padding: 0 16px; display: flex; gap: 6px; flex-wrap: wrap;">
+            <div class="chip accent">🎂 День рождения <span style="opacity:0.6;margin-left:3px;">✕</span></div>
+            <div class="chip accent">🏠 На квартиру <span style="opacity:0.6;margin-left:3px;">✕</span></div>
+            <div class="chip" style="border-style: dashed; color: var(--accent); background: transparent;">＋ Добавить</div>
+          </div>
+          <div class="input-hint-block">
+            <div class="ihb-icon">🔗</div>
+            <div>
+              <strong>Общее желание в 2 wishlist'ах.</strong>
+              Изменения, бронь, комментарии и статус будут едиными.
+            </div>
+          </div>
+
+          <label class="input-label">Категория (в каждом wishlist — своя)</label>
+          <div style="padding: 0 16px; display: flex; gap: 6px; flex-wrap: wrap;">
+            <div class="chip">🎂 День рождения · <span style="color: var(--accent); font-weight: 600;">Электроника</span></div>
+            <div class="chip">🏠 На квартиру · <span style="color: var(--accent); font-weight: 600;">Техника</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Быстрее для power-user: выбор wishlist'ов через chip-picker. Категория сразу отображается как placement-level.
+      </div>
+    </div>
+
+    <!-- V3: Full-screen picker with scroll -->
+    <div class="phone-wrap">
+      <div class="phone-caption">C. Sheet выбора wishlist'ов (full list)</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px);"></div>
+        <div style="position: absolute; left: 0; right: 0; bottom: 0;">
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-title">Где разместить</div>
+            <div class="sheet-subtitle">Выбери один или несколько wishlist'ов. Одно желание может быть в нескольких.</div>
+            <div class="sheet-body">
+              <div class="list-group" style="margin: 0;">
+                <div class="check-row">
+                  <div class="cx on">✓</div>
+                  <div class="cr-icon" style="background: #5D4FC7;">🎂</div>
+                  <div class="cr-body">
+                    <div class="cr-title">День рождения <span class="wl-privacy-tag public">Публ</span></div>
+                    <div class="cr-sub">23 желания</div>
+                  </div>
+                </div>
+                <div class="check-row">
+                  <div class="cx on">✓</div>
+                  <div class="cr-icon" style="background: #3B6AD0;">🏠</div>
+                  <div class="cr-body">
+                    <div class="cr-title">На новую квартиру <span class="wl-privacy-tag private">Прив</span></div>
+                    <div class="cr-sub">41 желание</div>
+                  </div>
+                </div>
+                <div class="check-row">
+                  <div class="cx on">✓</div>
+                  <div class="cr-icon" style="background: #10B981;">🧠</div>
+                  <div class="cr-body">
+                    <div class="cr-title">Идеи на будущее <span class="wl-privacy-tag private">Прив</span></div>
+                    <div class="cr-sub">8 желаний</div>
+                  </div>
+                </div>
+                <div class="check-row">
+                  <div class="cx">&nbsp;</div>
+                  <div class="cr-icon" style="background: #FBBF24;">🎄</div>
+                  <div class="cr-body">
+                    <div class="cr-title">Новый год <span class="wl-privacy-tag public">Публ</span></div>
+                    <div class="cr-sub">0 желаний</div>
+                  </div>
+                </div>
+                <div class="check-row">
+                  <div class="cx">&nbsp;</div>
+                  <div class="cr-icon" style="background: #F472B6;">💝</div>
+                  <div class="cr-body">
+                    <div class="cr-title">Романтика <span class="wl-privacy-tag private">Прив</span></div>
+                    <div class="cr-sub">4 желания</div>
+                  </div>
+                </div>
+              </div>
+              <div class="sheet-warn" style="margin-top: 14px;">
+                <div class="sw-icon">🔗</div>
+                <div class="sw-text"><strong>Выбрано 3.</strong> Это будет одно общее желание во всех трёх списках.</div>
+              </div>
+            </div>
+            <div class="btn-sticky-bottom">
+              <button class="btn btn-ghost">Отмена</button>
+              <button class="btn btn-primary">Готово · 3</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Sheet-вариант — когда wishlist'ов много. Показываем privacy-тег у каждого, чтобы пользователь
+        помнил: желание в public-wishlist'е станет видимым извне.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="variant-label green">Рекомендация</div>
+  <div class="annotation ok" style="margin: 0;">
+    <strong>Вариант A — дефолт.</strong> Inline-список wishlist'ов в форме создания,
+    c чекбоксами и info-блоком «общее желание» под списком. Это самый прямой путь: пользователь видит все свои wishlist'ы
+    сразу, без дополнительного тапа. Sheet-вариант (C) может быть альтернативой при &gt; 8 wishlist'ах.
+  </div>
+</section>
+
+<!-- ========== SECTION 3: CARD & BADGE ========== -->
+<section id="badge" class="mockup-section">
+  <div class="section-title">3. Карточка с badge «общее желание»</div>
+  <div class="section-subtitle">
+    Когда желание размещено в 2+ wishlist'ах, владелец должен видеть это явно — но без визуального шума.
+    Публичный зритель badge не видит. Ниже три варианта визуализации — нужно выбрать один.
+  </div>
+
+  <div class="phone-grid">
+
+    <!-- Variant A: inline pill next to title -->
+    <div class="phone-wrap">
+      <div class="phone-caption">A. Мини-pill рядом с названием</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">🎂 День рождения</div>
+          <div class="hdr-action">＋</div>
+        </div>
+        <div class="phone-content short">
+          <div style="padding: 12px 16px 0; display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 13px; color: var(--text-sec);">23 желания</div>
+            <div style="font-size: 12px; color: var(--accent); font-weight: 600;">Сортировка ▾</div>
+          </div>
+          <div style="height: 10px;"></div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-pink">📱</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">iPhone 17 Pro</div>
+                <div class="shared-badge-inline">🔗 В 3</div>
+              </div>
+              <div class="meta-row">apple.com<span class="sep">·</span>Электроника</div>
+              <div class="price">129 990 ₽</div>
+              <div class="status-row">
+                <div class="sr-item orange">🔒 Забронировано</div>
+                <div class="sr-item">💬 2</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-gold">🎧</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">AirPods Pro 3</div>
+              </div>
+              <div class="meta-row">apple.com<span class="sep">·</span>Аудио</div>
+              <div class="price">29 990 ₽</div>
+            </div>
+          </div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-indigo">👟</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">Nike Air Max · 42</div>
+                <div class="shared-badge-inline">🔗 В 2</div>
+              </div>
+              <div class="meta-row">nike.com<span class="sep">·</span>Одежда</div>
+              <div class="price">18 500 ₽</div>
+              <div class="status-row">
+                <div class="sr-item">💬 1</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-green">📚</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">«Thinking, Fast and Slow»</div>
+              </div>
+              <div class="meta-row">ozon.ru<span class="sep">·</span>Книги</div>
+              <div class="price">1 290 ₽</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Самое незаметное. Цифра в badge подсказывает количество размещений.
+        <strong>Pro:</strong> компактно. <strong>Contra:</strong> badge ломает title-row на wrap при длинном названии.
+      </div>
+    </div>
+
+    <!-- Variant B: corner chip -->
+    <div class="phone-wrap">
+      <div class="phone-caption">B. Angle-chip в углу карточки</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">🎂 День рождения</div>
+          <div class="hdr-action">＋</div>
+        </div>
+        <div class="phone-content short">
+          <div style="padding: 12px 16px 0; display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 13px; color: var(--text-sec);">23 желания</div>
+            <div style="font-size: 12px; color: var(--accent); font-weight: 600;">Сортировка ▾</div>
+          </div>
+          <div style="height: 10px;"></div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-pink">📱</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">iPhone 17 Pro</div>
+              </div>
+              <div class="meta-row">apple.com<span class="sep">·</span>Электроника</div>
+              <div class="price">129 990 ₽</div>
+              <div class="status-row">
+                <div class="sr-item orange">🔒 Забронировано</div>
+                <div class="sr-item">💬 2</div>
+              </div>
+            </div>
+            <div class="shared-badge-corner">3</div>
+          </div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-gold">🎧</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">AirPods Pro 3</div>
+              </div>
+              <div class="meta-row">apple.com<span class="sep">·</span>Аудио</div>
+              <div class="price">29 990 ₽</div>
+            </div>
+          </div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-indigo">👟</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">Nike Air Max · 42</div>
+              </div>
+              <div class="meta-row">nike.com<span class="sep">·</span>Одежда</div>
+              <div class="price">18 500 ₽</div>
+              <div class="status-row">
+                <div class="sr-item">💬 1</div>
+              </div>
+            </div>
+            <div class="shared-badge-corner">2</div>
+          </div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-green">📚</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">«Thinking, Fast and Slow»</div>
+              </div>
+              <div class="meta-row">ozon.ru<span class="sep">·</span>Книги</div>
+              <div class="price">1 290 ₽</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Не мешает title-row.
+        <strong>Pro:</strong> легко сканировать — shared всегда в углу.
+        <strong>Contra:</strong> без иконки 🔗 неочевидно, что значит цифра 3. Нужен onboarding или tooltip на tap.
+      </div>
+    </div>
+
+    <!-- Variant C: pill + placement names line -->
+    <div class="phone-wrap">
+      <div class="phone-caption">C. Pill + перечисление списков строкой</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">🎂 День рождения</div>
+          <div class="hdr-action">＋</div>
+        </div>
+        <div class="phone-content short">
+          <div style="padding: 12px 16px 0; display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 13px; color: var(--text-sec);">23 желания</div>
+            <div style="font-size: 12px; color: var(--accent); font-weight: 600;">Сортировка ▾</div>
+          </div>
+          <div style="height: 10px;"></div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-pink">📱</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">iPhone 17 Pro</div>
+              </div>
+              <div class="meta-row">apple.com<span class="sep">·</span>Электроника</div>
+              <div class="price">129 990 ₽</div>
+              <div class="status-row">
+                <div class="sr-item orange">🔒 Забронировано</div>
+                <div class="sr-item">💬 2</div>
+              </div>
+              <div style="margin-top: 8px;">
+                <div class="shared-badge-pill">🔗 Также в: На квартиру · Идеи</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-gold">🎧</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">AirPods Pro 3</div>
+              </div>
+              <div class="meta-row">apple.com<span class="sep">·</span>Аудио</div>
+              <div class="price">29 990 ₽</div>
+            </div>
+          </div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-indigo">👟</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">Nike Air Max · 42</div>
+              </div>
+              <div class="meta-row">nike.com<span class="sep">·</span>Одежда</div>
+              <div class="price">18 500 ₽</div>
+              <div class="status-row">
+                <div class="sr-item">💬 1</div>
+              </div>
+              <div style="margin-top: 8px;">
+                <div class="shared-badge-pill">🔗 Также в: Романтика</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Максимум информации — видно, где ещё размещено.
+        <strong>Contra:</strong> много текста, особенно если placement'ов 3+.
+        Только в single-wish detail view, не в списке.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="variant-label green">Рекомендация</div>
+  <div class="annotation ok" style="margin: 0;">
+    <strong>В списке — вариант A (мини-pill «🔗 В 3»).</strong>
+    Читаемо, компактно, нужное количество placements сразу на виду. Tap по pill → открывается sheet «Где размещено».
+    Вариант C оставляем для detail-view карточки (см. раздел 4 — Редактирование).
+  </div>
+</section>
+
+<!-- ========== SECTION 4: EDIT ========== -->
+<section id="edit" class="mockup-section">
+  <div class="section-title">4. Редактирование общего желания</div>
+  <div class="section-subtitle">
+    Если желание размещено более чем в одном wishlist, в форме редактирования — заметный info-блок «Это общее желание».
+    Изменения применяются глобально. Из блока открывается sheet «Управление размещением».
+  </div>
+
+  <div class="phone-grid">
+
+    <!-- Edit form with shared info -->
+    <div class="phone-wrap">
+      <div class="phone-caption">A. Форма редактирования — shared notice</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">✕</div>
+          <div class="hdr-title">Редактировать</div>
+          <div class="hdr-action">Сохранить</div>
+        </div>
+        <div class="phone-content short">
+          <div class="shared-block">
+            <div class="sb-icon">🔗</div>
+            <div class="sb-body">
+              <div class="sb-title">Общее желание · 3 wishlist'а</div>
+              <div class="sb-text">
+                Изменения названия, цены, ссылки, фото или статуса применятся во всех wishlist'ах, где оно размещено.
+              </div>
+              <a class="sb-link">Управлять размещением →</a>
+            </div>
+          </div>
+
+          <label class="input-label">Название</label>
+          <input class="input-field with-value" value="iPhone 17 Pro · Titanium">
+
+          <label class="input-label">Ссылка</label>
+          <input class="input-field with-value" value="https://apple.com/ru/iphone-17-pro">
+
+          <label class="input-label">Цена</label>
+          <input class="input-field with-value" value="129 990 ₽">
+
+          <label class="input-label">Описание</label>
+          <textarea class="input-field with-value">Чёрный. 256 GB. Самый тонкий Pro за всё время.</textarea>
+
+          <div class="section-group-title" style="margin-top: 18px;">
+            Локально для этого wishlist
+            <span style="font-size: 10px; color: var(--text-muted);">меняется только здесь</span>
+          </div>
+          <div class="list-group" style="margin-top: 4px;">
+            <div class="list-row">
+              <div class="list-icon accent">📂</div>
+              <div class="list-body">
+                <div class="list-title">Категория</div>
+                <div class="list-sub">Электроника · в «День рождения»</div>
+              </div>
+              <div class="list-trail">›</div>
+            </div>
+            <div class="list-row">
+              <div class="list-icon blue">↕</div>
+              <div class="list-body">
+                <div class="list-title">Порядок</div>
+                <div class="list-sub">Второе в «День рождения» · меняй перетаскиванием</div>
+              </div>
+              <div class="list-trail">›</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Shared-блок — первое, что видит пользователь. Под обычными полями — явное разделение:
+        «локальное для этого wishlist» с подписью, что изменяется только здесь.
+      </div>
+    </div>
+
+    <!-- Edit — single wishlist (no shared block) -->
+    <div class="phone-wrap">
+      <div class="phone-caption">B. Для сравнения: не-shared желание</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">✕</div>
+          <div class="hdr-title">Редактировать</div>
+          <div class="hdr-action">Сохранить</div>
+        </div>
+        <div class="phone-content short">
+          <label class="input-label">Название</label>
+          <input class="input-field with-value" value="AirPods Pro 3">
+
+          <label class="input-label">Ссылка</label>
+          <input class="input-field with-value" value="https://apple.com/ru/airpods-pro">
+
+          <label class="input-label">Цена</label>
+          <input class="input-field with-value" value="29 990 ₽">
+
+          <label class="input-label">Описание</label>
+          <textarea class="input-field" placeholder="Расскажи, почему хочешь именно это"></textarea>
+
+          <label class="input-label">Wishlist</label>
+          <div style="padding: 0 16px;">
+            <div style="background: var(--surface); border: 1px solid var(--border-light); border-radius: 10px; padding: 11px 14px; display: flex; align-items: center; gap: 8px;">
+              <div style="width: 28px; height: 28px; border-radius: 8px; background: #5D4FC7; display: flex; align-items: center; justify-content: center; font-size: 14px;">🎂</div>
+              <div style="flex: 1; font-size: 14px;">День рождения</div>
+              <div style="font-size: 12px; color: var(--accent); font-weight: 600;">Добавить в ещё →</div>
+            </div>
+          </div>
+          <div class="input-help">Только в одном wishlist'е. Можно добавить в другие — желание станет общим.</div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Желание в одном wishlist. Shared-блок отсутствует — но есть inline-ссылка
+        «Добавить в ещё» для промо сценария превращения в shared.
+      </div>
+    </div>
+
+    <!-- Edit with propagation preview -->
+    <div class="phone-wrap">
+      <div class="phone-caption">C. После сохранения — propagation toast</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">🎂 День рождения</div>
+          <div class="hdr-action">＋</div>
+        </div>
+        <div class="phone-content short">
+          <div style="height: 10px;"></div>
+          <div class="wish-card">
+            <div class="thumb gradient-pink">📱</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">iPhone 17 Pro · Titanium</div>
+                <div class="shared-badge-inline">🔗 В 3</div>
+              </div>
+              <div class="meta-row">apple.com<span class="sep">·</span>Электроника</div>
+              <div class="price">129 990 ₽</div>
+            </div>
+          </div>
+          <div class="wish-card">
+            <div class="thumb gradient-gold">🎧</div>
+            <div class="body">
+              <div class="title-row"><div class="title">AirPods Pro 3</div></div>
+              <div class="meta-row">apple.com</div>
+              <div class="price">29 990 ₽</div>
+            </div>
+          </div>
+          <!-- Toast -->
+          <div style="position: absolute; left: 16px; right: 16px; bottom: 80px; background: var(--card); border: 1px solid var(--border-light); border-radius: 14px; padding: 14px 16px; display: flex; gap: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
+            <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0;">✓</div>
+            <div style="flex: 1; font-size: 13px; color: var(--text); line-height: 1.5;">
+              <strong>Сохранено.</strong> Обновлено во всех 3 wishlist'ах.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Короткий toast после сохранения. Явно подтверждает: propagation случился, не только локально.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="annotation info" style="margin: 24px 16px 0; max-width: 720px;">
+    <strong>Что нельзя переопределять per-placement.</strong>
+    title, description, url, фото, цена, статус, бронь, комментарии — все глобальные. Если пользователь
+    попытается их менять «для этого wishlist отдельно», сама идея общего желания ломается.
+    В UI нет кнопки/тогла «переопределить только здесь».
+  </div>
+</section>
+
+<!-- ========== SECTION 5: ACTION MENU ========== -->
+<section id="actions" class="mockup-section">
+  <div class="section-title">5. Меню действий на карточке</div>
+  <div class="section-subtitle">
+    Action sheet отличается для shared и не-shared. Для shared добавляются «Управлять размещением»,
+    «Убрать из этого wishlist» (вместо просто «Удалить»), и показывается отдельное «Удалить полностью».
+  </div>
+
+  <div class="phone-grid">
+
+    <!-- Action menu on shared wish -->
+    <div class="phone-wrap">
+      <div class="phone-caption">A. Shared wish (в 3 wishlist'ах)</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);"></div>
+        <div style="position: absolute; left: 0; right: 0; bottom: 0;">
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="mini-wish-preview" style="margin-top: 14px;">
+              <div class="mwp-thumb">📱</div>
+              <div class="mwp-body">
+                <div class="mwp-title">iPhone 17 Pro · Titanium</div>
+                <div class="mwp-sub">🔗 В 3 wishlist'ах · 129 990 ₽</div>
+              </div>
+            </div>
+            <div class="action-sheet-item">
+              <div class="as-icon">✏️</div>
+              <div class="as-body">
+                <div class="as-title">Редактировать</div>
+                <div class="as-sub">Изменения применятся во всех wishlist'ах</div>
+              </div>
+            </div>
+            <div class="action-sheet-item">
+              <div class="as-icon accent">🔗</div>
+              <div class="as-body">
+                <div class="as-title">Добавить в другой wishlist</div>
+                <div class="as-sub">То же желание в ещё одном списке</div>
+              </div>
+            </div>
+            <div class="action-sheet-item">
+              <div class="as-icon">🧬</div>
+              <div class="as-body">
+                <div class="as-title">Создать отдельную копию</div>
+                <div class="as-sub">Новая независимая карточка</div>
+              </div>
+            </div>
+            <div class="action-sheet-item">
+              <div class="as-icon accent">📂</div>
+              <div class="as-body">
+                <div class="as-title">Управлять размещением</div>
+                <div class="as-sub">Где желание сейчас лежит · 3 wishlist'а</div>
+              </div>
+            </div>
+            <div class="action-sheet-divider"></div>
+            <div class="action-sheet-item">
+              <div class="as-icon orange">📦</div>
+              <div class="as-body">
+                <div class="as-title">Архивировать</div>
+                <div class="as-sub">Скроется везде, где размещено</div>
+              </div>
+            </div>
+            <div class="action-sheet-item danger">
+              <div class="as-icon red">−</div>
+              <div class="as-body">
+                <div class="as-title">Убрать из этого wishlist</div>
+                <div class="as-sub">Останется в остальных 2</div>
+              </div>
+            </div>
+            <div class="action-sheet-item danger">
+              <div class="as-icon red">🗑️</div>
+              <div class="as-body">
+                <div class="as-title">Удалить полностью</div>
+                <div class="as-sub">Исчезнет из всех wishlist'ов</div>
+              </div>
+            </div>
+            <div style="padding: 12px 16px 16px;">
+              <button class="btn btn-outline">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Ключевое: <strong>«Убрать из этого wishlist»</strong> и <strong>«Удалить полностью»</strong> — разные пункты.
+        Оба destructive, но последствия совершенно разные.
+      </div>
+    </div>
+
+    <!-- Action menu on last placement -->
+    <div class="phone-wrap">
+      <div class="phone-caption">B. Shared в последнем wishlist'е (placements = 1)</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);"></div>
+        <div style="position: absolute; left: 0; right: 0; bottom: 0;">
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="mini-wish-preview" style="margin-top: 14px;">
+              <div class="mwp-thumb">📱</div>
+              <div class="mwp-body">
+                <div class="mwp-title">iPhone 17 Pro · Titanium</div>
+                <div class="mwp-sub">Только в «День рождения» · 129 990 ₽</div>
+              </div>
+            </div>
+            <div class="action-sheet-item">
+              <div class="as-icon">✏️</div>
+              <div class="as-body"><div class="as-title">Редактировать</div></div>
+            </div>
+            <div class="action-sheet-item">
+              <div class="as-icon accent">🔗</div>
+              <div class="as-body">
+                <div class="as-title">Добавить в другой wishlist</div>
+                <div class="as-sub">Станет общим желанием</div>
+              </div>
+            </div>
+            <div class="action-sheet-item">
+              <div class="as-icon">🧬</div>
+              <div class="as-body">
+                <div class="as-title">Создать отдельную копию</div>
+              </div>
+            </div>
+            <div class="action-sheet-divider"></div>
+            <div class="action-sheet-item">
+              <div class="as-icon orange">📦</div>
+              <div class="as-body"><div class="as-title">Архивировать</div></div>
+            </div>
+            <div class="action-sheet-item danger">
+              <div class="as-icon red">🗑️</div>
+              <div class="as-body">
+                <div class="as-title">Удалить</div>
+                <div class="as-sub">Это единственное размещение желания</div>
+              </div>
+            </div>
+            <div style="padding: 12px 16px 16px;">
+              <button class="btn btn-outline">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Только 1 placement → пункт «Убрать из этого wishlist» не показывается (не имеет смысла).
+        Остаётся «Удалить» = полное удаление, с подписью-предупреждением.
+      </div>
+    </div>
+
+    <!-- Context-sensitivity matrix -->
+    <div class="phone-wrap">
+      <div class="phone-caption">C. Матрица действий по контексту</div>
+      <div style="background: var(--surface); border-radius: 16px; padding: 18px; border: 1px solid var(--border);">
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          <thead>
+            <tr style="color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px;">
+              <th style="text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--border);">Действие</th>
+              <th style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border);">1 placement</th>
+              <th style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border);">N ≥ 2</th>
+              <th style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border);">Публ. вид</th>
+            </tr>
+          </thead>
+          <tbody style="color: var(--text-sec);">
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border);">Редактировать</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--text-muted);">—</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border);">Добавить в wishlist</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--text-muted);">—</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border);">Создать копию</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--text-muted);">—</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border);">Управлять размещением</td>
+              <td style="text-align: center; color: var(--text-muted);">—</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--text-muted);">—</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border);">Убрать из этого wishlist</td>
+              <td style="text-align: center; color: var(--text-muted);">—</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--text-muted);">—</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border);">Архивировать</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--text-muted);">—</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px;">Удалить полностью</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--green);">✓</td>
+              <td style="text-align: center; color: var(--text-muted);">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="phone-note" style="margin-top: 16px;">
+        Публичный зритель не видит ни один из этих пунктов — только резерв/деталь.
+        «Убрать из этого wishlist» появляется только когда placements ≥ 2.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== SECTION 6: PLACEMENTS MANAGEMENT ========== -->
+<section id="placements" class="mockup-section">
+  <div class="section-title">6. Управление размещением (sheet «Где размещено»)</div>
+  <div class="section-subtitle">
+    Центральный экран управления shared-желанием. Показывает все wishlist'ы владельца,
+    отмечает текущие placements, позволяет добавить или убрать размещение.
+  </div>
+
+  <div class="phone-grid">
+
+    <!-- V1: Unified list with toggles -->
+    <div class="phone-wrap">
+      <div class="phone-caption">A. Единый список с чекбоксами (рекомендуется)</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">Где размещено</div>
+          <div class="hdr-action">Готово</div>
+        </div>
+        <div class="phone-content short">
+          <div class="mini-wish-preview">
+            <div class="mwp-thumb">📱</div>
+            <div class="mwp-body">
+              <div class="mwp-title">iPhone 17 Pro · Titanium</div>
+              <div class="mwp-sub">Общее желание · 129 990 ₽</div>
+            </div>
+          </div>
+
+          <div class="section-group-title">
+            Сейчас размещено
+            <span class="count">3</span>
+          </div>
+          <div class="list-group" style="margin-top: 4px;">
+            <div class="check-row">
+              <div class="cx on">✓</div>
+              <div class="cr-icon" style="background: #5D4FC7;">🎂</div>
+              <div class="cr-body">
+                <div class="cr-title">День рождения <span class="wl-privacy-tag public">Публ</span></div>
+                <div class="cr-sub">Категория: Электроника · 2-я по порядку</div>
+              </div>
+            </div>
+            <div class="check-row">
+              <div class="cx on">✓</div>
+              <div class="cr-icon" style="background: #3B6AD0;">🏠</div>
+              <div class="cr-body">
+                <div class="cr-title">На новую квартиру <span class="wl-privacy-tag private">Прив</span></div>
+                <div class="cr-sub">Категория: Техника · 7-я</div>
+              </div>
+            </div>
+            <div class="check-row">
+              <div class="cx on">✓</div>
+              <div class="cr-icon" style="background: #10B981;">🧠</div>
+              <div class="cr-body">
+                <div class="cr-title">Идеи на будущее <span class="wl-privacy-tag private">Прив</span></div>
+                <div class="cr-sub">Без категории · 1-я</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-group-title">
+            Можно добавить
+            <span class="count">2</span>
+          </div>
+          <div class="list-group" style="margin-top: 4px;">
+            <div class="check-row">
+              <div class="cx">&nbsp;</div>
+              <div class="cr-icon" style="background: #FBBF24;">🎄</div>
+              <div class="cr-body">
+                <div class="cr-title">Новый год <span class="wl-privacy-tag public">Публ</span></div>
+                <div class="cr-sub">0 желаний</div>
+              </div>
+            </div>
+            <div class="check-row">
+              <div class="cx">&nbsp;</div>
+              <div class="cr-icon" style="background: #F472B6;">💝</div>
+              <div class="cr-body">
+                <div class="cr-title">Романтика <span class="wl-privacy-tag private">Прив</span></div>
+                <div class="cr-sub">4 желания</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation info" style="margin-top: 16px;">
+            <strong>Как это работает.</strong> Снимешь галочку — желание уйдёт из того wishlist'а, но останется в остальных.
+            Поставишь — появится в новом. Изменения сохраняются при выходе.
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Все wishlist'ы в одном экране, разбиты на две группы.
+        Tap по чекбоксу → сразу применяет изменение (без лишнего подтверждения для add).
+        Снятие галочки с last placement → confirm-dialog про полное удаление.
+      </div>
+    </div>
+
+    <!-- V2: Separate lists + quick actions -->
+    <div class="phone-wrap">
+      <div class="phone-caption">B. С категориями — inline-редактирование</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">Где размещено</div>
+          <div class="hdr-action">Готово</div>
+        </div>
+        <div class="phone-content short">
+          <div class="mini-wish-preview">
+            <div class="mwp-thumb">📱</div>
+            <div class="mwp-body">
+              <div class="mwp-title">iPhone 17 Pro · Titanium</div>
+              <div class="mwp-sub">Общее желание · в 3 wishlist'ах</div>
+            </div>
+          </div>
+
+          <div class="section-group-title">Размещения</div>
+          <div class="list-group" style="margin-top: 4px;">
+            <div class="list-row">
+              <div class="list-icon accent">🎂</div>
+              <div class="list-body">
+                <div class="list-title">День рождения <span class="wl-privacy-tag public">Публ</span></div>
+                <div class="list-sub">
+                  <span class="chip" style="font-size: 10px; padding: 2px 7px; margin-right: 4px;">Электроника</span>
+                  2-я
+                </div>
+              </div>
+              <div class="list-trail" style="color: var(--red);">−</div>
+            </div>
+            <div class="list-row">
+              <div class="list-icon blue">🏠</div>
+              <div class="list-body">
+                <div class="list-title">На новую квартиру <span class="wl-privacy-tag private">Прив</span></div>
+                <div class="list-sub">
+                  <span class="chip" style="font-size: 10px; padding: 2px 7px; margin-right: 4px;">Техника</span>
+                  7-я
+                </div>
+              </div>
+              <div class="list-trail" style="color: var(--red);">−</div>
+            </div>
+            <div class="list-row">
+              <div class="list-icon green">🧠</div>
+              <div class="list-body">
+                <div class="list-title">Идеи на будущее <span class="wl-privacy-tag private">Прив</span></div>
+                <div class="list-sub">Без категории · 1-я</div>
+              </div>
+              <div class="list-trail" style="color: var(--red);">−</div>
+            </div>
+          </div>
+
+          <div style="padding: 0 16px; margin-top: 14px;">
+            <button class="btn btn-secondary">＋ Добавить в ещё один wishlist</button>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Альтернатива: текущие placements — сразу с категорией и позицией. Минус (−) убирает placement.
+        Добавление — отдельная кнопка снизу, открывает picker (вариант C).
+      </div>
+    </div>
+
+    <!-- V3: Add picker (filtered) -->
+    <div class="phone-wrap">
+      <div class="phone-caption">C. Picker «добавить в» (фильтр по не-размещённым)</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px);"></div>
+        <div style="position: absolute; left: 0; right: 0; bottom: 0;">
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-icon accent">🔗</div>
+            <div class="sheet-title">Добавить в wishlist</div>
+            <div class="sheet-subtitle">Выбери, где ещё разместить <strong>iPhone 17 Pro</strong>. Это останется одним общим желанием.</div>
+            <div class="sheet-body">
+              <div class="list-group" style="margin: 0;">
+                <div class="check-row">
+                  <div class="cx on">✓</div>
+                  <div class="cr-icon" style="background: #FBBF24;">🎄</div>
+                  <div class="cr-body">
+                    <div class="cr-title">Новый год <span class="wl-privacy-tag public">Публ</span></div>
+                    <div class="cr-sub">0 желаний</div>
+                  </div>
+                </div>
+                <div class="check-row">
+                  <div class="cx">&nbsp;</div>
+                  <div class="cr-icon" style="background: #F472B6;">💝</div>
+                  <div class="cr-body">
+                    <div class="cr-title">Романтика <span class="wl-privacy-tag private">Прив</span></div>
+                    <div class="cr-sub">4 желания</div>
+                  </div>
+                </div>
+                <div class="check-row disabled">
+                  <div class="cx locked">✓</div>
+                  <div class="cr-icon" style="background: #5D4FC7;">🎂</div>
+                  <div class="cr-body">
+                    <div class="cr-title">День рождения</div>
+                    <div class="cr-sub">Уже добавлено</div>
+                  </div>
+                </div>
+                <div class="check-row disabled">
+                  <div class="cx locked">✓</div>
+                  <div class="cr-icon" style="background: #3B6AD0;">🏠</div>
+                  <div class="cr-body">
+                    <div class="cr-title">На новую квартиру</div>
+                    <div class="cr-sub">Уже добавлено</div>
+                  </div>
+                </div>
+                <div class="check-row disabled">
+                  <div class="cx locked">✓</div>
+                  <div class="cr-icon" style="background: #10B981;">🧠</div>
+                  <div class="cr-body">
+                    <div class="cr-title">Идеи на будущее</div>
+                    <div class="cr-sub">Уже добавлено</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="btn-sticky-bottom">
+              <button class="btn btn-ghost">Отмена</button>
+              <button class="btn btn-primary">Добавить · 1</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Уже размещённые wishlist'ы — задизейблены с тегом «Уже добавлено».
+        Не скрываем их: пользователю проще понять полную картину.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== SECTION 7: ADD vs COPY ========== -->
+<section id="add-copy" class="mockup-section">
+  <div class="section-title">7. Добавить (shared) vs Создать копию (independent)</div>
+  <div class="section-subtitle">
+    Это два разных сценария с разными последствиями. Они должны быть визуально различимы
+    и никогда не перепутаны в UI. В action-sheet — отдельные пункты с разными иконками.
+  </div>
+
+  <div class="phone-grid">
+
+    <!-- Add shared flow: entry -->
+    <div class="phone-wrap">
+      <div class="phone-caption">A. «Добавить в другой wishlist» → shared</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);"></div>
+        <div style="position: absolute; left: 0; right: 0; bottom: 0;">
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-icon accent">🔗</div>
+            <div class="sheet-title">Добавить это же желание</div>
+            <div class="sheet-subtitle">
+              <strong>iPhone 17 Pro</strong> появится в выбранных wishlist'ах как <strong>одно общее желание</strong>.
+              Изменения, бронь и комментарии останутся общими.
+            </div>
+            <div class="sheet-body">
+              <div class="list-group" style="margin: 0;">
+                <div class="check-row">
+                  <div class="cx on">✓</div>
+                  <div class="cr-icon" style="background: #FBBF24;">🎄</div>
+                  <div class="cr-body"><div class="cr-title">Новый год</div></div>
+                </div>
+                <div class="check-row">
+                  <div class="cx">&nbsp;</div>
+                  <div class="cr-icon" style="background: #F472B6;">💝</div>
+                  <div class="cr-body"><div class="cr-title">Романтика</div></div>
+                </div>
+              </div>
+              <div class="annotation info" style="margin: 12px 16px 0;">
+                <strong>Ты выбираешь shared.</strong> Редактирование и бронь будут едиными во всех wishlist'ах.
+              </div>
+            </div>
+            <div class="btn-sticky-bottom">
+              <button class="btn btn-ghost">Отмена</button>
+              <button class="btn btn-primary">🔗 Добавить · 1</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Акцент — accent purple. Иконка 🔗. Кнопка CTA с иконкой 🔗, чтобы ещё раз закрепить:
+        это shared-сценарий.
+      </div>
+    </div>
+
+    <!-- Copy flow: entry -->
+    <div class="phone-wrap">
+      <div class="phone-caption">B. «Создать отдельную копию» → independent</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);"></div>
+        <div style="position: absolute; left: 0; right: 0; bottom: 0;">
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-icon orange">🧬</div>
+            <div class="sheet-title">Создать отдельную копию</div>
+            <div class="sheet-subtitle">
+              Будет новое, <strong>независимое желание</strong>. Редактирование, бронь и комментарии не будут синхронизироваться с оригиналом.
+            </div>
+            <div class="sheet-body">
+              <div class="list-group" style="margin: 0;">
+                <div class="check-row">
+                  <div class="cx on">✓</div>
+                  <div class="cr-icon" style="background: #F472B6;">💝</div>
+                  <div class="cr-body">
+                    <div class="cr-title">Романтика</div>
+                    <div class="cr-sub">Копия появится здесь</div>
+                  </div>
+                </div>
+                <div class="check-row">
+                  <div class="cx">&nbsp;</div>
+                  <div class="cr-icon" style="background: #FBBF24;">🎄</div>
+                  <div class="cr-body"><div class="cr-title">Новый год</div></div>
+                </div>
+              </div>
+              <div class="annotation warn" style="margin: 12px 16px 0;">
+                <strong>Копия живёт сама по себе.</strong> Измени цену в оригинале — на копии она не обновится.
+              </div>
+            </div>
+            <div class="btn-sticky-bottom">
+              <button class="btn btn-ghost">Отмена</button>
+              <button class="btn" style="background: var(--orange); color: #1B1B1F;">🧬 Создать копию</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Для копии — оранжевый акцент. Иконка 🧬. Кнопка другого цвета.
+        Сразу понятно: это <strong>не</strong> то же самое, что «добавить».
+      </div>
+    </div>
+
+    <!-- Comparison diagram -->
+    <div class="phone-wrap">
+      <div class="phone-caption">C. Как их различать визуально</div>
+      <div style="background: var(--surface); border-radius: 16px; padding: 18px; border: 1px solid var(--border);">
+        <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+          <thead>
+            <tr style="color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">
+              <th style="text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--border);"></th>
+              <th style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--accent);">🔗 Shared</th>
+              <th style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--orange);">🧬 Copy</th>
+            </tr>
+          </thead>
+          <tbody style="color: var(--text-sec);">
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--text);">Иконка</td>
+              <td style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border);">🔗</td>
+              <td style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border);">🧬</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--text);">Акцент</td>
+              <td style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--accent);">Purple</td>
+              <td style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--orange);">Orange</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--text);">Редактирование</td>
+              <td style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--green);">Глобально</td>
+              <td style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--red);">Только копия</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--text);">Бронь</td>
+              <td style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--green);">Общая</td>
+              <td style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--red);">Отдельная</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--text);">Комментарии</td>
+              <td style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--green);">Один тред</td>
+              <td style="text-align: center; padding: 8px 4px; border-bottom: 1px solid var(--border); color: var(--red);">Разные треды</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 4px; color: var(--text);">DB</td>
+              <td style="text-align: center; padding: 8px 4px; color: var(--text-muted); font-family: monospace; font-size: 11px;">+1 placement</td>
+              <td style="text-align: center; padding: 8px 4px; color: var(--text-muted); font-family: monospace; font-size: 11px;">+1 wish, +1 placement</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="phone-note" style="margin-top: 16px;">
+        Главное правило UX: <strong>основной путь — shared</strong>. Copy — альтернатива для
+        редких кейсов (разные заметки, отдельная жизнь карточки). Не раздувать дефолтный flow.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== SECTION 8: CONFIRMATIONS ========== -->
+<section id="confirms" class="mockup-section">
+  <div class="section-title">8. Подтверждения и предупреждения</div>
+  <div class="section-subtitle">
+    Все тексты подтверждений из PRD, собранные вместе. Тон: прямой, без «мы хотим быть уверены». Указываем
+    последствия и количество размещений, если это релевантно.
+  </div>
+
+  <div class="phone-grid">
+
+    <!-- C1: Add shared confirm (if needed as separate confirm) -->
+    <div class="phone-wrap">
+      <div class="phone-caption">1. Добавить в другой wishlist (shared)</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="confirm-overlay">
+          <div class="confirm-sheet">
+            <div class="confirm-icon accent">🔗</div>
+            <div class="confirm-title">Добавить это же желание?</div>
+            <div class="confirm-desc">
+              Это будет <strong>одно общее желание</strong>. Изменения, бронь, комментарии и статус будут синхронизироваться во всех выбранных wishlist'ах.
+            </div>
+            <div class="confirm-meta">
+              <div class="cm-row"><span>Желание</span><strong>iPhone 17 Pro</strong></div>
+              <div class="cm-row"><span>Добавляется в</span><strong>Новый год</strong></div>
+            </div>
+            <div class="confirm-btns">
+              <button class="btn btn-primary">Добавить</button>
+              <button class="btn btn-ghost">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Для single-wishlist add можно инлайн без confirm-dialog — достаточно toast после.
+        Показываем dialog, только когда shared-семантика активируется впервые.
+      </div>
+    </div>
+
+    <!-- C2: Create copy confirm -->
+    <div class="phone-wrap">
+      <div class="phone-caption">2. Создать отдельную копию</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="confirm-overlay">
+          <div class="confirm-sheet">
+            <div class="confirm-icon orange">🧬</div>
+            <div class="confirm-title">Создать отдельную копию?</div>
+            <div class="confirm-desc">
+              Изменения, бронь и комментарии <strong>не будут синхронизироваться</strong> с исходным желанием.
+            </div>
+            <div class="confirm-meta">
+              <div class="cm-row"><span>Оригинал</span><strong>iPhone 17 Pro</strong></div>
+              <div class="cm-row"><span>Копия создаётся в</span><strong>Романтика</strong></div>
+            </div>
+            <div class="confirm-btns">
+              <button class="btn" style="background: var(--orange); color: #1B1B1F;">Создать копию</button>
+              <button class="btn btn-ghost">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Копия — отдельная dialog с orange-акцентом. Снова повторяем: «не будут синхронизироваться».
+      </div>
+    </div>
+
+    <!-- C3: Remove from one wishlist -->
+    <div class="phone-wrap">
+      <div class="phone-caption">3. Убрать только из этого wishlist</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="confirm-overlay">
+          <div class="confirm-sheet">
+            <div class="confirm-icon red">−</div>
+            <div class="confirm-title">Убрать только из этого wishlist?</div>
+            <div class="confirm-desc">
+              Само желание <strong>останется</strong> в других wishlist'ах, где оно сейчас размещено.
+            </div>
+            <div class="confirm-meta">
+              <div class="cm-row"><span>Убрать из</span><strong>🎂 День рождения</strong></div>
+              <div class="cm-row"><span>Останется в</span><strong>2 wishlist'ах</strong></div>
+            </div>
+            <div class="confirm-btns">
+              <button class="btn btn-danger">Убрать</button>
+              <button class="btn btn-ghost">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Destructive — но не «полное удаление». Красный акцент, но кнопка мягкая
+        (btn-danger, не btn-danger-solid).
+      </div>
+    </div>
+
+    <!-- C4: Last placement warning -->
+    <div class="phone-wrap">
+      <div class="phone-caption">4. Последнее размещение (критично)</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="confirm-overlay">
+          <div class="confirm-sheet">
+            <div class="confirm-icon red">⚠️</div>
+            <div class="confirm-title">Это последнее размещение</div>
+            <div class="confirm-desc">
+              Если убрать его отсюда, <strong>желание будет удалено полностью</strong>. Комментарии и история статуса тоже исчезнут.
+            </div>
+            <div class="confirm-meta">
+              <div class="cm-row"><span>Желание</span><strong>iPhone 17 Pro</strong></div>
+              <div class="cm-row"><span>Последнее место</span><strong>🎂 День рождения</strong></div>
+              <div class="cm-row"><span>Комментарии</span><strong>5</strong></div>
+              <div class="cm-row"><span>Бронь</span><strong style="color: var(--orange);">Активна</strong></div>
+            </div>
+            <div class="confirm-btns">
+              <button class="btn btn-danger-solid">Удалить полностью</button>
+              <button class="btn btn-ghost">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Максимально жёсткий confirm. Жирный красный. Показываем все побочные эффекты
+        (комментарии, бронь), чтобы пользователь увидел реальную цену действия.
+      </div>
+    </div>
+
+    <!-- C5: Full delete -->
+    <div class="phone-wrap">
+      <div class="phone-caption">5. Удалить желание полностью</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="confirm-overlay">
+          <div class="confirm-sheet">
+            <div class="confirm-icon red">🗑️</div>
+            <div class="confirm-title">Удалить желание полностью?</div>
+            <div class="confirm-desc">
+              Оно исчезнет <strong>из всех wishlist'ов</strong>, где сейчас размещено.
+            </div>
+            <div class="confirm-meta">
+              <div class="cm-row"><span>Желание</span><strong>iPhone 17 Pro</strong></div>
+              <div class="cm-row"><span>Сейчас в</span><strong>3 wishlist'ах</strong></div>
+              <div class="cm-row"><span>Бронь</span><strong style="color: var(--orange);">Активна</strong></div>
+            </div>
+            <div class="confirm-btns">
+              <button class="btn btn-danger-solid">Удалить</button>
+              <button class="btn btn-ghost">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Сильный confirm. Показываем количество wishlist'ов и статус брони.
+        Если бронь активна — подсветка orange.
+      </div>
+    </div>
+
+    <!-- C6: Already everywhere -->
+    <div class="phone-wrap">
+      <div class="phone-caption">6. Уже везде</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="confirm-overlay">
+          <div class="confirm-sheet">
+            <div class="confirm-icon blue">✓</div>
+            <div class="confirm-title">Уже везде</div>
+            <div class="confirm-desc">
+              Это желание <strong>уже добавлено во все твои wishlist'ы</strong>. Создай новый wishlist, если хочешь куда-то его добавить.
+            </div>
+            <div class="confirm-btns">
+              <button class="btn btn-primary">＋ Новый wishlist</button>
+              <button class="btn btn-ghost">Понятно</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Информационный dialog. Предлагаем action — создать новый wishlist —
+        чтобы не застревать в тупике.
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ========== SECTION 9: DELETE ========== -->
+<section id="delete" class="mockup-section">
+  <div class="section-title">9. Удаление: три разных сценария</div>
+  <div class="section-subtitle">
+    Пользователь должен чётко различать: <strong>убрать из одного wishlist</strong>,
+    <strong>удалить последнее размещение</strong> и <strong>удалить глобально</strong>.
+    Каждое — отдельная UX-ветка.
+  </div>
+
+  <div class="phone-grid">
+
+    <!-- Flow 1: Remove one of N -->
+    <div class="phone-wrap">
+      <div class="phone-caption">A. Убрать из одного wishlist (placements &gt; 1)</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">🎂 День рождения</div>
+          <div class="hdr-action">＋</div>
+        </div>
+        <div class="phone-content short">
+          <div style="height: 12px;"></div>
+          <div class="wish-card" style="opacity: 0.5;">
+            <div class="thumb gradient-pink">📱</div>
+            <div class="body">
+              <div class="title-row"><div class="title">iPhone 17 Pro</div></div>
+              <div class="meta-row">apple.com</div>
+              <div class="price">129 990 ₽</div>
+            </div>
+          </div>
+          <div class="wish-card">
+            <div class="thumb gradient-gold">🎧</div>
+            <div class="body">
+              <div class="title-row"><div class="title">AirPods Pro 3</div></div>
+              <div class="meta-row">apple.com</div>
+              <div class="price">29 990 ₽</div>
+            </div>
+          </div>
+
+          <!-- Toast -->
+          <div style="position: absolute; left: 16px; right: 16px; bottom: 80px; background: var(--card); border: 1px solid var(--border-light); border-radius: 14px; padding: 14px 16px; display: flex; gap: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); align-items: center;">
+            <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--orange-soft); color: var(--orange); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0;">−</div>
+            <div style="flex: 1; font-size: 12.5px; color: var(--text); line-height: 1.5;">
+              <strong>Убрано из «День рождения».</strong><br>Осталось в 2 wishlist'ах.
+            </div>
+            <div style="font-size: 12px; color: var(--accent); font-weight: 600;">Отменить</div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        После confirm — карточка сразу fade-out. Toast с undo внизу.
+        «Отменить» восстанавливает placement за 5 секунд.
+      </div>
+    </div>
+
+    <!-- Flow 2: Remove last placement -->
+    <div class="phone-wrap">
+      <div class="phone-caption">B. Убрать последнее — full delete warning</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="confirm-overlay">
+          <div class="confirm-sheet">
+            <div class="confirm-icon red">⚠️</div>
+            <div class="confirm-title">Это последнее размещение</div>
+            <div class="confirm-desc">
+              <strong>iPhone 17 Pro</strong> больше нигде не размещено. Если убрать его отсюда — желание будет удалено полностью.
+            </div>
+            <div class="confirm-meta">
+              <div class="cm-row"><span>Бронь</span><strong style="color: var(--orange);">Активна</strong></div>
+              <div class="cm-row"><span>Комментарии</span><strong>5</strong></div>
+              <div class="cm-row"><span>История статуса</span><strong>8 записей</strong></div>
+            </div>
+            <div class="confirm-btns">
+              <button class="btn btn-danger-solid">Удалить полностью</button>
+              <button class="btn btn-secondary">Добавить в другой wishlist</button>
+              <button class="btn btn-ghost">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        <strong>Ключевая деталь:</strong> кнопка «Добавить в другой wishlist» — мягкий выход.
+        Пользователь может не удалять, а переместить желание, чтобы сохранить.
+      </div>
+    </div>
+
+    <!-- Flow 3: Global delete -->
+    <div class="phone-wrap">
+      <div class="phone-caption">C. Удалить глобально из detail</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">Желание</div>
+          <div class="hdr-action">···</div>
+        </div>
+        <div class="phone-content short">
+          <div style="padding: 20px 16px 12px; text-align: center;">
+            <div style="width: 80px; height: 80px; border-radius: 18px; background: linear-gradient(135deg, #F472B6, #C084FC); display: flex; align-items: center; justify-content: center; font-size: 36px; margin: 0 auto 14px;">📱</div>
+            <div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">iPhone 17 Pro</div>
+            <div style="font-size: 13px; color: var(--text-sec);">apple.com · 129 990 ₽</div>
+          </div>
+
+          <div class="shared-block" style="margin: 6px 16px;">
+            <div class="sb-icon">🔗</div>
+            <div class="sb-body">
+              <div class="sb-title">В 3 wishlist'ах</div>
+              <div class="sb-text">День рождения · На квартиру · Идеи</div>
+              <a class="sb-link">Управлять размещением →</a>
+            </div>
+          </div>
+
+          <div style="padding: 0 16px; margin-top: 16px;">
+            <button class="btn btn-primary">Редактировать</button>
+            <div style="height: 8px;"></div>
+            <button class="btn btn-secondary">🔗 Добавить в другой wishlist</button>
+            <div style="height: 8px;"></div>
+            <button class="btn btn-outline">🧬 Создать отдельную копию</button>
+            <div style="height: 8px;"></div>
+            <button class="btn btn-danger">🗑️ Удалить полностью</button>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Detail view с shared-блоком и списком wishlist'ов. «Удалить полностью» внизу — после confirm снимает wish
+        + все placements + комментарии + бронь.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="variant-label red">Критично</div>
+  <div class="annotation danger" style="margin: 0;">
+    <strong>Политика no-orphan.</strong> Wish без placement'а не должна существовать.
+    Backend-гарантия: либо placement count &gt; 0, либо wish удалён. При удалении wishlist'а — placement'ы
+    удаляются; если это был последний placement для какого-то wish — wish тоже удаляется
+    (с логом в <code>DeletionAudit</code>, чтобы не потерять данные о бронях для аналитики).
+  </div>
+</section>
+
+<!-- ========== SECTION 10: PUBLIC VIEW ========== -->
+<section id="public" class="mockup-section">
+  <div class="section-title">10. Публичный вид и privacy-модель</div>
+  <div class="section-subtitle">
+    Это место с максимальным риском privacy-утечки. Правило одно: доступ к wish определяется
+    <strong>конкретным публичным контекстом</strong>, через который пришёл зритель. Другие placements
+    того же wish — невидимы.
+  </div>
+
+  <div class="phone-grid">
+
+    <!-- Public view: no shared info -->
+    <div class="phone-wrap">
+      <div class="phone-caption">A. Публичный зритель — обычный вид</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">Wishlist Ани</div>
+          <div class="hdr-action">🔗</div>
+        </div>
+        <div class="phone-content short">
+          <div style="padding: 14px 16px 4px;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+              <div style="width: 48px; height: 48px; border-radius: 24px; background: linear-gradient(135deg, #F472B6, #C084FC);"></div>
+              <div>
+                <div style="font-size: 16px; font-weight: 700;">Аня · День рождения</div>
+                <div style="font-size: 12px; color: var(--text-sec);">23 желания · 14 июня</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-pink">📱</div>
+            <div class="body">
+              <div class="title-row"><div class="title">iPhone 17 Pro</div></div>
+              <div class="meta-row">apple.com</div>
+              <div class="price">129 990 ₽</div>
+              <div class="status-row">
+                <div class="sr-item green">🎁 Подарить</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wish-card">
+            <div class="thumb gradient-gold">🎧</div>
+            <div class="body">
+              <div class="title-row"><div class="title">AirPods Pro 3</div></div>
+              <div class="meta-row">apple.com</div>
+              <div class="price">29 990 ₽</div>
+              <div class="status-row">
+                <div class="sr-item orange">🔒 Уже выбрал другой</div>
+              </div>
+            </div>
+          </div>
+          <div class="wish-card">
+            <div class="thumb gradient-indigo">👟</div>
+            <div class="body">
+              <div class="title-row"><div class="title">Nike Air Max</div></div>
+              <div class="meta-row">nike.com</div>
+              <div class="price">18 500 ₽</div>
+              <div class="status-row">
+                <div class="sr-item green">🎁 Подарить</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation ok" style="margin: 12px 16px 0;">
+            <strong>Что видит зритель.</strong> Обычный wishlist. Никаких badge'ей,
+            никаких «в нескольких списках», никакого намёка на приватные placements.
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        С точки зрения публичного зрителя shared-механика не существует.
+        Он видит один обычный wishlist с обычными желаниями.
+      </div>
+    </div>
+
+    <!-- Privacy: reservation propagation -->
+    <div class="phone-wrap">
+      <div class="phone-caption">B. Бронь едина, но без утечки</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">iPhone 17 Pro</div>
+          <div class="hdr-action"></div>
+        </div>
+        <div class="phone-content short">
+          <div style="padding: 16px; text-align: center;">
+            <div style="width: 100px; height: 100px; border-radius: 20px; background: linear-gradient(135deg, #F472B6, #C084FC); display: flex; align-items: center; justify-content: center; font-size: 44px; margin: 0 auto 14px;">📱</div>
+            <div style="font-size: 19px; font-weight: 700; margin-bottom: 4px;">iPhone 17 Pro · Titanium</div>
+            <div style="font-size: 13px; color: var(--text-sec);">apple.com · 129 990 ₽</div>
+          </div>
+
+          <div style="padding: 0 16px; margin-top: 8px;">
+            <div style="background: var(--orange-soft); border-left: 3px solid var(--orange); border-radius: 10px; padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start;">
+              <div style="font-size: 15px;">🔒</div>
+              <div style="font-size: 13px; color: var(--text); line-height: 1.5;">
+                <strong>Уже выбрал другой.</strong>
+                <span style="color: var(--text-sec);">Подарок забронирован. Ты всё равно можешь подарить что-то другое из списка.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-group-title" style="margin-top: 20px;">Комментарии</div>
+          <div class="comment-block">
+            <div class="cm-av">М</div>
+            <div class="cm-text">
+              <span class="cm-name">Миша</span> · я возьму чёрный или белый?
+              <div class="cm-meta">вчера · через «Wishlist Ани»</div>
+            </div>
+          </div>
+          <div class="comment-block">
+            <div class="cm-av" style="background: linear-gradient(135deg, #FBBF24, #F59E0B);">А</div>
+            <div class="cm-text">
+              <span class="cm-name">Аня</span> → Миша · любой
+              <div class="cm-meta">вчера</div>
+            </div>
+          </div>
+
+          <div class="annotation info" style="margin: 12px 16px 0;">
+            <strong>Контекст комментария</strong> — «через Wishlist Ани» — это имя wishlist'а <em>входа</em>,
+            не имя private-списка, где wish тоже размещён.
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Зритель видит: wish забронирован. Комментарии общие для wish — но отображаются
+        с тегом «через {wishlist входа}». Utечки private-wishlist имён нет.
+      </div>
+    </div>
+
+    <!-- Privacy diagram -->
+    <div class="phone-wrap">
+      <div class="phone-caption">C. Что видит кто — визуальная модель</div>
+      <div class="privacy-diagram">
+        <div style="font-size: 13px; margin-bottom: 14px; color: var(--text-sec);">
+          <strong style="color: var(--text);">Сценарий:</strong> у Ани — один iPhone 17 Pro, размещён в 3 wishlist'ах.
+        </div>
+        <div class="priv-row">
+          <div class="priv-wl public">
+            <div class="pwl-header">
+              <div class="pwl-title">🎂 День рождения</div>
+              <div class="pwl-tag">Публ</div>
+            </div>
+            <div class="pwl-item highlight">iPhone 17 Pro</div>
+            <div class="pwl-item">AirPods Pro</div>
+            <div class="pwl-item">Nike Air Max</div>
+          </div>
+          <div class="priv-wl private">
+            <div class="pwl-header">
+              <div class="pwl-title">🏠 На квартиру</div>
+              <div class="pwl-tag">Прив</div>
+            </div>
+            <div class="pwl-item highlight">iPhone 17 Pro</div>
+            <div class="pwl-item">Кухонный гарнитур</div>
+            <div class="pwl-item">Пылесос</div>
+          </div>
+          <div class="priv-wl private">
+            <div class="pwl-header">
+              <div class="pwl-title">🧠 Идеи</div>
+              <div class="pwl-tag">Прив</div>
+            </div>
+            <div class="pwl-item highlight">iPhone 17 Pro</div>
+            <div class="pwl-item">Rolex</div>
+          </div>
+        </div>
+
+        <div class="priv-viewer">
+          <div class="priv-case ok">
+            <div class="pcase-header">
+              <div class="dot"></div>
+              Зритель пришёл через «🎂 День рождения»
+            </div>
+            <div class="pcase-text">
+              Видит <strong>iPhone 17 Pro</strong> как одно из желаний из этого wishlist'а.
+              Не знает, что оно ещё где-то. Видит бронь, комментарии — если они есть.
+            </div>
+          </div>
+          <div class="priv-case bad">
+            <div class="pcase-header">
+              <div class="dot"></div>
+              Что утечь <strong>не должно</strong>
+            </div>
+            <div class="pcase-text">
+              Имена «На квартиру», «Идеи».
+              Счётчик «В 3 wishlist'ах».
+              «Также в...» badge.
+              Категории private-списков.
+              Комментарий с тегом «через Идеи».
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Формула доступа: <strong>wish доступен публично только через public-wishlist, в котором он размещён</strong>.
+        Backend-проверка при запросе: где я сейчас → есть ли placement в public-wishlist → видим.
+      </div>
+    </div>
+  </div>
+
+  <div class="variant-label red">Privacy-инварианты</div>
+  <div class="annotation danger" style="margin: 0;">
+    API-правила:<br>
+    1. <strong>Публичные endpoint'ы</strong> никогда не возвращают <code>wish.placements[]</code> целиком — только одну запись контекста.<br>
+    2. <strong>Счётчик placement'ов</strong> в публичном ответе либо отсутствует, либо считает только public-placements.<br>
+    3. <strong>Комментарий без wishlistId контекста</strong> не должен быть публично адресуемым (никаких deeplink'ов через private-placement).<br>
+    4. <strong>Owner-check</strong> перед любым ответом, включающим management-информацию (placements list, edit screen).
+  </div>
+</section>
+
+<!-- ========== SECTION 11: EDGE STATES ========== -->
+<section id="edge" class="mockup-section">
+  <div class="section-title">11. Edge-состояния</div>
+  <div class="section-subtitle">
+    Состояния, которые легко забыть, но которые пользователь обязательно встретит.
+  </div>
+
+  <div class="phone-grid">
+
+    <!-- Already everywhere -->
+    <div class="phone-wrap">
+      <div class="phone-caption">A. «Уже везде» — empty-state</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">Добавить в wishlist</div>
+          <div class="hdr-action"></div>
+        </div>
+        <div class="phone-content short">
+          <div class="empty-state">
+            <div class="empty-icon">✓</div>
+            <div class="empty-title">Это желание уже везде</div>
+            <div class="empty-desc">
+              Оно добавлено во все твои wishlist'ы — 5 штук.
+              Создай новый wishlist, если хочешь ещё одно место.
+            </div>
+            <button class="btn btn-primary" style="max-width: 220px; margin: 0 auto;">＋ Создать wishlist</button>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Чистый empty-state + CTA на создание wishlist'а.
+      </div>
+    </div>
+
+    <!-- Duplicate add attempt -->
+    <div class="phone-wrap">
+      <div class="phone-caption">B. Duplicate add — тихий отказ</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px);"></div>
+        <div style="position: absolute; left: 0; right: 0; bottom: 0;">
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-title">Добавить в wishlist</div>
+            <div class="sheet-body">
+              <div class="list-group" style="margin: 0;">
+                <div class="check-row">
+                  <div class="cx on">✓</div>
+                  <div class="cr-icon" style="background: #FBBF24;">🎄</div>
+                  <div class="cr-body"><div class="cr-title">Новый год</div></div>
+                </div>
+                <div class="check-row disabled">
+                  <div class="cx locked">✓</div>
+                  <div class="cr-icon" style="background: #5D4FC7;">🎂</div>
+                  <div class="cr-body">
+                    <div class="cr-title">День рождения</div>
+                    <div class="cr-sub" style="color: var(--green);">Уже добавлено</div>
+                  </div>
+                </div>
+                <div class="check-row disabled">
+                  <div class="cx locked">✓</div>
+                  <div class="cr-icon" style="background: #3B6AD0;">🏠</div>
+                  <div class="cr-body">
+                    <div class="cr-title">На новую квартиру</div>
+                    <div class="cr-sub" style="color: var(--green);">Уже добавлено</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="btn-sticky-bottom">
+              <button class="btn btn-ghost">Отмена</button>
+              <button class="btn btn-primary">Добавить · 1</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Уже размещённые wishlist'ы — задизейблены с подписью «Уже добавлено».
+        Backend unique(wishlistId, wishId) — страховка для гонок.
+      </div>
+    </div>
+
+    <!-- Archived propagation -->
+    <div class="phone-wrap">
+      <div class="phone-caption">C. Архивация — везде сразу</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">←</div>
+          <div class="hdr-title">🎂 День рождения</div>
+          <div class="hdr-action">＋</div>
+        </div>
+        <div class="phone-content short">
+          <div style="height: 10px;"></div>
+          <div class="wish-card">
+            <div class="thumb gradient-gold">🎧</div>
+            <div class="body">
+              <div class="title-row"><div class="title">AirPods Pro 3</div></div>
+              <div class="meta-row">apple.com</div>
+              <div class="price">29 990 ₽</div>
+            </div>
+          </div>
+
+          <div class="section-group-title" style="margin-top: 10px;">
+            Архив
+            <span class="count">1</span>
+          </div>
+          <div class="wish-card" style="opacity: 0.6; background: var(--card);">
+            <div class="thumb gradient-pink">📱</div>
+            <div class="body">
+              <div class="title-row">
+                <div class="title">iPhone 17 Pro</div>
+                <div class="shared-badge-inline" style="background: rgba(107,114,128,0.15); color: var(--text-muted);">🔗 В 3</div>
+              </div>
+              <div class="meta-row">apple.com<span class="sep">·</span>Электроника</div>
+              <div class="price">129 990 ₽</div>
+              <div class="status-row">
+                <div class="sr-item" style="color: var(--text-muted);">📦 В архиве везде</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="annotation info" style="margin: 10px 16px 0;">
+            <strong>Архив — глобально.</strong> Желание в архиве исчезает из публичных вью во всех wishlist'ах.
+            Владелец видит его в секции «Архив» в каждом wishlist'е, где placement остался.
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Архивация — wish-level. Одна кнопка → во всех 3 wishlist'ах желание уходит в архив.
+        Распаковать — тоже везде сразу.
+      </div>
+    </div>
+
+    <!-- Reserved wish removed from one -->
+    <div class="phone-wrap">
+      <div class="phone-caption">D. Удаление из одного wishlist'а при активной брони</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="confirm-overlay">
+          <div class="confirm-sheet">
+            <div class="confirm-icon orange">🔒</div>
+            <div class="confirm-title">Убрать из этого wishlist?</div>
+            <div class="confirm-desc">
+              Желание <strong>уже забронировано</strong> Мишей. Оно останется активной бронью в других 2 wishlist'ах.
+            </div>
+            <div class="confirm-meta">
+              <div class="cm-row"><span>Бронь</span><strong style="color: var(--orange);">Активна</strong></div>
+              <div class="cm-row"><span>Останется в</span><strong>2 wishlist'ах</strong></div>
+            </div>
+            <div class="confirm-btns">
+              <button class="btn btn-danger">Убрать</button>
+              <button class="btn btn-ghost">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Бронь — на уровне wish. Убрать placement ≠ снять бронь.
+        Миша не получит уведомления, потому что для него ничего не меняется.
+      </div>
+    </div>
+
+    <!-- Wishlist deleted (other placements survive) -->
+    <div class="phone-wrap">
+      <div class="phone-caption">E. Удаление wishlist'а — wish остаётся</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="confirm-overlay">
+          <div class="confirm-sheet">
+            <div class="confirm-icon red">🗑️</div>
+            <div class="confirm-title">Удалить wishlist «Идеи»?</div>
+            <div class="confirm-desc">
+              8 желаний, 3 из них — общие с другими wishlist'ами. Общие останутся в своих списках. Остальные 5 будут удалены.
+            </div>
+            <div class="confirm-meta">
+              <div class="cm-row"><span>Желаний в wishlist'е</span><strong>8</strong></div>
+              <div class="cm-row"><span>Общих — останутся</span><strong style="color: var(--green);">3</strong></div>
+              <div class="cm-row"><span>Уникальных — удалятся</span><strong style="color: var(--red);">5</strong></div>
+            </div>
+            <div class="confirm-btns">
+              <button class="btn btn-danger-solid">Удалить wishlist</button>
+              <button class="btn btn-ghost">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Удаление wishlist'а = удаление его placements. Shared wish остаётся жить в других wishlist'ах.
+        Пользователю показываем разбивку — что останется, что уйдёт.
+      </div>
+    </div>
+
+    <!-- Free plan limits -->
+    <div class="phone-wrap">
+      <div class="phone-caption">F. Free-план: лимит wishlist'ов, не shared</div>
+      <div class="phone">
+        <div class="phone-status">9:41</div>
+        <div class="phone-header">
+          <div class="back">✕</div>
+          <div class="hdr-title">Новое желание</div>
+          <div class="hdr-action">Сохранить</div>
+        </div>
+        <div class="phone-content short">
+          <label class="input-label">В каких wishlist'ах разместить</label>
+          <div class="list-group" style="margin-top: 6px;">
+            <div class="check-row">
+              <div class="cx on">✓</div>
+              <div class="cr-icon" style="background: #5D4FC7;">🎂</div>
+              <div class="cr-body">
+                <div class="cr-title">День рождения</div>
+                <div class="cr-sub">23 желания</div>
+              </div>
+            </div>
+            <div class="check-row">
+              <div class="cx on">✓</div>
+              <div class="cr-icon" style="background: #3B6AD0;">🏠</div>
+              <div class="cr-body">
+                <div class="cr-title">На новую квартиру</div>
+                <div class="cr-sub">41 желание</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding: 0 16px; margin-top: 14px;">
+            <div style="background: linear-gradient(135deg, rgba(124,106,255,0.1), rgba(124,106,255,0.02)); border: 1px solid rgba(124,106,255,0.22); border-radius: 12px; padding: 14px;">
+              <div style="font-size: 13px; font-weight: 700; margin-bottom: 4px;">🔒 Новые wishlist'ы — в Pro</div>
+              <div style="font-size: 12px; color: var(--text-sec); line-height: 1.5; margin-bottom: 10px;">
+                На Free можно до 2 wishlist'ов. Общее желание (shared) — без ограничений.
+              </div>
+              <button class="btn btn-primary btn-small" style="width: auto;">Узнать о Pro</button>
+            </div>
+          </div>
+
+          <div class="annotation ok" style="margin: 14px 16px 0;">
+            <strong>Важно.</strong> Сама shared-фича не paywall'ится. Free-пользователь может размещать
+            одно желание во все доступные ему wishlist'ы. Paywall касается только <em>создания</em> нового wishlist'а.
+          </div>
+        </div>
+      </div>
+      <div class="phone-note">
+        Free-юзер размещает shared-wish без ограничений в рамках своих wishlist'ов.
+        Paywall только на создание новых wishlist'ов сверх лимита.
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ========== SECTION 12: DECISIONS ========== -->
+<section id="decisions" class="mockup-section">
+  <div class="section-title">12. Архитектурные решения</div>
+  <div class="section-subtitle">
+    Non-negotiable решения перед имплементацией. Каждое — явный выбор с указанием альтернатив.
+    Эти решения зафиксируют модель и сохранят консистентность фичи.
+  </div>
+
+  <div class="decisions">
+    <div class="decision">
+      <div class="decision-num">Решение 1</div>
+      <div class="decision-title">Canonical Wish + WishlistWishPlacement</div>
+      <div class="decision-text">
+        Wish — каноничная сущность, принадлежит <strong>owner user</strong>. Wishlist содержит
+        <strong>размещения</strong> (join-record'ы). Никаких копий с фоновой синхронизацией.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">Wish ✕ Placement</div>
+        <div class="decision-pill muted">✕ shadow-копии</div>
+        <div class="decision-pill muted">✕ background sync</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 2</div>
+      <div class="decision-title">Глобальные vs локальные поля</div>
+      <div class="decision-text">
+        <strong>Global (wish):</strong> title, description, url, images, price, currency, status, reservation, comments, archive.<br>
+        <strong>Local (placement):</strong> position, categoryId, pinnedInWishlist.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">category = placement-level</div>
+        <div class="decision-pill">position = placement-level</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 3</div>
+      <div class="decision-title">Last placement → require explicit full-delete confirm</div>
+      <div class="decision-text">
+        Убрать последнее размещение нельзя без явного подтверждения. API:
+        <code>DELETE /placements/:id</code> возвращает <code>409 requires_full_delete_confirmation</code>,
+        если это последний placement. Клиент показывает соответствующий dialog и отправляет
+        <code>DELETE /wishes/:id</code>.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">409 + separate delete</div>
+        <div class="decision-pill muted">✕ implicit cascade</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 4</div>
+      <div class="decision-title">Full-delete разрешён при активной брони</div>
+      <div class="decision-text">
+        Следуем текущей политике удаления wish. Усиливаем confirm: показываем
+        <strong>«Желание уже забронировано»</strong>, но не блокируем. Бронь — не contract.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">allow + strong warn</div>
+        <div class="decision-pill muted">✕ hard block</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 5</div>
+      <div class="decision-title">Privacy по context-entry</div>
+      <div class="decision-text">
+        Доступ к wish публичному зрителю определяется через public-wishlist, в котором он сейчас смотрит.
+        Никаких «wish existed elsewhere» → ответ 200.
+        Backend filters: <code>resolvePublicWish({wishId, viaWishlistSlug}) → 403 or wish-in-context</code>.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">context-scoped</div>
+        <div class="decision-pill muted">✕ global-visible</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 6</div>
+      <div class="decision-title">Категория — placement-level</div>
+      <div class="decision-text">
+        Category хранится на placement: <code>WishlistWishPlacement.categoryId</code>.
+        Одно и то же желание может быть в «Электронике» в одном wishlist'е и «Технике» в другом.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">placement.categoryId</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 7</div>
+      <div class="decision-title">Порядок — placement-level</div>
+      <div class="decision-text">
+        <code>WishlistWishPlacement.position</code>. Reorder внутри wishlist'а меняет только позиции
+        placement'ов в этом wishlist'е. Index: <code>(wishlistId, position)</code>.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">placement.position</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 8</div>
+      <div class="decision-title">Migration: 1 wish → 1 placement</div>
+      <div class="decision-text">
+        Все существующие wishes получают ровно один placement с текущим wishlistId.
+        Существующие комментарии/бронь остаются на wish. Category/position переезжают на placement.
+        Deploy: schema → backfill → dual-read → switch → cleanup.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">1 → 1 placement</div>
+        <div class="decision-pill">dual-read window</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 9</div>
+      <div class="decision-title">No-orphan rule</div>
+      <div class="decision-text">
+        Wish без placement'ов не существует. Триггер при удалении последнего placement:
+        если это был последний — <strong>требовать явное full-delete</strong> (не auto-cascade),
+        кроме случая каскада от удаления wishlist'а.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">enforce invariant</div>
+        <div class="decision-pill">cascade on wishlist delete</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 10</div>
+      <div class="decision-title">Copy — отдельный endpoint</div>
+      <div class="decision-text">
+        <code>POST /tg/wishes/:id/duplicate-to-wishlists</code> создаёт новые canonical wish записи,
+        каждая — со своим placement. Комментарии и бронь <strong>не копируются</strong>.
+        Имя: <code>duplicate</code>, не <code>copy</code> — чтобы не пересекаться с shared terminology.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">new wish rows</div>
+        <div class="decision-pill">no comment/reservation copy</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 11</div>
+      <div class="decision-title">Not Pro-gated</div>
+      <div class="decision-text">
+        Shared-placement сам по себе — Free-фича. Paywall касается только количества wishlist'ов:
+        если у Free-юзера 2 лимит, shared работает во все 2.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">Free + Pro</div>
+        <div class="decision-pill muted">paywall ≠ shared</div>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Решение 12</div>
+      <div class="decision-title">Badge: 🔗 В N</div>
+      <div class="decision-text">
+        На wish-карточке в списке — мини-pill <code>🔗 В 3</code> рядом с title.
+        В detail view — расширенный shared-block с перечислением wishlist'ов.
+        Публичный зритель badge не видит.
+      </div>
+      <div class="decision-choice">
+        <div class="decision-pill">inline pill (list)</div>
+        <div class="decision-pill">full block (detail)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="variant-label orange" style="margin-top: 32px;">Ещё открыто — обсудить до кодинга</div>
+  <div class="annotation warn" style="margin: 0;">
+    <strong>1. Confirm на обычный add.</strong> В разделе 8 — confirm-dialog на «добавить в другой wishlist».
+    Может быть избыточно: sheet-выбор из раздела 6C + toast достаточно. Confirm оставляем только для copy и remove.<br>
+    <strong>2. Priority.</strong> PRD не уточнил — wish-level или placement-level. Предлагаю wish-level
+    (важность желания — свойство желания, не его размещения).<br>
+    <strong>3. Gift notes.</strong> Текущая фича «не забудь» — wish-level или placement-level? Предлагаю wish-level
+    для shared, с дублированием в notif'ах по wishlistId контекста.<br>
+    <strong>4. Аналитика на миграции.</strong> События: <code>wish_shared_placement_added</code>,
+    <code>wish_shared_badge_opened</code>, <code>wish_duplicate_vs_shared_chosen</code>. Dimensions:
+    <code>placements_count</code>, <code>entrypoint</code>.
+  </div>
+</section>
+
+<!-- Footer -->
+<div class="footer-note">
+  Моки по постановке «Общее желание в нескольких wishlist'ах» · v1 · 2026-04-15 · 12 секций, 40+ состояний<br>
+  Перед кодингом: подтвердить решения 1–12 и открытые вопросы в блоке выше.
+</div>
+
+<script>
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-target');
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.mockup-section').forEach(s => s.classList.remove('active'));
+      document.getElementById(target).classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+</script>
+
+</body>
+</html>

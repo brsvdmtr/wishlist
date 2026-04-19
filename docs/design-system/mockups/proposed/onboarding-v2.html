@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1">
+<title>WishBoard Onboarding v2</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    background: #111;
+    color: #F4F4F6;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+    padding: 40px;
+    justify-content: center;
+  }
+
+  .phone {
+    width: 390px;
+    height: 844px;
+    background: #1B1B1F;
+    border-radius: 40px;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    border: 2px solid rgba(255,255,255,0.08);
+  }
+  .phone-inner {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    padding: 60px 0 0;
+  }
+  .phone-inner::-webkit-scrollbar { display: none; }
+
+  .label {
+    text-align: center;
+    font-size: 13px;
+    color: #9CA3AF;
+    margin-top: 12px;
+    font-weight: 500;
+    width: 390px;
+    line-height: 1.4;
+  }
+
+  .onb-bg {
+    background: linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%);
+    min-height: 100%;
+    padding: 20px 24px 34px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .skip-btn {
+    align-self: flex-end;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.5);
+    font-size: 13px;
+    padding: 6px 16px;
+    border-radius: 20px;
+  }
+
+  .dots {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin: 20px 0 16px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+  }
+  .dot.active {
+    background: #7C6AFF;
+    width: 24px;
+    border-radius: 4px;
+  }
+
+  .cta-btn {
+    background: linear-gradient(135deg, #7c6aff 0%, #a855f7 100%);
+    color: white;
+    font-size: 17px;
+    font-weight: 700;
+    padding: 17px 0;
+    border-radius: 16px;
+    text-align: center;
+    width: 100%;
+    box-shadow: 0 8px 24px rgba(124,106,255,0.4);
+    margin-top: auto;
+  }
+  .cta-btn.secondary {
+    background: rgba(255,255,255,0.06);
+    box-shadow: none;
+    border: 1px solid rgba(255,255,255,0.1);
+    font-size: 15px;
+    font-weight: 600;
+    margin-top: 10px;
+    color: rgba(255,255,255,0.6);
+  }
+  .cta-btn.ghost {
+    background: transparent;
+    box-shadow: none;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 8px;
+    color: rgba(255,255,255,0.35);
+    padding: 12px 0;
+  }
+
+  .onb-title {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 800;
+    color: white;
+    line-height: 1.25;
+  }
+  .onb-subtitle {
+    text-align: center;
+    font-size: 14px;
+    color: rgba(255,255,255,0.45);
+    margin-top: 8px;
+    line-height: 1.45;
+  }
+
+  /* ── Step 3: Try Now ── */
+  .try-section {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .url-field {
+    background: rgba(255,255,255,0.06);
+    border: 1.5px solid rgba(124,106,255,0.35);
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: border-color 0.2s;
+  }
+  .url-field .paste-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: rgba(124,106,255,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .url-field .placeholder {
+    font-size: 15px;
+    color: rgba(255,255,255,0.3);
+    flex: 1;
+  }
+  .url-field .paste-btn {
+    background: rgba(124,106,255,0.2);
+    border: 1px solid rgba(124,106,255,0.4);
+    color: #A78BFA;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 14px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+
+  .or-divider {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 4px 0;
+  }
+  .or-divider .line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+  }
+  .or-divider .text {
+    font-size: 12px;
+    color: rgba(255,255,255,0.25);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .manual-btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+  }
+  .manual-btn .icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: rgba(52,211,153,0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .manual-btn .info .title {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.8);
+  }
+  .manual-btn .info .desc {
+    font-size: 12px;
+    color: rgba(255,255,255,0.35);
+    margin-top: 2px;
+  }
+  .manual-btn .arrow {
+    margin-left: auto;
+    color: rgba(255,255,255,0.2);
+    font-size: 16px;
+  }
+
+  .hint-box {
+    text-align: center;
+    font-size: 13px;
+    color: rgba(255,255,255,0.3);
+    line-height: 1.5;
+    margin-top: 4px;
+  }
+
+  /* ── Step 3b: Success after paste ── */
+  .success-card {
+    background: rgba(52,211,153,0.06);
+    border: 1.5px solid rgba(52,211,153,0.25);
+    border-radius: 16px;
+    padding: 18px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    animation: slideUp 0.4s ease;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .success-thumb {
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(124,106,255,0.2), rgba(168,85,247,0.2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+  .success-info { flex: 1; }
+  .success-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(52,211,153,0.15);
+    color: #34D399;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+  .success-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+  }
+  .success-price {
+    font-size: 15px;
+    font-weight: 700;
+    color: #7C6AFF;
+    margin-top: 3px;
+  }
+  .success-domain {
+    font-size: 12px;
+    color: rgba(255,255,255,0.35);
+    margin-top: 4px;
+  }
+
+  .confetti {
+    text-align: center;
+    font-size: 42px;
+    margin-bottom: 8px;
+  }
+
+  .success-msg {
+    text-align: center;
+    font-size: 15px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.5;
+    margin-top: 12px;
+  }
+  .success-msg b {
+    color: #34D399;
+    font-weight: 600;
+  }
+
+  /* ── Step 3c: Fallback grid ── */
+  .fallback-title {
+    text-align: center;
+    font-size: 15px;
+    color: rgba(255,255,255,0.55);
+    margin-top: 20px;
+    margin-bottom: 4px;
+  }
+
+  .catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .catalog-item {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 14px 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .catalog-item:hover, .catalog-item.selected {
+    border-color: rgba(124,106,255,0.4);
+    background: rgba(124,106,255,0.08);
+  }
+  .catalog-item.selected {
+    border-color: rgba(124,106,255,0.6);
+    box-shadow: 0 0 0 1px rgba(124,106,255,0.3);
+  }
+  .catalog-item .emoji {
+    font-size: 28px;
+    display: block;
+    margin-bottom: 6px;
+  }
+  .catalog-item .name {
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+    font-weight: 500;
+    line-height: 1.3;
+  }
+  .catalog-item .price {
+    font-size: 10px;
+    color: #7C6AFF;
+    font-weight: 600;
+    margin-top: 3px;
+  }
+  .catalog-item .check {
+    display: none;
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 20px;
+    height: 20px;
+    background: #7C6AFF;
+    border-radius: 50%;
+    font-size: 11px;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+  .catalog-item.selected .check {
+    display: flex;
+  }
+  .catalog-item {
+    position: relative;
+  }
+
+  .selected-count {
+    text-align: center;
+    font-size: 13px;
+    color: #7C6AFF;
+    font-weight: 600;
+    margin-top: 10px;
+  }
+
+  /* ── Step 4 combined: Share + Reserve ── */
+  .combined-section {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .feature-block {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 18px;
+  }
+  .feature-block-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .feature-block-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .feature-block-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: white;
+  }
+  .feature-block-desc {
+    font-size: 13px;
+    color: rgba(255,255,255,0.4);
+    line-height: 1.5;
+  }
+
+  .mini-demo {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .mini-card {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+  .mini-card .mc-title {
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+  }
+  .mini-card .mc-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    margin-top: 6px;
+    font-weight: 600;
+  }
+  .mini-arrow {
+    font-size: 16px;
+    color: rgba(255,255,255,0.15);
+    flex-shrink: 0;
+  }
+
+  /* ── Step 5: Complete with real wish ── */
+  .real-wish-card {
+    background: rgba(124,106,255,0.06);
+    border: 1.5px solid rgba(124,106,255,0.2);
+    border-radius: 18px;
+    overflow: hidden;
+    margin: 20px 0;
+  }
+  .real-wish-img {
+    height: 120px;
+    background: linear-gradient(135deg, #1f1840, #162040);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    position: relative;
+  }
+  .real-wish-img .your-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(124,106,255,0.8);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+  }
+  .real-wish-body {
+    padding: 16px 18px;
+  }
+  .real-wish-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: white;
+  }
+  .real-wish-price {
+    font-size: 15px;
+    color: #7C6AFF;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+  .real-wish-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .real-wish-wl {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .real-wish-move {
+    font-size: 12px;
+    color: #7C6AFF;
+    font-weight: 600;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- STEP 3a: TRY NOW (initial state) -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div>
+<div class="phone">
+<div class="phone-inner">
+<div class="onb-bg">
+  <div class="skip-btn">Потом</div>
+
+  <div style="text-align:center;font-size:44px;margin:16px 0 12px">✨</div>
+  <div class="onb-title">Попробуй прямо сейчас</div>
+  <div class="onb-subtitle">Добавь первое желание — это займёт<br>буквально 5 секунд</div>
+
+  <div class="try-section">
+    <div class="url-field">
+      <div class="paste-icon">🔗</div>
+      <div class="placeholder">Вставь ссылку на товар...</div>
+      <div class="paste-btn">📋 Вставить</div>
+    </div>
+
+    <div class="hint-box">
+      Ozon, WB, Яндекс Маркет, AliExpress<br>или любой другой магазин
+    </div>
+
+    <div class="or-divider">
+      <div class="line"></div>
+      <div class="text">или</div>
+      <div class="line"></div>
+    </div>
+
+    <div class="manual-btn">
+      <div class="icon">✏️</div>
+      <div class="info">
+        <div class="title">Добавить вручную</div>
+        <div class="desc">Просто напиши название желания</div>
+      </div>
+      <div class="arrow">›</div>
+    </div>
+  </div>
+
+  <div class="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot active"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+  <div class="cta-btn ghost">Пропустить этот шаг →</div>
+</div>
+</div>
+</div>
+<div class="label">Шаг 3а — «Попробуй сейчас»<br>Горячий путь: ссылка или ручной ввод</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- STEP 3b: SUCCESS (after paste) -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div>
+<div class="phone">
+<div class="phone-inner">
+<div class="onb-bg">
+
+  <div class="confetti">🎉</div>
+  <div class="onb-title">Первое желание<br>добавлено!</div>
+
+  <div style="margin-top:24px">
+    <div class="success-card">
+      <div class="success-thumb">📱</div>
+      <div class="success-info">
+        <div class="success-badge">✓ Добавлено</div>
+        <div class="success-title">iPhone 15 Pro 256GB</div>
+        <div class="success-price">89 990 ₽</div>
+        <div class="success-domain">🔗 market.yandex.ru</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="success-msg">
+    Желание уже в твоих <b>Черновиках</b>.<br>
+    Осталось создать вишлист<br>и поделиться с друзьями!
+  </div>
+
+  <div style="margin-top:20px;display:flex;flex-direction:column;gap:8px">
+    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:18px">📦</span>
+      <span style="font-size:13px;color:rgba(255,255,255,0.5)">Черновики</span>
+      <span style="margin-left:auto;font-size:13px;color:#7C6AFF;font-weight:600">→ Перенести в вишлист</span>
+    </div>
+  </div>
+
+  <div class="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot active"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+  <div class="cta-btn">Продолжить →</div>
+  <div class="cta-btn secondary">＋ Добавить ещё</div>
+</div>
+</div>
+</div>
+<div class="label">Шаг 3б — Успех!<br>Пользователь вставил ссылку → вау-момент</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- STEP 3c: FALLBACK GRID (if skipped paste) -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div>
+<div class="phone">
+<div class="phone-inner">
+<div class="onb-bg">
+  <div class="skip-btn">Потом</div>
+
+  <div style="text-align:center;font-size:38px;margin:12px 0 8px">🎁</div>
+  <div class="onb-title" style="font-size:21px">Что бы ты хотел<br>получить в подарок?</div>
+  <div class="onb-subtitle">Выбери хотя бы одно — потом<br>можно изменить или удалить</div>
+
+  <div class="catalog-grid">
+    <div class="catalog-item">
+      <div class="check">✓</div>
+      <span class="emoji">🎧</span>
+      <div class="name">AirPods Pro</div>
+      <div class="price">24 990 ₽</div>
+    </div>
+    <div class="catalog-item selected">
+      <div class="check">✓</div>
+      <span class="emoji">👟</span>
+      <div class="name">Кроссовки Nike</div>
+      <div class="price">12 500 ₽</div>
+    </div>
+    <div class="catalog-item">
+      <div class="check">✓</div>
+      <span class="emoji">📸</span>
+      <div class="name">Фотоаппарат</div>
+      <div class="price">от 15 000 ₽</div>
+    </div>
+    <div class="catalog-item">
+      <div class="check">✓</div>
+      <span class="emoji">📚</span>
+      <div class="name">Kindle</div>
+      <div class="price">15 990 ₽</div>
+    </div>
+    <div class="catalog-item selected">
+      <div class="check">✓</div>
+      <span class="emoji">🎮</span>
+      <div class="name">PlayStation 5</div>
+      <div class="price">49 990 ₽</div>
+    </div>
+    <div class="catalog-item">
+      <div class="check">✓</div>
+      <span class="emoji">🧴</span>
+      <div class="name">Парфюм</div>
+      <div class="price">от 3 000 ₽</div>
+    </div>
+    <div class="catalog-item">
+      <div class="check">✓</div>
+      <span class="emoji">🎸</span>
+      <div class="name">Гитара</div>
+      <div class="price">от 10 000 ₽</div>
+    </div>
+    <div class="catalog-item">
+      <div class="check">✓</div>
+      <span class="emoji">🎿</span>
+      <div class="name">Сноуборд</div>
+      <div class="price">от 20 000 ₽</div>
+    </div>
+    <div class="catalog-item" style="border-style:dashed">
+      <div class="check">✓</div>
+      <span class="emoji">✏️</span>
+      <div class="name">Своё желание</div>
+      <div class="price" style="color:rgba(255,255,255,0.3)">любая цена</div>
+    </div>
+  </div>
+
+  <div class="selected-count">Выбрано: 2</div>
+
+  <div class="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot active"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+  <div class="cta-btn">Добавить выбранные →</div>
+</div>
+</div>
+</div>
+<div class="label">Шаг 3в — Fallback «Каталог»<br>Для тех, кто пропустил вставку ссылки</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- STEP 4: COMBINED Share + Reserve -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div>
+<div class="phone">
+<div class="phone-inner">
+<div class="onb-bg">
+  <div class="skip-btn">Пропустить</div>
+
+  <div style="text-align:center;font-size:40px;margin:12px 0 8px">🎁</div>
+  <div class="onb-title" style="font-size:22px">Делись и дари<br>без спойлеров</div>
+
+  <div class="combined-section">
+    <!-- Share block -->
+    <div class="feature-block">
+      <div class="feature-block-header">
+        <div class="feature-block-icon" style="background:rgba(124,106,255,0.12)">📤</div>
+        <div class="feature-block-title">Поделись вишлистом</div>
+      </div>
+      <div class="feature-block-desc">
+        Отправь ссылку друзьям — они увидят твои желания, но <span style="color:rgba(255,255,255,0.7);font-weight:600">не узнают, что уже забронировано</span>
+      </div>
+      <div class="mini-demo">
+        <div class="mini-card">
+          <div class="mc-title">🎂 Мой ДР</div>
+          <div class="mc-badge" style="background:rgba(124,106,255,0.15);color:#A78BFA">📤 Share</div>
+        </div>
+        <div class="mini-arrow">→</div>
+        <div class="mini-card">
+          <div class="mc-title">👀 Друг</div>
+          <div class="mc-badge" style="background:rgba(52,211,153,0.15);color:#34D399">🔒 Тайно</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reserve block -->
+    <div class="feature-block">
+      <div class="feature-block-header">
+        <div class="feature-block-icon" style="background:rgba(52,211,153,0.12)">🎁</div>
+        <div class="feature-block-title">Бронируй подарки</div>
+      </div>
+      <div class="feature-block-desc">
+        Открой вишлист друга и забронируй подарок. <span style="color:rgba(255,255,255,0.7);font-weight:600">Именинник не увидит бронь</span> — никаких спойлеров
+      </div>
+      <div class="mini-demo">
+        <div class="mini-card">
+          <div class="mc-title">🎸 Гитара</div>
+          <div class="mc-badge" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.5)">Доступно</div>
+        </div>
+        <div class="mini-arrow">→</div>
+        <div class="mini-card">
+          <div class="mc-title">🎸 Гитара</div>
+          <div class="mc-badge" style="background:rgba(52,211,153,0.15);color:#34D399">✅ Твоя бронь</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot active"></div>
+    <div class="dot"></div>
+  </div>
+  <div class="cta-btn">Далее →</div>
+</div>
+</div>
+</div>
+<div class="label">Шаг 4 — Делись и бронируй<br>Два value prop в одном экране</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- STEP 5: COMPLETE (with real wish) -->
+<!-- ═══════════════════════════════════════════ -->
+
+<div>
+<div class="phone">
+<div class="phone-inner">
+<div class="onb-bg">
+
+  <div style="text-align:center;font-size:52px;margin:16px 0 12px">🚀</div>
+  <div class="onb-title">Ты готов!</div>
+  <div class="onb-subtitle">Создай вишлист и поделись<br>с друзьями и близкими</div>
+
+  <div class="real-wish-card">
+    <div class="real-wish-img">
+      📱
+      <div class="your-badge">✨ Твоё желание</div>
+    </div>
+    <div class="real-wish-body">
+      <div class="real-wish-title">iPhone 15 Pro 256GB</div>
+      <div class="real-wish-price">89 990 ₽</div>
+      <div class="real-wish-meta">
+        <div class="real-wish-wl">📦 Черновики</div>
+        <div class="real-wish-move">Перенести ↗</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;font-size:13px;color:rgba(255,255,255,0.35);line-height:1.5;margin-bottom:4px">
+    Создай вишлист → перенеси желание →<br>отправь ссылку друзьям
+  </div>
+
+  <div class="dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot active"></div>
+  </div>
+  <div class="cta-btn">Создать вишлист 🎉</div>
+  <div class="cta-btn secondary">На главную</div>
+</div>
+</div>
+</div>
+<div class="label">Шаг 5 — Финал<br>Показываем реальное желание пользователя</div>
+</div>
+
+</body>
+</html>

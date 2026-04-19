@@ -1,0 +1,1991 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1800, initial-scale=1">
+<title>Забронировано мной — Pro v2 Mockups</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --gold: #D4A853;
+    --gold-soft: rgba(212,168,83,0.10);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    background: #0e0e11;
+    color: var(--text);
+    padding: 40px 24px;
+  }
+
+  h1.page-title {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+  .page-subtitle {
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 48px;
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+    justify-content: center;
+    margin-bottom: 64px;
+  }
+  .row-label {
+    width: 100%;
+    text-align: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 8px;
+    letter-spacing: -0.3px;
+  }
+  .row-desc {
+    width: 100%;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+  }
+
+  .phone-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .phone {
+    width: 390px;
+    height: 844px;
+    background: var(--bg);
+    border-radius: 40px;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+    box-shadow:
+      0 0 0 2px rgba(255,255,255,0.06),
+      0 20px 60px rgba(0,0,0,0.6),
+      0 0 120px rgba(124,106,255,0.05);
+  }
+  .phone-inner {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    padding: 54px 0 0;
+  }
+  .phone-inner::-webkit-scrollbar { display: none; }
+
+  .screen-label {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-sec);
+    margin-top: 14px;
+    font-weight: 600;
+    width: 390px;
+    line-height: 1.4;
+  }
+
+  /* ===== Telegram status bar ===== */
+  .tg-status {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 54px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 8px;
+    background: linear-gradient(180deg, rgba(27,27,31,1) 60%, rgba(27,27,31,0.95));
+    z-index: 10;
+  }
+  .tg-status span {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+  .tg-back {
+    position: absolute;
+    left: 16px;
+    bottom: 7px;
+    font-size: 17px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* ===== Home tabs ===== */
+  .home-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    position: relative;
+  }
+  .home-tab {
+    flex: 1;
+    padding: 10px 4px 14px;
+    text-align: center;
+    border: none;
+    background: none;
+    cursor: pointer;
+    position: relative;
+  }
+  .home-tab .count {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    display: block;
+    line-height: 1.1;
+  }
+  .home-tab.active .count { color: var(--accent); }
+  .home-tab .tab-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    display: block;
+  }
+  .home-tab.active .tab-label { color: var(--text); }
+  .home-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 20%; right: 20%;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+  }
+
+  /* ===== Segment control (Active / History) ===== */
+  .segment {
+    display: flex;
+    margin: 14px 16px 0;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .seg-btn {
+    flex: 1;
+    padding: 7px 0;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: all 0.2s;
+    background: transparent;
+    color: var(--text-sec);
+  }
+  .seg-btn.active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(124,106,255,0.3);
+  }
+  .seg-btn .pro-lock {
+    font-size: 10px;
+    opacity: 0.7;
+  }
+
+  /* ===== Filters bar ===== */
+  .filters-bar {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px 4px;
+    gap: 8px;
+  }
+  .filter-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border-light);
+    background: var(--surface);
+    color: var(--text-sec);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .filter-chip.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .filter-chip .chip-icon {
+    font-size: 13px;
+  }
+  .filter-chip.pro-locked {
+    opacity: 0.5;
+    position: relative;
+  }
+  .filter-chip.pro-locked::after {
+    content: '🔒';
+    font-size: 9px;
+    margin-left: 2px;
+  }
+
+  .sort-btn {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid var(--border-light);
+    background: var(--surface);
+    color: var(--text-sec);
+    cursor: pointer;
+  }
+
+  /* ===== Owner group ===== */
+  .owner-group {
+    padding: 0 16px;
+    margin-top: 16px;
+  }
+  .owner-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .owner-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .owner-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  /* ===== Reservation card ===== */
+  .res-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .res-card-top {
+    display: flex;
+    gap: 12px;
+  }
+  .res-thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+  .res-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .res-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .res-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+  .res-price {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .res-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .res-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .res-badge.reserved {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .res-badge.purchased {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .res-badge.unread {
+    background: var(--accent);
+    color: #fff;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Pro features on card */
+  .res-pro-section {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .res-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+  .res-note-icon {
+    font-size: 12px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .res-note-text {
+    font-size: 12px;
+    color: var(--text-sec);
+    line-height: 1.4;
+  }
+  .res-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .res-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-sec);
+    cursor: pointer;
+  }
+  .res-action-btn.purchased-flag {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .res-action-btn.reminder-set {
+    background: var(--orange-soft);
+    border-color: rgba(251,191,36,0.3);
+    color: var(--orange);
+  }
+  .res-action-btn .btn-icon { font-size: 12px; }
+
+  /* ===== Unreserve button ===== */
+  .unreserve-btn {
+    margin-top: 10px;
+    width: 100%;
+    padding: 8px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    background: var(--red-soft);
+    color: var(--red);
+    text-align: center;
+  }
+
+  /* ===== History card variants ===== */
+  .res-card.history {
+    opacity: 0.8;
+  }
+  .res-badge.completed {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .res-badge.cancelled {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .res-badge.archived {
+    background: rgba(255,255,255,0.06);
+    color: var(--text-muted);
+  }
+  .history-date {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* ===== Pro upsell inline ===== */
+  .pro-upsell-inline {
+    margin: 16px;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(124,106,255,0.08) 0%, rgba(212,168,83,0.06) 100%);
+    border: 1px solid rgba(124,106,255,0.15);
+    border-radius: 14px;
+    text-align: center;
+  }
+  .pro-upsell-inline .upsell-icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+  }
+  .pro-upsell-inline .upsell-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .pro-upsell-inline .upsell-desc {
+    font-size: 12px;
+    color: var(--text-sec);
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+  .pro-upsell-inline .upsell-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 20px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(124,106,255,0.3);
+  }
+
+  /* ===== Bottom sheet mockup ===== */
+  .bs-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 20;
+  }
+  .bs-sheet {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    z-index: 30;
+    padding: 12px 20px 34px;
+  }
+  .bs-handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    margin: 0 auto 16px;
+  }
+  .bs-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .bs-subtitle {
+    font-size: 13px;
+    color: var(--text-sec);
+    margin-bottom: 16px;
+  }
+  .bs-input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-light);
+    background: var(--card);
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    margin-bottom: 12px;
+    resize: none;
+  }
+  .bs-input::placeholder { color: var(--text-muted); }
+  .bs-input:focus { border-color: var(--accent); outline: none; }
+  .bs-save-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    background: var(--accent);
+    color: #fff;
+    text-align: center;
+  }
+
+  /* Reminder options */
+  .reminder-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .reminder-opt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .reminder-opt.selected {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .reminder-opt .r-icon {
+    font-size: 18px;
+  }
+  .reminder-opt .r-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .reminder-opt .r-desc {
+    font-size: 12px;
+    color: var(--text-sec);
+  }
+  .reminder-opt .r-check {
+    margin-left: auto;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+  .reminder-opt.selected .r-check {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  /* Filter bottom sheet */
+  .filter-section {
+    margin-bottom: 16px;
+  }
+  .filter-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .filter-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .filter-opt {
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid var(--border-light);
+    background: var(--card);
+    color: var(--text-sec);
+    cursor: pointer;
+  }
+  .filter-opt.selected {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Pro upsell full sheet */
+  .pro-full-upsell {
+    text-align: center;
+    padding: 8px 0 0;
+  }
+  .pro-full-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+  .pro-full-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+  }
+  .pro-full-desc {
+    font-size: 14px;
+    color: var(--text-sec);
+    line-height: 1.5;
+    margin-bottom: 20px;
+    padding: 0 8px;
+  }
+  .pro-features-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: left;
+    margin-bottom: 20px;
+  }
+  .pro-feature-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--card);
+    border-radius: 10px;
+  }
+  .pro-feature-row .pf-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .pro-feature-row .pf-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .pro-feature-row .pf-text small {
+    font-weight: 400;
+    color: var(--text-sec);
+    display: block;
+    font-size: 11px;
+    margin-top: 1px;
+  }
+  .pro-cta-btn {
+    width: 100%;
+    padding: 16px;
+    border-radius: 14px;
+    font-size: 16px;
+    font-weight: 800;
+    border: none;
+    cursor: pointer;
+    background: linear-gradient(135deg, #7C6AFF 0%, #9B8AFF 100%);
+    color: #fff;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(124,106,255,0.35);
+    letter-spacing: -0.2px;
+  }
+  .pro-cta-price {
+    font-size: 12px;
+    color: var(--text-sec);
+    margin-top: 8px;
+  }
+
+  /* ===== Purchased flag shimmer ===== */
+  .purchased-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-soft) 0%, rgba(124,106,255,0.18) 100%);
+    color: var(--accent);
+  }
+
+  /* Empty state */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 32px 40px;
+    text-align: center;
+  }
+  .empty-state .em-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+  .empty-state .em-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .empty-state .em-desc {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.5;
+  }
+
+  /* History filter chips */
+  .history-filters {
+    display: flex;
+    gap: 6px;
+    padding: 12px 16px 0;
+    overflow-x: auto;
+  }
+  .history-filters::-webkit-scrollbar { display: none; }
+
+  /* Separator */
+  .section-sep {
+    height: 1px;
+    background: var(--border);
+    margin: 0 16px;
+  }
+
+  /* ===== Pro tariff card ===== */
+  .tariff-card {
+    margin: 16px;
+    padding: 20px;
+    background: linear-gradient(160deg, #1e1a30 0%, #1d1f2e 50%, #1a1d28 100%);
+    border: 1px solid rgba(124,106,255,0.2);
+    border-radius: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .tariff-card::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -40px;
+    width: 140px; height: 140px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124,106,255,0.12) 0%, transparent 70%);
+  }
+  .tariff-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .tariff-badge {
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #7C6AFF, #9B8AFF);
+    color: #fff;
+    letter-spacing: 1px;
+  }
+  .tariff-label {
+    font-size: 14px;
+    color: var(--text-sec);
+    font-weight: 500;
+  }
+  .tariff-features {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .tariff-feature {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .tariff-feature .tf-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    background: var(--accent-soft);
+    flex-shrink: 0;
+  }
+  .tariff-feature .tf-text {
+    font-weight: 600;
+  }
+  .tariff-feature .tf-text small {
+    font-weight: 400;
+    color: var(--text-sec);
+    display: block;
+    font-size: 11px;
+    margin-top: 1px;
+  }
+  .tariff-feature.new-badge .tf-icon {
+    background: linear-gradient(135deg, var(--accent-soft), rgba(212,168,83,0.12));
+  }
+  .new-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 800;
+    background: var(--accent);
+    color: #fff;
+    margin-left: 6px;
+    vertical-align: middle;
+    letter-spacing: 0.5px;
+  }
+  .tariff-cta {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    background: linear-gradient(135deg, #7C6AFF 0%, #9B8AFF 100%);
+    color: #fff;
+    text-align: center;
+    box-shadow: 0 6px 20px rgba(124,106,255,0.3);
+  }
+  .tariff-price {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+
+  /* ===== Annotations ===== */
+  .anno {
+    position: absolute;
+    z-index: 40;
+    pointer-events: none;
+  }
+  .anno-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+    color: #fff;
+    box-shadow: 0 0 0 3px rgba(124,106,255,0.2);
+  }
+  .anno-line {
+    position: absolute;
+    border-left: 1px dashed rgba(124,106,255,0.4);
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Забронировано мной — Pro v2</h1>
+<p class="page-subtitle">UI/UX мокапы для Telegram Mini App · WishBot</p>
+
+<!-- ================================================================
+     ROW 1: FREE vs PRO — Main view comparison
+     ================================================================ -->
+<div class="row">
+  <div class="row-label">1. Основной экран — Free vs Pro</div>
+  <div class="row-desc">Слева — бесплатный пользователь с upsell-хинтами. Справа — Pro с полным функционалом.</div>
+
+  <!-- FREE USER -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner">
+
+        <!-- Home tabs -->
+        <div class="home-tabs">
+          <div class="home-tab"><span class="count">3</span><span class="tab-label">Вишлисты</span></div>
+          <div class="home-tab"><span class="count">12</span><span class="tab-label">Желания</span></div>
+          <div class="home-tab active"><span class="count">4</span><span class="tab-label">Мои брони</span></div>
+        </div>
+
+        <!-- Segment: Active / History (locked) -->
+        <div class="segment">
+          <div class="seg-btn active">Активные</div>
+          <div class="seg-btn" style="opacity:0.5;">История <span class="pro-lock">🔒</span></div>
+        </div>
+
+        <!-- No filters for free -->
+        <div style="padding:10px 16px 0; display:flex; align-items:center; gap:6px;">
+          <div class="filter-chip pro-locked">Фильтры</div>
+          <div class="filter-chip pro-locked">Сортировка</div>
+        </div>
+
+        <!-- Owner group 1 -->
+        <div class="owner-group">
+          <div class="owner-header">
+            <div class="owner-avatar" style="background:linear-gradient(135deg,#6B7FD4,#818cf8);">А</div>
+            <div class="owner-name">Аня Иванова</div>
+          </div>
+          <!-- Card 1 -->
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#FFE0B2,#FFCC80);">🎧</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">AirPods Max</span>
+                  <span class="res-badge unread">2</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="res-badge reserved">✓ Забронировано</span>
+                  <span class="res-price">45 990 ₽</span>
+                </div>
+              </div>
+            </div>
+            <button class="unreserve-btn">Снять бронь</button>
+          </div>
+          <!-- Card 2 -->
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#C8E6C9,#A5D6A7);">📚</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">Набор книг Стругацких</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="res-badge reserved">✓ Забронировано</span>
+                  <span class="res-price">2 800 ₽</span>
+                </div>
+              </div>
+            </div>
+            <button class="unreserve-btn">Снять бронь</button>
+          </div>
+        </div>
+
+        <!-- Owner group 2 -->
+        <div class="owner-group">
+          <div class="owner-header">
+            <div class="owner-avatar" style="background:linear-gradient(135deg,#E8930A,#fbbf24);">М</div>
+            <div class="owner-name">Макс Петров</div>
+          </div>
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#BBDEFB,#90CAF9);">⌚</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">Garmin Venu 3</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="res-badge reserved">✓ Забронировано</span>
+                  <span class="res-price">35 000 ₽</span>
+                </div>
+              </div>
+            </div>
+            <button class="unreserve-btn">Снять бронь</button>
+          </div>
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#F8BBD0,#F48FB1);">🎮</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">Nintendo Switch OLED</span>
+                  <span class="res-badge unread">1</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="res-badge reserved">✓ Забронировано</span>
+                  <span class="res-price">28 990 ₽</span>
+                </div>
+              </div>
+            </div>
+            <button class="unreserve-btn">Снять бронь</button>
+          </div>
+        </div>
+
+        <!-- Inline upsell -->
+        <div class="pro-upsell-inline">
+          <div class="upsell-icon">✨</div>
+          <div class="upsell-title">Управляйте бронями удобнее</div>
+          <div class="upsell-desc">
+            История броней, заметки к подаркам,<br>
+            напоминания и умные фильтры
+          </div>
+          <button class="upsell-btn">⭐ Попробовать Pro</button>
+        </div>
+
+        <div style="height:40px;"></div>
+      </div>
+    </div>
+    <div class="screen-label">Free-пользователь<br>Базовый вид с upsell</div>
+  </div>
+
+  <!-- PRO USER -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner">
+
+        <div class="home-tabs">
+          <div class="home-tab"><span class="count">8</span><span class="tab-label">Вишлисты</span></div>
+          <div class="home-tab"><span class="count">34</span><span class="tab-label">Желания</span></div>
+          <div class="home-tab active"><span class="count">6</span><span class="tab-label">Мои брони</span></div>
+        </div>
+
+        <!-- Segment: Active / History (available) -->
+        <div class="segment">
+          <div class="seg-btn active">Активные</div>
+          <div class="seg-btn">История</div>
+        </div>
+
+        <!-- Filters bar PRO -->
+        <div class="filters-bar">
+          <div class="filter-chip active"><span class="chip-icon">💬</span> Непрочитанные</div>
+          <div class="filter-chip"><span class="chip-icon">👤</span> Владелец</div>
+          <div class="sort-btn">↕ По дате</div>
+        </div>
+
+        <!-- Owner group 1 -->
+        <div class="owner-group">
+          <div class="owner-header">
+            <div class="owner-avatar" style="background:linear-gradient(135deg,#6B7FD4,#818cf8);">А</div>
+            <div class="owner-name">Аня Иванова</div>
+          </div>
+          <!-- Card with Pro features -->
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#FFE0B2,#FFCC80);">🎧</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">AirPods Max</span>
+                  <span class="res-badge unread">2</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="purchased-check">✓ Куплено</span>
+                  <span class="res-price">45 990 ₽</span>
+                </div>
+              </div>
+            </div>
+            <!-- Pro section -->
+            <div class="res-pro-section">
+              <div class="res-note">
+                <span class="res-note-icon">📝</span>
+                <span class="res-note-text">Уже купил, не забыть вручить на ДР 15 апреля</span>
+              </div>
+              <div class="res-actions">
+                <div class="res-action-btn purchased-flag"><span class="btn-icon">✓</span> Куплено</div>
+                <div class="res-action-btn reminder-set"><span class="btn-icon">🔔</span> 14 апр</div>
+                <div class="res-action-btn"><span class="btn-icon">📝</span> Заметка</div>
+              </div>
+            </div>
+          </div>
+          <!-- Card 2 with note -->
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#C8E6C9,#A5D6A7);">📚</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">Набор книг Стругацких</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="res-badge reserved">✓ Забронировано</span>
+                  <span class="res-price">2 800 ₽</span>
+                </div>
+              </div>
+            </div>
+            <div class="res-pro-section">
+              <div class="res-note">
+                <span class="res-note-icon">📝</span>
+                <span class="res-note-text">Скинуться с Катей — она переводит 1400 ₽</span>
+              </div>
+              <div class="res-actions">
+                <div class="res-action-btn"><span class="btn-icon">☐</span> Куплено</div>
+                <div class="res-action-btn"><span class="btn-icon">🔔</span> Напомнить</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Owner group 2 -->
+        <div class="owner-group">
+          <div class="owner-header">
+            <div class="owner-avatar" style="background:linear-gradient(135deg,#E8930A,#fbbf24);">М</div>
+            <div class="owner-name">Макс Петров</div>
+          </div>
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#BBDEFB,#90CAF9);">⌚</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">Garmin Venu 3</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="res-badge reserved">✓ Забронировано</span>
+                  <span class="res-price">35 000 ₽</span>
+                </div>
+              </div>
+            </div>
+            <div class="res-pro-section">
+              <div class="res-actions">
+                <div class="res-action-btn"><span class="btn-icon">☐</span> Куплено</div>
+                <div class="res-action-btn"><span class="btn-icon">🔔</span> Напомнить</div>
+                <div class="res-action-btn"><span class="btn-icon">📝</span> Заметка</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:40px;"></div>
+      </div>
+    </div>
+    <div class="screen-label">Pro-пользователь<br>Фильтры, заметки, статус «Куплено»</div>
+  </div>
+</div>
+
+<!-- ================================================================
+     ROW 2: History tab + History upsell for free
+     ================================================================ -->
+<div class="row">
+  <div class="row-label">2. Вкладка «История» — Pro vs Free upsell</div>
+  <div class="row-desc">Pro видит полную историю с фильтрами по статусу. Free видит upsell.</div>
+
+  <!-- FREE — History upsell -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner">
+        <div class="home-tabs">
+          <div class="home-tab"><span class="count">3</span><span class="tab-label">Вишлисты</span></div>
+          <div class="home-tab"><span class="count">12</span><span class="tab-label">Желания</span></div>
+          <div class="home-tab active"><span class="count">4</span><span class="tab-label">Мои брони</span></div>
+        </div>
+
+        <div class="segment">
+          <div class="seg-btn">Активные</div>
+          <div class="seg-btn active" style="background:var(--surface); color:var(--text-sec); box-shadow:none; border:1px solid var(--border-light);">
+            История <span class="pro-lock">🔒</span>
+          </div>
+        </div>
+
+        <!-- Bottom sheet upsell -->
+        <div style="position:relative; height:600px;">
+          <div class="empty-state" style="padding-top:40px;">
+            <div class="em-icon">📋</div>
+            <div class="em-title">История броней</div>
+            <div class="em-desc" style="margin-bottom:24px;">
+              Все завершенные, отмененные<br>и исполненные брони в одном месте
+            </div>
+          </div>
+
+          <div class="pro-upsell-inline" style="margin-top:0;">
+            <div class="upsell-title">Откройте историю с Pro</div>
+            <div class="upsell-desc">
+              Видьте все прошлые брони,<br>
+              отслеживайте что уже подарено
+            </div>
+            <button class="upsell-btn">⭐ Попробовать Pro</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Free — upsell на историю</div>
+  </div>
+
+  <!-- PRO — History tab -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner">
+        <div class="home-tabs">
+          <div class="home-tab"><span class="count">8</span><span class="tab-label">Вишлисты</span></div>
+          <div class="home-tab"><span class="count">34</span><span class="tab-label">Желания</span></div>
+          <div class="home-tab active"><span class="count">6</span><span class="tab-label">Мои брони</span></div>
+        </div>
+
+        <div class="segment">
+          <div class="seg-btn">Активные</div>
+          <div class="seg-btn active">История</div>
+        </div>
+
+        <!-- History filters -->
+        <div class="history-filters">
+          <div class="filter-chip active">Все</div>
+          <div class="filter-chip">Подарено ✓</div>
+          <div class="filter-chip">Снял бронь</div>
+          <div class="filter-chip">В архиве</div>
+        </div>
+
+        <!-- History cards -->
+        <div class="owner-group">
+          <div class="owner-header">
+            <div class="owner-avatar" style="background:linear-gradient(135deg,#F04E6E,#ff6b9d);">Л</div>
+            <div class="owner-name">Лена Козлова</div>
+          </div>
+
+          <div class="res-card history">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#E1BEE7,#CE93D8);">💄</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">Набор косметики Charlotte Tilbury</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="res-badge completed">✓ Подарено</span>
+                  <span class="res-price">12 500 ₽</span>
+                </div>
+                <div class="history-date">Подарено 8 марта 2026</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="res-card history">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#FFF9C4,#FFF176);">🕯️</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">Свечи Diptyque</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="res-badge completed">✓ Подарено</span>
+                  <span class="res-price">6 200 ₽</span>
+                </div>
+                <div class="history-date">Подарено 1 января 2026</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="owner-group">
+          <div class="owner-header">
+            <div class="owner-avatar" style="background:linear-gradient(135deg,#6B7FD4,#818cf8);">А</div>
+            <div class="owner-name">Аня Иванова</div>
+          </div>
+          <div class="res-card history">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#FFCCBC,#FFAB91);">🧣</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">Кашемировый шарф</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="res-badge cancelled">✕ Снял бронь</span>
+                  <span class="res-price">8 900 ₽</span>
+                </div>
+                <div class="history-date">Снята 20 февраля 2026</div>
+              </div>
+            </div>
+          </div>
+          <div class="res-card history">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#B2DFDB,#80CBC4);">🌿</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title">Комнатное растение монстера</span>
+                </div>
+                <div class="res-status-row">
+                  <span class="res-badge archived">📦 В архиве</span>
+                  <span class="res-price">3 500 ₽</span>
+                </div>
+                <div class="history-date">Архивировано 15 января 2026</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:40px;"></div>
+      </div>
+    </div>
+    <div class="screen-label">Pro — история броней<br>Фильтры по статусу</div>
+  </div>
+</div>
+
+<!-- ================================================================
+     ROW 3: Bottom sheets — Note / Reminder / Filters
+     ================================================================ -->
+<div class="row">
+  <div class="row-label">3. Bottom sheets — Заметка / Напоминание / Фильтры</div>
+  <div class="row-desc">Модальные окна для Pro-функций. Нативный UX для Telegram Mini App.</div>
+
+  <!-- Add Note -->
+  <div class="phone-wrap">
+    <div class="phone" style="position:relative;">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner" style="filter:brightness(0.5);">
+        <div class="home-tabs">
+          <div class="home-tab active"><span class="count">6</span><span class="tab-label">Мои брони</span></div>
+        </div>
+      </div>
+      <div class="bs-overlay"></div>
+      <div class="bs-sheet">
+        <div class="bs-handle"></div>
+        <div class="bs-title">Личная заметка</div>
+        <div class="bs-subtitle">Только вы видите эту заметку</div>
+        <textarea class="bs-input" rows="3" placeholder="Например: скинуться с Катей, заказать на Ozon...">Уже купил, не забыть вручить на ДР 15 апреля</textarea>
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <div style="padding:6px 12px; border-radius:8px; font-size:12px; background:var(--surface); color:var(--text-sec); border:1px solid var(--border-light);">📋 Скинуться с...</div>
+          <div style="padding:6px 12px; border-radius:8px; font-size:12px; background:var(--surface); color:var(--text-sec); border:1px solid var(--border-light);">🛒 Заказать на...</div>
+          <div style="padding:6px 12px; border-radius:8px; font-size:12px; background:var(--surface); color:var(--text-sec); border:1px solid var(--border-light);">✓ Купил</div>
+        </div>
+        <button class="bs-save-btn">Сохранить</button>
+      </div>
+    </div>
+    <div class="screen-label">Добавление заметки<br>Быстрые шаблоны</div>
+  </div>
+
+  <!-- Set Reminder -->
+  <div class="phone-wrap">
+    <div class="phone" style="position:relative;">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner" style="filter:brightness(0.5);">
+        <div class="home-tabs">
+          <div class="home-tab active"><span class="count">6</span><span class="tab-label">Мои брони</span></div>
+        </div>
+      </div>
+      <div class="bs-overlay"></div>
+      <div class="bs-sheet">
+        <div class="bs-handle"></div>
+        <div class="bs-title">Напоминание</div>
+        <div class="bs-subtitle">AirPods Max · для Ани Ивановой</div>
+
+        <div class="reminder-options">
+          <div class="reminder-opt">
+            <span class="r-icon">⏰</span>
+            <div>
+              <div class="r-label">Через 3 дня</div>
+              <div class="r-desc">6 апреля</div>
+            </div>
+            <div class="r-check"></div>
+          </div>
+          <div class="reminder-opt">
+            <span class="r-icon">📅</span>
+            <div>
+              <div class="r-label">Через неделю</div>
+              <div class="r-desc">10 апреля</div>
+            </div>
+            <div class="r-check"></div>
+          </div>
+          <div class="reminder-opt selected">
+            <span class="r-icon">🎯</span>
+            <div>
+              <div class="r-label">В конце месяца</div>
+              <div class="r-desc">30 апреля</div>
+            </div>
+            <div class="r-check">✓</div>
+          </div>
+          <div class="reminder-opt">
+            <span class="r-icon">✏️</span>
+            <div>
+              <div class="r-label">Выбрать дату</div>
+              <div class="r-desc">Укажите точную дату</div>
+            </div>
+            <div class="r-check"></div>
+          </div>
+        </div>
+
+        <button class="bs-save-btn">Поставить напоминание</button>
+      </div>
+    </div>
+    <div class="screen-label">Установка напоминания<br>Пресеты + произвольная дата</div>
+  </div>
+
+  <!-- Filters & Sort -->
+  <div class="phone-wrap">
+    <div class="phone" style="position:relative;">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner" style="filter:brightness(0.5);">
+        <div class="home-tabs">
+          <div class="home-tab active"><span class="count">6</span><span class="tab-label">Мои брони</span></div>
+        </div>
+      </div>
+      <div class="bs-overlay"></div>
+      <div class="bs-sheet">
+        <div class="bs-handle"></div>
+        <div class="bs-title">Фильтры и сортировка</div>
+
+        <div class="filter-section">
+          <div class="filter-section-title">Сортировка</div>
+          <div class="filter-options">
+            <div class="filter-opt selected">По дате брони</div>
+            <div class="filter-opt">По цене ↑</div>
+            <div class="filter-opt">По цене ↓</div>
+            <div class="filter-opt">По активности</div>
+          </div>
+        </div>
+
+        <div class="filter-section">
+          <div class="filter-section-title">Статус</div>
+          <div class="filter-options">
+            <div class="filter-opt selected">Все</div>
+            <div class="filter-opt">Не куплено</div>
+            <div class="filter-opt">Куплено ✓</div>
+            <div class="filter-opt">С комментариями</div>
+          </div>
+        </div>
+
+        <div class="filter-section">
+          <div class="filter-section-title">Владелец</div>
+          <div class="filter-options">
+            <div class="filter-opt selected">Все</div>
+            <div class="filter-opt" style="display:flex; align-items:center; gap:6px;">
+              <span style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#6B7FD4,#818cf8);display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;">А</span>
+              Аня
+            </div>
+            <div class="filter-opt" style="display:flex; align-items:center; gap:6px;">
+              <span style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#E8930A,#fbbf24);display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;">М</span>
+              Макс
+            </div>
+            <div class="filter-opt" style="display:flex; align-items:center; gap:6px;">
+              <span style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#F04E6E,#ff6b9d);display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#fff;">Л</span>
+              Лена
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="bs-save-btn" style="flex:1; background:var(--surface); color:var(--text-sec);">Сбросить</button>
+          <button class="bs-save-btn" style="flex:2;">Применить</button>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Фильтры и сортировка<br>Компактный mobile UX</div>
+  </div>
+</div>
+
+<!-- ================================================================
+     ROW 4: Card detail with Pro actions + Purchased confirmation
+     ================================================================ -->
+<div class="row">
+  <div class="row-label">4. Детальная карточка брони + флаг «Куплено»</div>
+  <div class="row-desc">Pro-пользователь видит расширенные действия внутри карточки желания.</div>
+
+  <!-- Item detail with pro actions -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="tg-status">
+        <span class="tg-back">← Назад</span>
+        <span>Бронь</span>
+      </div>
+      <div class="phone-inner" style="padding-top:54px;">
+
+        <!-- Item hero -->
+        <div style="padding:16px; text-align:center;">
+          <div style="width:120px;height:120px;border-radius:20px;background:linear-gradient(135deg,#FFE0B2,#FFCC80);margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:52px;">🎧</div>
+          <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px;">AirPods Max</div>
+          <div style="font-size:15px;color:var(--accent);font-weight:600;margin-bottom:4px;">45 990 ₽</div>
+          <div style="font-size:13px;color:var(--text-sec);">Из вишлиста Ани Ивановой</div>
+        </div>
+
+        <div class="section-sep"></div>
+
+        <!-- Status section -->
+        <div style="padding:16px;">
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Статус</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--accent-soft);border-radius:12px;border:1px solid rgba(124,106,255,0.2);">
+            <span style="font-size:20px;">✓</span>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--accent);">Я уже купил</div>
+              <div style="font-size:12px;color:var(--text-sec);">Только вы это видите</div>
+            </div>
+            <div style="margin-left:auto;width:44px;height:26px;border-radius:13px;background:var(--accent);position:relative;">
+              <div style="width:22px;height:22px;border-radius:50%;background:#fff;position:absolute;right:2px;top:2px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Note section -->
+        <div style="padding:0 16px 16px;">
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Личная заметка</div>
+          <div style="padding:12px;background:var(--card);border-radius:12px;border:1px solid var(--border);">
+            <div style="font-size:14px;color:var(--text);line-height:1.5;">Уже купил, не забыть вручить на ДР 15 апреля</div>
+            <div style="margin-top:8px;text-align:right;">
+              <span style="font-size:12px;color:var(--accent);font-weight:600;cursor:pointer;">Редактировать</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reminder section -->
+        <div style="padding:0 16px 16px;">
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Напоминание</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--orange-soft);border-radius:12px;border:1px solid rgba(251,191,36,0.2);">
+            <span style="font-size:20px;">🔔</span>
+            <div>
+              <div style="font-size:14px;font-weight:600;color:var(--orange);">14 апреля в 10:00</div>
+              <div style="font-size:12px;color:var(--text-sec);">Через 11 дней</div>
+            </div>
+            <span style="margin-left:auto;font-size:12px;color:var(--text-sec);cursor:pointer;">✕</span>
+          </div>
+        </div>
+
+        <div class="section-sep"></div>
+
+        <!-- Actions -->
+        <div style="padding:16px;">
+          <button style="width:100%;padding:14px;border-radius:12px;font-size:15px;font-weight:700;border:none;background:var(--accent);color:#fff;margin-bottom:8px;cursor:pointer;">💬 Комментарии <span style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:8px;font-size:12px;margin-left:4px;">2 новых</span></button>
+          <button class="unreserve-btn" style="padding:14px;font-size:15px;border-radius:12px;">Снять бронь</button>
+        </div>
+
+        <div style="height:40px;"></div>
+      </div>
+    </div>
+    <div class="screen-label">Детальная карточка<br>Все Pro-функции в одном экране</div>
+  </div>
+
+  <!-- Purchased confirmation -->
+  <div class="phone-wrap">
+    <div class="phone" style="position:relative;">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner" style="filter:brightness(0.5);">
+        <div class="home-tabs">
+          <div class="home-tab active"><span class="count">6</span><span class="tab-label">Мои брони</span></div>
+        </div>
+      </div>
+      <div class="bs-overlay"></div>
+      <div class="bs-sheet">
+        <div class="bs-handle"></div>
+        <div style="text-align:center; padding:8px 0 0;">
+          <div style="font-size:48px; margin-bottom:12px;">🎁</div>
+          <div class="bs-title" style="text-align:center;">Отметить как купленное?</div>
+          <div class="bs-subtitle" style="text-align:center; margin-bottom:20px;">
+            Это ваша личная пометка.<br>
+            Владелец вишлиста не увидит её.
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="bs-save-btn" style="flex:1;background:var(--surface);color:var(--text-sec);">Отмена</button>
+            <button class="bs-save-btn" style="flex:2;background:var(--accent);">✓ Да, куплено</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Подтверждение «Куплено»<br>Приватный флаг</div>
+  </div>
+
+  <!-- Free user card detail -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="tg-status">
+        <span class="tg-back">← Назад</span>
+        <span>Бронь</span>
+      </div>
+      <div class="phone-inner" style="padding-top:54px;">
+
+        <!-- Item hero -->
+        <div style="padding:16px; text-align:center;">
+          <div style="width:120px;height:120px;border-radius:20px;background:linear-gradient(135deg,#FFE0B2,#FFCC80);margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:52px;">🎧</div>
+          <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px;">AirPods Max</div>
+          <div style="font-size:15px;color:var(--accent);font-weight:600;margin-bottom:4px;">45 990 ₽</div>
+          <div style="font-size:13px;color:var(--text-sec);">Из вишлиста Ани Ивановой</div>
+        </div>
+
+        <div class="section-sep"></div>
+
+        <!-- Pro features locked -->
+        <div style="padding:16px;">
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <!-- Locked: Note -->
+            <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(255,255,255,0.02);border-radius:12px;border:1px dashed var(--border-light);opacity:0.6;">
+              <span style="font-size:18px;">📝</span>
+              <div style="flex:1;">
+                <div style="font-size:13px;font-weight:600;color:var(--text-sec);">Личная заметка</div>
+              </div>
+              <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-weight:700;">PRO</span>
+            </div>
+            <!-- Locked: Purchased -->
+            <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(255,255,255,0.02);border-radius:12px;border:1px dashed var(--border-light);opacity:0.6;">
+              <span style="font-size:18px;">✓</span>
+              <div style="flex:1;">
+                <div style="font-size:13px;font-weight:600;color:var(--text-sec);">Отметить «Куплено»</div>
+              </div>
+              <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-weight:700;">PRO</span>
+            </div>
+            <!-- Locked: Reminder -->
+            <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(255,255,255,0.02);border-radius:12px;border:1px dashed var(--border-light);opacity:0.6;">
+              <span style="font-size:18px;">🔔</span>
+              <div style="flex:1;">
+                <div style="font-size:13px;font-weight:600;color:var(--text-sec);">Напоминание</div>
+              </div>
+              <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent);font-weight:700;">PRO</span>
+            </div>
+          </div>
+
+          <div class="pro-upsell-inline" style="margin:16px 0;">
+            <div class="upsell-title" style="font-size:14px;">Управляйте подарками удобнее</div>
+            <div class="upsell-desc" style="font-size:12px;">
+              Заметки, напоминания и статус покупки
+            </div>
+            <button class="upsell-btn" style="font-size:12px;padding:8px 16px;">⭐ Pro</button>
+          </div>
+        </div>
+
+        <div class="section-sep"></div>
+
+        <!-- Actions (always available) -->
+        <div style="padding:16px;">
+          <button style="width:100%;padding:14px;border-radius:12px;font-size:15px;font-weight:700;border:none;background:var(--accent);color:#fff;margin-bottom:8px;cursor:pointer;">💬 Комментарии</button>
+          <button class="unreserve-btn" style="padding:14px;font-size:15px;border-radius:12px;">Снять бронь</button>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Free — карточка брони<br>Pro-функции как upsell</div>
+  </div>
+</div>
+
+<!-- ================================================================
+     ROW 5: Updated Pro tariff card
+     ================================================================ -->
+<div class="row">
+  <div class="row-label">5. Обновленная карточка Pro-тарифа</div>
+  <div class="row-desc">Новые возможности по бронированию выделены бейджем NEW.</div>
+
+  <!-- Pro tariff card -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="tg-status">
+        <span class="tg-back">← Назад</span>
+        <span>Подписка</span>
+      </div>
+      <div class="phone-inner" style="padding-top:54px;">
+
+        <div class="tariff-card">
+          <div class="tariff-header">
+            <div class="tariff-badge">PRO</div>
+            <div class="tariff-label">Полный доступ ко всему</div>
+          </div>
+          <div class="tariff-features">
+            <div class="tariff-feature">
+              <div class="tf-icon">📋</div>
+              <div class="tf-text">Безлимитные вишлисты<small>До 10 вишлистов + расширение</small></div>
+            </div>
+            <div class="tariff-feature">
+              <div class="tf-icon">🎁</div>
+              <div class="tf-text">Больше желаний<small>До 70 желаний в каждом вишлисте</small></div>
+            </div>
+            <div class="tariff-feature">
+              <div class="tf-icon">💬</div>
+              <div class="tf-text">Комментарии<small>Обсуждайте подарки с друзьями</small></div>
+            </div>
+            <div class="tariff-feature">
+              <div class="tf-icon">🔗</div>
+              <div class="tf-text">Импорт по ссылке<small>Добавляйте товары из любых магазинов</small></div>
+            </div>
+
+            <!-- NEW features -->
+            <div style="margin:4px 0;height:1px;background:var(--border);"></div>
+            <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.8px;padding-left:2px;">Управление бронями</div>
+
+            <div class="tariff-feature new-badge">
+              <div class="tf-icon">📋</div>
+              <div class="tf-text">История броней <span class="new-tag">NEW</span><small>Все прошлые брони в одном месте</small></div>
+            </div>
+            <div class="tariff-feature new-badge">
+              <div class="tf-icon">📝</div>
+              <div class="tf-text">Заметки к подаркам <span class="new-tag">NEW</span><small>Приватные записки к каждой брони</small></div>
+            </div>
+            <div class="tariff-feature new-badge">
+              <div class="tf-icon">🔔</div>
+              <div class="tf-text">Напоминания <span class="new-tag">NEW</span><small>Не забудьте купить и вручить</small></div>
+            </div>
+            <div class="tariff-feature new-badge">
+              <div class="tf-icon">✓</div>
+              <div class="tf-text">Статус «Куплено» <span class="new-tag">NEW</span><small>Приватный трекер покупок</small></div>
+            </div>
+            <div class="tariff-feature new-badge">
+              <div class="tf-icon">🔍</div>
+              <div class="tf-text">Фильтры и сортировка <span class="new-tag">NEW</span><small>Удобное управление бронями</small></div>
+            </div>
+          </div>
+
+          <button class="tariff-cta">Подключить Pro</button>
+          <div class="tariff-price">100 ⭐ / месяц · отмена в любой момент</div>
+        </div>
+
+        <div style="height:40px;"></div>
+      </div>
+    </div>
+    <div class="screen-label">Обновленная карточка Pro<br>Новые фичи с бейджем NEW</div>
+  </div>
+
+  <!-- Paywall upsell sheet -->
+  <div class="phone-wrap">
+    <div class="phone" style="position:relative;">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner" style="filter:brightness(0.4);">
+        <div class="home-tabs">
+          <div class="home-tab active"><span class="count">4</span><span class="tab-label">Мои брони</span></div>
+        </div>
+      </div>
+      <div class="bs-overlay"></div>
+      <div class="bs-sheet" style="padding-bottom:40px;">
+        <div class="bs-handle"></div>
+        <div class="pro-full-upsell">
+          <div class="pro-full-icon">🎯</div>
+          <div class="pro-full-title">Управляйте бронями<br>как профи</div>
+          <div class="pro-full-desc">Не теряйте подарки, ставьте напоминания и храните историю всех броней</div>
+
+          <div class="pro-features-list">
+            <div class="pro-feature-row">
+              <span class="pf-icon">📋</span>
+              <div class="pf-text">История броней<small>Завершенные и отмененные</small></div>
+            </div>
+            <div class="pro-feature-row">
+              <span class="pf-icon">📝</span>
+              <div class="pf-text">Заметки к подаркам<small>Приватные записки к бронированным</small></div>
+            </div>
+            <div class="pro-feature-row">
+              <span class="pf-icon">🔔</span>
+              <div class="pf-text">Напоминания<small>Не забудьте купить и вручить</small></div>
+            </div>
+            <div class="pro-feature-row">
+              <span class="pf-icon">✓</span>
+              <div class="pf-text">Статус покупки<small>Отмечайте что уже куплено</small></div>
+            </div>
+            <div class="pro-feature-row">
+              <span class="pf-icon">🔍</span>
+              <div class="pf-text">Фильтры<small>Сортируйте по цене, дате, владельцу</small></div>
+            </div>
+          </div>
+
+          <button class="pro-cta-btn">⭐ Попробовать Pro</button>
+          <div class="pro-cta-price">100 ⭐ / месяц · отмена в любой момент</div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Paywall sheet<br>При нажатии на Pro-функцию</div>
+  </div>
+</div>
+
+<!-- ================================================================
+     ROW 6: Edge cases — Empty history, Reminder notification, Many items
+     ================================================================ -->
+<div class="row">
+  <div class="row-label">6. Крайние случаи</div>
+  <div class="row-desc">Пустая история, уведомление о напоминании, много карточек с Pro-фичами.</div>
+
+  <!-- Empty history Pro -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner">
+        <div class="home-tabs">
+          <div class="home-tab"><span class="count">8</span><span class="tab-label">Вишлисты</span></div>
+          <div class="home-tab"><span class="count">34</span><span class="tab-label">Желания</span></div>
+          <div class="home-tab active"><span class="count">6</span><span class="tab-label">Мои брони</span></div>
+        </div>
+
+        <div class="segment">
+          <div class="seg-btn">Активные</div>
+          <div class="seg-btn active">История</div>
+        </div>
+
+        <div class="empty-state">
+          <div class="em-icon">📦</div>
+          <div class="em-title">Пока пусто</div>
+          <div class="em-desc">Здесь появится история ваших завершенных<br>и отмененных бронирований</div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Pro — пустая история</div>
+  </div>
+
+  <!-- Reminder notification mockup -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner">
+
+        <!-- Telegram chat bubble mockup -->
+        <div style="padding:20px 16px;">
+          <div style="font-size:14px;color:var(--text-muted);text-align:center;margin-bottom:20px;">Чат с ботом WishBot</div>
+
+          <!-- Bot message -->
+          <div style="max-width:300px;padding:12px 14px;background:var(--card);border-radius:14px 14px 14px 4px;border:1px solid var(--border);margin-bottom:16px;">
+            <div style="font-size:14px;color:var(--text);line-height:1.5;">
+              🔔 <b>Напоминание о бронировании</b><br><br>
+              <b>AirPods Max</b> — 45 990 ₽<br>
+              Из вишлиста <b>Ани Ивановой</b><br><br>
+              📝 Ваша заметка:<br>
+              <span style="color:var(--text-sec);font-style:italic;">«Уже купил, не забыть вручить на ДР»</span>
+            </div>
+            <div style="margin-top:12px;display:flex;gap:8px;">
+              <div style="flex:1;padding:8px;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;text-align:center;">Открыть</div>
+              <div style="flex:1;padding:8px;border-radius:8px;background:var(--surface);color:var(--text-sec);font-size:13px;font-weight:600;text-align:center;border:1px solid var(--border-light);">Отложить</div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:right;">14 апреля, 10:00</div>
+          </div>
+
+          <!-- Second reminder -->
+          <div style="max-width:300px;padding:12px 14px;background:var(--card);border-radius:14px 14px 14px 4px;border:1px solid var(--border);margin-bottom:16px;">
+            <div style="font-size:14px;color:var(--text);line-height:1.5;">
+              🔔 <b>Напоминание о бронировании</b><br><br>
+              <b>Набор книг Стругацких</b> — 2 800 ₽<br>
+              Из вишлиста <b>Ани Ивановой</b><br><br>
+              💡 <span style="color:var(--text-sec);">Не забудьте купить подарок!</span>
+            </div>
+            <div style="margin-top:12px;display:flex;gap:8px;">
+              <div style="flex:1;padding:8px;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;text-align:center;">Открыть</div>
+              <div style="flex:1;padding:8px;border-radius:8px;background:var(--green-soft);color:var(--green);font-size:13px;font-weight:600;text-align:center;">✓ Куплено</div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:right;">30 апреля, 10:00</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-label">Бот: напоминания<br>Inline-кнопки для быстрых действий</div>
+  </div>
+
+  <!-- Dense view with many items -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="tg-status"><span>WishBot</span></div>
+      <div class="phone-inner">
+        <div class="home-tabs">
+          <div class="home-tab"><span class="count">8</span><span class="tab-label">Вишлисты</span></div>
+          <div class="home-tab"><span class="count">34</span><span class="tab-label">Желания</span></div>
+          <div class="home-tab active"><span class="count">9</span><span class="tab-label">Мои брони</span></div>
+        </div>
+
+        <div class="segment">
+          <div class="seg-btn active">Активные</div>
+          <div class="seg-btn">История</div>
+        </div>
+
+        <div class="filters-bar">
+          <div class="filter-chip active"><span class="chip-icon">☐</span> Не куплено</div>
+          <div class="sort-btn">↕ По цене ↑</div>
+        </div>
+
+        <!-- Dense cards without expanded notes -->
+        <div class="owner-group">
+          <div class="owner-header">
+            <div class="owner-avatar" style="background:linear-gradient(135deg,#6B7FD4,#818cf8);">А</div>
+            <div class="owner-name">Аня Иванова</div>
+          </div>
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#C8E6C9,#A5D6A7);font-size:20px;width:44px;height:44px;border-radius:8px;">📚</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title" style="font-size:14px;">Набор книг Стругацких</span>
+                  <span class="res-price" style="font-size:12px;">2 800 ₽</span>
+                </div>
+                <div class="res-status-row" style="margin-top:2px;">
+                  <span class="res-badge reserved" style="font-size:10px;">Забронировано</span>
+                  <span style="font-size:10px;color:var(--text-muted);">📝 Заметка</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#D7CCC8,#BCAAA4);font-size:20px;width:44px;height:44px;border-radius:8px;">☕</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title" style="font-size:14px;">Кофемолка Wilfa</span>
+                  <span class="res-price" style="font-size:12px;">7 500 ₽</span>
+                </div>
+                <div class="res-status-row" style="margin-top:2px;">
+                  <span class="res-badge reserved" style="font-size:10px;">Забронировано</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="owner-group">
+          <div class="owner-header">
+            <div class="owner-avatar" style="background:linear-gradient(135deg,#E8930A,#fbbf24);">М</div>
+            <div class="owner-name">Макс Петров</div>
+          </div>
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#BBDEFB,#90CAF9);font-size:20px;width:44px;height:44px;border-radius:8px;">⌚</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title" style="font-size:14px;">Garmin Venu 3</span>
+                  <span class="res-price" style="font-size:12px;">35 000 ₽</span>
+                </div>
+                <div class="res-status-row" style="margin-top:2px;">
+                  <span class="res-badge reserved" style="font-size:10px;">Забронировано</span>
+                  <span style="font-size:10px;color:var(--orange);">🔔 5 апр</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#F8BBD0,#F48FB1);font-size:20px;width:44px;height:44px;border-radius:8px;">🎮</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title" style="font-size:14px;">Nintendo Switch OLED</span>
+                  <span class="res-badge unread" style="font-size:10px;min-width:18px;height:18px;">1</span>
+                </div>
+                <div class="res-status-row" style="margin-top:2px;">
+                  <span class="res-badge reserved" style="font-size:10px;">Забронировано</span>
+                  <span class="res-price" style="font-size:12px;">28 990 ₽</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="owner-group">
+          <div class="owner-header">
+            <div class="owner-avatar" style="background:linear-gradient(135deg,#F04E6E,#ff6b9d);">Л</div>
+            <div class="owner-name">Лена Козлова</div>
+          </div>
+          <div class="res-card">
+            <div class="res-card-top">
+              <div class="res-thumb" style="background:linear-gradient(135deg,#E1BEE7,#CE93D8);font-size:20px;width:44px;height:44px;border-radius:8px;">💄</div>
+              <div class="res-info">
+                <div class="res-title-row">
+                  <span class="res-title" style="font-size:14px;">Charlotte Tilbury набор</span>
+                  <span class="res-price" style="font-size:12px;">12 500 ₽</span>
+                </div>
+                <div class="res-status-row" style="margin-top:2px;">
+                  <span class="purchased-check" style="font-size:10px;">✓ Куплено</span>
+                  <span style="font-size:10px;color:var(--text-muted);">📝</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:40px;"></div>
+      </div>
+    </div>
+    <div class="screen-label">Много карточек — компактный вид<br>Индикаторы заметок и напоминаний</div>
+  </div>
+</div>
+
+</body>
+</html>

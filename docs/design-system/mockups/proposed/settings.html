@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Settings — Wishlist Mini App</title>
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accentSoft: rgba(124,106,255,0.12);
+    --accentGlow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --red: #F87171;
+    --text: #F4F4F6;
+    --textSec: #9CA3AF;
+    --textMuted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --borderLight: rgba(255,255,255,0.1);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .page {
+    padding: 0 16px;
+    padding-bottom: 120px;
+  }
+
+  /* ---- HEADER ---- */
+  .header {
+    padding: 14px 0 20px;
+  }
+
+  .header-back {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--accent);
+    margin-bottom: 14px;
+    cursor: pointer;
+    display: inline-block;
+    transition: opacity 0.15s;
+  }
+  .header-back:active { opacity: 0.6; }
+
+  .header-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+
+  /* ---- SECTION HEADERS ---- */
+  .section-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--textMuted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+    margin-top: 28px;
+    padding-left: 4px;
+  }
+
+  /* ---- CARDS ---- */
+  .card {
+    background: var(--card);
+    border-radius: 20px;
+    padding: 4px 18px;
+    transition: transform 0.15s;
+  }
+
+  /* ---- PROFILE CARD ---- */
+  .profile-card {
+    background: linear-gradient(135deg, rgba(124,106,255,0.08), rgba(124,106,255,0.02));
+    border: 1px solid rgba(124,106,255,0.15);
+    border-radius: 20px;
+    padding: 18px;
+    margin-top: 4px;
+  }
+
+  .profile-top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .profile-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accentSoft);
+    border: 2px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .profile-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .profile-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .profile-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .pro-badge {
+    background: linear-gradient(135deg, #7C6AFF, #A78BFA);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    letter-spacing: 0.5px;
+    line-height: 16px;
+  }
+
+  .profile-username {
+    font-size: 13px;
+    color: var(--textMuted);
+    margin-top: 2px;
+  }
+
+  .support-id-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(124,106,255,0.1);
+  }
+
+  .support-id-left {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .support-id-label {
+    font-size: 11px;
+    color: var(--textMuted);
+    font-weight: 500;
+  }
+
+  .support-id-value {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 12px;
+    color: var(--textSec);
+    letter-spacing: 0.3px;
+  }
+
+  .copy-btn {
+    background: var(--accentSoft);
+    color: var(--accent);
+    border: none;
+    padding: 6px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .copy-btn:active {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+
+  /* ---- ROWS ---- */
+  .row {
+    display: flex;
+    align-items: center;
+    padding: 14px 0;
+    gap: 12px;
+    transition: opacity 0.15s;
+  }
+  .row:active { opacity: 0.7; }
+  .row.disabled { pointer-events: none; }
+  .row.disabled .row-left { opacity: 0.4; }
+
+  .row-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accentSoft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .row-icon.red-bg {
+    background: rgba(248,113,113,0.12);
+  }
+
+  .row-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .row-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .row-label.red { color: var(--red); }
+
+  .row-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    max-width: 45%;
+  }
+
+  .row-value {
+    font-size: 14px;
+    color: var(--textMuted);
+    text-align: right;
+    line-height: 1.3;
+  }
+
+  .row-chevron {
+    font-size: 14px;
+    color: var(--textMuted);
+    font-weight: 300;
+  }
+
+  .soon-badge {
+    font-size: 12px;
+    color: var(--textMuted);
+    font-weight: 500;
+  }
+
+  .dot-badge {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  /* ---- DIVIDERS ---- */
+  .divider {
+    height: 1px;
+    background: rgba(255,255,255,0.04);
+    margin-left: 40px;
+  }
+
+  /* ---- TOGGLES ---- */
+  .toggle {
+    width: 50px;
+    height: 28px;
+    border-radius: 14px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.25s, box-shadow 0.25s;
+    flex-shrink: 0;
+  }
+  .toggle.on {
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accentGlow), 0 0 4px rgba(124,106,255,0.15);
+  }
+  .toggle.off {
+    background: var(--surface);
+    border: 1px solid var(--borderLight);
+  }
+
+  .toggle-knob {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    position: absolute;
+    top: 3px;
+    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .toggle.on .toggle-knob { left: 25px; }
+  .toggle.off .toggle-knob { left: 3px; }
+
+  /* ---- PILL SWITCHER ---- */
+  .pill-switcher {
+    display: flex;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+  }
+
+  .pill-option {
+    padding: 5px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    font-family: inherit;
+  }
+  .pill-option.active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(124,106,255,0.3);
+  }
+  .pill-option.inactive {
+    background: transparent;
+    color: var(--textMuted);
+  }
+
+  /* ---- CARD VIEW SELECTOR ---- */
+  .card-view-section {
+    padding: 10px 0 6px;
+  }
+
+  .card-view-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 12px;
+  }
+
+  .card-view-options {
+    display: flex;
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+
+  .card-view-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 12px 6px 10px;
+    border-radius: 14px;
+    border: 1px solid var(--borderLight);
+    background: var(--surface);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .card-view-btn.active {
+    background: var(--accentSoft);
+    border-color: rgba(124,106,255,0.35);
+  }
+
+  .card-view-btn .cv-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .card-view-btn .cv-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--textSec);
+  }
+  .card-view-btn.active .cv-label {
+    color: var(--accent);
+  }
+
+  .card-view-hint {
+    font-size: 10px;
+    color: var(--textMuted);
+    line-height: 1.4;
+    padding: 0 2px 4px;
+  }
+
+  /* ---- DANGER CARD ---- */
+  .danger-card {
+    background: rgba(248,113,113,0.06);
+    border: 1px solid rgba(248,113,113,0.12);
+    border-radius: 20px;
+    padding: 4px 18px;
+    margin-top: 28px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- 1. HEADER -->
+  <div class="header">
+    <div class="header-back">&larr; Назад</div>
+    <div class="header-title">Настройки</div>
+  </div>
+
+  <!-- 2. PROFILE CARD -->
+  <div class="profile-card">
+    <div class="profile-top">
+      <div class="profile-avatar">Д</div>
+      <div class="profile-info">
+        <div class="profile-name-row">
+          <span class="profile-name">Dmitriy</span>
+          <span class="pro-badge">PRO</span>
+        </div>
+        <div class="profile-username">@brsvdmtr</div>
+      </div>
+    </div>
+    <div class="support-id-row">
+      <div class="support-id-left">
+        <span class="support-id-label">ID для поддержки</span>
+        <span class="support-id-value">78d72f1dcd8cd582</span>
+      </div>
+      <button class="copy-btn">Скопировать</button>
+    </div>
+  </div>
+
+  <!-- 3. SECTION: ОБЩИЕ -->
+  <div class="section-header">Общие</div>
+  <div class="card">
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F310;</div>
+        <span class="row-label">Язык</span>
+      </div>
+      <div class="row-right">
+        <span class="row-value">Русский</span>
+        <span class="row-chevron">&rsaquo;</span>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F4B0;</div>
+        <span class="row-label">Валюта по умолчанию</span>
+      </div>
+      <div class="row-right">
+        <div class="pill-switcher">
+          <div class="pill-option active">&#x20BD;</div>
+          <div class="pill-option inactive">$</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. SECTION: УВЕДОМЛЕНИЯ -->
+  <div class="section-header">Уведомления</div>
+  <div class="card">
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F4AC;</div>
+        <span class="row-label">Комментарии</span>
+      </div>
+      <div class="row-right">
+        <div class="toggle on"><div class="toggle-knob"></div></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F381;</div>
+        <span class="row-label">Бронирования</span>
+      </div>
+      <div class="row-right">
+        <div class="toggle on"><div class="toggle-knob"></div></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F514;</div>
+        <span class="row-label">Изменения в подписках</span>
+      </div>
+      <div class="row-right">
+        <div class="toggle on"><div class="toggle-knob"></div></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F4E2;</div>
+        <span class="row-label">Новости и обновления</span>
+      </div>
+      <div class="row-right">
+        <div class="toggle on"><div class="toggle-knob"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. SECTION: ПРИВАТНОСТЬ -->
+  <div class="section-header">Приватность</div>
+  <div class="card">
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F441;</div>
+        <span class="row-label">Кто видит мой профиль</span>
+      </div>
+      <div class="row-right">
+        <span class="row-value">Все</span>
+        <span class="row-chevron">&rsaquo;</span>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F465;</div>
+        <span class="row-label">Кто может подписаться</span>
+      </div>
+      <div class="row-right">
+        <span class="row-value">Все</span>
+        <span class="row-chevron">&rsaquo;</span>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F4AD;</div>
+        <span class="row-label">Комментарии к желаниям</span>
+      </div>
+      <div class="row-right">
+        <span class="row-value" style="font-size:12px;">Все, у кого есть доступ</span>
+        <span class="row-chevron">&rsaquo;</span>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F4A1;</div>
+        <span class="row-label">Намёки на подарок</span>
+      </div>
+      <div class="row-right">
+        <div class="toggle on"><div class="toggle-knob"></div></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row disabled">
+      <div class="row-left">
+        <div class="row-icon">&#x1F512;</div>
+        <span class="row-label">Видимость &laquo;Забронировано мной&raquo;</span>
+      </div>
+      <div class="row-right">
+        <span class="soon-badge">Скоро</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. SECTION: КАСТОМИЗАЦИЯ -->
+  <div class="section-header">Кастомизация</div>
+  <div class="card">
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F4CC;</div>
+        <span class="row-label">Новые вишлисты добавлять сверху</span>
+      </div>
+      <div class="row-right">
+        <div class="toggle on"><div class="toggle-knob"></div></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row disabled">
+      <div class="row-left">
+        <div class="row-icon">&#x1F512;</div>
+        <span class="row-label">Сортировка желаний</span>
+      </div>
+      <div class="row-right">
+        <span class="soon-badge">Скоро</span>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="card-view-section">
+      <div class="card-view-label">
+        <div class="row-icon">&#x1F0CF;</div>
+        <span class="row-label">Вид карточек</span>
+      </div>
+      <div class="card-view-options">
+        <button class="card-view-btn active">
+          <span class="cv-icon">&#x1F4F1;</span>
+          <span class="cv-label">Авто</span>
+        </button>
+        <button class="card-view-btn">
+          <span class="cv-icon">&#x1F5BC;</span>
+          <span class="cv-label">Крупные</span>
+        </button>
+        <button class="card-view-btn">
+          <span class="cv-icon">&#x1F4CB;</span>
+          <span class="cv-label">Компакт</span>
+        </button>
+      </div>
+      <div class="card-view-hint">Авто — крупные до 5 желаний, компактные для длинных списков</div>
+    </div>
+  </div>
+
+  <!-- 7. SECTION: ПОДДЕРЖКА И СЕРВИС -->
+  <div class="section-header">Поддержка и сервис</div>
+  <div class="card">
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F4CB;</div>
+        <span class="row-label">Что нового</span>
+      </div>
+      <div class="row-right">
+        <div class="dot-badge"></div>
+        <span class="row-chevron">&rsaquo;</span>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F6E0;</div>
+        <span class="row-label">Сообщить о проблеме</span>
+      </div>
+      <div class="row-right">
+        <span class="row-chevron">&rsaquo;</span>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F4AC;</div>
+        <span class="row-label">Связаться с поддержкой</span>
+      </div>
+      <div class="row-right">
+        <span class="row-chevron">&rsaquo;</span>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x2753;</div>
+        <span class="row-label">Частые вопросы</span>
+      </div>
+      <div class="row-right">
+        <span class="row-chevron">&rsaquo;</span>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon">&#x1F4C4;</div>
+        <span class="row-label">Юридическая информация</span>
+      </div>
+      <div class="row-right">
+        <span class="row-chevron">&rsaquo;</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. DANGER ZONE -->
+  <div class="danger-card">
+    <div class="row">
+      <div class="row-left">
+        <div class="row-icon red-bg">&#x1F5D1;</div>
+        <span class="row-label red">Удалить аккаунт</span>
+      </div>
+      <div class="row-right">
+        <span class="row-chevron" style="color:var(--red)">&rsaquo;</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. Bottom padding is handled by .page padding-bottom: 120px -->
+</div>
+</body>
+</html>

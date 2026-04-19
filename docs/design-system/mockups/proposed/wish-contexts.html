@@ -1,0 +1,3931 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Контексты желаний — Mockups</title>
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --blue: #60A5FA;
+    --blue-soft: rgba(96,165,250,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+    --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: #111;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.4;
+  }
+
+  /* Page header */
+  .page-header {
+    padding: 28px 20px 8px;
+    max-width: 860px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .page-title {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+  }
+  .page-subtitle {
+    font-size: 14px;
+    color: var(--text-sec);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+
+  /* Navigation */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(17,17,17,0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-light);
+    padding: 12px 20px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 20px;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-btn {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-sec);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: var(--font);
+    transition: all 0.2s;
+  }
+  .nav-btn:hover, .nav-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* Sections */
+  .mockup-section {
+    display: none;
+    padding: 28px 20px 60px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  .mockup-section.active { display: block; }
+
+  .section-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+  .section-subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    line-height: 1.5;
+    max-width: 720px;
+  }
+
+  /* Phone grid */
+  .phone-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 380px));
+    gap: 28px;
+    justify-content: flex-start;
+    margin-top: 16px;
+  }
+
+  .variant-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    margin: 28px 0 12px;
+    padding: 6px 12px;
+    background: var(--accent-soft);
+    border-radius: 8px;
+    display: inline-block;
+  }
+  .variant-label.muted {
+    color: var(--text-sec);
+    background: var(--surface);
+  }
+  .variant-label.green { color: var(--green); background: var(--green-soft); }
+  .variant-label.orange { color: var(--orange); background: var(--orange-soft); }
+  .variant-label.red { color: var(--red); background: var(--red-soft); }
+
+  .phone-wrap {
+    display: flex;
+    flex-direction: column;
+  }
+  .phone-caption {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-sec);
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .phone-note {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    line-height: 1.5;
+    text-align: center;
+    padding: 0 10px;
+  }
+
+  /* Phone frame */
+  .phone {
+    background: var(--bg);
+    border-radius: 24px;
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    width: 100%;
+    max-width: 380px;
+  }
+  .phone-status {
+    height: 42px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-sec);
+    border-bottom: 1px solid var(--border);
+  }
+  .phone-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .phone-header .back { font-size: 20px; color: var(--accent); line-height: 1; }
+  .phone-header .hdr-title { font-size: 16px; font-weight: 600; flex: 1; }
+  .phone-header .hdr-action { font-size: 13px; color: var(--accent); font-weight: 500; }
+  .phone-content {
+    min-height: 640px;
+    overflow-y: auto;
+    padding-bottom: 16px;
+  }
+
+  /* Buttons */
+  .btn {
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: var(--font);
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.15s;
+    text-decoration: none;
+    width: 100%;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--accent-soft); color: var(--accent); }
+  .btn-ghost { background: transparent; color: var(--text-sec); }
+  .btn-danger { background: var(--red-soft); color: var(--red); }
+  .btn-pro { background: linear-gradient(135deg, #7C6AFF, #a78bfa); color: #fff; }
+  .btn-outline { background: transparent; border: 1px solid var(--border-light); color: var(--text); }
+  .btn-small {
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    width: auto;
+  }
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+  .btn-row .btn { flex: 1; }
+  .btn-sticky-bottom {
+    padding: 12px 16px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+  }
+
+  /* Chips / pills */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--surface);
+    color: var(--text-sec);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .chip.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: transparent;
+    font-weight: 600;
+  }
+  .chip.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .chip.green { background: var(--green-soft); color: var(--green); border-color: transparent; }
+  .chip.orange { background: var(--orange-soft); color: var(--orange); border-color: transparent; }
+  .chip.blue { background: var(--blue-soft); color: var(--blue); border-color: transparent; }
+  .chip.red { background: var(--red-soft); color: var(--red); border-color: transparent; }
+  .chip .x { opacity: 0.7; font-size: 14px; margin-left: 2px; }
+  .chip.dashed {
+    background: transparent;
+    border: 1px dashed var(--border-light);
+    color: var(--text-sec);
+  }
+  .chip-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 0 16px;
+  }
+  .chip-row.scroll {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .chip-row.scroll::-webkit-scrollbar { display: none; }
+
+  /* Pro badge */
+  .pro-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: linear-gradient(135deg, #7C6AFF 0%, #a78bfa 100%);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+  }
+
+  /* Wish card (compact) */
+  .wish-card {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: var(--surface);
+    border-radius: 14px;
+    margin: 0 16px 8px;
+    border: 1px solid var(--border);
+    align-items: center;
+  }
+  .wish-card.selected {
+    border-color: var(--accent);
+    background: rgba(124,106,255,0.05);
+  }
+  .wish-card.checkbox-visible { gap: 10px; }
+  .wish-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    border: 1.5px solid var(--border-light);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 14px;
+  }
+  .wish-check.on {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .wish-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    background: var(--card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .wish-info { flex: 1; min-width: 0; }
+  .wish-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wish-meta {
+    font-size: 12px;
+    color: var(--text-sec);
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .wish-meta .sep { opacity: 0.4; }
+  .wish-ctx {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .wish-ctx .mini-chip {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 8px;
+    background: var(--surface-hover);
+    color: var(--text-sec);
+    font-weight: 500;
+  }
+  .wish-ctx .mini-chip.accent { background: var(--accent-soft); color: var(--accent); }
+  .wish-ctx .mini-chip.orange { background: var(--orange-soft); color: var(--orange); }
+  .wish-ctx .mini-chip.green { background: var(--green-soft); color: var(--green); }
+  .wish-ctx .mini-chip.blue { background: var(--blue-soft); color: var(--blue); }
+  .wish-status {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+  .wish-status.reserved { background: var(--orange-soft); color: var(--orange); }
+  .wish-status.purchased { background: var(--green-soft); color: var(--green); }
+  .wish-status.archived { background: var(--surface-hover); color: var(--text-muted); }
+
+  /* Context editor block */
+  .ctx-block {
+    background: var(--surface);
+    border-radius: 14px;
+    margin: 10px 16px 0;
+    padding: 14px 14px 8px;
+    border: 1px solid var(--border);
+  }
+  .ctx-block-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-sec);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .ctx-block-title .help {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .ctx-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .ctx-row:first-child { border-top: none; padding-top: 4px; }
+  .ctx-row .ctx-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .ctx-row .ctx-body { flex: 1; min-width: 0; }
+  .ctx-row .ctx-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+  .ctx-row .ctx-value {
+    font-size: 12px;
+    color: var(--text-sec);
+    line-height: 1.4;
+  }
+  .ctx-row .ctx-value.empty { color: var(--text-muted); font-style: italic; }
+  .ctx-row .ctx-chips {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .ctx-row .chev {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin-top: 3px;
+  }
+
+  /* List rows */
+  .list-group {
+    background: var(--surface);
+    border-radius: 14px;
+    margin: 12px 16px;
+    overflow: hidden;
+  }
+  .list-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 14px;
+    border-top: 1px solid var(--border);
+  }
+  .list-row:first-child { border-top: none; }
+  .list-row .list-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .list-row .list-icon.accent { background: var(--accent-soft); color: var(--accent); }
+  .list-row .list-icon.green { background: var(--green-soft); }
+  .list-row .list-icon.orange { background: var(--orange-soft); }
+  .list-row .list-icon.blue { background: var(--blue-soft); }
+  .list-row .list-body { flex: 1; min-width: 0; }
+  .list-row .list-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .list-row .list-sub {
+    font-size: 12px;
+    color: var(--text-sec);
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .list-row .chev { color: var(--text-muted); font-size: 16px; }
+  .list-row.clickable:active { background: var(--surface-hover); }
+
+  /* Sheets */
+  .sheet {
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    overflow: hidden;
+  }
+  .sheet-handle {
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    margin: 10px auto 0;
+  }
+  .sheet-title {
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    padding: 16px 20px 6px;
+  }
+  .sheet-subtitle {
+    font-size: 12px;
+    color: var(--text-sec);
+    text-align: center;
+    padding: 0 20px 12px;
+    line-height: 1.5;
+  }
+  .sheet-body { padding: 0 8px 16px; }
+
+  /* Inputs */
+  .input-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin: 12px 16px 6px;
+    display: block;
+  }
+  .input-field {
+    width: calc(100% - 32px);
+    margin: 0 16px 4px;
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 11px 14px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: var(--font);
+    outline: none;
+  }
+  textarea.input-field { resize: none; min-height: 72px; line-height: 1.5; }
+  .input-field::placeholder { color: var(--text-muted); }
+  .input-help {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 4px 16px 0;
+    line-height: 1.4;
+  }
+
+  /* Toggle */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    gap: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .toggle-row:first-child { border-top: none; }
+  .toggle-row .tr-body { flex: 1; min-width: 0; }
+  .toggle-row .tr-title { font-size: 14px; font-weight: 500; }
+  .toggle-row .tr-sub { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
+  .toggle {
+    width: 46px;
+    height: 26px;
+    border-radius: 13px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.25s;
+    flex-shrink: 0;
+  }
+  .toggle.on {
+    background: var(--accent);
+  }
+  .toggle.off {
+    background: var(--surface-hover);
+    border: 1px solid var(--border-light);
+  }
+  .toggle-knob {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    position: absolute;
+    top: 3px;
+    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .toggle.on .toggle-knob { left: 23px; }
+  .toggle.off .toggle-knob { left: 3px; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+  }
+  .empty-icon {
+    font-size: 52px;
+    margin-bottom: 16px;
+    opacity: 0.9;
+  }
+  .empty-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .empty-desc {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.5;
+    margin-bottom: 20px;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Teaser / paywall */
+  .teaser-card {
+    background: linear-gradient(135deg, rgba(124,106,255,0.1), rgba(124,106,255,0.02));
+    border: 1px solid rgba(124,106,255,0.2);
+    border-radius: 16px;
+    padding: 20px;
+    margin: 12px 16px;
+    text-align: center;
+    position: relative;
+  }
+  .teaser-icon { font-size: 38px; margin-bottom: 12px; }
+  .teaser-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .teaser-desc { font-size: 12.5px; color: var(--text-sec); margin-bottom: 14px; line-height: 1.5; }
+  .teaser-features {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left;
+    margin-bottom: 16px;
+  }
+  .teaser-feature {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--text-sec);
+  }
+  .teaser-feature .check {
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  /* Annotation / callouts */
+  .annotation {
+    background: var(--surface);
+    padding: 14px 16px;
+    border-radius: 12px;
+    border-left: 3px solid var(--accent);
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.6;
+    margin: 16px 0;
+  }
+  .annotation strong { color: var(--text); }
+  .annotation.warn { border-left-color: var(--orange); }
+  .annotation.danger { border-left-color: var(--red); }
+  .annotation.ok { border-left-color: var(--green); }
+  .annotation.info { border-left-color: var(--blue); }
+
+  /* Decisions table */
+  .decisions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  @media (min-width: 860px) {
+    .decisions { grid-template-columns: 1fr 1fr; }
+  }
+  .decision {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 18px 20px;
+    border: 1px solid var(--border);
+  }
+  .decision-num {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--accent);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .decision-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+  .decision-text {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.6;
+  }
+  .decision-text strong { color: var(--text); }
+  .decision-choice {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .decision-pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .decision-pill.muted { background: var(--surface-hover); color: var(--text-sec); }
+  .decision-pill.ok { background: var(--green-soft); color: var(--green); }
+  .decision-pill.warn { background: var(--orange-soft); color: var(--orange); }
+
+  /* Data model blocks */
+  .schema-table {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 0;
+    margin: 12px 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .schema-table-title {
+    padding: 12px 16px;
+    background: var(--surface-hover);
+    font-size: 13px;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .schema-table-title .pill {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .schema-table-title .pill.new { background: var(--accent-soft); color: var(--accent); }
+  .schema-table-title .pill.existing { background: var(--green-soft); color: var(--green); }
+  .schema-field {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 2fr;
+    gap: 8px;
+    padding: 8px 16px;
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    align-items: center;
+  }
+  .schema-field:first-of-type { border-top: none; }
+  .schema-field .name { font-family: 'SF Mono', Consolas, monospace; color: var(--text); font-weight: 600; }
+  .schema-field .type { font-family: 'SF Mono', Consolas, monospace; color: var(--accent); font-size: 11.5px; }
+  .schema-field .note { color: var(--text-sec); line-height: 1.4; }
+
+  /* Badges for data-model relation */
+  .rel-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+  }
+  .rel-row:first-child { border-top: none; }
+
+  /* Tabs inside phone */
+  .tabs-row {
+    display: flex;
+    padding: 10px 16px 6px;
+    gap: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-pill {
+    padding: 7px 14px;
+    border-radius: 18px;
+    font-size: 12.5px;
+    font-weight: 500;
+    background: transparent;
+    color: var(--text-sec);
+    border: 1px solid var(--border-light);
+  }
+  .tab-pill.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Section block */
+  .section-block-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 16px 16px 8px;
+  }
+
+  /* Collection card (for list) */
+  .coll-card {
+    background: var(--surface);
+    border-radius: 16px;
+    margin: 0 16px 10px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .coll-card .coll-cover {
+    height: 96px;
+    background: linear-gradient(135deg, #4a3a9e, #2d1f6e);
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    padding: 10px 14px;
+  }
+  .coll-card .coll-cover .coll-emoji {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    font-size: 28px;
+  }
+  .coll-card .coll-cover .coll-count {
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+    padding: 3px 9px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .coll-card .coll-body { padding: 12px 14px 14px; }
+  .coll-card .coll-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .coll-card .coll-meta {
+    font-size: 12px;
+    color: var(--text-sec);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .coll-card .coll-meta .dot { opacity: 0.4; }
+
+  .coll-gradient-1 { background: linear-gradient(135deg, #4a3a9e 0%, #2d1f6e 100%); }
+  .coll-gradient-2 { background: linear-gradient(135deg, #0891B2 0%, #0E7490 100%); }
+  .coll-gradient-3 { background: linear-gradient(135deg, #BE185D 0%, #831843 100%); }
+  .coll-gradient-4 { background: linear-gradient(135deg, #059669 0%, #065F46 100%); }
+  .coll-gradient-5 { background: linear-gradient(135deg, #D97706 0%, #92400E 100%); }
+
+  /* Showcase hero */
+  .sc-hero {
+    height: 180px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+    padding: 18px;
+  }
+  .sc-hero .sc-emoji {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    font-size: 40px;
+  }
+  .sc-hero .sc-info { position: relative; z-index: 2; }
+  .sc-hero .sc-title { font-size: 22px; font-weight: 800; color: #fff; }
+  .sc-hero .sc-meta { font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px; }
+
+  /* Share preview link */
+  .share-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .share-box .link-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .share-box .link-info { flex: 1; min-width: 0; }
+  .share-box .link-url {
+    font-size: 12px;
+    color: var(--text);
+    font-family: 'SF Mono', Consolas, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .share-box .link-sub { font-size: 11px; color: var(--text-sec); margin-top: 2px; }
+  .share-box .link-action { font-size: 12px; color: var(--accent); font-weight: 600; }
+
+  /* Bulk action bar */
+  .bulk-bar {
+    position: sticky;
+    bottom: 0;
+    background: rgba(26,26,30,0.95);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    padding: 12px 14px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+  }
+  .bulk-bar::-webkit-scrollbar { display: none; }
+  .bulk-action {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .bulk-action.accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Pill for audience/occasion */
+  .ctx-pill-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 16px 4px;
+  }
+  .ctx-pill {
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .ctx-pill.selected {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .ctx-pill .ctx-pill-icon { font-size: 18px; }
+  .ctx-pill.full { grid-column: 1 / -1; }
+
+  /* Public showcase card */
+  .pub-wish-card {
+    display: flex;
+    gap: 12px;
+    padding: 14px;
+    background: var(--surface);
+    border-radius: 14px;
+    margin: 0 16px 10px;
+    border: 1px solid var(--border);
+    align-items: flex-start;
+  }
+  .pub-wish-card .pub-thumb {
+    width: 72px;
+    height: 72px;
+    border-radius: 12px;
+    background: var(--card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    flex-shrink: 0;
+  }
+  .pub-wish-card .pub-info { flex: 1; min-width: 0; }
+  .pub-wish-card .pub-title { font-size: 14px; font-weight: 600; line-height: 1.35; }
+  .pub-wish-card .pub-price { font-size: 12px; color: var(--text-sec); margin-top: 4px; }
+  .pub-wish-card .pub-cta {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+    margin-top: 8px;
+  }
+  .pub-wish-card .pub-cta.reserved {
+    background: var(--orange-soft);
+    color: var(--orange);
+  }
+
+  /* Label badge */
+  .label-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 6px;
+  }
+  .label-badge.new { background: var(--accent-soft); color: var(--accent); }
+  .label-badge.pro {
+    background: linear-gradient(135deg, #7C6AFF, #a78bfa);
+    color: #fff;
+  }
+
+  /* Collapsed row with arrow */
+  .collapsed-row {
+    padding: 12px 16px;
+    background: var(--surface);
+    margin: 8px 16px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid var(--border);
+  }
+  .collapsed-row .cr-body { flex: 1; }
+  .collapsed-row .cr-title { font-size: 13px; font-weight: 600; }
+  .collapsed-row .cr-sub { font-size: 11px; color: var(--text-sec); margin-top: 1px; }
+
+  /* Segmented control */
+  .seg-control {
+    display: flex;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 3px;
+    margin: 10px 16px;
+  }
+  .seg-item {
+    flex: 1;
+    text-align: center;
+    padding: 8px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-sec);
+    border-radius: 8px;
+  }
+  .seg-item.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* Utility */
+  .spacer-8 { height: 8px; }
+  .spacer-16 { height: 16px; }
+  .spacer-24 { height: 24px; }
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0 16px;
+  }
+  .row-space { padding: 0 16px; }
+
+  /* Broken-config state */
+  .broken-banner {
+    background: rgba(251,191,36,0.08);
+    border: 1px solid rgba(251,191,36,0.2);
+    border-radius: 12px;
+    margin: 12px 16px;
+    padding: 12px 14px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .broken-banner .bb-icon { color: var(--orange); font-size: 18px; }
+  .broken-banner .bb-body { flex: 1; }
+  .broken-banner .bb-title { font-size: 13px; font-weight: 700; color: var(--orange); }
+  .broken-banner .bb-sub { font-size: 12px; color: var(--text-sec); margin-top: 3px; line-height: 1.5; }
+
+  .notice-block {
+    background: var(--surface);
+    border: 1px dashed var(--border-light);
+    border-radius: 12px;
+    margin: 12px 16px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text-sec);
+    text-align: center;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <div class="page-title">Контексты желаний</div>
+    <div class="page-subtitle">
+      Теги · Поводы · Аудитории · Подборки · Витрины<br>
+      Мокапы фичи организации желаний поверх существующих вишлистов.
+    </div>
+  </div>
+
+  <div class="nav" id="nav">
+    <button class="nav-btn active" data-section="intro">1. Решения</button>
+    <button class="nav-btn" data-section="wish-edit">2. Редактор желания</button>
+    <button class="nav-btn" data-section="filters">3. Вишлист: фильтры</button>
+    <button class="nav-btn" data-section="collections">4. Подборки</button>
+    <button class="nav-btn" data-section="showcases">5. Витрины</button>
+    <button class="nav-btn" data-section="public">6. Публичные страницы</button>
+    <button class="nav-btn" data-section="profile">7. Интеграция в профиль</button>
+    <button class="nav-btn" data-section="pro">8. Pro-гейтинг</button>
+    <button class="nav-btn" data-section="edge">9. Edge-кейсы</button>
+    <button class="nav-btn" data-section="data">10. Данные и события</button>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 1: KEY DECISIONS                                      -->
+  <!-- ============================================================ -->
+  <section id="intro" class="mockup-section active">
+    <div class="section-title">1. Ключевые продуктовые решения</div>
+    <div class="section-subtitle">
+      До того как рисовать экраны, нужно договориться о нескольких развилках — они влияют и на UX, и на данные. Ниже — рекомендация для каждой. Если что-то выглядит не так, скажи — и я перерисую.
+    </div>
+
+    <div class="annotation warn">
+      <strong>Важный терминологический конфликт.</strong><br>
+      В продукте уже заняты слова <strong>«витрина»</strong> (Profile Showcase — секция профиля с закреплёнными вишлистами, существует с 2026-04-14) и <strong>«подборка»</strong> (Curated Selection — временная ссылка на 45 дней для отправки N желаний). Новая фича вводит ещё одно значение «подборки» и «витрины». Ниже — мой вариант развести термины без переписывания существующего.
+    </div>
+
+    <div class="decisions">
+      <div class="decision">
+        <div class="decision-num">Решение 1 · терминология</div>
+        <div class="decision-title">Как назвать Collection и Showcase, не ломая текущие термины</div>
+        <div class="decision-text">
+          Предлагаю: <strong>Collection</strong> → <em>«Подборка»</em> (постоянная, кросс-вишлистная). <strong>Showcase</strong> → <em>«Витрина»</em> (публичная shareable-страница). Существующая <em>Curated Selection</em> переименовывается в UI в <em>«Ссылка-подборка»</em> или <em>«Быстрая подборка»</em> и становится частным случаем шаринга Collection. Существующий Profile Showcase из UserProfile → <em>«Обложка профиля»</em>. В коде модели не переименовываем — меняем только тексты UI.
+        </div>
+        <div class="decision-choice">
+          <span class="decision-pill">Collection = Подборка</span>
+          <span class="decision-pill">Showcase = Витрина</span>
+          <span class="decision-pill muted">Curated → «Быстрая подборка»</span>
+          <span class="decision-pill muted">Profile Showcase → «Обложка профиля»</span>
+        </div>
+      </div>
+
+      <div class="decision">
+        <div class="decision-num">Решение 2 · теги</div>
+        <div class="decision-title">Ломать или не ломать существующую модель Tag</div>
+        <div class="decision-text">
+          Сейчас <code>Tag</code> привязан к <code>wishlistId</code> — тег живёт в одном вишлисте. Для фичи нужен тег уровня пользователя (чтобы один тег работал через все вишлисты). Рекомендую: <strong>добавить новую таблицу UserTag (owner-scoped)</strong>, связь через WishTag. Старый Tag оставить для внутренней механики wishlist-категорий / не трогать. Мигрировать постепенно: в UI показывать только UserTag, старый Tag маскируется.
+        </div>
+        <div class="decision-choice">
+          <span class="decision-pill">Новая таблица UserTag</span>
+          <span class="decision-pill muted">Старый Tag не трогаем</span>
+          <span class="decision-pill ok">Без деструктивной миграции</span>
+        </div>
+      </div>
+
+      <div class="decision">
+        <div class="decision-num">Решение 3 · поводы</div>
+        <div class="decision-title">Occasion ≠ GiftOccasion (они не должны путаться)</div>
+        <div class="decision-text">
+          В проекте уже есть <code>GiftOccasion</code> — это события конкретных людей из Gift Calendar («ДР Маши 5 июля»). Новый <code>Occasion</code> — это справочная метка, вешается на желание: «это подходит на ДР / НГ / свадьбу». Рекомендую: <strong>завести новую модель Occasion как справочник</strong> (system-seeded), связь с wish через WishOccasion. GiftOccasion не трогаем. В UI называю «повод» — в проекте это свободное слово, конфликта нет.
+        </div>
+        <div class="decision-choice">
+          <span class="decision-pill">Новый Occasion (справочник)</span>
+          <span class="decision-pill muted">GiftOccasion не трогаем</span>
+          <span class="decision-pill warn">Риск путаницы у юзера — смягчается копирайтом</span>
+        </div>
+      </div>
+
+      <div class="decision">
+        <div class="decision-num">Решение 4 · множественность</div>
+        <div class="decision-title">Сколько поводов и аудиторий можно повесить на желание</div>
+        <div class="decision-text">
+          Рекомендация: <strong>несколько поводов и несколько аудиторий</strong> — так пользователь реально думает. Mutual exclusivity реализуется двумя «wildcard» значениями: <em>«без повода»</em> и <em>«любой повод»</em> исключают все остальные поводы; <em>«кто угодно»</em> исключает конкретные аудитории. UI блокирует несовместимые выборы с подсказкой, а не выдаёт ошибку постфактум.
+        </div>
+        <div class="decision-choice">
+          <span class="decision-pill">Multiple occasions</span>
+          <span class="decision-pill">Multiple audiences</span>
+          <span class="decision-pill">Wildcard исключает остальное</span>
+        </div>
+      </div>
+
+      <div class="decision">
+        <div class="decision-num">Решение 5 · режимы витрин</div>
+        <div class="decision-title">Manual vs Dynamic vs Filter — и что делать при поломке источника</div>
+        <div class="decision-text">
+          Поддерживаем три режима: <strong>Manual</strong> (ручной список wishes), <strong>Dynamic Collection</strong> (зеркалит содержимое подборки), <strong>Dynamic Filter</strong> (правило: тег + повод + аудитория). Если источник исчезает — виртрина становится <em>broken-config</em>, owner видит баннер с CTA «Починить», публичный зритель видит то, что удалось зарезолвить; если пусто — empty state «Некоторые желания больше не показываются».
+        </div>
+        <div class="decision-choice">
+          <span class="decision-pill">Manual</span>
+          <span class="decision-pill">Dynamic Collection</span>
+          <span class="decision-pill">Dynamic Filter</span>
+          <span class="decision-pill warn">Broken-config UI для владельца</span>
+        </div>
+      </div>
+
+      <div class="decision">
+        <div class="decision-num">Решение 6 · приватность шаринга</div>
+        <div class="decision-title">Может ли Collection быть публичной сама по себе</div>
+        <div class="decision-text">
+          Рекомендация: <strong>Collection не шарится напрямую как публичная страница</strong>. Если пользователь хочет поделиться — он создаёт Showcase поверх этой Collection. Это убирает двойную shareable-поверхность и делает Collection чисто организационным слоем. Исключение: «быстрая подборка» (старый CuratedSelection) остаётся как самостоятельный инструмент ad-hoc шаринга и живёт рядом.
+        </div>
+        <div class="decision-choice">
+          <span class="decision-pill">Collection = private layer</span>
+          <span class="decision-pill">Showcase = public layer</span>
+          <span class="decision-pill muted">Curated = ad-hoc quick share</span>
+        </div>
+      </div>
+
+      <div class="decision">
+        <div class="decision-num">Решение 7 · архив и приватность</div>
+        <div class="decision-title">Что показывает публичная Витрина при частично недоступном контенте</div>
+        <div class="decision-text">
+          Правило: <strong>архивные / приватные / удалённые wishes выпадают из публичной витрины молча</strong>. Если пропадает часть — витрина рендерит то, что есть, плюс тонкая подпись: «Некоторые желания больше не показываются». Если пусто — empty state, не ошибка. Broken-config (удалён источник) — owner видит предупреждение, public видит то же empty state.
+        </div>
+        <div class="decision-choice">
+          <span class="decision-pill ok">Graceful degradation</span>
+          <span class="decision-pill">Silent skip</span>
+          <span class="decision-pill muted">Тонкая подпись для прозрачности</span>
+        </div>
+      </div>
+
+      <div class="decision">
+        <div class="decision-num">Решение 8 · Pro vs Free</div>
+        <div class="decision-title">Границы плана</div>
+        <div class="decision-text">
+          <strong>Free:</strong> теги до 10, подборок до 3 (private only), витрин 0. Закрепление в профиле — нет. Кастомная обложка витрины — нет.<br>
+          <strong>Pro:</strong> теги unlimited, подборок unlimited, витрин до 10, cover/описание/закрепление в профиле до 5 витрин/подборок. Аналитика по витринам. Dynamic filter mode.
+        </div>
+        <div class="decision-choice">
+          <span class="decision-pill muted">Free: 10 tags / 3 коллекций / 0 витрин</span>
+          <span class="decision-pill">Pro: ∞ / ∞ / 10 витрин</span>
+        </div>
+      </div>
+
+      <div class="decision">
+        <div class="decision-num">Решение 9 · синхронизация</div>
+        <div class="decision-title">Dynamic Filter — snapshot или live</div>
+        <div class="decision-text">
+          Рекомендация: <strong>dynamic filter всегда разрешается live</strong> при рендере публичной страницы. Без снапшотов. Плюс: пользователь меняет wish — публика видит сразу. Минус: удаление тега ведёт к пустой витрине — решается CTA «Перенастроить» на стороне владельца. Для тяжёлых витрин — кешируем result set на короткое время (5–10 минут) на backend.
+        </div>
+        <div class="decision-choice">
+          <span class="decision-pill">Live resolve</span>
+          <span class="decision-pill muted">Короткий cache</span>
+          <span class="decision-pill ok">Без снапшотов</span>
+        </div>
+      </div>
+
+      <div class="decision">
+        <div class="decision-num">Решение 10 · комментарии, брони</div>
+        <div class="decision-title">Ничего не ломаем в существующих механиках</div>
+        <div class="decision-text">
+          Бронь и комментарии остаются <strong>на уровне wish</strong>. Витрина и подборка — только ракурсы. Reply, reserve, replies-on-comments, privacy по существующим правилам. Точка входа «открыть wish из витрины» ведёт в ту же карточку, что из вишлиста (тот же компонент, тот же actorHash). Никаких параллельных веток комментариев и броней внутри подборок/витрин.
+        </div>
+        <div class="decision-choice">
+          <span class="decision-pill ok">Wish — единственный источник</span>
+          <span class="decision-pill">Никаких parallel threads</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="spacer-24"></div>
+
+    <div class="variant-label">Вопросы, которые я хочу услышать от тебя</div>
+    <div class="annotation info">
+      1. <strong>Термины</strong> — согласен на «Подборка / Витрина / Быстрая подборка / Обложка профиля»? Или хочешь другой расклад?<br>
+      2. <strong>Free-лимиты</strong> — 0 витрин на Free или всё же одна минимальная?<br>
+      3. <strong>«Быстрая подборка»</strong> (существующий CuratedSelection) — сохраняем рядом или прячем за Collection-шарингом?<br>
+      4. <strong>«Без повода / Любой повод»</strong> — обе wildcard-опции или только одна (рекомендую обе, но это спорно)?<br>
+      5. <strong>Cover у Collection</strong> — только у Showcase, или у Collection тоже (в профиле она видна — значит обложка нужна)?<br>
+      6. <strong>«Ссылка-подборка» с TTL 45 дней</strong> — сохранять у нового Showcase по умолчанию, или Showcase только постоянные без TTL?
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 2: WISH EDIT                                          -->
+  <!-- ============================================================ -->
+  <section id="wish-edit" class="mockup-section">
+    <div class="section-title">2. Редактор желания: блок «Контекст»</div>
+    <div class="section-subtitle">
+      Единая точка входа для тегов, поводов, аудиторий и подборок. Блок вставляется ниже обычных полей (название / ссылка / цена / фото). Компактный: 4 строки, раскрываются в bottom-sheet. Чипы состояний видны сразу, без тапа.
+    </div>
+
+    <div class="phone-grid">
+      <!-- Phone A: Wish edit sheet with context block -->
+      <div class="phone-wrap">
+        <div class="phone-caption">А. Карточка редактирования желания (сверху вниз)</div>
+        <div class="phone">
+          <div class="phone-status">Редактирование желания</div>
+          <div class="phone-content" style="padding-bottom: 0;">
+            <div style="padding: 16px;">
+              <div style="display: flex; gap: 12px;">
+                <div style="width: 68px; height: 68px; background: var(--card); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 28px;">🎧</div>
+                <div style="flex: 1;">
+                  <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Название</div>
+                  <input class="input-field" style="margin: 0; width: 100%;" value="Sony WH-1000XM5"/>
+                </div>
+              </div>
+            </div>
+
+            <div class="input-label">Ссылка</div>
+            <input class="input-field" value="amazon.com/sony-wh-1000xm5"/>
+
+            <div style="display: flex; gap: 12px; padding: 0 16px;">
+              <div style="flex: 1;">
+                <div class="input-label" style="margin-left: 0;">Цена</div>
+                <input class="input-field" style="margin-left: 0; width: 100%;" value="38 000"/>
+              </div>
+              <div style="flex: 1;">
+                <div class="input-label" style="margin-left: 0;">Валюта</div>
+                <input class="input-field" style="margin-left: 0; width: 100%;" value="₽"/>
+              </div>
+            </div>
+
+            <div class="input-label">Приоритет</div>
+            <div style="padding: 0 16px;">
+              <div class="seg-control" style="margin: 0;">
+                <div class="seg-item">Низкий</div>
+                <div class="seg-item active">Средний</div>
+                <div class="seg-item">Высокий</div>
+              </div>
+            </div>
+
+            <div class="section-block-title" style="margin-top: 12px;">Контекст <span class="label-badge new" style="margin-left: 6px;">NEW</span></div>
+
+            <div class="ctx-block" style="margin-top: 0;">
+              <div class="ctx-row">
+                <div class="ctx-icon">🏷️</div>
+                <div class="ctx-body">
+                  <div class="ctx-label">Теги</div>
+                  <div class="ctx-chips">
+                    <span class="chip accent" style="font-size: 11px; padding: 4px 10px;">техника</span>
+                    <span class="chip accent" style="font-size: 11px; padding: 4px 10px;">для работы</span>
+                    <span class="chip dashed" style="font-size: 11px; padding: 4px 10px;">+</span>
+                  </div>
+                </div>
+                <div class="chev">›</div>
+              </div>
+              <div class="ctx-row">
+                <div class="ctx-icon">🎉</div>
+                <div class="ctx-body">
+                  <div class="ctx-label">Поводы</div>
+                  <div class="ctx-chips">
+                    <span class="chip orange" style="font-size: 11px; padding: 4px 10px;">день рождения</span>
+                    <span class="chip orange" style="font-size: 11px; padding: 4px 10px;">новый год</span>
+                  </div>
+                </div>
+                <div class="chev">›</div>
+              </div>
+              <div class="ctx-row">
+                <div class="ctx-icon">👥</div>
+                <div class="ctx-body">
+                  <div class="ctx-label">Для кого</div>
+                  <div class="ctx-chips">
+                    <span class="chip blue" style="font-size: 11px; padding: 4px 10px;">близкий человек</span>
+                    <span class="chip blue" style="font-size: 11px; padding: 4px 10px;">семья</span>
+                  </div>
+                </div>
+                <div class="chev">›</div>
+              </div>
+              <div class="ctx-row">
+                <div class="ctx-icon">📂</div>
+                <div class="ctx-body">
+                  <div class="ctx-label">В подборках</div>
+                  <div class="ctx-chips">
+                    <span class="chip green" style="font-size: 11px; padding: 4px 10px;">Самое желанное</span>
+                    <span class="chip dashed" style="font-size: 11px; padding: 4px 10px;">+ в подборку</span>
+                  </div>
+                </div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+
+            <div style="padding: 20px 16px 16px;">
+              <button class="btn btn-primary">Сохранить</button>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Контекст виден как 4 компактные строки. Значения сразу видны чипами — тапать не надо, если ничего не меняешь. Тап по строке — bottom-sheet.</div>
+      </div>
+
+      <!-- Phone B: Tags picker sheet -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Б. Sheet «Теги»</div>
+        <div class="phone">
+          <div class="phone-status">Желание</div>
+          <div class="phone-content">
+            <div style="height: 180px; background: rgba(0,0,0,0.3);"></div>
+            <div class="sheet" style="min-height: 460px;">
+              <div class="sheet-handle"></div>
+              <div class="sheet-title">Теги</div>
+              <div class="sheet-subtitle">Помогают фильтровать желания и собирать подборки по смыслу.</div>
+
+              <div style="padding: 0 16px 10px;">
+                <input class="input-field" style="margin: 0; width: 100%;" placeholder="🔍 Поиск или новый тег…" value="тех"/>
+              </div>
+
+              <div style="padding: 0 16px 6px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Выбрано</div>
+              <div class="chip-row" style="padding-bottom: 10px;">
+                <span class="chip accent">техника <span class="x">×</span></span>
+                <span class="chip accent">для работы <span class="x">×</span></span>
+              </div>
+
+              <div style="padding: 0 16px 6px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Часто используешь</div>
+              <div class="chip-row" style="padding-bottom: 10px;">
+                <span class="chip">для дома</span>
+                <span class="chip">одежда</span>
+                <span class="chip">до 5000 ₽</span>
+                <span class="chip">must-have</span>
+                <span class="chip">путешествия</span>
+                <span class="chip">книги</span>
+              </div>
+
+              <div style="padding: 12px 16px 6px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Создать новый</div>
+              <div class="chip-row" style="padding-bottom: 12px;">
+                <span class="chip dashed">+ создать «тех»</span>
+              </div>
+
+              <div class="btn-sticky-bottom">
+                <button class="btn btn-ghost" style="flex: 0 0 auto;">Отмена</button>
+                <button class="btn btn-primary">Готово · 2 тега</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Поиск и создание — в одном поле. Первые 6 тегов — самые частые у владельца. При пустом поиске — «сначала используйте часто», потом «все теги» кнопкой.</div>
+      </div>
+
+      <!-- Phone C: Occasions picker sheet -->
+      <div class="phone-wrap">
+        <div class="phone-caption">В. Sheet «Поводы»</div>
+        <div class="phone">
+          <div class="phone-status">Желание</div>
+          <div class="phone-content">
+            <div style="height: 140px; background: rgba(0,0,0,0.3);"></div>
+            <div class="sheet" style="min-height: 500px;">
+              <div class="sheet-handle"></div>
+              <div class="sheet-title">Для какого повода</div>
+              <div class="sheet-subtitle">Помогает дарителям выбрать подходящее к случаю. Можно отметить несколько.</div>
+
+              <div class="ctx-pill-list">
+                <div class="ctx-pill selected">
+                  <span class="ctx-pill-icon">🎂</span>
+                  <span>День рождения</span>
+                </div>
+                <div class="ctx-pill selected">
+                  <span class="ctx-pill-icon">🎄</span>
+                  <span>Новый год</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">💍</span>
+                  <span>Свадьба</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">🏡</span>
+                  <span>Новоселье</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">💞</span>
+                  <span>Годовщина</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">🎓</span>
+                  <span>Выпускной</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">🎁</span>
+                  <span>8 марта</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">🌷</span>
+                  <span>14 февраля</span>
+                </div>
+              </div>
+
+              <div style="padding: 10px 16px 0; font-size: 11px; color: var(--text-muted); line-height: 1.5;">Или выбери общее:</div>
+
+              <div class="ctx-pill-list" style="padding-top: 6px;">
+                <div class="ctx-pill full" style="opacity: 0.5;">
+                  <span class="ctx-pill-icon">∞</span>
+                  <span>Любой повод</span>
+                  <span style="margin-left: auto; font-size: 11px; color: var(--text-muted);">нельзя с конкретными</span>
+                </div>
+                <div class="ctx-pill full" style="opacity: 0.5;">
+                  <span class="ctx-pill-icon">⊘</span>
+                  <span>Без повода</span>
+                  <span style="margin-left: auto; font-size: 11px; color: var(--text-muted);">нельзя с конкретными</span>
+                </div>
+              </div>
+
+              <div class="btn-sticky-bottom">
+                <button class="btn btn-ghost" style="flex: 0 0 auto;">Отмена</button>
+                <button class="btn btn-primary">Готово · 2 повода</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Wildcard-опции «Любой повод» и «Без повода» становятся disabled, когда выбран хотя бы один конкретный повод (и наоборот). Это видно пользователю сразу.</div>
+      </div>
+
+      <!-- Phone D: Audiences picker -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Г. Sheet «Для кого»</div>
+        <div class="phone">
+          <div class="phone-status">Желание</div>
+          <div class="phone-content">
+            <div style="height: 220px; background: rgba(0,0,0,0.3);"></div>
+            <div class="sheet" style="min-height: 420px;">
+              <div class="sheet-handle"></div>
+              <div class="sheet-title">Кому уместно подарить</div>
+              <div class="sheet-subtitle">Не скрывает желание — помогает дарителю понять уместность. Можно выбрать несколько.</div>
+
+              <div class="ctx-pill-list">
+                <div class="ctx-pill selected">
+                  <span class="ctx-pill-icon">💕</span>
+                  <span>Близкий человек</span>
+                </div>
+                <div class="ctx-pill selected">
+                  <span class="ctx-pill-icon">👨‍👩‍👧</span>
+                  <span>Семья</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">🤝</span>
+                  <span>Друзья</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">💼</span>
+                  <span>Коллеги</span>
+                </div>
+                <div class="ctx-pill full" style="opacity: 0.5;">
+                  <span class="ctx-pill-icon">🌍</span>
+                  <span>Кто угодно</span>
+                  <span style="margin-left: auto; font-size: 11px; color: var(--text-muted);">исключает остальных</span>
+                </div>
+              </div>
+
+              <div class="annotation info" style="margin: 16px;">
+                Эта метка <strong>не скрывает</strong> желание от других — если ссылку отдадут коллегам, они всё равно увидят. Это подсказка, кому уместно дарить.
+              </div>
+
+              <div class="btn-sticky-bottom">
+                <button class="btn btn-ghost" style="flex: 0 0 auto;">Отмена</button>
+                <button class="btn btn-primary">Готово · 2 аудитории</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Важное: «Для кого» — это не privacy-фильтр, а подсказка. Privacy остаётся на уровне вишлиста. В sheet — явное объяснение, чтобы не было ложных ожиданий.</div>
+      </div>
+
+      <!-- Phone E: Add to collection -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Д. Sheet «Добавить в подборку»</div>
+        <div class="phone">
+          <div class="phone-status">Желание</div>
+          <div class="phone-content">
+            <div style="height: 150px; background: rgba(0,0,0,0.3);"></div>
+            <div class="sheet" style="min-height: 490px;">
+              <div class="sheet-handle"></div>
+              <div class="sheet-title">В какие подборки входит</div>
+              <div class="sheet-subtitle">Одно желание может быть в нескольких подборках без дублирования.</div>
+
+              <div class="list-group" style="margin: 10px 16px;">
+                <div class="list-row clickable">
+                  <div class="list-icon green">⭐</div>
+                  <div class="list-body">
+                    <div class="list-title">Самое желанное</div>
+                    <div class="list-sub">12 желаний · закреплено в профиле</div>
+                  </div>
+                  <div class="wish-check on">✓</div>
+                </div>
+                <div class="list-row clickable">
+                  <div class="list-icon accent">🎁</div>
+                  <div class="list-body">
+                    <div class="list-title">Идеи на день рождения</div>
+                    <div class="list-sub">8 желаний</div>
+                  </div>
+                  <div class="wish-check"></div>
+                </div>
+                <div class="list-row clickable">
+                  <div class="list-icon blue">💼</div>
+                  <div class="list-body">
+                    <div class="list-title">Для коллег</div>
+                    <div class="list-sub">5 желаний · до 3 000 ₽</div>
+                  </div>
+                  <div class="wish-check"></div>
+                </div>
+                <div class="list-row clickable">
+                  <div class="list-icon orange">🏡</div>
+                  <div class="list-body">
+                    <div class="list-title">Для дома</div>
+                    <div class="list-sub">3 желания</div>
+                  </div>
+                  <div class="wish-check"></div>
+                </div>
+              </div>
+
+              <div style="padding: 0 16px 12px;">
+                <button class="btn btn-secondary" style="justify-content: flex-start; gap: 10px; font-weight: 500;">
+                  <span style="font-size: 16px;">+</span>
+                  <span>Создать новую подборку</span>
+                </button>
+              </div>
+
+              <div class="btn-sticky-bottom">
+                <button class="btn btn-primary">Готово · 1 подборка</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Список подборок владельца. Чекбокс справа. «Создать новую» — inline вход в создание без выхода из sheet. После создания новая подборка добавляется к выбранным.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 3: WISHLIST FILTERS                                   -->
+  <!-- ============================================================ -->
+  <section id="filters" class="mockup-section">
+    <div class="section-title">3. Вишлист: фильтры по контексту и bulk-режим</div>
+    <div class="section-subtitle">
+      В текущем экране вишлиста появляется второй уровень фильтрации (горизонтальный скролл-чипсов под шапкой). Bulk-mode получает новые действия. Фильтры комбинируются между собой — можно наложить повод + тег + аудиторию.
+    </div>
+
+    <div class="phone-grid">
+      <!-- Phone A: Default state with filter chips -->
+      <div class="phone-wrap">
+        <div class="phone-caption">А. Вишлист — обычный вид</div>
+        <div class="phone">
+          <div class="phone-status">Мои желания · 24</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none; padding-bottom: 6px;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Основной вишлист</div>
+              <span style="font-size: 18px;">⋯</span>
+            </div>
+
+            <div class="chip-row scroll" style="padding-top: 2px; padding-bottom: 10px;">
+              <span class="chip active">Все · 24</span>
+              <span class="chip">🏷️ Теги</span>
+              <span class="chip">🎉 Поводы</span>
+              <span class="chip">👥 Для кого</span>
+              <span class="chip">📂 Подборки</span>
+              <span class="chip">📸 С фото</span>
+            </div>
+
+            <div class="divider"></div>
+            <div class="spacer-8"></div>
+
+            <div class="wish-card">
+              <div class="wish-thumb">🎧</div>
+              <div class="wish-info">
+                <div class="wish-title">Sony WH-1000XM5</div>
+                <div class="wish-meta">38 000 ₽ <span class="sep">·</span> amazon.com</div>
+                <div class="wish-ctx">
+                  <span class="mini-chip accent">техника</span>
+                  <span class="mini-chip orange">ДР</span>
+                  <span class="mini-chip green">⭐ Самое желанное</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="wish-card">
+              <div class="wish-thumb">📚</div>
+              <div class="wish-info">
+                <div class="wish-title">Артбук «Horizon: Zero Dawn»</div>
+                <div class="wish-meta">4 500 ₽</div>
+                <div class="wish-ctx">
+                  <span class="mini-chip accent">книги</span>
+                  <span class="mini-chip orange">ДР</span>
+                  <span class="mini-chip orange">НГ</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="wish-card">
+              <div class="wish-thumb">☕</div>
+              <div class="wish-info">
+                <div class="wish-title">Керамическая кружка ручной работы</div>
+                <div class="wish-meta">1 800 ₽ <span class="sep">·</span> <span class="wish-status reserved">Забронировано</span></div>
+                <div class="wish-ctx">
+                  <span class="mini-chip accent">для дома</span>
+                  <span class="mini-chip blue">коллеги</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="wish-card">
+              <div class="wish-thumb">👟</div>
+              <div class="wish-info">
+                <div class="wish-title">New Balance 990v6</div>
+                <div class="wish-meta">24 000 ₽</div>
+                <div class="wish-ctx">
+                  <span class="mini-chip accent">одежда</span>
+                  <span class="mini-chip orange">ДР</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="wish-card">
+              <div class="wish-thumb">🕯️</div>
+              <div class="wish-info">
+                <div class="wish-title">Свеча Diptyque Baies</div>
+                <div class="wish-meta">6 800 ₽</div>
+                <div class="wish-ctx">
+                  <span class="mini-chip accent">для дома</span>
+                  <span class="mini-chip orange">любой повод</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Второй слой чипов — выбор «измерения». Каждый раскрывает popover с конкретными значениями. Под карточкой — до 3 мини-чипов контекста (тег/повод/подборка). Ни одна строка не скрыта — всё видно без тапа.</div>
+      </div>
+
+      <!-- Phone B: Filter active (tag + occasion) -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Б. Активный фильтр: «ДР» + «техника»</div>
+        <div class="phone">
+          <div class="phone-status">Отфильтровано · 3</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none; padding-bottom: 6px;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Основной вишлист</div>
+              <span style="font-size: 13px; color: var(--accent);">Сброс</span>
+            </div>
+
+            <div class="chip-row scroll" style="padding-top: 2px; padding-bottom: 10px;">
+              <span class="chip">Все · 24</span>
+              <span class="chip accent">🎉 ДР <span class="x">×</span></span>
+              <span class="chip accent">🏷️ техника <span class="x">×</span></span>
+              <span class="chip">👥 Для кого</span>
+              <span class="chip">📂 Подборки</span>
+            </div>
+
+            <div class="notice-block" style="border: 1px solid var(--accent-soft); background: var(--accent-soft); color: var(--accent);">
+              Показано 3 из 24 желаний
+            </div>
+
+            <div class="wish-card">
+              <div class="wish-thumb">🎧</div>
+              <div class="wish-info">
+                <div class="wish-title">Sony WH-1000XM5</div>
+                <div class="wish-meta">38 000 ₽</div>
+                <div class="wish-ctx">
+                  <span class="mini-chip accent">техника</span>
+                  <span class="mini-chip orange">ДР</span>
+                </div>
+              </div>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">📱</div>
+              <div class="wish-info">
+                <div class="wish-title">iPad Air M2 11"</div>
+                <div class="wish-meta">72 000 ₽</div>
+                <div class="wish-ctx">
+                  <span class="mini-chip accent">техника</span>
+                  <span class="mini-chip orange">ДР</span>
+                </div>
+              </div>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">⌚</div>
+              <div class="wish-info">
+                <div class="wish-title">Casio G-Shock DW-5600</div>
+                <div class="wish-meta">9 500 ₽</div>
+                <div class="wish-ctx">
+                  <span class="mini-chip accent">техника</span>
+                  <span class="mini-chip orange">ДР</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="spacer-16"></div>
+            <div class="notice-block">
+              <strong style="color: var(--text);">Сохранить фильтр как подборку?</strong><br>
+              «Техника на ДР» появится в разделе «Подборки» и будет обновляться автоматически.<br>
+              <button class="btn btn-secondary btn-small" style="margin-top: 10px;">+ Сохранить как подборку</button>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Активные фильтры — accent-чипы с крестиком. Блок «Сохранить как подборку» появляется, когда применено 2+ фильтра — быстрый путь из фильтра в постоянную подборку (dynamic filter collection).</div>
+      </div>
+
+      <!-- Phone C: Bulk mode with context actions -->
+      <div class="phone-wrap">
+        <div class="phone-caption">В. Bulk-mode: действия с контекстом</div>
+        <div class="phone">
+          <div class="phone-status">Выбрано: 3 желания</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none; padding-bottom: 6px;">
+              <span class="back" style="font-size: 22px;">✕</span>
+              <div class="hdr-title">Выбрано: 3</div>
+              <span style="font-size: 13px; color: var(--accent);">Выбрать всё</span>
+            </div>
+
+            <div class="chip-row scroll" style="padding-top: 2px; padding-bottom: 10px;">
+              <span class="chip active">Все · 24</span>
+              <span class="chip">🏷️ Теги</span>
+              <span class="chip">🎉 Поводы</span>
+            </div>
+
+            <div class="divider"></div>
+            <div class="spacer-8"></div>
+
+            <div class="wish-card selected checkbox-visible">
+              <div class="wish-check on">✓</div>
+              <div class="wish-thumb">🎧</div>
+              <div class="wish-info">
+                <div class="wish-title">Sony WH-1000XM5</div>
+                <div class="wish-meta">38 000 ₽</div>
+              </div>
+            </div>
+            <div class="wish-card checkbox-visible">
+              <div class="wish-check"></div>
+              <div class="wish-thumb">📚</div>
+              <div class="wish-info">
+                <div class="wish-title">Артбук «Horizon: Zero Dawn»</div>
+                <div class="wish-meta">4 500 ₽</div>
+              </div>
+            </div>
+            <div class="wish-card selected checkbox-visible">
+              <div class="wish-check on">✓</div>
+              <div class="wish-thumb">☕</div>
+              <div class="wish-info">
+                <div class="wish-title">Керамическая кружка</div>
+                <div class="wish-meta">1 800 ₽</div>
+              </div>
+            </div>
+            <div class="wish-card selected checkbox-visible">
+              <div class="wish-check on">✓</div>
+              <div class="wish-thumb">👟</div>
+              <div class="wish-info">
+                <div class="wish-title">New Balance 990v6</div>
+                <div class="wish-meta">24 000 ₽</div>
+              </div>
+            </div>
+            <div class="wish-card checkbox-visible">
+              <div class="wish-check"></div>
+              <div class="wish-thumb">🕯️</div>
+              <div class="wish-info">
+                <div class="wish-title">Свеча Diptyque Baies</div>
+                <div class="wish-meta">6 800 ₽</div>
+              </div>
+            </div>
+
+            <div class="bulk-bar">
+              <div class="bulk-action accent">📂 В подборку</div>
+              <div class="bulk-action">🏷️ Тег</div>
+              <div class="bulk-action">🎉 Повод</div>
+              <div class="bulk-action">👥 Для кого</div>
+              <div class="bulk-action">🗄 В архив</div>
+              <div class="bulk-action">🗑</div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Bulk-bar внизу скроллится горизонтально. «В подборку» — синий (основное действие), остальные — обычный surface. Каждое действие открывает тот же sheet, что в редакторе одного желания, но применяется ко всем выбранным.</div>
+      </div>
+    </div>
+
+    <div class="annotation">
+      <strong>Поведение фильтрации:</strong> фильтры комбинируются по AND внутри одного измерения и OR между значениями. То есть «ДР ИЛИ НГ» + «техника» = желания, которые и на ДР, и на НГ, и с тегом «техника». Эта логика совпадает с тем, что мы покажем в dynamic filter showcase — чтобы UX был предсказуемым.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION PLACEHOLDERS (filled by subsequent edits)             -->
+  <!-- ============================================================ -->
+  <!-- ============================================================ -->
+  <!-- SECTION 4: COLLECTIONS                                        -->
+  <!-- ============================================================ -->
+  <section id="collections" class="mockup-section">
+    <div class="section-title">4. Подборки (Collections)</div>
+    <div class="section-subtitle">
+      Подборка — постоянная кросс-вишлистная группа желаний. Приватная по умолчанию. Закрепляется в профиле, служит источником для Витрины. Не имеет публичной ссылки напрямую — для этого создаётся Витрина.
+    </div>
+
+    <div class="phone-grid">
+      <!-- Phone A: Collections list -->
+      <div class="phone-wrap">
+        <div class="phone-caption">А. Раздел «Подборки»</div>
+        <div class="phone">
+          <div class="phone-status">Подборки · 5</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Подборки</div>
+              <span style="font-size: 18px; color: var(--accent);">+</span>
+            </div>
+
+            <div class="annotation" style="margin: 0 16px 10px; font-size: 12.5px;">
+              Подборки объединяют желания по смыслу — без дублирования карточек. Одно желание может быть в нескольких подборках.
+            </div>
+
+            <div class="coll-card">
+              <div class="coll-cover coll-gradient-1">
+                <span class="coll-emoji">⭐</span>
+                <div class="coll-count">12 желаний</div>
+              </div>
+              <div class="coll-body">
+                <div class="coll-title">Самое желанное</div>
+                <div class="coll-meta">
+                  <span>📌 Закреплено в профиле</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="coll-card">
+              <div class="coll-cover coll-gradient-2">
+                <span class="coll-emoji">🎂</span>
+                <div class="coll-count">8 желаний</div>
+              </div>
+              <div class="coll-body">
+                <div class="coll-title">Идеи на день рождения</div>
+                <div class="coll-meta">
+                  <span>🎉 По поводу «ДР»</span>
+                  <span class="dot">·</span>
+                  <span>обновляется автоматически</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="coll-card">
+              <div class="coll-cover coll-gradient-3">
+                <span class="coll-emoji">💼</span>
+                <div class="coll-count">5 желаний</div>
+              </div>
+              <div class="coll-body">
+                <div class="coll-title">Для коллег</div>
+                <div class="coll-meta">
+                  <span>👥 Аудитория «коллеги»</span>
+                  <span class="dot">·</span>
+                  <span>до 3 000 ₽</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="coll-card">
+              <div class="coll-cover coll-gradient-4">
+                <span class="coll-emoji">🏡</span>
+                <div class="coll-count">3 желания</div>
+              </div>
+              <div class="coll-body">
+                <div class="coll-title">Для дома</div>
+                <div class="coll-meta">
+                  <span>🏷 Тег «для дома»</span>
+                  <span class="dot">·</span>
+                  <span>изменено вчера</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="coll-card">
+              <div class="coll-cover coll-gradient-5">
+                <span class="coll-emoji">📸</span>
+                <div class="coll-count">2 желания</div>
+              </div>
+              <div class="coll-body">
+                <div class="coll-title">Хочу попробовать</div>
+                <div class="coll-meta">
+                  <span>📝 Ручная подборка</span>
+                  <span class="dot">·</span>
+                  <span>создано сегодня</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Карточка показывает источник: «ручная», «по тегу», «по поводу», «по фильтру». Если закреплено в профиле — плашка 📌. Счётчик — актуальный (dynamic пересчитывается).</div>
+      </div>
+
+      <!-- Phone B: Collection detail -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Б. Подборка внутри</div>
+        <div class="phone">
+          <div class="phone-status">⭐ Самое желанное · 12</div>
+          <div class="phone-content">
+            <div style="height: 130px; background: linear-gradient(135deg, #4a3a9e 0%, #2d1f6e 100%); position: relative;">
+              <div style="position: absolute; top: 12px; left: 12px; width: 36px; height: 36px; background: rgba(0,0,0,0.5); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff;">‹</div>
+              <div style="position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; background: rgba(0,0,0,0.5); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff;">⋯</div>
+              <div style="position: absolute; bottom: 14px; left: 18px; right: 18px;">
+                <div style="font-size: 22px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px;">⭐ Самое желанное</div>
+                <div style="font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 4px;">12 желаний · обновлено вчера · 📌 в профиле</div>
+              </div>
+            </div>
+
+            <div class="btn-row">
+              <button class="btn btn-primary btn-small" style="flex: 2;">🎁 Создать витрину</button>
+              <button class="btn btn-outline btn-small">✏️</button>
+              <button class="btn btn-outline btn-small">📌</button>
+            </div>
+
+            <div class="chip-row scroll" style="padding-top: 4px; padding-bottom: 10px;">
+              <span class="chip active">Все · 12</span>
+              <span class="chip">Свободно · 9</span>
+              <span class="chip">🎁 Забронировано · 3</span>
+              <span class="chip">🗄 Архив</span>
+            </div>
+
+            <div class="divider"></div>
+            <div class="spacer-8"></div>
+
+            <div class="wish-card">
+              <div class="wish-thumb">🎧</div>
+              <div class="wish-info">
+                <div class="wish-title">Sony WH-1000XM5</div>
+                <div class="wish-meta">38 000 ₽ <span class="sep">·</span> в «Основной вишлист»</div>
+              </div>
+              <span style="font-size: 14px; color: var(--text-muted);">⋮⋮</span>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">📱</div>
+              <div class="wish-info">
+                <div class="wish-title">iPad Air M2 11"</div>
+                <div class="wish-meta">72 000 ₽ <span class="sep">·</span> в «Техника»</div>
+              </div>
+              <span style="font-size: 14px; color: var(--text-muted);">⋮⋮</span>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">🎮</div>
+              <div class="wish-info">
+                <div class="wish-title">Steam Deck OLED 1TB</div>
+                <div class="wish-meta">68 000 ₽ <span class="sep">·</span> <span class="wish-status reserved">Забронировано</span></div>
+              </div>
+              <span style="font-size: 14px; color: var(--text-muted);">⋮⋮</span>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">📷</div>
+              <div class="wish-info">
+                <div class="wish-title">Fujifilm X100VI</div>
+                <div class="wish-meta">175 000 ₽</div>
+              </div>
+              <span style="font-size: 14px; color: var(--text-muted);">⋮⋮</span>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">⌚</div>
+              <div class="wish-info">
+                <div class="wish-title">Apple Watch Ultra 2</div>
+                <div class="wish-meta">95 000 ₽ <span class="sep">·</span> в «Техника»</div>
+              </div>
+              <span style="font-size: 14px; color: var(--text-muted);">⋮⋮</span>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">В карточке желания внутри подборки показан «из какого вишлиста». Ручка ⋮⋮ справа — reorder. CTA сверху — «Создать витрину» (продолжение пути). 📌 тоггл — закрепить в профиле.</div>
+      </div>
+
+      <!-- Phone C: Collection editor -->
+      <div class="phone-wrap">
+        <div class="phone-caption">В. Создание / редактирование подборки</div>
+        <div class="phone">
+          <div class="phone-status">Новая подборка</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Новая подборка</div>
+              <span class="hdr-action">Сохранить</span>
+            </div>
+
+            <div class="input-label">Название</div>
+            <input class="input-field" value="Идеи на день рождения"/>
+
+            <div class="input-label">Описание · необязательно</div>
+            <textarea class="input-field" placeholder="Например: желания, которые хотелось бы к ДР. Разбросано от 2 000 до 40 000 ₽.">Желания, подходящие к ДР. Можно комбинировать.</textarea>
+
+            <div class="input-label">Обложка</div>
+            <div style="padding: 0 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+              <div style="aspect-ratio: 1; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px;">⭐</div>
+              <div style="aspect-ratio: 1; background: linear-gradient(135deg, #0891B2, #0E7490); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; border: 2px solid var(--accent);">🎂</div>
+              <div style="aspect-ratio: 1; background: linear-gradient(135deg, #BE185D, #831843); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px;">💼</div>
+              <div style="aspect-ratio: 1; background: linear-gradient(135deg, #059669, #065F46); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px;">🏡</div>
+            </div>
+
+            <div class="section-block-title">Как собирать желания</div>
+
+            <div class="seg-control" style="margin: 0 16px 4px;">
+              <div class="seg-item">Вручную</div>
+              <div class="seg-item active">По фильтру</div>
+            </div>
+
+            <div class="input-help" style="margin: 0 16px 10px;">По фильтру — подборка обновляется автоматически, когда появляются новые желания, подходящие под условия.</div>
+
+            <div class="ctx-block" style="margin-top: 6px;">
+              <div class="ctx-row">
+                <div class="ctx-icon">🏷️</div>
+                <div class="ctx-body">
+                  <div class="ctx-label">Теги</div>
+                  <div class="ctx-value empty">Все</div>
+                </div>
+                <div class="chev">›</div>
+              </div>
+              <div class="ctx-row">
+                <div class="ctx-icon">🎉</div>
+                <div class="ctx-body">
+                  <div class="ctx-label">Поводы</div>
+                  <div class="ctx-chips">
+                    <span class="chip orange" style="font-size: 11px; padding: 4px 10px;">день рождения</span>
+                  </div>
+                </div>
+                <div class="chev">›</div>
+              </div>
+              <div class="ctx-row">
+                <div class="ctx-icon">👥</div>
+                <div class="ctx-body">
+                  <div class="ctx-label">Для кого</div>
+                  <div class="ctx-value empty">Все</div>
+                </div>
+                <div class="chev">›</div>
+              </div>
+              <div class="ctx-row">
+                <div class="ctx-icon">💰</div>
+                <div class="ctx-body">
+                  <div class="ctx-label">Цена</div>
+                  <div class="ctx-value">От 2 000 до 40 000 ₽</div>
+                </div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+
+            <div class="notice-block" style="background: var(--accent-soft); border: none; color: var(--accent);">
+              По текущим условиям: <strong>8 желаний</strong>
+            </div>
+
+            <div class="section-block-title">Публикация</div>
+            <div class="list-group" style="margin-top: 0;">
+              <div class="toggle-row">
+                <div class="tr-body">
+                  <div class="tr-title">Закрепить в моём профиле</div>
+                  <div class="tr-sub">Видна подписчикам и всем, кто открыл профиль по ссылке</div>
+                </div>
+                <div class="toggle on"><div class="toggle-knob"></div></div>
+              </div>
+              <div class="toggle-row">
+                <div class="tr-body">
+                  <div class="tr-title">Создать публичную витрину</div>
+                  <div class="tr-sub">Сразу после сохранения будет предложено оформить витрину</div>
+                </div>
+                <div class="toggle off"><div class="toggle-knob"></div></div>
+              </div>
+            </div>
+
+            <div style="padding: 16px;">
+              <button class="btn btn-primary">Сохранить подборку</button>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Segment «Вручную / По фильтру» — ключевой выбор на этапе создания. «По фильтру» — автоматическая подборка (dynamic collection). Превью количества — живой счётчик.</div>
+      </div>
+
+      <!-- Phone D: Empty state -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Г. Empty state</div>
+        <div class="phone">
+          <div class="phone-status">Подборки</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Подборки</div>
+              <span style="font-size: 18px; color: var(--accent);">+</span>
+            </div>
+
+            <div class="empty-state">
+              <div class="empty-icon">📂</div>
+              <div class="empty-title">Соберите желания по смыслу</div>
+              <div class="empty-desc">Подборка помогает сгруппировать желания не по вишлистам, а по теме, поводу или бюджету. Одно желание может быть в нескольких подборках.</div>
+              <div style="display: flex; flex-direction: column; gap: 8px; padding: 0 32px;">
+                <button class="btn btn-primary">+ Создать подборку</button>
+                <button class="btn btn-ghost">Как это работает</button>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div style="padding: 20px 16px;">
+              <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;">Быстрые идеи</div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div class="collapsed-row" style="margin: 0;">
+                  <div style="font-size: 22px;">⭐</div>
+                  <div class="cr-body">
+                    <div class="cr-title">Самое желанное</div>
+                    <div class="cr-sub">5 желаний с высоким приоритетом</div>
+                  </div>
+                  <span class="btn btn-small btn-secondary">Создать</span>
+                </div>
+                <div class="collapsed-row" style="margin: 0;">
+                  <div style="font-size: 22px;">🎂</div>
+                  <div class="cr-body">
+                    <div class="cr-title">На день рождения</div>
+                    <div class="cr-sub">Всё с поводом «ДР»</div>
+                  </div>
+                  <span class="btn btn-small btn-secondary">Создать</span>
+                </div>
+                <div class="collapsed-row" style="margin: 0;">
+                  <div style="font-size: 22px;">💰</div>
+                  <div class="cr-body">
+                    <div class="cr-title">До 3 000 ₽</div>
+                    <div class="cr-sub">Недорогие желания</div>
+                  </div>
+                  <span class="btn btn-small btn-secondary">Создать</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Пустое состояние — не просто «ничего нет», а предложение трёх шаблонов. Каждый создаёт dynamic collection с уже настроенным фильтром. Онбординг без текста-объяснялки.</div>
+      </div>
+    </div>
+
+    <div class="annotation ok">
+      <strong>Ключевое:</strong> одна Collection — это просто тонкий «слой организации». Никаких дублирующих Wish-ей. Все изменения wish (название, фото, статус брони) появляются в подборке сразу, потому что показывается сам wish, а не копия.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 5: SHOWCASES                                          -->
+  <!-- ============================================================ -->
+  <section id="showcases" class="mockup-section">
+    <div class="section-title">5. Витрины (Showcases)</div>
+    <div class="section-subtitle">
+      Витрина — публичная страница с набором желаний, которой делятся по ссылке. Может быть сделана вручную, привязана к подборке или собрана по фильтру. Это PRO-фича: Free-пользователи видят экран-promo.
+    </div>
+
+    <div class="phone-grid">
+      <!-- Phone A: Showcases list -->
+      <div class="phone-wrap">
+        <div class="phone-caption">А. Раздел «Витрины»</div>
+        <div class="phone">
+          <div class="phone-status">Витрины · 3</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Мои витрины</div>
+              <span style="font-size: 18px; color: var(--accent);">+</span>
+            </div>
+
+            <div class="annotation" style="margin: 0 16px 10px; font-size: 12.5px;">
+              Витрина — красивая публичная страница с отобранными желаниями. Отправь ссылку тем, кто выбирает тебе подарок.
+            </div>
+
+            <div class="coll-card">
+              <div class="coll-cover coll-gradient-1" style="height: 120px;">
+                <span class="coll-emoji" style="font-size: 32px;">🎂</span>
+                <div style="position: absolute; bottom: 12px; left: 14px; display: flex; gap: 6px;">
+                  <div class="coll-count" style="background: rgba(16,185,129,0.8);">● активна</div>
+                  <div class="coll-count">8 желаний</div>
+                </div>
+              </div>
+              <div class="coll-body">
+                <div class="coll-title">Подарки на ДР</div>
+                <div class="coll-meta">
+                  <span>🔗 wishy.me/s/ao9kP2</span>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--text-sec);">
+                  <span>👁 142 просмотра</span>
+                  <span class="dot">·</span>
+                  <span>🎁 3 брони</span>
+                  <span class="dot">·</span>
+                  <span>📌 в профиле</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="coll-card">
+              <div class="coll-cover coll-gradient-3" style="height: 120px;">
+                <span class="coll-emoji" style="font-size: 32px;">💼</span>
+                <div style="position: absolute; bottom: 12px; left: 14px; display: flex; gap: 6px;">
+                  <div class="coll-count" style="background: rgba(16,185,129,0.8);">● активна</div>
+                  <div class="coll-count">5 желаний</div>
+                </div>
+              </div>
+              <div class="coll-body">
+                <div class="coll-title">Для коллег</div>
+                <div class="coll-meta">
+                  <span>🔗 wishy.me/s/kL4t72</span>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--text-sec);">
+                  <span>👁 28 просмотров</span>
+                  <span class="dot">·</span>
+                  <span>🎁 1 бронь</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="coll-card">
+              <div class="coll-cover" style="height: 120px; background: linear-gradient(135deg, #374151, #1F2937);">
+                <span class="coll-emoji" style="font-size: 32px;">🗄</span>
+                <div style="position: absolute; bottom: 12px; left: 14px; display: flex; gap: 6px;">
+                  <div class="coll-count" style="background: rgba(107,114,128,0.8);">● в архиве</div>
+                  <div class="coll-count">12 желаний</div>
+                </div>
+              </div>
+              <div class="coll-body">
+                <div class="coll-title">НГ 2025</div>
+                <div class="coll-meta">
+                  <span style="color: var(--text-muted);">Ссылка отозвана · 3 янв</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="padding: 4px 16px 16px;">
+              <button class="btn btn-secondary" style="justify-content: flex-start; gap: 10px;">
+                <span style="font-size: 16px;">+</span>
+                <span>Создать витрину</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Карточка витрины показывает статус (активна / в архиве), ссылку, просмотры, брони. В профиле — отметка 📌. Архивные — визуально приглушены.</div>
+      </div>
+
+      <!-- Phone B: Showcase editor — choose source -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Б. Создание: выбор источника</div>
+        <div class="phone">
+          <div class="phone-status">Новая витрина</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Новая витрина</div>
+              <span></span>
+            </div>
+
+            <div style="padding: 0 16px; font-size: 13px; color: var(--text-sec); line-height: 1.6; margin-bottom: 14px;">
+              Как будем собирать желания для витрины?
+            </div>
+
+            <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="background: var(--surface); border: 2px solid var(--accent); border-radius: 14px; padding: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                  <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 16px;">📂</div>
+                  <div style="font-size: 14px; font-weight: 700;">Из подборки</div>
+                  <span class="label-badge new" style="margin-left: auto;">Советую</span>
+                </div>
+                <div style="font-size: 12px; color: var(--text-sec); line-height: 1.5;">Витрина покажет всё, что лежит в выбранной подборке. Добавишь желание в подборку — появится в витрине автоматически.</div>
+              </div>
+
+              <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                  <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--orange-soft); color: var(--orange); display: flex; align-items: center; justify-content: center; font-size: 16px;">🎉</div>
+                  <div style="font-size: 14px; font-weight: 700;">По фильтру</div>
+                </div>
+                <div style="font-size: 12px; color: var(--text-sec); line-height: 1.5;">Правило: тег + повод + аудитория + цена. Витрина обновляется при любом новом желании, подходящем под фильтр.</div>
+              </div>
+
+              <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                  <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--blue-soft); color: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 16px;">📌</div>
+                  <div style="font-size: 14px; font-weight: 700;">Вручную</div>
+                </div>
+                <div style="font-size: 12px; color: var(--text-sec); line-height: 1.5;">Ты сам выбираешь желания и их порядок. Если поменяешь вишлисты — витрина останется как есть.</div>
+              </div>
+            </div>
+
+            <div class="annotation info" style="margin: 16px;">
+              <strong>Совет:</strong> если подборка уже есть — бери «из подборки». Обе сущности останутся связаны, редактировать будешь в одном месте.
+            </div>
+
+            <div style="padding: 16px;">
+              <button class="btn btn-primary">Дальше</button>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Три режима — один из ключевых продуктовых выборов. Default-рекомендация: dynamic collection. Manual остаётся для snapshot-случаев («зафиксировал подарки на свадьбу на конкретный день»).</div>
+      </div>
+
+      <!-- Phone C: Editor form -->
+      <div class="phone-wrap">
+        <div class="phone-caption">В. Оформление витрины</div>
+        <div class="phone">
+          <div class="phone-status">Новая витрина</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Оформление</div>
+              <span class="hdr-action">Предпросмотр</span>
+            </div>
+
+            <div style="height: 120px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); margin: 0 16px; border-radius: 14px; position: relative; display: flex; align-items: center; justify-content: center; font-size: 36px;">
+              🎂
+              <div style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); backdrop-filter: blur(6px); border-radius: 8px; padding: 6px 10px; font-size: 11px; color: #fff; display: flex; align-items: center; gap: 5px;">
+                📷 Сменить обложку
+              </div>
+            </div>
+
+            <div class="input-label">Название</div>
+            <input class="input-field" value="Подарки на ДР"/>
+
+            <div class="input-label">Короткое описание · необязательно</div>
+            <textarea class="input-field" placeholder="Появится на публичной странице под названием." style="min-height: 64px;">Здесь то, что хочу получить к 12 мая. Цены разные — выбери по бюджету.</textarea>
+
+            <div class="input-label">Источник</div>
+            <div class="collapsed-row" style="margin: 0 16px;">
+              <div style="font-size: 22px;">📂</div>
+              <div class="cr-body">
+                <div class="cr-title">Подборка «Идеи на день рождения»</div>
+                <div class="cr-sub">8 желаний · обновляется автоматически</div>
+              </div>
+              <span style="color: var(--text-muted);">›</span>
+            </div>
+
+            <div class="section-block-title">Что показывать гостям</div>
+            <div class="list-group" style="margin-top: 0;">
+              <div class="toggle-row">
+                <div class="tr-body">
+                  <div class="tr-title">Показать мой профиль</div>
+                  <div class="tr-sub">Имя, аватар и кнопку «Открыть профиль»</div>
+                </div>
+                <div class="toggle on"><div class="toggle-knob"></div></div>
+              </div>
+              <div class="toggle-row">
+                <div class="tr-body">
+                  <div class="tr-title">CTA «Посмотреть все желания»</div>
+                  <div class="tr-sub">Ведёт в основной публичный вишлист</div>
+                </div>
+                <div class="toggle on"><div class="toggle-knob"></div></div>
+              </div>
+              <div class="toggle-row">
+                <div class="tr-body">
+                  <div class="tr-title">Пометки «из вишлиста X»</div>
+                  <div class="tr-sub">Под карточками показывается, откуда желание</div>
+                </div>
+                <div class="toggle off"><div class="toggle-knob"></div></div>
+              </div>
+              <div class="toggle-row">
+                <div class="tr-body">
+                  <div class="tr-title">Показывать забронированные</div>
+                  <div class="tr-sub">Отображать как «🎁 Забронировано» или скрывать</div>
+                </div>
+                <div class="toggle on"><div class="toggle-knob"></div></div>
+              </div>
+            </div>
+
+            <div class="section-block-title">Ссылка</div>
+            <div class="share-box">
+              <div class="link-icon">🔗</div>
+              <div class="link-info">
+                <div class="link-url">wishy.me/s/ao9kP2</div>
+                <div class="link-sub">Без срока действия · можно отозвать</div>
+              </div>
+              <div class="link-action">Сменить</div>
+            </div>
+
+            <div class="section-block-title">Где показывать</div>
+            <div class="list-group" style="margin-top: 0;">
+              <div class="toggle-row">
+                <div class="tr-body">
+                  <div class="tr-title">Закрепить в моём профиле</div>
+                  <div class="tr-sub">Видна всем, кто открыл профиль</div>
+                </div>
+                <div class="toggle on"><div class="toggle-knob"></div></div>
+              </div>
+            </div>
+
+            <div style="padding: 16px;">
+              <button class="btn btn-primary">Сохранить и опубликовать</button>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Все настройки на одном экране: обложка, название, описание, источник, поведение, ссылка, закрепление в профиле. Нет wizard'а — это быстрая настройка + предпросмотр.</div>
+      </div>
+
+      <!-- Phone D: Share sheet -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Г. Шаринг витрины</div>
+        <div class="phone">
+          <div class="phone-status">Витрина</div>
+          <div class="phone-content">
+            <div style="height: 150px; background: rgba(0,0,0,0.3);"></div>
+            <div class="sheet" style="min-height: 500px;">
+              <div class="sheet-handle"></div>
+              <div class="sheet-title">Поделиться витриной</div>
+              <div class="sheet-subtitle">Каждый, у кого есть ссылка, увидит выбранные желания.</div>
+
+              <div class="share-box" style="margin: 10px 16px;">
+                <div class="link-icon">🔗</div>
+                <div class="link-info">
+                  <div class="link-url">wishy.me/s/ao9kP2</div>
+                  <div class="link-sub">8 желаний · обновляется автоматически</div>
+                </div>
+              </div>
+
+              <div style="padding: 10px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button class="btn btn-primary btn-small">📤 Отправить в Telegram</button>
+                <button class="btn btn-secondary btn-small">📋 Скопировать</button>
+              </div>
+
+              <div class="section-block-title">Превью</div>
+              <div style="padding: 0 16px 12px;">
+                <div style="background: var(--surface); border-radius: 12px; overflow: hidden; border: 1px solid var(--border);">
+                  <div style="height: 72px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); display: flex; align-items: center; justify-content: center; font-size: 28px;">🎂</div>
+                  <div style="padding: 12px 14px;">
+                    <div style="font-size: 13px; font-weight: 700;">Подарки на ДР · Аня</div>
+                    <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">8 желаний · 2 000 – 40 000 ₽</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="section-block-title">Другие действия</div>
+              <div class="list-group" style="margin-top: 0;">
+                <div class="list-row clickable">
+                  <div class="list-icon">🔄</div>
+                  <div class="list-body">
+                    <div class="list-title">Сменить ссылку</div>
+                    <div class="list-sub">Старая перестанет работать</div>
+                  </div>
+                  <div class="chev">›</div>
+                </div>
+                <div class="list-row clickable">
+                  <div class="list-icon orange">🗄</div>
+                  <div class="list-body">
+                    <div class="list-title">В архив</div>
+                    <div class="list-sub">Витрина станет недоступна по ссылке</div>
+                  </div>
+                  <div class="chev">›</div>
+                </div>
+                <div class="list-row clickable">
+                  <div class="list-icon">📊</div>
+                  <div class="list-body">
+                    <div class="list-title">Аналитика</div>
+                    <div class="list-sub">142 просмотра · 3 брони</div>
+                  </div>
+                  <div class="chev">›</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Share-sheet даёт сразу ссылку, кнопку «отправить в TG», превью ссылки-карточки (как она рендерится в чате), и менее частые действия — сменить ссылку / в архив / аналитика.</div>
+      </div>
+
+      <!-- Phone E: Manual mode — add items -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Д. Ручной режим: подбор желаний</div>
+        <div class="phone">
+          <div class="phone-status">Подбор желаний</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Выбери желания · 4</div>
+              <span class="hdr-action">Готово</span>
+            </div>
+
+            <div style="padding: 0 16px 10px;">
+              <input class="input-field" style="margin: 0; width: 100%;" placeholder="🔍 Поиск"/>
+            </div>
+
+            <div class="chip-row scroll" style="padding-bottom: 10px;">
+              <span class="chip active">Все вишлисты</span>
+              <span class="chip">Основной</span>
+              <span class="chip">Техника</span>
+              <span class="chip">Для работы</span>
+            </div>
+
+            <div class="divider"></div>
+            <div class="spacer-8"></div>
+
+            <div class="wish-card selected checkbox-visible">
+              <div class="wish-check on">✓</div>
+              <div class="wish-thumb">🎧</div>
+              <div class="wish-info">
+                <div class="wish-title">Sony WH-1000XM5</div>
+                <div class="wish-meta">38 000 ₽ <span class="sep">·</span> Основной</div>
+              </div>
+            </div>
+            <div class="wish-card selected checkbox-visible">
+              <div class="wish-check on">✓</div>
+              <div class="wish-thumb">📱</div>
+              <div class="wish-info">
+                <div class="wish-title">iPad Air M2 11"</div>
+                <div class="wish-meta">72 000 ₽ <span class="sep">·</span> Техника</div>
+              </div>
+            </div>
+            <div class="wish-card checkbox-visible">
+              <div class="wish-check"></div>
+              <div class="wish-thumb">📚</div>
+              <div class="wish-info">
+                <div class="wish-title">Артбук «Horizon»</div>
+                <div class="wish-meta">4 500 ₽ <span class="sep">·</span> Основной</div>
+              </div>
+            </div>
+            <div class="wish-card selected checkbox-visible">
+              <div class="wish-check on">✓</div>
+              <div class="wish-thumb">☕</div>
+              <div class="wish-info">
+                <div class="wish-title">Керамическая кружка</div>
+                <div class="wish-meta">1 800 ₽ <span class="sep">·</span> Для работы</div>
+              </div>
+            </div>
+            <div class="wish-card selected checkbox-visible">
+              <div class="wish-check on">✓</div>
+              <div class="wish-thumb">🕯️</div>
+              <div class="wish-info">
+                <div class="wish-title">Свеча Diptyque</div>
+                <div class="wish-meta">6 800 ₽ <span class="sep">·</span> Основной</div>
+              </div>
+            </div>
+
+            <div class="bulk-bar">
+              <div class="bulk-action accent">Выбрано: 4</div>
+              <div class="bulk-action">Отметить все</div>
+              <div class="bulk-action">Снять</div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Ручной режим: мульти-селект с фильтром по вишлистам. Можно брать желания из любых своих вишлистов в одну витрину. Порядок задаётся потом reorder'ом.</div>
+      </div>
+
+      <!-- Phone F: Showcase detail (owner view) -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Е. Витрина изнутри (вид владельца)</div>
+        <div class="phone">
+          <div class="phone-status">Подарки на ДР</div>
+          <div class="phone-content">
+            <div style="height: 160px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); position: relative;">
+              <div style="position: absolute; top: 12px; left: 12px; width: 36px; height: 36px; background: rgba(0,0,0,0.5); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff;">‹</div>
+              <div style="position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; background: rgba(0,0,0,0.5); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff;">⋯</div>
+              <div style="position: absolute; top: 12px; right: 58px; background: rgba(16,185,129,0.8); border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 600; color: #fff;">● активна</div>
+              <div style="position: absolute; bottom: 14px; left: 18px; right: 18px;">
+                <div style="font-size: 24px; font-weight: 800; color: #fff;">Подарки на ДР 🎂</div>
+                <div style="font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 4px;">8 желаний · обновляется автоматически</div>
+              </div>
+            </div>
+
+            <div style="padding: 12px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <button class="btn btn-primary btn-small">📤 Поделиться</button>
+              <button class="btn btn-outline btn-small">✏️ Редактировать</button>
+            </div>
+
+            <div style="display: flex; gap: 12px; padding: 8px 16px 14px; font-size: 12px; color: var(--text-sec); justify-content: space-between;">
+              <div><strong style="color: var(--text); font-size: 16px; display: block;">142</strong>Просмотра</div>
+              <div><strong style="color: var(--text); font-size: 16px; display: block;">3</strong>Брони</div>
+              <div><strong style="color: var(--text); font-size: 16px; display: block;">5</strong>Поделились</div>
+              <div><strong style="color: var(--text); font-size: 16px; display: block;">12</strong>CTA-кликов</div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="section-block-title">Желания <span style="float: right; color: var(--accent); font-weight: 600; text-transform: none; letter-spacing: 0;">Порядок ⋮⋮</span></div>
+
+            <div class="wish-card">
+              <div class="wish-thumb">🎧</div>
+              <div class="wish-info">
+                <div class="wish-title">Sony WH-1000XM5</div>
+                <div class="wish-meta">38 000 ₽</div>
+              </div>
+              <span style="font-size: 14px; color: var(--text-muted);">⋮⋮</span>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">📱</div>
+              <div class="wish-info">
+                <div class="wish-title">iPad Air M2 11"</div>
+                <div class="wish-meta">72 000 ₽</div>
+              </div>
+              <span style="font-size: 14px; color: var(--text-muted);">⋮⋮</span>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">☕</div>
+              <div class="wish-info">
+                <div class="wish-title">Керамическая кружка</div>
+                <div class="wish-meta">1 800 ₽ <span class="sep">·</span> <span class="wish-status reserved">Забронировано</span></div>
+              </div>
+              <span style="font-size: 14px; color: var(--text-muted);">⋮⋮</span>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Экран владельца: hero с обложкой, статус-бейдж, мини-статистика (4 метрики), список желаний с ручной сортировкой. Порядок в витрине независим от порядка в вишлисте и подборке.</div>
+      </div>
+    </div>
+
+    <div class="annotation warn">
+      <strong>О Dynamic vs Manual:</strong> у dynamic-витрин «вручную менять порядок желаний» работает как override — пользователь зафиксировал положение N желаний, остальное резолвится из источника. Это спорное решение — альтернатива: dynamic-витрины запрещают reorder. Рекомендую override как более предсказуемое поведение для авторов.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 6: PUBLIC PAGES                                       -->
+  <!-- ============================================================ -->
+  <section id="public" class="mockup-section">
+    <div class="section-title">6. Публичные страницы</div>
+    <div class="section-subtitle">
+      То, что видит человек, открывший ссылку-витрину. Здесь правила бронирования, комментариев и privacy остаются <strong>такими же, как в обычном публичном вишлисте</strong> — меняется только обёртка. Ключевые состояния: обычный, частично недоступный, пустой после фильтра, отозванная ссылка, архив.
+    </div>
+
+    <div class="phone-grid">
+      <!-- Phone A: Normal public showcase -->
+      <div class="phone-wrap">
+        <div class="phone-caption">А. Публичная витрина · обычный вид</div>
+        <div class="phone">
+          <div class="phone-status">wishy.me</div>
+          <div class="phone-content">
+            <div class="sc-hero" style="background: linear-gradient(135deg, #4a3a9e 0%, #2d1f6e 100%); height: 200px;">
+              <span class="sc-emoji">🎂</span>
+              <div class="sc-info">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                  <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #a78bfa, #ec4899); display: flex; align-items: center; justify-content: center; font-size: 16px; border: 2px solid rgba(255,255,255,0.3);">А</div>
+                  <div>
+                    <div style="font-size: 12px; color: rgba(255,255,255,0.8);">Аня · @annapetrova</div>
+                  </div>
+                </div>
+                <div class="sc-title">Подарки на ДР</div>
+                <div class="sc-meta">8 желаний · от 1 800 до 72 000 ₽</div>
+              </div>
+            </div>
+
+            <div style="padding: 14px 16px; font-size: 13px; color: var(--text-sec); line-height: 1.5; background: var(--surface);">
+              Здесь то, что хочу получить к 12 мая. Цены разные — выбери по бюджету. Можно бронировать, чтобы не сталкиваться с другими дарителями.
+            </div>
+
+            <div class="spacer-8"></div>
+
+            <div class="pub-wish-card">
+              <div class="pub-thumb">🎧</div>
+              <div class="pub-info">
+                <div class="pub-title">Sony WH-1000XM5 — беспроводные наушники</div>
+                <div class="pub-price">38 000 ₽ · amazon.com</div>
+                <span class="pub-cta">🎁 Забронировать подарок</span>
+              </div>
+            </div>
+            <div class="pub-wish-card">
+              <div class="pub-thumb">📱</div>
+              <div class="pub-info">
+                <div class="pub-title">iPad Air M2 11" Space Gray</div>
+                <div class="pub-price">72 000 ₽</div>
+                <span class="pub-cta">🎁 Забронировать подарок</span>
+              </div>
+            </div>
+            <div class="pub-wish-card">
+              <div class="pub-thumb">☕</div>
+              <div class="pub-info">
+                <div class="pub-title">Керамическая кружка ручной работы</div>
+                <div class="pub-price">1 800 ₽</div>
+                <span class="pub-cta reserved">🎁 Уже забронировано</span>
+              </div>
+            </div>
+            <div class="pub-wish-card">
+              <div class="pub-thumb">🕯️</div>
+              <div class="pub-info">
+                <div class="pub-title">Свеча Diptyque Baies 190g</div>
+                <div class="pub-price">6 800 ₽</div>
+                <span class="pub-cta">🎁 Забронировать подарок</span>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+            <div style="padding: 20px 16px; text-align: center;">
+              <button class="btn btn-secondary" style="max-width: 280px; margin: 0 auto;">Посмотреть все желания Ани →</button>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 10px;">wishy.me · выбери подарок</div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Hero с обложкой и автором. Описание автора. Список карточек с бронированием (как на публичном вишлисте). Внизу CTA «Посмотреть все желания» — ведёт на основной вишлист автора.</div>
+      </div>
+
+      <!-- Phone B: Partial unavailable -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Б. Часть желаний недоступна</div>
+        <div class="phone">
+          <div class="phone-status">wishy.me</div>
+          <div class="phone-content">
+            <div class="sc-hero" style="background: linear-gradient(135deg, #4a3a9e, #2d1f6e); height: 180px;">
+              <span class="sc-emoji">🎂</span>
+              <div class="sc-info">
+                <div class="sc-title">Подарки на ДР</div>
+                <div class="sc-meta">5 желаний</div>
+              </div>
+            </div>
+
+            <div class="notice-block" style="background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); color: var(--text-sec); text-align: left; display: flex; gap: 10px; align-items: flex-start; margin-top: 12px;">
+              <span style="font-size: 16px;">⚠️</span>
+              <div>
+                <strong style="color: var(--orange); font-size: 12px;">Некоторые желания больше не показываются</strong><br>
+                <span style="font-size: 12px;">Автор их убрал или скрыл. Остальные можно бронировать.</span>
+              </div>
+            </div>
+
+            <div class="spacer-8"></div>
+
+            <div class="pub-wish-card">
+              <div class="pub-thumb">🎧</div>
+              <div class="pub-info">
+                <div class="pub-title">Sony WH-1000XM5</div>
+                <div class="pub-price">38 000 ₽</div>
+                <span class="pub-cta">🎁 Забронировать подарок</span>
+              </div>
+            </div>
+            <div class="pub-wish-card">
+              <div class="pub-thumb">🕯️</div>
+              <div class="pub-info">
+                <div class="pub-title">Свеча Diptyque Baies 190g</div>
+                <div class="pub-price">6 800 ₽</div>
+                <span class="pub-cta">🎁 Забронировать подарок</span>
+              </div>
+            </div>
+            <div class="pub-wish-card">
+              <div class="pub-thumb">👟</div>
+              <div class="pub-info">
+                <div class="pub-title">New Balance 990v6</div>
+                <div class="pub-price">24 000 ₽</div>
+                <span class="pub-cta">🎁 Забронировать подарок</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Деградация без ошибки: показано то, что доступно, сверху — тонкая жёлтая подпись. Никаких «пустых» карточек, никаких «ID not found». Счётчик в hero показывает актуальное число видимых.</div>
+      </div>
+
+      <!-- Phone C: Empty showcase -->
+      <div class="phone-wrap">
+        <div class="phone-caption">В. Витрина пуста после фильтра</div>
+        <div class="phone">
+          <div class="phone-status">wishy.me</div>
+          <div class="phone-content">
+            <div class="sc-hero" style="background: linear-gradient(135deg, #374151, #1F2937); height: 160px;">
+              <span class="sc-emoji" style="opacity: 0.7;">🎂</span>
+              <div class="sc-info">
+                <div class="sc-title">Подарки на ДР</div>
+                <div class="sc-meta">Пусто сейчас</div>
+              </div>
+            </div>
+
+            <div class="empty-state">
+              <div class="empty-icon">🎁</div>
+              <div class="empty-title">Витрина сейчас пустая</div>
+              <div class="empty-desc">Автор скоро добавит сюда желания. Пока можно заглянуть на основной профиль.</div>
+              <div style="display: flex; flex-direction: column; gap: 8px; padding: 0 32px;">
+                <button class="btn btn-secondary">Открыть профиль Ани</button>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+            <div style="padding: 20px 16px; text-align: center; font-size: 11px; color: var(--text-muted);">
+              wishy.me · выбери подарок
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Пустая витрина: не ошибка, а «подожди немного». Не стыдно. CTA на профиль автора, если он настроен публичным. Это может случиться, например, когда фильтр dynamic filter ничего не находит.</div>
+      </div>
+
+      <!-- Phone D: Link revoked -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Г. Ссылка больше недоступна</div>
+        <div class="phone">
+          <div class="phone-status">wishy.me</div>
+          <div class="phone-content">
+            <div style="height: 50px; background: var(--bg);"></div>
+
+            <div class="empty-state" style="padding-top: 36px;">
+              <div class="empty-icon">🔒</div>
+              <div class="empty-title">Эта витрина больше недоступна</div>
+              <div class="empty-desc">Автор обновил ссылку или снял витрину с публикации. Если тебе нужен подарок — попроси у автора свежую ссылку.</div>
+            </div>
+
+            <div class="divider"></div>
+            <div style="padding: 20px 16px; text-align: center;">
+              <div style="font-size: 13px; color: var(--text-sec); margin-bottom: 10px;">Можно начать свой вишлист — это бесплатно</div>
+              <button class="btn btn-secondary" style="max-width: 240px; margin: 0 auto;">Создать свой</button>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 14px;">wishy.me</div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Самый частый сценарий «мусорной» ссылки: после смены shareSlug или архивирования. Не показываем ни имени автора, ни превью — ничего. Только дружелюбное сообщение и альтернатива.</div>
+      </div>
+
+      <!-- Phone E: Open wish from showcase -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Д. Открытое желание из витрины</div>
+        <div class="phone">
+          <div class="phone-status">wishy.me · Sony WH-1000XM5</div>
+          <div class="phone-content">
+            <div class="phone-header">
+              <span class="back">‹</span>
+              <div class="hdr-title">Желание</div>
+              <span style="font-size: 18px;">⋯</span>
+            </div>
+
+            <div style="padding: 0 16px;">
+              <div style="aspect-ratio: 1.5; background: var(--card); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 80px; margin-bottom: 14px;">🎧</div>
+              <div style="font-size: 19px; font-weight: 700; margin-bottom: 4px;">Sony WH-1000XM5</div>
+              <div style="font-size: 14px; color: var(--text-sec); margin-bottom: 10px;">Беспроводные наушники с активным шумоподавлением.</div>
+              <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+                <span class="chip blue" style="font-size: 11px; padding: 4px 10px;">📂 Из витрины «Подарки на ДР»</span>
+              </div>
+              <div style="font-size: 17px; font-weight: 700; color: var(--accent); margin-bottom: 14px;">38 000 ₽</div>
+              <button class="btn btn-primary" style="margin-bottom: 8px;">🎁 Забронировать подарок</button>
+              <button class="btn btn-outline">amazon.com — открыть →</button>
+            </div>
+
+            <div class="section-block-title">Комментарии · 2</div>
+
+            <div class="list-group">
+              <div class="list-row" style="align-items: flex-start;">
+                <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #60a5fa, #3b82f6); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700;">М</div>
+                <div class="list-body">
+                  <div style="font-size: 12px; font-weight: 600;">Миша · даритель</div>
+                  <div style="font-size: 13px; color: var(--text); margin-top: 3px; line-height: 1.5;">Беру! Можно белый цвет, если есть.</div>
+                </div>
+              </div>
+              <div class="list-row" style="align-items: flex-start;">
+                <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #a78bfa, #ec4899); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700;">А</div>
+                <div class="list-body">
+                  <div style="font-size: 12px; font-weight: 600;">Аня · автор</div>
+                  <div style="font-size: 13px; color: var(--text); margin-top: 3px; line-height: 1.5;">Белый или чёрный — любой отлично!</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="annotation info" style="margin: 0 16px 16px; font-size: 12px;">
+              Эти комментарии — та же самая переписка, что в основном вишлисте. Если ты уже бронировал это желание через другую ссылку — оно продолжит быть занятым здесь.
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Открытое желание из витрины — тот же экран, что из вишлиста. Единственное отличие — bread-crumb «Из витрины X». Бронь, комментарии, reply — работают по существующим правилам без дублирования.</div>
+      </div>
+
+      <!-- Phone F: Utility-mode public (compact) -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Е. Utility-mode (компактный)</div>
+        <div class="phone">
+          <div class="phone-status">wishy.me</div>
+          <div class="phone-content">
+            <div style="padding: 20px 16px 12px; border-bottom: 1px solid var(--border);">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #a78bfa, #ec4899); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700;">А</div>
+                <div>
+                  <div style="font-size: 15px; font-weight: 700;">Аня Петрова</div>
+                  <div style="font-size: 12px; color: var(--text-sec);">@annapetrova</div>
+                </div>
+                <span class="pro-badge" style="margin-left: auto;">PRO</span>
+              </div>
+              <div style="font-size: 18px; font-weight: 700; margin-bottom: 2px;">Подарки коллегам 💼</div>
+              <div style="font-size: 12px; color: var(--text-sec); line-height: 1.5;">5 желаний · до 3 000 ₽ · можно бронировать</div>
+            </div>
+
+            <div class="spacer-8"></div>
+
+            <div class="wish-card">
+              <div class="wish-thumb">☕</div>
+              <div class="wish-info">
+                <div class="wish-title">Керамическая кружка</div>
+                <div class="wish-meta">1 800 ₽</div>
+              </div>
+              <span class="btn btn-secondary btn-small" style="width: auto; padding: 6px 12px;">🎁</span>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">🕯️</div>
+              <div class="wish-info">
+                <div class="wish-title">Ароматическая свеча</div>
+                <div class="wish-meta">2 400 ₽</div>
+              </div>
+              <span class="btn btn-secondary btn-small" style="width: auto; padding: 6px 12px;">🎁</span>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">🧦</div>
+              <div class="wish-info">
+                <div class="wish-title">Шерстяные носки Falke</div>
+                <div class="wish-meta">2 900 ₽</div>
+              </div>
+              <span class="btn btn-secondary btn-small" style="width: auto; padding: 6px 12px;">🎁</span>
+            </div>
+            <div class="wish-card">
+              <div class="wish-thumb">📓</div>
+              <div class="wish-info">
+                <div class="wish-title">Блокнот Moleskine A5</div>
+                <div class="wish-meta">2 200 ₽</div>
+              </div>
+              <span class="btn btn-secondary btn-small" style="width: auto; padding: 6px 12px;">🎁</span>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Alternative utility-mode: компактный список без больших обложек, для «бизнес» сценариев. Выбирается в настройках витрины — toggle «Визуально / Компактно». Default — visual.</div>
+      </div>
+    </div>
+
+    <div class="annotation ok">
+      <strong>Договор с существующими public pages:</strong> ровно один рендер карточки wish и ровно один флоу бронирования-комментариев. Публичная витрина — это <code>&lt;ShowcaseShell&gt;</code> (hero + description + CTAs) + список тех же <code>&lt;PublicWishCard&gt;</code>, что на <code>/w/[slug]</code>. Никакого fork'а компонента.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 7: PROFILE INTEGRATION                                -->
+  <!-- ============================================================ -->
+  <section id="profile" class="mockup-section">
+    <div class="section-title">7. Интеграция в профиль</div>
+    <div class="section-subtitle">
+      Закреплённые витрины и подборки отображаются в профиле владельца и на публичном профиле (если разрешено). Переименование: существующая «Витрина профиля» (UserProfile.showcase*) → <em>«Обложка профиля»</em>, чтобы освободить слово «витрина» под новую сущность.
+    </div>
+
+    <div class="phone-grid">
+      <!-- Phone A: Owner profile with pinned showcases -->
+      <div class="phone-wrap">
+        <div class="phone-caption">А. Мой профиль с закреплёнными витринами</div>
+        <div class="phone">
+          <div class="phone-status">Профиль</div>
+          <div class="phone-content">
+            <div style="height: 120px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); position: relative;">
+              <div style="position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; background: rgba(0,0,0,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff;">⚙️</div>
+            </div>
+            <div style="padding: 0 16px; margin-top: -36px; position: relative; z-index: 2;">
+              <div style="width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(135deg, #a78bfa, #ec4899); border: 3px solid var(--bg); display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 700;">А</div>
+              <div style="margin-top: 12px;">
+                <div style="font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;">Аня Петрова <span class="pro-badge">PRO</span></div>
+                <div style="font-size: 12px; color: var(--text-sec); margin-top: 3px;">@annapetrova · день рождения 12 мая</div>
+                <div style="font-size: 13px; color: var(--text); margin-top: 8px; line-height: 1.5;">Люблю практичные подарки: технику, книги и вещи для дома.</div>
+              </div>
+            </div>
+
+            <div class="tabs-row" style="margin-top: 14px;">
+              <div class="tab-pill active">Вишлисты · 3</div>
+              <div class="tab-pill">Витрины · 2</div>
+              <div class="tab-pill">Подборки · 5</div>
+              <div class="tab-pill">Подписки</div>
+            </div>
+
+            <div class="section-block-title">Закреплённые витрины <span style="float: right; color: var(--accent); font-weight: 600; text-transform: none; letter-spacing: 0;">Править</span></div>
+
+            <div style="padding: 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div style="background: var(--surface); border-radius: 14px; overflow: hidden; border: 1px solid var(--border);">
+                <div style="height: 80px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); display: flex; align-items: center; justify-content: center; font-size: 28px;">🎂</div>
+                <div style="padding: 10px 12px;">
+                  <div style="font-size: 13px; font-weight: 700;">Подарки на ДР</div>
+                  <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;">8 желаний</div>
+                </div>
+              </div>
+              <div style="background: var(--surface); border-radius: 14px; overflow: hidden; border: 1px solid var(--border);">
+                <div style="height: 80px; background: linear-gradient(135deg, #BE185D, #831843); display: flex; align-items: center; justify-content: center; font-size: 28px;">💼</div>
+                <div style="padding: 10px 12px;">
+                  <div style="font-size: 13px; font-weight: 700;">Для коллег</div>
+                  <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;">5 желаний</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block-title">Закреплённые подборки</div>
+            <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 8px;">
+              <div class="collapsed-row" style="margin: 0;">
+                <div style="font-size: 22px;">⭐</div>
+                <div class="cr-body">
+                  <div class="cr-title">Самое желанное</div>
+                  <div class="cr-sub">12 желаний · только для подписчиков</div>
+                </div>
+                <span style="font-size: 11px; color: var(--accent); font-weight: 600;">📌</span>
+              </div>
+            </div>
+
+            <div class="section-block-title">Основные вишлисты</div>
+            <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 8px;">
+              <div class="collapsed-row" style="margin: 0;">
+                <div style="font-size: 22px;">🎁</div>
+                <div class="cr-body">
+                  <div class="cr-title">Основной</div>
+                  <div class="cr-sub">24 желания</div>
+                </div>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+              <div class="collapsed-row" style="margin: 0;">
+                <div style="font-size: 22px;">🔧</div>
+                <div class="cr-body">
+                  <div class="cr-title">Техника</div>
+                  <div class="cr-sub">8 желаний</div>
+                </div>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Три уровня структуры в профиле: закреплённые витрины (2×grid), закреплённые подборки (список), основные вишлисты. Вкладки сверху — переключение ракурса (всё по витринам / всё по подборкам).</div>
+      </div>
+
+      <!-- Phone B: Pinned items editor -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Б. Управление закреплёнными</div>
+        <div class="phone">
+          <div class="phone-status">Закреплённое в профиле</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Закреплённое</div>
+              <span class="hdr-action">Готово</span>
+            </div>
+
+            <div class="annotation info" style="margin: 0 16px 10px; font-size: 12.5px;">
+              В профиле можно закрепить до <strong>5 элементов</strong> — витрин и подборок. Перетаскивай, чтобы поменять порядок.
+            </div>
+
+            <div class="section-block-title">Закреплено · 3 из 5</div>
+
+            <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="background: var(--surface); border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--border);">
+                <span style="color: var(--text-muted); font-size: 16px;">⋮⋮</span>
+                <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); display: flex; align-items: center; justify-content: center; font-size: 18px;">🎂</div>
+                <div style="flex: 1;">
+                  <div style="font-size: 13px; font-weight: 600;">Подарки на ДР</div>
+                  <div style="font-size: 11px; color: var(--text-sec);">Витрина · 8 желаний</div>
+                </div>
+                <span style="font-size: 18px; color: var(--red);">−</span>
+              </div>
+              <div style="background: var(--surface); border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--border);">
+                <span style="color: var(--text-muted); font-size: 16px;">⋮⋮</span>
+                <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #BE185D, #831843); display: flex; align-items: center; justify-content: center; font-size: 18px;">💼</div>
+                <div style="flex: 1;">
+                  <div style="font-size: 13px; font-weight: 600;">Для коллег</div>
+                  <div style="font-size: 11px; color: var(--text-sec);">Витрина · 5 желаний</div>
+                </div>
+                <span style="font-size: 18px; color: var(--red);">−</span>
+              </div>
+              <div style="background: var(--surface); border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--border);">
+                <span style="color: var(--text-muted); font-size: 16px;">⋮⋮</span>
+                <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); display: flex; align-items: center; justify-content: center; font-size: 18px;">⭐</div>
+                <div style="flex: 1;">
+                  <div style="font-size: 13px; font-weight: 600;">Самое желанное</div>
+                  <div style="font-size: 11px; color: var(--text-sec);">Подборка · 12 желаний</div>
+                </div>
+                <span style="font-size: 18px; color: var(--red);">−</span>
+              </div>
+            </div>
+
+            <div class="section-block-title">Можно добавить</div>
+            <div class="list-group">
+              <div class="list-row clickable">
+                <div class="list-icon">🎨</div>
+                <div class="list-body">
+                  <div class="list-title">Для дома</div>
+                  <div class="list-sub">Подборка · 3 желания</div>
+                </div>
+                <span style="font-size: 18px; color: var(--green);">+</span>
+              </div>
+              <div class="list-row clickable">
+                <div class="list-icon">🎬</div>
+                <div class="list-body">
+                  <div class="list-title">Хочу попробовать</div>
+                  <div class="list-sub">Подборка · 2 желания</div>
+                </div>
+                <span style="font-size: 18px; color: var(--green);">+</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Единый экран-редактор: закреплённые сверху (можно перетаскивать + открепить), доступные для добавления ниже. Лимит — 5. Для Free — лимит 0 (вся секция за paywall).</div>
+      </div>
+
+      <!-- Phone C: Public profile (visitor view) -->
+      <div class="phone-wrap">
+        <div class="phone-caption">В. Публичный профиль (гость)</div>
+        <div class="phone">
+          <div class="phone-status">wishy.me/@annapetrova</div>
+          <div class="phone-content">
+            <div style="height: 140px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); position: relative;"></div>
+            <div style="padding: 0 16px; margin-top: -36px; position: relative; z-index: 2;">
+              <div style="width: 76px; height: 76px; border-radius: 50%; background: linear-gradient(135deg, #a78bfa, #ec4899); border: 3px solid var(--bg); display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700;">А</div>
+              <div style="margin-top: 12px;">
+                <div style="font-size: 19px; font-weight: 700;">Аня Петрова</div>
+                <div style="font-size: 12px; color: var(--text-sec); margin-top: 2px;">@annapetrova · 🎂 12 мая</div>
+                <div style="font-size: 13px; color: var(--text); margin-top: 8px; line-height: 1.5;">Люблю практичные подарки: технику, книги и вещи для дома.</div>
+              </div>
+              <div style="display: flex; gap: 8px; margin-top: 14px;">
+                <button class="btn btn-primary btn-small" style="width: auto; padding: 8px 14px;">🔔 Подписаться</button>
+                <button class="btn btn-outline btn-small" style="width: auto; padding: 8px 14px;">📅 В календарь</button>
+              </div>
+            </div>
+
+            <div class="section-block-title">Подборки и витрины</div>
+
+            <div style="padding: 0 16px 12px;">
+              <div style="background: var(--surface); border-radius: 14px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 8px;">
+                <div style="height: 80px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); position: relative;">
+                  <span style="position: absolute; top: 10px; right: 12px; font-size: 24px;">🎂</span>
+                  <span style="position: absolute; bottom: 10px; left: 12px; background: rgba(0,0,0,0.5); border-radius: 6px; padding: 2px 8px; font-size: 10px; font-weight: 600; color: #fff;">8 желаний</span>
+                </div>
+                <div style="padding: 10px 14px;">
+                  <div style="font-size: 14px; font-weight: 700;">Подарки на ДР</div>
+                  <div style="font-size: 12px; color: var(--text-sec); margin-top: 2px;">от 1 800 до 72 000 ₽ · обновляется</div>
+                </div>
+              </div>
+
+              <div style="background: var(--surface); border-radius: 14px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 8px;">
+                <div style="height: 80px; background: linear-gradient(135deg, #BE185D, #831843); position: relative;">
+                  <span style="position: absolute; top: 10px; right: 12px; font-size: 24px;">💼</span>
+                  <span style="position: absolute; bottom: 10px; left: 12px; background: rgba(0,0,0,0.5); border-radius: 6px; padding: 2px 8px; font-size: 10px; font-weight: 600; color: #fff;">5 желаний</span>
+                </div>
+                <div style="padding: 10px 14px;">
+                  <div style="font-size: 14px; font-weight: 700;">Для коллег</div>
+                  <div style="font-size: 12px; color: var(--text-sec); margin-top: 2px;">до 3 000 ₽</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block-title">Вишлисты</div>
+            <div style="padding: 0 16px;">
+              <div class="collapsed-row" style="margin: 0 0 8px;">
+                <div style="font-size: 22px;">🎁</div>
+                <div class="cr-body">
+                  <div class="cr-title">Основной</div>
+                  <div class="cr-sub">24 желания</div>
+                </div>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Публичный профиль: хеадер с подписаться, секция «Подборки и витрины» (смешанная, закреплённые), потом обычные вишлисты. Термины в UI: всё называется «Подборки и витрины» — гостю не важна разница.</div>
+      </div>
+
+      <!-- Phone D: Profile settings -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Г. Настройки профиля (секция «Обложка»)</div>
+        <div class="phone">
+          <div class="phone-status">Настройки</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Настройки</div>
+              <span></span>
+            </div>
+
+            <div class="section-block-title">Обложка профиля <span class="pro-badge" style="margin-left: 6px; vertical-align: middle;">PRO</span></div>
+            <div class="annotation" style="margin: 0 16px 10px; font-size: 12.5px;">
+              Раньше называлось «Витрина профиля». Теперь слово «витрина» значит <strong>отдельную публичную страницу</strong> — чтобы не путаться, этот блок переименован в «Обложка».
+            </div>
+
+            <div class="list-group">
+              <div class="list-row clickable">
+                <div class="list-icon">📷</div>
+                <div class="list-body">
+                  <div class="list-title">Сменить обложку</div>
+                  <div class="list-sub">Фон профиля и фото для поста</div>
+                </div>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+              <div class="list-row clickable">
+                <div class="list-icon">📌</div>
+                <div class="list-body">
+                  <div class="list-title">Закреплённое</div>
+                  <div class="list-sub">3 из 5 — витрины и подборки</div>
+                </div>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+              <div class="list-row clickable">
+                <div class="list-icon">✨</div>
+                <div class="list-body">
+                  <div class="list-title">Любимые бренды</div>
+                  <div class="list-sub">Apple · IKEA · Muji</div>
+                </div>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+              <div class="list-row clickable">
+                <div class="list-icon">📐</div>
+                <div class="list-body">
+                  <div class="list-title">Размеры</div>
+                  <div class="list-sub">Одежда, обувь, украшения</div>
+                </div>
+                <span style="color: var(--text-muted);">›</span>
+              </div>
+            </div>
+
+            <div class="section-block-title">Приватность</div>
+            <div class="list-group" style="margin-top: 0;">
+              <div class="toggle-row">
+                <div class="tr-body">
+                  <div class="tr-title">Публичный профиль</div>
+                  <div class="tr-sub">Доступен по @annapetrova</div>
+                </div>
+                <div class="toggle on"><div class="toggle-knob"></div></div>
+              </div>
+              <div class="toggle-row">
+                <div class="tr-body">
+                  <div class="tr-title">Показывать закреплённое гостям</div>
+                  <div class="tr-sub">Витрины и подборки в публичном профиле</div>
+                </div>
+                <div class="toggle on"><div class="toggle-knob"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Настройки профиля переименованы: старая секция «Витрина» теперь «Обложка». Аннотация в начале блока объясняет, почему изменилось название — чтобы существующий Pro-пользователь не потерялся.</div>
+      </div>
+    </div>
+
+    <div class="annotation warn">
+      <strong>Миграционный момент:</strong> существующий <code>UserProfile.showcaseEnabled</code> и его поля переименовываем в UI в «Обложку профиля», но в коде/данных оставляем как есть (минимум рефакторинга). Новая сущность Showcase — отдельная таблица. В changelog'е одна строка «Витрина профиля теперь называется Обложка — появилась отдельная фича Витрины».
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 8: PRO GATING                                         -->
+  <!-- ============================================================ -->
+  <section id="pro" class="mockup-section">
+    <div class="section-title">8. Pro-гейтинг и paywall</div>
+    <div class="section-subtitle">
+      Фича должна ощущаться не как «платный замок», а как предложение чего-то ценного. Ниже — состояния Free-пользователя в разных точках: создание витрины, достижение лимита, paywall-sheet, и PRO-feature карточка в онбординге/changelog.
+    </div>
+
+    <div class="phone-grid">
+      <!-- Phone A: Free user opens Showcases -->
+      <div class="phone-wrap">
+        <div class="phone-caption">А. Free: вход в раздел «Витрины»</div>
+        <div class="phone">
+          <div class="phone-status">Витрины</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Витрины</div>
+              <span></span>
+            </div>
+
+            <div class="teaser-card" style="margin-top: 12px;">
+              <div class="teaser-icon">🎁</div>
+              <div class="teaser-title">Публичные витрины — в PRO</div>
+              <div class="teaser-desc">Отдельные страницы с отобранными желаниями под конкретный повод или аудиторию. Отправь ссылку — и человек видит только то, что подходит.</div>
+              <div class="teaser-features" style="padding: 0 16px;">
+                <div class="teaser-feature"><span class="check">✓</span> До 10 витрин с собственной обложкой</div>
+                <div class="teaser-feature"><span class="check">✓</span> Автообновление по тегам и поводам</div>
+                <div class="teaser-feature"><span class="check">✓</span> Статистика просмотров и броней</div>
+                <div class="teaser-feature"><span class="check">✓</span> Закрепление в профиле — до 5 штук</div>
+              </div>
+              <div style="margin-top: 16px; padding: 0 16px;">
+                <button class="btn btn-pro">Подключить PRO · 100 ⭐ / мес</button>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 10px;">Можно отменить в любой момент</div>
+            </div>
+
+            <div class="section-block-title">Примеры витрин</div>
+
+            <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 10px; opacity: 0.85;">
+              <div style="background: var(--surface); border-radius: 14px; overflow: hidden; border: 1px solid var(--border); position: relative;">
+                <div style="height: 70px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); display: flex; align-items: center; justify-content: center; font-size: 24px;">🎂</div>
+                <div style="padding: 10px 14px;">
+                  <div style="font-size: 13px; font-weight: 700;">Подарки на ДР</div>
+                  <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;">Для друзей и семьи · 8 желаний</div>
+                </div>
+                <div style="position: absolute; top: 8px; right: 8px; background: rgba(124,106,255,0.9); color: #fff; border-radius: 6px; padding: 3px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">PRO</div>
+              </div>
+              <div style="background: var(--surface); border-radius: 14px; overflow: hidden; border: 1px solid var(--border); position: relative;">
+                <div style="height: 70px; background: linear-gradient(135deg, #BE185D, #831843); display: flex; align-items: center; justify-content: center; font-size: 24px;">💼</div>
+                <div style="padding: 10px 14px;">
+                  <div style="font-size: 13px; font-weight: 700;">Для коллег</div>
+                  <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;">До 3 000 ₽</div>
+                </div>
+                <div style="position: absolute; top: 8px; right: 8px; background: rgba(124,106,255,0.9); color: #fff; border-radius: 6px; padding: 3px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">PRO</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Free видит не пустой экран и не «плати», а понятное предложение: что такое и зачем. Внизу — примеры-демо с PRO-бейджами. Тап по любому — опять paywall.</div>
+      </div>
+
+      <!-- Phone B: Free hits collections limit -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Б. Free: достигнут лимит подборок</div>
+        <div class="phone">
+          <div class="phone-status">Новая подборка</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Новая подборка</div>
+              <span></span>
+            </div>
+
+            <div class="empty-state" style="padding: 40px 24px 20px;">
+              <div class="empty-icon">📂</div>
+              <div class="empty-title">Достигнут лимит — 3 подборки</div>
+              <div class="empty-desc">На Free можно 3 подборки. Чтобы создавать больше и использовать dynamic-фильтры, подключи PRO.</div>
+            </div>
+
+            <div class="teaser-card" style="margin-top: 0;">
+              <div class="teaser-features" style="gap: 10px;">
+                <div class="teaser-feature"><span class="check">✓</span> Без лимита подборок</div>
+                <div class="teaser-feature"><span class="check">✓</span> Автосбор по фильтру (теги + поводы + цена)</div>
+                <div class="teaser-feature"><span class="check">✓</span> Теги без ограничений</div>
+                <div class="teaser-feature"><span class="check">✓</span> Витрины для шаринга</div>
+              </div>
+              <div style="margin-top: 16px;">
+                <button class="btn btn-pro">Подключить PRO · 100 ⭐ / мес</button>
+                <button class="btn btn-ghost" style="margin-top: 6px;">Не сейчас</button>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="section-block-title">Твои подборки · 3 / 3</div>
+            <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 8px;">
+              <div class="collapsed-row" style="margin: 0;">
+                <div style="font-size: 22px;">⭐</div>
+                <div class="cr-body">
+                  <div class="cr-title">Самое желанное</div>
+                  <div class="cr-sub">5 желаний</div>
+                </div>
+              </div>
+              <div class="collapsed-row" style="margin: 0;">
+                <div style="font-size: 22px;">🎁</div>
+                <div class="cr-body">
+                  <div class="cr-title">На день рождения</div>
+                  <div class="cr-sub">3 желания</div>
+                </div>
+              </div>
+              <div class="collapsed-row" style="margin: 0;">
+                <div style="font-size: 22px;">🏡</div>
+                <div class="cr-body">
+                  <div class="cr-title">Для дома</div>
+                  <div class="cr-sub">2 желания</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Если у Free 3 подборки и тыкнут «+ создать» — вот этот экран. Текущие подборки остаются рабочими. PRO апгрейд — чётко видны фичи, которые открываются. Кнопка «Не сейчас» — ghost.</div>
+      </div>
+
+      <!-- Phone C: Paywall sheet (full) -->
+      <div class="phone-wrap">
+        <div class="phone-caption">В. Paywall sheet</div>
+        <div class="phone">
+          <div class="phone-status">Витрины</div>
+          <div class="phone-content">
+            <div style="height: 90px; background: rgba(0,0,0,0.35);"></div>
+            <div class="sheet" style="min-height: 590px;">
+              <div class="sheet-handle"></div>
+
+              <div style="padding: 20px 20px 0; text-align: center;">
+                <div style="width: 64px; height: 64px; border-radius: 20px; background: linear-gradient(135deg, var(--accent), #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 30px; margin: 0 auto 12px;">🎁</div>
+                <div style="font-size: 18px; font-weight: 800;">Оформить витрину</div>
+                <div style="font-size: 13px; color: var(--text-sec); margin-top: 6px; line-height: 1.5; max-width: 280px; margin-left: auto; margin-right: auto;">Собери отдельную страницу под повод или аудиторию — и отправь ссылку тем, кто выбирает тебе подарок.</div>
+              </div>
+
+              <div style="padding: 16px 20px 0;">
+                <div style="background: var(--surface); border-radius: 14px; padding: 4px 0; margin-bottom: 16px;">
+                  <div class="list-row" style="border: none; padding: 10px 14px;">
+                    <div class="list-icon accent">🎁</div>
+                    <div class="list-body">
+                      <div class="list-title" style="font-size: 13px;">Витрины по ссылке</div>
+                      <div class="list-sub" style="font-size: 11.5px;">До 10 штук с обложкой и описанием</div>
+                    </div>
+                  </div>
+                  <div class="list-row" style="padding: 10px 14px;">
+                    <div class="list-icon accent">📂</div>
+                    <div class="list-body">
+                      <div class="list-title" style="font-size: 13px;">Подборки без лимита</div>
+                      <div class="list-sub" style="font-size: 11.5px;">Ручные и dynamic по фильтру</div>
+                    </div>
+                  </div>
+                  <div class="list-row" style="padding: 10px 14px;">
+                    <div class="list-icon accent">🏷️</div>
+                    <div class="list-body">
+                      <div class="list-title" style="font-size: 13px;">Теги без лимита</div>
+                      <div class="list-sub" style="font-size: 11.5px;">Сейчас Free: 10 тегов</div>
+                    </div>
+                  </div>
+                  <div class="list-row" style="padding: 10px 14px;">
+                    <div class="list-icon accent">📌</div>
+                    <div class="list-body">
+                      <div class="list-title" style="font-size: 13px;">Закрепление в профиле</div>
+                      <div class="list-sub" style="font-size: 11.5px;">До 5 витрин и подборок</div>
+                    </div>
+                  </div>
+                  <div class="list-row" style="padding: 10px 14px;">
+                    <div class="list-icon accent">📊</div>
+                    <div class="list-body">
+                      <div class="list-title" style="font-size: 13px;">Аналитика</div>
+                      <div class="list-sub" style="font-size: 11.5px;">Просмотры, брони, шеринг</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="annotation info" style="margin: 0 0 14px; font-size: 12px;">
+                  Plus всё остальное PRO: Smart Reservations, быстрые подборки, подписки на профили, кастомные обложки.
+                </div>
+
+                <div style="background: linear-gradient(135deg, rgba(124,106,255,0.15), rgba(124,106,255,0.05)); border: 1px solid var(--accent); border-radius: 14px; padding: 16px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+                  <div>
+                    <div style="font-size: 14px; font-weight: 700;">PRO · 100 ⭐ / мес</div>
+                    <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;">или 960 ⭐ / год — скидка 20%</div>
+                  </div>
+                  <div style="font-size: 11px; color: var(--accent); font-weight: 600; padding: 4px 10px; background: var(--accent-soft); border-radius: 20px;">ВЫГОДНО</div>
+                </div>
+
+                <button class="btn btn-pro">Попробовать PRO</button>
+                <button class="btn btn-ghost" style="margin-top: 8px;">Не сейчас</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Полный paywall — в формате bottom sheet. Features-бенефиты: пять, не двенадцать. Ценовой блок выделен. «ВЫГОДНО» pill — понятный визуальный контраст для yearly-варианта. Ghost «Не сейчас» — не pushy.</div>
+      </div>
+
+      <!-- Phone D: Discovery / changelog entry -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Г. Discoverability — карточка в changelog</div>
+        <div class="phone">
+          <div class="phone-status">Что нового</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Что нового</div>
+              <span></span>
+            </div>
+
+            <div style="padding: 0 16px 16px;">
+              <div style="font-size: 11px; color: var(--text-muted); letter-spacing: 0.5px;">14 АПРЕЛЯ 2026</div>
+              <div style="font-size: 18px; font-weight: 700; margin-top: 4px; display: flex; align-items: center; gap: 8px;">Контексты желаний <span class="label-badge new">NEW</span></div>
+            </div>
+
+            <div style="padding: 0 16px;">
+              <div style="background: var(--surface); border-radius: 14px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 10px;">
+                <div style="height: 100px; background: linear-gradient(135deg, var(--accent), #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 42px;">🏷️🎉👥</div>
+                <div style="padding: 14px;">
+                  <div style="font-size: 14px; font-weight: 700; margin-bottom: 6px;">Теги, поводы и «для кого»</div>
+                  <div style="font-size: 12.5px; color: var(--text-sec); line-height: 1.6;">Теперь на желание можно повесить тег, повод (ДР, НГ, свадьба) и аудиторию. Фильтры в вишлисте разбирают всё по смыслу.</div>
+                  <button class="btn btn-secondary btn-small" style="margin-top: 10px; width: auto; padding: 6px 12px;">Попробовать →</button>
+                </div>
+              </div>
+
+              <div style="background: var(--surface); border-radius: 14px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 10px;">
+                <div style="height: 100px; background: linear-gradient(135deg, #BE185D, #831843); display: flex; align-items: center; justify-content: center; font-size: 42px;">📂</div>
+                <div style="padding: 14px;">
+                  <div style="font-size: 14px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">Подборки <span class="pro-badge" style="font-size: 9px;">FREE · до 3</span></div>
+                  <div style="font-size: 12.5px; color: var(--text-sec); line-height: 1.6;">Сгруппируй желания без создания нового вишлиста. Одно желание может быть в нескольких подборках.</div>
+                  <button class="btn btn-secondary btn-small" style="margin-top: 10px; width: auto; padding: 6px 12px;">Создать →</button>
+                </div>
+              </div>
+
+              <div style="background: var(--surface); border-radius: 14px; overflow: hidden; border: 1px solid var(--border);">
+                <div style="height: 100px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); display: flex; align-items: center; justify-content: center; font-size: 42px;">🎁</div>
+                <div style="padding: 14px;">
+                  <div style="font-size: 14px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">Витрины <span class="pro-badge" style="font-size: 9px;">PRO</span></div>
+                  <div style="font-size: 12.5px; color: var(--text-sec); line-height: 1.6;">Публичная страница с отобранными желаниями. Отправь одну ссылку и человек видит только то, что подходит под повод.</div>
+                  <button class="btn btn-pro btn-small" style="margin-top: 10px; width: auto; padding: 6px 12px;">Подробнее →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Карточка в changelog — точка обнаружения фичи после запуска. Три отдельные карточки: теги (без гейтинга), подборки (Free с лимитом), витрины (PRO). Переходы прямо в создание.</div>
+      </div>
+    </div>
+
+    <div class="annotation info">
+      <strong>Точки входа в paywall:</strong> (1) раздел «Витрины» в меню — на Free показывает teaser; (2) кнопка «+ создать подборку» при достижении лимита; (3) «Закрепить в профиле» на Free; (4) попытка создать dynamic-collection на Free; (5) карточка в changelog при запуске. Каждая точка ведёт в один и тот же paywall-sheet, чтобы конверсия трекалась одинаково.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- SECTION 9: EDGE CASES                                         -->
+  <!-- ============================================================ -->
+  <section id="edge" class="mockup-section">
+    <div class="section-title">9. Edge-кейсы</div>
+    <div class="section-subtitle">
+      Всё, что может пойти не так: удаление, архив, конфликт значений, поломанный источник, приватность, недоступные желания. Для каждого — визуальное поведение как владельца, так и гостя.
+    </div>
+
+    <div class="phone-grid">
+      <!-- Phone A: Broken config -->
+      <div class="phone-wrap">
+        <div class="phone-caption">А. Источник подборки удалён (взгляд владельца)</div>
+        <div class="phone">
+          <div class="phone-status">Витрина</div>
+          <div class="phone-content">
+            <div style="height: 130px; background: linear-gradient(135deg, #374151, #1F2937); position: relative;">
+              <div style="position: absolute; top: 12px; left: 12px; width: 36px; height: 36px; background: rgba(0,0,0,0.5); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff;">‹</div>
+              <div style="position: absolute; bottom: 14px; left: 18px;">
+                <div style="font-size: 20px; font-weight: 800; color: #fff;">На день рождения</div>
+                <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px;">Подборка-источник удалена</div>
+              </div>
+            </div>
+
+            <div class="broken-banner">
+              <div class="bb-icon">⚠️</div>
+              <div class="bb-body">
+                <div class="bb-title">Источник больше не существует</div>
+                <div class="bb-sub">Подборка «Идеи на день рождения», к которой привязана витрина, была удалена. Можно привязать к другой подборке или перевести в ручной режим.</div>
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                  <button class="btn btn-primary btn-small" style="width: auto; padding: 6px 12px;">Починить</button>
+                  <button class="btn btn-ghost btn-small" style="width: auto; padding: 6px 12px;">В архив</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="notice-block">
+              Публичная ссылка <strong>пока возвращает empty state</strong>. Никто из гостей не видит ошибки.
+            </div>
+
+            <div class="section-block-title">Что было</div>
+            <div style="opacity: 0.5;">
+              <div class="wish-card">
+                <div class="wish-thumb">🎧</div>
+                <div class="wish-info">
+                  <div class="wish-title">Sony WH-1000XM5</div>
+                  <div class="wish-meta">38 000 ₽ <span class="sep">·</span> желание живо, но не в источнике</div>
+                </div>
+              </div>
+              <div class="wish-card">
+                <div class="wish-thumb">📱</div>
+                <div class="wish-info">
+                  <div class="wish-title">iPad Air M2 11"</div>
+                  <div class="wish-meta">72 000 ₽ <span class="sep">·</span> желание живо</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">При удалении источника — dynamic витрина не ломается silently. Владелец видит explicit warning + CTA «Починить». Предпоследний снапшот items показан приглушённым, чтобы можно было быстро переключить в ручной режим с этим же набором.</div>
+      </div>
+
+      <!-- Phone B: Confirmation: delete wish used in contexts -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Б. Удаление желания, которое в контекстах</div>
+        <div class="phone">
+          <div class="phone-status">Желание</div>
+          <div class="phone-content">
+            <div style="height: 120px; background: rgba(0,0,0,0.35);"></div>
+            <div class="sheet" style="min-height: 460px;">
+              <div class="sheet-handle"></div>
+
+              <div style="padding: 20px 20px 0; text-align: center;">
+                <div style="width: 52px; height: 52px; border-radius: 16px; background: var(--red-soft); color: var(--red); display: flex; align-items: center; justify-content: center; font-size: 26px; margin: 0 auto 12px;">🗑</div>
+                <div style="font-size: 17px; font-weight: 700;">Удалить «Sony WH-1000XM5»?</div>
+                <div style="font-size: 13px; color: var(--text-sec); margin-top: 6px; line-height: 1.5;">Действие необратимо. Желание исчезнет из всех подборок и витрин, где оно сейчас показывается.</div>
+              </div>
+
+              <div class="section-block-title">Это затронет</div>
+
+              <div class="list-group" style="margin-top: 0;">
+                <div class="list-row">
+                  <div class="list-icon green">⭐</div>
+                  <div class="list-body">
+                    <div class="list-title">Подборка «Самое желанное»</div>
+                    <div class="list-sub">Останется 11 желаний из 12</div>
+                  </div>
+                </div>
+                <div class="list-row">
+                  <div class="list-icon accent">🎂</div>
+                  <div class="list-body">
+                    <div class="list-title">Подборка «Идеи на день рождения»</div>
+                    <div class="list-sub">Останется 7 желаний из 8</div>
+                  </div>
+                </div>
+                <div class="list-row">
+                  <div class="list-icon">🎁</div>
+                  <div class="list-body">
+                    <div class="list-title">Витрина «Подарки на ДР»</div>
+                    <div class="list-sub">Публичная · 142 просмотра</div>
+                  </div>
+                </div>
+                <div class="list-row">
+                  <div class="list-icon orange">🎁</div>
+                  <div class="list-body">
+                    <div class="list-title">Забронировано дарителем Миша</div>
+                    <div class="list-sub">Он будет уведомлён об удалении</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 16px;">
+                <button class="btn btn-danger">Удалить желание</button>
+                <button class="btn btn-ghost" style="margin-top: 6px;">Отмена</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">До удаления — явный список: какие подборки, витрины, брони будут затронуты. Если есть бронь — отдельный warning. Это применимо и при архивации (но с меньшим акцентом на «необратимо»).</div>
+      </div>
+
+      <!-- Phone C: Occasion conflict -->
+      <div class="phone-wrap">
+        <div class="phone-caption">В. Конфликт поводов: «без повода» + «ДР»</div>
+        <div class="phone">
+          <div class="phone-status">Желание</div>
+          <div class="phone-content">
+            <div style="height: 80px; background: rgba(0,0,0,0.3);"></div>
+            <div class="sheet" style="min-height: 560px;">
+              <div class="sheet-handle"></div>
+              <div class="sheet-title">Для какого повода</div>
+              <div class="sheet-subtitle">Можно выбрать несколько конкретных поводов ИЛИ один универсальный.</div>
+
+              <div class="ctx-pill-list">
+                <div class="ctx-pill selected">
+                  <span class="ctx-pill-icon">🎂</span>
+                  <span>День рождения</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">🎄</span>
+                  <span>Новый год</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">💍</span>
+                  <span>Свадьба</span>
+                </div>
+                <div class="ctx-pill">
+                  <span class="ctx-pill-icon">🏡</span>
+                  <span>Новоселье</span>
+                </div>
+              </div>
+
+              <div style="padding: 14px 16px 6px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Универсальные</div>
+
+              <div class="ctx-pill-list" style="padding-top: 0;">
+                <div class="ctx-pill full" style="opacity: 0.4; cursor: not-allowed;">
+                  <span class="ctx-pill-icon">∞</span>
+                  <span>Любой повод</span>
+                </div>
+                <div class="ctx-pill full" style="opacity: 0.4; cursor: not-allowed;">
+                  <span class="ctx-pill-icon">⊘</span>
+                  <span>Без повода</span>
+                </div>
+              </div>
+
+              <div class="annotation warn" style="margin: 14px 16px 0; font-size: 12.5px;">
+                <strong>Универсальные нельзя с конкретными.</strong> Сначала сними «День рождения», потом можно выбрать «Любой» или «Без повода».
+              </div>
+
+              <div class="btn-sticky-bottom">
+                <button class="btn btn-ghost" style="flex: 0 0 auto;">Отмена</button>
+                <button class="btn btn-primary">Готово · 1 повод</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Wildcard-опции визуально disabled + inline-объяснение сверху sheet. Пользователь понимает, <em>почему</em> нельзя, а не получает ошибку после сохранения. Та же логика для аудиторий («кто угодно» vs конкретные).</div>
+      </div>
+
+      <!-- Phone D: Tag deleted, filter showcase empty -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Г. Тег удалён — dynamic filter пустой</div>
+        <div class="phone">
+          <div class="phone-status">Витрина</div>
+          <div class="phone-content">
+            <div class="phone-header" style="border-bottom: none;">
+              <span class="back">‹</span>
+              <div class="hdr-title">Техника</div>
+              <span style="font-size: 18px;">⋯</span>
+            </div>
+
+            <div style="height: 120px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); margin: 0 16px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 36px; position: relative;">
+              💻
+              <div style="position: absolute; top: 8px; right: 8px; background: rgba(107,114,128,0.9); color: #fff; border-radius: 6px; padding: 3px 8px; font-size: 10px; font-weight: 600;">● не показывается</div>
+            </div>
+
+            <div class="broken-banner">
+              <div class="bb-icon">💤</div>
+              <div class="bb-body">
+                <div class="bb-title">Витрина пустая</div>
+                <div class="bb-sub">Фильтр «тег <em>техника</em> + повод <em>ДР</em>» сейчас не находит ни одного желания. Возможно, ты удалил тег или желания. Можно поменять условия или перевести в ручной режим.</div>
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                  <button class="btn btn-primary btn-small" style="width: auto; padding: 6px 12px;">Поменять условия</button>
+                  <button class="btn btn-outline btn-small" style="width: auto; padding: 6px 12px;">В архив</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block-title">Условия фильтра</div>
+            <div class="ctx-block" style="margin-top: 0;">
+              <div class="ctx-row">
+                <div class="ctx-icon">🏷️</div>
+                <div class="ctx-body">
+                  <div class="ctx-label">Тег</div>
+                  <div class="ctx-value" style="color: var(--red);">⚠ «техника» — тег удалён</div>
+                </div>
+              </div>
+              <div class="ctx-row">
+                <div class="ctx-icon">🎉</div>
+                <div class="ctx-body">
+                  <div class="ctx-label">Повод</div>
+                  <div class="ctx-chips">
+                    <span class="chip orange" style="font-size: 11px; padding: 4px 10px;">день рождения</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Dynamic filter с удалённым тегом — warning в условиях подсвечивает, что именно сломалось. CTA «Поменять условия» открывает редактор фильтра. Гости видят пустой empty state без объяснения причин.</div>
+      </div>
+
+      <!-- Phone E: Private wish in showcase -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Д. Приватное желание в публичной витрине</div>
+        <div class="phone">
+          <div class="phone-status">Витрина</div>
+          <div class="phone-content">
+            <div style="height: 130px; background: linear-gradient(135deg, #4a3a9e, #2d1f6e); position: relative;">
+              <div style="position: absolute; bottom: 14px; left: 18px;">
+                <div style="font-size: 20px; font-weight: 800; color: #fff;">Подарки на ДР</div>
+                <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px;">Вид владельца</div>
+              </div>
+              <div style="position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,0.5); border-radius: 10px; padding: 4px 10px; font-size: 11px; color: #fff;">🔗 Превью гостю</div>
+            </div>
+
+            <div class="section-block-title">В витрине — 8 желаний</div>
+
+            <div class="wish-card">
+              <div class="wish-thumb">🎧</div>
+              <div class="wish-info">
+                <div class="wish-title">Sony WH-1000XM5</div>
+                <div class="wish-meta">38 000 ₽ <span class="sep">·</span> показывается гостям</div>
+              </div>
+              <span style="font-size: 14px; color: var(--green);">●</span>
+            </div>
+            <div class="wish-card" style="opacity: 0.6;">
+              <div class="wish-thumb">💍</div>
+              <div class="wish-info">
+                <div class="wish-title">Кольцо Tiffany Solitaire</div>
+                <div class="wish-meta" style="color: var(--red);">из приватного вишлиста · гости не видят</div>
+              </div>
+              <span style="font-size: 14px; color: var(--red);">●</span>
+            </div>
+            <div class="wish-card" style="opacity: 0.6;">
+              <div class="wish-thumb">📱</div>
+              <div class="wish-info">
+                <div class="wish-title">iPhone 16 Pro Max</div>
+                <div class="wish-meta" style="color: var(--orange);">архивировано · гости не видят</div>
+              </div>
+              <span style="font-size: 14px; color: var(--orange);">●</span>
+            </div>
+
+            <div class="annotation warn" style="margin: 12px 16px; font-size: 12.5px;">
+              <strong>Видно только тебе.</strong> 2 желания недоступны гостям: одно из приватного вишлиста, одно в архиве. В публичной витрине они автоматически скрыты. Счётчик у гостя покажет 6, не 8.
+            </div>
+
+            <div class="section-block-title">Посмотреть как гость</div>
+            <div style="padding: 0 16px 16px;">
+              <button class="btn btn-outline">👁 Открыть публичный превью</button>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Ключевой privacy-контракт: внутри витрины владелец видит маркировку «не показывается гостям». Гость получает отфильтрованный список без упоминания скрытого. Precision over transparency — владелец знает, что скрыто, гость не получает утечку.</div>
+      </div>
+
+      <!-- Phone F: Duplicate add -->
+      <div class="phone-wrap">
+        <div class="phone-caption">Е. Желание уже в подборке</div>
+        <div class="phone">
+          <div class="phone-status">Желание</div>
+          <div class="phone-content">
+            <div style="height: 170px; background: rgba(0,0,0,0.3);"></div>
+            <div class="sheet" style="min-height: 450px;">
+              <div class="sheet-handle"></div>
+              <div class="sheet-title">В какие подборки</div>
+              <div class="sheet-subtitle">Одно желание может быть в нескольких подборках.</div>
+
+              <div class="list-group" style="margin: 10px 16px;">
+                <div class="list-row">
+                  <div class="list-icon green">⭐</div>
+                  <div class="list-body">
+                    <div class="list-title">Самое желанное</div>
+                    <div class="list-sub" style="color: var(--green);">✓ Уже здесь</div>
+                  </div>
+                  <div class="wish-check on">✓</div>
+                </div>
+                <div class="list-row">
+                  <div class="list-icon accent">🎂</div>
+                  <div class="list-body">
+                    <div class="list-title">Идеи на ДР</div>
+                    <div class="list-sub" style="color: var(--green);">✓ Уже здесь</div>
+                  </div>
+                  <div class="wish-check on">✓</div>
+                </div>
+                <div class="list-row clickable">
+                  <div class="list-icon blue">💼</div>
+                  <div class="list-body">
+                    <div class="list-title">Для коллег</div>
+                    <div class="list-sub">5 желаний</div>
+                  </div>
+                  <div class="wish-check"></div>
+                </div>
+              </div>
+
+              <div class="notice-block">
+                Текущие подборки отмечены. Можно снять или добавить — всё как список.
+              </div>
+
+              <div class="btn-sticky-bottom">
+                <button class="btn btn-primary">Готово</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-note">Нет отдельной ошибки «уже добавлено». Состояние «уже здесь» — это просто включённый чекбокс с подписью. Снимаешь — удаляется из подборки, ставишь — добавляется. Идемпотентно.</div>
+      </div>
+    </div>
+
+    <div class="annotation">
+      <strong>Чего в мокапах нет, но обязательно в реализации:</strong><br>
+      · конфликт аудиторий «кто угодно» ↔ конкретные — тот же pattern, что у поводов<br>
+      · смена приватности вишлиста → пересчёт видимости в витринах (cron / on-save trigger)<br>
+      · витрина с 0 видимых wishes → публичный empty state, счётчик не показывается<br>
+      · попытка открыть старую ссылку (regenerated slug) → link_revoked state (см. секция 6-Г)<br>
+      · удаление тега, используемого в 3 dynamic collections → confirm-sheet с перечислением затронутых<br>
+      · несовместимые bulk actions (назначить «Любой повод» на wishes, где уже есть конкретный) → toast с результатом: «5 обновлено, 3 пропущено»
+    </div>
+  </section>
+
+  <section id="data" class="mockup-section">
+    <div class="section-title">10. Данные и события</div>
+    <div class="section-subtitle">Заполняется следующими блоками…</div>
+  </section>
+
+  <script>
+    const nav = document.getElementById('nav');
+    const sections = document.querySelectorAll('.mockup-section');
+    nav.addEventListener('click', (e) => {
+      const btn = e.target.closest('.nav-btn');
+      if (!btn) return;
+      const id = btn.dataset.section;
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b === btn));
+      sections.forEach(s => s.classList.toggle('active', s.id === id));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  </script>
+</body>
+</html>

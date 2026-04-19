@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WishBoard — Home, 3 tabs (North Star v2)</title>
+<style>
+:root{--bg:#1B1B1F;--surface:#26262C;--surface-hover:#2E2E36;--card:#2F2F38;--card-elevated:#33333D;--accent:#7C6AFF;--accent-soft:rgba(124,106,255,0.12);--accent-glow:rgba(124,106,255,0.25);--accent-strong:#9B8AFF;--accent-light:#A78BFA;--accent-deep:#5B4BD6;--accent-tint:#C4A7FF;--success:#34D399;--success-soft:rgba(52,211,153,0.12);--warning:#FBBF24;--warning-soft:rgba(251,191,36,0.12);--danger:#F87171;--danger-soft:rgba(248,113,113,0.12);--prio-1:#6B7FD4;--prio-1-soft:rgba(107,127,212,0.15);--prio-2:#E8930A;--prio-2-soft:rgba(232,147,10,0.15);--prio-3:#F04E6E;--prio-3-soft:rgba(240,78,110,0.15);--text:#F4F4F6;--text-secondary:#9CA3AF;--text-muted:#6B7280;--border:rgba(255,255,255,0.06);--border-light:rgba(255,255,255,0.10);--backdrop:rgba(0,0,0,0.6);--gradient-accent:linear-gradient(135deg,#7C6AFF 0%,#9B8AFF 100%);--gradient-accent-deep:linear-gradient(135deg,#7C6AFF 0%,#9B8AFF 55%,#6B5CE7 100%);--gradient-priority-1:linear-gradient(90deg,#6B7FD4,#818cf8);--gradient-priority-2:linear-gradient(90deg,#E8930A,#fbbf24);--gradient-priority-3:linear-gradient(90deg,#F04E6E,#ff6b9d);--gradient-fade-bg:linear-gradient(to top,#1B1B1F 65%,transparent);--r-xs:4px;--r-sm:6px;--r-md:10px;--r-lg:12px;--r-xl:14px;--r-xxl:16px;--r-xxxl:20px;--r-pill:100px;--sh-subtle:0 1px 3px rgba(0,0,0,0.20);--sh-elevated:0 2px 12px rgba(0,0,0,0.18);--sh-deep:0 8px 24px rgba(0,0,0,0.35);--sh-deep-max:0 8px 40px rgba(0,0,0,0.40);--sh-overlay:0 12px 40px rgba(0,0,0,0.60);--sh-glow-soft:0 4px 20px rgba(124,106,255,0.15);--sh-glow-med:0 4px 16px rgba(124,106,255,0.25);--sh-glow-strong:0 4px 16px rgba(124,106,255,0.35);--sh-glow-cta:0 8px 24px rgba(124,106,255,0.40);--font-sans:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-sans);background:#0c0c0e;color:var(--text);min-height:100vh;padding:40px 20px;line-height:1.4}
+.page-title{text-align:center;color:var(--text);font-size:20px;font-weight:700;margin:0 auto 8px;letter-spacing:-0.01em}
+.page-subtitle{text-align:center;color:var(--text-secondary);font-size:14px;margin:0 auto 32px;max-width:720px}
+.phones{display:flex;flex-wrap:wrap;gap:32px;justify-content:center;align-items:flex-start}
+.phone-with-note{display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;justify-content:center;margin:0 auto;max-width:1300px}
+.phone{width:375px;min-height:812px;background:var(--bg);border-radius:44px;position:relative;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.6),0 0 0 10px #1a1a1c,0 0 0 12px #0a0a0b;flex-shrink:0}
+.phone.short{min-height:640px}
+.phone.tall{min-height:900px}
+.status-bar{height:48px;padding:16px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;font-size:14px;font-weight:600}
+.phone-label{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-size:10px;padding:4px 10px;border-radius:var(--r-pill);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;z-index:10;backdrop-filter:blur(8px);white-space:nowrap}
+.side-note{max-width:340px;color:var(--text-secondary);font-size:13px;line-height:1.6}
+.side-note .tag{display:inline-block;font-size:10px;padding:3px 8px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-light);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px}
+.side-note h3{color:var(--text);font-size:16px;margin:0 0 12px;letter-spacing:-0.01em}
+.side-note h4{color:var(--accent-light);font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700}
+.side-note p{margin:0 0 10px}
+.side-note ul{margin:0 0 14px;padding-left:18px}
+.side-note li{margin-bottom:4px}
+.side-note b{color:var(--text);font-weight:600}
+.side-note code{font-size:11px;background:var(--surface);padding:1px 5px;border-radius:var(--r-xs);color:var(--accent-light)}
+.screen-header{height:52px;padding:6px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hdr-btn{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.04);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text);font-size:18px;cursor:pointer;flex-shrink:0}
+.hdr-title{flex:1;text-align:center;font-size:15px;font-weight:700;color:var(--text);letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hdr-title.small{color:var(--text-secondary);font-weight:600;font-size:14px}
+.tab-bar{display:flex;gap:4px;padding:4px;background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);margin:0 16px 20px}
+.tab{flex:1;padding:9px 12px;border-radius:var(--r-md);text-align:center;font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;transition:all 0.15s ease;position:relative}
+.tab.active{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(124,106,255,0.3)}
+.tab{overflow:visible}
+.tab .badge{position:absolute;top:-6px;right:-6px;background:var(--danger);color:#fff;font-size:10px;font-weight:800;min-width:20px;height:20px;padding:0 5px;border-radius:50%;display:flex;align-items:center;justify-content:center;line-height:1;border:2px solid var(--bg);box-shadow:0 2px 6px rgba(248,113,113,0.45);letter-spacing:0;margin-left:0}
+.tab.active .badge{background:#fff;color:var(--danger);border-color:var(--accent)}
+.btn{border:none;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:transform 0.15s ease;letter-spacing:-0.01em;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:var(--r-xl);min-height:44px}
+.btn:active{transform:scale(0.98)}
+.btn.full{width:100%}
+.btn.lg{min-height:52px;font-size:16px;padding:16px 24px}
+.btn.sm{min-height:36px;font-size:13px;padding:8px 16px}
+.btn.primary{background:var(--accent);color:#fff;box-shadow:var(--sh-elevated)}
+.btn.primary-gradient{background:var(--gradient-accent);color:#fff;box-shadow:var(--sh-glow-cta),inset 0 1px 0 rgba(255,255,255,0.2)}
+.btn.secondary{background:var(--accent-soft);color:var(--accent)}
+.btn.ghost{background:transparent;color:var(--text-muted);box-shadow:none}
+.btn.danger{background:var(--danger-soft);color:var(--danger)}
+.btn.surface{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.icon-btn{width:44px;height:44px;border-radius:var(--r-xl);background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text);font-size:18px;cursor:pointer;flex-shrink:0}
+.icon-btn.accent{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:0 4px;gap:8px}
+.section-header h2{margin:0;font-size:17px;font-weight:700;letter-spacing:-0.01em;display:flex;align-items:center;gap:8px}
+.section-header .action{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;flex-shrink:0}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:var(--r-sm);font-size:11px;font-weight:700;white-space:nowrap}
+.chip.lg{padding:5px 10px;border-radius:var(--r-pill);font-size:12px}
+.chip.accent{background:var(--accent-soft);color:var(--accent)}
+.chip.success{background:var(--success-soft);color:var(--success)}
+.chip.warning{background:var(--warning-soft);color:var(--warning)}
+.chip.danger{background:var(--danger-soft);color:var(--danger)}
+.chip.surface{background:var(--surface);color:var(--text-secondary)}
+.chip.prio-1{background:var(--prio-1-soft);color:var(--prio-1)}
+.chip.prio-2{background:var(--prio-2-soft);color:var(--prio-2)}
+.chip.prio-3{background:var(--prio-3-soft);color:var(--prio-3)}
+.chip.new{background:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(124,106,255,0.3)}
+.chip.pro{background:var(--gradient-accent);color:#fff;box-shadow:0 2px 8px rgba(124,106,255,0.25);padding:5px 10px;border-radius:var(--r-pill);font-size:11px;letter-spacing:0.3px}
+.avatar{width:40px;height:40px;border-radius:50%;background:var(--gradient-accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;flex-shrink:0}
+.avatar.sm{width:24px;height:24px;font-size:11px}
+.avatar.lg{width:64px;height:64px;font-size:22px}
+.avatar.xl{width:88px;height:88px;font-size:32px}
+.avatar.img{background-size:cover;background-position:center;color:transparent}
+.avatar-stack{display:flex;align-items:center}
+.avatar-stack .avatar.sm{border:2px solid var(--card);margin-left:-6px}
+.avatar-stack .avatar.sm:first-child{margin-left:0}
+.avatar-stack .avatar.a2{background:linear-gradient(135deg,#fbbf24,#f59e0b)}
+.avatar-stack .avatar.a3{background:linear-gradient(135deg,#34d399,#10b981)}
+.avatar-stack .avatar.a4{background:var(--surface);color:var(--text-muted)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r-xl);padding:14px}
+.card.lg{padding:20px;border-radius:var(--r-xxl)}
+.card.flat{background:var(--surface)}
+.card.interactive{cursor:pointer;transition:all 0.15s ease}
+.card.interactive:active{transform:scale(0.995);background:var(--surface)}
+.card.current{border-color:rgba(124,106,255,0.3);background:linear-gradient(135deg,var(--card),rgba(124,106,255,0.04));box-shadow:0 0 0 1px rgba(124,106,255,0.15) inset,0 4px 16px rgba(124,106,255,0.08)}
+.row{display:flex;gap:14px;align-items:flex-start}
+.row .leading{flex-shrink:0}
+.row .body{flex:1;min-width:0;padding-top:2px}
+.row .trailing{flex-shrink:0;align-self:center;color:var(--text-muted);font-size:22px}
+.row .title{font-size:15px;font-weight:600;line-height:1.3;letter-spacing:-0.01em;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .subtitle{font-size:13px;color:var(--text-secondary);line-height:1.4}
+.row .meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--text-secondary);margin-top:4px}
+.row .meta .count{color:var(--text);font-weight:700}
+.row .meta .dot{color:var(--text-muted)}
+.thumb{width:52px;height:52px;border-radius:var(--r-xl);background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+.thumb.warm{background:var(--warning-soft)}
+.thumb.green{background:var(--success-soft)}
+.thumb.rose{background:var(--prio-3-soft)}
+.thumb.sm{width:44px;height:44px;font-size:20px;border-radius:var(--r-md)}
+.thumb.lg{width:72px;height:72px;font-size:36px;border-radius:var(--r-xxl)}
+.sticky{position:absolute;bottom:0;left:0;right:0;padding:24px 16px 28px;background:var(--gradient-fade-bg);pointer-events:none;display:flex;flex-direction:column;gap:10px}
+.sticky>*{pointer-events:auto}
+.banner{padding:12px 14px;border-radius:var(--r-xl);display:flex;gap:12px;align-items:flex-start;font-size:13px;line-height:1.5}
+.banner.info{background:var(--accent-soft);color:var(--accent)}
+.banner.success{background:var(--success-soft);color:var(--success)}
+.banner.warning{background:var(--warning-soft);color:var(--warning)}
+.banner.danger{background:var(--danger-soft);color:var(--danger)}
+.banner.promo{background:var(--gradient-accent);color:#fff;box-shadow:var(--sh-glow-med)}
+.banner .b-icon{flex-shrink:0;font-size:16px;line-height:1;margin-top:1px}
+.banner .b-body{flex:1;min-width:0}
+.banner .b-title{font-weight:700;margin-bottom:2px;font-size:14px}
+.content{padding:0 16px 140px}
+.content.no-sticky{padding-bottom:24px}
+.section-gap{height:28px}
+.divider{height:1px;background:var(--border);margin:14px 0}
+.app-header{display:flex;align-items:center;gap:12px;padding:12px 4px 24px}
+.greeting{flex:1;min-width:0}
+.greeting .hi{font-size:12px;color:var(--text-muted);margin-bottom:2px}
+.greeting .name{font-size:16px;font-weight:700;letter-spacing:-0.01em}
+.state-legend{background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px;margin:8px 0 14px;color:var(--text);font-size:12px;line-height:1.5}
+.state-legend .lg-row{display:flex;gap:10px;align-items:flex-start;padding:4px 0}
+.state-legend .swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0;margin-top:3px}
+</style>
+<style>
+  /* file-specific */
+  .tab-bar-in-home { margin: 4px 16px 16px; }
+  .quick-filters {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 0 16px 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .quick-filters::-webkit-scrollbar { display: none; }
+  .qfilter {
+    flex-shrink: 0;
+    padding: 7px 12px;
+    border-radius: var(--r-pill);
+    background: var(--card);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .qfilter.active { background: var(--accent-soft); color: var(--accent); border-color: rgba(124,106,255,0.3); }
+  .wishes-row {
+    display: flex;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: var(--r-xl);
+    background: var(--card);
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+    align-items: center;
+  }
+  .wishes-row .micro {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .wishes-row .price {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.01em;
+  }
+  .ttl-bar {
+    height: 3px;
+    background: rgba(52,211,153,0.15);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .ttl-fill {
+    height: 100%;
+    background: var(--success);
+    border-radius: 2px;
+  }
+  .ttl-fill.low { background: var(--warning); }
+  .res-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 12px;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 12px;
+  }
+  .res-card.smart { border-color: rgba(124,106,255,0.2); }
+  .res-card.secret {
+    background: linear-gradient(135deg, var(--card), rgba(124,106,255,0.06));
+    border-color: rgba(124,106,255,0.3);
+  }
+  .res-owner {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+  .locked-tile {
+    background: linear-gradient(135deg, rgba(124,106,255,0.06), rgba(124,106,255,0.02));
+    border: 1px dashed rgba(124,106,255,0.25);
+    padding: 16px;
+    border-radius: var(--r-xl);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin: 8px 0;
+  }
+  .locked-tile .lock-icon {
+    width: 40px; height: 40px; border-radius: var(--r-lg);
+    background: var(--accent-soft); display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .locked-tile .lock-body { flex: 1; }
+  .locked-tile .lock-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .locked-tile .lock-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .locked-tile .lock-cta {
+    font-size: 12px; font-weight: 700; color: var(--accent);
+    padding: 6px 10px; border-radius: var(--r-sm); background: var(--accent-soft);
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Home × 3 tabs — North Star v2</h1>
+<p class="page-subtitle">The three real Home tabs. Every user opens one of these first.<br>
+Принципы: warm greeting + PRO-бейдж · decisive tab-bar · state-chips читаются с 1 секунды · sticky CTA отражает контекст таба.</p>
+
+<div class="phones">
+
+<!-- ═══════════════ TAB 1: WISHLISTS ═══════════════ -->
+<div class="phone">
+  <div class="phone-label">Home · Wishlists</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+
+  <div style="padding: 0 16px;">
+    <div class="app-header">
+      <div class="avatar">D</div>
+      <div class="greeting">
+        <div class="hi">С возвращением,</div>
+        <div class="name">Дима 👋</div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="chip pro">⭐ PRO</div>
+        <div class="icon-btn" style="width: 36px; height: 36px; font-size: 17px;">⚙</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-bar tab-bar-in-home">
+    <div class="tab active">Вишлисты</div>
+    <div class="tab">Желания</div>
+    <div class="tab">Брони<span class="badge">5</span></div>
+  </div>
+
+  <div class="content">
+    <div class="section-header">
+      <h2>Мои вишлисты</h2>
+      <span class="action">+ Новый</span>
+    </div>
+
+    <div class="card interactive current" style="display: flex; gap: 14px; margin-bottom: 10px; position: relative;">
+      <div class="thumb">🎂</div>
+      <div style="flex: 1; min-width: 0; padding-top: 2px;">
+        <div class="row"><div class="title">День рождения</div></div>
+        <div class="row"><div class="meta">
+          <span class="count">12</span><span>желаний</span>
+          <span class="dot">•</span>
+          <span class="chip warning">⏱ через 3 дня</span>
+        </div></div>
+      </div>
+      <div style="position: absolute; top: 10px; right: 12px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(124,106,255,0.6);"></div>
+      <div style="align-self: center; color: var(--text-muted); font-size: 22px;">›</div>
+    </div>
+
+    <div class="card interactive" style="display: flex; gap: 14px; margin-bottom: 10px;">
+      <div class="thumb warm">🎄</div>
+      <div style="flex: 1; min-width: 0; padding-top: 2px;">
+        <div class="row"><div class="title">Новый год 2027</div></div>
+        <div class="row"><div class="meta">
+          <span class="count">8</span><span>желаний</span>
+          <span class="dot">•</span>
+          <div class="avatar-stack">
+            <div class="avatar sm">А</div>
+            <div class="avatar sm a2">М</div>
+            <div class="avatar sm a3">К</div>
+            <div class="avatar sm a4" style="font-weight: 700;">+2</div>
+          </div>
+        </div></div>
+      </div>
+      <div style="align-self: center; color: var(--text-muted); font-size: 22px;">›</div>
+    </div>
+
+    <div class="card interactive" style="display: flex; gap: 14px; margin-bottom: 10px;">
+      <div class="thumb green">🎁</div>
+      <div style="flex: 1; min-width: 0; padding-top: 2px;">
+        <div class="row"><div class="title">Просто хочется</div></div>
+        <div class="row"><div class="meta">
+          <span class="count">5</span><span>желаний</span>
+          <span class="dot">•</span>
+          <span class="chip success">3 забронировано</span>
+        </div></div>
+      </div>
+      <div style="align-self: center; color: var(--text-muted); font-size: 22px;">›</div>
+    </div>
+
+    <!-- Limit reached — upsell inline -->
+    <div class="locked-tile">
+      <div class="lock-icon">🔒</div>
+      <div class="lock-body">
+        <div class="lock-title">Лимит 3 / 3 на FREE</div>
+        <div class="lock-sub">Открой до 10 вишлистов в PRO</div>
+      </div>
+      <div class="lock-cta">Unlock</div>
+    </div>
+
+    <div class="section-gap"></div>
+
+    <div class="section-header">
+      <h2>Подписки <span class="chip accent" style="font-size: 11px;">3 новых</span></h2>
+      <span class="action">Все</span>
+    </div>
+
+    <div class="card interactive" style="display: flex; gap: 14px; margin-bottom: 10px;">
+      <div class="thumb" style="background: rgba(96,165,250,0.12);">👤</div>
+      <div style="flex: 1; min-width: 0; padding-top: 2px;">
+        <div class="row"><div class="title">Анна Смирнова</div></div>
+        <div class="row"><div class="meta">
+          <span>@annasm</span><span class="dot">•</span>
+          <span class="chip new">3 новых</span>
+        </div></div>
+      </div>
+      <div style="align-self: center; color: var(--text-muted); font-size: 22px;">›</div>
+    </div>
+
+    <div class="card interactive" style="display: flex; gap: 14px; margin-bottom: 10px;">
+      <div class="thumb" style="background: rgba(167,139,250,0.12);">✨</div>
+      <div style="flex: 1; min-width: 0; padding-top: 2px;">
+        <div class="row"><div class="title">Максим Петров <span class="chip pro" style="font-size: 9px; padding: 2px 6px;">PRO</span></div></div>
+        <div class="row"><div class="meta">
+          <span>@maximp</span><span class="dot">•</span>
+          <span>showcase</span>
+        </div></div>
+      </div>
+      <div style="align-self: center; color: var(--text-muted); font-size: 22px;">›</div>
+    </div>
+  </div>
+
+  <div class="sticky">
+    <button class="btn primary-gradient lg full"><span style="font-size: 18px;">+</span> Создать вишлист</button>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB 2: WISHES (cross-wishlist flat list) ═══════════════ -->
+<div class="phone">
+  <div class="phone-label">Home · Wishes</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+
+  <div style="padding: 0 16px;">
+    <div class="app-header">
+      <div class="avatar">D</div>
+      <div class="greeting">
+        <div class="hi">Все мои желания</div>
+        <div class="name">25 желаний · 3 вишлиста</div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="icon-btn" style="width: 36px; height: 36px; font-size: 16px;">⋮</div>
+        <div class="icon-btn" style="width: 36px; height: 36px; font-size: 17px;">⚙</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-bar tab-bar-in-home">
+    <div class="tab">Вишлисты</div>
+    <div class="tab active">Желания</div>
+    <div class="tab">Брони<span class="badge">5</span></div>
+  </div>
+
+  <div class="quick-filters">
+    <div class="qfilter active">Все 25</div>
+    <div class="qfilter">😍 Очень хочу <span style="color: var(--prio-3);">5</span></div>
+    <div class="qfilter">😊 Хочу <span style="color: var(--prio-2);">14</span></div>
+    <div class="qfilter">🙂 Можно <span style="color: var(--prio-1);">6</span></div>
+    <div class="qfilter">✓ Забронированы</div>
+    <div class="qfilter">До 5 000 ₽</div>
+  </div>
+
+  <div class="content">
+    <div class="section-header" style="padding: 0 4px;">
+      <h2 style="font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;">По приоритету</h2>
+      <span class="action" style="font-size: 12px; color: var(--text-muted);">Сортировка ↓</span>
+    </div>
+
+    <!-- 😍 высокий приоритет -->
+    <div class="wishes-row">
+      <div class="thumb sm">🎧</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">AirPods Pro 2 (USB-C)</div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;">
+          <span class="chip prio-3">😍</span>
+          <span class="price">24 990 ₽</span>
+          <span class="chip surface" style="font-size: 10px;">apple.com</span>
+        </div>
+      </div>
+      <div style="color: var(--text-muted); font-size: 20px; padding: 0 4px;">›</div>
+    </div>
+
+    <div class="wishes-row">
+      <div class="thumb sm" style="background: rgba(240,78,110,0.12);">👟</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Nike Dunk Low Panda</div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;">
+          <span class="chip prio-3">😍</span>
+          <span class="price">12 500 ₽</span>
+          <span class="chip accent" style="font-size: 10px;">🔗 в 2</span>
+        </div>
+      </div>
+      <div style="color: var(--text-muted); font-size: 20px; padding: 0 4px;">›</div>
+    </div>
+
+    <div class="section-gap" style="height: 18px;"></div>
+
+    <div class="section-header" style="padding: 0 4px;">
+      <h2 style="font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;">Забронированы</h2>
+    </div>
+
+    <div class="wishes-row" style="opacity: 0.7;">
+      <div class="thumb sm">📚</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">«Четвёртое крыло»</div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;">
+          <span class="chip success">✓ Забронировано</span>
+          <span class="chip surface" style="font-size: 10px;">1 890 ₽</span>
+        </div>
+      </div>
+      <div style="color: var(--text-muted); font-size: 20px; padding: 0 4px;">›</div>
+    </div>
+
+    <div class="section-gap" style="height: 18px;"></div>
+
+    <div class="section-header" style="padding: 0 4px;">
+      <h2 style="font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;">Остальное</h2>
+    </div>
+
+    <div class="wishes-row">
+      <div class="thumb sm">☕</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Кофемашина DeLonghi</div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;">
+          <span class="chip prio-2">😊</span>
+          <span class="price">45 000 ₽</span>
+        </div>
+      </div>
+      <div style="color: var(--text-muted); font-size: 20px; padding: 0 4px;">›</div>
+    </div>
+
+    <div class="wishes-row">
+      <div class="thumb sm" style="background: rgba(107,127,212,0.15);">🕯</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Свечи Diptyque набор</div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;">
+          <span class="chip prio-1">🙂</span>
+          <span class="price">8 400 ₽</span>
+        </div>
+      </div>
+      <div style="color: var(--text-muted); font-size: 20px; padding: 0 4px;">›</div>
+    </div>
+
+    <div class="wishes-row">
+      <div class="thumb sm" style="background: rgba(52,211,153,0.12);">🎮</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Nintendo Switch OLED</div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;">
+          <span class="chip prio-2">😊</span>
+          <span class="price">27 900 ₽</span>
+        </div>
+      </div>
+      <div style="color: var(--text-muted); font-size: 20px; padding: 0 4px;">›</div>
+    </div>
+  </div>
+
+  <div class="sticky">
+    <button class="btn primary-gradient lg full"><span style="font-size: 18px;">+</span> Добавить желание</button>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB 3: RESERVATIONS (gift-giver) ═══════════════ -->
+<div class="phone">
+  <div class="phone-label">Home · Reservations</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+
+  <div style="padding: 0 16px;">
+    <div class="app-header">
+      <div class="avatar">D</div>
+      <div class="greeting">
+        <div class="hi">Мои брони</div>
+        <div class="name">5 активных · 2 секретных 🔒</div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="icon-btn accent" style="width: 36px; height: 36px; font-size: 16px;">🔍</div>
+        <div class="icon-btn" style="width: 36px; height: 36px; font-size: 17px;">⚙</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-bar tab-bar-in-home">
+    <div class="tab">Вишлисты</div>
+    <div class="tab">Желания</div>
+    <div class="tab active">Брони<span class="badge">5</span></div>
+  </div>
+
+  <div class="quick-filters">
+    <div class="qfilter active">Активные 5</div>
+    <div class="qfilter">💳 Куплено 2</div>
+    <div class="qfilter">🔒 Тайные 2</div>
+    <div class="qfilter">👥 Группой 1</div>
+    <div class="qfilter">📜 История</div>
+  </div>
+
+  <div class="content">
+    <!-- Active, smart reservation with TTL -->
+    <div class="res-card smart">
+      <div class="thumb sm">🎧</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">AirPods Pro 2 USB-C</div>
+        <div class="res-owner">
+          <div class="avatar sm" style="background: linear-gradient(135deg, #fbbf24, #f59e0b); width: 18px; height: 18px; font-size: 9px;">А</div>
+          <span>Анна · День рождения</span>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px;">
+          <span class="chip success" style="font-size: 10px;">⏱ через 5 дней</span>
+          <span class="chip accent" style="font-size: 10px;">📝 заметка</span>
+        </div>
+        <div class="ttl-bar"><div class="ttl-fill" style="width: 72%;"></div></div>
+      </div>
+      <div style="align-self: center; color: var(--text-muted); font-size: 20px;">›</div>
+    </div>
+
+    <!-- Secret reservation (PRO) -->
+    <div class="res-card secret">
+      <div class="thumb sm" style="background: rgba(124,106,255,0.18);">📚</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; gap: 6px; align-items: center;">
+          «Четвёртое крыло»
+          <span style="font-size: 12px;">🔒</span>
+        </div>
+        <div class="res-owner">
+          <div class="avatar sm" style="background: linear-gradient(135deg, #fbbf24, #f59e0b); width: 18px; height: 18px; font-size: 9px;">А</div>
+          <span>Анна · Тайная бронь</span>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px;">
+          <span class="chip accent" style="font-size: 10px;">🔒 владелец не знает</span>
+        </div>
+      </div>
+      <div style="align-self: center; color: var(--text-muted); font-size: 20px;">›</div>
+    </div>
+
+    <!-- Group gift -->
+    <div class="res-card">
+      <div class="thumb sm" style="background: rgba(240,78,110,0.12);">💍</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">iPad Pro 13"</div>
+        <div class="res-owner">
+          <div class="avatar sm a3" style="width: 18px; height: 18px; font-size: 9px;">К</div>
+          <span>Катя · Новый год</span>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px;">
+          <span class="chip" style="background: rgba(240,78,110,0.12); color: var(--prio-3); font-size: 10px;">👥 Скидываемся 3/5</span>
+          <span class="chip surface" style="font-size: 10px;">организатор</span>
+        </div>
+      </div>
+      <div style="align-self: center; color: var(--text-muted); font-size: 20px;">›</div>
+    </div>
+
+    <!-- Expiring soon warning -->
+    <div class="res-card smart" style="border-color: rgba(251,191,36,0.3);">
+      <div class="thumb sm warm">🕯</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Diptyque Baies</div>
+        <div class="res-owner">
+          <span>Мария · День рождения</span>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px;">
+          <span class="chip warning" style="font-size: 10px;">⚠️ истекает через 6ч</span>
+        </div>
+        <div class="ttl-bar"><div class="ttl-fill low" style="width: 18%;"></div></div>
+      </div>
+      <div style="align-self: center; color: var(--text-muted); font-size: 20px;">›</div>
+    </div>
+
+    <!-- Purchased -->
+    <div class="res-card" style="opacity: 0.7;">
+      <div class="thumb sm">🎨</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: line-through;">Акварельный набор</div>
+        <div class="res-owner">
+          <span>Саша · Просто так</span>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: 6px;">
+          <span class="chip success" style="font-size: 10px;">💳 куплено</span>
+          <span class="chip surface" style="font-size: 10px;">3 890 ₽</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Locked filters upsell (FREE user sees this instead of filters) -->
+    <div class="locked-tile" style="margin-top: 16px;">
+      <div class="lock-icon">📜</div>
+      <div class="lock-body">
+        <div class="lock-title">История броней</div>
+        <div class="lock-sub">Все твои подарки навсегда · PRO</div>
+      </div>
+      <div class="lock-cta">Unlock</div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ═══ Side note panel below phones ═══ -->
+<div style="max-width: 1200px; margin: 40px auto 0;">
+  <div class="side-note" style="max-width: none;">
+    <span class="tag">North Star — Home × 3 tabs</span>
+    <h3>Что покрывает эта сетка</h3>
+    <p>Три реальных таба с кодового <code>type HomeTab = 'wishlists' | 'wishes' | 'reservations'</code>. Каждый таб — отдельный mental mode, не разные слайсы одной сущности.</p>
+
+    <h4>Общий слой (все 3 таба)</h4>
+    <ul>
+      <li><b>Header:</b> аватар (тап → профиль, где настройки) + greeting с локальным контекстом + правый slot (контекстно: PRO+⚙ / ⋮ / 🔍)</li>
+      <li><b>⚙ Settings</b> — отдельная иконка, явно видна в header'е на Wishlists-табе. Альтернативно настройки реально доступны и через тап по аватару (профиль) — iOS/Instagram pattern.</li>
+      <li><b>Tab-bar:</b> pill с accent-fill на active, <b>counter-badge</b> как красный кружок top-right — нотификационная метафора, не inline-chip</li>
+      <li><b>Sticky CTA:</b> отражает контекст — «создать вишлист» / «добавить желание» / отсутствует (брони не создаёшь отсюда)</li>
+    </ul>
+
+    <h4>Wishlists tab (первый)</h4>
+    <ul>
+      <li>Current wishlist — accent-glow + синий dot справа вверху («это активный»)</li>
+      <li>Shared wishlist — overlap-аватарки (реальная реляционная ценность)</li>
+      <li>Limit indicator — inline locked-tile «3/3 на FREE · Unlock» — не agressive paywall, а мягкий context-ual upsell</li>
+      <li>Подписки — отдельная секция, с PRO-бейджами у showcase-профилей</li>
+    </ul>
+
+    <h4>Wishes tab (flat cross-wishlist — ВОТ ЧТО НЕ БЫЛО В V1)</h4>
+    <ul>
+      <li>Header переключается на «все мои желания · 25 штук» — интент глобального обзора</li>
+      <li>Sticky quick-filters: priority (🙂😊😍 с реальными counts), статус, бюджет</li>
+      <li>Группировка: «по приоритету» / «забронированы» / «остальное» — не flat, но с логичной иерархией</li>
+      <li>Compact row: thumb + title + priority chip + price + source — всё в одну линию</li>
+      <li>Shared-wish indicator: «🔗 в 2» на карточке</li>
+    </ul>
+
+    <h4>Reservations tab (gift-giver workflow)</h4>
+    <ul>
+      <li>Header: «5 активных · 2 секретных 🔒»</li>
+      <li>Quick-filters: активные / куплено / тайные / группой / история</li>
+      <li><b>Smart reservation:</b> TTL progress bar, countdown chip «через 5 дней»</li>
+      <li><b>Secret (PRO):</b> карточка с accent-gradient, 🔒-индикатор, «владелец не знает»</li>
+      <li><b>Group gift:</b> «👥 Скидываемся 3/5», роль «организатор»</li>
+      <li><b>Expiring warning:</b> амбер border + «⚠️ истекает через 6ч» + красно-оранжевый TTL bar</li>
+      <li><b>Purchased:</b> strike-through, opacity 0.7, 💳 chip, 3 890 ₽ как чек</li>
+      <li>История — locked-tile для FREE пользователей</li>
+    </ul>
+
+    <h4>Что лучше current prod</h4>
+    <ul>
+      <li>Все 3 таба — единый visual language. В current prod каждый таб слегка дрейфует.</li>
+      <li>State-chips унифицированы и читаются с одной секунды</li>
+      <li>Реальные upsell-tile вписаны в контент, не отдельной модалкой</li>
+      <li>Secret reservation визуально отличается от public (accent-gradient vs. success-soft)</li>
+      <li>Cross-wishlist Wishes-таб получает настоящую группировку с priority-секциями</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>

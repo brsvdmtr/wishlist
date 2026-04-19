@@ -1,0 +1,1816 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Smart Reservations — Макеты</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --blue: #60A5FA;
+    --blue-soft: rgba(96,165,250,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Rubik', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #111114;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(17,17,20,0.92); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border); padding: 12px 16px;
+  }
+  .nav-title { font-size: 14px; font-weight: 600; color: var(--text-sec); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .nav-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; flex-wrap: wrap; }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab {
+    flex-shrink: 0; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 500;
+    color: var(--text-sec); background: var(--surface); border: 1px solid var(--border);
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .nav-tab:hover { background: var(--surface-hover); }
+  .nav-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .section { display: none; max-width: 400px; margin: 0 auto; padding: 20px 16px 40px; }
+  .section.active { display: block; }
+  .section-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin: 24px 0 12px; }
+  .section-label:first-child { margin-top: 0; }
+  .desc-text {
+    font-size: 13px; color: var(--text-sec); line-height: 1.6; margin: 8px 0 16px;
+    padding: 12px 16px; background: var(--surface); border-radius: 12px; border-left: 3px solid var(--accent);
+  }
+
+  /* Phone frame */
+  .phone {
+    background: var(--bg); border-radius: 24px; border: 2px solid var(--border-light);
+    overflow: hidden; margin: 12px 0; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .phone-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 16px 12px; border-bottom: 1px solid var(--border);
+  }
+  .phone-header .back { font-size: 20px; color: var(--accent); cursor: pointer; }
+  .phone-header .title { font-size: 17px; font-weight: 600; }
+  .phone-body { padding: 12px 16px 20px; }
+
+  /* Settings components */
+  .settings-row {
+    display: flex; align-items: center; padding: 14px 0; gap: 12px;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .settings-row:active { opacity: 0.7; }
+  .settings-icon {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .settings-icon.accent { background: var(--accent-soft); }
+  .settings-icon.green { background: var(--green-soft); }
+  .settings-icon.orange { background: var(--orange-soft); }
+  .settings-icon.disabled { background: var(--surface); opacity: 0.4; }
+  .settings-label { flex: 1; min-width: 0; }
+  .settings-label-text { font-size: 15px; font-weight: 500; color: var(--text); line-height: 1.3; display: flex; align-items: center; gap: 6px; }
+  .settings-label-hint { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .settings-value { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .settings-chevron { font-size: 14px; color: var(--text-muted); font-weight: 300; }
+  .settings-divider { height: 1px; background: var(--border); margin-left: 40px; }
+
+  /* Toggle */
+  .toggle {
+    width: 50px; height: 28px; border-radius: 14px;
+    position: relative; cursor: pointer; transition: background 0.25s; flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); box-shadow: 0 0 12px var(--accent-glow), 0 0 4px rgba(124,106,255,0.15); }
+  .toggle.off { background: var(--surface); border: 1.5px solid var(--border-light); }
+  .toggle-knob {
+    width: 22px; height: 22px; border-radius: 50%; background: #fff;
+    position: absolute; top: 3px; transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .toggle.on .toggle-knob { left: 25px; }
+  .toggle.off .toggle-knob { left: 3px; }
+
+  /* Pill toggle group */
+  .pill-group {
+    display: flex; gap: 4px; background: var(--bg); border-radius: 10px; padding: 3px;
+  }
+  .pill {
+    flex: 1; padding: 8px 4px; border-radius: 8px; border: none;
+    font-size: 13px; font-weight: 600; text-align: center;
+    cursor: pointer; transition: all 0.15s;
+    font-family: inherit;
+  }
+  .pill.active { background: var(--accent); color: #fff; }
+  .pill.inactive { background: transparent; color: var(--text-muted); }
+
+  /* Badges */
+  .pro-badge {
+    font-size: 9px; font-weight: 700; color: #fff;
+    background: linear-gradient(135deg, #7C6AFF, #A78BFA);
+    padding: 2px 6px; border-radius: 4px; text-transform: uppercase;
+  }
+  .new-badge {
+    font-size: 9px; font-weight: 700; color: #fff;
+    background: linear-gradient(135deg, #34D399, #10B981);
+    padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .smart-badge {
+    font-size: 10px; font-weight: 600; color: var(--accent);
+    background: var(--accent-soft); padding: 3px 8px; border-radius: 6px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .status-badge {
+    font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 8px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .status-badge.reserved { background: var(--accent-soft); color: var(--accent); }
+  .status-badge.expiring { background: var(--orange-soft); color: var(--orange); }
+  .status-badge.released { background: var(--green-soft); color: var(--green); }
+  .status-badge.extended { background: var(--blue-soft); color: var(--blue); }
+
+  /* Buttons */
+  .btn-primary {
+    width: 100%; padding: 14px 24px; border: none; border-radius: 14px;
+    font-size: 15px; font-weight: 600; color: #fff; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), #6B5CE7);
+    font-family: inherit; transition: all 0.15s;
+  }
+  .btn-primary:active { opacity: 0.85; transform: scale(0.98); }
+  .btn-secondary {
+    width: 100%; padding: 12px 24px; border: 1.5px solid var(--border-light); border-radius: 14px;
+    font-size: 14px; font-weight: 500; color: var(--text-sec); cursor: pointer;
+    background: transparent; font-family: inherit; transition: all 0.15s;
+  }
+  .btn-secondary:active { opacity: 0.7; }
+  .btn-danger {
+    width: 100%; padding: 12px 24px; border: 1.5px solid var(--red-soft); border-radius: 14px;
+    font-size: 14px; font-weight: 500; color: var(--red); cursor: pointer;
+    background: var(--red-soft); font-family: inherit; transition: all 0.15s;
+  }
+  .btn-danger:active { opacity: 0.7; }
+  .btn-small {
+    padding: 8px 14px; border: none; border-radius: 10px;
+    font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
+  }
+  .btn-small:active { opacity: 0.7; }
+
+  /* Bottom sheet */
+  .sheet-overlay {
+    background: rgba(0,0,0,0.55); border-radius: 24px;
+    position: relative; overflow: hidden; margin: 12px 0;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 2px solid var(--border-light);
+  }
+  .sheet-bg {
+    background: var(--bg); padding: 16px; min-height: 300px;
+    opacity: 0.4;
+  }
+  .sheet {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: var(--surface); border-radius: 20px 20px 0 0;
+    padding: 8px 20px 24px;
+  }
+  .sheet-handle {
+    width: 40px; height: 4px; border-radius: 100px;
+    background: var(--text-muted); opacity: 0.3;
+    margin: 0 auto 16px;
+  }
+  .sheet-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .sheet-subtitle { font-size: 14px; color: var(--text-sec); line-height: 1.5; margin-bottom: 16px; }
+
+  /* Wish card */
+  .wish-card {
+    background: var(--card); border-radius: 16px; padding: 14px;
+    border: 1px solid var(--border); margin-bottom: 10px;
+  }
+  .wish-card-top { display: flex; gap: 12px; }
+  .wish-card-img {
+    width: 72px; height: 72px; border-radius: 12px; background: var(--surface);
+    display: flex; align-items: center; justify-content: center; font-size: 28px; flex-shrink: 0;
+    overflow: hidden;
+  }
+  .wish-card-info { flex: 1; min-width: 0; }
+  .wish-card-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; line-height: 1.3; }
+  .wish-card-price { font-size: 14px; color: var(--text-sec); margin-bottom: 6px; }
+  .wish-card-owner { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+
+  /* Timer block */
+  .timer-block {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    background: var(--bg); border-radius: 12px; margin-top: 10px;
+  }
+  .timer-icon { font-size: 18px; flex-shrink: 0; }
+  .timer-text { font-size: 13px; color: var(--text-sec); line-height: 1.4; flex: 1; }
+  .timer-text strong { color: var(--text); font-weight: 600; }
+  .timer-block.warning { border: 1px solid rgba(251,191,36,0.2); }
+  .timer-block.warning .timer-text { color: var(--orange); }
+  .timer-block.warning .timer-text strong { color: var(--orange); }
+
+  /* Extensions counter */
+  .ext-counter {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-muted); margin-top: 8px;
+  }
+  .ext-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .ext-dot.used { background: var(--accent); }
+  .ext-dot.available { background: var(--border-light); }
+
+  /* Actions row */
+  .actions-row {
+    display: flex; gap: 8px; margin-top: 10px;
+  }
+  .actions-row .btn-small { flex: 1; text-align: center; }
+
+  /* Notification card */
+  .notif-card {
+    background: var(--card); border-radius: 16px; padding: 14px 16px;
+    border: 1px solid var(--border); margin-bottom: 10px;
+  }
+  .notif-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  }
+  .notif-icon {
+    width: 36px; height: 36px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .notif-title { font-size: 14px; font-weight: 600; }
+  .notif-time { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .notif-body { font-size: 13px; color: var(--text-sec); line-height: 1.5; }
+
+  /* Paywall */
+  .paywall-hero {
+    text-align: center; padding: 8px 0 16px;
+  }
+  .paywall-icon {
+    width: 68px; height: 68px; border-radius: 22px; margin: 0 auto 16px;
+    display: flex; align-items: center; justify-content: center; font-size: 32px;
+    background: linear-gradient(145deg, rgba(124,106,255,0.22), rgba(124,106,255,0.08));
+    border: 1px solid rgba(124,106,255,0.18);
+  }
+  .paywall-title { font-size: 20px; font-weight: 800; }
+  .paywall-subtitle { font-size: 14px; color: var(--text-sec); margin-top: 8px; line-height: 1.5; }
+
+  .benefit-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 0;
+    border-top: 1px solid var(--border);
+  }
+  .benefit-row:first-child { border-top: none; }
+  .benefit-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .benefit-text { font-size: 14px; color: var(--text); line-height: 1.4; }
+
+  .plan-block {
+    border-radius: 14px; padding: 12px 14px; margin-bottom: 8px;
+  }
+  .plan-block.free { background: var(--bg); }
+  .plan-block.pro { background: var(--card); border: 1px solid rgba(124,106,255,0.3); }
+  .plan-block.addon { background: var(--card); border: 1px solid rgba(251,191,36,0.2); }
+  .plan-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.4px; margin-bottom: 8px;
+  }
+  .plan-feat {
+    font-size: 13px; color: var(--text-sec); padding: 3px 0;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .plan-feat .check { color: var(--green); font-weight: 600; }
+  .plan-feat .cross { color: var(--text-muted); }
+
+  .or-divider {
+    text-align: center; font-size: 12px; color: var(--text-muted);
+    margin: 12px 0; font-weight: 500;
+  }
+
+  /* Owner reservation row */
+  .owner-res-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: var(--bg); border-radius: 10px; margin-top: 8px;
+  }
+  .owner-res-icon { font-size: 16px; flex-shrink: 0; }
+  .owner-res-text { font-size: 12px; color: var(--text-sec); line-height: 1.4; flex: 1; }
+
+  /* Reservation list item */
+  .res-item {
+    background: var(--card); border-radius: 16px; padding: 14px;
+    border: 1px solid var(--border); margin-bottom: 10px;
+  }
+  .res-item-top { display: flex; gap: 12px; align-items: center; }
+  .res-item-img {
+    width: 52px; height: 52px; border-radius: 12px; background: var(--surface);
+    display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0;
+  }
+  .res-item-info { flex: 1; min-width: 0; }
+  .res-item-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .res-item-list { font-size: 12px; color: var(--text-muted); }
+
+  /* Progress bar */
+  .progress-bar {
+    height: 4px; background: var(--bg); border-radius: 2px; margin-top: 10px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 2px; transition: width 0.3s;
+  }
+
+  /* Feature table for settings */
+  .feature-table {
+    background: var(--bg); border-radius: 12px; padding: 12px; margin-top: 12px;
+  }
+  .feature-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; font-size: 13px;
+  }
+  .feature-row:not(:last-child) { border-bottom: 1px solid var(--border); }
+  .feature-label { color: var(--text-sec); }
+  .feature-val { color: var(--text); font-weight: 600; }
+
+  /* Telegram message simulation */
+  .tg-msg {
+    background: var(--card); border-radius: 16px 16px 16px 4px;
+    padding: 12px 14px; margin-bottom: 8px; max-width: 90%;
+  }
+  .tg-msg-bot { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+  .tg-msg-text { font-size: 14px; color: var(--text); line-height: 1.5; }
+  .tg-msg-btn {
+    display: block; text-align: center; padding: 10px;
+    background: var(--accent-soft); border-radius: 10px; margin-top: 8px;
+    font-size: 14px; font-weight: 600; color: var(--accent); cursor: pointer;
+  }
+  .tg-msg-btns { display: flex; gap: 6px; margin-top: 8px; }
+  .tg-msg-btns .tg-msg-btn { flex: 1; }
+
+  /* Contextual upsell banner */
+  .upsell-banner {
+    background: linear-gradient(135deg, rgba(124,106,255,0.12), rgba(124,106,255,0.06));
+    border: 1px solid rgba(124,106,255,0.2); border-radius: 14px;
+    padding: 14px 16px; margin: 12px 0;
+  }
+  .upsell-banner-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .upsell-banner-text { font-size: 12px; color: var(--text-sec); line-height: 1.5; margin-bottom: 10px; }
+  .upsell-banner-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title">Smart Reservations — Макеты</div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="show('s1')">⚙️ Настройки</div>
+    <div class="nav-tab" onclick="show('s2')">🎁 Бронирование</div>
+    <div class="nav-tab" onclick="show('s3')">📋 Карточки</div>
+    <div class="nav-tab" onclick="show('s4')">⏰ Напоминание</div>
+    <div class="nav-tab" onclick="show('s5')">🔓 Автоснятие</div>
+    <div class="nav-tab" onclick="show('s6')">👁 Владелец</div>
+    <div class="nav-tab" onclick="show('s7')">📦 Мои брони</div>
+    <div class="nav-tab" onclick="show('s8')">💎 Paywall</div>
+    <div class="nav-tab" onclick="show('s9')">📩 Уведомления TG</div>
+    <div class="nav-tab" onclick="show('s10')">🏪 Upsell точки</div>
+    <div class="nav-tab" onclick="show('s11')">🎓 Онбординг</div>
+  </div>
+</div>
+
+<!-- ======================= -->
+<!-- S1: НАСТРОЙКИ WISHLIST  -->
+<!-- ======================= -->
+<div class="section active" id="s1">
+  <div class="section-label">Настройки вишлиста — блок Smart Reservations</div>
+  <div class="desc-text">
+    Блок появляется в настройках вишлиста рядом с приватностью и комментариями. Доступен только при наличии PRO или покупке add-on на вишлист.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Настройки вишлиста</span>
+    </div>
+    <div class="phone-body">
+
+      <!-- Other settings above (collapsed) -->
+      <div style="padding: 10px 0 6px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Приватность</div>
+      </div>
+      <div class="settings-row" style="opacity: 0.5;">
+        <div class="settings-icon accent">👁</div>
+        <div class="settings-label">
+          <div class="settings-label-text">Видимость</div>
+        </div>
+        <div class="settings-value">
+          <span style="font-size: 14px; color: var(--text-muted);">По ссылке</span>
+          <span class="settings-chevron">›</span>
+        </div>
+      </div>
+      <div class="settings-divider"></div>
+
+      <!-- SMART RESERVATIONS SECTION -->
+      <div style="padding: 18px 0 6px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px;">
+          Умные брони
+          <span class="new-badge">NEW</span>
+        </div>
+      </div>
+
+      <!-- Toggle: enable smart reservations -->
+      <div class="settings-row">
+        <div class="settings-icon accent">⏱</div>
+        <div class="settings-label">
+          <div class="settings-label-text">Умные брони</div>
+          <div class="settings-label-hint">Автоснятие неподтверждённых броней</div>
+        </div>
+        <div class="toggle on">
+          <div class="toggle-knob"></div>
+        </div>
+      </div>
+      <div class="settings-divider"></div>
+
+      <!-- TTL preset -->
+      <div class="settings-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="settings-icon accent">📅</div>
+          <div class="settings-label">
+            <div class="settings-label-text">Срок брони</div>
+            <div class="settings-label-hint">Через сколько бронь снимется</div>
+          </div>
+        </div>
+        <div class="pill-group">
+          <div class="pill inactive">24ч</div>
+          <div class="pill inactive">48ч</div>
+          <div class="pill active">72ч</div>
+          <div class="pill inactive">7 дн.</div>
+        </div>
+      </div>
+      <div class="settings-divider"></div>
+
+      <!-- Allow extensions toggle -->
+      <div class="settings-row">
+        <div class="settings-icon accent">🔄</div>
+        <div class="settings-label">
+          <div class="settings-label-text">Разрешить продление</div>
+          <div class="settings-label-hint">Даритель сможет продлить бронь</div>
+        </div>
+        <div class="toggle on">
+          <div class="toggle-knob"></div>
+        </div>
+      </div>
+      <div class="settings-divider"></div>
+
+      <!-- Max extensions -->
+      <div class="settings-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="settings-icon accent">#</div>
+          <div class="settings-label">
+            <div class="settings-label-text">Максимум продлений</div>
+          </div>
+        </div>
+        <div class="pill-group">
+          <div class="pill inactive">1</div>
+          <div class="pill active">2</div>
+          <div class="pill inactive">3</div>
+        </div>
+      </div>
+
+      <!-- Info footer -->
+      <div style="margin-top: 16px; padding: 12px; background: var(--bg); border-radius: 12px;">
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+          💡 Изменения применяются только к новым бронированиям. Уже активные брони сохранят свои текущие настройки.
+        </div>
+      </div>
+
+      <button class="btn-primary" style="margin-top: 16px;">Сохранить</button>
+    </div>
+  </div>
+
+  <!-- Settings OFF state -->
+  <div class="section-label">Состояние: выключено</div>
+  <div class="desc-text">Когда умные брони выключены, остальные настройки скрыты.</div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Настройки вишлиста</span>
+    </div>
+    <div class="phone-body">
+      <div style="padding: 10px 0 6px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px;">
+          Умные брони
+          <span class="new-badge">NEW</span>
+        </div>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-icon" style="background: var(--surface);">⏱</div>
+        <div class="settings-label">
+          <div class="settings-label-text" style="color: var(--text-sec);">Умные брони</div>
+          <div class="settings-label-hint">Автоснятие неподтверждённых броней</div>
+        </div>
+        <div class="toggle off">
+          <div class="toggle-knob"></div>
+        </div>
+      </div>
+
+      <div style="margin-top: 8px; padding: 12px; background: var(--bg); border-radius: 12px;">
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+          Включи умные брони, чтобы бронирования не зависали. Бронь будет автоматически сниматься, если даритель не подтвердит намерение.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ -->
+<!-- S2: МОМЕНТ БРОНИРОВАНИЯ      -->
+<!-- ============================ -->
+<div class="section" id="s2">
+  <div class="section-label">Бронирование с умной бронью</div>
+  <div class="desc-text">
+    Когда даритель нажимает «Забронировать» на вишлисте с включёнными умными бронями, он видит confirmation sheet с информацией о сроке.
+  </div>
+
+  <!-- Step 1: Item card before reserve -->
+  <div class="section-label">Карточка до бронирования</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;">
+              <span class="status-badge" style="background: var(--green-soft); color: var(--green);">Доступно</span>
+              <span class="smart-badge">⏱ Умная бронь</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 12px;">
+          <button class="btn-primary">🎁 Забронировать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Confirmation sheet -->
+  <div class="section-label">Confirmation sheet после нажатия</div>
+  <div class="sheet-overlay">
+    <div class="sheet-bg">
+      <div class="wish-card" style="opacity: 0.5;">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Забронировать подарок?</div>
+      <div class="sheet-subtitle">
+        На этом вишлисте включены умные брони. Бронь будет активна <strong style="color: var(--text);">72 часа</strong>.
+      </div>
+
+      <div class="timer-block">
+        <span class="timer-icon">⏱</span>
+        <div class="timer-text">
+          Бронь активна до <strong>16 апреля, 18:00</strong><br>
+          <span style="font-size: 12px; color: var(--text-muted);">Можно продлить до 2 раз</span>
+        </div>
+      </div>
+
+      <div style="margin-top: 12px; padding: 10px 12px; background: var(--bg); border-radius: 12px;">
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+          💡 Напомним до истечения срока. Если бронь не продлить и не подтвердить, она снимется автоматически.
+        </div>
+      </div>
+
+      <button class="btn-primary" style="margin-top: 16px;">🎁 Забронировать</button>
+      <button class="btn-secondary" style="margin-top: 8px;">Отмена</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Success -->
+  <div class="section-label">Успешное бронирование — toast</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge reserved">✅ Забронировано тобой</span>
+            </div>
+          </div>
+        </div>
+        <div class="timer-block" style="margin-top: 10px;">
+          <span class="timer-icon">⏱</span>
+          <div class="timer-text">
+            До <strong>16 апреля, 18:00</strong> · осталось 2 дн. 23 ч.
+          </div>
+        </div>
+      </div>
+      <!-- Toast -->
+      <div style="position: relative; margin-top: 8px;">
+        <div style="background: var(--green); color: #111; font-size: 14px; font-weight: 600; text-align: center; padding: 12px; border-radius: 12px;">
+          ✓ Подарок забронирован на 72 часа
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =============================== -->
+<!-- S3: КАРТОЧКИ СТАТУСОВ (ДАРИТЕЛЬ) -->
+<!-- =============================== -->
+<div class="section" id="s3">
+  <div class="section-label">Карточки — статусы брони для дарителя</div>
+  <div class="desc-text">
+    Даритель видит полный статус своей брони: оставшееся время, число продлений, CTA для действий.
+  </div>
+
+  <!-- Active reservation -->
+  <div class="section-label">Active — бронь активна</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge reserved">✅ Забронировано тобой</span>
+            </div>
+          </div>
+        </div>
+        <div class="timer-block">
+          <span class="timer-icon">⏱</span>
+          <div class="timer-text">
+            До <strong>16 апреля, 18:00</strong> · осталось 2 дн. 12 ч.
+          </div>
+        </div>
+        <div class="ext-counter">
+          <span style="color: var(--text-sec);">Продления:</span>
+          <span class="ext-dot available"></span>
+          <span class="ext-dot available"></span>
+          <span style="color: var(--text-muted);">0 из 2 использовано</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 65%; background: var(--accent);"></div>
+        </div>
+        <div class="actions-row">
+          <button class="btn-small" style="background: var(--accent-soft); color: var(--accent);">Снять бронь</button>
+          <button class="btn-small" style="background: var(--green-soft); color: var(--green);">✓ Куплено</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expiring soon -->
+  <div class="section-label">Expiring Soon — бронь скоро истечёт</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card" style="border-color: rgba(251,191,36,0.2);">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge expiring">⚠️ Бронь истекает</span>
+            </div>
+          </div>
+        </div>
+        <div class="timer-block warning">
+          <span class="timer-icon">⚠️</span>
+          <div class="timer-text">
+            <strong>Осталось 5 часов</strong><br>
+            <span style="font-size: 12px;">До 16 апреля, 18:00</span>
+          </div>
+        </div>
+        <div class="ext-counter">
+          <span style="color: var(--text-sec);">Продления:</span>
+          <span class="ext-dot available"></span>
+          <span class="ext-dot available"></span>
+          <span style="color: var(--text-muted);">0 из 2 использовано</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 93%; background: var(--orange);"></div>
+        </div>
+        <div class="actions-row">
+          <button class="btn-small" style="background: var(--accent); color: #fff;">🔄 Продлить</button>
+          <button class="btn-small" style="background: var(--green-soft); color: var(--green);">✓ Куплено</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Extended -->
+  <div class="section-label">Extended — бронь продлена</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge extended">🔄 Бронь продлена</span>
+            </div>
+          </div>
+        </div>
+        <div class="timer-block">
+          <span class="timer-icon">⏱</span>
+          <div class="timer-text">
+            До <strong>19 апреля, 18:00</strong> · осталось 2 дн. 23 ч.
+          </div>
+        </div>
+        <div class="ext-counter">
+          <span style="color: var(--text-sec);">Продления:</span>
+          <span class="ext-dot used"></span>
+          <span class="ext-dot available"></span>
+          <span style="color: var(--text-muted);">1 из 2 использовано</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 35%; background: var(--blue);"></div>
+        </div>
+        <div class="actions-row">
+          <button class="btn-small" style="background: var(--accent-soft); color: var(--accent);">Снять бронь</button>
+          <button class="btn-small" style="background: var(--green-soft); color: var(--green);">✓ Куплено</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Last extension, expiring -->
+  <div class="section-label">Последнее продление, скоро истечёт</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card" style="border-color: rgba(251,191,36,0.2);">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge expiring">⚠️ Последняя бронь</span>
+            </div>
+          </div>
+        </div>
+        <div class="timer-block warning">
+          <span class="timer-icon">⚠️</span>
+          <div class="timer-text">
+            <strong>Осталось 8 часов</strong><br>
+            <span style="font-size: 12px;">Продления исчерпаны</span>
+          </div>
+        </div>
+        <div class="ext-counter">
+          <span style="color: var(--text-sec);">Продления:</span>
+          <span class="ext-dot used"></span>
+          <span class="ext-dot used"></span>
+          <span style="color: var(--orange);">2 из 2 использовано</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 89%; background: var(--orange);"></div>
+        </div>
+        <div class="actions-row">
+          <button class="btn-small" style="background: var(--green); color: #111;">✓ Отметить купленным</button>
+          <button class="btn-small" style="background: var(--accent-soft); color: var(--accent);">Снять бронь</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ -->
+<!-- S4: REMINDER BOTTOM SHEET    -->
+<!-- ============================ -->
+<div class="section" id="s4">
+  <div class="section-label">Напоминание — bottom sheet</div>
+  <div class="desc-text">
+    Когда даритель заходит в вишлист и его бронь скоро истекает, он видит bottom sheet с предложением действия. Также это содержание push/уведомления.
+  </div>
+
+  <!-- Reminder sheet -->
+  <div class="sheet-overlay">
+    <div class="sheet-bg" style="min-height: 280px;">
+      <div class="wish-card" style="opacity: 0.5;">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div style="text-align: center; margin-bottom: 12px;">
+        <div style="width: 56px; height: 56px; border-radius: 18px; background: var(--orange-soft); display: inline-flex; align-items: center; justify-content: center; font-size: 28px;">
+          ⏰
+        </div>
+      </div>
+      <div class="sheet-title" style="text-align: center;">Бронь скоро истечёт</div>
+      <div class="sheet-subtitle" style="text-align: center;">
+        Бронь на <strong style="color: var(--text);">Sony WH-1000XM5</strong> истекает через <strong style="color: var(--orange);">5 часов</strong>
+      </div>
+
+      <div class="timer-block warning" style="justify-content: center; margin-bottom: 16px;">
+        <span class="timer-icon">⏱</span>
+        <div class="timer-text" style="flex: none;">
+          До <strong>16 апреля, 18:00</strong>
+        </div>
+      </div>
+
+      <div style="font-size: 13px; color: var(--text-sec); text-align: center; margin-bottom: 16px; line-height: 1.5;">
+        Подтверди, что ты всё ещё покупаешь подарок, или продли бронь.
+      </div>
+
+      <button class="btn-primary">🔄 Подтвердить и продлить</button>
+      <button class="btn-secondary" style="margin-top: 8px;">Снять бронь</button>
+      <div style="text-align: center; margin-top: 10px;">
+        <span style="font-size: 12px; color: var(--text-muted); cursor: pointer;">Не сейчас</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- After extension -->
+  <div class="section-label">После продления — toast</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div style="background: var(--blue); color: #111; font-size: 14px; font-weight: 600; text-align: center; padding: 12px; border-radius: 12px;">
+        🔄 Бронь продлена до 19 апреля, 18:00
+      </div>
+    </div>
+  </div>
+
+  <!-- Extension limit reached -->
+  <div class="section-label">Лимит продлений исчерпан</div>
+  <div class="sheet-overlay">
+    <div class="sheet-bg" style="min-height: 240px; opacity: 0.3;"></div>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div style="text-align: center; margin-bottom: 12px;">
+        <div style="width: 56px; height: 56px; border-radius: 18px; background: var(--orange-soft); display: inline-flex; align-items: center; justify-content: center; font-size: 28px;">
+          ⚠️
+        </div>
+      </div>
+      <div class="sheet-title" style="text-align: center;">Лимит продлений исчерпан</div>
+      <div class="sheet-subtitle" style="text-align: center;">
+        Бронь на <strong style="color: var(--text);">Sony WH-1000XM5</strong> истекает через <strong style="color: var(--orange);">8 часов</strong> и не может быть продлена.
+      </div>
+
+      <div style="font-size: 13px; color: var(--text-sec); text-align: center; margin-bottom: 16px; line-height: 1.5;">
+        Если подарок уже куплен, отметь это. Если нет, бронь снимется автоматически, и желание снова станет доступно.
+      </div>
+
+      <button class="btn-primary" style="background: linear-gradient(135deg, var(--green), #10B981);">✓ Отметить купленным</button>
+      <button class="btn-secondary" style="margin-top: 8px;">Снять бронь</button>
+      <div style="text-align: center; margin-top: 10px;">
+        <span style="font-size: 12px; color: var(--text-muted);">Бронь истечёт 22 апреля в 18:00</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ -->
+<!-- S5: АВТОСНЯТИЕ               -->
+<!-- ============================ -->
+<div class="section" id="s5">
+  <div class="section-label">Автоснятие брони</div>
+  <div class="desc-text">
+    Когда TTL истёк и даритель не продлил / не подтвердил бронь, она снимается автоматически. Даритель получает уведомление.
+  </div>
+
+  <!-- Auto-released card -->
+  <div class="section-label">Карточка после автоснятия</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card" style="border-color: rgba(107,127,212,0.2);">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge" style="background: var(--surface); color: var(--text-muted);">⏱ Бронь истекла</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 10px; padding: 10px 12px; background: var(--bg); border-radius: 12px;">
+          <div style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+            Бронь автоматически снята 16 апреля в 18:00. Желание снова доступно для бронирования.
+          </div>
+        </div>
+        <div style="margin-top: 10px;">
+          <button class="btn-primary">🎁 Забронировать снова</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Item back to available (other gifters) -->
+  <div class="section-label">Для остальных — снова доступно</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge" style="background: var(--green-soft); color: var(--green);">Доступно</span>
+              <span class="smart-badge">⏱ Умная бронь</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 12px;">
+          <button class="btn-primary">🎁 Забронировать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ -->
+<!-- S6: ВИД ВЛАДЕЛЬЦА            -->
+<!-- ============================ -->
+<div class="section" id="s6">
+  <div class="section-label">Вид владельца вишлиста</div>
+  <div class="desc-text">
+    Владелец видит статус бронирования с информацией о умной брони: когда истекает, продлена ли. Анонимность дарителя сохраняется.
+  </div>
+
+  <!-- Owner sees active reservation -->
+  <div class="section-label">Активная бронь</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge reserved">Забронировано</span>
+            </div>
+          </div>
+        </div>
+        <div class="owner-res-row">
+          <span class="owner-res-icon">⏱</span>
+          <span class="owner-res-text">
+            Умная бронь · автоснятие <strong style="color: var(--text);">через 2 дня</strong>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Owner sees expiring soon -->
+  <div class="section-label">Бронь скоро истечёт</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card" style="border-color: rgba(251,191,36,0.15);">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge expiring">Бронь истекает</span>
+            </div>
+          </div>
+        </div>
+        <div class="owner-res-row" style="border: 1px solid rgba(251,191,36,0.15);">
+          <span class="owner-res-icon">⚠️</span>
+          <span class="owner-res-text" style="color: var(--orange);">
+            Автоснятие <strong>через 5 часов</strong>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Owner sees extended reservation -->
+  <div class="section-label">Продлённая бронь</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge reserved">Забронировано</span>
+              <span style="font-size: 10px; color: var(--blue); background: var(--blue-soft); padding: 2px 6px; border-radius: 4px;">продлена</span>
+            </div>
+          </div>
+        </div>
+        <div class="owner-res-row">
+          <span class="owner-res-icon">🔄</span>
+          <span class="owner-res-text">
+            Умная бронь · продлена 1 раз · автоснятие <strong style="color: var(--text);">через 2 дня</strong>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Owner sees auto-released -->
+  <div class="section-label">После автоснятия</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge" style="background: var(--green-soft); color: var(--green);">Доступно</span>
+            </div>
+          </div>
+        </div>
+        <div class="owner-res-row" style="background: var(--green-soft);">
+          <span class="owner-res-icon">✓</span>
+          <span class="owner-res-text" style="color: var(--green);">
+            Бронь автоматически снята · желание доступно
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature summary for owner -->
+  <div class="section-label">Сводка в настройках вишлиста</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div style="padding: 6px 0 8px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Умные брони</div>
+      </div>
+      <div class="feature-table">
+        <div class="feature-row">
+          <span class="feature-label">Статус</span>
+          <span class="feature-val" style="color: var(--green);">Включены</span>
+        </div>
+        <div class="feature-row">
+          <span class="feature-label">Срок брони</span>
+          <span class="feature-val">72 часа</span>
+        </div>
+        <div class="feature-row">
+          <span class="feature-label">Продление</span>
+          <span class="feature-val">До 2 раз</span>
+        </div>
+        <div class="feature-row">
+          <span class="feature-label">Активных броней</span>
+          <span class="feature-val">3</span>
+        </div>
+        <div class="feature-row">
+          <span class="feature-label">Автоснятий за месяц</span>
+          <span class="feature-val">1</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ -->
+<!-- S7: МОИ БРОНИРОВАНИЯ         -->
+<!-- ============================ -->
+<div class="section" id="s7">
+  <div class="section-label">Экран «Мои бронирования» с таймерами</div>
+  <div class="desc-text">
+    В разделе «Забронировано мной» каждая карточка показывает оставшееся время, если вишлист с умными бронями.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Забронировано мной</span>
+    </div>
+    <div class="phone-body">
+
+      <!-- Item 1: active smart reservation -->
+      <div class="res-item">
+        <div class="res-item-top">
+          <div class="res-item-img">🎧</div>
+          <div class="res-item-info">
+            <div class="res-item-name">Sony WH-1000XM5</div>
+            <div class="res-item-list">Вишлист Алёны</div>
+          </div>
+          <span class="status-badge reserved" style="font-size: 10px; padding: 3px 8px;">Активна</span>
+        </div>
+        <div class="timer-block" style="margin-top: 8px;">
+          <span class="timer-icon" style="font-size: 14px;">⏱</span>
+          <div class="timer-text" style="font-size: 12px;">
+            До <strong>16 апреля, 18:00</strong> · 2 дн. 12 ч.
+          </div>
+        </div>
+        <div class="progress-bar" style="margin-top: 6px;">
+          <div class="progress-fill" style="width: 65%; background: var(--accent);"></div>
+        </div>
+      </div>
+
+      <!-- Item 2: expiring -->
+      <div class="res-item" style="border-color: rgba(251,191,36,0.2);">
+        <div class="res-item-top">
+          <div class="res-item-img">📚</div>
+          <div class="res-item-info">
+            <div class="res-item-name">Атлас облаков</div>
+            <div class="res-item-list">Вишлист Макса</div>
+          </div>
+          <span class="status-badge expiring" style="font-size: 10px; padding: 3px 8px;">⚠️ 3 ч.</span>
+        </div>
+        <div class="timer-block warning" style="margin-top: 8px;">
+          <span class="timer-icon" style="font-size: 14px;">⚠️</span>
+          <div class="timer-text" style="font-size: 12px;">
+            <strong>Осталось 3 часа</strong> · 1 продление доступно
+          </div>
+        </div>
+        <div class="progress-bar" style="margin-top: 6px;">
+          <div class="progress-fill" style="width: 92%; background: var(--orange);"></div>
+        </div>
+        <div style="margin-top: 8px;">
+          <button class="btn-small" style="background: var(--accent); color: #fff; width: 100%; text-align: center;">🔄 Продлить</button>
+        </div>
+      </div>
+
+      <!-- Item 3: regular reservation (no smart) -->
+      <div class="res-item">
+        <div class="res-item-top">
+          <div class="res-item-img">🕹</div>
+          <div class="res-item-info">
+            <div class="res-item-name">DualSense Controller</div>
+            <div class="res-item-list">Вишлист Димы</div>
+          </div>
+          <span class="status-badge reserved" style="font-size: 10px; padding: 3px 8px;">Активна</span>
+        </div>
+        <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
+          Обычная бронь · бессрочно
+        </div>
+      </div>
+
+      <!-- Item 4: extended -->
+      <div class="res-item">
+        <div class="res-item-top">
+          <div class="res-item-img">🧴</div>
+          <div class="res-item-info">
+            <div class="res-item-name">Крем La Roche-Posay</div>
+            <div class="res-item-list">Вишлист Кати</div>
+          </div>
+          <span class="status-badge extended" style="font-size: 10px; padding: 3px 8px;">🔄 Продлена</span>
+        </div>
+        <div class="timer-block" style="margin-top: 8px;">
+          <span class="timer-icon" style="font-size: 14px;">⏱</span>
+          <div class="timer-text" style="font-size: 12px;">
+            До <strong>21 апреля, 10:00</strong> · 5 дн. 1 ч.
+          </div>
+        </div>
+        <div class="ext-counter" style="margin-top: 4px;">
+          <span class="ext-dot used"></span>
+          <span class="ext-dot available"></span>
+          <span style="font-size: 11px; color: var(--text-muted);">1/2 продлений</span>
+        </div>
+        <div class="progress-bar" style="margin-top: 6px;">
+          <div class="progress-fill" style="width: 30%; background: var(--blue);"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============================ -->
+<!-- S8: PAYWALL                  -->
+<!-- ============================ -->
+<div class="section" id="s8">
+  <div class="section-label">Paywall — Smart Reservations</div>
+  <div class="desc-text">
+    Paywall показывается, когда владелец пытается включить умные брони без PRO и без add-on. Продаём не таймер, а результат.
+  </div>
+
+  <div class="sheet-overlay">
+    <div class="sheet-bg" style="min-height: 240px; opacity: 0.3;"></div>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+
+      <div class="paywall-hero">
+        <div class="paywall-icon">⏱</div>
+        <div class="paywall-title">Умные брони</div>
+        <div class="paywall-subtitle">
+          Желания не будут зависать в чужих бронях. Бронь снимается сама, если даритель пропал.
+        </div>
+      </div>
+
+      <!-- How it works -->
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">Как это работает</div>
+
+        <!-- Step 1 -->
+        <div style="display: flex; gap: 12px; align-items: flex-start; padding: 10px 0;">
+          <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0;">1</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 2px;">Даритель бронирует подарок</div>
+            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">Запускается таймер — бронь активна заданное время (по умолчанию 72 часа)</div>
+          </div>
+        </div>
+        <div style="width: 2px; height: 12px; background: var(--border-light); margin-left: 15px;"></div>
+
+        <!-- Step 2 -->
+        <div style="display: flex; gap: 12px; align-items: flex-start; padding: 10px 0;">
+          <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--orange-soft); color: var(--orange); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0;">2</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 2px;">Напоминание перед истечением</div>
+            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">Даритель получает уведомление и может продлить бронь или подтвердить покупку</div>
+          </div>
+        </div>
+        <div style="width: 2px; height: 12px; background: var(--border-light); margin-left: 15px;"></div>
+
+        <!-- Step 3 -->
+        <div style="display: flex; gap: 12px; align-items: flex-start; padding: 10px 0;">
+          <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--green-soft); color: var(--green); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0;">3</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 2px;">Автоснятие, если тишина</div>
+            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">Если даритель не реагирует — бронь снимается, и желание снова доступно другим</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PRO option -->
+      <div class="plan-block pro">
+        <div class="plan-label" style="color: var(--accent);">PRO · 100 Stars/мес</div>
+        <div class="plan-feat"><span class="check">✓</span> Умные брони на всех вишлистах</div>
+        <div class="plan-feat"><span class="check">✓</span> Приватность, импорт, подсказки</div>
+        <div class="plan-feat"><span class="check">✓</span> Расширенные лимиты</div>
+      </div>
+
+      <button class="btn-primary" style="margin-top: 8px;">Подключить PRO</button>
+
+      <div class="or-divider">или</div>
+
+      <!-- Add-on option -->
+      <div class="plan-block addon">
+        <div class="plan-label" style="color: var(--orange);">Только этот вишлист · 15 Stars</div>
+        <div class="plan-feat"><span class="check" style="color: var(--orange);">✓</span> Умные брони навсегда</div>
+        <div class="plan-feat"><span class="check" style="color: var(--orange);">✓</span> На выбранный вишлист</div>
+      </div>
+
+      <button class="btn-secondary" style="margin-top: 8px; border-color: rgba(251,191,36,0.3); color: var(--orange);">
+        ⭐ Купить за 15 Stars
+      </button>
+
+      <div style="text-align: center; margin-top: 14px;">
+        <span style="font-size: 12px; color: var(--text-muted); cursor: pointer;">Не сейчас</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- After purchase — redirect to onboarding (tab 11) -->
+  <div class="section-label">После покупки</div>
+  <div class="desc-text">
+    После успешной оплаты пользователь попадает в онбординг-флоу (вкладка «Онбординг»), который объясняет как фича работает и предлагает настроить.
+  </div>
+</div>
+
+<!-- ================================= -->
+<!-- S9: TELEGRAM УВЕДОМЛЕНИЯ           -->
+<!-- ================================= -->
+<div class="section" id="s9">
+  <div class="section-label">Уведомления в Telegram боте</div>
+  <div class="desc-text">
+    Три ключевых уведомления: при бронировании, перед истечением, после автоснятия. Отправляются через Telegram Bot API.
+  </div>
+
+  <!-- Notification 1: Reservation created (to gifter) -->
+  <div class="section-label">Дарителю: бронь создана</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="title" style="font-size: 15px;">🤖 Wishlist Bot</span>
+    </div>
+    <div class="phone-body">
+      <div class="tg-msg">
+        <div class="tg-msg-bot">Wishlist Bot</div>
+        <div class="tg-msg-text">
+          ✅ <strong>Подарок забронирован!</strong><br><br>
+          🎧 Sony WH-1000XM5<br>
+          📋 Вишлист Алёны<br><br>
+          ⏱ Бронь активна <strong>72 часа</strong><br>
+          📅 До: <strong>16 апреля, 18:00</strong><br><br>
+          <span style="color: var(--text-sec);">Напомним за 24 часа до окончания. Если подарок куплен — отметь в приложении.</span>
+        </div>
+        <div class="tg-msg-btn">🎁 Открыть бронирование</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification 2: Reminder before expiry (to gifter) -->
+  <div class="section-label">Дарителю: напоминание</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="title" style="font-size: 15px;">🤖 Wishlist Bot</span>
+    </div>
+    <div class="phone-body">
+      <div class="tg-msg">
+        <div class="tg-msg-bot">Wishlist Bot</div>
+        <div class="tg-msg-text">
+          ⏰ <strong>Бронь скоро истечёт</strong><br><br>
+          🎧 Sony WH-1000XM5<br>
+          ⏱ Осталось: <strong>24 часа</strong><br><br>
+          <span style="color: var(--text-sec);">Подтверди, что всё ещё покупаешь подарок, или продли бронь.</span>
+        </div>
+        <div class="tg-msg-btns">
+          <div class="tg-msg-btn">🔄 Продлить</div>
+          <div class="tg-msg-btn" style="background: var(--red-soft); color: var(--red);">✕ Снять</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification 3: Auto-released (to gifter) -->
+  <div class="section-label">Дарителю: бронь снята</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="title" style="font-size: 15px;">🤖 Wishlist Bot</span>
+    </div>
+    <div class="phone-body">
+      <div class="tg-msg">
+        <div class="tg-msg-bot">Wishlist Bot</div>
+        <div class="tg-msg-text">
+          ⏱ <strong>Бронь автоматически снята</strong><br><br>
+          🎧 Sony WH-1000XM5<br>
+          📋 Вишлист Алёны<br><br>
+          <span style="color: var(--text-sec);">Срок бронирования истёк. Желание снова доступно для бронирования.</span>
+        </div>
+        <div class="tg-msg-btn">🎁 Забронировать снова</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification 4: Owner notification (quiet) -->
+  <div class="section-label">Владельцу: тихое системное событие</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="title" style="font-size: 15px;">🤖 Wishlist Bot</span>
+    </div>
+    <div class="phone-body">
+      <div class="tg-msg">
+        <div class="tg-msg-bot">Wishlist Bot</div>
+        <div class="tg-msg-text">
+          ℹ️ Бронь на <strong>Sony WH-1000XM5</strong> автоматически снята — срок истёк. Желание снова доступно.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================= -->
+<!-- S10: UPSELL ТОЧКИ                 -->
+<!-- ================================= -->
+<div class="section" id="s10">
+  <div class="section-label">Контекстные точки upsell</div>
+  <div class="desc-text">
+    Места, где пользователю предлагается подключить Smart Reservations. Показываются только тем, у кого фича не активна.
+  </div>
+
+  <!-- Upsell 1: In wishlist settings (owner) -->
+  <div class="section-label">В настройках вишлиста</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div style="padding: 6px 0 8px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px;">
+          Бронирования
+          <span class="new-badge">NEW</span>
+        </div>
+      </div>
+
+      <div class="upsell-banner">
+        <div class="upsell-banner-title">
+          ⏱ Умные брони
+        </div>
+        <div class="upsell-banner-text">
+          Избавь вишлист от зависших броней. Бронь снимается сама, если даритель пропал.
+        </div>
+        <div class="upsell-banner-btn">
+          Подключить →
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upsell 2: When owner sees a stuck reservation -->
+  <div class="section-label">Когда бронь зависла (владелец)</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-card-top">
+          <div class="wish-card-img">🎧</div>
+          <div class="wish-card-info">
+            <div class="wish-card-name">Sony WH-1000XM5</div>
+            <div class="wish-card-price">29 990 ₽</div>
+            <div style="margin-top: 4px;">
+              <span class="status-badge reserved">Забронировано</span>
+              <span style="font-size: 10px; color: var(--text-muted);">5 дней назад</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="upsell-banner" style="margin-top: 4px;">
+        <div class="upsell-banner-title" style="font-size: 13px;">
+          💡 Бронь зависла?
+        </div>
+        <div class="upsell-banner-text">
+          С умными бронями неподтверждённые резервирования снимаются автоматически.
+        </div>
+        <div class="upsell-banner-btn">
+          Подключить за 15 Stars →
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upsell 3: When gifter first reserves in list without smart reservations -->
+  <div class="section-label">При бронировании в списке без умных броней (подсказка владельцу)</div>
+  <div class="phone">
+    <div class="phone-body">
+      <!-- This is shown to the owner after someone reserves -->
+      <div class="tg-msg" style="max-width: 100%;">
+        <div class="tg-msg-bot">Wishlist Bot</div>
+        <div class="tg-msg-text">
+          🎁 Кто-то забронировал <strong>Sony WH-1000XM5</strong> из вишлиста «День рождения».<br><br>
+          <span style="color: var(--text-sec);">💡 Подключи <strong>умные брони</strong>, чтобы бронирования не зависали вечно.</span>
+        </div>
+        <div class="tg-msg-btn">⏱ Подключить Smart Reservations</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upsell 4: On important wishlist creation -->
+  <div class="section-label">При создании важного вишлиста</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div style="text-align: center; padding: 12px 0;">
+        <div style="font-size: 24px; margin-bottom: 8px;">🎂</div>
+        <div style="font-size: 17px; font-weight: 700; margin-bottom: 4px;">Вишлист создан!</div>
+        <div style="font-size: 14px; color: var(--text-sec); margin-bottom: 16px;">День рождения · 20 апреля</div>
+      </div>
+
+      <div class="upsell-banner">
+        <div class="upsell-banner-title" style="justify-content: center;">
+          ⏱ Подключить умные брони?
+        </div>
+        <div class="upsell-banner-text" style="text-align: center;">
+          Для подарков на день рождения особенно полезно: если кто-то забронирует и пропадёт, бронь снимется автоматически.
+        </div>
+        <div style="text-align: center;">
+          <div class="upsell-banner-btn">
+            Подключить →
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================= -->
+<!-- S11: ОНБОРДИНГ ПОСЛЕ ПОКУПКИ      -->
+<!-- ================================= -->
+<div class="section" id="s11">
+  <div class="section-label">Онбординг после покупки / подключения PRO</div>
+  <div class="desc-text">
+    Пошаговый walkthrough из 4 экранов. Показывается сразу после оплаты (add-on за 15 Stars или PRO). Формат — полноэкранный флоу с индикатором шагов и кнопкой «Далее».
+  </div>
+
+  <!-- Step 1: Welcome -->
+  <div class="section-label">Шаг 1 — Готово!</div>
+  <div class="phone">
+    <div class="phone-body" style="padding: 24px 20px;">
+      <!-- Progress dots -->
+      <div style="display: flex; justify-content: center; gap: 6px; margin-bottom: 28px;">
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent);"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--border-light);"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--border-light);"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--border-light);"></div>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="width: 80px; height: 80px; border-radius: 24px; background: linear-gradient(145deg, rgba(52,211,153,0.2), rgba(52,211,153,0.08)); border: 1px solid rgba(52,211,153,0.2); display: inline-flex; align-items: center; justify-content: center; font-size: 40px; margin-bottom: 16px;">
+          ✓
+        </div>
+        <div style="font-size: 22px; font-weight: 800; margin-bottom: 8px;">Умные брони подключены!</div>
+        <div style="font-size: 14px; color: var(--text-sec); line-height: 1.6;">
+          Теперь бронирования на вишлисте<br><strong style="color: var(--text);">«День рождения»</strong> управляются автоматически.
+        </div>
+      </div>
+
+      <!-- What changed summary -->
+      <div style="background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 24px;">
+        <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">Что включено</div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+          <span style="color: var(--green); font-size: 16px;">✓</span>
+          <span style="font-size: 14px; color: var(--text);">Автоснятие зависших броней</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border);">
+          <span style="color: var(--green); font-size: 16px;">✓</span>
+          <span style="font-size: 14px; color: var(--text);">Напоминания дарителям</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border);">
+          <span style="color: var(--green); font-size: 16px;">✓</span>
+          <span style="font-size: 14px; color: var(--text);">Продление и подтверждение брони</span>
+        </div>
+      </div>
+
+      <button class="btn-primary">Далее →</button>
+    </div>
+  </div>
+
+  <!-- Step 2: How the timer works -->
+  <div class="section-label">Шаг 2 — Как работает таймер</div>
+  <div class="phone">
+    <div class="phone-body" style="padding: 24px 20px;">
+      <!-- Progress dots -->
+      <div style="display: flex; justify-content: center; gap: 6px; margin-bottom: 28px;">
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent); opacity: 0.4;"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent);"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--border-light);"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--border-light);"></div>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 36px; margin-bottom: 12px;">⏱</div>
+        <div style="font-size: 20px; font-weight: 800; margin-bottom: 8px;">Бронь с таймером</div>
+        <div style="font-size: 14px; color: var(--text-sec); line-height: 1.6;">
+          Когда кто-то бронирует подарок, запускается обратный отсчёт.
+        </div>
+      </div>
+
+      <!-- Visual demo -->
+      <div style="background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 16px;">
+        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
+          <div style="width: 44px; height: 44px; border-radius: 12px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 22px;">🎧</div>
+          <div style="flex: 1;">
+            <div style="font-size: 14px; font-weight: 600;">Sony WH-1000XM5</div>
+            <div style="font-size: 12px; color: var(--accent); margin-top: 2px;">✅ Забронировано</div>
+          </div>
+        </div>
+        <div class="timer-block">
+          <span class="timer-icon">⏱</span>
+          <div class="timer-text">
+            До <strong>16 апреля, 18:00</strong> · 2 дн. 23 ч.
+          </div>
+        </div>
+        <div class="progress-bar" style="margin-top: 8px;">
+          <div class="progress-fill" style="width: 40%; background: var(--accent);"></div>
+        </div>
+      </div>
+
+      <div style="padding: 12px; background: var(--bg); border-radius: 12px; margin-bottom: 24px;">
+        <div style="font-size: 13px; color: var(--text-sec); line-height: 1.6; text-align: center;">
+          Ты выбираешь срок: <strong style="color: var(--text);">24ч</strong>, <strong style="color: var(--text);">48ч</strong>, <strong style="color: var(--text);">72ч</strong> или <strong style="color: var(--text);">7 дней</strong>.<br>Даритель видит, сколько осталось.
+        </div>
+      </div>
+
+      <button class="btn-primary">Далее →</button>
+      <div style="text-align: center; margin-top: 8px;">
+        <span style="font-size: 12px; color: var(--text-muted); cursor: pointer;">Пропустить</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: Reminders & Extensions -->
+  <div class="section-label">Шаг 3 — Напоминания и продление</div>
+  <div class="phone">
+    <div class="phone-body" style="padding: 24px 20px;">
+      <!-- Progress dots -->
+      <div style="display: flex; justify-content: center; gap: 6px; margin-bottom: 28px;">
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent); opacity: 0.4;"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent); opacity: 0.4;"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent);"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--border-light);"></div>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 36px; margin-bottom: 12px;">🔔</div>
+        <div style="font-size: 20px; font-weight: 800; margin-bottom: 8px;">Без сюрпризов</div>
+        <div style="font-size: 14px; color: var(--text-sec); line-height: 1.6;">
+          Бронь не слетает молча. Даритель всегда предупреждён.
+        </div>
+      </div>
+
+      <!-- Timeline visual -->
+      <div style="background: var(--card); border-radius: 16px; padding: 16px 16px 12px; margin-bottom: 16px;">
+
+        <!-- Event 1: reserved -->
+        <div style="display: flex; gap: 12px; align-items: flex-start;">
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex-shrink: 0;"></div>
+            <div style="width: 2px; height: 32px; background: var(--border-light);"></div>
+          </div>
+          <div style="padding-bottom: 12px;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--text);">Бронь создана</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Даритель получает подтверждение с датой истечения</div>
+          </div>
+        </div>
+
+        <!-- Event 2: reminder -->
+        <div style="display: flex; gap: 12px; align-items: flex-start;">
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: var(--orange); flex-shrink: 0;"></div>
+            <div style="width: 2px; height: 32px; background: var(--border-light);"></div>
+          </div>
+          <div style="padding-bottom: 12px;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--orange);">Напоминание</div>
+            <div style="font-size: 11px; color: var(--text-muted);">За 24ч до истечения — можно продлить или подтвердить</div>
+          </div>
+        </div>
+
+        <!-- Event 3: extend or release -->
+        <div style="display: flex; gap: 12px; align-items: flex-start;">
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: var(--green); flex-shrink: 0;"></div>
+          </div>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--green);">Продлить или отпустить</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Даритель решает сам, а не пропадает молча</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="padding: 12px; background: var(--bg); border-radius: 12px; margin-bottom: 24px;">
+        <div style="font-size: 13px; color: var(--text-sec); line-height: 1.6; text-align: center;">
+          Продление доступно до <strong style="color: var(--text);">2 раз</strong> — достаточно, чтобы успеть, но бронь не зависнет навсегда.
+        </div>
+      </div>
+
+      <button class="btn-primary">Далее →</button>
+      <div style="text-align: center; margin-top: 8px;">
+        <span style="font-size: 12px; color: var(--text-muted); cursor: pointer;">Пропустить</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4: Auto-release + CTA -->
+  <div class="section-label">Шаг 4 — Автоснятие и настройка</div>
+  <div class="phone">
+    <div class="phone-body" style="padding: 24px 20px;">
+      <!-- Progress dots -->
+      <div style="display: flex; justify-content: center; gap: 6px; margin-bottom: 28px;">
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent); opacity: 0.4;"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent); opacity: 0.4;"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent); opacity: 0.4;"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent);"></div>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 36px; margin-bottom: 12px;">🧹</div>
+        <div style="font-size: 20px; font-weight: 800; margin-bottom: 8px;">Порядок без усилий</div>
+        <div style="font-size: 14px; color: var(--text-sec); line-height: 1.6;">
+          Если даритель не реагирует — бронь снимается автоматически. Желание возвращается в список.
+        </div>
+      </div>
+
+      <!-- Before/After visual -->
+      <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+        <!-- Before -->
+        <div style="flex: 1; background: var(--red-soft); border-radius: 14px; padding: 14px 12px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--red); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 8px;">Было</div>
+          <div style="font-size: 22px; margin-bottom: 6px;">😰</div>
+          <div style="font-size: 12px; color: var(--text-sec); line-height: 1.4;">Бронь зависла, подарок заблокирован, непонятно что делать</div>
+        </div>
+        <!-- After -->
+        <div style="flex: 1; background: var(--green-soft); border-radius: 14px; padding: 14px 12px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 8px;">Стало</div>
+          <div style="font-size: 22px; margin-bottom: 6px;">😌</div>
+          <div style="font-size: 12px; color: var(--text-sec); line-height: 1.4;">Бронь снялась сама, желание снова доступно, все довольны</div>
+        </div>
+      </div>
+
+      <!-- Default settings preview -->
+      <div style="background: var(--card); border-radius: 14px; padding: 14px; margin-bottom: 24px;">
+        <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">Настройки по умолчанию</div>
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;">
+          <span style="color: var(--text-sec);">Срок брони</span>
+          <span style="color: var(--text); font-weight: 600;">72 часа</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-top: 1px solid var(--border);">
+          <span style="color: var(--text-sec);">Продление</span>
+          <span style="color: var(--text); font-weight: 600;">До 2 раз</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-top: 1px solid var(--border);">
+          <span style="color: var(--text-sec);">Напоминание</span>
+          <span style="color: var(--text); font-weight: 600;">За 24 часа</span>
+        </div>
+      </div>
+
+      <button class="btn-primary">⚙️ Настроить под себя</button>
+      <button class="btn-secondary" style="margin-top: 8px;">Оставить по умолчанию</button>
+    </div>
+  </div>
+
+  <!-- PRO onboarding variant -->
+  <div class="section-label">Вариант: онбординг через PRO (все вишлисты)</div>
+  <div class="desc-text">
+    Если пользователь подключил PRO (а не add-on на один вишлист), первый экран отличается — акцент на том, что фича работает на всех вишлистах.
+  </div>
+
+  <div class="phone">
+    <div class="phone-body" style="padding: 24px 20px;">
+      <!-- Progress dots -->
+      <div style="display: flex; justify-content: center; gap: 6px; margin-bottom: 28px;">
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--accent);"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--border-light);"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--border-light);"></div>
+        <div style="width: 20px; height: 4px; border-radius: 2px; background: var(--border-light);"></div>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="width: 80px; height: 80px; border-radius: 24px; background: linear-gradient(145deg, rgba(124,106,255,0.2), rgba(124,106,255,0.08)); border: 1px solid rgba(124,106,255,0.2); display: inline-flex; align-items: center; justify-content: center; font-size: 40px; margin-bottom: 16px;">
+          👑
+        </div>
+        <div style="font-size: 22px; font-weight: 800; margin-bottom: 8px;">PRO подключён!</div>
+        <div style="font-size: 14px; color: var(--text-sec); line-height: 1.6;">
+          Умные брони доступны на <strong style="color: var(--text);">всех твоих вишлистах</strong>. Включи на нужных в настройках.
+        </div>
+      </div>
+
+      <!-- Wishlists to enable -->
+      <div style="background: var(--card); border-radius: 16px; padding: 14px; margin-bottom: 24px;">
+        <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">Твои вишлисты</div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 0;">
+          <span style="font-size: 18px;">🎂</span>
+          <span style="flex: 1; font-size: 14px; font-weight: 500;">День рождения</span>
+          <div class="toggle on" style="width: 42px; height: 24px; border-radius: 12px;">
+            <div class="toggle-knob" style="width: 18px; height: 18px; border-radius: 9px; top: 3px; left: 21px;"></div>
+          </div>
+        </div>
+        <div style="border-top: 1px solid var(--border);"></div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 0;">
+          <span style="font-size: 18px;">🎄</span>
+          <span style="flex: 1; font-size: 14px; font-weight: 500;">Новый год</span>
+          <div class="toggle off" style="width: 42px; height: 24px; border-radius: 12px;">
+            <div class="toggle-knob" style="width: 18px; height: 18px; border-radius: 9px; top: 3px; left: 3px;"></div>
+          </div>
+        </div>
+        <div style="border-top: 1px solid var(--border);"></div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 0;">
+          <span style="font-size: 18px;">💡</span>
+          <span style="flex: 1; font-size: 14px; font-weight: 500;">Хотелки</span>
+          <div class="toggle off" style="width: 42px; height: 24px; border-radius: 12px;">
+            <div class="toggle-knob" style="width: 18px; height: 18px; border-radius: 9px; top: 3px; left: 3px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-primary">Далее →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo(0, 0);
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WishBoard — Reservations PRO · North Star v2</title>
+<style>
+:root{--bg:#1B1B1F;--surface:#26262C;--card:#2F2F38;--accent:#7C6AFF;--accent-soft:rgba(124,106,255,0.12);--accent-light:#A78BFA;--accent-deep:#5B4BD6;--success:#34D399;--success-soft:rgba(52,211,153,0.12);--warning:#FBBF24;--warning-soft:rgba(251,191,36,0.12);--danger:#F87171;--danger-soft:rgba(248,113,113,0.12);--prio-3:#F04E6E;--text:#F4F4F6;--text-secondary:#9CA3AF;--text-muted:#6B7280;--border:rgba(255,255,255,0.06);--border-light:rgba(255,255,255,0.10);--gradient-accent:linear-gradient(135deg,#7C6AFF 0%,#9B8AFF 100%);--gradient-fade-bg:linear-gradient(to top,#1B1B1F 65%,transparent);--r-sm:6px;--r-md:10px;--r-lg:12px;--r-xl:14px;--r-xxl:16px;--r-xxxl:20px;--r-pill:100px;--sh-elevated:0 2px 12px rgba(0,0,0,0.18);--sh-deep-max:0 8px 40px rgba(0,0,0,0.40);--sh-glow-cta:0 8px 24px rgba(124,106,255,0.40);--font-sans:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-sans);background:#0c0c0e;color:var(--text);min-height:100vh;padding:40px 20px;line-height:1.4}
+.page-title{text-align:center;color:var(--text);font-size:20px;font-weight:700;margin:0 auto 8px;letter-spacing:-0.01em}
+.page-subtitle{text-align:center;color:var(--text-secondary);font-size:14px;margin:0 auto 32px;max-width:720px}
+.phones{display:flex;flex-wrap:wrap;gap:32px;justify-content:center;align-items:flex-start}
+.phone{width:375px;min-height:812px;background:var(--bg);border-radius:44px;position:relative;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.6),0 0 0 10px #1a1a1c,0 0 0 12px #0a0a0b;flex-shrink:0}
+.phone.tall{min-height:900px}
+.status-bar{height:48px;padding:16px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;font-size:14px;font-weight:600}
+.phone-label{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-size:10px;padding:4px 10px;border-radius:var(--r-pill);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;z-index:10;backdrop-filter:blur(8px);white-space:nowrap}
+.side-note{max-width:none;color:var(--text-secondary);font-size:13px;line-height:1.6}
+.side-note .tag{display:inline-block;font-size:10px;padding:3px 8px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-light);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px}
+.side-note h3{color:var(--text);font-size:16px;margin:0 0 12px;letter-spacing:-0.01em}
+.side-note h4{color:var(--accent-light);font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700}
+.side-note p{margin:0 0 10px}
+.side-note ul{margin:0 0 14px;padding-left:18px}
+.side-note li{margin-bottom:4px}
+.side-note b{color:var(--text);font-weight:600}
+.screen-header{height:52px;padding:6px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hdr-btn{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.04);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text);font-size:18px;cursor:pointer;flex-shrink:0}
+.hdr-title{flex:1;text-align:center;font-size:15px;font-weight:700;color:var(--text);letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.content{padding:0 16px 140px}
+.btn{border:none;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:transform 0.15s ease;letter-spacing:-0.01em;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:var(--r-xl);min-height:44px}
+.btn:active{transform:scale(0.98)}
+.btn.full{width:100%}
+.btn.lg{min-height:52px;font-size:16px;padding:16px 24px}
+.btn.primary{background:var(--accent);color:#fff;box-shadow:var(--sh-elevated)}
+.btn.primary-gradient{background:var(--gradient-accent);color:#fff;box-shadow:var(--sh-glow-cta),inset 0 1px 0 rgba(255,255,255,0.2)}
+.btn.ghost{background:transparent;color:var(--text-muted);box-shadow:none}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:var(--r-sm);font-size:11px;font-weight:700;white-space:nowrap}
+.chip.accent{background:var(--accent-soft);color:var(--accent)}
+.chip.success{background:var(--success-soft);color:var(--success)}
+.chip.warning{background:var(--warning-soft);color:var(--warning)}
+.chip.surface{background:var(--surface);color:var(--text-secondary)}
+.thumb{width:52px;height:52px;border-radius:var(--r-xl);background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+.thumb.warm{background:var(--warning-soft)}
+.thumb.sm{width:44px;height:44px;font-size:20px;border-radius:var(--r-md)}
+.sticky{position:absolute;bottom:0;left:0;right:0;padding:24px 16px 28px;background:var(--gradient-fade-bg);pointer-events:none;display:flex;flex-direction:column;gap:10px}
+.sticky>*{pointer-events:auto}
+</style>
+<style>
+  .res-header {
+    padding: 4px 16px 14px;
+  }
+  .res-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .rs-tile {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .rs-tile.active { border-color: rgba(52,211,153,0.25); background: linear-gradient(135deg, var(--card), rgba(52,211,153,0.04)); }
+  .rs-tile.secret { border-color: rgba(124,106,255,0.3); background: linear-gradient(135deg, var(--card), rgba(124,106,255,0.04)); }
+  .rs-tile .n { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+  .rs-tile.active .n { color: var(--success); }
+  .rs-tile.secret .n { color: var(--accent); }
+  .rs-tile .l { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; }
+
+  .filters-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .filters-row::-webkit-scrollbar { display: none; }
+  .flt {
+    flex-shrink: 0;
+    padding: 7px 12px;
+    border-radius: var(--r-pill);
+    background: var(--card);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .flt.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: rgba(124,106,255,0.3);
+  }
+
+  .sub-tabs {
+    display: flex;
+    gap: 24px;
+    padding: 0 4px 12px;
+    border-bottom: 1px solid var(--border);
+    margin: 0 16px 16px;
+  }
+  .sub-tab {
+    padding: 4px 0 10px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-muted);
+    cursor: pointer;
+    position: relative;
+    letter-spacing: -0.01em;
+  }
+  .sub-tab.active { color: var(--text); }
+  .sub-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  .r-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 12px;
+    position: relative;
+  }
+  .r-card.smart { border-color: rgba(52,211,153,0.2); }
+  .r-card.expiring {
+    border-color: rgba(251,191,36,0.4);
+    background: linear-gradient(135deg, var(--card), rgba(251,191,36,0.04));
+  }
+  .r-card.group { border-color: rgba(240,78,110,0.25); }
+  .r-card.secret {
+    background: linear-gradient(135deg, var(--card), rgba(124,106,255,0.06));
+    border-color: rgba(124,106,255,0.3);
+  }
+  .r-card.done { opacity: 0.65; }
+
+  .r-thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    flex-shrink: 0;
+  }
+  .r-body { flex: 1; min-width: 0; }
+  .r-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .r-owner {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .r-owner .avatar-tiny {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    flex-shrink: 0;
+  }
+  .r-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .r-note {
+    font-size: 11px;
+    color: var(--accent-light);
+    background: rgba(124,106,255,0.08);
+    padding: 5px 8px;
+    border-radius: var(--r-sm);
+    font-style: italic;
+    margin-top: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  .r-ttl-bar {
+    height: 3px;
+    background: rgba(52,211,153,0.15);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .r-ttl-fill {
+    height: 100%;
+    background: var(--success);
+    border-radius: 2px;
+  }
+  .r-ttl-fill.low { background: var(--warning); }
+
+  /* History items */
+  .h-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .h-item:last-child { border-bottom: none; }
+  .h-thumb {
+    width: 36px; height: 36px;
+    border-radius: var(--r-md);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .h-body { flex: 1; min-width: 0; }
+  .h-title {
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .h-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* Detail (sheet preview) */
+  .sheet-preview {
+    background: var(--surface);
+    border-radius: var(--r-xxxl) var(--r-xxxl) 0 0;
+    padding: 24px 20px 28px;
+    margin-top: auto;
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    box-shadow: var(--sh-deep-max);
+  }
+  .sheet-handle {
+    width: 40px; height: 4px; border-radius: 100px;
+    background: var(--text-muted);
+    opacity: 0.3;
+    margin: 0 auto 16px;
+  }
+  .sheet-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin: 0 0 14px;
+    letter-spacing: -0.01em;
+  }
+  .sheet-item-row {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: var(--card);
+    border-radius: var(--r-lg);
+    margin-bottom: 14px;
+  }
+  .sheet-item-row .si-thumb {
+    width: 48px; height: 48px;
+    border-radius: var(--r-md);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .sheet-item-row .si-body { flex: 1; min-width: 0; }
+  .sheet-item-row .si-title { font-size: 13px; font-weight: 700; }
+  .sheet-item-row .si-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .ttl-control {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .ttl-control-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .ttl-header-title { font-size: 13px; font-weight: 700; }
+  .ttl-countdown { font-size: 12px; color: var(--success); font-weight: 700; }
+  .extend-btn {
+    padding: 6px 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: none;
+    border-radius: var(--r-sm);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .note-editor {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .note-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .note-text {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .check-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    margin-bottom: 12px;
+    cursor: pointer;
+  }
+  .check-box {
+    width: 22px; height: 22px; border-radius: 6px;
+    background: var(--success);
+    display: flex; align-items: center; justify-content: center;
+    color: #000; font-weight: 800; font-size: 14px;
+  }
+  .check-label { flex: 1; font-size: 13px; font-weight: 600; }
+  .check-sub { font-size: 11px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Reservations PRO · North Star v2</h1>
+<p class="page-subtitle">Уникальный WishBoard-surface: подаривающий, не владелец. 6 PRO-фич (TTL / note / reminders / purchase / filter / history) работают здесь. Слева — active tab, справа — history + detail-sheet.</p>
+
+<div class="phones">
+
+<!-- Phone 1: Active reservations, expanded filters -->
+<div class="phone tall">
+  <div class="phone-label">Reservations · Active</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+
+  <div class="screen-header">
+    <div class="hdr-btn">‹</div>
+    <div class="hdr-title">Мои брони</div>
+    <div class="hdr-btn">⚙</div>
+  </div>
+
+  <div class="res-header">
+    <div class="res-summary">
+      <div class="rs-tile active">
+        <div class="n">5</div>
+        <div class="l">активных</div>
+      </div>
+      <div class="rs-tile secret">
+        <div class="n">2</div>
+        <div class="l">тайных 🔒</div>
+      </div>
+      <div class="rs-tile">
+        <div class="n">12</div>
+        <div class="l">в истории</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sub-tabs">
+    <div class="sub-tab active">Активные <span style="font-size: 11px; color: var(--text-muted); font-weight: 600; margin-left: 4px;">5</span></div>
+    <div class="sub-tab">История <span style="font-size: 11px; color: var(--text-muted); font-weight: 600; margin-left: 4px;">12</span></div>
+  </div>
+
+  <div style="padding: 0 16px;">
+    <div class="filters-row">
+      <div class="flt active">Все 5</div>
+      <div class="flt">💳 Не куплено <span style="color: var(--warning); margin-left: 4px;">3</span></div>
+      <div class="flt">✓ Куплено <span style="color: var(--success); margin-left: 4px;">2</span></div>
+      <div class="flt">💬 С комментариями</div>
+      <div class="flt">🔒 Тайные 2</div>
+      <div class="flt">👥 Группой 1</div>
+    </div>
+  </div>
+
+  <div class="content" style="padding-bottom: 40px;">
+
+    <!-- Active smart with note -->
+    <div class="r-card smart">
+      <div class="r-thumb">🎧</div>
+      <div class="r-body">
+        <div class="r-title">AirPods Pro 2 USB-C</div>
+        <div class="r-owner">
+          <div class="avatar-tiny">А</div>
+          <span>Анна · День рождения · 28 апреля</span>
+        </div>
+        <div class="r-note">📝 «Белый, обязательно с USB-C. Проверил на re:Store — есть за 24 990»</div>
+        <div class="r-row">
+          <span class="chip success" style="font-size: 10px;">⏱ через 5д 12ч</span>
+          <span class="chip accent" style="font-size: 10px;">🔔 напомнит за сутки</span>
+        </div>
+        <div class="r-ttl-bar"><div class="r-ttl-fill" style="width: 78%;"></div></div>
+      </div>
+    </div>
+
+    <!-- Secret -->
+    <div class="r-card secret">
+      <div class="r-thumb" style="background: rgba(124,106,255,0.15);">💄</div>
+      <div class="r-body">
+        <div class="r-title" style="display: flex; gap: 6px; align-items: center;">Chanel Chance <span style="font-size: 12px;">🔒</span></div>
+        <div class="r-owner">
+          <div class="avatar-tiny">А</div>
+          <span>Анна · тайная бронь</span>
+        </div>
+        <div class="r-row">
+          <span class="chip accent" style="font-size: 10px;">🔒 владелец не знает</span>
+          <span class="chip surface" style="font-size: 10px;">9 800 ₽</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Group gift -->
+    <div class="r-card group">
+      <div class="r-thumb" style="background: rgba(240,78,110,0.12);">💍</div>
+      <div class="r-body">
+        <div class="r-title">iPad Pro 13"</div>
+        <div class="r-owner">
+          <div class="avatar-tiny" style="background: linear-gradient(135deg, #34d399, #10b981);">К</div>
+          <span>Катя · Новый год</span>
+        </div>
+        <div class="r-row">
+          <span class="chip" style="background: rgba(240,78,110,0.12); color: var(--prio-3); font-size: 10px;">👥 3 из 5 скинулись</span>
+          <span class="chip surface" style="font-size: 10px;">организатор</span>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">78 000 ₽ из 129 990 ₽</div>
+      </div>
+    </div>
+
+    <!-- Expiring warning -->
+    <div class="r-card expiring">
+      <div class="r-thumb warm">🕯</div>
+      <div class="r-body">
+        <div class="r-title">Diptyque Baies</div>
+        <div class="r-owner">
+          <span>Мария · День рождения</span>
+        </div>
+        <div class="r-row">
+          <span class="chip warning" style="font-size: 10px;">⚠️ истекает через 6ч</span>
+          <button class="extend-btn">+ Продлить</button>
+        </div>
+        <div class="r-ttl-bar"><div class="r-ttl-fill low" style="width: 15%;"></div></div>
+      </div>
+    </div>
+
+    <!-- Purchased -->
+    <div class="r-card done">
+      <div class="r-thumb">🎨</div>
+      <div class="r-body">
+        <div class="r-title" style="text-decoration: line-through;">Акварельный набор</div>
+        <div class="r-owner">
+          <span>Саша · 3 890 ₽</span>
+        </div>
+        <div class="r-row">
+          <span class="chip success" style="font-size: 10px;">💳 куплено 14 апр</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Phone 2: History tab + detail bottom sheet -->
+<div class="phone tall" style="overflow: hidden;">
+  <div class="phone-label">Reservations · Detail sheet</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+
+  <div class="screen-header">
+    <div class="hdr-btn">‹</div>
+    <div class="hdr-title">Мои брони</div>
+    <div class="hdr-btn">⚙</div>
+  </div>
+
+  <div class="sub-tabs">
+    <div class="sub-tab">Активные</div>
+    <div class="sub-tab active">История <span style="font-size: 11px; color: var(--text-muted); font-weight: 600; margin-left: 4px;">12</span></div>
+  </div>
+
+  <div style="padding: 0 16px;">
+    <div class="filters-row">
+      <div class="flt active">Все 12</div>
+      <div class="flt">✓ Куплено 8</div>
+      <div class="flt">↶ Отменил 2</div>
+      <div class="flt">⏱ Истекло 2</div>
+    </div>
+
+    <!-- History list — compact rows -->
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 4px 14px; margin-top: 4px;">
+      <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 0 6px;">Апрель 2026</div>
+      <div class="h-item">
+        <div class="h-thumb">🎨</div>
+        <div class="h-body">
+          <div class="h-title">Акварельный набор</div>
+          <div class="h-meta">Саша · куплено 14 апр · 3 890 ₽</div>
+        </div>
+        <span class="chip success" style="font-size: 9px;">✓</span>
+      </div>
+      <div class="h-item">
+        <div class="h-thumb">📚</div>
+        <div class="h-body">
+          <div class="h-title">«Три товарища» Ремарк</div>
+          <div class="h-meta">Папа · куплено 2 апр · 1 450 ₽</div>
+        </div>
+        <span class="chip success" style="font-size: 9px;">✓</span>
+      </div>
+
+      <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 0 6px;">Март 2026</div>
+      <div class="h-item">
+        <div class="h-thumb">🎁</div>
+        <div class="h-body">
+          <div class="h-title">Подарочный сертификат</div>
+          <div class="h-meta">Миша · куплено 8 мар · 5 000 ₽</div>
+        </div>
+        <span class="chip success" style="font-size: 9px;">✓</span>
+      </div>
+      <div class="h-item">
+        <div class="h-thumb" style="opacity: 0.6;">🏃</div>
+        <div class="h-body">
+          <div class="h-title" style="opacity: 0.7;">Беговые кроссовки Asics</div>
+          <div class="h-meta" style="color: var(--warning);">Анна · TTL истёк 3 мар</div>
+        </div>
+        <span class="chip warning" style="font-size: 9px;">⏱</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Backdrop -->
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.6); top: 48px;"></div>
+
+  <!-- Detail sheet (reservation edit) -->
+  <div class="sheet-preview" style="max-height: 70vh;">
+    <div class="sheet-handle"></div>
+    <h2 class="sheet-title">Бронь</h2>
+
+    <div class="sheet-item-row">
+      <div class="si-thumb">🎧</div>
+      <div class="si-body">
+        <div class="si-title">AirPods Pro 2 USB-C</div>
+        <div class="si-sub">Анна · День рождения · 24 990 ₽</div>
+      </div>
+    </div>
+
+    <div class="ttl-control">
+      <div class="ttl-control-header">
+        <div class="ttl-header-title">⏱ Smart reservation</div>
+        <div class="ttl-countdown">через 5д 12ч</div>
+      </div>
+      <div class="r-ttl-bar"><div class="r-ttl-fill" style="width: 78%;"></div></div>
+      <div style="display: flex; gap: 8px; margin-top: 10px;">
+        <button class="extend-btn">+ Продлить на 48ч</button>
+        <span style="font-size: 11px; color: var(--text-muted); align-self: center;">осталось 2 из 3 продлений</span>
+      </div>
+    </div>
+
+    <div class="note-editor">
+      <div class="note-label">📝 Моя заметка</div>
+      <div class="note-text">Белый, обязательно с USB-C чехлом. Проверил на re:Store — есть за 24 990. У дяди купон на 5% до 30 апр.</div>
+    </div>
+
+    <div class="check-toggle">
+      <div class="check-box">✓</div>
+      <div class="check-label">Куплено
+        <div class="check-sub" style="font-weight: 400;">Отметить что уже купил</div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button class="btn ghost" style="flex: 1;">Отменить бронь</button>
+      <button class="btn primary" style="flex: 1;">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- Side note -->
+<div style="max-width: 1200px; margin: 40px auto 0;">
+  <div class="side-note" style="max-width: none;">
+    <span class="tag">North Star — Reservations PRO</span>
+    <h3>Gift-giver workflow — уникальный surface WishBoard</h3>
+    <p>Это <b>не</b> тот же самый экран что Reservations tab на Home. Home tab — быстрый обзор. Здесь — полный workflow управления бронями с PRO-фичами.</p>
+
+    <h4>Phone 1 — Active с реальным PRO-surface</h4>
+    <ul>
+      <li><b>Summary tile×3</b>: активных / тайных / в истории — sub-tabs навигация</li>
+      <li><b>Filter row</b>: 6 фильтров (все / не куплено / куплено / с комментариями / тайные / группой) — выглядит длинно, но это <b>реальные</b> фильтры</li>
+      <li><b>Reservation card</b> — tint меняется по modifier:
+        <ul>
+          <li>Smart active → green-border + TTL прогресс-bar</li>
+          <li>Secret → accent-tint + 🔒 chip</li>
+          <li>Group → rose-pink + «3/5 скинулись»</li>
+          <li>Expiring → amber + «⚠️ через 6ч» + «+ Продлить»</li>
+          <li>Done → strike + opacity 0.65 + «💳 куплено»</li>
+        </ul>
+      </li>
+      <li><b>Note preview inline</b>: «📝 Белый, с USB-C чехлом...» — italic, accent-tint bg</li>
+      <li><b>Reminder chip</b>: «🔔 напомнит за сутки» — показывает что бот следит</li>
+    </ul>
+
+    <h4>Phone 2 — История + detail-sheet</h4>
+    <ul>
+      <li><b>History</b>: compact rows сгруппированы по месяцам. «Апрель 2026», «Март 2026» — chronology</li>
+      <li><b>End-reason chips</b>: ✓ куплено / ⏱ TTL истёк / ↶ отменено — цветовая маркировка</li>
+      <li><b>Detail sheet (bottom)</b>: нажатие на карточку открывает полный edit:
+        <ul>
+          <li>Item preview</li>
+          <li>TTL control с «+ Продлить на 48ч» + «осталось 2 из 3 продлений»</li>
+          <li>Note editor (inline, не отдельный экран)</li>
+          <li>«Куплено» toggle с success-check</li>
+          <li>Footer: «Отменить бронь» (ghost) / «Закрыть» (primary)</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h4>Почему это отдельный North Star surface</h4>
+    <p>Обычные task-managers показывают список и всё. WishBoard конкурирует за <b>gift-giver</b> experience — это уникальная category. Здесь пересекаются 6 PRO-фич (TTL + note + reminder + purchase + filter + history) — как они работают вместе <b>определяет</b> value proposition.</p>
+
+    <h4>Что лучше current prod</h4>
+    <ul>
+      <li>Detail-sheet объединяет все действия (TTL / note / mark purchased / cancel) в одно место — сейчас это разные экраны</li>
+      <li>Note-preview inline в карточке — сейчас скрыт до открытия</li>
+      <li>Extension limit «2 из 3» видимый — сейчас абстрактный</li>
+      <li>Reminder chip сообщает что бот следит — сейчас silent</li>
+      <li>End-reason в истории явный (TTL-expired vs cancelled vs purchased) — сейчас всё «завершено»</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>

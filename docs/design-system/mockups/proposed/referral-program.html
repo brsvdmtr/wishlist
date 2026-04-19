@@ -1,0 +1,3082 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Реферальная программа — Макеты</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    /* Referral-specific — warm "gift" gold */
+    --ref: #FFB86A;
+    --ref-soft: rgba(255,184,106,0.14);
+    --ref-border: rgba(255,184,106,0.28);
+    --ref-glow: rgba(255,184,106,0.35);
+    /* Reward success — green */
+    --reward: #34D399;
+    --reward-soft: rgba(52,211,153,0.12);
+    --reward-border: rgba(52,211,153,0.28);
+    /* Functional */
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --blue: #60A5FA;
+    --blue-soft: rgba(96,165,250,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Rubik', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #111114;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 60px;
+  }
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(17,17,20,0.92); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border); padding: 12px 16px;
+  }
+  .nav-title { font-size: 13px; font-weight: 600; color: var(--text-sec); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .nav-title span { color: var(--ref); }
+  .nav-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; flex-wrap: wrap; }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab {
+    flex-shrink: 0; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 500;
+    color: var(--text-sec); background: var(--surface); border: 1px solid var(--border);
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .nav-tab:hover { background: var(--surface-hover); }
+  .nav-tab.active { background: var(--ref); color: #1a1a1d; border-color: var(--ref); }
+
+  .section { display: none; max-width: 400px; margin: 0 auto; padding: 20px 16px 40px; }
+  .section.active { display: block; }
+  .section-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin: 24px 0 12px; }
+  .section-label:first-child { margin-top: 0; }
+  .desc-text {
+    font-size: 13px; color: var(--text-sec); line-height: 1.6; margin: 8px 0 16px;
+    padding: 12px 16px; background: var(--surface); border-radius: 12px; border-left: 3px solid var(--ref);
+  }
+
+  .phone {
+    background: var(--bg); border-radius: 24px; border: 2px solid var(--border-light);
+    overflow: hidden; margin: 12px 0; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .phone-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px 12px; border-bottom: 1px solid var(--border);
+  }
+  .phone-header .back { font-size: 20px; color: var(--accent); cursor: pointer; }
+  .phone-header .title { font-size: 17px; font-weight: 600; }
+  .phone-header .title-sub { font-size: 11px; color: var(--text-muted); font-weight: 400; margin-top: 1px; }
+  .phone-body { padding: 14px 16px 22px; }
+
+  /* CTA */
+  .btn-primary {
+    width: 100%; padding: 14px 24px; border: none; border-radius: 14px;
+    font-size: 15px; font-weight: 600; color: #fff; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), #6B5CE7);
+    font-family: inherit; transition: all 0.15s;
+  }
+  .btn-ref {
+    width: 100%; padding: 14px 20px; border: none; border-radius: 14px;
+    font-size: 15px; font-weight: 700; color: #1a1a1d; cursor: pointer;
+    background: linear-gradient(135deg, var(--ref) 0%, #FFCE8F 100%);
+    font-family: inherit; transition: all 0.15s;
+    box-shadow: 0 6px 18px rgba(255,184,106,0.22);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-secondary {
+    width: 100%; padding: 12px 20px; border: 1.5px solid var(--border-light); border-radius: 14px;
+    font-size: 14px; font-weight: 500; color: var(--text); cursor: pointer;
+    background: transparent; font-family: inherit; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-ghost {
+    width: 100%; padding: 10px; border: none; border-radius: 12px;
+    background: transparent; color: var(--text-muted); font-size: 13px; cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-small {
+    padding: 8px 14px; border: none; border-radius: 10px;
+    font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+
+  /* Hero block for referral screen */
+  .ref-hero {
+    position: relative; padding: 26px 18px 22px; text-align: center; overflow: hidden;
+    border-radius: 20px; margin-bottom: 14px;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(255,184,106,0.28) 0%, transparent 62%),
+      radial-gradient(circle at 15% 85%, rgba(124,106,255,0.14) 0%, transparent 52%),
+      radial-gradient(circle at 90% 90%, rgba(52,211,153,0.10) 0%, transparent 50%),
+      var(--card);
+    border: 1px solid var(--border-light);
+  }
+  .ref-hero-emoji {
+    font-size: 44px; line-height: 1; margin-bottom: 10px;
+    filter: drop-shadow(0 6px 16px rgba(255,184,106,0.45));
+  }
+  .ref-hero-title { font-size: 22px; font-weight: 800; line-height: 1.2; margin-bottom: 6px; }
+  .ref-hero-title .hl { color: var(--ref); }
+  .ref-hero-sub { font-size: 13px; color: var(--text-sec); line-height: 1.5; max-width: 320px; margin: 0 auto; }
+
+  /* Ссылка-блок */
+  .ref-link {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 12px; margin-bottom: 10px;
+  }
+  .ref-link-icon {
+    width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+    background: var(--ref-soft); color: var(--ref);
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+  }
+  .ref-link-url {
+    flex: 1; font-size: 13px; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-family: ui-monospace, 'SF Mono', monospace; font-weight: 500;
+  }
+  .ref-link-copy {
+    font-size: 12px; font-weight: 600; color: var(--ref);
+    background: var(--ref-soft); padding: 6px 10px; border-radius: 8px;
+    border: 1px solid var(--ref-border); cursor: pointer;
+  }
+
+  /* Stats strip */
+  .stats-strip {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    margin: 14px 0;
+  }
+  .stat-cell {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 8px; text-align: center;
+  }
+  .stat-cell .v { font-size: 20px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+  .stat-cell.is-ref .v { color: var(--ref); }
+  .stat-cell.is-reward .v { color: var(--reward); }
+  .stat-cell .l { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+
+  /* How-it-works steps */
+  .how-block {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px; margin: 14px 0;
+  }
+  .how-block h4 { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; font-weight: 700; }
+  .how-step { display: flex; gap: 10px; padding: 8px 0; }
+  .how-step-n {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--ref-soft); color: var(--ref);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; flex-shrink: 0;
+    border: 1px solid var(--ref-border);
+  }
+  .how-step-txt { font-size: 13px; color: var(--text-sec); line-height: 1.45; padding-top: 1px; }
+  .how-step-txt b { color: var(--text); font-weight: 600; }
+
+  /* Cap indicator */
+  .cap-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 12px; margin: 10px 0;
+    font-size: 12px; color: var(--text-sec);
+  }
+  .cap-dots { display: flex; gap: 4px; flex-shrink: 0; }
+  .cap-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-light); }
+  .cap-dot.on { background: var(--ref); box-shadow: 0 0 6px var(--ref-glow); }
+  .cap-row .cap-reset { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+
+  /* History items */
+  .hist-item {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px; margin-bottom: 8px;
+    position: relative; overflow: hidden;
+  }
+  .hist-item.is-rewarded { border-left: 3px solid var(--reward); }
+  .hist-item.is-pending { border-left: 3px solid var(--orange); }
+  .hist-item.is-qualifying { border-left: 3px solid var(--blue); }
+  .hist-item.is-attributed { border-left: 3px solid var(--text-muted); opacity: 0.85; }
+  .hist-item.is-rejected { opacity: 0.55; }
+  .hist-item.is-expired { opacity: 0.55; }
+  .hist-av {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    background: var(--surface); display: flex; align-items: center; justify-content: center;
+    font-size: 16px; overflow: hidden;
+  }
+  .hist-av.anon { background: var(--border-light); color: var(--text-muted); }
+  .hist-info { flex: 1; min-width: 0; }
+  .hist-line1 { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .hist-line2 { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+  .hist-badge {
+    font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+    text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0;
+    align-self: flex-start;
+  }
+  .hist-badge.is-rewarded { background: var(--reward-soft); color: var(--reward); }
+  .hist-badge.is-pending { background: var(--orange-soft); color: var(--orange); }
+  .hist-badge.is-qualifying { background: var(--blue-soft); color: var(--blue); }
+  .hist-badge.is-attributed { background: var(--border-light); color: var(--text-muted); }
+  .hist-badge.is-rejected { background: var(--border-light); color: var(--text-muted); }
+
+  /* Share-sheet-style menu */
+  .sheet-overlay {
+    background: rgba(0,0,0,0.55); border-radius: 24px;
+    position: relative; overflow: hidden; margin: 12px 0;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 2px solid var(--border-light);
+  }
+  .sheet-bg { background: var(--bg); padding: 16px; min-height: 320px; opacity: 0.35; }
+  .sheet {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: var(--surface); border-radius: 20px 20px 0 0;
+    padding: 8px 0 24px;
+  }
+  .sheet-handle {
+    width: 40px; height: 4px; border-radius: 100px;
+    background: var(--text-muted); opacity: 0.3;
+    margin: 0 auto 14px;
+  }
+  .sheet-head { padding: 0 20px 10px; }
+  .sheet-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .sheet-sub { font-size: 13px; color: var(--text-sec); line-height: 1.5; }
+  .sheet-list { padding: 0 20px; }
+  .sheet-item {
+    display: flex; align-items: center; gap: 14px; padding: 14px 4px;
+    border-bottom: 1px solid var(--border); cursor: pointer;
+  }
+  .sheet-item:last-child { border-bottom: none; }
+  .sheet-item-ic {
+    width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+    background: var(--ref-soft); color: var(--ref);
+  }
+  .sheet-item-ic.tg { background: rgba(34,158,217,0.14); color: #229ED9; }
+  .sheet-item-ic.copy { background: var(--accent-soft); color: var(--accent); }
+  .sheet-item-ic.more { background: var(--border-light); color: var(--text-sec); }
+  .sheet-item-tx { flex: 1; }
+  .sheet-item-tx .t { font-size: 15px; font-weight: 500; }
+  .sheet-item-tx .s { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .sheet-item .arrow { color: var(--text-muted); }
+
+  /* Profile card */
+  .profile-head {
+    display: flex; gap: 12px; align-items: center;
+    padding: 4px 0 12px;
+  }
+  .profile-av {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #A78BFA);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; color: #fff; font-weight: 700; flex-shrink: 0;
+  }
+  .profile-info { flex: 1; min-width: 0; }
+  .profile-name { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .profile-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .pro-chip {
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px;
+    background: linear-gradient(135deg, var(--accent), #A78BFA); color: #fff;
+    display: inline-flex; align-items: center; gap: 3px;
+  }
+  .pro-chip-small {
+    font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px;
+    background: linear-gradient(135deg, var(--accent), #A78BFA); color: #fff;
+  }
+
+  /* Paywall referral option */
+  .pw-divider {
+    display: flex; align-items: center; gap: 10px; margin: 14px 0; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+  }
+  .pw-divider::before, .pw-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border-light);
+  }
+
+  .ref-alt-card {
+    padding: 14px; border-radius: 16px; position: relative; overflow: hidden;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(255,184,106,0.16) 0%, transparent 50%),
+      var(--card);
+    border: 1px solid var(--ref-border);
+  }
+  .ref-alt-card-top { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+  .ref-alt-card-ic { width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; background: var(--ref-soft); color: var(--ref); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .ref-alt-card-title { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .ref-alt-card-sub { font-size: 12px; color: var(--text-sec); line-height: 1.45; }
+
+  /* Banner — home soft promo */
+  .home-banner {
+    display: flex; gap: 10px; align-items: center;
+    padding: 12px; border-radius: 14px; margin-bottom: 10px;
+    background:
+      radial-gradient(circle at 100% 0%, rgba(255,184,106,0.22) 0%, transparent 55%),
+      var(--card);
+    border: 1px solid var(--ref-border);
+    cursor: pointer;
+  }
+  .home-banner-ic { width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0; background: var(--ref-soft); color: var(--ref); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .home-banner-t { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+  .home-banner-s { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+  .home-banner-close { color: var(--text-muted); font-size: 18px; flex-shrink: 0; padding: 4px; }
+
+  /* Invitee landing */
+  .invitee-hero {
+    padding: 26px 18px 22px; text-align: center; position: relative; overflow: hidden;
+    border-radius: 20px; margin-bottom: 14px;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(124,106,255,0.25) 0%, transparent 60%),
+      radial-gradient(circle at 50% 100%, rgba(255,184,106,0.16) 0%, transparent 55%),
+      var(--card);
+    border: 1px solid var(--border-light);
+  }
+  .invitee-inviter {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 100px;
+    background: var(--accent-soft); border: 1px solid var(--accent);
+    font-size: 12px; color: var(--accent); font-weight: 600; margin-bottom: 14px;
+  }
+  .invitee-inviter .av {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #A78BFA); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+  }
+
+  .progress-row {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px 14px; margin: 12px 0;
+  }
+  .progress-ic {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    background: var(--border-light); color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;
+  }
+  .progress-ic.on { background: var(--reward-soft); color: var(--reward); border: 1px solid var(--reward-border); }
+  .progress-ic.active { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); animation: pulseA 1.8s infinite; }
+  @keyframes pulseA { 0%,100%{box-shadow:0 0 0 0 var(--accent-glow)} 50%{box-shadow:0 0 0 5px transparent} }
+  .progress-tx { flex: 1; font-size: 13px; }
+  .progress-tx .t { font-weight: 600; }
+  .progress-tx .s { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .progress-line { width: 100%; height: 3px; border-radius: 100px; background: var(--border-light); margin-bottom: 10px; overflow: hidden; }
+  .progress-line-fill { height: 100%; background: linear-gradient(90deg, var(--ref), var(--reward)); transition: width 0.3s; }
+
+  /* Bot message bubble */
+  .bot-chat {
+    padding: 18px 14px; background: #17212B; border-radius: 0 0 22px 22px;
+  }
+  .bot-msg {
+    display: flex; gap: 8px; align-items: flex-end; margin-bottom: 10px;
+  }
+  .bot-msg-av {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent), #A78BFA); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;
+  }
+  .bot-bubble {
+    max-width: 82%; padding: 10px 12px; border-radius: 14px 14px 14px 4px;
+    background: #212C36; color: #F4F4F6; font-size: 13px; line-height: 1.45;
+  }
+  .bot-bubble .b-title { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+  .bot-bubble .b-title.ref { color: var(--ref); }
+  .bot-bubble .b-title.reward { color: var(--reward); }
+  .bot-bubble .b-time { font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 4px; text-align: right; }
+  .bot-bubble .b-btn {
+    display: block; margin-top: 8px; padding: 8px 12px; border-radius: 10px;
+    background: rgba(96,165,250,0.12); color: #60A5FA; font-size: 12px; font-weight: 600;
+    text-align: center; cursor: pointer;
+  }
+  .bot-bubble .b-btn + .b-btn { margin-top: 6px; }
+  .bot-chat-header {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: #17212B; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .bot-chat-header-av {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #A78BFA);
+    display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; font-weight: 700;
+  }
+  .bot-chat-header-tx .t { font-size: 14px; font-weight: 600; color: #F4F4F6; }
+  .bot-chat-header-tx .s { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 1px; }
+
+  /* Reward celebration */
+  .celebration {
+    padding: 28px 22px 24px; text-align: center;
+    position: relative; overflow: hidden;
+    background:
+      radial-gradient(circle at 30% 10%, rgba(255,184,106,0.32) 0%, transparent 50%),
+      radial-gradient(circle at 70% 85%, rgba(52,211,153,0.22) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(124,106,255,0.14) 0%, transparent 60%),
+      var(--card);
+    border-radius: 22px; border: 1px solid var(--ref-border);
+    margin-bottom: 14px;
+  }
+  .celebration::before, .celebration::after {
+    content: ''; position: absolute; border-radius: 50%; pointer-events: none;
+  }
+  .celebration::before { width: 8px; height: 8px; background: var(--ref); top: 18%; left: 15%; box-shadow: 80px 30px 0 -2px var(--reward), 180px -2px 0 -3px var(--accent), 40px 90px 0 -3px var(--ref), 220px 120px 0 -3px var(--reward); }
+  .celebration::after { width: 6px; height: 6px; background: var(--accent); top: 25%; right: 18%; box-shadow: -60px 80px 0 -2px var(--ref), 20px 140px 0 -3px var(--reward); }
+  .celebration-icon { font-size: 56px; line-height: 1; margin-bottom: 12px; filter: drop-shadow(0 8px 24px rgba(255,184,106,0.45)); }
+  .celebration-title { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+  .celebration-sub { font-size: 13px; color: var(--text-sec); line-height: 1.5; margin-bottom: 16px; }
+  .celebration-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 100px;
+    background: var(--reward-soft); border: 1px solid var(--reward-border);
+    color: var(--reward); font-size: 12px; font-weight: 700;
+  }
+
+  /* Rules accordion */
+  .rules-list { border-radius: 14px; overflow: hidden; background: var(--surface); border: 1px solid var(--border); }
+  .rule {
+    border-bottom: 1px solid var(--border); padding: 14px 16px; cursor: pointer;
+  }
+  .rule:last-child { border-bottom: none; }
+  .rule-q { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .rule-q-t { font-size: 14px; font-weight: 600; flex: 1; }
+  .rule-q-c { color: var(--text-muted); font-size: 16px; transition: transform 0.2s; }
+  .rule.open .rule-q-c { transform: rotate(45deg); color: var(--ref); }
+  .rule-a { font-size: 13px; color: var(--text-sec); line-height: 1.55; padding-top: 10px; display: none; }
+  .rule.open .rule-a { display: block; }
+
+  /* Cap reached */
+  .cap-reached {
+    padding: 18px; border-radius: 16px;
+    background: var(--orange-soft); border: 1px solid rgba(251,191,36,0.22);
+    text-align: center; margin-bottom: 14px;
+  }
+  .cap-reached-ic { font-size: 32px; margin-bottom: 8px; }
+  .cap-reached-t { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .cap-reached-s { font-size: 12px; color: var(--text-sec); line-height: 1.5; }
+
+  /* Admin table */
+  .admin-stat {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px;
+  }
+  .admin-stat-cell {
+    padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  }
+  .admin-stat-cell .l { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 6px; }
+  .admin-stat-cell .v { font-size: 20px; font-weight: 800; }
+  .admin-stat-cell .d { font-size: 11px; color: var(--reward); margin-top: 3px; }
+  .admin-stat-cell .d.neg { color: var(--red); }
+
+  .admin-row {
+    display: flex; gap: 10px; align-items: center; padding: 10px 12px;
+    border-radius: 10px; background: var(--surface); border: 1px solid var(--border); margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .admin-row-code { font-family: ui-monospace, 'SF Mono', monospace; color: var(--text-muted); font-size: 11px; }
+  .admin-row-score {
+    padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px;
+  }
+  .admin-row-score.low { background: var(--reward-soft); color: var(--reward); }
+  .admin-row-score.med { background: var(--orange-soft); color: var(--orange); }
+  .admin-row-score.high { background: var(--red-soft); color: var(--red); }
+
+  /* Events table */
+  .ev-group { margin-bottom: 18px; }
+  .ev-group h4 { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 8px; }
+  .ev {
+    padding: 9px 12px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; margin-bottom: 5px; font-family: ui-monospace, 'SF Mono', monospace;
+    font-size: 11px; color: var(--ref); font-weight: 500;
+  }
+  .ev-attrs { padding-left: 16px; font-size: 10px; color: var(--text-muted); margin-top: 2px; font-weight: 400; }
+
+  /* Toast */
+  .toast-cta {
+    padding: 14px; border-radius: 14px; display: flex; gap: 12px; align-items: center;
+    background: linear-gradient(135deg, rgba(255,184,106,0.18), rgba(52,211,153,0.12));
+    border: 1px solid var(--ref-border);
+  }
+  .toast-cta-ic { font-size: 22px; flex-shrink: 0; }
+  .toast-cta-tx { flex: 1; }
+  .toast-cta-t { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+  .toast-cta-s { font-size: 11px; color: var(--text-sec); line-height: 1.4; }
+  .toast-cta-btn {
+    padding: 7px 12px; border-radius: 9px; background: var(--ref); color: #1a1a1d;
+    font-size: 11px; font-weight: 700; border: none; cursor: pointer; font-family: inherit; flex-shrink: 0;
+  }
+
+  /* Wishlist skeleton (used in invitee onboarding bg) */
+  .skeleton-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px; display: flex; gap: 12px; align-items: center;
+  }
+  .skeleton-img { width: 48px; height: 48px; border-radius: 10px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .skeleton-ln1 { height: 10px; width: 60%; background: var(--surface); border-radius: 3px; margin-bottom: 6px; }
+  .skeleton-ln2 { height: 8px; width: 40%; background: var(--surface); border-radius: 3px; }
+
+  /* Small list dots for config */
+  .config-list { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .config-list-item { display: flex; justify-content: space-between; padding: 6px 0; font-size: 12px; }
+  .config-list-item .k { color: var(--text-muted); }
+  .config-list-item .v { color: var(--text); font-weight: 600; }
+
+  /* Schema block for event contract */
+  .schema-block { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; font-size: 11px; font-family: ui-monospace, 'SF Mono', monospace; line-height: 1.7; }
+  .schema-block .sk { color: var(--ref); }
+  .schema-block .sv { color: var(--text-sec); }
+  .schema-block .sc { color: var(--text-muted); font-weight: 400; }
+  .schema-block .sreq { color: var(--red); font-weight: 700; }
+  .schema-block .sopt { color: var(--text-muted); }
+
+  /* Fraud signal rows */
+  .signal-row {
+    display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px;
+  }
+  .signal-row.trig { border-left: 3px solid var(--red); background: rgba(248,113,113,0.04); }
+  .signal-ic { width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; background: var(--border-light); color: var(--text-muted); }
+  .signal-ic.trig { background: var(--red-soft); color: var(--red); }
+  .signal-body { flex: 1; min-width: 0; }
+  .signal-name { font-size: 12px; font-weight: 600; font-family: ui-monospace, monospace; color: var(--ref); margin-bottom: 2px; }
+  .signal-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+  .signal-score { padding: 3px 7px; border-radius: 6px; font-size: 10px; font-weight: 700; flex-shrink: 0; background: var(--border-light); color: var(--text-muted); }
+  .signal-score.trig { background: var(--red-soft); color: var(--red); }
+
+  /* Alert row */
+  .alert-row {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 10px;
+    padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    margin-bottom: 6px; align-items: center;
+  }
+  .sev {
+    padding: 2px 7px; border-radius: 5px; font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0;
+  }
+  .sev.high { background: var(--red-soft); color: var(--red); }
+  .sev.med { background: var(--orange-soft); color: var(--orange); }
+  .sev.low { background: var(--blue-soft); color: var(--blue); }
+  .sev.info { background: var(--border-light); color: var(--text-muted); }
+  .alert-name { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .alert-cond { font-size: 10px; color: var(--text-muted); font-family: ui-monospace, monospace; }
+  .alert-act { font-size: 10px; color: var(--text-sec); text-align: right; max-width: 100px; line-height: 1.3; }
+
+  /* Playbook */
+  .playbook-case {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px; margin-bottom: 10px;
+  }
+  .playbook-case h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--ref); }
+  .playbook-case .user-said {
+    font-size: 11px; color: var(--text-sec); font-style: italic; padding: 8px 10px;
+    background: var(--surface); border-radius: 8px; margin-bottom: 10px; line-height: 1.45;
+    border-left: 2px solid var(--text-muted);
+  }
+  .playbook-step {
+    display: flex; gap: 8px; padding: 4px 0; font-size: 11px; color: var(--text-sec); line-height: 1.5;
+  }
+  .playbook-step-n {
+    flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--ref-soft); color: var(--ref); border: 1px solid var(--ref-border);
+    display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700;
+  }
+  .playbook-step code { font-family: ui-monospace, monospace; color: var(--ref); font-size: 10px; background: var(--surface); padding: 1px 5px; border-radius: 4px; }
+
+  /* Debug trace - event timeline */
+  .trace-evt {
+    display: flex; gap: 10px; padding: 8px 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 4px;
+    font-family: ui-monospace, monospace; font-size: 11px;
+  }
+  .trace-evt.err { background: rgba(248,113,113,0.06); border-color: rgba(248,113,113,0.22); }
+  .trace-evt.ok { background: rgba(52,211,153,0.06); border-color: rgba(52,211,153,0.22); }
+  .trace-evt.warn { background: rgba(251,191,36,0.06); border-color: rgba(251,191,36,0.22); }
+  .trace-t { color: var(--text-muted); flex-shrink: 0; }
+  .trace-n { color: var(--ref); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trace-s { color: var(--text-sec); flex-shrink: 0; }
+
+  /* Ring graph */
+  .ring-node {
+    display: flex; gap: 10px; align-items: center; padding: 8px 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 4px;
+    font-size: 11px;
+  }
+  .ring-node.center { background: var(--red-soft); border-color: rgba(248,113,113,0.25); }
+  .ring-node-badge {
+    padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; flex-shrink: 0;
+    background: var(--border-light); color: var(--text-muted);
+  }
+  .ring-node-badge.warn { background: var(--orange-soft); color: var(--orange); }
+  .ring-node-badge.bad { background: var(--red-soft); color: var(--red); }
+
+  code { font-family: ui-monospace, 'SF Mono', monospace; background: var(--surface); padding: 1px 5px; border-radius: 4px; color: var(--ref); font-size: 0.9em; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title">Реферальная программа — <span>Месяц PRO за друга</span></div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="show('s1', this)">🎯 Точки входа</div>
+    <div class="nav-tab" onclick="show('s2', this)">🎁 Экран рефералки</div>
+    <div class="nav-tab" onclick="show('s3', this)">📤 Шаринг</div>
+    <div class="nav-tab" onclick="show('s4', this)">👋 Приход друга</div>
+    <div class="nav-tab" onclick="show('s5', this)">🔔 Бот-уведомления</div>
+    <div class="nav-tab" onclick="show('s6', this)">🎉 Награда</div>
+    <div class="nav-tab" onclick="show('s7', this)">📜 История</div>
+    <div class="nav-tab" onclick="show('s8', this)">🚫 Edge-кейсы</div>
+    <div class="nav-tab" onclick="show('s9', this)">📖 Правила</div>
+    <div class="nav-tab" onclick="show('s10', this)">🛡 Админка</div>
+    <div class="nav-tab" onclick="show('s11', this)">📊 Аналитика</div>
+    <div class="nav-tab" onclick="show('s13', this)">🔍 Observability</div>
+    <div class="nav-tab" onclick="show('s12', this)">⚙️ Конфиг</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S1: ТОЧКИ ВХОДА                                               -->
+<!-- ============================================================ -->
+<div class="section active" id="s1">
+  <div class="section-label">Профиль — основной вход</div>
+  <div class="desc-text">
+    Главная витрина фичи. Карточка живёт в профиле над блоком PRO — воспринимается как способ получить PRO бесплатно, а не как навязчивая promo-полоса. Для пользователей без PRO это самая частая точка соприкосновения с предложением.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Профиль</span>
+    </div>
+    <div class="phone-body">
+      <div class="profile-head">
+        <div class="profile-av">DK</div>
+        <div class="profile-info">
+          <div class="profile-name">Дима Котов</div>
+          <div class="profile-sub">@dkotov · присоединился в марте</div>
+        </div>
+      </div>
+
+      <!-- Referral entry card -->
+      <div class="ref-alt-card" style="margin-bottom: 12px;">
+        <div class="ref-alt-card-top">
+          <div class="ref-alt-card-ic">🎁</div>
+          <div style="flex: 1;">
+            <div class="ref-alt-card-title">Месяц PRO за друга</div>
+            <div class="ref-alt-card-sub">Пригласи друга — получи 30 дней PRO бесплатно, когда он создаст свой первый вишлист и желание</div>
+          </div>
+        </div>
+        <button class="btn-ref">🚀 Пригласить друга</button>
+      </div>
+
+      <!-- PRO block below -->
+      <div style="padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px;">
+        <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 16px;">⭐</div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; font-weight: 600;">PRO недоступен</div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 1px;">Купить за ⭐ 249 или получить за друга</div>
+        </div>
+        <span style="font-size: 18px; color: var(--text-muted);">›</span>
+      </div>
+
+      <!-- Other profile rows -->
+      <div style="padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px;">
+        <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--border-light); display: flex; align-items: center; justify-content: center; font-size: 16px;">⚙️</div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; font-weight: 600;">Настройки</div>
+        </div>
+        <span style="font-size: 18px; color: var(--text-muted);">›</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Профиль — у пользователя уже активный PRO</div>
+  <div class="desc-text">
+    Если PRO уже есть, карточка меняет формулировку — «продлить подписку на 30 дней бесплатно». Фича становится удержанием PRO-подписчика, а не первичной конверсией.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Профиль</span>
+    </div>
+    <div class="phone-body">
+      <div class="profile-head">
+        <div class="profile-av">DK</div>
+        <div class="profile-info">
+          <div class="profile-name">Дима Котов <span class="pro-chip">⭐ PRO</span></div>
+          <div class="profile-sub">PRO до 14 мая 2026</div>
+        </div>
+      </div>
+
+      <div class="ref-alt-card" style="margin-bottom: 12px;">
+        <div class="ref-alt-card-top">
+          <div class="ref-alt-card-ic">🎁</div>
+          <div style="flex: 1;">
+            <div class="ref-alt-card-title">+30 дней PRO за друга</div>
+            <div class="ref-alt-card-sub">Уже есть PRO? Бонус продлит твою подписку на месяц — без доплаты за Stars</div>
+          </div>
+        </div>
+        <button class="btn-ref">🚀 Пригласить друга</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Paywall — альтернатива платной покупке</div>
+  <div class="desc-text">
+    Самая сильная точка: когда пользователь упёрся в PRO-гейт и готов платить или уходить. Показываем «или получи бесплатно за друга» мягкой альтернативой, но не ломаем конверсию в платную — referral CTA secondary, Stars-покупка остаётся primary.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">WishBoard PRO</span>
+    </div>
+    <div class="phone-body" style="padding: 0;">
+      <!-- hero -->
+      <div style="padding: 22px 20px 0; text-align: center; background: radial-gradient(circle at 50% 0%, rgba(167,139,250,0.26) 0%, transparent 60%);">
+        <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--accent); background: var(--accent-soft); padding: 5px 10px; border-radius: 20px; border: 1px solid var(--accent); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.05em;">⭐ PRO</div>
+        <h1 style="font-size: 22px; font-weight: 800; line-height: 1.2; margin-bottom: 6px;">Разблокируй PRO</h1>
+        <p style="font-size: 13px; color: var(--text-sec); line-height: 1.5; max-width: 280px; margin: 0 auto 16px;">Безлимитные вишлисты, секретные брони, приоритетная поддержка</p>
+      </div>
+
+      <!-- paywall price -->
+      <div style="padding: 0 20px;">
+        <div style="padding: 16px; border-radius: 16px; background: linear-gradient(135deg, rgba(167,139,250,0.16), rgba(124,106,255,0.05)); border: 1px solid rgba(167,139,250,0.28); margin-bottom: 12px;">
+          <div style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; color: var(--green); background: var(--green-soft); padding: 3px 7px; border-radius: 5px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">⚡ Популярно</div>
+          <div style="font-size: 28px; font-weight: 800; line-height: 1;">⭐ <span style="color: #FBBF24;">249</span> <span style="font-size: 14px; font-weight: 500; color: var(--text-sec);">/ мес</span></div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">~ 190 ₽ · оплата через Telegram Stars</div>
+        </div>
+        <button class="btn-primary">⭐ Подписаться на PRO</button>
+
+        <!-- Divider -->
+        <div class="pw-divider">или получи бесплатно</div>
+
+        <!-- Referral alternative -->
+        <div class="ref-alt-card">
+          <div class="ref-alt-card-top">
+            <div class="ref-alt-card-ic">🎁</div>
+            <div style="flex: 1;">
+              <div class="ref-alt-card-title">Месяц PRO за друга</div>
+              <div class="ref-alt-card-sub">Пригласи друга в WishBoard — получи 30 дней PRO, когда он создаст свой первый вишлист и желание</div>
+            </div>
+          </div>
+          <button class="btn-ref" style="margin-top: 4px;">🚀 Пригласить друга</button>
+        </div>
+      </div>
+
+      <div style="padding: 16px 20px 20px;">
+        <button class="btn-ghost">Правила программы</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Домашний баннер — мягкое напоминание</div>
+  <div class="desc-text">
+    Показываем активным пользователям (≥ 1 вишлист, ≥ 2 дня с регистрации, нет открытия реферального экрана за 14 дней). Баннер закрывается — не назойливый. Живёт над списком вишлистов, исчезает после одного клика или закрытия.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Мои вишлисты</span>
+    </div>
+    <div class="phone-body">
+      <div class="home-banner">
+        <div class="home-banner-ic">🎁</div>
+        <div style="flex: 1; min-width: 0;">
+          <div class="home-banner-t">Пригласи друга — получи PRO</div>
+          <div class="home-banner-s">Месяц PRO бесплатно, когда друг создаст первый вишлист</div>
+        </div>
+        <span class="home-banner-close">×</span>
+      </div>
+
+      <!-- Real content below looks normal -->
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-size: 14px; font-weight: 700;">🎂 День рождения</div>
+          <div style="font-size: 11px; color: var(--text-muted);">12 желаний</div>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted);">обновлён 2 дня назад</div>
+      </div>
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-size: 14px; font-weight: 700;">🎄 Новый год</div>
+          <div style="font-size: 11px; color: var(--text-muted);">4 желания</div>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted);">обновлён 1 неделю назад</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">После успешного шаринга вишлиста</div>
+  <div class="desc-text">
+    Пользователь только что нажал «Поделиться вишлистом» — он в контексте «делюсь». Показываем ненавязчивый мост к реферальной программе. Не блокируем поток — это toast-карточка, которую можно проигнорировать.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">🎂 День рождения</span>
+    </div>
+    <div class="phone-body">
+      <!-- Success toast -->
+      <div style="padding: 10px 14px; background: var(--green-soft); border: 1px solid rgba(52,211,153,0.22); border-radius: 12px; font-size: 13px; color: var(--green); font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+        <span>✓</span> Вишлист отправлен другу
+      </div>
+
+      <!-- Referral bridge -->
+      <div class="toast-cta">
+        <div class="toast-cta-ic">🎁</div>
+        <div class="toast-cta-tx">
+          <div class="toast-cta-t">А знаешь? Можно получить PRO</div>
+          <div class="toast-cta-s">Если друг зарегистрируется и сам создаст вишлист — тебе 30 дней PRO</div>
+        </div>
+        <button class="toast-cta-btn">Детали</button>
+      </div>
+
+      <!-- Wishlist items below go normal -->
+      <div style="margin-top: 14px;">
+        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; margin-bottom: 8px;">Желания · 12</div>
+        <div class="skeleton-card" style="margin-bottom: 8px;">
+          <div class="skeleton-img">🎧</div>
+          <div style="flex: 1;">
+            <div class="skeleton-ln1"></div>
+            <div class="skeleton-ln2"></div>
+          </div>
+        </div>
+        <div class="skeleton-card">
+          <div class="skeleton-img">📚</div>
+          <div style="flex: 1;">
+            <div class="skeleton-ln1"></div>
+            <div class="skeleton-ln2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S2: ЭКРАН РЕФЕРАЛКИ                                           -->
+<!-- ============================================================ -->
+<div class="section" id="s2">
+  <div class="section-label">Пустое состояние — никого ещё не пригласил</div>
+  <div class="desc-text">
+    Первый заход на экран программы. Задача — объяснить ценность, показать ссылку, убрать страхи («а что если друг — не подойдёт?»), мотивировать первый шаринг. Без overselling — спокойно, прямо, с прозрачными правилами в конце.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Пригласить друга</span></div>
+    </div>
+    <div class="phone-body">
+      <!-- Hero -->
+      <div class="ref-hero">
+        <div class="ref-hero-emoji">🎁</div>
+        <div class="ref-hero-title">Месяц PRO <br><span class="hl">за друга</span></div>
+        <div class="ref-hero-sub">Когда друг придёт по твоей ссылке и создаст свой первый вишлист — тебе начислят 30 дней PRO бесплатно</div>
+      </div>
+
+      <!-- Link -->
+      <div class="ref-link">
+        <div class="ref-link-icon">🔗</div>
+        <div class="ref-link-url">t.me/wishboard_bot?start=ref_dk9x2</div>
+        <div class="ref-link-copy">Копировать</div>
+      </div>
+
+      <button class="btn-ref" style="margin-bottom: 8px;">📤 Поделиться в Telegram</button>
+      <button class="btn-secondary" style="margin-bottom: 14px;">Другие приложения</button>
+
+      <!-- How it works -->
+      <div class="how-block">
+        <h4>Как это работает</h4>
+        <div class="how-step">
+          <div class="how-step-n">1</div>
+          <div class="how-step-txt">Отправь другу <b>свою ссылку</b> — в Telegram, копией или через share-меню</div>
+        </div>
+        <div class="how-step">
+          <div class="how-step-n">2</div>
+          <div class="how-step-txt">Друг впервые заходит в WishBoard — <b>никогда не был раньше</b></div>
+        </div>
+        <div class="how-step">
+          <div class="how-step-n">3</div>
+          <div class="how-step-txt">Он создаёт свой <b>первый вишлист и первое желание</b> — тебе <b>30 дней PRO</b> бесплатно</div>
+        </div>
+      </div>
+
+      <!-- Progress zero -->
+      <div style="padding: 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); text-align: center; color: var(--text-muted); font-size: 13px;">
+        Пока никого не пригласил. Отправь ссылку — и прогресс появится здесь.
+      </div>
+
+      <button class="btn-ghost" style="margin-top: 16px;">Правила программы</button>
+    </div>
+  </div>
+
+  <div class="section-label">Состояние с прогрессом</div>
+  <div class="desc-text">
+    У пользователя уже есть рефералы в разных статусах. Видны: агрегаты, cap-индикатор («2 из 3 за месяц»), активный прогресс по pending-друзьям, список последних событий. CTA наверху — чтобы снова поделиться.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Пригласить друга</span></div>
+    </div>
+    <div class="phone-body">
+      <!-- Compact hero with stats -->
+      <div class="ref-hero" style="padding: 18px 16px 16px;">
+        <div class="ref-hero-emoji" style="font-size: 32px; margin-bottom: 6px;">🎁</div>
+        <div class="ref-hero-title" style="font-size: 17px;">Пригласи ещё — <span class="hl">+30 дней PRO</span></div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-strip">
+        <div class="stat-cell is-ref">
+          <div class="v">4</div>
+          <div class="l">приглашено</div>
+        </div>
+        <div class="stat-cell">
+          <div class="v">2</div>
+          <div class="l">в процессе</div>
+        </div>
+        <div class="stat-cell is-reward">
+          <div class="v">+60</div>
+          <div class="l">дней PRO</div>
+        </div>
+      </div>
+
+      <!-- Cap indicator -->
+      <div class="cap-row">
+        <div class="cap-dots">
+          <div class="cap-dot on"></div>
+          <div class="cap-dot on"></div>
+          <div class="cap-dot"></div>
+        </div>
+        <span>Использовано <b style="color:var(--text)">2 из 3</b> наград в этом месяце</span>
+        <span class="cap-reset">сброс 1 мая</span>
+      </div>
+
+      <!-- Link + share -->
+      <div class="ref-link" style="margin-top: 8px;">
+        <div class="ref-link-icon">🔗</div>
+        <div class="ref-link-url">t.me/wishboard_bot?start=ref_dk9x2</div>
+        <div class="ref-link-copy">Копировать</div>
+      </div>
+      <button class="btn-ref" style="margin-bottom: 18px;">📤 Поделиться в Telegram</button>
+
+      <!-- Active pending progress -->
+      <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin-bottom: 10px;">Почти готово</div>
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; border-left: 3px solid var(--orange); margin-bottom: 14px;">
+        <div style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px;">
+          <div class="hist-av anon">👤</div>
+          <div style="flex: 1;">
+            <div class="hist-line1">Друг пришёл по твоей ссылке</div>
+            <div class="hist-line2">Осталось создать первое желание</div>
+          </div>
+          <span class="hist-badge is-pending">Почти</span>
+        </div>
+        <div class="progress-line"><div class="progress-line-fill" style="width: 50%;"></div></div>
+        <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+          <span>Шаг 1 из 2 ·  вишлист создан</span>
+          <span>истекает через 9 дней</span>
+        </div>
+      </div>
+
+      <!-- History preview -->
+      <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin-bottom: 10px;">Последние события</div>
+      <div class="hist-item is-rewarded">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг выполнил условия</div>
+          <div class="hist-line2">+30 дней PRO · 12 апреля</div>
+        </div>
+        <span class="hist-badge is-rewarded">+30 дн</span>
+      </div>
+      <div class="hist-item is-rewarded">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг выполнил условия</div>
+          <div class="hist-line2">+30 дней PRO · 3 апреля</div>
+        </div>
+        <span class="hist-badge is-rewarded">+30 дн</span>
+      </div>
+
+      <button class="btn-ghost" style="margin-top: 4px;">Показать всю историю →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S3: ШАРИНГ                                                    -->
+<!-- ============================================================ -->
+<div class="section" id="s3">
+  <div class="section-label">Шаринг — action sheet</div>
+  <div class="desc-text">
+    При нажатии на «Поделиться» показываем sheet с тремя каналами. Telegram — главный, стоит первым. Копирование и системный share — запасные варианты. Каждый канал трекается отдельным событием для аналитики (referral_link_shared_tg / _copy / _native).
+  </div>
+
+  <div class="sheet-overlay">
+    <div class="sheet-bg">
+      <div class="ref-hero" style="padding: 18px 14px 14px;">
+        <div class="ref-hero-emoji" style="font-size: 28px; margin-bottom: 4px;">🎁</div>
+        <div class="ref-hero-title" style="font-size: 16px;">Месяц PRO за друга</div>
+      </div>
+      <div class="ref-link" style="margin-bottom: 8px;">
+        <div class="ref-link-icon">🔗</div>
+        <div class="ref-link-url">t.me/wishboard_bot?start=ref_dk9x2</div>
+      </div>
+    </div>
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <div class="sheet-title">Поделиться ссылкой</div>
+        <div class="sheet-sub">Отправь другу любым способом — привязка произойдёт по первой открытой ссылке</div>
+      </div>
+      <div class="sheet-list">
+        <div class="sheet-item">
+          <div class="sheet-item-ic tg">✈️</div>
+          <div class="sheet-item-tx">
+            <div class="t">Поделиться в Telegram</div>
+            <div class="s">Выбрать чат или группу</div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="sheet-item">
+          <div class="sheet-item-ic copy">📋</div>
+          <div class="sheet-item-tx">
+            <div class="t">Скопировать ссылку</div>
+            <div class="s">t.me/wishboard_bot?start=ref_dk9x2</div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+        <div class="sheet-item">
+          <div class="sheet-item-ic more">↗</div>
+          <div class="sheet-item-tx">
+            <div class="t">Другое приложение</div>
+            <div class="s">iMessage, WhatsApp, почта…</div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Telegram share — как выглядит сообщение у друга</div>
+  <div class="desc-text">
+    Формат preview-карточки Telegram на основе OpenGraph-меты мини-аппа. Превью сразу объясняет ценность — не просто ссылка «открой бот», а «вишлист с друзьями» с CTA-кнопкой. Важно: CTA-текст — «Открыть», а не «Попробовать бесплатно» — это Telegram mini-app, не покупка.
+  </div>
+
+  <div class="phone">
+    <div class="bot-chat-header">
+      <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #A78BFA); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #fff;">DK</div>
+      <div class="bot-chat-header-tx">
+        <div class="t">Дима · @dkotov</div>
+        <div class="s">был в сети недавно</div>
+      </div>
+    </div>
+    <div class="bot-chat">
+      <!-- Outgoing message (from Dima to friend) -->
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+        <div style="max-width: 82%; padding: 10px 12px; border-radius: 14px 14px 4px 14px; background: #2B5278; color: #F4F4F6; font-size: 13px; line-height: 1.45;">
+          Зацени, вишлисты с друзьями. Мне до ДР 2 месяца, уже собираю 👀
+          <div style="padding: 10px; margin-top: 8px; background: rgba(0,0,0,0.2); border-radius: 10px; border-left: 2px solid var(--ref);">
+            <div style="font-size: 10px; color: var(--ref); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">🎁 WishBoard</div>
+            <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px;">Вишлисты с друзьями</div>
+            <div style="font-size: 11px; color: rgba(255,255,255,0.7); line-height: 1.4;">Создавай вишлисты, делись с друзьями, договаривайся о подарках без дублей</div>
+            <button style="width: 100%; margin-top: 8px; padding: 8px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 12px; font-weight: 600;">Открыть</button>
+          </div>
+          <div style="font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 4px; text-align: right;">18:42 ✓✓</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Копирование — подтверждение</div>
+  <div class="desc-text">
+    Важно явно подтвердить копирование — иначе пользователь не знает, сработало ли. Короткий haptic-подобный toast, без затемнения.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Пригласить друга</span></div>
+    </div>
+    <div class="phone-body">
+      <div class="ref-hero" style="padding: 18px 16px 16px;">
+        <div class="ref-hero-emoji" style="font-size: 32px; margin-bottom: 6px;">🎁</div>
+        <div class="ref-hero-title" style="font-size: 17px;">Пригласи ещё — <span class="hl">+30 дней PRO</span></div>
+      </div>
+
+      <!-- Link with success state -->
+      <div class="ref-link" style="border-color: var(--reward-border); background: var(--reward-soft);">
+        <div class="ref-link-icon" style="background: rgba(52,211,153,0.18); color: var(--reward);">✓</div>
+        <div class="ref-link-url" style="color: var(--reward);">Ссылка скопирована</div>
+        <div class="ref-link-copy" style="color: var(--reward); background: rgba(52,211,153,0.18); border-color: var(--reward-border);">Готово</div>
+      </div>
+
+      <button class="btn-ref">📤 Поделиться в Telegram</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S4: ПРИХОД ДРУГА + ОНБОРДИНГ                                  -->
+<!-- ============================================================ -->
+<div class="section" id="s4">
+  <div class="section-label">Приход друга — 1-й экран после deep-link</div>
+  <div class="desc-text">
+    Никакого referral-chrome для приглашённого. Обычный welcome + стандартный онбординг — он не должен чувствовать, что его «используют» или что за ним кто-то наблюдает. Имя пригласившего не показываем. Про +30 PRO для друга пригласившего — расскажем в самом конце, когда он уже завершит активацию (S4.3). Прогресс-бар 0/2 — это просто нормальная onboarding-структура, не referral-gate.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="title">WishBoard</span>
+    </div>
+    <div class="phone-body">
+      <div class="invitee-hero">
+        <div style="font-size: 48px; margin-bottom: 8px;">✨</div>
+        <div style="font-size: 22px; font-weight: 800; line-height: 1.25; margin-bottom: 6px;">Добро пожаловать<br>в WishBoard</div>
+        <div style="font-size: 13px; color: var(--text-sec); line-height: 1.5; max-width: 300px; margin: 0 auto;">Создавай вишлисты, делись с друзьями, договаривайтесь о подарках без дублей</div>
+      </div>
+
+      <!-- Progress 0/2 — framed as onboarding, not referral gate -->
+      <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin-bottom: 8px;">Первые шаги</div>
+      <div class="progress-row">
+        <div class="progress-ic active">1</div>
+        <div class="progress-tx">
+          <div class="t">Создать первый вишлист</div>
+          <div class="s">Например: «День рождения»</div>
+        </div>
+      </div>
+      <div class="progress-row">
+        <div class="progress-ic">2</div>
+        <div class="progress-tx">
+          <div class="t">Добавить первое желание</div>
+          <div class="s">Что бы ты хотел получить</div>
+        </div>
+      </div>
+
+      <button class="btn-primary" style="margin-top: 8px;">➕ Создать вишлист</button>
+    </div>
+  </div>
+
+  <div class="section-label">Онбординг друга — 1/2 выполнено</div>
+  <div class="desc-text">
+    После создания первого вишлиста обновляем прогресс. Нет никакой referral-специфики — обычный продуктовый nudge «добавь желание, чтобы вишлистом было чем делиться». Параллельно пригласившему летит inviter-side update «друг сделал шаг 1 из 2» (см. S5).
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">🎂 День рождения</span>
+    </div>
+    <div class="phone-body">
+      <!-- Persistent progress banner — product-framed -->
+      <div style="padding: 12px 14px; border-radius: 14px; background: linear-gradient(90deg, var(--accent-soft), rgba(52,211,153,0.06)); border: 1px solid var(--border-light); margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div style="font-size: 12px; font-weight: 700;">✨ Шаг 1 из 2 выполнен</div>
+          <div style="font-size: 11px; color: var(--accent); font-weight: 700;">50%</div>
+        </div>
+        <div class="progress-line" style="margin-bottom: 8px;"><div class="progress-line-fill" style="width: 50%;"></div></div>
+        <div style="font-size: 11px; color: var(--text-sec); line-height: 1.4;">Добавь первое желание — чтобы друзьям было что подарить</div>
+      </div>
+
+      <!-- Empty wishlist with one CTA -->
+      <div style="padding: 28px 16px; border-radius: 16px; background: var(--surface); border: 1px dashed var(--border-light); text-align: center; margin-bottom: 12px;">
+        <div style="font-size: 36px; margin-bottom: 8px;">✨</div>
+        <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">Пусто</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.45; margin-bottom: 14px;">Добавь первое желание — друзья увидят, что ты хочешь</div>
+        <button class="btn-primary" style="padding: 12px 20px; font-size: 14px;">➕ Добавить желание</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Онбординг — 2/2, первый вишлист + желание созданы</div>
+  <div class="desc-text">
+    После завершения активации — celebration-экран с двумя смысловыми слоями. Во-первых, поздравляем с созданием первого вишлиста (продуктовая ценность). Во-вторых, мягко сообщаем «ты помог другу получить 30 дней PRO» — как благодарность, не как оправдание. Имя пригласившего <b>не называем</b>. Это уважение к обеим сторонам: invitee не чувствует, что его использовали втёмную, и одновременно не получает пресс «ты обязан».
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="title">🎂 День рождения</span>
+    </div>
+    <div class="phone-body">
+      <div class="celebration">
+        <div class="celebration-icon">🎉</div>
+        <div class="celebration-title">Первый вишлист готов</div>
+        <div class="celebration-sub">Теперь им можно делиться с друзьями — чтобы не дарили одно и то же</div>
+      </div>
+
+      <!-- Thank-you footnote — after the fact, no pressure -->
+      <div style="padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); display: flex; gap: 10px; align-items: center; margin-bottom: 14px;">
+        <div style="font-size: 18px; flex-shrink: 0;">💜</div>
+        <div style="flex: 1; font-size: 12px; color: var(--text-sec); line-height: 1.45;">
+          Кстати — друг, который тебя пригласил, получил <b style="color: var(--text);">30 дней PRO</b> бесплатно за то, что ты зарегистрировался и создал свой вишлист. Спасибо!
+        </div>
+      </div>
+
+      <button class="btn-primary" style="margin-bottom: 8px;">Поделиться вишлистом</button>
+      <button class="btn-secondary">Добавить ещё желаний</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S5: БОТ-УВЕДОМЛЕНИЯ                                           -->
+<!-- ============================================================ -->
+<div class="section" id="s5">
+  <div class="section-label">Пригласившему — «друг пришёл по ссылке»</div>
+  <div class="desc-text">
+    Первое событие — привязка атрибуции. Не кричим «награда ждёт», не обещаем лишнего. Честно: «перешёл, если выполнит — получишь». Имя друга НЕ показываем на первом шаге (privacy + antifraud — кто-то мог случайно нажать).
+  </div>
+
+  <div class="phone">
+    <div class="bot-chat-header">
+      <div class="bot-chat-header-av">W</div>
+      <div class="bot-chat-header-tx">
+        <div class="t">WishBoard</div>
+        <div class="s">bot</div>
+      </div>
+    </div>
+    <div class="bot-chat">
+      <div class="bot-msg">
+        <div class="bot-msg-av">W</div>
+        <div class="bot-bubble">
+          <div class="b-title ref">🎁 Реферал</div>
+          Кто-то перешёл по твоей ссылке в WishBoard.<br><br>
+          Если он создаст свой <b>первый вишлист и желание</b> — тебе начислят <b>30 дней PRO</b>.
+          <div class="b-btn">Открыть программу →</div>
+          <div class="b-time">18:42</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Пригласившему — «друг выполнил условия, награда»</div>
+  <div class="desc-text">
+    Главное событие — reward granted. Эмоциональный пик. Сразу показываем новую expiry-дату PRO и две кнопки: открыть PRO / пригласить ещё. Вторая кнопка — запуск viral loop, критична для growth-метрики k.
+  </div>
+
+  <div class="phone">
+    <div class="bot-chat-header">
+      <div class="bot-chat-header-av">W</div>
+      <div class="bot-chat-header-tx">
+        <div class="t">WishBoard</div>
+        <div class="s">bot</div>
+      </div>
+    </div>
+    <div class="bot-chat">
+      <div class="bot-msg">
+        <div class="bot-msg-av">W</div>
+        <div class="bot-bubble">
+          <div class="b-title reward">🎉 Награда начислена</div>
+          Друг выполнил условия. Тебе начислено <b>30 дней PRO</b>.<br><br>
+          Подписка активна <b>до 16 мая 2026</b>.
+          <div class="b-btn">⭐ Открыть PRO</div>
+          <div class="b-btn">🎁 Пригласить ещё друга</div>
+          <div class="b-time">20:11</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Пригласившему — PRO продлён</div>
+  <div class="desc-text">
+    Если у пригласившего уже был активный PRO — другой текст, акцент на продлении. Не заменяем существующую подписку, а складываем 30 дней к expiry.
+  </div>
+
+  <div class="phone">
+    <div class="bot-chat-header">
+      <div class="bot-chat-header-av">W</div>
+      <div class="bot-chat-header-tx">
+        <div class="t">WishBoard</div>
+        <div class="s">bot</div>
+      </div>
+    </div>
+    <div class="bot-chat">
+      <div class="bot-msg">
+        <div class="bot-msg-av">W</div>
+        <div class="bot-bubble">
+          <div class="b-title reward">🎉 PRO продлён</div>
+          Друг выполнил условия. Твой PRO продлён на <b>30 дней</b>.<br><br>
+          Было: до 14 мая 2026<br>
+          Стало: <b>до 13 июня 2026</b>
+          <div class="b-btn">⭐ Открыть PRO</div>
+          <div class="b-time">20:11</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Пригласившему — промежуточный прогресс (опционально)</div>
+  <div class="desc-text">
+    После того как друг сделает шаг 1 из 2 (создаст вишлист), можно прислать inviter-у короткий update. Цель — держать его в курсе, чтобы не пропал после первого notif. Важно: <b>это опционально</b> и через rate-limit, чтобы не спамить. Если у inviter несколько pending-друзей одновременно — агрегируем в одно сообщение раз в 12 часов.
+  </div>
+
+  <div class="phone">
+    <div class="bot-chat-header">
+      <div class="bot-chat-header-av">W</div>
+      <div class="bot-chat-header-tx">
+        <div class="t">WishBoard</div>
+        <div class="s">bot</div>
+      </div>
+    </div>
+    <div class="bot-chat">
+      <div class="bot-msg">
+        <div class="bot-msg-av">W</div>
+        <div class="bot-bubble">
+          <div class="b-title ref">🎁 Реферал · шаг 1 из 2</div>
+          Друг, которого ты пригласил, уже создал свой первый вишлист.<br><br>
+          Осталось добавить первое желание — и тебе начислят <b>30 дней PRO</b>.
+          <div class="b-btn">Посмотреть прогресс</div>
+          <div class="b-time">19:57</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Правила отправки уведомлений</div>
+  <div class="desc-text">
+    Чтобы не превратиться в спам-бота.
+  </div>
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; font-size: 12px; color: var(--text-sec); line-height: 1.8;">
+    · <b style="color: var(--text);">«Друг перешёл»</b> — отправляем <b style="color: var(--text);">только за первого</b> реферала в сутки. Иначе спам при массовом шаринге<br>
+    · <b style="color: var(--text);">«Шаг 1 из 2»</b> — агрегируем за 12 часов. Если 3 друга дошли до шага 1 — одно сообщение с цифрой 3<br>
+    · <b style="color: var(--text);">«Награда начислена»</b> — всегда индивидуальное сообщение. Это эмоциональный peak, нельзя сливать<br>
+    · <b style="color: var(--text);">Приглашённому</b> — никаких referral-specific уведомлений. Обычный onboarding
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S6: НАГРАДА                                                   -->
+<!-- ============================================================ -->
+<div class="section" id="s6">
+  <div class="section-label">In-app celebration — основная награда</div>
+  <div class="desc-text">
+    Когда пригласивший заходит в app после reward.granted, показываем одноразовый celebration-оверлей. Не модал-жатье-ок — отдельный экран с confetti, потом возврат на реферальный экран с обновлённой статистикой.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="title">WishBoard</span>
+    </div>
+    <div class="phone-body">
+      <div class="celebration">
+        <div class="celebration-icon">🎉</div>
+        <div class="celebration-title">+30 дней PRO</div>
+        <div class="celebration-sub">Твой друг выполнил условия — награда начислена. Подписка активна до <b style="color: var(--text);">16 мая 2026</b></div>
+        <div class="celebration-pill">⭐ PRO · 30 дней</div>
+      </div>
+
+      <button class="btn-ref" style="margin-bottom: 8px;">🎁 Пригласить ещё друга</button>
+      <button class="btn-secondary">Открыть PRO</button>
+    </div>
+  </div>
+
+  <div class="section-label">Экран PRO — видна история начисления</div>
+  <div class="desc-text">
+    На экране управления PRO показываем, откуда взялся текущий срок. Прозрачность — важно: пользователь видит, что референс-бонус реально прибавил дни. Повышает доверие и стимулирует ещё приглашать.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Мой PRO</span>
+    </div>
+    <div class="phone-body">
+      <!-- PRO status card -->
+      <div style="padding: 18px; border-radius: 18px; background: linear-gradient(135deg, rgba(167,139,250,0.2), rgba(124,106,255,0.08)); border: 1px solid rgba(167,139,250,0.3); text-align: center; margin-bottom: 14px;">
+        <div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 100px; background: rgba(52,211,153,0.15); color: var(--reward); font-size: 11px; font-weight: 700; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em;">✓ Активен</div>
+        <div style="font-size: 32px; font-weight: 800; line-height: 1; margin-bottom: 4px;">⭐ PRO</div>
+        <div style="font-size: 13px; color: var(--text-sec);">до <b style="color: var(--text);">16 мая 2026</b> · осталось 30 дней</div>
+      </div>
+
+      <!-- History of extensions -->
+      <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin-bottom: 10px;">Откуда текущий срок</div>
+
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 10px; overflow: hidden;">
+        <div style="padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; border-left: 3px solid var(--ref);">
+          <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--ref-soft); color: var(--ref); display: flex; align-items: center; justify-content: center; font-size: 15px;">🎁</div>
+          <div style="flex: 1;">
+            <div style="font-size: 13px; font-weight: 600;">Реферал от друга</div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 1px;">16 апреля · +30 дней</div>
+          </div>
+          <div style="font-size: 13px; font-weight: 700; color: var(--reward);">+30</div>
+        </div>
+        <div style="padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center;">
+          <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 15px;">⭐</div>
+          <div style="flex: 1;">
+            <div style="font-size: 13px; font-weight: 600;">Покупка за Stars</div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 1px;">14 марта · 249 ⭐</div>
+          </div>
+          <div style="font-size: 13px; font-weight: 700; color: var(--accent);">+30</div>
+        </div>
+        <div style="padding: 12px 14px; display: flex; gap: 10px; align-items: center;">
+          <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--ref-soft); color: var(--ref); display: flex; align-items: center; justify-content: center; font-size: 15px;">🎁</div>
+          <div style="flex: 1;">
+            <div style="font-size: 13px; font-weight: 600;">Реферал от друга</div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 1px;">3 апреля · +30 дней</div>
+          </div>
+          <div style="font-size: 13px; font-weight: 700; color: var(--reward);">+30</div>
+        </div>
+      </div>
+
+      <button class="btn-ref">🎁 Пригласить друга — +30 дней</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S7: ИСТОРИЯ                                                    -->
+<!-- ============================================================ -->
+<div class="section" id="s7">
+  <div class="section-label">Полная история — все статусы</div>
+  <div class="desc-text">
+    Выделенный экран для погружения в реферальную воронку. 5 основных статусов: <b>attributed</b> (перешёл), <b>pending_activation / qualifying</b> (онбординг в процессе), <b>qualified→rewarded</b> (засчитано), <b>rejected</b> (не подошёл — без деталей «почему», чтобы не плодить privacy/UX-вопросов), <b>expired</b> (не успел за 14 дней). Даты — относительные, имена — аватар + ник либо анонимный если друг не указал @username.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">История приглашений</span></div>
+    </div>
+    <div class="phone-body">
+      <!-- Filter chips -->
+      <div style="display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto;">
+        <div style="padding: 6px 12px; border-radius: 100px; background: var(--ref); color: #1a1a1d; font-size: 11px; font-weight: 700; white-space: nowrap;">Все · 8</div>
+        <div style="padding: 6px 12px; border-radius: 100px; background: var(--surface); border: 1px solid var(--border); color: var(--text-sec); font-size: 11px; font-weight: 600; white-space: nowrap;">Награды · 4</div>
+        <div style="padding: 6px 12px; border-radius: 100px; background: var(--surface); border: 1px solid var(--border); color: var(--text-sec); font-size: 11px; font-weight: 600; white-space: nowrap;">В процессе · 2</div>
+        <div style="padding: 6px 12px; border-radius: 100px; background: var(--surface); border: 1px solid var(--border); color: var(--text-sec); font-size: 11px; font-weight: 600; white-space: nowrap;">Не подошли · 2</div>
+      </div>
+
+      <!-- Rewarded -->
+      <div class="hist-item is-rewarded">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг · приглашение #47</div>
+          <div class="hist-line2">Выполнил условия · 12 апреля</div>
+        </div>
+        <span class="hist-badge is-rewarded">+30 дн</span>
+      </div>
+
+      <!-- Qualifying/pending half -->
+      <div class="hist-item is-pending">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг · приглашение #46</div>
+          <div class="hist-line2">Создал вишлист · осталось добавить желание</div>
+          <div style="font-size: 10px; color: var(--orange); margin-top: 4px;">⏱ истекает через 9 дней</div>
+        </div>
+        <span class="hist-badge is-pending">1/2</span>
+      </div>
+
+      <!-- Rewarded -->
+      <div class="hist-item is-rewarded">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг · приглашение #45</div>
+          <div class="hist-line2">Выполнил условия · 3 апреля</div>
+        </div>
+        <span class="hist-badge is-rewarded">+30 дн</span>
+      </div>
+
+      <!-- Attributed (just came) -->
+      <div class="hist-item is-attributed">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг · приглашение #44</div>
+          <div class="hist-line2">Перешёл по ссылке · ещё не начал онбординг</div>
+        </div>
+        <span class="hist-badge is-attributed">Перешёл</span>
+      </div>
+
+      <!-- Rewarded -->
+      <div class="hist-item is-rewarded">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг · приглашение #43</div>
+          <div class="hist-line2">Выполнил условия · 29 марта</div>
+        </div>
+        <span class="hist-badge is-rewarded">+30 дн</span>
+      </div>
+
+      <!-- Rejected - silent -->
+      <div class="hist-item is-rejected">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг · приглашение #42</div>
+          <div class="hist-line2">Этот переход не подошёл под условия программы</div>
+        </div>
+        <span class="hist-badge is-rejected">—</span>
+      </div>
+
+      <!-- Rewarded -->
+      <div class="hist-item is-rewarded">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг · приглашение #41</div>
+          <div class="hist-line2">Выполнил условия · 21 марта</div>
+        </div>
+        <span class="hist-badge is-rewarded">+30 дн</span>
+      </div>
+
+      <!-- Expired -->
+      <div class="hist-item is-expired">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг · приглашение #40</div>
+          <div class="hist-line2">Не успел выполнить условия за 14 дней</div>
+        </div>
+        <span class="hist-badge is-rejected">Истёк</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Тап на карточку — детали</div>
+  <div class="desc-text">
+    По клику на карточку разворачиваем timeline событий по этому рефералу. Нужно для саппорта и понимания пользователем, где сейчас остановился процесс. Имя друга <b>не показываем</b> — привязка идёт по номеру приглашения и дате.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Приглашение #47</span><div class="title-sub">12 апреля 2026</div></div>
+    </div>
+    <div class="phone-body">
+      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 18px; padding: 14px; background: var(--card); border-radius: 14px; border: 1px solid var(--reward-border); border-left: 3px solid var(--reward);">
+        <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--reward-soft); color: var(--reward); display: flex; align-items: center; justify-content: center; font-size: 22px;">✓</div>
+        <div style="flex: 1;">
+          <div style="font-size: 15px; font-weight: 700;">Друг выполнил условия</div>
+          <div style="font-size: 12px; color: var(--reward); font-weight: 600;">Награда начислена</div>
+        </div>
+        <div style="font-size: 14px; font-weight: 800; color: var(--reward);">+30 дн</div>
+      </div>
+
+      <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin-bottom: 10px;">Timeline</div>
+
+      <!-- Timeline -->
+      <div style="position: relative; padding-left: 24px;">
+        <div style="position: absolute; left: 11px; top: 14px; bottom: 14px; width: 1px; background: var(--border);"></div>
+
+        <div style="position: relative; margin-bottom: 14px;">
+          <div style="position: absolute; left: -24px; top: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--reward-soft); border: 2px solid var(--reward); color: var(--reward); display: flex; align-items: center; justify-content: center; font-size: 11px;">✓</div>
+          <div style="font-size: 13px; font-weight: 600;">Награда начислена</div>
+          <div style="font-size: 11px; color: var(--text-muted);">12 апреля, 20:11 · +30 дней PRO</div>
+        </div>
+
+        <div style="position: relative; margin-bottom: 14px;">
+          <div style="position: absolute; left: -24px; top: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--reward-soft); border: 2px solid var(--reward); color: var(--reward); display: flex; align-items: center; justify-content: center; font-size: 11px;">✓</div>
+          <div style="font-size: 13px; font-weight: 600;">Добавил первое желание</div>
+          <div style="font-size: 11px; color: var(--text-muted);">12 апреля, 20:08</div>
+        </div>
+
+        <div style="position: relative; margin-bottom: 14px;">
+          <div style="position: absolute; left: -24px; top: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--reward-soft); border: 2px solid var(--reward); color: var(--reward); display: flex; align-items: center; justify-content: center; font-size: 11px;">✓</div>
+          <div style="font-size: 13px; font-weight: 600;">Создал первый вишлист</div>
+          <div style="font-size: 11px; color: var(--text-muted);">12 апреля, 19:55</div>
+        </div>
+
+        <div style="position: relative;">
+          <div style="position: absolute; left: -24px; top: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); border: 2px solid var(--text-muted); color: var(--text-muted); display: flex; align-items: center; justify-content: center; font-size: 11px;">→</div>
+          <div style="font-size: 13px; font-weight: 600;">Перешёл по ссылке</div>
+          <div style="font-size: 11px; color: var(--text-muted);">12 апреля, 19:42</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S8: EDGE-КЕЙСЫ                                                -->
+<!-- ============================================================ -->
+<div class="section" id="s8">
+  <div class="section-label">Лимит за месяц исчерпан</div>
+  <div class="desc-text">
+    Пользователь получил 3 награды за календарный месяц. Не блокируем шаринг ссылки полностью — это растит retention / social. Просто честно предупреждаем: «новые награды — с 1 мая». Пусть зовёт ещё, ссылка работает, атрибуция сохраняется, но reward пометится <code>cap_rejected</code> и будет видна в истории как «не начислено — лимит».
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Пригласить друга</span></div>
+    </div>
+    <div class="phone-body">
+      <!-- Cap reached banner -->
+      <div class="cap-reached">
+        <div class="cap-reached-ic">🏆</div>
+        <div class="cap-reached-t">Лимит за месяц исчерпан</div>
+        <div class="cap-reached-s">Ты получил 3 награды в апреле — максимум за месяц. Новые награды можно получать с <b style="color: var(--text);">1 мая 2026</b></div>
+      </div>
+
+      <!-- Cap dots -->
+      <div class="cap-row">
+        <div class="cap-dots">
+          <div class="cap-dot on"></div>
+          <div class="cap-dot on"></div>
+          <div class="cap-dot on"></div>
+        </div>
+        <span><b style="color:var(--text)">3 из 3</b> · в этом году <b style="color: var(--text);">6 из 12</b></span>
+      </div>
+
+      <!-- Still can share -->
+      <div style="padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px dashed var(--border-light); font-size: 12px; color: var(--text-sec); line-height: 1.5; margin: 14px 0;">
+        Ссылкой можно делиться и дальше — просто новые друзья не принесут награду в этом месяце
+      </div>
+
+      <div class="ref-link">
+        <div class="ref-link-icon">🔗</div>
+        <div class="ref-link-url">t.me/wishboard_bot?start=ref_dk9x2</div>
+        <div class="ref-link-copy">Копировать</div>
+      </div>
+
+      <button class="btn-ref">📤 Поделиться в Telegram</button>
+    </div>
+  </div>
+
+  <div class="section-label">Годовой лимит</div>
+  <div class="desc-text">
+    Крайне редкий кейс (12 успешных рефералов за 12 месяцев). Подача спокойная, без позора — это же наш power-user. Фактически делаем фичу недоступной до даты rolling-сброса, но оставляем ссылку рабочей.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Пригласить друга</span></div>
+    </div>
+    <div class="phone-body">
+      <div style="padding: 20px; border-radius: 18px; background: var(--card); border: 1px solid var(--border); text-align: center;">
+        <div style="font-size: 40px; margin-bottom: 10px;">👑</div>
+        <div style="font-size: 16px; font-weight: 700; margin-bottom: 6px;">Ты максимальный реферал года</div>
+        <div style="font-size: 12px; color: var(--text-sec); line-height: 1.55; margin-bottom: 14px;">12 друзей выполнили условия за последние 12 месяцев. Лимит сбросится <b style="color: var(--text);">21 марта 2027</b></div>
+        <div style="padding: 10px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600;">⭐ У тебя +360 дней PRO</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Pending-guidance — друг застрял на шаге 1</div>
+  <div class="desc-text">
+    Если у пригласившего есть друг в статусе <code>pending_activation</code> уже >3 дней — показываем мягкий nudge: «Напомнить». CTA создаёт <b>drafted</b> сообщение для пересылки другу (prefilled), без автоматической отправки — чтобы не было UX-обидки.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Пригласить друга</span></div>
+    </div>
+    <div class="phone-body">
+      <div style="padding: 14px; border-radius: 14px; background: var(--orange-soft); border: 1px solid rgba(251,191,36,0.22); margin-bottom: 14px;">
+        <div style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px;">
+          <div style="font-size: 22px;">⏱</div>
+          <div style="flex: 1;">
+            <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px;">Друг почти готов</div>
+            <div style="font-size: 12px; color: var(--text-sec); line-height: 1.45;">Создал вишлист 5 дней назад — осталось добавить желание. Напомни, чтобы не истекло через 9 дней</div>
+          </div>
+        </div>
+        <button class="btn-small" style="width: 100%; background: var(--orange); color: #1a1a1d;">Напомнить другу</button>
+      </div>
+
+      <div class="stats-strip">
+        <div class="stat-cell is-ref"><div class="v">4</div><div class="l">приглашено</div></div>
+        <div class="stat-cell"><div class="v">1</div><div class="l">в процессе</div></div>
+        <div class="stat-cell is-reward"><div class="v">+90</div><div class="l">дней PRO</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Самореферал / другой inviter — тихий fallback</div>
+  <div class="desc-text">
+    Если пользователь открыл собственную ссылку, или у него в учётке уже привязан другой inviter, или он уже не новый — <b>не показываем ошибок</b>. Просто открываем app как обычно. Toast с техническим текстом («ты не подошёл под условия») унижает пользователя. Тихо пропускаем — в истории inviter это отобразится как <code>rejected</code>.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="title">WishBoard</span>
+    </div>
+    <div class="phone-body">
+      <!-- Normal home, no referral chrome — no shame -->
+      <div style="padding: 16px; border-radius: 16px; background: var(--card); border: 1px solid var(--border); margin-bottom: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-size: 14px; font-weight: 700;">🎂 День рождения</div>
+          <div style="font-size: 11px; color: var(--text-muted);">12 желаний</div>
+        </div>
+      </div>
+      <div style="padding: 16px; border-radius: 16px; background: var(--card); border: 1px solid var(--border); margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-size: 14px; font-weight: 700;">🎄 Новый год</div>
+          <div style="font-size: 11px; color: var(--text-muted);">4 желания</div>
+        </div>
+      </div>
+
+      <div style="padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px dashed var(--border-light); font-size: 11px; color: var(--text-muted); line-height: 1.45; text-align: center;">
+        👁 Dev-note: Реферал тихо отмечен как <code>rejected / invitee_not_new_user</code> — никакой информации пользователю. Он просто в своём обычном потоке, как будто ссылка была дефолтной
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Fraud review — награда на паузе</div>
+  <div class="desc-text">
+    Если antifraud-скоринг сработал подозрительно (вспышка рефералов с одного IP, подозрительные device-паттерны), reward не начисляется мгновенно — статус <code>fraud_review</code>. Пользователю показываем нейтральное «на проверке, скоро решим» без обвинений. 90% случаев разрешится автоматически. Остальное — ручной review в админке.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Пригласить друга</span></div>
+    </div>
+    <div class="phone-body">
+      <div style="padding: 14px; border-radius: 14px; background: var(--blue-soft); border: 1px solid rgba(96,165,250,0.22); margin-bottom: 14px;">
+        <div style="display: flex; gap: 10px; align-items: flex-start;">
+          <div style="font-size: 20px; color: var(--blue);">🔎</div>
+          <div style="flex: 1;">
+            <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px; color: var(--blue);">Награда на проверке</div>
+            <div style="font-size: 12px; color: var(--text-sec); line-height: 1.45;">Обычно занимает несколько часов. Как только проверка завершится — начислим 30 дней PRO</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hist-item" style="border-left: 3px solid var(--blue);">
+        <div class="hist-av anon">👤</div>
+        <div class="hist-info">
+          <div class="hist-line1">Друг · приглашение #48</div>
+          <div class="hist-line2">Выполнил условия · на проверке</div>
+        </div>
+        <span class="hist-badge" style="background: var(--blue-soft); color: var(--blue);">Проверка</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S9: ПРАВИЛА                                                    -->
+<!-- ============================================================ -->
+<div class="section" id="s9">
+  <div class="section-label">Правила — аккордеон</div>
+  <div class="desc-text">
+    Отдельный экран с правилами. Открывается либо по ссылке «Правила программы» из реферального экрана, либо с paywall. Не огромная простыня — 6 вопросов, на которые чаще всего приходит саппорт. Первые 3 раскрыты по умолчанию — самые важные.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Правила программы</span></div>
+    </div>
+    <div class="phone-body">
+      <!-- Short intro -->
+      <div style="padding: 14px; border-radius: 14px; background: var(--ref-soft); border: 1px solid var(--ref-border); margin-bottom: 14px;">
+        <div style="font-size: 13px; font-weight: 700; margin-bottom: 4px;">🎁 Как работает программа</div>
+        <div style="font-size: 12px; color: var(--text-sec); line-height: 1.5;">Пригласи друга — получи 30 дней PRO бесплатно. Награда начисляется после того, как друг создаёт свой первый вишлист и первое желание</div>
+      </div>
+
+      <div class="rules-list">
+        <div class="rule open">
+          <div class="rule-q"><div class="rule-q-t">Кто считается новым пользователем?</div><div class="rule-q-c">+</div></div>
+          <div class="rule-a">Тот, кто раньше не открывал бота, не создавал вишлистов и не добавлял желаний. Если друг уже когда-то пользовался WishBoard — награда за него не начисляется. Это проверяется автоматически.</div>
+        </div>
+        <div class="rule open">
+          <div class="rule-q"><div class="rule-q-t">За что начисляется награда?</div><div class="rule-q-c">+</div></div>
+          <div class="rule-a">Когда приглашённый друг впервые заходит в бот, создаёт свой первый вишлист и добавляет в него первое желание — тебе начисляется 30 дней PRO. Оба условия обязательны: просто переход по ссылке не даёт награды.</div>
+        </div>
+        <div class="rule open">
+          <div class="rule-q"><div class="rule-q-t">Сколько наград можно получить?</div><div class="rule-q-c">+</div></div>
+          <div class="rule-a">До 3 наград в месяц и до 12 наград за последние 12 месяцев. Этого достаточно, чтобы круглый год пользоваться PRO бесплатно, если приглашать хотя бы одного друга в месяц.</div>
+        </div>
+        <div class="rule">
+          <div class="rule-q"><div class="rule-q-t">Что если у меня уже есть PRO?</div><div class="rule-q-c">+</div></div>
+        </div>
+        <div class="rule">
+          <div class="rule-q"><div class="rule-q-t">Сколько времени у друга на выполнение условий?</div><div class="rule-q-c">+</div></div>
+        </div>
+        <div class="rule">
+          <div class="rule-q"><div class="rule-q-t">Что если друг открыл ссылку случайно?</div><div class="rule-q-c">+</div></div>
+        </div>
+        <div class="rule">
+          <div class="rule-q"><div class="rule-q-t">Могут ли аннулировать награду?</div><div class="rule-q-c">+</div></div>
+        </div>
+      </div>
+
+      <!-- Fine print -->
+      <div style="margin-top: 18px; padding: 12px; font-size: 11px; color: var(--text-muted); line-height: 1.55; text-align: center;">
+        Программа может быть изменена или остановлена. Злоупотребление ведёт к аннулированию награды.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S10: АДМИНКА                                                  -->
+<!-- ============================================================ -->
+<div class="section" id="s10">
+  <div class="section-label">God-mode — общий обзор</div>
+  <div class="desc-text">
+    Админский экран реферальной программы. Ключевое — видеть стоимость (сколько PRO-месяцев раздали) и качество (сколько rejected по фрод-причинам). Метрики обновляются по клику, а не риал-тайм — чтобы не грузить БД.
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Реферальная программа</span><div class="title-sub">admin · god-mode</div></div>
+    </div>
+    <div class="phone-body">
+      <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin-bottom: 10px;">За последние 30 дней</div>
+
+      <div class="admin-stat">
+        <div class="admin-stat-cell">
+          <div class="l">Переходы</div>
+          <div class="v">2 147</div>
+          <div class="d">+18% к прошлому периоду</div>
+        </div>
+        <div class="admin-stat-cell">
+          <div class="l">Атрибуции</div>
+          <div class="v">1 423</div>
+          <div class="d">66% от переходов</div>
+        </div>
+        <div class="admin-stat-cell">
+          <div class="l">Qualified</div>
+          <div class="v">612</div>
+          <div class="d">43% от атрибуций</div>
+        </div>
+        <div class="admin-stat-cell">
+          <div class="l">Начислено наград</div>
+          <div class="v">587</div>
+          <div class="d">96% от qualified</div>
+        </div>
+        <div class="admin-stat-cell">
+          <div class="l">Раздано PRO-дней</div>
+          <div class="v">18 290</div>
+          <div class="d neg">~ €1 250 rev loss</div>
+        </div>
+        <div class="admin-stat-cell">
+          <div class="l">Fraud review</div>
+          <div class="v">25</div>
+          <div class="d">4% от qualified</div>
+        </div>
+      </div>
+
+      <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin: 18px 0 10px;">Воронка</div>
+      <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 14px;">
+        <!-- Funnel bars -->
+        <div style="margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;"><span>Переходы</span><span style="color: var(--text); font-weight: 600;">2 147</span></div>
+          <div style="height: 6px; border-radius: 3px; background: var(--ref); width: 100%;"></div>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;"><span>Атрибуции</span><span style="color: var(--text); font-weight: 600;">1 423 · 66%</span></div>
+          <div style="height: 6px; border-radius: 3px; background: var(--ref); width: 66%;"></div>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;"><span>1-й вишлист</span><span style="color: var(--text); font-weight: 600;">851 · 40%</span></div>
+          <div style="height: 6px; border-radius: 3px; background: var(--ref); width: 40%;"></div>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;"><span>1-е желание</span><span style="color: var(--text); font-weight: 600;">612 · 29%</span></div>
+          <div style="height: 6px; border-radius: 3px; background: var(--ref); width: 29%;"></div>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;"><span>Награды</span><span style="color: var(--text); font-weight: 600;">587 · 27%</span></div>
+          <div style="height: 6px; border-radius: 3px; background: var(--reward); width: 27%;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Fraud review queue</div>
+  <div class="desc-text">
+    Очередь на ручной review. Scoring: low (auto-approve), med (manual), high (auto-reject, manual unlock). Видим: inviter, invitee, причину флага, fraud score, timestamp. Кнопки: approve / reject / revoke (если уже начислили).
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">Fraud Review · 25</span></div>
+    </div>
+    <div class="phone-body">
+      <div class="admin-row">
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 12px; font-weight: 600;">@dkotov → <span style="color: var(--text-muted);">anon #a91</span></div>
+          <div class="admin-row-code">Same IP as 3 other refs in 12min window</div>
+        </div>
+        <span class="admin-row-score high">92</span>
+      </div>
+      <div class="admin-row">
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 12px; font-weight: 600;">@nevermint → <span style="color: var(--text-muted);">anon #b41</span></div>
+          <div class="admin-row-code">Invitee inactive 0m after qualifying</div>
+        </div>
+        <span class="admin-row-score high">87</span>
+      </div>
+      <div class="admin-row">
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 12px; font-weight: 600;">@bearfriend → <span style="color: var(--text-muted);">anon #c77</span></div>
+          <div class="admin-row-code">Same device fingerprint cluster</div>
+        </div>
+        <span class="admin-row-score med">61</span>
+      </div>
+      <div class="admin-row">
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 12px; font-weight: 600;">@foxy → <span style="color: var(--text-muted);">anon #d23</span></div>
+          <div class="admin-row-code">5 refs in 8 minutes from same inviter</div>
+        </div>
+        <span class="admin-row-score med">58</span>
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button class="btn-small" style="flex: 1; background: var(--reward-soft); color: var(--reward); border: 1px solid var(--reward-border);">✓ Approve</button>
+        <button class="btn-small" style="flex: 1; background: var(--red-soft); color: var(--red); border: 1px solid rgba(248,113,113,0.22);">✗ Reject</button>
+      </div>
+
+      <div style="margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); font-size: 11px; color: var(--text-muted); line-height: 1.5;">
+        <b style="color: var(--text-sec);">Rules:</b> score < 40 = auto-approve · 40-80 = manual · >80 = auto-reject + manual unlock
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Пользователь — карточка inviter</div>
+  <div class="desc-text">
+    Карточка конкретного пользователя для саппорта и фрод-исследования. Видим: все его рефералы, общий risk-score, текущий cap, его собственный referral chain (кто пригласил его).
+  </div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <div><span class="title">@dkotov</span><div class="title-sub">referral history</div></div>
+    </div>
+    <div class="phone-body">
+      <div style="display: flex; gap: 12px; padding: 14px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 14px;">
+        <div class="profile-av">DK</div>
+        <div style="flex: 1;">
+          <div class="profile-name">@dkotov <span class="pro-chip-small">PRO</span></div>
+          <div class="profile-sub">TG: 12345678 · joined 14.03.2026</div>
+        </div>
+      </div>
+
+      <div class="admin-stat">
+        <div class="admin-stat-cell">
+          <div class="l">Успешных рефералов</div>
+          <div class="v">6 / 12</div>
+          <div class="d">за 12 мес</div>
+        </div>
+        <div class="admin-stat-cell">
+          <div class="l">Risk score</div>
+          <div class="v" style="color: var(--reward);">12</div>
+          <div class="d">low · clean</div>
+        </div>
+      </div>
+
+      <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin-bottom: 8px;">Его рефералы</div>
+      <div class="admin-row"><div style="flex: 1;"><div style="font-size: 12px; font-weight: 600;">@bearfriend</div><div class="admin-row-code">rewarded · 12.04</div></div><span class="admin-row-score low">12</span></div>
+      <div class="admin-row"><div style="flex: 1;"><div style="font-size: 12px; font-weight: 600;">@foxy</div><div class="admin-row-code">rewarded · 03.04</div></div><span class="admin-row-score low">8</span></div>
+      <div class="admin-row"><div style="flex: 1;"><div style="font-size: 12px; font-weight: 600;">@pandacraft</div><div class="admin-row-code">rewarded · 29.03</div></div><span class="admin-row-score low">15</span></div>
+      <div class="admin-row"><div style="flex: 1;"><div style="font-size: 12px; font-weight: 600;">anon #c77</div><div class="admin-row-code">fraud_review · 16.04</div></div><span class="admin-row-score med">61</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S11: АНАЛИТИКА                                                -->
+<!-- ============================================================ -->
+<div class="section" id="s11">
+  <div class="section-label">Schema contract — атрибуты на каждом событии</div>
+  <div class="desc-text">
+    Это жёсткий контракт. Каждое <code>referral.*</code> событие ОБЯЗАНО содержать этот набор — иначе на дашборде и в отладке будут слепые зоны. Валидация на уровне writer'а: если атрибут отсутствует — событие дропается в <code>AnalyticsDeadletter</code> с причиной.
+  </div>
+
+  <div class="schema-block">
+    <div style="color: var(--text); font-weight: 700; margin-bottom: 8px;">// Обязательные (reject event on missing)</div>
+    <span class="sreq">▸</span> <span class="sk">eventId</span><span class="sc"> · uuid, idempotency key</span><br>
+    <span class="sreq">▸</span> <span class="sk">eventName</span><span class="sc"> · referral.*</span><br>
+    <span class="sreq">▸</span> <span class="sk">eventVersion</span><span class="sc"> · int, bump on schema change</span><br>
+    <span class="sreq">▸</span> <span class="sk">occurredAt</span><span class="sc"> · datetime, client-side event time</span><br>
+    <span class="sreq">▸</span> <span class="sk">receivedAt</span><span class="sc"> · datetime, server-side ingestion</span><br>
+    <span class="sreq">▸</span> <span class="sk">environment</span><span class="sc"> · prod | staging | dev</span><br>
+    <span class="sreq">▸</span> <span class="sk">appVersion</span><span class="sc"> · для regression-среза</span><br>
+    <span class="sreq">▸</span> <span class="sk">configVersion</span><span class="sc"> · ReferralProgramConfig hash/id на момент события</span><br>
+    <span class="sreq">▸</span> <span class="sk">configSnapshot</span><span class="sc"> · rewardDays, caps, windowDays — inline копия</span>
+    <div style="color: var(--text); font-weight: 700; margin: 14px 0 8px;">// Identity</div>
+    <span class="sreq">▸</span> <span class="sk">actorUserId</span><span class="sc"> · кто дёрнул событие (inviter OR invitee)</span><br>
+    <span class="sopt">▸</span> <span class="sk">inviterUserId</span><span class="sc"> · если применимо</span><br>
+    <span class="sopt">▸</span> <span class="sk">inviteeUserId</span><span class="sc"> · если применимо</span><br>
+    <span class="sopt">▸</span> <span class="sk">attributionId</span><span class="sc"> · null до события `attributed`</span><br>
+    <span class="sopt">▸</span> <span class="sk">referralCode</span><span class="sc"> · всегда если есть</span>
+    <div style="color: var(--text); font-weight: 700; margin: 14px 0 8px;">// Context</div>
+    <span class="sreq">▸</span> <span class="sk">platform</span><span class="sc"> · ios | android | web | tma</span><br>
+    <span class="sreq">▸</span> <span class="sk">telegramClient</span><span class="sc"> · tma version from initDataUnsafe</span><br>
+    <span class="sreq">▸</span> <span class="sk">locale</span><span class="sc"> · ru, en, ...</span><br>
+    <span class="sreq">▸</span> <span class="sk">timezone</span><span class="sc"> · для same_tz_cluster detection</span><br>
+    <span class="sopt">▸</span> <span class="sk">ipHash</span><span class="sc"> · sha256(ip+salt), rotating salt</span><br>
+    <span class="sopt">▸</span> <span class="sk">deviceFingerprintHash</span><span class="sc"> · stable across session</span><br>
+    <span class="sopt">▸</span> <span class="sk">sessionId</span><span class="sc"> · для связывания событий одного захода</span><br>
+    <span class="sopt">▸</span> <span class="sk">userAgent</span><span class="sc"> · для bot-detection</span>
+    <div style="color: var(--text); font-weight: 700; margin: 14px 0 8px;">// Experiment (если есть)</div>
+    <span class="sopt">▸</span> <span class="sk">experiments</span><span class="sc"> · [{ key, variant }] — все активные A/B</span>
+  </div>
+
+  <div class="section-label" style="margin-top: 24px;">Events — Inviter входные точки</div>
+
+  <div class="ev-group">
+    <div class="ev">referral.entry_point_impression<div class="ev-attrs">slot: profile_card | paywall_alt | home_banner | post_share_toast · visibleMs</div></div>
+    <div class="ev">referral.entry_point_clicked<div class="ev-attrs">slot</div></div>
+    <div class="ev">referral.home_banner_dismissed<div class="ev-attrs">sessionId — чтобы понять, мы ли долбим пользователя</div></div>
+    <div class="ev">referral.screen_opened<div class="ev-attrs">entryPoint, referralCodeGeneratedInline: bool — была ли генерация лениво в этот момент</div></div>
+    <div class="ev">referral.rules_opened</div>
+    <div class="ev">referral.history_opened</div>
+  </div>
+
+  <div class="section-label" style="margin-top: 20px;">Events — Share flow</div>
+
+  <div class="ev-group">
+    <div class="ev">referral.share_action_sheet_opened</div>
+    <div class="ev">referral.link_copied<div class="ev-attrs">via: chip | share_sheet · clipboardApiSucceeded: bool</div></div>
+    <div class="ev">referral.share_intent<div class="ev-attrs">channel: telegram | native | copy — намерение, ДО выполнения</div></div>
+    <div class="ev">referral.share_completed<div class="ev-attrs">channel — опционально, если SDK репортит</div></div>
+    <div class="ev">referral.share_failed<div class="ev-attrs">channel, reason: sdk_error | user_cancelled | clipboard_blocked — <b>критично для debug</b></div></div>
+    <div class="ev">referral.reminder_drafted<div class="ev-attrs">attributionId · pending-guidance flow</div></div>
+  </div>
+
+  <div class="section-label" style="margin-top: 20px;">Events — Pre-attribution (start-команда)</div>
+  <div class="desc-text">
+    Это то, что происходит до того, как invitee вообще связан с inviter. Критично для диагностики «ссылка была, но attribution нет».
+  </div>
+
+  <div class="ev-group">
+    <div class="ev">referral.start_command_received<div class="ev-attrs">payloadRaw, hasReferralPayload: bool — fires ДО парсинга</div></div>
+    <div class="ev">referral.code_resolved<div class="ev-attrs">referralCode, inviterUserId — ссылка распознана</div></div>
+    <div class="ev">referral.code_invalid<div class="ev-attrs">payloadRaw, reason: unknown_code | malformed | expired_code_format | code_belongs_to_banned_user</div></div>
+    <div class="ev">referral.payload_missing<div class="ev-attrs">startedBotWithoutReferralPayload — baseline для сравнения</div></div>
+    <div class="ev">referral.landing_viewed<div class="ev-attrs">inviterUserId, referralCode, source · DOMContentLoaded→mount latency</div></div>
+  </div>
+
+  <div class="section-label" style="margin-top: 20px;">Events — Invitee воронка</div>
+
+  <div class="ev-group">
+    <div class="ev">referral.onboarding_started<div class="ev-attrs">elapsedMsSinceLanding</div></div>
+    <div class="ev">referral.onboarding_step_viewed<div class="ev-attrs">step: 1_wishlist | 2_item — impression на шаге</div></div>
+    <div class="ev">referral.first_wishlist_created<div class="ev-attrs">elapsedMsSinceLanding, wishlistId</div></div>
+    <div class="ev">referral.first_item_created<div class="ev-attrs">elapsedMsSinceLanding, itemId</div></div>
+    <div class="ev">referral.qualification_criteria_met<div class="ev-attrs">внутри транзакции, до записи в БД — для telemetry race-кондов</div></div>
+  </div>
+
+  <div class="section-label" style="margin-top: 20px;">Events — Attribution lifecycle</div>
+
+  <div class="ev-group">
+    <div class="ev">referral.attributed<div class="ev-attrs">status: attributed, attributionId, source</div></div>
+    <div class="ev">referral.attribution_rejected_on_write<div class="ev-attrs">reason: invitee_not_new_user | invitee_had_prior_dialog | invitee_had_prior_wishlist | invitee_had_prior_item | invitee_already_attributed | self_referral_detected | program_disabled | inviter_banned | inviter_self_deleted — <b>fires на попытке записи, до attributed</b></div></div>
+    <div class="ev">referral.pending_activation<div class="ev-attrs">attributionId, windowDeadlineAt</div></div>
+    <div class="ev">referral.qualified<div class="ev-attrs">attributionId, timeToQualifyMs</div></div>
+    <div class="ev">referral.qualification_timeout<div class="ev-attrs">attributionId, windowDays, invitedCreatedWishlist: bool, invitedCreatedItem: bool — <b>partial-progress</b></div></div>
+    <div class="ev">referral.rewarded<div class="ev-attrs">rewardDays, inviterHadActivePro: bool, inviterPrevExpiryAt, inviterNewExpiryAt, grantStrategy: stack | replace</div></div>
+    <div class="ev">referral.reward_grant_failed<div class="ev-attrs">reason: db_error | double_grant_prevented | subscription_service_error — <b>должно быть 0</b></div></div>
+    <div class="ev">referral.rejected<div class="ev-attrs">rejectReason: reward_cap_reached | qualification_timeout | program_disabled | system_conflict</div></div>
+  </div>
+
+  <div class="section-label" style="margin-top: 20px;">Events — Fraud signals (по каждому сигналу)</div>
+  <div class="desc-text">
+    Раньше было одно событие <code>fraud_review</code> с массивом причин. <b>Теперь — отдельное событие на каждый сигнал</b>, чтобы можно было отфильтровать «сколько раз срабатывал ip_cluster в апреле» без парсинга JSON.
+  </div>
+
+  <div class="ev-group">
+    <div class="ev">referral.fraud_signal_ip_cluster<div class="ev-attrs">ipHash, clusterSize, windowMinutes, weight</div></div>
+    <div class="ev">referral.fraud_signal_device_fingerprint<div class="ev-attrs">fingerprintHash, priorAttributions, weight</div></div>
+    <div class="ev">referral.fraud_signal_velocity<div class="ev-attrs">inviterAttributionsLast24h, inviterAttributionsLast1h, weight</div></div>
+    <div class="ev">referral.fraud_signal_inactive_invitee<div class="ev-attrs">sessionsAfterQualify, msgsAfterQualify, weight</div></div>
+    <div class="ev">referral.fraud_signal_same_tz_cluster<div class="ev-attrs">tz, clusterSize, weight</div></div>
+    <div class="ev">referral.fraud_signal_self_referral<div class="ev-attrs">matchedBy: phone_hash | email_hash | device_fingerprint | ip</div></div>
+    <div class="ev">referral.fraud_signal_suspicious_onboarding<div class="ev-attrs">timeToQualifyMs, stepGapsMs — слишком быстро = bot-pattern</div></div>
+    <div class="ev">referral.fraud_signal_account_age_delta<div class="ev-attrs">inviterAgeDays, inviteeAgeDays — invitee создан через минуту после inviter = подозрительно</div></div>
+    <div class="ev">referral.fraud_score_calculated<div class="ev-attrs">score, triggeredSignals: [...], threshold, decision: auto_reject | manual_review | pass</div></div>
+    <div class="ev">referral.fraud_review_queued<div class="ev-attrs">attributionId, priority</div></div>
+    <div class="ev">referral.fraud_resolved<div class="ev-attrs">resolution: approved | rejected, resolvedBy: admin_id, timeInQueueHours</div></div>
+    <div class="ev">referral.fraud_cluster_created<div class="ev-attrs">clusterId, signalType, initialSize</div></div>
+    <div class="ev">referral.fraud_cluster_grew<div class="ev-attrs">clusterId, newSize, deltaMembers</div></div>
+    <div class="ev">referral.fraud_false_positive_confirmed<div class="ev-attrs">attributionId — админ unreject'нул. Feed back в тюнинг весов</div></div>
+    <div class="ev">referral.fraud_false_negative_confirmed<div class="ev-attrs">attributionId — задним числом выявили фрод. Критично для рекалибровки</div></div>
+    <div class="ev">referral.reward_revoked<div class="ev-attrs">reason, by: system | admin, daysRevoked</div></div>
+  </div>
+
+  <div class="section-label" style="margin-top: 20px;">Events — Silent failures & UI errors</div>
+  <div class="desc-text">
+    Самый большой слепой угол. Если этого не логировать — юзер жалуется «ничего не работает», а у нас в дашборде тишина.
+  </div>
+
+  <div class="ev-group">
+    <div class="ev">referral.code_generation_failed<div class="ev-attrs">reason: db_unique_collision | db_timeout | service_unavailable — при первом открытии экрана</div></div>
+    <div class="ev">referral.screen_load_failed<div class="ev-attrs">reason: api_500 | api_timeout | api_unauthorized · retryCount</div></div>
+    <div class="ev">referral.history_load_failed<div class="ev-attrs">reason</div></div>
+    <div class="ev">referral.deeplink_open_failed<div class="ev-attrs">reason: telegram_rejected_link | url_malformed — на стороне inviter'а</div></div>
+    <div class="ev">referral.landing_render_blocked<div class="ev-attrs">reason: config_fetch_failed | inviter_not_found_race | invitee_auth_pending</div></div>
+    <div class="ev">referral.banner_impression_but_no_click_session<div class="ev-attrs">impressionsTotal — метка «юзер видит но не кликает»</div></div>
+    <div class="ev">referral.client_js_error<div class="ev-attrs">route: referral/*, errorName, errorMessage, stack — из global error handler</div></div>
+  </div>
+
+  <div class="section-label" style="margin-top: 20px;">Events — Race conditions & edge</div>
+  <div class="desc-text">
+    Редкие, но ломающие инварианты. Если это растёт — у нас сломанная транзакционность.
+  </div>
+
+  <div class="ev-group">
+    <div class="ev">referral.concurrent_attribution_blocked<div class="ev-attrs">inviteeUserId, winnerAttributionId, loserAttributionId — два inviter'а одновременно</div></div>
+    <div class="ev">referral.qualification_fired_after_timeout<div class="ev-attrs">attributionId, overdueByMs — race между cron-expiry и qualify</div></div>
+    <div class="ev">referral.reward_granted_after_revoke<div class="ev-attrs">attributionId — <b>инвариант сломан</b>, alert critical</div></div>
+    <div class="ev">referral.duplicate_start_command<div class="ev-attrs">inviteeUserId, delayBetweenMs — юзер кликнул ссылку дважды</div></div>
+    <div class="ev">referral.attribution_invariant_violation<div class="ev-attrs">attributionId, violation: status_transition_invalid | reward_without_qualify | qualify_before_attribute — <b>должно быть 0</b></div></div>
+    <div class="ev">referral.invitee_deleted_account_before_qualify<div class="ev-attrs">attributionId, elapsedHours</div></div>
+    <div class="ev">referral.inviter_deleted_account_after_qualify<div class="ev-attrs">attributionId — invitee qualified, а награждать некого</div></div>
+    <div class="ev">referral.clock_skew_detected<div class="ev-attrs">clientTs, serverTs, deltaMs — критично для fraud velocity</div></div>
+  </div>
+
+  <div class="section-label" style="margin-top: 20px;">Events — Reward grant механика</div>
+
+  <div class="ev-group">
+    <div class="ev">referral.cap_check_performed<div class="ev-attrs">monthlyUsed, monthlyLimit, yearlyUsed, yearlyLimit, decision: pass | cap_monthly | cap_yearly</div></div>
+    <div class="ev">referral.pro_subscription_extended<div class="ev-attrs">strategy: stack | replace, previousExpiryAt, newExpiryAt, daysAdded</div></div>
+    <div class="ev">referral.pro_subscription_extend_failed<div class="ev-attrs">reason — если связь с биллинг-сервисом</div></div>
+    <div class="ev">referral.idempotency_hit<div class="ev-attrs">operation: grant | revoke, attributionId — повторный вызов не прошёл</div></div>
+    <div class="ev">referral.admin_manual_grant<div class="ev-attrs">adminId, attributionId, daysGranted, reason — ручные начисления должны быть tracked отдельно</div></div>
+  </div>
+
+  <div class="section-label" style="margin-top: 20px;">Events — Bot notification health</div>
+
+  <div class="ev-group">
+    <div class="ev">referral.bot_notification_sent<div class="ev-attrs">type: inviter_arrival | inviter_step_progress | reward | pro_extended | invitee_welcome, success: bool</div></div>
+    <div class="ev">referral.bot_notification_delivery_failed<div class="ev-attrs">type, errorCode: telegram_403_blocked | 429_rate_limit | 400_invalid_request, retryQueued: bool</div></div>
+    <div class="ev">referral.bot_notification_rate_limit_applied<div class="ev-attrs">type, reason: too_many_per_user_per_day — значит мы собираемся задолбать юзера, не отправляем</div></div>
+    <div class="ev">referral.bot_notification_dropped<div class="ev-attrs">type, reason: user_blocked_bot | user_deleted | preferences_disabled</div></div>
+    <div class="ev">referral.bot_notification_opened<div class="ev-attrs">type — юзер открыл Telegram и увидел</div></div>
+  </div>
+
+  <div class="section-label" style="margin-top: 20px;">Events — Config & реплеируемость</div>
+  <div class="desc-text">
+    Без этого через полгода невозможно ответить «почему в марте reward был 30 дней, а в апреле 14». И почему A/B читается по-разному.
+  </div>
+
+  <div class="ev-group">
+    <div class="ev">referral.config_changed<div class="ev-attrs">changedBy: admin_id, diff: {field: {old, new}}, newConfigVersion</div></div>
+    <div class="ev">referral.config_fetch_failed<div class="ev-attrs">reason: db_timeout | cache_miss_and_fallback, fallbackUsed: bool</div></div>
+    <div class="ev">referral.experiment_assigned<div class="ev-attrs">key, variant, userId, stickinessBucket</div></div>
+    <div class="ev">referral.experiment_exposure<div class="ev-attrs">key, variant — event «юзер реально увидел вариант», не просто был зачислен</div></div>
+    <div class="ev">referral.feature_flag_evaluated<div class="ev-attrs">flag, value, context — для debug «почему у этого юзера фича была выключена»</div></div>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- Dashboard metrics                                       -->
+  <!-- ====================================================== -->
+  <div class="section-label" style="margin-top: 28px;">Ключевые метрики дашборда</div>
+  <div class="desc-text">Еженедельный чек + дневной автоматический sanity-check</div>
+
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;">
+    <div style="font-size: 12px; font-weight: 700; color: var(--ref); margin-bottom: 8px;">🎯 Воронка</div>
+    <div style="font-size: 12px; color: var(--text-sec); line-height: 1.8;">
+      · <b style="color: var(--text);">Share rate</b> = link_copied / screen_opened<br>
+      · <b style="color: var(--text);">Link CTR</b> = landing_viewed / share_intent<br>
+      · <b style="color: var(--text);">Attribution rate</b> = attributed / landing_viewed<br>
+      · <b style="color: var(--text);">Qualification rate</b> = qualified / attributed<br>
+      · <b style="color: var(--text);">Reward rate</b> = rewarded / qualified<br>
+      · <b style="color: var(--text);">End-to-end</b> = rewarded / screen_opened<br>
+      · <b style="color: var(--text);">Time-to-qualify p50/p90</b> = p(timeToQualifyMs) — если растёт, onboarding сломан
+    </div>
+    <div style="font-size: 12px; font-weight: 700; color: var(--reward); margin: 14px 0 8px;">💰 Unit economics</div>
+    <div style="font-size: 12px; color: var(--text-sec); line-height: 1.8;">
+      · <b style="color: var(--text);">Cost per referral</b> = 30 × pro_margin<br>
+      · <b style="color: var(--text);">Retained revenue</b> = % inviter_converted_to_paid_after_bonus<br>
+      · <b style="color: var(--text);">Invitee LTV vs organic baseline</b> — качество канала<br>
+      · <b style="color: var(--text);">Break-even ratio</b> = какому % inviters нужно купить PRO, чтобы окупить все 30-дневки
+    </div>
+    <div style="font-size: 12px; font-weight: 700; color: var(--orange); margin: 14px 0 8px;">🛡 Fraud health</div>
+    <div style="font-size: 12px; color: var(--text-sec); line-height: 1.8;">
+      · <b style="color: var(--text);">Fraud-review %</b> от qualified<br>
+      · <b style="color: var(--text);">Auto-reject %</b> — резкий рост = дыра найдена<br>
+      · <b style="color: var(--text);">Signal triggered rate</b> по каждому сигналу отдельно<br>
+      · <b style="color: var(--text);">False-positive rate</b> = admin_approved / fraud_review_total — высокий = threshold перестроить<br>
+      · <b style="color: var(--text);">Invitee D1 retention</b> — < 50% = «зашёл-создал-ушёл»<br>
+      · <b style="color: var(--text);">Cluster growth velocity</b> — новые members fraud-кластера в час
+    </div>
+    <div style="font-size: 12px; font-weight: 700; color: var(--red); margin: 14px 0 8px;">🚨 Инварианты (должны быть 0)</div>
+    <div style="font-size: 12px; color: var(--text-sec); line-height: 1.8;">
+      · <b style="color: var(--text);">reward_grant_failed count</b><br>
+      · <b style="color: var(--text);">reward_granted_after_revoke count</b><br>
+      · <b style="color: var(--text);">attribution_invariant_violation count</b><br>
+      · <b style="color: var(--text);">idempotency_hit</b> на grant — если &gt;0, двойные списания рядом<br>
+      · <b style="color: var(--text);">events with missing mandatory fields</b> (AnalyticsDeadletter)
+    </div>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- Alerts table                                            -->
+  <!-- ====================================================== -->
+  <div class="section-label" style="margin-top: 24px;">Алёрты — автоматические уведомления</div>
+  <div class="desc-text">
+    Что стреляет в Telegram-канал админки без моего участия. Пороги откалибруются после soft launch.
+  </div>
+
+  <div class="alert-row">
+    <span class="sev high">CRIT</span>
+    <div>
+      <div class="alert-name">Invariant violated</div>
+      <div class="alert-cond">attribution_invariant_violation &gt; 0 за 5 мин</div>
+    </div>
+    <div class="alert-act">немедленный page</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev high">CRIT</span>
+    <div>
+      <div class="alert-name">Reward granted after revoke</div>
+      <div class="alert-cond">reward_granted_after_revoke &gt; 0</div>
+    </div>
+    <div class="alert-act">немедленный page</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev high">CRIT</span>
+    <div>
+      <div class="alert-name">Reward grant failure rate</div>
+      <div class="alert-cond">reward_grant_failed / rewarded &gt; 1% за 1ч</div>
+    </div>
+    <div class="alert-act">немедленный page</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev med">WARN</span>
+    <div>
+      <div class="alert-name">Attribution rate collapse</div>
+      <div class="alert-cond">attributed/landing_viewed упало &gt;30% vs 7-day median</div>
+    </div>
+    <div class="alert-act">канал, в течение 15 мин</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev med">WARN</span>
+    <div>
+      <div class="alert-name">Auto-reject spike</div>
+      <div class="alert-cond">fraud_score_calculated(auto_reject) rate × 3 vs baseline</div>
+    </div>
+    <div class="alert-act">канал, предупредить</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev med">WARN</span>
+    <div>
+      <div class="alert-name">Cluster growth anomaly</div>
+      <div class="alert-cond">fraud_cluster_grew.newSize &gt; 20 за 1ч</div>
+    </div>
+    <div class="alert-act">канал + freeze проверка</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev med">WARN</span>
+    <div>
+      <div class="alert-name">Code invalid surge</div>
+      <div class="alert-cond">code_invalid/start_command_received &gt; 5% за 1ч</div>
+    </div>
+    <div class="alert-act">канал — возможно, сломан парсинг</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev med">WARN</span>
+    <div>
+      <div class="alert-name">Bot notification failure</div>
+      <div class="alert-cond">bot_notification_delivery_failed rate &gt; 10% за 30 мин</div>
+    </div>
+    <div class="alert-act">канал — Telegram API / rate limit</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev med">WARN</span>
+    <div>
+      <div class="alert-name">Client JS error spike</div>
+      <div class="alert-cond">client_js_error на route=referral/* × 5 vs 24h baseline</div>
+    </div>
+    <div class="alert-act">канал — возможно, релиз сломал UI</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev low">INFO</span>
+    <div>
+      <div class="alert-name">Qualification timeout без прогресса</div>
+      <div class="alert-cond">qualification_timeout с invitedCreatedWishlist=false &gt; 80% daily</div>
+    </div>
+    <div class="alert-act">канал — onboarding не доносится</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev low">INFO</span>
+    <div>
+      <div class="alert-name">Schema deadletter</div>
+      <div class="alert-cond">AnalyticsDeadletter insert rate &gt; 0 sustained</div>
+    </div>
+    <div class="alert-act">канал — кто-то пишет неполные события</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev low">INFO</span>
+    <div>
+      <div class="alert-name">Cap saturation</div>
+      <div class="alert-cond">share users hitting monthly cap &gt; 5% активных</div>
+    </div>
+    <div class="alert-act">канал — подумать, не поднять ли cap</div>
+  </div>
+
+  <div class="alert-row">
+    <span class="sev info">NOTE</span>
+    <div>
+      <div class="alert-name">Config changed</div>
+      <div class="alert-cond">referral.config_changed fired</div>
+    </div>
+    <div class="alert-act">канал — audit trail</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S12: КОНФИГ                                                   -->
+<!-- ============================================================ -->
+<div class="section" id="s12">
+  <div class="section-label">Рекомендованная конфигурация MVP</div>
+  <div class="desc-text">
+    То, с чем стартуем. Эти значения — отправная точка, все корректируются через <code>ReferralProgramConfig</code> без деплоя. Рекомендация — начать жёстко, ослабить по мере накопления fraud-данных.
+  </div>
+
+  <div class="config-list" style="margin-bottom: 14px;">
+    <div class="config-list-item"><span class="k">Награда пригласившему</span><span class="v">30 дней PRO</span></div>
+    <div class="config-list-item"><span class="k">Награда другу</span><span class="v" style="color: var(--text-muted);">— (нет)</span></div>
+    <div class="config-list-item"><span class="k">Qualifying action</span><span class="v">1 вишлист + 1 желание</span></div>
+    <div class="config-list-item"><span class="k">Окно на выполнение</span><span class="v">14 дней</span></div>
+    <div class="config-list-item"><span class="k">Лимит в месяц</span><span class="v">3 награды</span></div>
+    <div class="config-list-item"><span class="k">Лимит за 12 мес</span><span class="v">12 наград</span></div>
+    <div class="config-list-item"><span class="k">Формат ссылки</span><span class="v">?start=ref_&lt;code&gt;</span></div>
+    <div class="config-list-item"><span class="k">Код</span><span class="v">постоянный, 5-6 символов</span></div>
+    <div class="config-list-item"><span class="k">Attribution</span><span class="v">first-touch, locked</span></div>
+    <div class="config-list-item"><span class="k">Имена invitees в UI</span><span class="v">не показываем (privacy)</span></div>
+    <div class="config-list-item"><span class="k">Fraud threshold</span><span class="v">score ≥ 80 → auto-reject</span></div>
+    <div class="config-list-item"><span class="k">Manual review</span><span class="v">40 ≤ score &lt; 80</span></div>
+  </div>
+
+  <div class="section-label">Матрица reject-кодов</div>
+
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;">
+    <div style="padding: 10px 14px; background: var(--card); font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px;">
+      <span>Код</span><span>UI / бот</span>
+    </div>
+    <div style="padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: center;">
+      <code style="color: var(--ref); font-family: ui-monospace, monospace;">invitee_not_new_user</code>
+      <span style="color: var(--text-muted);">silent — не показываем</span>
+    </div>
+    <div style="padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: center;">
+      <code style="color: var(--ref); font-family: ui-monospace, monospace;">invitee_had_prior_dialog</code>
+      <span style="color: var(--text-muted);">silent</span>
+    </div>
+    <div style="padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: center;">
+      <code style="color: var(--ref); font-family: ui-monospace, monospace;">invitee_had_prior_wishlist</code>
+      <span style="color: var(--text-muted);">silent</span>
+    </div>
+    <div style="padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: center;">
+      <code style="color: var(--ref); font-family: ui-monospace, monospace;">invitee_had_prior_item</code>
+      <span style="color: var(--text-muted);">silent</span>
+    </div>
+    <div style="padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: center;">
+      <code style="color: var(--ref); font-family: ui-monospace, monospace;">invitee_already_attributed</code>
+      <span style="color: var(--text-muted);">silent</span>
+    </div>
+    <div style="padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: center;">
+      <code style="color: var(--ref); font-family: ui-monospace, monospace;">self_referral_detected</code>
+      <span style="color: var(--text-muted);">silent</span>
+    </div>
+    <div style="padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: center;">
+      <code style="color: var(--ref); font-family: ui-monospace, monospace;">reward_cap_reached</code>
+      <span style="color: var(--orange);">«лимит» banner</span>
+    </div>
+    <div style="padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: center;">
+      <code style="color: var(--ref); font-family: ui-monospace, monospace;">qualification_timeout</code>
+      <span style="color: var(--text-muted);">«истёк» в истории</span>
+    </div>
+    <div style="padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: center;">
+      <code style="color: var(--ref); font-family: ui-monospace, monospace;">fraud_suspected</code>
+      <span style="color: var(--blue);">«на проверке» banner</span>
+    </div>
+    <div style="padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; align-items: center;">
+      <code style="color: var(--ref); font-family: ui-monospace, monospace;">program_disabled</code>
+      <span style="color: var(--text-muted);">скрываем экран</span>
+    </div>
+  </div>
+
+  <div class="section-label">Data model — основные сущности</div>
+
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; font-size: 11px; font-family: ui-monospace, 'SF Mono', monospace; line-height: 1.7;">
+    <div style="color: var(--ref); font-weight: 700; margin-bottom: 6px;">UserProfile <span style="color: var(--text-muted); font-weight: 400;">(+ fields)</span></div>
+    <div style="color: var(--text-sec); padding-left: 12px;">
+      + referralCode&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string, unique<br>
+      + referredByUserId&nbsp;&nbsp;string?<br>
+      + referredAt&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;datetime?<br>
+      + firstBotStartAt&nbsp;&nbsp;&nbsp;datetime?<br>
+      + firstWishlistAt&nbsp;&nbsp;&nbsp;datetime?<br>
+      + firstItemAt&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;datetime?
+    </div>
+
+    <div style="color: var(--ref); font-weight: 700; margin: 14px 0 6px;">ReferralAttribution</div>
+    <div style="color: var(--text-sec); padding-left: 12px;">
+      id, inviterUserId, invitedUserId,<br>
+      referralCode, attributedAt, source,<br>
+      status&nbsp;&nbsp;&nbsp;&nbsp;enum,<br>
+      rejectReason&nbsp;&nbsp;enum?,<br>
+      qualifiedAt, rewardedAt, fraudScore, metadata
+    </div>
+
+    <div style="color: var(--ref); font-weight: 700; margin: 14px 0 6px;">ReferralReward</div>
+    <div style="color: var(--text-sec); padding-left: 12px;">
+      id, userId, attributionId,<br>
+      rewardType&nbsp;&nbsp;&nbsp;'pro_days',<br>
+      rewardValueDays&nbsp;int,<br>
+      status&nbsp;&nbsp;'granted' | 'revoked',<br>
+      grantedAt, revokedAt?, reason
+    </div>
+
+    <div style="color: var(--ref); font-weight: 700; margin: 14px 0 6px;">ReferralProgramConfig</div>
+    <div style="color: var(--text-sec); padding-left: 12px;">
+      enabled, rewardDaysInviter,<br>
+      monthlyRewardCap, yearlyRewardCap,<br>
+      qualificationWindowDays, fraudReviewEnabled,<br>
+      showInviteeNamesInUi&nbsp;&nbsp;bool&nbsp;=&nbsp;false
+    </div>
+  </div>
+
+  <div class="section-label">Rollout план</div>
+
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px;">
+    <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+      <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--ref-soft); color: var(--ref); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; border: 1px solid var(--ref-border);">1</div>
+      <div style="flex: 1;">
+        <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px;">Soft launch</div>
+        <div style="font-size: 12px; color: var(--text-sec); line-height: 1.45;">Только для 10-20% пользователей. Cap жёсткий (3/мес). Аналитика в режиме «шпион» — логируем всё, начислять консервативно. Цель — набрать baseline для fraud threshold</div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+      <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--ref-soft); color: var(--ref); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; border: 1px solid var(--ref-border);">2</div>
+      <div style="flex: 1;">
+        <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px;">Full launch</div>
+        <div style="font-size: 12px; color: var(--text-sec); line-height: 1.45;">Всем пользователям. Все точки входа. Бот-уведомления включены. Дашборд в админке доступен</div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--ref-soft); color: var(--ref); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; border: 1px solid var(--ref-border);">3</div>
+      <div style="flex: 1;">
+        <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px;">A/B optimization</div>
+        <div style="font-size: 12px; color: var(--text-sec); line-height: 1.45;">Тестируем: точки входа (paywall vs profile vs post-share), текст CTA («Получить PRO» vs «Месяц PRO за друга» vs «Пригласи друга»), копирайт на invitee-onboarding (упоминать про бонус inviter или нет), cap-параметры (3/мес vs 5/мес)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- S13: OBSERVABILITY — debug trace, fraud ring, on-call          -->
+<!-- ============================================================ -->
+<div class="section" id="s13">
+  <div class="section-label">🔍 Observability — debug-инструменты</div>
+  <div class="desc-text">
+    Тут живут инструменты, которые нужны <b>в момент, когда что-то сломалось</b>. Не дашборд «как идут дела», а ответ на конкретный вопрос: «почему у этого юзера нет награды?», «этот фрод-кластер — реальный или ложняк?», «что делать, когда пришёл support-тикет?».
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- 13.1 Debug trace — один attribution целиком              -->
+  <!-- ====================================================== -->
+  <div class="section-label" style="margin-top: 24px;">1. Debug-trace одного attribution</div>
+  <div class="desc-text">
+    Ввёл <code>attributionId</code> (или <code>inviteeUserId</code>, или <code>referralCode</code>) — получил всю цепочку событий, snapshots конфига, список сработавших сигналов, device-info. Без этого debug юзерской жалобы — это 40 минут SQL.
+  </div>
+
+  <div class="phone-row">
+  <div class="phone">
+    <div class="phone-inner">
+      <div style="padding: 14px 14px 12px; background: var(--bg); border-bottom: 1px solid var(--border);">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          <div style="width: 26px; height: 26px; border-radius: 8px; background: var(--ref-soft); color: var(--ref); display: flex; align-items: center; justify-content: center; font-size: 13px;">🔍</div>
+          <div>
+            <div style="font-size: 13px; font-weight: 700;">Debug trace</div>
+            <div style="font-size: 10px; color: var(--text-muted);">Admin · obs.wishboard.local</div>
+          </div>
+        </div>
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-family: ui-monospace, monospace; font-size: 11px;">
+          <span style="color: var(--text-muted);">attribution:</span> <span style="color: var(--ref);">att_0193fab...92c1</span>
+        </div>
+      </div>
+
+      <div style="padding: 14px;">
+
+        <!-- Summary card -->
+        <div style="background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+            <div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">Attribution</div>
+              <div style="font-size: 13px; font-weight: 700;">att_0193fab...92c1</div>
+            </div>
+            <div style="padding: 3px 8px; border-radius: 6px; background: var(--red-soft); color: var(--red); font-size: 10px; font-weight: 700;">FRAUD_REVIEW</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+            <div><span style="color: var(--text-muted);">inviter:</span> <code>usr_7712</code></div>
+            <div><span style="color: var(--text-muted);">invitee:</span> <code>usr_9034</code></div>
+            <div><span style="color: var(--text-muted);">code:</span> <code>A7K2P</code></div>
+            <div><span style="color: var(--text-muted);">source:</span> <code>telegram</code></div>
+            <div><span style="color: var(--text-muted);">attributed:</span> 16.04 14:22</div>
+            <div><span style="color: var(--text-muted);">qualified:</span> 16.04 14:24</div>
+            <div><span style="color: var(--text-muted);">config ver:</span> <code>v12</code></div>
+            <div><span style="color: var(--text-muted);">fraud score:</span> <b style="color: var(--red);">84</b></div>
+          </div>
+        </div>
+
+        <!-- Event timeline -->
+        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">Event timeline (17 events)</div>
+
+        <div class="trace-evt ok">
+          <span class="trace-t">14:21:58</span>
+          <span class="trace-n">share_intent</span>
+          <span class="trace-s">channel=telegram</span>
+        </div>
+        <div class="trace-evt ok">
+          <span class="trace-t">14:22:04</span>
+          <span class="trace-n">start_command_received</span>
+          <span class="trace-s">hasPayload=true</span>
+        </div>
+        <div class="trace-evt ok">
+          <span class="trace-t">14:22:04</span>
+          <span class="trace-n">code_resolved</span>
+          <span class="trace-s">code=A7K2P</span>
+        </div>
+        <div class="trace-evt ok">
+          <span class="trace-t">14:22:05</span>
+          <span class="trace-n">landing_viewed</span>
+          <span class="trace-s">latencyMs=1102</span>
+        </div>
+        <div class="trace-evt ok">
+          <span class="trace-t">14:22:06</span>
+          <span class="trace-n">attributed</span>
+          <span class="trace-s">attId=0193...92c1</span>
+        </div>
+        <div class="trace-evt ok">
+          <span class="trace-t">14:22:06</span>
+          <span class="trace-n">pending_activation</span>
+          <span class="trace-s">deadline=30.04</span>
+        </div>
+        <div class="trace-evt">
+          <span class="trace-t">14:22:47</span>
+          <span class="trace-n">onboarding_started</span>
+          <span class="trace-s">-</span>
+        </div>
+        <div class="trace-evt warn">
+          <span class="trace-t">14:23:12</span>
+          <span class="trace-n">first_wishlist_created</span>
+          <span class="trace-s" style="color: var(--orange);">elapsed=26s ⚠</span>
+        </div>
+        <div class="trace-evt warn">
+          <span class="trace-t">14:23:44</span>
+          <span class="trace-n">first_item_created</span>
+          <span class="trace-s" style="color: var(--orange);">elapsed=32s ⚠</span>
+        </div>
+        <div class="trace-evt ok">
+          <span class="trace-t">14:23:44</span>
+          <span class="trace-n">qualified</span>
+          <span class="trace-s">ttq=98s</span>
+        </div>
+        <div class="trace-evt warn">
+          <span class="trace-t">14:23:44</span>
+          <span class="trace-n">fraud_signal_suspicious_onboarding</span>
+          <span class="trace-s" style="color: var(--orange);">w=25</span>
+        </div>
+        <div class="trace-evt warn">
+          <span class="trace-t">14:23:44</span>
+          <span class="trace-n">fraud_signal_account_age_delta</span>
+          <span class="trace-s" style="color: var(--orange);">w=20</span>
+        </div>
+        <div class="trace-evt err">
+          <span class="trace-t">14:23:45</span>
+          <span class="trace-n">fraud_signal_ip_cluster</span>
+          <span class="trace-s" style="color: var(--red);">w=30</span>
+        </div>
+        <div class="trace-evt err">
+          <span class="trace-t">14:23:45</span>
+          <span class="trace-n">fraud_score_calculated</span>
+          <span class="trace-s" style="color: var(--red);">score=84</span>
+        </div>
+        <div class="trace-evt err">
+          <span class="trace-t">14:23:45</span>
+          <span class="trace-n">fraud_review_queued</span>
+          <span class="trace-s" style="color: var(--red);">priority=high</span>
+        </div>
+        <div class="trace-evt">
+          <span class="trace-t">14:30:11</span>
+          <span class="trace-n">bot_notification_dropped</span>
+          <span class="trace-s">type=reward · pending review</span>
+        </div>
+        <div class="trace-evt">
+          <span class="trace-t">—</span>
+          <span class="trace-n" style="color: var(--text-muted);">awaiting admin decision</span>
+          <span class="trace-s">—</span>
+        </div>
+
+        <!-- Signals breakdown -->
+        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 0 8px;">Fraud signals (triggered)</div>
+
+        <div class="signal-row trig">
+          <div class="signal-ic trig">🌐</div>
+          <div class="signal-body">
+            <div class="signal-name">ip_cluster</div>
+            <div class="signal-desc">ipHash <code>a8f2...</code> used by 7 attributions за 24h</div>
+          </div>
+          <span class="signal-score trig">+30</span>
+        </div>
+
+        <div class="signal-row trig">
+          <div class="signal-ic trig">⚡</div>
+          <div class="signal-body">
+            <div class="signal-name">suspicious_onboarding</div>
+            <div class="signal-desc">ttq=98s (baseline p50=1240s) — слишком быстро</div>
+          </div>
+          <span class="signal-score trig">+25</span>
+        </div>
+
+        <div class="signal-row trig">
+          <div class="signal-ic trig">🕐</div>
+          <div class="signal-body">
+            <div class="signal-name">account_age_delta</div>
+            <div class="signal-desc">invitee создан через 3 мин после inviter</div>
+          </div>
+          <span class="signal-score trig">+20</span>
+        </div>
+
+        <div class="signal-row trig">
+          <div class="signal-ic trig">🖐</div>
+          <div class="signal-body">
+            <div class="signal-name">device_fingerprint</div>
+            <div class="signal-desc">fp <code>f2c...</code> уже давал 2 attributions</div>
+          </div>
+          <span class="signal-score trig">+9</span>
+        </div>
+
+        <div class="signal-row">
+          <div class="signal-ic">🔄</div>
+          <div class="signal-body">
+            <div class="signal-name">velocity</div>
+            <div class="signal-desc">inviter: 1 attr / 24h — норма</div>
+          </div>
+          <span class="signal-score">0</span>
+        </div>
+
+        <div class="signal-row">
+          <div class="signal-ic">🙅</div>
+          <div class="signal-body">
+            <div class="signal-name">self_referral</div>
+            <div class="signal-desc">phone/device/ip mismatch — не совпадает</div>
+          </div>
+          <span class="signal-score">0</span>
+        </div>
+
+        <!-- Context -->
+        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 16px 0 8px;">Context snapshot</div>
+
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-family: ui-monospace, monospace; font-size: 10px; line-height: 1.7;">
+          <div><span style="color: var(--text-muted);">inviter.platform:</span> <span style="color: var(--text-sec);">tma</span> · <span style="color: var(--text-muted);">tma-ver:</span> 8.4.1</div>
+          <div><span style="color: var(--text-muted);">invitee.platform:</span> <span style="color: var(--text-sec);">tma</span> · <span style="color: var(--text-muted);">tma-ver:</span> 8.4.1</div>
+          <div><span style="color: var(--text-muted);">invitee.tz:</span> <span style="color: var(--text-sec);">Europe/Moscow</span> · same as inviter</div>
+          <div><span style="color: var(--text-muted);">invitee.locale:</span> ru-RU</div>
+          <div><span style="color: var(--text-muted);">invitee.ipHash:</span> <span style="color: var(--ref);">a8f2c1d9</span> <span style="color: var(--red);">← seen 7x</span></div>
+          <div><span style="color: var(--text-muted);">invitee.fp:</span> <span style="color: var(--ref);">f2c7b9e4</span> <span style="color: var(--orange);">← seen 3x</span></div>
+          <div><span style="color: var(--text-muted);">invitee.ua:</span> <span style="color: var(--text-sec);">TelegramiOS/11.2 iPhone14,5</span></div>
+          <div><span style="color: var(--text-muted);">session clockSkewMs:</span> <span style="color: var(--text-sec);">-120ms</span></div>
+          <div><span style="color: var(--text-muted);">config.configVersion:</span> v12 (2026-04-01)</div>
+          <div><span style="color: var(--text-muted);">experiments:</span> paywall_cta=B, onboarding_copy=A</div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px;">
+          <button style="padding: 10px; border-radius: 10px; background: var(--reward); color: #1a1a1d; border: none; font-size: 12px; font-weight: 700; cursor: pointer;">✓ Approve</button>
+          <button style="padding: 10px; border-radius: 10px; background: var(--red); color: #fff; border: none; font-size: 12px; font-weight: 700; cursor: pointer;">✗ Reject (fraud)</button>
+          <button style="padding: 10px; border-radius: 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); font-size: 12px; font-weight: 500; grid-column: span 2; cursor: pointer;">🔗 Open fraud ring view</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- 13.2 Fraud ring view                                    -->
+  <!-- ====================================================== -->
+  <div class="section-label" style="margin-top: 28px;">2. Fraud ring view</div>
+  <div class="desc-text">
+    Один attribution редко бывает фродом сам по себе. Обычно это ring — группа связанных по IP/fingerprint/timestamp-паттерну attributions. Этот экран показывает всю группу + общие «швы».
+  </div>
+
+  <div class="phone-row">
+  <div class="phone">
+    <div class="phone-inner">
+      <div style="padding: 14px; background: var(--bg); border-bottom: 1px solid var(--border);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 26px; height: 26px; border-radius: 8px; background: var(--red-soft); color: var(--red); display: flex; align-items: center; justify-content: center; font-size: 13px;">🕸</div>
+          <div>
+            <div style="font-size: 13px; font-weight: 700;">Fraud ring · cluster_0042</div>
+            <div style="font-size: 10px; color: var(--text-muted);">Bound by: ipHash a8f2c1d9</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding: 14px;">
+
+        <!-- Cluster stats -->
+        <div style="background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px;">
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;">
+            <div>
+              <div style="font-size: 18px; font-weight: 800; color: var(--red);">7</div>
+              <div style="font-size: 10px; color: var(--text-muted);">attributions</div>
+            </div>
+            <div>
+              <div style="font-size: 18px; font-weight: 800; color: var(--ref);">5</div>
+              <div style="font-size: 10px; color: var(--text-muted);">unique inviters</div>
+            </div>
+            <div>
+              <div style="font-size: 18px; font-weight: 800; color: var(--orange);">24h</div>
+              <div style="font-size: 10px; color: var(--text-muted);">time window</div>
+            </div>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-sec); line-height: 1.5;">
+            <b style="color: var(--text);">Shared artifacts:</b> ipHash (7/7), tz=Moscow (7/7), fp variants: 3 unique, account_age_delta avg=4 min
+          </div>
+        </div>
+
+        <!-- Graph: inviters linked by common invitee artefacts -->
+        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">Nodes в кластере</div>
+
+        <div class="ring-node center">
+          <span style="font-size: 16px;">📍</span>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; color: var(--red);">att_0193fab...92c1</div>
+            <div style="color: var(--text-muted); font-size: 10px;">текущий · inviter usr_7712 → invitee usr_9034</div>
+          </div>
+          <span class="ring-node-badge bad">CURRENT</span>
+        </div>
+
+        <div class="ring-node">
+          <span style="font-size: 16px;">▸</span>
+          <div style="flex: 1;">
+            <div style="color: var(--text);">att_0193f9e...77aa</div>
+            <div style="color: var(--text-muted); font-size: 10px;">usr_7712 → usr_9011 · 2h ago</div>
+          </div>
+          <span class="ring-node-badge bad">REJECTED</span>
+        </div>
+
+        <div class="ring-node">
+          <span style="font-size: 16px;">▸</span>
+          <div style="flex: 1;">
+            <div style="color: var(--text);">att_0193f82...3f12</div>
+            <div style="color: var(--text-muted); font-size: 10px;">usr_7713 → usr_9012 · 3h ago</div>
+          </div>
+          <span class="ring-node-badge warn">REVIEW</span>
+        </div>
+
+        <div class="ring-node">
+          <span style="font-size: 16px;">▸</span>
+          <div style="flex: 1;">
+            <div style="color: var(--text);">att_0193f75...ae90</div>
+            <div style="color: var(--text-muted); font-size: 10px;">usr_7715 → usr_9014 · 5h ago</div>
+          </div>
+          <span class="ring-node-badge bad">REJECTED</span>
+        </div>
+
+        <div class="ring-node">
+          <span style="font-size: 16px;">▸</span>
+          <div style="flex: 1;">
+            <div style="color: var(--text);">att_0193f6c...b201</div>
+            <div style="color: var(--text-muted); font-size: 10px;">usr_7718 → usr_9018 · 7h ago</div>
+          </div>
+          <span class="ring-node-badge bad">REJECTED</span>
+        </div>
+
+        <div class="ring-node">
+          <span style="font-size: 16px;">▸</span>
+          <div style="flex: 1;">
+            <div style="color: var(--text);">att_0193f5a...d832</div>
+            <div style="color: var(--text-muted); font-size: 10px;">usr_7712 → usr_9022 · 9h ago</div>
+          </div>
+          <span class="ring-node-badge">REWARDED</span>
+        </div>
+
+        <div class="ring-node">
+          <span style="font-size: 16px;">▸</span>
+          <div style="flex: 1;">
+            <div style="color: var(--text);">att_0193f48...ca45</div>
+            <div style="color: var(--text-muted); font-size: 10px;">usr_7720 → usr_9025 · 11h ago</div>
+          </div>
+          <span class="ring-node-badge warn">REVIEW</span>
+        </div>
+
+        <!-- Interpretation -->
+        <div style="background: var(--orange-soft); border: 1px solid rgba(251,191,36,0.24); border-radius: 10px; padding: 12px; margin-top: 14px;">
+          <div style="font-size: 12px; font-weight: 700; color: var(--orange); margin-bottom: 6px;">⚠ Что видно</div>
+          <div style="font-size: 11px; color: var(--text-sec); line-height: 1.5;">
+            · 7 attributions через один IP за сутки<br>
+            · 2 inviter'а повторяются (usr_7712 ×2)<br>
+            · одна успела получить reward → кандидат на <b style="color: var(--red);">retroactive revoke</b><br>
+            · разброс invitee-id компактный (9011-9025) — одна фабрика аккаунтов
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px;">
+          <button style="padding: 10px; border-radius: 10px; background: var(--red); color: #fff; border: none; font-size: 12px; font-weight: 700; cursor: pointer;">Reject all (7)</button>
+          <button style="padding: 10px; border-radius: 10px; background: var(--orange); color: #1a1a1d; border: none; font-size: 12px; font-weight: 700; cursor: pointer;">Revoke rewarded</button>
+          <button style="padding: 10px; border-radius: 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); font-size: 12px; font-weight: 500; grid-column: span 2; cursor: pointer;">Ban inviters (3) · irreversible</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- 13.3 On-call playbook                                   -->
+  <!-- ====================================================== -->
+  <div class="section-label" style="margin-top: 28px;">3. On-call playbook — runbook диагностики</div>
+  <div class="desc-text">
+    Типовые жалобы support и как их чинить. Написано так, чтобы я через 3 месяца не тупил «откуда начать». Шаги опираются на запросы по событиям S11.
+  </div>
+
+  <!-- Case 1 -->
+  <div class="playbook-case">
+    <h4>🟠 «Я пригласил друга, а награды нет»</h4>
+    <div class="user-said">
+      Юзер: «Отправил ссылку другу, он зашёл, создал вишлист, а мне ничего не дали. Где месяц PRO?»
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">1</div>
+      <div>Найти inviter по @username → <code>usr_id</code>. Открыть debug-trace: <code>attributionId by inviterUserId</code>. Если <b>нет</b> attributions — смотри шаг 2. Если есть — шаг 3.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">2</div>
+      <div>Ссылку не использовал никто. Проверить <code>referral.code_resolved</code> where <code>inviterUserId=X</code>. Если 0 — друг не открыл ссылку. Если &gt;0 но нет <code>attributed</code> — смотри <code>attribution_rejected_on_write</code>: друг скорее всего уже был в боте.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">3</div>
+      <div>Attribution есть. Смотреть status: если <code>pending_activation</code> — друг ещё не создал вишлист+желание. Написать юзеру, что надо дождаться. Если <code>fraud_review</code> — открыть fraud ring view.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">4</div>
+      <div>Если <code>rewarded</code>, но юзер говорит «нет» — проверить <code>pro_subscription_extended</code> и сверить с текущим <code>proUntil</code> на профиле. Если не совпадает — <code>reward_grant_failed</code>, manual grant + <b>critical alert</b>.</div>
+    </div>
+  </div>
+
+  <!-- Case 2 -->
+  <div class="playbook-case">
+    <h4>🔴 «Бот-уведомления о награде пропали»</h4>
+    <div class="user-said">
+      Множественные жалобы: «Друг зарегистрировался, но бот ничего не прислал». При этом награда начислена.
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">1</div>
+      <div>Проверить алёрт «Bot notification failure». Если стреляет — <code>bot_notification_delivery_failed</code> grouped by <code>errorCode</code>.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">2</div>
+      <div>Если <code>429_rate_limit</code> доминирует — Telegram rate-limits, включить backoff/retry-queue, не паниковать.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">3</div>
+      <div>Если <code>403_blocked</code> растёт — юзеры блокируют бота. Смотри retention: проблема не в нотификах, а в продукте.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">4</div>
+      <div>Если <code>400_invalid_request</code> — сломали шаблон. Проверить последний деплой, откатить или фикс.</div>
+    </div>
+  </div>
+
+  <!-- Case 3 -->
+  <div class="playbook-case">
+    <h4>🟡 «Attribution rate резко упал»</h4>
+    <div class="user-said">
+      Алёрт: <code>attributed/landing_viewed</code> упал с 40% до 12% за ночь.
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">1</div>
+      <div>Проверить <code>attribution_rejected_on_write</code> grouped by <code>reason</code>. Самая частая причина — самая свежая проблема.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">2</div>
+      <div>Если <code>invitee_not_new_user</code> взлетел — возможно, кто-то массово делится ссылками в старом чате с ботом (все уже юзеры).</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">3</div>
+      <div>Если <code>code_invalid</code> вырос — сломан payload-парсер. Проверить деплой. <code>referral.code_invalid</code> group by <code>reason</code>.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">4</div>
+      <div>Если <code>landing_render_blocked</code> вырос — проблема с config fetch или auth. Проверить API health.</div>
+    </div>
+  </div>
+
+  <!-- Case 4 -->
+  <div class="playbook-case">
+    <h4>🔴 «Auto-reject spike — кто-то нашёл дыру»</h4>
+    <div class="user-said">
+      Алёрт: rate auto-reject ×3 за 1 час. Подозрение на abuse.
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">1</div>
+      <div>Какой сигнал стреляет чаще всех? <code>fraud_signal_*</code> grouped by event name, last 2h. Обычно это <code>ip_cluster</code> или <code>device_fingerprint</code>.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">2</div>
+      <div>Открыть топ-3 <code>fraud_cluster_grew</code> за 2h → посмотреть ring view для каждого.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">3</div>
+      <div>Если кластеры реальные — забанить inviters, retroactive revoke. Если 1 кластер &gt;50 nodes — <b>временно выключить программу</b> через <code>ReferralProgramConfig.enabled=false</code> и разбираться.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">4</div>
+      <div>Post-mortem: какой сигнал не сработал раньше? Тюнить вес. <code>fraud_false_negative_confirmed</code> ← зафиксировать для feedback loop.</div>
+    </div>
+  </div>
+
+  <!-- Case 5 -->
+  <div class="playbook-case">
+    <h4>🟡 «Qualification rate упал, а share rate норм»</h4>
+    <div class="user-said">
+      Инвайтят много, доходят до лендинга, но не квалифицируются.
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">1</div>
+      <div>Сравнить <code>onboarding_step_viewed</code> step=1 vs step=2. Где dropoff?</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">2</div>
+      <div>Если падают после step=1 (создали вишлист, не создали item) — онбординг не говорит «нужно ещё желание». Проверить копирайт.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">3</div>
+      <div>Посмотреть <code>qualification_timeout</code> с <code>invitedCreatedWishlist=true, invitedCreatedItem=false</code>. Высокий % = проблема именно на 2-м шаге.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">4</div>
+      <div>Если <code>timeToQualifyMs</code> p50 вырос — онбординг замедлился, смотреть <code>client_js_error</code> и <code>screen_load_failed</code>.</div>
+    </div>
+  </div>
+
+  <!-- Case 6 -->
+  <div class="playbook-case">
+    <h4>🔴 «Deadletter растёт — события дропаются»</h4>
+    <div class="user-said">
+      <code>AnalyticsDeadletter</code> insert rate &gt; 0, дашборды врут.
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">1</div>
+      <div>Посмотреть <code>AnalyticsDeadletter.reason</code> grouped. Типичное: <code>missing_config_version</code>, <code>missing_actorUserId</code>.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">2</div>
+      <div>Какой клиент? Group by <code>platform, appVersion</code>. Обычно баг в конкретной версии.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">3</div>
+      <div>Фиксить клиентский writer. Временно — ослабить валидацию для конкретного <code>appVersion</code>, но события помечать <code>schemaDegraded=true</code>.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">4</div>
+      <div>Дашборды — явно показывать, какой % событий в deadletter, иначе метрики врут втихую.</div>
+    </div>
+  </div>
+
+  <!-- Case 7 -->
+  <div class="playbook-case">
+    <h4>🟠 «Хочу понять, почему в марте было 500 rewards, в апреле 200»</h4>
+    <div class="user-said">
+      Бизнес-вопрос: «что изменилось?»
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">1</div>
+      <div>Посмотреть <code>referral.config_changed</code> между датами. Если <code>rewardDaysInviter</code> или <code>caps</code> менялись — это оно.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">2</div>
+      <div>Если конфиг не менялся — сравнить <code>experiments</code> активные. Возможно, новый вариант paywall-CTA сосёт.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">3</div>
+      <div>Воронка по месяцам: на каком шаге упали? <code>screen_opened → attributed → qualified → rewarded</code> по месяцу. Видно, где именно.</div>
+    </div>
+    <div class="playbook-step">
+      <div class="playbook-step-n">4</div>
+      <div>Если упал <code>share_rate</code> — причина вне рефералки, это про общий engagement. Смотри app-level метрики.</div>
+    </div>
+  </div>
+
+  <!-- Invariants view -->
+  <div class="section-label" style="margin-top: 28px;">4. Инвариант-борд (должны быть нули)</div>
+  <div class="desc-text">
+    Отдельный экран, который <b>один</b> число на виджет. Если где-то не 0 — есть системная проблема, которая не может быть «иногда допустимой».
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;">
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center;">
+      <div style="font-size: 22px; font-weight: 800; color: var(--green);">0</div>
+      <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">reward_grant_failed · 24h</div>
+    </div>
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center;">
+      <div style="font-size: 22px; font-weight: 800; color: var(--green);">0</div>
+      <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">granted_after_revoke · 7d</div>
+    </div>
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center;">
+      <div style="font-size: 22px; font-weight: 800; color: var(--green);">0</div>
+      <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">invariant_violation · 7d</div>
+    </div>
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center;">
+      <div style="font-size: 22px; font-weight: 800; color: var(--red);">3</div>
+      <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">idempotency_hit grant · 24h ⚠</div>
+    </div>
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center;">
+      <div style="font-size: 22px; font-weight: 800; color: var(--green);">0</div>
+      <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">concurrent_attribution · 24h</div>
+    </div>
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center;">
+      <div style="font-size: 22px; font-weight: 800; color: var(--orange);">14</div>
+      <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">deadletter · 24h</div>
+    </div>
+  </div>
+
+  <!-- Retention of raw data -->
+  <div class="section-label" style="margin-top: 28px;">5. Retention & репродьюсируемость</div>
+
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;">
+    <div style="font-size: 12px; color: var(--text-sec); line-height: 1.8;">
+      · <b style="color: var(--text);">AnalyticsEvent</b> — 90 дней hot, 2 года cold<br>
+      · <b style="color: var(--text);">ReferralAttribution</b> — forever (это контракт с юзером)<br>
+      · <b style="color: var(--text);">ReferralReward</b> — forever<br>
+      · <b style="color: var(--text);">ReferralProgramConfig</b> — все версии, с <code>configVersion</code>, forever<br>
+      · <b style="color: var(--text);">ipHash salt</b> — rotating 30 дней, старые salt'ы храним, чтобы уметь проверить историю<br>
+      · <b style="color: var(--text);">deviceFingerprintHash</b> — 1 год, потом хеш нельзя «раскрыть»<br>
+      · <b style="color: var(--text);">FraudCluster</b> — forever с immutable членами на момент решения
+    </div>
+    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); line-height: 1.5;">
+      <b style="color: var(--ref);">Инвариант репродьюсируемости:</b> по любой <code>attributionId</code> за последние 2 года я могу ответить — какой был конфиг в момент события, какой вариант A/B, какие сигналы сработали, какое решение приняла система и кто из админов его менял.
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (el) el.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Accordion for rules
+document.querySelectorAll('.rule').forEach(r => {
+  r.addEventListener('click', () => r.classList.toggle('open'));
+});
+</script>
+</body>
+</html>

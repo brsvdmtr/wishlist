@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1800, initial-scale=1">
+<title>Что не стоит дарить — Mockups v1</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    background: #0e0e11;
+    color: var(--text);
+    padding: 40px 24px;
+  }
+
+  h1.page-title {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+  .page-subtitle {
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 48px;
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+    justify-content: center;
+    margin-bottom: 64px;
+  }
+
+  .label {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .phone {
+    width: 393px;
+    border-radius: 40px;
+    background: var(--bg);
+    overflow: hidden;
+    border: 2px solid rgba(255,255,255,0.08);
+    box-shadow: 0 20px 80px rgba(0,0,0,0.6);
+    position: relative;
+  }
+
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 28px 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .status-bar .time { font-weight: 700; }
+  .status-bar .icons { display: flex; gap: 5px; font-size: 13px; }
+
+  .tg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 20px 12px;
+    background: rgba(124,106,255,0.08);
+    border-bottom: 1px solid var(--border);
+  }
+  .tg-header .back { color: var(--accent); font-size: 16px; font-weight: 600; cursor: pointer; }
+  .tg-header .title-block { text-align: center; flex: 1; }
+  .tg-header .title-block .name { font-size: 17px; font-weight: 700; color: var(--text); }
+  .tg-header .title-block .sub { font-size: 12px; color: var(--text-muted); }
+  .tg-header .dots { font-size: 20px; color: var(--accent); }
+
+  .screen-body {
+    padding: 0 0 40px;
+    min-height: 700px;
+    overflow-y: auto;
+  }
+
+  /* ── Settings row ── */
+  .settings-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 20px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-row:active { background: rgba(255,255,255,0.03); }
+  .settings-row .icon { font-size: 22px; width: 32px; text-align: center; flex-shrink: 0; }
+  .settings-row .label-text { flex: 1; font-size: 16px; color: var(--text); font-weight: 500; }
+  .settings-row .arrow { color: var(--text-muted); font-size: 16px; }
+  .settings-row .pro-badge {
+    display: inline-flex; align-items: center;
+    font-size: 9px; font-weight: 800; letter-spacing: 0.6px;
+    padding: 2px 7px; border-radius: 5px;
+    background: linear-gradient(135deg, rgba(124,106,255,0.2), rgba(124,106,255,0.12));
+    border: 1px solid rgba(124,106,255,0.3);
+    color: var(--accent);
+  }
+
+  /* ── Chips ── */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 8px 14px; border-radius: 20px;
+    font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+    border: 1.5px solid transparent;
+  }
+  .chip.off {
+    background: var(--surface);
+    color: var(--text-sec);
+    border-color: transparent;
+  }
+  .chip.on {
+    background: var(--red-soft);
+    color: var(--red);
+    border-color: rgba(248,113,113,0.3);
+  }
+  .chip .x { font-size: 12px; margin-left: 2px; opacity: 0.7; }
+
+  /* ── Text input area ── */
+  .text-area {
+    margin: 0 20px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--border-light);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.5;
+    min-height: 80px;
+    width: calc(100% - 40px);
+    resize: none;
+  }
+  .text-area::placeholder { color: var(--text-muted); }
+
+  /* ── Section header ── */
+  .section-hdr {
+    padding: 20px 20px 10px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .section-sub {
+    padding: 0 20px 14px;
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  /* ── Custom items ── */
+  .custom-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .custom-item .bullet {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--red); flex-shrink: 0;
+  }
+  .custom-item .text { flex: 1; font-size: 14px; color: var(--text); }
+  .custom-item .remove { color: var(--text-muted); font-size: 16px; cursor: pointer; padding: 4px; }
+
+  .add-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 20px;
+    font-size: 14px; color: var(--accent); font-weight: 600;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .add-btn .plus { font-size: 18px; }
+
+  /* ── Toggle ── */
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .toggle-row .lbl { font-size: 15px; color: var(--text); font-weight: 500; }
+  .toggle {
+    width: 52px; height: 32px; border-radius: 16px;
+    position: relative; cursor: pointer;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle.off { background: var(--surface); border: 1.5px solid var(--text-muted); }
+  .toggle .knob {
+    width: 26px; height: 26px; border-radius: 13px;
+    background: #fff;
+    position: absolute; top: 3px;
+    transition: left 0.15s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  .toggle.on .knob { left: 23px; }
+  .toggle.off .knob { left: 3px; }
+
+  /* ── Primary button ── */
+  .btn-primary {
+    display: block;
+    width: calc(100% - 40px);
+    margin: 20px 20px 0;
+    padding: 16px;
+    border-radius: 14px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: center;
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .btn-secondary {
+    display: block;
+    width: calc(100% - 40px);
+    margin: 10px 20px 0;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-sec);
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  /* ── Paywall card ── */
+  .paywall-card {
+    margin: 16px 20px;
+    padding: 24px 20px;
+    border-radius: 20px;
+    background: linear-gradient(145deg, rgba(124,106,255,0.12), rgba(124,106,255,0.04));
+    border: 1px solid rgba(124,106,255,0.2);
+    text-align: center;
+  }
+  .paywall-card .emoji { font-size: 48px; margin-bottom: 12px; }
+  .paywall-card .title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .paywall-card .desc {
+    font-size: 14px; color: var(--text-sec); line-height: 1.5;
+    margin-bottom: 16px;
+  }
+  .paywall-card .features {
+    text-align: left;
+    margin-bottom: 18px;
+  }
+  .paywall-card .feature {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 13px; color: var(--text-sec); line-height: 1.4;
+    margin-bottom: 8px;
+  }
+  .paywall-card .feature .check { color: var(--accent); font-size: 16px; flex-shrink: 0; }
+  .paywall-card .pro-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 14px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  /* ── Guest view block ── */
+  .dont-gift-block {
+    margin: 0 20px 16px;
+    padding: 16px;
+    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid rgba(248,113,113,0.12);
+  }
+  .dont-gift-block .hdr {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .dont-gift-block .hdr .icon { font-size: 18px; }
+  .dont-gift-block .hdr .title {
+    font-size: 14px; font-weight: 700; color: var(--text);
+    flex: 1;
+  }
+  .dont-gift-block .hdr .collapse {
+    font-size: 12px; color: var(--text-muted);
+    transition: transform 0.2s; display: inline-block;
+  }
+  .dont-gift-block .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .dont-gift-block .tag {
+    padding: 5px 11px; border-radius: 12px;
+    font-size: 12px; font-weight: 600;
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .dont-gift-block .comment {
+    font-size: 13px; color: var(--text-sec); line-height: 1.5;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Wishlist header for guest ── */
+  .wl-header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 20px 10px;
+  }
+  .avatar {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #a78bfa);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; color: #fff; font-weight: 700; flex-shrink: 0;
+  }
+  .wl-header .info { flex: 1; min-width: 0; }
+  .wl-header .owner { font-size: 13px; font-weight: 600; color: var(--accent); }
+  .wl-header .wl-title { font-size: 18px; font-weight: 700; color: var(--text); }
+  .wl-header .sub-btn {
+    padding: 8px 14px; border-radius: 20px; border: none;
+    background: var(--accent); color: #fff;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* ── Ghost card (placeholder wish item) ── */
+  .ghost-card {
+    margin: 0 20px 10px;
+    padding: 14px;
+    border-radius: 16px;
+    background: var(--card);
+    display: flex; gap: 12px; align-items: center;
+  }
+  .ghost-card .img {
+    width: 64px; height: 64px; border-radius: 12px;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+  }
+  .ghost-card .details { flex: 1; }
+  .ghost-card .details .name {
+    font-size: 14px; font-weight: 600; color: var(--text);
+    margin-bottom: 4px;
+  }
+  .ghost-card .details .price {
+    font-size: 13px; color: var(--text-muted);
+  }
+  .ghost-card .prio {
+    padding: 4px 10px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  }
+  .ghost-card .prio.high { background: rgba(240,78,110,0.15); color: #F04E6E; }
+  .ghost-card .prio.med { background: rgba(251,191,36,0.15); color: #FBBF24; }
+
+  /* ── Preview box ── */
+  .preview-box {
+    margin: 16px 20px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.03);
+    border: 1px dashed var(--border-light);
+  }
+  .preview-label {
+    font-size: 11px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+
+  /* ── Settings profile card mock ── */
+  .profile-card {
+    margin: 16px 20px;
+    padding: 18px;
+    border-radius: 18px;
+    background: var(--card);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .profile-card .name-block .name { font-size: 17px; font-weight: 700; color: var(--text); }
+  .profile-card .name-block .plan {
+    font-size: 12px; font-weight: 600; color: var(--accent);
+    margin-top: 2px;
+  }
+
+  .section-divider {
+    height: 8px;
+    background: rgba(0,0,0,0.2);
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Что не стоит дарить</h1>
+<p class="page-subtitle">PRO-фича · Mockups v1 · 4 экрана</p>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 1: Settings — entry point (PRO user)
+     ═══════════════════════════════════════════════ -->
+<div class="row">
+  <div>
+    <div class="label">1. Настройки — точка входа (Pro)</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">12:11</span>
+        <span class="icons">📶 🔋 94</span>
+      </div>
+      <div class="tg-header">
+        <span class="back">‹ Назад</span>
+        <div class="title-block">
+          <div class="name">WishBot</div>
+          <div class="sub">мини-приложение</div>
+        </div>
+        <span class="dots">⋯</span>
+      </div>
+      <div class="screen-body">
+        <div class="profile-card">
+          <div class="avatar">Д</div>
+          <div class="name-block">
+            <div class="name">Дмитрий</div>
+            <div class="plan">✦ PRO</div>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="settings-row">
+          <span class="icon">✏️</span>
+          <span class="label-text">Редактировать профиль</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="icon">🔒</span>
+          <span class="label-text">Приватность</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row" style="background: rgba(248,113,113,0.04);">
+          <span class="icon">🚫</span>
+          <span class="label-text">Что не стоит дарить</span>
+          <span style="font-size: 12px; color: var(--green); font-weight: 600; margin-right: 4px;">заполнено</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="icon">🎁</span>
+          <span class="label-text">Календарь событий</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="icon">📋</span>
+          <span class="label-text">Что нового</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="icon">❓</span>
+          <span class="label-text">Частые вопросы</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="icon">📜</span>
+          <span class="label-text">Юридическая информация</span>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       SCREEN 2: Settings — entry point (FREE user)
+       ═══════════════════════════════════════════════ -->
+  <div>
+    <div class="label">2. Настройки — точка входа (Free)</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">12:11</span>
+        <span class="icons">📶 🔋 94</span>
+      </div>
+      <div class="tg-header">
+        <span class="back">‹ Назад</span>
+        <div class="title-block">
+          <div class="name">WishBot</div>
+          <div class="sub">мини-приложение</div>
+        </div>
+        <span class="dots">⋯</span>
+      </div>
+      <div class="screen-body">
+        <div class="profile-card">
+          <div class="avatar" style="background: var(--surface);">А</div>
+          <div class="name-block">
+            <div class="name">Анна</div>
+            <div class="plan" style="color: var(--text-muted);">Free</div>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="settings-row">
+          <span class="icon">✏️</span>
+          <span class="label-text">Редактировать профиль</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="icon">🔒</span>
+          <span class="label-text">Приватность</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row" style="opacity: 0.7;">
+          <span class="icon">🚫</span>
+          <span class="label-text">Что не стоит дарить</span>
+          <span class="pro-badge">PRO</span>
+          <span class="arrow" style="margin-left: 6px;">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="icon">🎁</span>
+          <span class="label-text">Календарь событий</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="icon">📋</span>
+          <span class="label-text">Что нового</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="icon">❓</span>
+          <span class="label-text">Частые вопросы</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="settings-row">
+          <span class="icon">📜</span>
+          <span class="label-text">Юридическая информация</span>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 3: Paywall (FREE user taps the row)
+     ═══════════════════════════════════════════════ -->
+<div class="row">
+  <div>
+    <div class="label">3. Пейволл для Free</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">12:12</span>
+        <span class="icons">📶 🔋 93</span>
+      </div>
+      <div class="tg-header">
+        <span class="back">‹ Назад</span>
+        <div class="title-block">
+          <div class="name">WishBot</div>
+          <div class="sub">мини-приложение</div>
+        </div>
+        <span class="dots">⋯</span>
+      </div>
+      <div class="screen-body" style="display: flex; flex-direction: column; justify-content: center; padding-top: 60px;">
+        <div class="paywall-card">
+          <div class="emoji">🚫</div>
+          <div class="title">Что не стоит дарить</div>
+          <div class="desc">
+            Подскажи друзьям, чего лучше избегать в подарках — аллергии, нелюбимые категории и личные ограничения.
+          </div>
+          <div class="features">
+            <div class="feature">
+              <span class="check">✓</span>
+              <span>Готовые категории: сладости, парфюм, цветы и другие</span>
+            </div>
+            <div class="feature">
+              <span class="check">✓</span>
+              <span>Свои ограничения и пожелания</span>
+            </div>
+            <div class="feature">
+              <span class="check">✓</span>
+              <span>Блок виден всем, кто открывает твой вишлист</span>
+            </div>
+          </div>
+          <button class="pro-btn">Открыть в PRO</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       SCREEN 4: Editing screen (PRO user)
+       ═══════════════════════════════════════════════ -->
+  <div>
+    <div class="label">4. Экран редактирования (Pro)</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">12:12</span>
+        <span class="icons">📶 🔋 93</span>
+      </div>
+      <div class="tg-header">
+        <span class="back">‹ Назад</span>
+        <div class="title-block">
+          <div class="name">WishBot</div>
+          <div class="sub">мини-приложение</div>
+        </div>
+        <span class="dots">⋯</span>
+      </div>
+      <div class="screen-body">
+        <div class="section-hdr" style="font-size: 20px; font-weight: 800; padding-top: 24px;">
+          🚫 Что не стоит дарить
+        </div>
+        <div class="section-sub">
+          Помоги друзьям не ошибиться с подарком, если они выбирают не из списка.
+        </div>
+
+        <div class="section-hdr" style="font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
+          Нежелательные категории
+        </div>
+        <div class="chips" style="margin-bottom: 16px;">
+          <span class="chip on">🍬 Сладости <span class="x">✕</span></span>
+          <span class="chip on">💐 Цветы <span class="x">✕</span></span>
+          <span class="chip on">🧸 Мягкие игрушки <span class="x">✕</span></span>
+          <span class="chip off">🧴 Парфюм</span>
+          <span class="chip off">💄 Косметика</span>
+          <span class="chip off">💍 Украшения</span>
+          <span class="chip off">👔 Одежда</span>
+          <span class="chip off">👟 Обувь</span>
+          <span class="chip off">🏺 Сувениры</span>
+          <span class="chip off">🍷 Алкоголь</span>
+          <span class="chip off">🎫 Сертификаты</span>
+          <span class="chip off">📱 Техника</span>
+          <span class="chip off">🕯 Ароматы</span>
+          <span class="chip off">🍕 Еда</span>
+        </div>
+
+        <div class="section-hdr" style="font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
+          Свои ограничения
+        </div>
+        <div class="custom-item">
+          <span class="bullet"></span>
+          <span class="text">Одежду только после согласования размера</span>
+          <span class="remove">✕</span>
+        </div>
+        <div class="custom-item">
+          <span class="bullet"></span>
+          <span class="text">Технику лучше строго по списку</span>
+          <span class="remove">✕</span>
+        </div>
+        <div class="add-btn">
+          <span class="plus">+</span> Добавить ограничение
+        </div>
+
+        <div class="section-hdr" style="font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
+          Комментарий для дарителей
+        </div>
+        <textarea class="text-area" placeholder="Например: аллергия на орехи, не люблю сильные ароматы">У меня аллергия на орехи и цитрусовые. Если хочешь подарить что-то не из вишлиста, лучше уточни заранее 🙂</textarea>
+        <div style="text-align: right; padding: 4px 24px 0; font-size: 11px; color: var(--text-muted);">
+          118 / 400
+        </div>
+
+        <div class="toggle-row" style="margin-top: 8px;">
+          <span class="lbl">Показывать на моих вишлистах</span>
+          <div class="toggle on"><div class="knob"></div></div>
+        </div>
+
+        <!-- Preview -->
+        <div class="preview-box">
+          <div class="preview-label">👁 Так видят дарители</div>
+          <div class="dont-gift-block" style="margin: 0;">
+            <div class="hdr">
+              <span class="icon">🚫</span>
+              <span class="title">Что не стоит дарить</span>
+            </div>
+            <div class="tags">
+              <span class="tag">🍬 Сладости</span>
+              <span class="tag">💐 Цветы</span>
+              <span class="tag">🧸 Мягкие игрушки</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-sec); margin-bottom: 8px;">
+              • Одежду только после согласования размера<br>
+              • Технику лучше строго по списку
+            </div>
+            <div class="comment">
+              У меня аллергия на орехи и цитрусовые. Если хочешь подарить что-то не из вишлиста, лучше уточни заранее 🙂
+            </div>
+          </div>
+        </div>
+
+        <button class="btn-primary">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 5 & 6: Guest view
+     ═══════════════════════════════════════════════ -->
+<div class="row">
+  <div>
+    <div class="label">5. Гостевой вид — блок раскрыт</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">12:15</span>
+        <span class="icons">📶 🔋 91</span>
+      </div>
+      <div class="tg-header">
+        <span class="back">‹ Назад</span>
+        <div class="title-block">
+          <div class="name">WishBot</div>
+          <div class="sub">мини-приложение</div>
+        </div>
+        <span class="dots">⋯</span>
+      </div>
+      <div class="screen-body">
+        <div class="wl-header">
+          <div class="avatar">Д</div>
+          <div class="info">
+            <div class="owner">Дмитрий</div>
+            <div class="wl-title">День рождения 🎂</div>
+          </div>
+          <button class="sub-btn">Подписаться</button>
+        </div>
+
+        <!-- Don't gift block -->
+        <div class="dont-gift-block">
+          <div class="hdr">
+            <span class="icon">🚫</span>
+            <span class="title">Что не стоит дарить</span>
+            <span class="collapse">▲</span>
+          </div>
+          <div class="tags">
+            <span class="tag">🍬 Сладости</span>
+            <span class="tag">💐 Цветы</span>
+            <span class="tag">🧸 Мягкие игрушки</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-sec); margin-bottom: 8px; line-height: 1.5;">
+            • Одежду только после согласования размера<br>
+            • Технику лучше строго по списку
+          </div>
+          <div class="comment">
+            У меня аллергия на орехи и цитрусовые. Если хочешь подарить что-то не из вишлиста, лучше уточни заранее 🙂
+          </div>
+        </div>
+
+        <!-- Separator: wishlist items -->
+        <div style="display: flex; align-items: center; gap: 10px; padding: 20px 20px 10px;">
+          <div style="flex: 1; height: 1px; background: var(--border-light);"></div>
+          <span style="font-size: 13px; font-weight: 600; color: var(--text-muted); white-space: nowrap;">🎁 А вот что хочу</span>
+          <div style="flex: 1; height: 1px; background: var(--border-light);"></div>
+        </div>
+
+        <!-- Wish items -->
+        <div class="ghost-card">
+          <div class="img">🎧</div>
+          <div class="details">
+            <div class="name">AirPods Pro 2</div>
+            <div class="price">24 990 ₽</div>
+          </div>
+          <span class="prio high">🔴 Очень хочу</span>
+        </div>
+        <div class="ghost-card">
+          <div class="img">📖</div>
+          <div class="details">
+            <div class="name">Kindle Paperwhite</div>
+            <div class="price">14 990 ₽</div>
+          </div>
+          <span class="prio high">🔴 Очень хочу</span>
+        </div>
+        <div class="ghost-card">
+          <div class="img">☕</div>
+          <div class="details">
+            <div class="name">Набор specialty кофе</div>
+            <div class="price">3 500 ₽</div>
+          </div>
+          <span class="prio med">🟡 Хочу</span>
+        </div>
+        <div class="ghost-card">
+          <div class="img">🎮</div>
+          <div class="details">
+            <div class="name">Геймпад Xbox Elite 2</div>
+            <div class="price">15 990 ₽</div>
+          </div>
+          <span class="prio med">🟡 Хочу</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="label">6. Гостевой вид — блок свёрнут</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">12:15</span>
+        <span class="icons">📶 🔋 91</span>
+      </div>
+      <div class="tg-header">
+        <span class="back">‹ Назад</span>
+        <div class="title-block">
+          <div class="name">WishBot</div>
+          <div class="sub">мини-приложение</div>
+        </div>
+        <span class="dots">⋯</span>
+      </div>
+      <div class="screen-body">
+        <div class="wl-header">
+          <div class="avatar">Д</div>
+          <div class="info">
+            <div class="owner">Дмитрий</div>
+            <div class="wl-title">День рождения 🎂</div>
+          </div>
+          <button class="sub-btn">Подписаться</button>
+        </div>
+
+        <!-- Don't gift block — collapsed -->
+        <div class="dont-gift-block" style="padding: 14px 16px;">
+          <div class="hdr" style="margin-bottom: 0;">
+            <span class="icon">🚫</span>
+            <span class="title">Что не стоит дарить</span>
+            <span style="font-size: 12px; color: var(--text-muted); margin-right: 4px;">3 категории</span>
+            <span class="collapse" style="transform: rotate(180deg);">▲</span>
+          </div>
+        </div>
+
+        <!-- Separator: wishlist items -->
+        <div style="display: flex; align-items: center; gap: 10px; padding: 16px 20px 10px;">
+          <div style="flex: 1; height: 1px; background: var(--border-light);"></div>
+          <span style="font-size: 13px; font-weight: 600; color: var(--text-muted); white-space: nowrap;">🎁 А вот что хочу</span>
+          <div style="flex: 1; height: 1px; background: var(--border-light);"></div>
+        </div>
+
+        <!-- Wish items -->
+        <div class="ghost-card">
+          <div class="img">🎧</div>
+          <div class="details">
+            <div class="name">AirPods Pro 2</div>
+            <div class="price">24 990 ₽</div>
+          </div>
+          <span class="prio high">🔴 Очень хочу</span>
+        </div>
+        <div class="ghost-card">
+          <div class="img">📖</div>
+          <div class="details">
+            <div class="name">Kindle Paperwhite</div>
+            <div class="price">14 990 ₽</div>
+          </div>
+          <span class="prio high">🔴 Очень хочу</span>
+        </div>
+        <div class="ghost-card">
+          <div class="img">☕</div>
+          <div class="details">
+            <div class="name">Набор specialty кофе</div>
+            <div class="price">3 500 ₽</div>
+          </div>
+          <span class="prio med">🟡 Хочу</span>
+        </div>
+        <div class="ghost-card">
+          <div class="img">🎮</div>
+          <div class="details">
+            <div class="name">Геймпад Xbox Elite 2</div>
+            <div class="price">15 990 ₽</div>
+          </div>
+          <span class="prio med">🟡 Хочу</span>
+        </div>
+        <div class="ghost-card">
+          <div class="img">🎒</div>
+          <div class="details">
+            <div class="name">Рюкзак Peak Design</div>
+            <div class="price">19 900 ₽</div>
+          </div>
+          <span class="prio med">🟡 Хочу</span>
+        </div>
+        <div class="ghost-card">
+          <div class="img">⌚</div>
+          <div class="details">
+            <div class="name">Ремешок для Apple Watch</div>
+            <div class="price">2 990 ₽</div>
+          </div>
+          <span class="prio med">🟡 Хочу</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCREEN 7: Empty state (PRO, not filled yet)
+     ═══════════════════════════════════════════════ -->
+<div class="row">
+  <div>
+    <div class="label">7. Пустое состояние (Pro, ещё не заполнено)</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">12:13</span>
+        <span class="icons">📶 🔋 92</span>
+      </div>
+      <div class="tg-header">
+        <span class="back">‹ Назад</span>
+        <div class="title-block">
+          <div class="name">WishBot</div>
+          <div class="sub">мини-приложение</div>
+        </div>
+        <span class="dots">⋯</span>
+      </div>
+      <div class="screen-body" style="display: flex; flex-direction: column; align-items: center; padding-top: 100px;">
+        <div style="font-size: 64px; margin-bottom: 20px;">🚫</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 8px; text-align: center; padding: 0 40px;">
+          Пока ничего не указано
+        </div>
+        <div style="font-size: 14px; color: var(--text-muted); text-align: center; padding: 0 40px; line-height: 1.5; margin-bottom: 24px;">
+          Добавь подсказки для тех, кто хочет подарить тебе что-то не из вишлиста
+        </div>
+        <button class="btn-primary" style="width: auto; padding: 14px 32px; margin: 0;">
+          Добавить ограничения
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

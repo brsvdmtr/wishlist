@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WishBoard — Paywall v2 (real 19-PRO stack)</title>
+<style>
+:root{--bg:#1B1B1F;--surface:#26262C;--surface-hover:#2E2E36;--card:#2F2F38;--card-elevated:#33333D;--accent:#7C6AFF;--accent-soft:rgba(124,106,255,0.12);--accent-glow:rgba(124,106,255,0.25);--accent-strong:#9B8AFF;--accent-light:#A78BFA;--accent-deep:#5B4BD6;--accent-tint:#C4A7FF;--success:#34D399;--success-soft:rgba(52,211,153,0.12);--warning:#FBBF24;--warning-soft:rgba(251,191,36,0.12);--danger:#F87171;--danger-soft:rgba(248,113,113,0.12);--prio-1:#6B7FD4;--prio-1-soft:rgba(107,127,212,0.15);--prio-2:#E8930A;--prio-2-soft:rgba(232,147,10,0.15);--prio-3:#F04E6E;--prio-3-soft:rgba(240,78,110,0.15);--text:#F4F4F6;--text-secondary:#9CA3AF;--text-muted:#6B7280;--border:rgba(255,255,255,0.06);--border-light:rgba(255,255,255,0.10);--backdrop:rgba(0,0,0,0.6);--gradient-accent:linear-gradient(135deg,#7C6AFF 0%,#9B8AFF 100%);--gradient-accent-deep:linear-gradient(135deg,#7C6AFF 0%,#9B8AFF 55%,#6B5CE7 100%);--gradient-fade-bg:linear-gradient(to top,#1B1B1F 65%,transparent);--r-xs:4px;--r-sm:6px;--r-md:10px;--r-lg:12px;--r-xl:14px;--r-xxl:16px;--r-xxxl:20px;--r-pill:100px;--sh-subtle:0 1px 3px rgba(0,0,0,0.20);--sh-elevated:0 2px 12px rgba(0,0,0,0.18);--sh-deep:0 8px 24px rgba(0,0,0,0.35);--sh-deep-max:0 8px 40px rgba(0,0,0,0.40);--sh-glow-soft:0 4px 20px rgba(124,106,255,0.15);--sh-glow-med:0 4px 16px rgba(124,106,255,0.25);--sh-glow-strong:0 4px 16px rgba(124,106,255,0.35);--sh-glow-cta:0 8px 24px rgba(124,106,255,0.40);--font-sans:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-sans);background:#0c0c0e;color:var(--text);min-height:100vh;padding:40px 20px;line-height:1.4}
+.page-title{text-align:center;color:var(--text);font-size:20px;font-weight:700;margin:0 auto 8px;letter-spacing:-0.01em}
+.page-subtitle{text-align:center;color:var(--text-secondary);font-size:14px;margin:0 auto 32px;max-width:720px}
+.phone-with-note{display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;justify-content:center;margin:0 auto;max-width:1300px}
+.phone{width:375px;min-height:812px;background:var(--bg);border-radius:44px;position:relative;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.6),0 0 0 10px #1a1a1c,0 0 0 12px #0a0a0b;flex-shrink:0}
+.phone.tall{min-height:900px}
+.status-bar{height:48px;padding:16px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;font-size:14px;font-weight:600}
+.phone-label{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-size:10px;padding:4px 10px;border-radius:var(--r-pill);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;z-index:10;backdrop-filter:blur(8px);white-space:nowrap}
+.side-note{max-width:340px;color:var(--text-secondary);font-size:13px;line-height:1.6}
+.side-note .tag{display:inline-block;font-size:10px;padding:3px 8px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-light);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px}
+.side-note h3{color:var(--text);font-size:16px;margin:0 0 12px;letter-spacing:-0.01em}
+.side-note h4{color:var(--accent-light);font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700}
+.side-note p{margin:0 0 10px}
+.side-note ul{margin:0 0 14px;padding-left:18px}
+.side-note li{margin-bottom:4px}
+.side-note b{color:var(--text);font-weight:600}
+.side-note code{font-size:11px;background:var(--surface);padding:1px 5px;border-radius:var(--r-xs);color:var(--accent-light)}
+.btn{border:none;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:transform 0.15s ease;letter-spacing:-0.01em;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:var(--r-xl);min-height:44px}
+.btn:active{transform:scale(0.98)}
+.btn.full{width:100%}
+.btn.lg{min-height:52px;font-size:16px;padding:16px 24px}
+.btn.primary{background:var(--accent);color:#fff;box-shadow:var(--sh-elevated)}
+.btn.primary-gradient{background:var(--gradient-accent);color:#fff;box-shadow:var(--sh-glow-cta),inset 0 1px 0 rgba(255,255,255,0.2)}
+.btn.ghost{background:transparent;color:var(--text-muted);box-shadow:none}
+</style>
+<style>
+  .pw-close {
+    position: absolute;
+    top: 52px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 20px;
+    font-weight: 300;
+    cursor: pointer;
+    z-index: 5;
+    backdrop-filter: blur(10px);
+  }
+  .pw-context-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(124,106,255,0.08);
+    border: 1px solid rgba(124,106,255,0.2);
+    border-radius: var(--r-pill);
+    padding: 6px 14px;
+    margin: 12px auto 16px;
+    font-size: 12px;
+    color: var(--accent-light);
+    font-weight: 600;
+    width: fit-content;
+  }
+
+  .pw-hero {
+    margin: 4px 16px 22px;
+    border-radius: var(--r-xxxl);
+    padding: 32px 24px 26px;
+    background:
+      radial-gradient(ellipse at top right, rgba(255,255,255,0.18), transparent 55%),
+      radial-gradient(ellipse at bottom left, rgba(91,75,214,0.4), transparent 55%),
+      linear-gradient(135deg, #7C6AFF 0%, #9B8AFF 55%, #6B5CE7 100%);
+    text-align: center;
+    position: relative;
+    box-shadow:
+      0 20px 48px rgba(124,106,255,0.4),
+      0 8px 24px rgba(124,106,255,0.25),
+      inset 0 1px 0 rgba(255,255,255,0.15);
+    overflow: hidden;
+  }
+  .pw-crown {
+    font-size: 48px;
+    margin-bottom: 10px;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.35));
+    line-height: 1;
+  }
+  .pw-title {
+    font-size: 26px;
+    font-weight: 800;
+    margin: 0 0 6px;
+    color: #fff;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  .pw-sub {
+    font-size: 14px;
+    color: rgba(255,255,255,0.92);
+    margin: 0;
+    line-height: 1.45;
+    font-weight: 500;
+  }
+
+  .pw-features-section {
+    padding: 0 16px;
+    margin-bottom: 20px;
+  }
+  .pw-section-title {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin: 18px 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pw-section-title.new { color: var(--accent-light); }
+
+  .pw-feat-grid {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    overflow: hidden;
+  }
+  .pw-feat {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    align-items: flex-start;
+    position: relative;
+  }
+  .pw-feat:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+  .pw-feat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--r-md);
+    background: var(--accent-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .pw-feat-icon.new-feat {
+    background: linear-gradient(135deg, rgba(124,106,255,0.2), rgba(167,139,250,0.15));
+    position: relative;
+  }
+  .pw-feat-body { flex: 1; padding-top: 2px; }
+  .pw-feat-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .pw-feat-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+    margin-top: 2px;
+  }
+  .new-badge {
+    background: var(--accent);
+    color: #fff;
+    font-size: 8px;
+    font-weight: 800;
+    padding: 2px 5px;
+    border-radius: var(--r-pill);
+    letter-spacing: 0.3px;
+  }
+
+  .pw-plans {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 0 16px;
+    margin-top: 14px;
+    margin-bottom: 14px;
+  }
+  .pw-plan {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 14px 14px 12px;
+    cursor: pointer;
+    position: relative;
+    text-align: left;
+  }
+  .pw-plan.selected {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, var(--accent-soft), rgba(124,106,255,0.04));
+    box-shadow: 0 0 0 2px rgba(124,106,255,0.15);
+  }
+  .pw-plan-name {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .pw-plan.selected .pw-plan-name { color: var(--accent); }
+  .pw-plan-price {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .pw-plan-per {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 3px;
+  }
+  .pw-plan-save {
+    position: absolute;
+    top: -9px;
+    right: 10px;
+    background: var(--success);
+    color: #000;
+    padding: 3px 8px;
+    border-radius: var(--r-pill);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+  }
+
+  .pw-alt {
+    padding: 14px 16px;
+    border: 1px dashed rgba(124,106,255,0.25);
+    background: rgba(124,106,255,0.04);
+    border-radius: var(--r-xl);
+    margin: 0 16px 16px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .pw-alt .alt-icon {
+    width: 32px; height: 32px;
+    border-radius: var(--r-md);
+    background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .pw-alt .alt-body { flex: 1; }
+  .pw-alt .alt-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .pw-alt .alt-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .pw-sticky {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 20px 16px 28px;
+    background: linear-gradient(to top, var(--bg) 75%, transparent);
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .pw-sticky > * { pointer-events: auto; }
+  .pw-trust {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: -2px;
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Paywall v2 · North Star</h1>
+<p class="page-subtitle">Реальный 19-feature PRO stack, сгруппированный по 3 секциям (Core / Reservations PRO / New). Context-chip сверху сообщает откуда пришёл пользователь (15 upsell-triggers).</p>
+
+<div class="phone-with-note">
+
+<div class="phone tall" style="min-height: 1400px;">
+  <div class="phone-label">Paywall — full</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+  <div class="pw-close">×</div>
+
+  <!-- Context chip — shows which upsell triggered -->
+  <div class="pw-context-chip">
+    <span>🔒</span>
+    <span>Чтобы разблокировать <b>Тайные брони</b></span>
+  </div>
+
+  <!-- Hero -->
+  <div class="pw-hero">
+    <div class="pw-crown">👑</div>
+    <h1 class="pw-title">WishBoard PRO</h1>
+    <p class="pw-sub">19 функций для тех,<br>кто дарит и получает всерьёз</p>
+  </div>
+
+  <!-- Section 1: Новое -->
+  <div class="pw-features-section">
+    <div class="pw-section-title new">✨ Новое в PRO</div>
+    <div class="pw-feat-grid">
+      <div class="pw-feat">
+        <div class="pw-feat-icon new-feat">🔒</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Тайные брони <span class="new-badge">NEW</span></div>
+          <div class="pw-feat-sub">Бронируй чужое желание так, чтобы владелец не узнал</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon new-feat">🔗</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Общие желания <span class="new-badge">NEW</span></div>
+          <div class="pw-feat-sub">Одно желание в нескольких вишлистах сразу, sync автоматом</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon new-feat">✨</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Gift showcase <span class="new-badge">NEW</span></div>
+          <div class="pw-feat-sub">Публичный профиль с @ником — витрина твоих вишлистов</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon new-feat">📋</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Curated share <span class="new-badge">NEW</span></div>
+          <div class="pw-feat-sub">Поделись подборкой желаний отдельной ссылкой</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Reservation PRO -->
+  <div class="pw-features-section">
+    <div class="pw-section-title">⏱ Reservation PRO · для тех кто дарит</div>
+    <div class="pw-feat-grid">
+      <div class="pw-feat">
+        <div class="pw-feat-icon">⏱</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Smart reservations (TTL)</div>
+          <div class="pw-feat-sub">Бронь автоматически возвращается через 24ч / 48ч / 72ч / 7д</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">📝</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Заметки к броням</div>
+          <div class="pw-feat-sub">Приватные пометки «где купить / размер / цвет»</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">🔔</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Напоминания о TTL</div>
+          <div class="pw-feat-sub">Бот напомнит за несколько часов до истечения</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">✓</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Отметка «куплено»</div>
+          <div class="pw-feat-sub">Трекай что уже купил, завершай бронь в 1 клик</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">🔍</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Фильтры и сортировка</div>
+          <div class="pw-feat-sub">По покупке / комментариям / дате / имени</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">📜</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">История броней</div>
+          <div class="pw-feat-sub">Все твои подарки — навсегда</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 3: Core -->
+  <div class="pw-features-section">
+    <div class="pw-section-title">📦 Основные PRO</div>
+    <div class="pw-feat-grid">
+      <div class="pw-feat">
+        <div class="pw-feat-icon">📋</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">До 10 вишлистов</div>
+          <div class="pw-feat-sub">Вместо 2 на FREE</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">🎁</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">До 50 желаний в каждом</div>
+          <div class="pw-feat-sub">Вместо 20 на FREE</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">👥</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Общие подарки</div>
+          <div class="pw-feat-sub">Скидывайся на крупное с 2–5 друзьями</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">💬</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Комментарии и ответы</div>
+          <div class="pw-feat-sub">Обсуждения с тредами — размер, цвет, идеи</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">🔗</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">URL-импорт</div>
+          <div class="pw-feat-sub">Кинул ссылку — вытащили название, цену, фото</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">💡</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Подсказки</div>
+          <div class="pw-feat-sub">Давай guest'ам намёки: размер, бренд, цвет</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">👁</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Подписки на вишлисты</div>
+          <div class="pw-feat-sub">До 10 штук — следи за обновлениями друзей</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">🗂</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Категории внутри вишлиста</div>
+          <div class="pw-feat-sub">Группируй желания, drag-reorder</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">🚫</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">«Не дарить»</div>
+          <div class="pw-feat-sub">Аллергии, предпочтения — скажи честно что не надо</div>
+        </div>
+      </div>
+      <div class="pw-feat">
+        <div class="pw-feat-icon">📅</div>
+        <div class="pw-feat-body">
+          <div class="pw-feat-title">Календарь подарков</div>
+          <div class="pw-feat-sub">Заметки о том кому что когда купил</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Plans -->
+  <div class="pw-plans">
+    <div class="pw-plan">
+      <div class="pw-plan-name">Месяц</div>
+      <div class="pw-plan-price">299 ₽</div>
+      <div class="pw-plan-per">каждый месяц</div>
+    </div>
+    <div class="pw-plan selected">
+      <div class="pw-plan-save">−45%</div>
+      <div class="pw-plan-name">Год</div>
+      <div class="pw-plan-price">1 990 ₽</div>
+      <div class="pw-plan-per">166 ₽ / месяц</div>
+    </div>
+  </div>
+
+  <!-- Referral alternative CTA -->
+  <div class="pw-alt">
+    <div class="alt-icon">🎁</div>
+    <div class="alt-body">
+      <div class="alt-title">Или получи PRO бесплатно</div>
+      <div class="alt-sub">Пригласи 3 друзей → +30 дней PRO каждому</div>
+    </div>
+    <span style="color: var(--accent); font-size: 18px;">›</span>
+  </div>
+
+  <div class="pw-sticky">
+    <button class="btn primary-gradient lg full">Начать PRO · 1 990 ₽/год</button>
+    <button class="btn ghost">Не сейчас</button>
+    <div class="pw-trust">💳 ⭐ Stars · Отмена в любой момент</div>
+  </div>
+</div>
+
+<div class="side-note">
+  <span class="tag">North Star — Paywall v2</span>
+  <h3>Реальный 19-feature stack</h3>
+  <p>V1 показывал 4 случайных бенефита. V2 — всю реальную ценность, сгруппированную по intent'у.</p>
+
+  <h4>Context-chip сверху</h4>
+  <p>«Чтобы разблокировать <b>Тайные брони</b>» — сообщает пользователю что <b>триггернуло</b> paywall. Из 15 upsell-контекстов (<code>UpsellContext</code>) каждый показывает релевантный chip — wishlist_limit, comments, reservation_pro, secret_reservation и т.д.</p>
+  <p>Это создаёт контекст: «не generic продажа, а конкретный unlock для того чего мне сейчас не хватает».</p>
+
+  <h4>3 секции features</h4>
+  <ul>
+    <li><b>✨ Новое</b> (4 шт) — с NEW-бейджами, accent-tinted иконки. Недавние релизы: тайные брони, общие желания, showcase, curated share.</li>
+    <li><b>⏱ Reservation PRO</b> (6 шт) — отдельная секция потому что это <i>unlockable standalone</i> за Stars (<code>reservation_pro_unlock</code>). Показывает что PRO включает всё это.</li>
+    <li><b>📦 Основные</b> (10 шт) — core бенефиты: limits, import, subscriptions, comments, categories, don't-gift, calendar.</li>
+  </ul>
+  <p>Итого видно 20 feature-rows (иногда 19, но пересечения есть). Скроллится — этот список <b>должен</b> быть длинным чтобы value читался.</p>
+
+  <h4>Plan selector с референтной экономикой</h4>
+  <ul>
+    <li>Месяц 299₽ / год 1 990₽ — save -45% яркий badge</li>
+    <li>Год выбран по-умолчанию (раскрытая LTV-psychology)</li>
+    <li>«166₽/месяц» в годовом tile — референтная цена</li>
+  </ul>
+
+  <h4>Referral-альтернатива</h4>
+  <p>Dashed-border tile «или получи PRO бесплатно за 3 приглашения» — важный escape hatch. Пользователи чувствуют «я не заперт в платёж». Current prod это имеет (код в MiniApp.tsx:3545+), но часто теряется в дизайне.</p>
+
+  <h4>Sticky footer</h4>
+  <ul>
+    <li>Primary-gradient «Начать PRO · 1 990 ₽/год» (с ценой прямо на кнопке — transparency)</li>
+    <li>Ghost «Не сейчас» — quiet, 13/muted</li>
+    <li>Trust-строчка «💳 ⭐ Stars · Отмена в любой момент»</li>
+  </ul>
+
+  <h4>Что лучше current prod</h4>
+  <ul>
+    <li>Структурированный value: 3 секции вместо плоского списка</li>
+    <li>Context-chip вверху — paywall знает откуда ты пришёл</li>
+    <li>NEW-бейджи на недавних фичах — показывают что продукт живой</li>
+    <li>Price на CTA-кнопке — нет «скрытой цены»</li>
+    <li>Referral-alt визуально выровнен с PRO — равноправная альтернатива</li>
+    <li>19 фич действительно продают value, а не 4 абстракции</li>
+  </ul>
+</div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,1981 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PRO Showcase — Mockups</title>
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+    --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: #111;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Navigation */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(17,17,17,0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-light);
+    padding: 12px 20px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-btn {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-sec);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: var(--font);
+    transition: all 0.2s;
+  }
+  .nav-btn:hover, .nav-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* Sections */
+  .mockup-section {
+    display: none;
+    padding: 20px;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+  .mockup-section.active { display: block; }
+
+  .section-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  .section-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+    line-height: 1.4;
+  }
+  .variant-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    margin: 32px 0 12px;
+    padding: 6px 12px;
+    background: var(--accent-soft);
+    border-radius: 8px;
+    display: inline-block;
+  }
+  .variant-label:first-of-type { margin-top: 16px; }
+
+  /* Phone frame */
+  .phone {
+    background: var(--bg);
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+    margin-bottom: 24px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .phone-status {
+    height: 44px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-sec);
+    border-bottom: 1px solid var(--border);
+  }
+  .phone-content {
+    min-height: 600px;
+    overflow-y: auto;
+  }
+
+  /* ============================================ */
+  /* COMPONENTS                                   */
+  /* ============================================ */
+
+  /* Hero variants */
+  .hero-v1 {
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-cover {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+    display: block;
+  }
+  .hero-cover-gradient {
+    background: linear-gradient(135deg, #3a2d6e 0%, #1a1538 50%, #2d1f4e 100%);
+    width: 100%;
+    height: 160px;
+  }
+  .hero-cover-default {
+    background: linear-gradient(135deg, var(--accent) 0%, #4a3a9e 50%, #2d1f6e 100%);
+    width: 100%;
+    height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .hero-avatar-row {
+    display: flex;
+    align-items: flex-end;
+    padding: 0 20px;
+    margin-top: -36px;
+    position: relative;
+    z-index: 2;
+  }
+  .hero-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #a78bfa);
+    border: 3px solid var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+  .hero-info {
+    padding: 12px 20px 20px;
+  }
+  .hero-name {
+    font-size: 20px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pro-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: linear-gradient(135deg, #7C6AFF 0%, #a78bfa 100%);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    letter-spacing: 0.5px;
+  }
+  .hero-username {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .hero-bio {
+    font-size: 14px;
+    color: var(--text-sec);
+    margin-top: 8px;
+    line-height: 1.45;
+  }
+
+  /* Cards */
+  .sc-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .sc-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .sc-card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .sc-card-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .sc-card-count {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* Pinned wishlist cards */
+  .pinned-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .pinned-item {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .pinned-item:hover {
+    background: var(--surface-hover);
+  }
+  .pinned-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+  .pinned-emoji {
+    font-size: 22px;
+    width: 36px;
+    height: 36px;
+    background: var(--accent-soft);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .pinned-name {
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pinned-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .pinned-arrow {
+    color: var(--text-muted);
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+
+  /* Chips / pills */
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--surface);
+    color: var(--text-sec);
+    border: 1px solid var(--border);
+  }
+  .chip-accent {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: transparent;
+  }
+
+  /* Preference block */
+  .pref-text {
+    font-size: 14px;
+    color: var(--text-sec);
+    line-height: 1.5;
+  }
+
+  /* Sizes grid */
+  .sizes-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .size-item {
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+  }
+  .size-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+  .size-value {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  /* Anti-gifts */
+  .antigift-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .antigift-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    background: var(--red-soft);
+    color: var(--red);
+    border: 1px solid rgba(248,113,113,0.15);
+  }
+  .antigift-comment {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.45;
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-radius: 10px;
+    border-left: 3px solid var(--red);
+  }
+
+  /* Section divider */
+  .sc-section {
+    padding: 0 20px;
+    margin-bottom: 20px;
+  }
+  .sc-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    width: 100%;
+    padding: 14px 24px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: var(--font);
+    cursor: pointer;
+    text-align: center;
+    display: block;
+  }
+  .btn-secondary {
+    width: 100%;
+    padding: 14px 24px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 15px;
+    font-weight: 600;
+    font-family: var(--font);
+    cursor: pointer;
+    text-align: center;
+    display: block;
+  }
+  .btn-ghost {
+    padding: 10px 16px;
+    border-radius: 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-sec);
+    font-size: 14px;
+    font-weight: 500;
+    font-family: var(--font);
+    cursor: pointer;
+  }
+  .btn-small {
+    padding: 8px 16px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font);
+    cursor: pointer;
+  }
+
+  /* CTA bar */
+  .cta-bar {
+    padding: 16px 20px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+  }
+  .cta-bar .btn-primary { flex: 1; }
+
+  /* Teaser / Lock */
+  .teaser-card {
+    background: linear-gradient(135deg, rgba(124,106,255,0.08) 0%, rgba(124,106,255,0.02) 100%);
+    border: 1px solid rgba(124,106,255,0.2);
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .teaser-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 30% 20%, rgba(124,106,255,0.08) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .teaser-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+  }
+  .teaser-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .teaser-desc {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.45;
+    margin-bottom: 16px;
+  }
+  .teaser-features {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 18px;
+    text-align: left;
+  }
+  .teaser-feature {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-sec);
+  }
+  .teaser-feature-icon {
+    color: var(--accent);
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Progress bar */
+  .progress-bar-wrap {
+    background: var(--surface);
+    border-radius: 6px;
+    height: 6px;
+    overflow: hidden;
+    margin: 8px 0;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--accent), #a78bfa);
+    transition: width 0.4s ease;
+  }
+
+  /* Editor sections */
+  .editor-section {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+  }
+  .editor-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .editor-section-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .editor-section-icon {
+    font-size: 20px;
+  }
+  .editor-section-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .editor-section-status {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .status-done {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .status-empty {
+    background: var(--surface);
+    color: var(--text-muted);
+  }
+  .editor-section-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    padding-left: 30px;
+  }
+
+  /* Input fields */
+  .input-field {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: var(--font);
+    outline: none;
+    resize: none;
+  }
+  .input-field::placeholder {
+    color: var(--text-muted);
+  }
+  .input-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    display: block;
+  }
+  .input-counter {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+    margin-top: 4px;
+  }
+
+  /* Cover upload */
+  .cover-upload {
+    width: 100%;
+    height: 120px;
+    border-radius: 12px;
+    border: 2px dashed var(--border-light);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .cover-upload:hover {
+    border-color: var(--accent);
+  }
+  .cover-upload-icon {
+    font-size: 24px;
+    color: var(--text-muted);
+  }
+  .cover-upload-text {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .cover-preview {
+    width: 100%;
+    height: 120px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #3a2d6e 0%, #1a1538 50%, #2d1f4e 100%);
+    position: relative;
+    overflow: hidden;
+  }
+  .cover-preview-actions {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    display: flex;
+    gap: 6px;
+  }
+  .cover-action-btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font);
+  }
+
+  /* Pinned editor */
+  .pinned-editor-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--surface);
+    border-radius: 10px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+  }
+  .pinned-editor-grip {
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: grab;
+  }
+  .pinned-editor-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .pinned-editor-name {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pinned-editor-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .pinned-editor-action {
+    font-size: 12px;
+    color: var(--red);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font);
+    font-weight: 500;
+    padding: 4px 8px;
+  }
+
+  /* Wishlists other */
+  .wl-other-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .wl-other-item:last-child {
+    border-bottom: none;
+  }
+  .wl-other-name {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .wl-other-count {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* Skeleton placeholder */
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface) 25%, var(--surface-hover) 50%, var(--surface) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 8px;
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 20px 0;
+  }
+
+  /* Share row */
+  .share-row {
+    display: flex;
+    gap: 8px;
+    padding: 0 20px 20px;
+  }
+  .share-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border-light);
+    background: var(--surface);
+    color: var(--text-sec);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: var(--font);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  /* Lock overlay */
+  .lock-overlay {
+    background: rgba(27,27,31,0.85);
+    backdrop-filter: blur(6px);
+    border-radius: 14px;
+    padding: 24px 20px;
+    text-align: center;
+    border: 1px solid rgba(124,106,255,0.15);
+  }
+  .lock-icon { font-size: 32px; margin-bottom: 10px; }
+  .lock-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .lock-desc { font-size: 13px; color: var(--text-sec); margin-bottom: 14px; line-height: 1.4; }
+
+  /* Success toast */
+  .success-toast {
+    background: var(--green-soft);
+    border: 1px solid rgba(52,211,153,0.2);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--green);
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 40px 24px;
+  }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+  .empty-desc { font-size: 13px; color: var(--text-sec); line-height: 1.45; margin-bottom: 20px; }
+
+  /* Preview badge */
+  .preview-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: var(--orange-soft);
+    color: var(--orange);
+    font-size: 12px;
+    font-weight: 600;
+    margin: 12px 20px;
+  }
+
+  /* Separator between mockups */
+  .mockup-divider {
+    border: none;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    margin: 40px 0;
+    opacity: 0.3;
+  }
+
+  /* Annotation */
+  .annotation {
+    background: rgba(251,191,36,0.08);
+    border: 1px solid rgba(251,191,36,0.15);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 12px;
+    color: var(--orange);
+    line-height: 1.45;
+    margin-bottom: 16px;
+  }
+  .annotation strong {
+    display: block;
+    margin-bottom: 4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="showSection('hero')">Hero-блоки</button>
+  <button class="nav-btn" onclick="showSection('public-visual')">Public: Visual</button>
+  <button class="nav-btn" onclick="showSection('public-util')">Public: Utility</button>
+  <button class="nav-btn" onclick="showSection('editor')">Редактор</button>
+  <button class="nav-btn" onclick="showSection('states')">Состояния</button>
+  <button class="nav-btn" onclick="showSection('paywall')">Paywall</button>
+  <button class="nav-btn" onclick="showSection('preview')">Preview</button>
+  <button class="nav-btn" onclick="showSection('transition')">Переход</button>
+</nav>
+
+<!-- ============================================ -->
+<!-- SECTION 1: HERO VARIANTS                     -->
+<!-- ============================================ -->
+<div id="hero" class="mockup-section active">
+  <h2 class="section-title">Hero-блок: 3 варианта</h2>
+  <p class="section-subtitle">Варианты оформления верхней части публичной витрины. Каждый — mobile-first, тёмная тема, без перегруза.</p>
+
+  <!-- Variant A: Immersive Cover -->
+  <div class="variant-label">Вариант A — Immersive Cover</div>
+  <div class="annotation">
+    <strong>Обложка на весь hero</strong>
+    Аватар накладывается поверх обложки. Градиент снизу для читаемости текста. Самый визуально мощный вариант.
+  </div>
+  <div class="phone">
+    <div class="phone-content">
+      <div style="position: relative;">
+        <!-- Cover -->
+        <div style="width:100%; height:200px; background: linear-gradient(135deg, #2a1f5e 0%, #1a1040 40%, #3d2870 100%); position: relative;">
+          <div style="position: absolute; top: 20px; right: 20px; font-size: 24px; opacity: 0.15;">&#10024;</div>
+          <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 100px; background: linear-gradient(to top, var(--bg) 0%, transparent 100%);"></div>
+        </div>
+        <!-- Avatar + Name overlay -->
+        <div style="padding: 0 20px; margin-top: -52px; position: relative; z-index: 2;">
+          <div style="display: flex; align-items: flex-end; gap: 14px;">
+            <div class="hero-avatar">&#128105;</div>
+            <div style="padding-bottom: 4px;">
+              <div class="hero-name">
+                Анна Петрова
+                <span class="pro-badge">PRO</span>
+              </div>
+              <div class="hero-username">@annapetrova</div>
+            </div>
+          </div>
+          <p class="hero-bio" style="margin-top: 12px;">Люблю практичные подарки: технику, книги и вещи для дома. Предпочитаю минимализм</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Variant B: Compact Elegant -->
+  <div class="variant-label">Вариант B — Compact Elegant</div>
+  <div class="annotation">
+    <strong>Обложка-полоса + компактная карточка</strong>
+    Обложка занимает меньше места. Аватар по центру. Элегантный, чистый. Менее рискованный по layout shifts.
+  </div>
+  <div class="phone">
+    <div class="phone-content">
+      <div style="position: relative;">
+        <div style="width:100%; height:120px; background: linear-gradient(135deg, #3a2d6e 0%, #1a1538 50%, #2d1f4e 100%);"></div>
+        <div style="text-align: center; margin-top: -32px; position: relative; z-index: 2;">
+          <div style="display: inline-flex; width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a78bfa); border: 3px solid var(--bg); align-items: center; justify-content: center; font-size: 26px;">&#128105;</div>
+          <div style="margin-top: 8px;">
+            <div style="font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              Анна Петрова
+              <span class="pro-badge">PRO</span>
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted);">@annapetrova</div>
+          </div>
+          <p style="font-size: 14px; color: var(--text-sec); margin: 10px 24px 0; line-height: 1.45;">Люблю практичные подарки: технику, книги и вещи для дома. Предпочитаю минимализм</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Variant C: No Cover, Clean -->
+  <div class="variant-label">Вариант C — Minimal (default без обложки)</div>
+  <div class="annotation">
+    <strong>Без обложки, accent-градиент фон</strong>
+    Для пользователей без обложки. Вариант по умолчанию — чистый, красивый, не пустой.
+  </div>
+  <div class="phone">
+    <div class="phone-content">
+      <div style="position: relative;">
+        <div style="width:100%; height:100px; background: linear-gradient(180deg, rgba(124,106,255,0.15) 0%, transparent 100%);"></div>
+        <div style="padding: 0 20px; margin-top: -20px;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">&#128105;</div>
+            <div>
+              <div style="font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                Анна Петрова
+                <span class="pro-badge">PRO</span>
+              </div>
+              <div style="font-size: 13px; color: var(--text-muted);">@annapetrova</div>
+            </div>
+          </div>
+          <p style="font-size: 14px; color: var(--text-sec); margin-top: 12px; line-height: 1.45;">Люблю практичные подарки: технику, книги и вещи для дома. Предпочитаю минимализм</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION 2: PUBLIC SHOWCASE — VISUAL          -->
+<!-- ============================================ -->
+<div id="public-visual" class="mockup-section">
+  <h2 class="section-title">Public Showcase: Visual</h2>
+  <p class="section-subtitle">Более визуальный вариант. Акцент на обложке, крупных карточках, эмоциональном восприятии. Для тех, кто хочет "wow".</p>
+
+  <div class="phone">
+    <div class="phone-status">showcase &middot; @annapetrova</div>
+    <div class="phone-content">
+      <!-- Hero A -->
+      <div style="position: relative;">
+        <div style="width:100%; height:180px; background: linear-gradient(135deg, #2a1f5e 0%, #1a1040 40%, #3d2870 100%); position: relative;">
+          <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: linear-gradient(to top, var(--bg) 0%, transparent 100%);"></div>
+        </div>
+        <div style="padding: 0 20px; margin-top: -44px; position: relative; z-index: 2;">
+          <div style="display: flex; align-items: flex-end; gap: 14px;">
+            <div class="hero-avatar">&#128105;</div>
+            <div style="padding-bottom: 4px;">
+              <div class="hero-name">Анна Петрова <span class="pro-badge">PRO</span></div>
+              <div class="hero-username">@annapetrova</div>
+            </div>
+          </div>
+          <p class="hero-bio" style="margin-top: 12px;">Люблю практичные подарки: технику, книги и вещи для дома. Предпочитаю минимализм</p>
+        </div>
+      </div>
+
+      <div style="height: 24px;"></div>
+
+      <!-- Pinned Wishlists -->
+      <div class="sc-section">
+        <div class="sc-section-title">&#128204; Главные вишлисты</div>
+        <div class="pinned-grid">
+          <div class="pinned-item">
+            <div class="pinned-left">
+              <div class="pinned-emoji">&#127873;</div>
+              <div>
+                <div class="pinned-name">День рождения 2026</div>
+                <div class="pinned-meta">12 желаний &middot; 3 забронированы</div>
+              </div>
+            </div>
+            <span class="pinned-arrow">&#8250;</span>
+          </div>
+          <div class="pinned-item">
+            <div class="pinned-left">
+              <div class="pinned-emoji">&#127968;</div>
+              <div>
+                <div class="pinned-name">Для дома</div>
+                <div class="pinned-meta">8 желаний</div>
+              </div>
+            </div>
+            <span class="pinned-arrow">&#8250;</span>
+          </div>
+          <div class="pinned-item">
+            <div class="pinned-left">
+              <div class="pinned-emoji">&#128218;</div>
+              <div>
+                <div class="pinned-name">Книги на лето</div>
+                <div class="pinned-meta">5 желаний &middot; 1 забронировано</div>
+              </div>
+            </div>
+            <span class="pinned-arrow">&#8250;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preferences -->
+      <div class="sc-section">
+        <div class="sc-section-title">&#128161; Предпочтения</div>
+        <div class="sc-card" style="margin-bottom: 0;">
+          <p class="pref-text">Предпочитаю практичные вещи, которыми пользуюсь каждый день. Люблю технику, книги и хороший кофе. Цвета: нейтральные, тёмные. Стиль: минимализм.</p>
+        </div>
+      </div>
+
+      <!-- Sizes -->
+      <div class="sc-section">
+        <div class="sc-section-title">&#128207; Размеры</div>
+        <div class="sizes-grid">
+          <div class="size-item">
+            <div class="size-label">Одежда</div>
+            <div class="size-value">M / 46</div>
+          </div>
+          <div class="size-item">
+            <div class="size-label">Обувь</div>
+            <div class="size-value">38 EU</div>
+          </div>
+          <div class="size-item">
+            <div class="size-label">Кольцо</div>
+            <div class="size-value">16.5</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Brands -->
+      <div class="sc-section">
+        <div class="sc-section-title">&#10024; Любимые бренды</div>
+        <div class="chips">
+          <span class="chip chip-accent">Apple</span>
+          <span class="chip chip-accent">IKEA</span>
+          <span class="chip chip-accent">Uniqlo</span>
+          <span class="chip chip-accent">Muji</span>
+          <span class="chip chip-accent">Zara Home</span>
+        </div>
+      </div>
+
+      <!-- Anti-gifts -->
+      <div class="sc-section">
+        <div class="sc-section-title">&#128683; Что лучше не дарить</div>
+        <div class="antigift-list">
+          <span class="antigift-tag">&#127856; Сладости</span>
+          <span class="antigift-tag">&#128144; Цветы</span>
+          <span class="antigift-tag">&#129506; Мягкие игрушки</span>
+          <span class="antigift-tag">&#127863; Алкоголь</span>
+        </div>
+        <div class="antigift-comment">Пожалуйста, не дарите вещи из масс-маркета: предпочитаю качество, а не количество</div>
+      </div>
+
+      <!-- Other wishlists -->
+      <div class="sc-section">
+        <div class="sc-section-title">Другие вишлисты</div>
+        <div style="background: var(--card); border-radius: 12px; padding: 4px 16px; border: 1px solid var(--border);">
+          <div class="wl-other-item">
+            <div>
+              <div class="wl-other-name">Электроника</div>
+              <div class="wl-other-count">4 желания</div>
+            </div>
+            <span style="color: var(--text-muted);">&#8250;</span>
+          </div>
+          <div class="wl-other-item">
+            <div>
+              <div class="wl-other-name">Спорт</div>
+              <div class="wl-other-count">3 желания</div>
+            </div>
+            <span style="color: var(--text-muted);">&#8250;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Share row -->
+      <div class="share-row">
+        <button class="share-btn">&#128279; Скопировать ссылку</button>
+        <button class="share-btn">&#128172; Поделиться</button>
+      </div>
+
+      <div style="height: 20px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION 3: PUBLIC SHOWCASE — UTILITARIAN      -->
+<!-- ============================================ -->
+<div id="public-util" class="mockup-section">
+  <h2 class="section-title">Public Showcase: Utility</h2>
+  <p class="section-subtitle">Более утилитарный вариант. Компактнее, плотнее, быстрее сканируется. Фокус на информации, а не wow-эффекте.</p>
+
+  <div class="phone">
+    <div class="phone-status">showcase &middot; @annapetrova</div>
+    <div class="phone-content">
+      <!-- Compact hero (Variant C style) -->
+      <div style="padding: 20px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;">&#128105;</div>
+          <div style="min-width: 0;">
+            <div style="font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+              Анна Петрова
+              <span class="pro-badge" style="font-size: 9px; padding: 2px 6px;">PRO</span>
+            </div>
+            <div style="font-size: 13px; color: var(--text-sec); margin-top: 2px; line-height: 1.35;">Люблю практичные подарки: технику, книги и вещи для дома</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Combined info block -->
+      <div style="padding: 0 20px;">
+        <!-- Quick info chips -->
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;">
+          <span class="chip" style="font-size: 12px; padding: 5px 10px;">&#128090; M / 46</span>
+          <span class="chip" style="font-size: 12px; padding: 5px 10px;">&#128095; 38 EU</span>
+          <span class="chip" style="font-size: 12px; padding: 5px 10px;">&#128141; 16.5</span>
+        </div>
+      </div>
+
+      <!-- Pinned -->
+      <div class="sc-section">
+        <div class="sc-section-title" style="font-size: 12px;">&#128204; Главные вишлисты</div>
+        <div class="pinned-grid">
+          <div class="pinned-item" style="padding: 12px 14px;">
+            <div class="pinned-left">
+              <div class="pinned-emoji" style="width: 32px; height: 32px; font-size: 18px; border-radius: 8px;">&#127873;</div>
+              <div>
+                <div class="pinned-name" style="font-size: 14px;">День рождения 2026</div>
+                <div class="pinned-meta" style="font-size: 11px;">12 желаний &middot; 3 забронированы</div>
+              </div>
+            </div>
+            <span class="pinned-arrow">&#8250;</span>
+          </div>
+          <div class="pinned-item" style="padding: 12px 14px;">
+            <div class="pinned-left">
+              <div class="pinned-emoji" style="width: 32px; height: 32px; font-size: 18px; border-radius: 8px;">&#127968;</div>
+              <div>
+                <div class="pinned-name" style="font-size: 14px;">Для дома</div>
+                <div class="pinned-meta" style="font-size: 11px;">8 желаний</div>
+              </div>
+            </div>
+            <span class="pinned-arrow">&#8250;</span>
+          </div>
+          <div class="pinned-item" style="padding: 12px 14px;">
+            <div class="pinned-left">
+              <div class="pinned-emoji" style="width: 32px; height: 32px; font-size: 18px; border-radius: 8px;">&#128218;</div>
+              <div>
+                <div class="pinned-name" style="font-size: 14px;">Книги на лето</div>
+                <div class="pinned-meta" style="font-size: 11px;">5 желаний &middot; 1 забронировано</div>
+              </div>
+            </div>
+            <span class="pinned-arrow">&#8250;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preferences compact -->
+      <div class="sc-section">
+        <div class="sc-section-title" style="font-size: 12px;">&#128161; Предпочтения</div>
+        <p style="font-size: 13px; color: var(--text-sec); line-height: 1.45;">Предпочитаю практичные вещи: технику, книги и хороший кофе. Цвета: нейтральные, тёмные. Стиль: минимализм.</p>
+      </div>
+
+      <!-- Brands compact -->
+      <div class="sc-section">
+        <div class="sc-section-title" style="font-size: 12px;">&#10024; Любимые бренды</div>
+        <div class="chips" style="gap: 6px;">
+          <span class="chip chip-accent" style="font-size: 12px; padding: 4px 10px;">Apple</span>
+          <span class="chip chip-accent" style="font-size: 12px; padding: 4px 10px;">IKEA</span>
+          <span class="chip chip-accent" style="font-size: 12px; padding: 4px 10px;">Uniqlo</span>
+          <span class="chip chip-accent" style="font-size: 12px; padding: 4px 10px;">Muji</span>
+          <span class="chip chip-accent" style="font-size: 12px; padding: 4px 10px;">Zara Home</span>
+        </div>
+      </div>
+
+      <!-- Anti-gifts compact -->
+      <div class="sc-section">
+        <div class="sc-section-title" style="font-size: 12px;">&#128683; Что лучше не дарить</div>
+        <div class="antigift-list" style="gap: 4px;">
+          <span class="antigift-tag" style="font-size: 12px; padding: 4px 10px;">&#127856; Сладости</span>
+          <span class="antigift-tag" style="font-size: 12px; padding: 4px 10px;">&#128144; Цветы</span>
+          <span class="antigift-tag" style="font-size: 12px; padding: 4px 10px;">&#129506; Игрушки</span>
+          <span class="antigift-tag" style="font-size: 12px; padding: 4px 10px;">&#127863; Алкоголь</span>
+        </div>
+      </div>
+
+      <!-- Other wishlists compact -->
+      <div class="sc-section">
+        <div class="sc-section-title" style="font-size: 12px;">Другие вишлисты</div>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface); border-radius: 10px;">
+            <span style="font-size: 14px; font-weight: 500;">Электроника</span>
+            <span style="font-size: 12px; color: var(--text-muted);">4 &#8250;</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface); border-radius: 10px;">
+            <span style="font-size: 14px; font-weight: 500;">Спорт</span>
+            <span style="font-size: 12px; color: var(--text-muted);">3 &#8250;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Share -->
+      <div class="share-row" style="padding-bottom: 24px;">
+        <button class="share-btn" style="font-size: 12px;">&#128279; Ссылка</button>
+        <button class="share-btn" style="font-size: 12px;">&#128172; Поделиться</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION 4: EDITOR                             -->
+<!-- ============================================ -->
+<div id="editor" class="mockup-section">
+  <h2 class="section-title">Редактор Showcase</h2>
+  <p class="section-subtitle">Секционный редактор. Прогресс заполнения, статус готовности, compact entry для каждой секции.</p>
+
+  <div class="phone">
+    <div class="phone-status">&#9664; &nbsp; Оформить витрину</div>
+    <div class="phone-content" style="padding: 20px;">
+      <!-- Header -->
+      <div style="margin-bottom: 20px;">
+        <div style="font-size: 22px; font-weight: 700; margin-bottom: 4px;">Подарочная витрина</div>
+        <div style="font-size: 13px; color: var(--text-sec); line-height: 1.4;">Оформи профиль так, чтобы дарителям было проще выбрать тебе подарок</div>
+      </div>
+
+      <!-- Progress -->
+      <div style="background: var(--card); border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; border: 1px solid var(--border);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <span style="font-size: 13px; font-weight: 600;">Почти готово</span>
+          <span style="font-size: 12px; color: var(--accent); font-weight: 600;">5 / 7</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" style="width: 71%;"></div>
+        </div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">Добавь размеры и любимые бренды, чтобы дарителям было проще</div>
+      </div>
+
+      <!-- Sections -->
+      <!-- 1. Cover -->
+      <div class="editor-section">
+        <div class="editor-section-head">
+          <div class="editor-section-left">
+            <span class="editor-section-icon">&#128247;</span>
+            <span class="editor-section-title">Обложка</span>
+          </div>
+          <span class="editor-section-status status-done">&#10003; Готово</span>
+        </div>
+        <div style="margin-top: 12px;">
+          <div class="cover-preview">
+            <div class="cover-preview-actions">
+              <button class="cover-action-btn">Заменить</button>
+              <button class="cover-action-btn">&#10005;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Bio -->
+      <div class="editor-section">
+        <div class="editor-section-head">
+          <div class="editor-section-left">
+            <span class="editor-section-icon">&#9997;&#65039;</span>
+            <span class="editor-section-title">О тебе</span>
+          </div>
+          <span class="editor-section-status status-done">&#10003; Готово</span>
+        </div>
+        <div style="margin-top: 12px;">
+          <textarea class="input-field" rows="2" style="resize: none;" placeholder="Напиши коротко, что тебе нравится и какой формат подарков тебе ближе">Люблю практичные подарки: технику, книги и вещи для дома. Предпочитаю минимализм</textarea>
+          <div class="input-counter">82 / 180</div>
+        </div>
+      </div>
+
+      <!-- 3. Pinned -->
+      <div class="editor-section">
+        <div class="editor-section-head">
+          <div class="editor-section-left">
+            <span class="editor-section-icon">&#128204;</span>
+            <span class="editor-section-title">Главные вишлисты</span>
+          </div>
+          <span class="editor-section-status status-done">3 / 3</span>
+        </div>
+        <div style="margin-top: 12px;">
+          <div class="pinned-editor-item">
+            <span class="pinned-editor-grip">&#9776;</span>
+            <div class="pinned-editor-info">
+              <div class="pinned-editor-name">&#127873; День рождения 2026</div>
+              <div class="pinned-editor-meta">12 желаний</div>
+            </div>
+            <button class="pinned-editor-action">Убрать</button>
+          </div>
+          <div class="pinned-editor-item">
+            <span class="pinned-editor-grip">&#9776;</span>
+            <div class="pinned-editor-info">
+              <div class="pinned-editor-name">&#127968; Для дома</div>
+              <div class="pinned-editor-meta">8 желаний</div>
+            </div>
+            <button class="pinned-editor-action">Убрать</button>
+          </div>
+          <div class="pinned-editor-item">
+            <span class="pinned-editor-grip">&#9776;</span>
+            <div class="pinned-editor-info">
+              <div class="pinned-editor-name">&#128218; Книги на лето</div>
+              <div class="pinned-editor-meta">5 желаний</div>
+            </div>
+            <button class="pinned-editor-action">Убрать</button>
+          </div>
+        </div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Закрепи до 3 самых важных вишлистов</div>
+      </div>
+
+      <!-- 4. Preferences -->
+      <div class="editor-section">
+        <div class="editor-section-head">
+          <div class="editor-section-left">
+            <span class="editor-section-icon">&#128161;</span>
+            <span class="editor-section-title">Предпочтения</span>
+          </div>
+          <span class="editor-section-status status-done">&#10003; Готово</span>
+        </div>
+        <div style="margin-top: 12px;">
+          <textarea class="input-field" rows="3" style="resize: none;" placeholder="Расскажи, что тебе обычно нравится: формат подарков, стиль, категории, цвета...">Предпочитаю практичные вещи, которыми пользуюсь каждый день. Люблю технику, книги и хороший кофе. Цвета: нейтральные, тёмные. Стиль: минимализм.</textarea>
+          <div class="input-counter">145 / 300</div>
+        </div>
+      </div>
+
+      <!-- 5. Sizes -->
+      <div class="editor-section">
+        <div class="editor-section-head">
+          <div class="editor-section-left">
+            <span class="editor-section-icon">&#128207;</span>
+            <span class="editor-section-title">Размеры</span>
+          </div>
+          <span class="editor-section-status status-empty">Не заполнено</span>
+        </div>
+        <div class="editor-section-hint">Заполни, если хочешь помочь с выбором одежды или обуви</div>
+        <div style="margin-top: 12px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div>
+              <label class="input-label">Одежда</label>
+              <input class="input-field" placeholder="M, 46, S/M..." style="padding: 10px 12px;">
+            </div>
+            <div>
+              <label class="input-label">Обувь</label>
+              <input class="input-field" placeholder="38, 39 EU..." style="padding: 10px 12px;">
+            </div>
+            <div>
+              <label class="input-label">Кольцо</label>
+              <input class="input-field" placeholder="16.5, 17..." style="padding: 10px 12px;">
+            </div>
+            <div>
+              <label class="input-label">Другое</label>
+              <input class="input-field" placeholder="Браслет, шапка..." style="padding: 10px 12px;">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Brands -->
+      <div class="editor-section">
+        <div class="editor-section-head">
+          <div class="editor-section-left">
+            <span class="editor-section-icon">&#10024;</span>
+            <span class="editor-section-title">Любимые бренды</span>
+          </div>
+          <span class="editor-section-status status-empty">0 / 10</span>
+        </div>
+        <div class="editor-section-hint">Добавь бренды, если это поможет другим выбрать тебе подарок</div>
+        <div style="margin-top: 12px;">
+          <div style="display: flex; gap: 8px;">
+            <input class="input-field" placeholder="Название бренда" style="flex: 1; padding: 10px 12px;">
+            <button class="btn-small">+</button>
+          </div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">До 10 брендов</div>
+        </div>
+      </div>
+
+      <!-- 7. Anti-gifts -->
+      <div class="editor-section">
+        <div class="editor-section-head">
+          <div class="editor-section-left">
+            <span class="editor-section-icon">&#128683;</span>
+            <span class="editor-section-title">Что лучше не дарить</span>
+          </div>
+          <span class="editor-section-status status-done">&#10003; Настроено</span>
+        </div>
+        <div class="editor-section-hint">Используются настройки из профиля</div>
+        <div style="margin-top: 10px;">
+          <div class="antigift-list" style="gap: 4px;">
+            <span class="antigift-tag" style="font-size: 12px; padding: 4px 10px;">&#127856; Сладости</span>
+            <span class="antigift-tag" style="font-size: 12px; padding: 4px 10px;">&#128144; Цветы</span>
+            <span class="antigift-tag" style="font-size: 12px; padding: 4px 10px;">&#129506; Игрушки</span>
+            <span class="antigift-tag" style="font-size: 12px; padding: 4px 10px;">&#127863; Алкоголь</span>
+          </div>
+          <button class="btn-ghost" style="font-size: 12px; padding: 8px 0; color: var(--accent);">Изменить в настройках профиля &#8250;</button>
+        </div>
+      </div>
+
+      <div style="height: 12px;"></div>
+
+      <!-- Actions -->
+      <button class="btn-secondary" style="margin-bottom: 10px;">&#128064; Предпросмотр</button>
+      <button class="btn-primary">Сохранить и опубликовать</button>
+
+      <div style="height: 24px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION 5: STATES                             -->
+<!-- ============================================ -->
+<div id="states" class="mockup-section">
+  <h2 class="section-title">UX-состояния</h2>
+  <p class="section-subtitle">Locked (free), Empty (Pro, ничего не заполнено), Partial (частично), Full (всё готово), Expired (Pro истёк).</p>
+
+  <!-- LOCKED STATE -->
+  <div class="variant-label">Locked State (Free user)</div>
+  <div class="annotation">
+    <strong>Пользователь на Free-плане</strong>
+    Видит teaser-карточку в профиле. Мотивация через ценность, не через запрет.
+  </div>
+  <div class="phone">
+    <div class="phone-status">Профиль</div>
+    <div class="phone-content" style="padding: 20px;">
+      <!-- Regular profile header -->
+      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+        <div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #6B7FD4, #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 20px;">&#128104;</div>
+        <div>
+          <div style="font-size: 17px; font-weight: 700;">Иван Смирнов</div>
+          <div style="font-size: 13px; color: var(--text-muted);">@ivansmirnov</div>
+        </div>
+      </div>
+
+      <!-- Teaser card -->
+      <div class="teaser-card">
+        <div class="teaser-icon">&#10024;</div>
+        <div class="teaser-title">Подарочная витрина</div>
+        <div class="teaser-desc">Сделай профиль красивой витриной подарков — с обложкой, закреплёнными вишлистами и предпочтениями</div>
+        <div class="teaser-features">
+          <div class="teaser-feature">
+            <span class="teaser-feature-icon">&#128204;</span>
+            <span>Закрепи главные вишлисты</span>
+          </div>
+          <div class="teaser-feature">
+            <span class="teaser-feature-icon">&#128161;</span>
+            <span>Добавь предпочтения и размеры</span>
+          </div>
+          <div class="teaser-feature">
+            <span class="teaser-feature-icon">&#128247;</span>
+            <span>Красивая обложка профиля</span>
+          </div>
+          <div class="teaser-feature">
+            <span class="teaser-feature-icon">&#128683;</span>
+            <span>Покажи, что лучше не дарить</span>
+          </div>
+        </div>
+        <button class="btn-primary" style="background: linear-gradient(135deg, var(--accent), #a78bfa);">Попробовать с PRO</button>
+      </div>
+
+      <!-- Regular wishlists below -->
+      <div style="margin-top: 20px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Мои вишлисты</div>
+        <div style="background: var(--card); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border); margin-bottom: 8px;">
+          <div style="font-size: 14px; font-weight: 600;">&#127873; День рождения</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">6 желаний</div>
+        </div>
+        <div style="background: var(--card); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border);">
+          <div style="font-size: 14px; font-weight: 600;">&#127968; Для дома</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">3 желания</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMPTY STATE -->
+  <div class="variant-label">Empty State (Pro, ничего не заполнено)</div>
+  <div class="annotation">
+    <strong>Pro куплен, showcase пуст</strong>
+    Мотивационный prompt + быстрый старт. Подсказки, что можно добавить.
+  </div>
+  <div class="phone">
+    <div class="phone-status">Профиль</div>
+    <div class="phone-content" style="padding: 20px;">
+      <div class="empty-state">
+        <div class="empty-icon">&#127873;</div>
+        <div class="empty-title">Оформи подарочную витрину</div>
+        <div class="empty-desc">Сделай профиль удобнее для тех, кто выбирает тебе подарок. Добавь обложку, закрепи вишлисты и расскажи о предпочтениях.</div>
+        <button class="btn-primary" style="margin-bottom: 12px;">Оформить витрину</button>
+        <div style="font-size: 12px; color: var(--text-muted);">Занимает 2-3 минуты</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PARTIAL STATE -->
+  <div class="variant-label">Partial State (заполнено частично)</div>
+  <div class="annotation">
+    <strong>Заполнены обложка, bio и pinned, но нет размеров и брендов</strong>
+    Recommendation дотянуть до meaningful completion.
+  </div>
+  <div class="phone">
+    <div class="phone-status">Профиль</div>
+    <div class="phone-content" style="padding: 20px;">
+      <!-- Mini-progress in profile -->
+      <div style="background: var(--accent-soft); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(124,106,255,0.15);">
+        <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; color: #fff; font-weight: 700;">5/7</div>
+        <div>
+          <div style="font-size: 13px; font-weight: 600; color: var(--accent);">Витрина почти готова</div>
+          <div style="font-size: 12px; color: var(--text-sec);">Добавь размеры и бренды, чтобы дарителям было проще</div>
+        </div>
+      </div>
+
+      <!-- Profile content with partial showcase -->
+      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+        <div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 20px;">&#128105;</div>
+        <div>
+          <div style="font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px;">Анна Петрова <span class="pro-badge">PRO</span></div>
+          <div style="font-size: 13px; color: var(--text-muted);">@annapetrova</div>
+        </div>
+      </div>
+
+      <button class="btn-secondary" style="margin-bottom: 16px; font-size: 14px;">&#9998; Дооформить витрину</button>
+
+      <div style="background: var(--card); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border); margin-bottom: 8px;">
+        <div style="font-size: 14px; font-weight: 600;">&#127873; День рождения 2026</div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">12 желаний &middot; &#128204; Закреплён</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FULL STATE -->
+  <div class="variant-label">Full State (всё заполнено)</div>
+  <div class="annotation">
+    <strong>Все блоки заполнены</strong>
+    Позитивное подтверждение + CTA на шаринг.
+  </div>
+  <div class="phone">
+    <div class="phone-status">Профиль</div>
+    <div class="phone-content" style="padding: 20px;">
+      <div class="success-toast" style="margin-bottom: 16px;">
+        <span>&#10003;</span>
+        <span>Витрина готова к шарингу</span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+        <div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 20px;">&#128105;</div>
+        <div style="flex: 1;">
+          <div style="font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px;">Анна Петрова <span class="pro-badge">PRO</span></div>
+          <div style="font-size: 13px; color: var(--text-muted);">@annapetrova</div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+        <button class="btn-secondary" style="flex: 1; font-size: 13px; padding: 10px;">&#9998; Редактировать</button>
+        <button class="btn-primary" style="flex: 1; font-size: 13px; padding: 10px;">&#128279; Поделиться</button>
+      </div>
+
+      <div style="background: var(--card); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <span style="font-size: 13px; font-weight: 600; color: var(--text-sec);">Витрина заполнена</span>
+          <span style="font-size: 12px; color: var(--green); font-weight: 600;">7 / 7 &#10003;</span>
+        </div>
+        <div class="progress-bar-wrap" style="height: 4px;">
+          <div class="progress-bar-fill" style="width: 100%; background: linear-gradient(90deg, var(--green), #6ee7b7);"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPIRED STATE -->
+  <div class="variant-label">Expired State (Pro истёк)</div>
+  <div class="annotation">
+    <strong>Pro подписка истекла</strong>
+    Данные сохранены, но showcase деградирует. Мотивация продлить.
+  </div>
+  <div class="phone">
+    <div class="phone-status">Профиль</div>
+    <div class="phone-content" style="padding: 20px;">
+      <!-- Expired notice -->
+      <div style="background: var(--orange-soft); border: 1px solid rgba(251,191,36,0.2); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;">
+        <div style="font-size: 14px; font-weight: 600; color: var(--orange); margin-bottom: 4px;">Подписка Pro истекла</div>
+        <div style="font-size: 13px; color: var(--text-sec); line-height: 1.4;">Подарочная витрина скрыта для гостей. Продли подписку, чтобы вернуть showcase.</div>
+        <button class="btn-primary" style="margin-top: 12px; background: var(--orange); font-size: 13px; padding: 10px;">Продлить Pro</button>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+        <div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #6B7FD4, #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 20px;">&#128105;</div>
+        <div>
+          <div style="font-size: 17px; font-weight: 700;">Анна Петрова</div>
+          <div style="font-size: 13px; color: var(--text-muted);">@annapetrova</div>
+        </div>
+      </div>
+
+      <!-- Frozen sections preview -->
+      <div style="opacity: 0.5; pointer-events: none;">
+        <div class="editor-section" style="margin-bottom: 8px;">
+          <div class="editor-section-head">
+            <div class="editor-section-left">
+              <span class="editor-section-icon">&#128204;</span>
+              <span class="editor-section-title">3 закреплённых вишлиста</span>
+            </div>
+            <span style="font-size: 18px;">&#128274;</span>
+          </div>
+        </div>
+        <div class="editor-section" style="margin-bottom: 8px;">
+          <div class="editor-section-head">
+            <div class="editor-section-left">
+              <span class="editor-section-icon">&#128161;</span>
+              <span class="editor-section-title">Предпочтения и размеры</span>
+            </div>
+            <span style="font-size: 18px;">&#128274;</span>
+          </div>
+        </div>
+      </div>
+      <div style="text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 12px;">Данные сохранены и вернутся при продлении</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION 6: PAYWALL                            -->
+<!-- ============================================ -->
+<div id="paywall" class="mockup-section">
+  <h2 class="section-title">Paywall Teaser</h2>
+  <p class="section-subtitle">Вариант paywall при попытке войти в showcase на Free-плане. Ценностное messaging вместо сухого "доступно в Pro".</p>
+
+  <!-- Paywall variant: Bottom Sheet -->
+  <div class="variant-label">Bottom Sheet Paywall</div>
+  <div class="annotation">
+    <strong>При клике на "Оформить витрину" на Free-плане</strong>
+    Выезжает bottom sheet с preview ценности и CTA.
+  </div>
+  <div class="phone">
+    <div class="phone-status">Профиль</div>
+    <div class="phone-content">
+      <!-- Dimmed background -->
+      <div style="opacity: 0.3; padding: 20px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 48px; height: 48px; border-radius: 50%; background: #555; display: flex; align-items: center; justify-content: center; font-size: 20px;">&#128104;</div>
+          <div>
+            <div style="font-size: 17px; font-weight: 700;">Иван Смирнов</div>
+            <div style="font-size: 13px; color: var(--text-muted);">@ivansmirnov</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom sheet -->
+      <div style="background: var(--surface); border-radius: 20px 20px 0 0; padding: 8px 20px 24px; border-top: 1px solid var(--border-light); margin-top: 120px;">
+        <!-- Handle -->
+        <div style="width: 36px; height: 4px; background: var(--border-light); border-radius: 2px; margin: 0 auto 16px;"></div>
+
+        <!-- Content -->
+        <div style="text-align: center; margin-bottom: 20px;">
+          <div style="font-size: 32px; margin-bottom: 8px;">&#10024;</div>
+          <div style="font-size: 18px; font-weight: 700; margin-bottom: 6px;">Подарочная витрина</div>
+          <div style="font-size: 14px; color: var(--text-sec); line-height: 1.45;">Помоги другим быстрее выбрать тебе подарок. Оформи профиль как красивую витрину.</div>
+        </div>
+
+        <!-- Preview card -->
+        <div style="background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 20px; border: 1px solid var(--border);">
+          <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">Что получишь</div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 20px; width: 32px; text-align: center;">&#128247;</span>
+              <div>
+                <div style="font-size: 14px; font-weight: 600;">Обложка профиля</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Сделай профиль живым и заметным</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 20px; width: 32px; text-align: center;">&#128204;</span>
+              <div>
+                <div style="font-size: 14px; font-weight: 600;">Закреплённые вишлисты</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Главное сразу на виду</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 20px; width: 32px; text-align: center;">&#128161;</span>
+              <div>
+                <div style="font-size: 14px; font-weight: 600;">Предпочтения и размеры</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Дарителям не придётся гадать</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 20px; width: 32px; text-align: center;">&#128683;</span>
+              <div>
+                <div style="font-size: 14px; font-weight: 600;">Анти-подарки на видном месте</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Меньше шанс на неудачный подарок</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn-primary" style="background: linear-gradient(135deg, var(--accent), #a78bfa); margin-bottom: 10px;">Подключить Pro</button>
+        <button class="btn-ghost" style="width: 100%; text-align: center; font-size: 13px;">Не сейчас</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inline paywall in profile -->
+  <div class="variant-label">Inline Teaser (в профиле)</div>
+  <div class="annotation">
+    <strong>Компактный teaser прямо в профиле</strong>
+    Между блоками профиля. Менее навязчивый, но заметный.
+  </div>
+  <div class="phone">
+    <div class="phone-status">Профиль</div>
+    <div class="phone-content" style="padding: 20px;">
+      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+        <div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, #6B7FD4, #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 20px;">&#128104;</div>
+        <div>
+          <div style="font-size: 17px; font-weight: 700;">Иван Смирнов</div>
+          <div style="font-size: 13px; color: var(--text-muted);">@ivansmirnov</div>
+        </div>
+      </div>
+
+      <!-- Compact inline teaser -->
+      <div style="background: linear-gradient(135deg, rgba(124,106,255,0.1) 0%, rgba(124,106,255,0.03) 100%); border: 1px solid rgba(124,106,255,0.15); border-radius: 14px; padding: 16px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+          <span style="font-size: 24px;">&#10024;</span>
+          <div>
+            <div style="font-size: 14px; font-weight: 600;">Оформи подарочную витрину</div>
+            <div style="font-size: 12px; color: var(--text-sec);">Закрепи вишлисты, добавь предпочтения и размеры</div>
+          </div>
+        </div>
+        <button class="btn-small" style="width: 100%; padding: 10px; background: linear-gradient(135deg, var(--accent), #a78bfa); color: #fff;">Попробовать с PRO</button>
+      </div>
+
+      <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Мои вишлисты</div>
+      <div style="background: var(--card); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border);">
+        <div style="font-size: 14px; font-weight: 600;">&#127873; День рождения</div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">6 желаний</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION 7: PREVIEW BEFORE PUBLISH             -->
+<!-- ============================================ -->
+<div id="preview" class="mockup-section">
+  <h2 class="section-title">Preview Before Publish</h2>
+  <p class="section-subtitle">Предпросмотр "как видят другие" перед публикацией. Помогает оценить результат и повышает completion rate.</p>
+
+  <div class="phone">
+    <div class="phone-status">&#9664; &nbsp; Предпросмотр</div>
+    <div class="phone-content">
+      <!-- Preview badge -->
+      <div class="preview-badge">&#128064; Так видят другие</div>
+
+      <!-- Same as public view but with badge -->
+      <div style="position: relative;">
+        <div style="width:100%; height:160px; background: linear-gradient(135deg, #2a1f5e 0%, #1a1040 40%, #3d2870 100%); position: relative;">
+          <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 70px; background: linear-gradient(to top, var(--bg) 0%, transparent 100%);"></div>
+        </div>
+        <div style="padding: 0 20px; margin-top: -36px; position: relative; z-index: 2;">
+          <div style="display: flex; align-items: flex-end; gap: 14px;">
+            <div style="width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a78bfa); border: 3px solid var(--bg); display: flex; align-items: center; justify-content: center; font-size: 26px;">&#128105;</div>
+            <div style="padding-bottom: 4px;">
+              <div style="font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;">Анна Петрова <span class="pro-badge">PRO</span></div>
+              <div style="font-size: 13px; color: var(--text-muted);">@annapetrova</div>
+            </div>
+          </div>
+          <p style="font-size: 14px; color: var(--text-sec); margin-top: 10px; line-height: 1.45;">Люблю практичные подарки: технику, книги и вещи для дома</p>
+        </div>
+      </div>
+
+      <div style="height: 20px;"></div>
+
+      <!-- Pinned -->
+      <div class="sc-section">
+        <div class="sc-section-title">&#128204; Главные вишлисты</div>
+        <div class="pinned-grid">
+          <div class="pinned-item">
+            <div class="pinned-left">
+              <div class="pinned-emoji" style="width: 32px; height: 32px; font-size: 18px; border-radius: 8px;">&#127873;</div>
+              <div>
+                <div class="pinned-name" style="font-size: 14px;">День рождения 2026</div>
+                <div class="pinned-meta" style="font-size: 11px;">12 желаний</div>
+              </div>
+            </div>
+            <span class="pinned-arrow">&#8250;</span>
+          </div>
+          <div class="pinned-item">
+            <div class="pinned-left">
+              <div class="pinned-emoji" style="width: 32px; height: 32px; font-size: 18px; border-radius: 8px;">&#127968;</div>
+              <div>
+                <div class="pinned-name" style="font-size: 14px;">Для дома</div>
+                <div class="pinned-meta" style="font-size: 11px;">8 желаний</div>
+              </div>
+            </div>
+            <span class="pinned-arrow">&#8250;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compact preferences -->
+      <div class="sc-section">
+        <div class="sc-section-title" style="font-size: 12px;">&#128161; Предпочтения</div>
+        <p style="font-size: 13px; color: var(--text-sec); line-height: 1.4;">Практичные вещи, техника, книги, кофе. Цвета: нейтральные, тёмные.</p>
+      </div>
+
+      <!-- Anti-gifts -->
+      <div class="sc-section">
+        <div class="sc-section-title" style="font-size: 12px;">&#128683; Что лучше не дарить</div>
+        <div class="antigift-list" style="gap: 4px;">
+          <span class="antigift-tag" style="font-size: 12px; padding: 4px 10px;">&#127856; Сладости</span>
+          <span class="antigift-tag" style="font-size: 12px; padding: 4px 10px;">&#128144; Цветы</span>
+        </div>
+      </div>
+
+      <div style="height: 16px;"></div>
+
+      <!-- Bottom CTA -->
+      <div class="cta-bar">
+        <button class="btn-ghost" style="flex-shrink: 0;">&#9664; Назад</button>
+        <button class="btn-primary">Опубликовать</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="variant-label">After Publish — Success</div>
+  <div class="phone">
+    <div class="phone-status">Витрина</div>
+    <div class="phone-content" style="padding: 40px 20px; text-align: center;">
+      <div style="font-size: 48px; margin-bottom: 16px;">&#127881;</div>
+      <div style="font-size: 20px; font-weight: 700; margin-bottom: 6px;">Витрина опубликована</div>
+      <div style="font-size: 14px; color: var(--text-sec); line-height: 1.45; margin-bottom: 28px;">Теперь профиль выглядит отлично. Поделись ссылкой, чтобы другим было проще выбрать подарок.</div>
+
+      <button class="btn-primary" style="margin-bottom: 10px;">&#128279; Поделиться профилем</button>
+      <button class="btn-secondary" style="margin-bottom: 10px;">&#128064; Открыть, как видят другие</button>
+      <button class="btn-ghost" style="width: 100%; text-align: center;">На главную</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION 8: TRANSITION                         -->
+<!-- ============================================ -->
+<div id="transition" class="mockup-section">
+  <h2 class="section-title">Переход в Showcase</h2>
+  <p class="section-subtitle">Как пользователь попадает из обычного профиля в showcase. Entry points и навигация.</p>
+
+  <div class="variant-label">Entry Point 1: Профиль (Pro)</div>
+  <div class="annotation">
+    <strong>Пользователь Pro видит CTA в профиле</strong>
+    Баннер сверху → вход в редактор showcase.
+  </div>
+  <div class="phone">
+    <div class="phone-status">Профиль</div>
+    <div class="phone-content" style="padding: 20px;">
+      <!-- Pro user profile with showcase CTA -->
+      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+        <div style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 20px;">&#128105;</div>
+        <div style="flex: 1;">
+          <div style="font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px;">Анна Петрова <span class="pro-badge">PRO</span></div>
+          <div style="font-size: 13px; color: var(--text-muted);">@annapetrova</div>
+        </div>
+      </div>
+
+      <!-- Showcase CTA banner -->
+      <div style="background: linear-gradient(135deg, rgba(124,106,255,0.12) 0%, rgba(124,106,255,0.04) 100%); border: 1px solid rgba(124,106,255,0.2); border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 20px;">&#10024;</span>
+          <div>
+            <div style="font-size: 14px; font-weight: 600;">Оформить витрину</div>
+            <div style="font-size: 12px; color: var(--text-sec);">Помоги дарителям выбрать подарок</div>
+          </div>
+        </div>
+        <span style="color: var(--accent); font-size: 18px;">&#8250;</span>
+      </div>
+
+      <!-- Regular wishlists -->
+      <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Мои вишлисты</div>
+      <div style="background: var(--card); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border); margin-bottom: 8px;">
+        <div style="font-size: 14px; font-weight: 600;">&#127873; День рождения 2026</div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">12 желаний</div>
+      </div>
+      <div style="background: var(--card); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border);">
+        <div style="font-size: 14px; font-weight: 600;">&#127968; Для дома</div>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">8 желаний</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="variant-label">Entry Point 2: После покупки Pro</div>
+  <div class="annotation">
+    <strong>Сразу после оплаты Pro</strong>
+    Prompt к оформлению showcase — "горячий момент".
+  </div>
+  <div class="phone">
+    <div class="phone-status">Pro подключён!</div>
+    <div class="phone-content" style="padding: 40px 20px; text-align: center;">
+      <div style="font-size: 48px; margin-bottom: 16px;">&#127881;</div>
+      <div style="font-size: 20px; font-weight: 700; margin-bottom: 6px;">Pro активирован</div>
+      <div style="font-size: 14px; color: var(--text-sec); line-height: 1.45; margin-bottom: 24px;">Теперь тебе доступны все функции. Начни с главного:</div>
+
+      <div style="background: var(--card); border-radius: 14px; padding: 16px; border: 1px solid var(--border); text-align: left; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <span style="font-size: 24px;">&#10024;</span>
+          <div>
+            <div style="font-size: 15px; font-weight: 700;">Оформи подарочную витрину</div>
+            <div style="font-size: 12px; color: var(--text-sec);">Добавь обложку, закрепи вишлисты, расскажи о предпочтениях</div>
+          </div>
+        </div>
+        <button class="btn-primary" style="font-size: 14px; padding: 12px;">Оформить витрину</button>
+      </div>
+
+      <button class="btn-ghost" style="width: 100%; text-align: center; font-size: 13px;">Пропустить</button>
+    </div>
+  </div>
+
+  <div class="variant-label">Entry Point 3: Экран Pro features</div>
+  <div class="annotation">
+    <strong>Showcase как одно из преимуществ Pro</strong>
+    В списке Pro-фич — с визуальным preview.
+  </div>
+  <div class="phone">
+    <div class="phone-status">Pro</div>
+    <div class="phone-content" style="padding: 20px;">
+      <div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">Wishlist Pro</div>
+      <div style="font-size: 13px; color: var(--text-sec); margin-bottom: 20px;">Всё, что нужно для идеального вишлиста</div>
+
+      <!-- Showcase as feature #1 -->
+      <div style="background: linear-gradient(135deg, rgba(124,106,255,0.15) 0%, rgba(124,106,255,0.05) 100%); border: 1px solid rgba(124,106,255,0.25); border-radius: 16px; padding: 20px; margin-bottom: 12px;">
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin-bottom: 8px;">&#10024; Новинка</div>
+        <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Подарочная витрина</div>
+        <div style="font-size: 13px; color: var(--text-sec); line-height: 1.4; margin-bottom: 12px;">Красивый профиль с обложкой, закреплёнными вишлистами, предпочтениями и размерами</div>
+        <!-- Mini preview -->
+        <div style="background: var(--bg); border-radius: 10px; padding: 12px; display: flex; align-items: center; gap: 10px;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;">&#128105;</div>
+          <div>
+            <div style="font-size: 12px; font-weight: 600;">Анна П.</div>
+            <div style="font-size: 10px; color: var(--text-muted);">3 вишлиста &middot; размеры &middot; бренды</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Other features -->
+      <div style="background: var(--card); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border); margin-bottom: 8px; display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 20px;">&#128203;</span>
+        <div>
+          <div style="font-size: 14px; font-weight: 600;">Безлимит вишлистов</div>
+          <div style="font-size: 12px; color: var(--text-muted);">Без ограничений на количество списков</div>
+        </div>
+      </div>
+      <div style="background: var(--card); border-radius: 12px; padding: 14px 16px; border: 1px solid var(--border); margin-bottom: 8px; display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 20px;">&#128279;</span>
+        <div>
+          <div style="font-size: 14px; font-weight: 600;">Импорт по ссылке</div>
+          <div style="font-size: 12px; color: var(--text-muted);">Добавляй товары одним кликом</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.mockup-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo(0, 0);
+}
+</script>
+
+</body>
+</html>

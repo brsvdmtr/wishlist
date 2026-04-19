@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Group Gift — Mockups</title>
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+    --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: #111; font-family: var(--font); color: var(--text); display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+
+  /* Navigation tabs */
+  .nav { position: sticky; top: 0; z-index: 999; background: #111; padding: 16px 0 8px; width: 100%; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .nav button { font-family: var(--font); font-size: 11px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: transparent; color: var(--text-sec); cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+  .nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .nav button:hover:not(.active) { background: rgba(255,255,255,0.05); }
+
+  /* Phone frame */
+  .phone { width: 390px; height: 844px; background: var(--bg); border-radius: 40px; overflow: hidden; position: relative; border: 3px solid #333; margin: 20px 0 40px; flex-shrink: 0; display: none; }
+  .phone.active { display: block; }
+  .phone-inner { height: 100%; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+  .phone-inner::-webkit-scrollbar { display: none; }
+
+  /* Label above phone */
+  .screen-label { text-align: center; font-size: 14px; color: var(--text-muted); margin-top: 20px; display: none; }
+  .screen-label.active { display: block; }
+
+  /* Common component styles */
+  .btn-primary { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 16px 24px; border-radius: 14px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; font-family: var(--font); width: 100%; background: var(--accent); color: #fff; transition: all 0.15s; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-secondary { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 24px; border-radius: 14px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; font-family: var(--font); width: 100%; background: var(--accent-soft); color: var(--accent); }
+  .btn-ghost { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; font-family: var(--font); background: transparent; color: var(--text-sec); }
+  .btn-danger { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 24px; border-radius: 14px; border: 1px solid var(--red); font-size: 15px; font-weight: 600; cursor: pointer; font-family: var(--font); width: 100%; background: transparent; color: var(--red); }
+
+  .input { width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border-light); background: var(--surface); color: var(--text); font-size: 16px; font-family: var(--font); outline: none; }
+  .input::placeholder { color: var(--text-muted); }
+
+  .avatar { border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; flex-shrink: 0; }
+
+  .badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; }
+
+  .progress-bar { height: 8px; border-radius: 4px; background: var(--surface); overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+
+  .sticky-bottom { position: absolute; bottom: 0; left: 0; right: 0; padding: 12px 20px 34px; background: linear-gradient(180deg, transparent 0%, var(--bg) 25%); z-index: 50; }
+
+  .divider { height: 1px; background: var(--border); margin: 12px 0; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <button class="active" onclick="showScreen('s1')">1. Item Detail + CTA</button>
+  <button onclick="showScreen('s2')">2. Paywall</button>
+  <button onclick="showScreen('s3')">3. Создание</button>
+  <button onclick="showScreen('s4')">4. Detail (Organizer)</button>
+  <button onclick="showScreen('s5')">5. Detail (Participant)</button>
+  <button onclick="showScreen('s6')">6. Join Flow</button>
+  <button onclick="showScreen('s7')">7. Chat</button>
+  <button onclick="showScreen('s8')">8. Owner View</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 1: Guest Item Detail with Group Gift CTA
+     ═══════════════════════════════════════════════════════════ -->
+<div class="screen-label active" id="label-s1">Экран 1 — Guest Item Detail: новая CTA «Скинуться компанией»</div>
+<div class="phone active" id="s1">
+<div class="phone-inner">
+  <!-- Hero image -->
+  <div style="width:100%; height:230px; background: linear-gradient(145deg, #2a2040, #1a1a2e); display:flex; align-items:center; justify-content:center; font-size:80px; position:relative;">
+    🎧
+    <div style="position:absolute; bottom:12px; right:12px; background:rgba(0,0,0,0.6); border-radius:8px; padding:4px 10px; font-size:11px; color:var(--text-sec); backdrop-filter:blur(8px);">ozon.ru</div>
+  </div>
+
+  <!-- Content -->
+  <div style="padding: 20px 20px 180px;">
+    <!-- Title & price -->
+    <h1 style="font-size:22px; font-weight:800; line-height:1.3; margin-bottom:6px;">Sony WH-1000XM5</h1>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+      <span style="font-size:20px; font-weight:800; color:var(--accent);">32 990 ₽</span>
+      <span class="badge" style="background:var(--orange-soft); color:var(--orange);">⭐ Важное</span>
+    </div>
+
+    <!-- Description -->
+    <p style="font-size:14px; color:var(--text-sec); line-height:1.6; margin-bottom:20px;">
+      Беспроводные наушники с шумоподавлением. Чёрный цвет, 30 часов работы.
+    </p>
+
+    <!-- Link -->
+    <a href="#" style="display:flex; align-items:center; gap:8px; padding:12px 16px; background:var(--accent-soft); border-radius:12px; text-decoration:none; margin-bottom:24px;">
+      <span style="font-size:16px;">🔗</span>
+      <span style="font-size:14px; color:var(--accent); font-weight:600;">Открыть ссылку</span>
+    </a>
+
+    <!-- Divider -->
+    <div style="height:1px; background:var(--border); margin:0 0 20px;"></div>
+
+    <!-- === ACTION ZONE === -->
+
+    <!-- Primary: Reserve solo -->
+    <button class="btn-primary" style="margin-bottom:12px; font-size:16px; padding:16px;">
+      🎁 Забронировать
+    </button>
+
+    <!-- Secondary: Group Gift CTA -->
+    <button class="btn-secondary" style="margin-bottom:10px; background:linear-gradient(135deg, rgba(251,191,36,0.12), rgba(124,106,255,0.12)); border:1px solid rgba(251,191,36,0.15); padding:16px;">
+      <span style="font-size:18px;">👥</span>
+      <span style="font-weight:700; color:var(--text);">Скинуться компанией</span>
+    </button>
+
+    <!-- Explanation -->
+    <p style="font-size:12px; color:var(--text-muted); text-align:center; line-height:1.5; padding:0 12px;">
+      Объединитесь на один подарок, обсудите детали внутри бота и соберите сумму вместе
+    </p>
+  </div>
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 2: Paywall (79 Stars)
+     ═══════════════════════════════════════════════════════════ -->
+<div class="screen-label" id="label-s2">Экран 2 — Paywall: покупка сценария за 79 Stars</div>
+<div class="phone" id="s2">
+<div class="phone-inner">
+  <!-- Hero zone -->
+  <div style="background:linear-gradient(160deg, #1a1130 0%, #0d1628 60%, #091520 100%); padding:48px 24px 32px; text-align:center; border-bottom-left-radius:24px; border-bottom-right-radius:24px;">
+    <div style="font-size:56px; margin-bottom:12px; filter:drop-shadow(0 0 20px rgba(251,191,36,0.3));">👥🎁</div>
+    <h1 style="font-size:22px; font-weight:800; color:#fff; line-height:1.3; margin-bottom:8px;">Совместный подарок</h1>
+    <p style="font-size:14px; color:rgba(255,255,255,0.55); line-height:1.5;">
+      Скиньтесь на один подарок компанией — с чатом, прогрессом и координацией
+    </p>
+  </div>
+
+  <!-- Features -->
+  <div style="padding:20px 24px 0;">
+    <div style="display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid var(--border);">
+      <div style="width:36px; height:36px; border-radius:10px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;">👥</div>
+      <span style="font-size:14px; color:var(--text); line-height:1.4;">Участники и общий прогресс сборов</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid var(--border);">
+      <div style="width:36px; height:36px; border-radius:10px; background:rgba(251,191,36,0.12); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;">💬</div>
+      <span style="font-size:14px; color:var(--text); line-height:1.4;">Встроенный чат для обсуждения</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid var(--border);">
+      <div style="width:36px; height:36px; border-radius:10px; background:rgba(52,211,153,0.12); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;">🔗</div>
+      <span style="font-size:14px; color:var(--text); line-height:1.4;">Ссылка на банковский сбор или реквизиты</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:14px; padding:14px 0;">
+      <div style="width:36px; height:36px; border-radius:10px; background:rgba(96,165,250,0.12); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;">🎯</div>
+      <span style="font-size:14px; color:var(--text); line-height:1.4;">Именинник видит только «Забронировано»</span>
+    </div>
+  </div>
+
+  <!-- Pricing block -->
+  <div style="padding:20px 24px;">
+    <div style="background:var(--surface); border-radius:16px; padding:16px 18px; border:1px solid var(--border);">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <span style="font-size:24px; font-weight:800; color:var(--accent);">79</span>
+          <span style="font-size:14px; font-weight:600; color:var(--text-sec); margin-left:6px;">Stars</span>
+        </div>
+        <span class="badge" style="background:var(--green-soft); color:var(--green);">1 сценарий</span>
+      </div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
+        Одна покупка за один совместный подарок. Слот освобождается после завершения.
+      </div>
+    </div>
+  </div>
+
+  <!-- Sticky CTA -->
+  <div style="padding:0 20px 100px;">
+    <button class="btn-primary" style="background:linear-gradient(135deg, var(--accent) 0%, #9B8AFF 100%); box-shadow:0 6px 20px var(--accent-glow); padding:16px; font-size:16px;">
+      ⭐ Купить за 79 Stars
+    </button>
+    <button class="btn-ghost" style="width:100%; margin-top:8px; justify-content:center; color:var(--text-muted); font-size:13px;">
+      Не сейчас
+    </button>
+  </div>
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 3: Create Group Gift
+     ═══════════════════════════════════════════════════════════ -->
+<div class="screen-label" id="label-s3">Экран 3 — Создание совместного подарка</div>
+<div class="phone" id="s3">
+<div class="phone-inner">
+  <div style="padding:20px 20px 120px;">
+    <!-- Header -->
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
+      <span style="font-size:14px; color:var(--accent); cursor:pointer; font-weight:600;">← Назад</span>
+    </div>
+    <h2 style="font-size:20px; font-weight:800; margin-bottom:4px;">Совместный подарок</h2>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Создай сценарий и пригласи друзей</p>
+
+    <!-- Item preview card -->
+    <div style="display:flex; gap:14px; align-items:center; padding:14px; background:var(--card); border-radius:14px; margin-bottom:24px; border:1px solid var(--border);">
+      <div style="width:56px; height:56px; border-radius:12px; background:linear-gradient(135deg, #2a2040, #1a1a2e); display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0;">🎧</div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:15px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Sony WH-1000XM5</div>
+        <div style="font-size:14px; color:var(--accent); font-weight:700; margin-top:2px;">32 990 ₽</div>
+      </div>
+    </div>
+
+    <!-- Target amount -->
+    <div style="margin-bottom:20px;">
+      <label style="display:block; font-size:13px; color:var(--text-sec); margin-bottom:6px; font-weight:600;">Цель сбора</label>
+      <div style="position:relative;">
+        <input class="input" type="text" value="32 990" style="padding-right:36px; font-weight:700; font-size:18px;" />
+        <span style="position:absolute; right:16px; top:50%; transform:translateY(-50%); font-size:16px; color:var(--text-muted);">₽</span>
+      </div>
+      <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Можешь изменить, если нужно собрать другую сумму</div>
+    </div>
+
+    <!-- Deadline -->
+    <div style="margin-bottom:20px;">
+      <label style="display:block; font-size:13px; color:var(--text-sec); margin-bottom:6px; font-weight:600;">Дедлайн</label>
+      <input class="input" type="text" value="25 апреля 2026" />
+    </div>
+
+    <!-- Note -->
+    <div style="margin-bottom:24px;">
+      <label style="display:block; font-size:13px; color:var(--text-sec); margin-bottom:6px; font-weight:600;">Сообщение участникам <span style="color:var(--text-muted); font-weight:400;">(необязательно)</span></label>
+      <textarea class="input" placeholder="Привет! Давайте скинемся на наушники для Саши..." style="min-height:80px; resize:none; font-size:14px; line-height:1.5;"></textarea>
+    </div>
+
+    <!-- Info block -->
+    <div style="background:var(--accent-soft); border-radius:14px; padding:14px 16px; display:flex; gap:10px; margin-bottom:8px;">
+      <span style="font-size:16px; flex-shrink:0; margin-top:1px;">ℹ️</span>
+      <p style="font-size:13px; color:var(--text-sec); line-height:1.5;">
+        Деньги переводятся вне приложения, например по банковской ссылке. Участники видят прогресс и общаются в чате.
+      </p>
+    </div>
+  </div>
+
+  <!-- Sticky CTA -->
+  <div class="sticky-bottom">
+    <button class="btn-primary" style="font-size:16px; padding:16px;">
+      👥 Создать совместный подарок
+    </button>
+  </div>
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 4: Group Gift Detail — Organizer View
+     ═══════════════════════════════════════════════════════════ -->
+<div class="screen-label" id="label-s4">Экран 4 — Детали (Organizer): прогресс, участники, чат, действия</div>
+<div class="phone" id="s4">
+<div class="phone-inner">
+  <div style="padding:16px 20px 120px;">
+    <!-- Header -->
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <span style="font-size:14px; color:var(--accent); cursor:pointer; font-weight:600;">← Назад</span>
+      <div style="display:flex; gap:8px;">
+        <span class="badge" style="background:var(--accent-soft); color:var(--accent); font-size:11px;">Организатор</span>
+        <span style="font-size:20px; cursor:pointer;">⚙️</span>
+      </div>
+    </div>
+
+    <!-- Item card -->
+    <div style="display:flex; gap:14px; align-items:center; padding:14px; background:var(--card); border-radius:14px; margin-bottom:16px; border:1px solid var(--border);">
+      <div style="width:48px; height:48px; border-radius:10px; background:linear-gradient(135deg, #2a2040, #1a1a2e); display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0;">🎧</div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:15px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Sony WH-1000XM5</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Вишлист Саши · 📅 25 апреля</div>
+      </div>
+      <span class="badge" style="background:var(--green-soft); color:var(--green); font-size:10px;">OPEN</span>
+    </div>
+
+    <!-- Progress block -->
+    <div style="background:var(--card); border-radius:16px; padding:18px; margin-bottom:16px; border:1px solid var(--border);">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;">
+        <span style="font-size:13px; color:var(--text-sec); font-weight:600;">Собрано</span>
+        <span style="font-size:11px; color:var(--text-muted);">22 000 / 32 990 ₽</span>
+      </div>
+      <div class="progress-bar" style="margin-bottom:10px;">
+        <div class="progress-fill" style="width:67%; background:linear-gradient(90deg, var(--accent), #9B8AFF);"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <div>
+          <div style="font-size:22px; font-weight:800; color:var(--accent);">67%</div>
+          <div style="font-size:11px; color:var(--text-muted);">прогресс</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:var(--text);">4</div>
+          <div style="font-size:11px; color:var(--text-muted);">участника</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:22px; font-weight:800; color:var(--orange);">10 990 ₽</div>
+          <div style="font-size:11px; color:var(--text-muted);">осталось</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pinned bank info -->
+    <div style="background:linear-gradient(135deg, rgba(251,191,36,0.08), rgba(251,191,36,0.04)); border:1px solid rgba(251,191,36,0.2); border-radius:14px; padding:14px 16px; margin-bottom:16px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <span style="font-size:14px;">📌</span>
+        <span style="font-size:12px; font-weight:700; color:var(--orange); text-transform:uppercase; letter-spacing:0.5px;">Ссылка на сбор</span>
+      </div>
+      <a href="#" style="font-size:14px; color:var(--accent); text-decoration:underline; word-break:break-all; line-height:1.5;">
+        https://www.tinkoff.ru/collect/abc123def
+      </a>
+      <div style="margin-top:8px; font-size:12px; color:var(--text-muted);">
+        💳 Или переводом: Сбер 4276 **** **** 1234 (Максим П.)
+      </div>
+    </div>
+
+    <!-- Participants (organizer sees amounts) -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="font-size:14px; font-weight:700; color:var(--text);">Участники</span>
+        <button style="font-size:13px; color:var(--accent); font-weight:600; background:none; border:none; cursor:pointer;">Пригласить →</button>
+      </div>
+      <!-- Participant 1: organizer -->
+      <div style="display:flex; align-items:center; gap:12px; padding:12px; background:var(--surface); border-radius:12px; margin-bottom:8px;">
+        <div class="avatar" style="width:36px; height:36px; background:linear-gradient(135deg, var(--accent), #9B8AFF); font-size:14px;">М</div>
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:14px; font-weight:600;">Максим</span>
+            <span class="badge" style="background:var(--accent-soft); color:var(--accent); font-size:9px; padding:2px 6px;">орг</span>
+          </div>
+        </div>
+        <span style="font-size:14px; font-weight:700; color:var(--green);">8 000 ₽</span>
+      </div>
+      <!-- Participant 2 -->
+      <div style="display:flex; align-items:center; gap:12px; padding:12px; background:var(--surface); border-radius:12px; margin-bottom:8px;">
+        <div class="avatar" style="width:36px; height:36px; background:linear-gradient(135deg, #FBBF24, #f59e0b); font-size:14px;">А</div>
+        <div style="flex:1;">
+          <span style="font-size:14px; font-weight:600;">Аня</span>
+        </div>
+        <span style="font-size:14px; font-weight:700; color:var(--green);">6 000 ₽</span>
+      </div>
+      <!-- Participant 3 -->
+      <div style="display:flex; align-items:center; gap:12px; padding:12px; background:var(--surface); border-radius:12px; margin-bottom:8px;">
+        <div class="avatar" style="width:36px; height:36px; background:linear-gradient(135deg, #34D399, #6ee7b7); font-size:14px;">Д</div>
+        <div style="flex:1;">
+          <span style="font-size:14px; font-weight:600;">Дима</span>
+        </div>
+        <span style="font-size:14px; font-weight:700; color:var(--green);">5 000 ₽</span>
+      </div>
+      <!-- Participant 4 -->
+      <div style="display:flex; align-items:center; gap:12px; padding:12px; background:var(--surface); border-radius:12px;">
+        <div class="avatar" style="width:36px; height:36px; background:linear-gradient(135deg, #F87171, #ef4444); font-size:14px;">К</div>
+        <div style="flex:1;">
+          <span style="font-size:14px; font-weight:600;">Катя</span>
+        </div>
+        <span style="font-size:14px; font-weight:700; color:var(--green);">3 000 ₽</span>
+      </div>
+    </div>
+
+    <!-- Recent chat preview -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="font-size:14px; font-weight:700; color:var(--text);">💬 Чат</span>
+        <span style="font-size:12px; color:var(--accent); font-weight:600; cursor:pointer;">Все сообщения →</span>
+      </div>
+      <div style="background:var(--surface); border-radius:12px; padding:12px;">
+        <div style="margin-bottom:8px;">
+          <span style="font-size:12px; font-weight:600; color:var(--accent);">Аня</span>
+          <span style="font-size:11px; color:var(--text-muted); margin-left:6px;">14:32</span>
+          <div style="font-size:13px; color:var(--text); margin-top:2px; line-height:1.4;">Я перевела! Скрин в личку скину</div>
+        </div>
+        <div>
+          <span style="font-size:12px; font-weight:600; color:var(--orange);">Максим</span>
+          <span class="badge" style="background:var(--accent-soft); color:var(--accent); font-size:8px; padding:1px 5px; margin-left:4px;">орг</span>
+          <span style="font-size:11px; color:var(--text-muted); margin-left:6px;">14:30</span>
+          <div style="font-size:13px; color:var(--text); margin-top:2px; line-height:1.4;">Ребята, ссылка на сбор обновлена 👆</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Organizer actions -->
+  <div class="sticky-bottom">
+    <div style="display:flex; gap:10px;">
+      <button class="btn-secondary" style="flex:1; padding:14px; font-size:14px;">📤 Поделиться</button>
+      <button class="btn-primary" style="flex:1; padding:14px; font-size:14px;">⚡ Действия</button>
+    </div>
+  </div>
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 5: Group Gift Detail — Participant View
+     ═══════════════════════════════════════════════════════════ -->
+<div class="screen-label" id="label-s5">Экран 5 — Детали (Participant): суммы других скрыты</div>
+<div class="phone" id="s5">
+<div class="phone-inner">
+  <div style="padding:16px 20px 120px;">
+    <!-- Header -->
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <span style="font-size:14px; color:var(--accent); cursor:pointer; font-weight:600;">← Назад</span>
+      <span class="badge" style="background:var(--green-soft); color:var(--green); font-size:11px;">Участник</span>
+    </div>
+
+    <!-- Item card -->
+    <div style="display:flex; gap:14px; align-items:center; padding:14px; background:var(--card); border-radius:14px; margin-bottom:16px; border:1px solid var(--border);">
+      <div style="width:48px; height:48px; border-radius:10px; background:linear-gradient(135deg, #2a2040, #1a1a2e); display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0;">🎧</div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:15px; font-weight:700;">Sony WH-1000XM5</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Организатор: Максим · 📅 25 апр</div>
+      </div>
+      <span class="badge" style="background:var(--green-soft); color:var(--green); font-size:10px;">OPEN</span>
+    </div>
+
+    <!-- Progress block -->
+    <div style="background:var(--card); border-radius:16px; padding:18px; margin-bottom:16px; border:1px solid var(--border);">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;">
+        <span style="font-size:13px; color:var(--text-sec); font-weight:600;">Собрано</span>
+        <span style="font-size:11px; color:var(--text-muted);">22 000 / 32 990 ₽</span>
+      </div>
+      <div class="progress-bar" style="margin-bottom:10px;">
+        <div class="progress-fill" style="width:67%; background:linear-gradient(90deg, var(--accent), #9B8AFF);"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <div>
+          <div style="font-size:22px; font-weight:800; color:var(--accent);">67%</div>
+          <div style="font-size:11px; color:var(--text-muted);">прогресс</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:22px; font-weight:800; color:var(--text);">4</div>
+          <div style="font-size:11px; color:var(--text-muted);">участника</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:22px; font-weight:800; color:var(--orange);">10 990 ₽</div>
+          <div style="font-size:11px; color:var(--text-muted);">осталось</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- My contribution -->
+    <div style="background:linear-gradient(135deg, rgba(52,211,153,0.08), rgba(52,211,153,0.03)); border:1px solid rgba(52,211,153,0.2); border-radius:14px; padding:14px 16px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:2px;">Моя сумма</div>
+        <div style="font-size:20px; font-weight:800; color:var(--green);">6 000 ₽</div>
+      </div>
+      <button style="padding:8px 16px; border-radius:10px; border:1px solid rgba(52,211,153,0.3); background:transparent; color:var(--green); font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font);">
+        Изменить
+      </button>
+    </div>
+
+    <!-- Pinned bank info -->
+    <div style="background:linear-gradient(135deg, rgba(251,191,36,0.08), rgba(251,191,36,0.04)); border:1px solid rgba(251,191,36,0.2); border-radius:14px; padding:14px 16px; margin-bottom:16px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <span style="font-size:14px;">📌</span>
+        <span style="font-size:12px; font-weight:700; color:var(--orange); text-transform:uppercase; letter-spacing:0.5px;">Ссылка на сбор</span>
+      </div>
+      <a href="#" style="font-size:14px; color:var(--accent); text-decoration:underline; word-break:break-all;">
+        https://www.tinkoff.ru/collect/abc123def
+      </a>
+    </div>
+
+    <!-- Participants (NO amounts visible) -->
+    <div style="margin-bottom:16px;">
+      <span style="font-size:14px; font-weight:700; color:var(--text); display:block; margin-bottom:10px;">Участники</span>
+
+      <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--surface); border-radius:12px; margin-bottom:6px;">
+        <div class="avatar" style="width:32px; height:32px; background:linear-gradient(135deg, var(--accent), #9B8AFF); font-size:12px;">М</div>
+        <span style="font-size:14px; font-weight:600; flex:1;">Максим</span>
+        <span class="badge" style="background:var(--accent-soft); color:var(--accent); font-size:9px; padding:2px 6px;">орг</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--surface); border-radius:12px; margin-bottom:6px;">
+        <div class="avatar" style="width:32px; height:32px; background:linear-gradient(135deg, #FBBF24, #f59e0b); font-size:12px;">А</div>
+        <span style="font-size:14px; font-weight:600; flex:1;">Аня</span>
+        <span style="font-size:12px; color:var(--green);">✓</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:linear-gradient(135deg, rgba(52,211,153,0.06), transparent); border:1px solid rgba(52,211,153,0.15); border-radius:12px; margin-bottom:6px;">
+        <div class="avatar" style="width:32px; height:32px; background:linear-gradient(135deg, #34D399, #6ee7b7); font-size:12px;">Д</div>
+        <span style="font-size:14px; font-weight:600; flex:1;">Дима</span>
+        <span style="font-size:12px; color:var(--green);">✓ это ты</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--surface); border-radius:12px;">
+        <div class="avatar" style="width:32px; height:32px; background:linear-gradient(135deg, #F87171, #ef4444); font-size:12px;">К</div>
+        <span style="font-size:14px; font-weight:600; flex:1;">Катя</span>
+        <span style="font-size:12px; color:var(--green);">✓</span>
+      </div>
+    </div>
+
+    <!-- Chat preview -->
+    <div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="font-size:14px; font-weight:700; color:var(--text);">💬 Чат</span>
+        <span style="font-size:12px; color:var(--accent); font-weight:600; cursor:pointer;">Все сообщения →</span>
+      </div>
+      <div style="background:var(--surface); border-radius:12px; padding:12px;">
+        <div>
+          <span style="font-size:12px; font-weight:600; color:var(--accent);">Аня</span>
+          <span style="font-size:11px; color:var(--text-muted); margin-left:6px;">14:32</span>
+          <div style="font-size:13px; color:var(--text); margin-top:2px;">Я перевела! Скрин в личку скину</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Participant actions -->
+  <div class="sticky-bottom">
+    <div style="display:flex; gap:10px;">
+      <button class="btn-ghost" style="flex:0; padding:14px; border:1px solid var(--border-light); border-radius:14px; color:var(--red); font-size:13px;">Выйти</button>
+      <button class="btn-primary" style="flex:1; padding:14px; font-size:15px;">💬 Написать в чат</button>
+    </div>
+  </div>
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 6: Join Flow
+     ═══════════════════════════════════════════════════════════ -->
+<div class="screen-label" id="label-s6">Экран 6 — Join Flow: приглашённый вводит сумму</div>
+<div class="phone" id="s6">
+<div class="phone-inner">
+  <div style="padding:20px 20px 120px;">
+
+    <!-- Header -->
+    <div style="text-align:center; margin-bottom:24px;">
+      <div style="font-size:48px; margin-bottom:12px;">👥🎁</div>
+      <h2 style="font-size:20px; font-weight:800; margin-bottom:4px;">Совместный подарок</h2>
+      <p style="font-size:13px; color:var(--text-muted);">Максим приглашает скинуться</p>
+    </div>
+
+    <!-- Item card -->
+    <div style="display:flex; gap:14px; align-items:center; padding:16px; background:var(--card); border-radius:16px; margin-bottom:20px; border:1px solid var(--border);">
+      <div style="width:56px; height:56px; border-radius:12px; background:linear-gradient(135deg, #2a2040, #1a1a2e); display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0;">🎧</div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:16px; font-weight:700;">Sony WH-1000XM5</div>
+        <div style="font-size:14px; color:var(--accent); font-weight:700; margin-top:2px;">32 990 ₽</div>
+      </div>
+    </div>
+
+    <!-- Stats row -->
+    <div style="display:flex; gap:10px; margin-bottom:20px;">
+      <div style="flex:1; background:var(--surface); border-radius:12px; padding:12px; text-align:center;">
+        <div style="font-size:18px; font-weight:800; color:var(--accent);">67%</div>
+        <div style="font-size:11px; color:var(--text-muted);">собрано</div>
+      </div>
+      <div style="flex:1; background:var(--surface); border-radius:12px; padding:12px; text-align:center;">
+        <div style="font-size:18px; font-weight:800; color:var(--text);">4</div>
+        <div style="font-size:11px; color:var(--text-muted);">участника</div>
+      </div>
+      <div style="flex:1; background:var(--surface); border-radius:12px; padding:12px; text-align:center;">
+        <div style="font-size:18px; font-weight:800; color:var(--orange);">10 990 ₽</div>
+        <div style="font-size:11px; color:var(--text-muted);">осталось</div>
+      </div>
+    </div>
+
+    <!-- Deadline -->
+    <div style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--orange-soft); border-radius:10px; margin-bottom:20px;">
+      <span style="font-size:14px;">⏰</span>
+      <span style="font-size:13px; color:var(--orange); font-weight:600;">Дедлайн: 25 апреля (18 дней)</span>
+    </div>
+
+    <!-- Organizer note -->
+    <div style="background:var(--surface); border-radius:12px; padding:12px 14px; margin-bottom:24px; border-left:3px solid var(--accent);">
+      <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">Сообщение от организатора</div>
+      <p style="font-size:14px; color:var(--text); line-height:1.5;">Привет! Давайте скинемся на наушники для Саши ко дню рождения 🎉</p>
+    </div>
+
+    <div style="height:1px; background:var(--border); margin-bottom:24px;"></div>
+
+    <!-- Amount input -->
+    <div style="margin-bottom:20px;">
+      <label style="display:block; font-size:14px; color:var(--text); margin-bottom:8px; font-weight:700;">Моя сумма</label>
+      <div style="position:relative;">
+        <input class="input" type="text" placeholder="0" style="font-size:24px; font-weight:800; padding:18px 50px 18px 20px; text-align:center; border-color:var(--accent); background:rgba(124,106,255,0.06);" value="5 000" />
+        <span style="position:absolute; right:20px; top:50%; transform:translateY(-50%); font-size:18px; color:var(--text-muted); font-weight:600;">₽</span>
+      </div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:6px; text-align:center;">
+        Укажи сумму, которую готов(-а) внести
+      </div>
+    </div>
+
+    <!-- Info -->
+    <div style="background:var(--accent-soft); border-radius:12px; padding:12px 14px; display:flex; gap:10px;">
+      <span style="font-size:14px; flex-shrink:0;">ℹ️</span>
+      <p style="font-size:12px; color:var(--text-sec); line-height:1.5;">
+        Деньги переводятся вне приложения. Ссылку на сбор или реквизиты увидишь после вступления.
+      </p>
+    </div>
+  </div>
+
+  <!-- Sticky CTA -->
+  <div class="sticky-bottom">
+    <button class="btn-primary" style="font-size:16px; padding:16px; background:linear-gradient(135deg, var(--accent), #9B8AFF);">
+      ✋ Участвовать
+    </button>
+  </div>
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 7: Chat (full screen)
+     ═══════════════════════════════════════════════════════════ -->
+<div class="screen-label" id="label-s7">Экран 7 — Чат: сообщения, системные события, закреп</div>
+<div class="phone" id="s7">
+<div class="phone-inner" style="display:flex; flex-direction:column; height:100%;">
+  <!-- Chat header -->
+  <div style="padding:14px 20px; border-bottom:1px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:space-between;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:14px; color:var(--accent); cursor:pointer; font-weight:600;">←</span>
+      <div>
+        <div style="font-size:15px; font-weight:700;">💬 Чат · Sony WH-1000XM5</div>
+        <div style="font-size:11px; color:var(--text-muted);">4 участника</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pinned message -->
+  <div style="padding:8px 20px; background:rgba(251,191,36,0.06); border-bottom:1px solid rgba(251,191,36,0.12); flex-shrink:0;">
+    <div style="display:flex; align-items:center; gap:6px;">
+      <span style="font-size:12px;">📌</span>
+      <span style="font-size:12px; font-weight:700; color:var(--orange);">Закреплено</span>
+    </div>
+    <a href="#" style="font-size:13px; color:var(--accent); text-decoration:underline; display:block; margin-top:2px;">
+      https://www.tinkoff.ru/collect/abc123def
+    </a>
+    <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Сбер 4276 **** **** 1234 (Максим П.)</div>
+  </div>
+
+  <!-- Messages -->
+  <div style="flex:1; overflow-y:auto; padding:12px 20px;">
+    <!-- System message -->
+    <div style="text-align:center; margin-bottom:16px;">
+      <span style="font-size:11px; color:var(--text-muted); background:var(--surface); padding:4px 12px; border-radius:8px;">
+        Максим создал совместный подарок
+      </span>
+    </div>
+
+    <!-- System: joined -->
+    <div style="text-align:center; margin-bottom:16px;">
+      <span style="font-size:11px; color:var(--text-muted); background:var(--surface); padding:4px 12px; border-radius:8px;">
+        Аня присоединилась
+      </span>
+    </div>
+
+    <!-- User message: organizer -->
+    <div style="margin-bottom:14px;">
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+        <div class="avatar" style="width:22px; height:22px; background:linear-gradient(135deg, var(--accent), #9B8AFF); font-size:9px;">М</div>
+        <span style="font-size:12px; font-weight:600; color:var(--accent);">Максим</span>
+        <span class="badge" style="background:var(--accent-soft); color:var(--accent); font-size:8px; padding:1px 5px;">орг</span>
+        <span style="font-size:10px; color:var(--text-muted);">12:05</span>
+      </div>
+      <div style="background:var(--card); border-radius:0 14px 14px 14px; padding:10px 14px; display:inline-block; max-width:85%;">
+        <p style="font-size:14px; line-height:1.5; color:var(--text);">Привет всем! Собираем на наушники для Саши 🎧 Ссылка на сбор Тинькофф вверху, но можно и на Сбер перевести.</p>
+      </div>
+    </div>
+
+    <!-- System: pinned -->
+    <div style="text-align:center; margin-bottom:16px;">
+      <span style="font-size:11px; color:var(--text-muted); background:var(--surface); padding:4px 12px; border-radius:8px;">
+        📌 Максим закрепил сообщение
+      </span>
+    </div>
+
+    <!-- System: joined -->
+    <div style="text-align:center; margin-bottom:16px;">
+      <span style="font-size:11px; color:var(--text-muted); background:var(--surface); padding:4px 12px; border-radius:8px;">
+        Дима присоединился
+      </span>
+    </div>
+
+    <!-- User message -->
+    <div style="margin-bottom:14px;">
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+        <div class="avatar" style="width:22px; height:22px; background:linear-gradient(135deg, #FBBF24, #f59e0b); font-size:9px;">А</div>
+        <span style="font-size:12px; font-weight:600; color:var(--text);">Аня</span>
+        <span style="font-size:10px; color:var(--text-muted);">13:20</span>
+      </div>
+      <div style="background:var(--card); border-radius:0 14px 14px 14px; padding:10px 14px; display:inline-block; max-width:85%;">
+        <p style="font-size:14px; line-height:1.5; color:var(--text);">А может взять чёрные? Они стильнее 😄</p>
+      </div>
+    </div>
+
+    <!-- User message -->
+    <div style="margin-bottom:14px;">
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+        <div class="avatar" style="width:22px; height:22px; background:linear-gradient(135deg, var(--accent), #9B8AFF); font-size:9px;">М</div>
+        <span style="font-size:12px; font-weight:600; color:var(--accent);">Максим</span>
+        <span class="badge" style="background:var(--accent-soft); color:var(--accent); font-size:8px; padding:1px 5px;">орг</span>
+        <span style="font-size:10px; color:var(--text-muted);">13:25</span>
+      </div>
+      <div style="background:var(--card); border-radius:0 14px 14px 14px; padding:10px 14px; display:inline-block; max-width:85%;">
+        <p style="font-size:14px; line-height:1.5; color:var(--text);">Да, он и хотел чёрные! Я буду заказывать на Ozon, там есть доставка до ДР 👍</p>
+      </div>
+    </div>
+
+    <!-- System: Katya joined -->
+    <div style="text-align:center; margin-bottom:16px;">
+      <span style="font-size:11px; color:var(--text-muted); background:var(--surface); padding:4px 12px; border-radius:8px;">
+        Катя присоединилась
+      </span>
+    </div>
+
+    <!-- User message -->
+    <div style="margin-bottom:14px;">
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+        <div class="avatar" style="width:22px; height:22px; background:linear-gradient(135deg, #F87171, #ef4444); font-size:9px;">К</div>
+        <span style="font-size:12px; font-weight:600; color:var(--text);">Катя</span>
+        <span style="font-size:10px; color:var(--text-muted);">14:10</span>
+      </div>
+      <div style="background:var(--card); border-radius:0 14px 14px 14px; padding:10px 14px; display:inline-block; max-width:85%;">
+        <p style="font-size:14px; line-height:1.5; color:var(--text);">Перевела на Тинькофф! 💸</p>
+      </div>
+    </div>
+
+    <!-- User message -->
+    <div style="margin-bottom:14px;">
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+        <div class="avatar" style="width:22px; height:22px; background:linear-gradient(135deg, #FBBF24, #f59e0b); font-size:9px;">А</div>
+        <span style="font-size:12px; font-weight:600; color:var(--text);">Аня</span>
+        <span style="font-size:10px; color:var(--text-muted);">14:32</span>
+      </div>
+      <div style="background:var(--card); border-radius:0 14px 14px 14px; padding:10px 14px; display:inline-block; max-width:85%;">
+        <p style="font-size:14px; line-height:1.5; color:var(--text);">Я тоже перевела! Скрин в личку скину 💳</p>
+      </div>
+    </div>
+
+    <div style="height:80px;"></div>
+  </div>
+
+  <!-- Message input -->
+  <div style="padding:10px 16px 30px; border-top:1px solid var(--border); flex-shrink:0; display:flex; gap:10px; align-items:center; background:var(--bg);">
+    <input class="input" placeholder="Сообщение..." style="flex:1; padding:12px 16px; border-radius:20px; font-size:14px;" />
+    <button style="width:40px; height:40px; border-radius:50%; background:var(--accent); border:none; color:#fff; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">↑</button>
+  </div>
+</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 8: Owner View (sees only "Reserved")
+     ═══════════════════════════════════════════════════════════ -->
+<div class="screen-label" id="label-s8">Экран 8 — Owner View: видит только «Забронировано» без деталей</div>
+<div class="phone" id="s8">
+<div class="phone-inner">
+  <!-- Simulate owner item detail -->
+  <div style="width:100%; height:230px; background:linear-gradient(145deg, #2a2040, #1a1a2e); display:flex; align-items:center; justify-content:center; font-size:80px;">
+    🎧
+  </div>
+
+  <div style="padding:20px 20px 100px;">
+    <h1 style="font-size:22px; font-weight:800; line-height:1.3; margin-bottom:6px;">Sony WH-1000XM5</h1>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+      <span style="font-size:20px; font-weight:800; color:var(--accent);">32 990 ₽</span>
+      <span class="badge" style="background:var(--orange-soft); color:var(--orange);">⭐ Важное</span>
+    </div>
+
+    <p style="font-size:14px; color:var(--text-sec); line-height:1.6; margin-bottom:24px;">
+      Беспроводные наушники с шумоподавлением. Чёрный цвет, 30 часов работы.
+    </p>
+
+    <div style="height:1px; background:var(--border); margin-bottom:20px;"></div>
+
+    <!-- Reserved status — THAT'S ALL THE OWNER SEES -->
+    <div style="padding:16px 20px; background:var(--green-soft); border-radius:14px; display:flex; align-items:center; gap:12px;">
+      <div style="width:40px; height:40px; border-radius:12px; background:rgba(52,211,153,0.2); display:flex; align-items:center; justify-content:center; font-size:20px;">🎁</div>
+      <div>
+        <div style="font-size:15px; font-weight:700; color:var(--green);">Забронировано</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Кто-то уже забрал этот подарок</div>
+      </div>
+    </div>
+
+    <!-- Explicit note about what owner does NOT see -->
+    <div style="margin-top:40px; padding:20px; background:var(--surface); border-radius:14px; border:1px dashed var(--border-light);">
+      <div style="font-size:13px; color:var(--text-muted); text-align:center; line-height:1.6;">
+        <strong style="color:var(--text-sec);">📝 Что НЕ видит owner:</strong><br>
+        • Что это group gift<br>
+        • Участников<br>
+        • Суммы<br>
+        • Чат<br>
+        • Организатора<br>
+        • Ссылку на сбор<br><br>
+        <em>Только «Забронировано» — как обычная резервация</em>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+
+<script>
+function showScreen(id) {
+  document.querySelectorAll('.phone').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.screen-label').forEach(l => l.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.getElementById('label-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

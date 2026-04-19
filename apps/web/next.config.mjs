@@ -7,6 +7,8 @@ const __dirname = path.dirname(__filename);
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Source-in-place workspace packages; Next transpiles their TS/TSX directly.
+  transpilePackages: ['@wishlist/ui', '@wishlist/ui-tokens'],
   env: {
     // Injected at build time — used as a cache-bust marker and debug indicator
     NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),

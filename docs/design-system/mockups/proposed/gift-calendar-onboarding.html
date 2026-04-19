@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Подарочный календарь — Paywall + Онбординг</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-2: #9B8AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --pink: #EC4899;
+    --pink-soft: rgba(236,72,153,0.12);
+    --blue: #60A5FA;
+    --blue-soft: rgba(96,165,250,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Rubik', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0B0B0E;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 80px;
+  }
+
+  /* Top nav */
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(11,11,14,0.92); backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border); padding: 14px 16px;
+  }
+  .nav-title {
+    font-size: 18px; font-weight: 700; color: var(--text);
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  }
+  .nav-subtitle {
+    font-size: 12px; color: var(--text-muted); margin-bottom: 12px;
+  }
+  .nav-tabs {
+    display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab {
+    flex-shrink: 0; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 500;
+    color: var(--text-sec); background: var(--surface); border: 1px solid var(--border);
+    cursor: pointer; transition: all 0.15s; white-space: nowrap; font-family: inherit;
+  }
+  .nav-tab:hover { background: var(--surface-hover); }
+  .nav-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Sections */
+  .section { display: none; max-width: 1100px; margin: 0 auto; padding: 24px 20px 40px; }
+  .section.active { display: block; }
+  .section-h1 { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+  .section-lead { font-size: 14px; color: var(--text-sec); line-height: 1.6; margin-bottom: 20px; max-width: 640px; }
+  .section-label {
+    font-size: 11px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.08em; margin: 28px 0 12px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  /* Frame layout: for before/after */
+  .frames {
+    display: grid; grid-template-columns: 1fr; gap: 20px;
+  }
+  @media (min-width: 880px) {
+    .frames.two { grid-template-columns: 1fr 1fr; }
+    .frames.four { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (min-width: 1200px) {
+    .frames.four { grid-template-columns: repeat(4, 1fr); }
+  }
+  .frame-wrap {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .frame-label {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700;
+    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .frame-label .tag {
+    font-size: 10px; padding: 3px 7px; border-radius: 5px; font-weight: 700; letter-spacing: 0.03em;
+  }
+  .frame-label .tag.old { background: var(--red-soft); color: var(--red); }
+  .frame-label .tag.new { background: var(--green-soft); color: var(--green); }
+  .frame-label .tag.step { background: var(--accent-soft); color: var(--accent); }
+  .frame-note {
+    font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-top: 4px;
+  }
+  .phone {
+    background: var(--bg); border-radius: 28px; border: 2px solid var(--border-light);
+    overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    width: 100%; max-width: 380px; margin: 0 auto;
+  }
+  .phone-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 16px; background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-muted);
+  }
+  .phone-header .left { display: flex; align-items: center; gap: 8px; }
+  .phone-body { position: relative; min-height: 560px; }
+
+  /* =========== PAYWALL — CURRENT =========== */
+  .current-paywall-hero {
+    background: linear-gradient(160deg, #1a1130 0%, #0d1628 60%, #091520 100%);
+    padding: 40px 24px 30px; text-align: center;
+    border-bottom-left-radius: 24px; border-bottom-right-radius: 24px;
+  }
+  .current-paywall-hero .emoji {
+    font-size: 56px; margin-bottom: 12px; filter: drop-shadow(0 0 20px rgba(251,191,36,0.3));
+  }
+  .current-paywall-hero h1 { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 8px; line-height: 1.3; }
+  .current-paywall-hero p { font-size: 14px; color: rgba(255,255,255,0.55); line-height: 1.5; }
+
+  .current-feature {
+    display: flex; align-items: center; gap: 14px; padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .current-feature:last-of-type { border: none; }
+  .current-feature .ic {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+  }
+  .current-feature .txt { font-size: 14px; color: var(--text); line-height: 1.4; }
+
+  .current-price {
+    margin: 10px 20px; padding: 16px 18px; border-radius: 16px;
+    background: var(--surface); border: 1px solid var(--border);
+  }
+  .current-price .amount { font-size: 24px; font-weight: 800; color: var(--accent); }
+  .current-price .unit { font-size: 14px; font-weight: 600; color: var(--text-sec); margin-left: 6px; }
+  .current-price .info { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .current-price .pro {
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--green); font-weight: 600;
+  }
+
+  .current-cta {
+    padding: 12px 20px 20px;
+  }
+  .btn-buy {
+    width: 100%; padding: 16px; border-radius: 14px; border: none;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 6px 20px var(--accent-glow); font-family: inherit;
+  }
+  .btn-later {
+    width: 100%; padding: 10px; border-radius: 10px; border: none;
+    background: transparent; color: var(--text-muted); font-size: 13px;
+    cursor: pointer; margin-top: 6px; font-family: inherit;
+  }
+
+  /* =========== PAYWALL — NEW (DEMO-FIRST) =========== */
+  .new-paywall {
+    background: var(--bg);
+  }
+  /* Hero with live countdown mockup */
+  .np-hero {
+    padding: 24px 20px 0; text-align: center; position: relative;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(124,106,255,0.22) 0%, transparent 60%),
+      radial-gradient(circle at 20% 30%, rgba(236,72,153,0.12) 0%, transparent 40%),
+      radial-gradient(circle at 80% 20%, rgba(251,191,36,0.10) 0%, transparent 40%);
+  }
+  .np-brand {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: 0.05em;
+    text-transform: uppercase; margin-bottom: 14px;
+    padding: 5px 10px; border-radius: 20px;
+    background: var(--accent-soft); border: 1px solid rgba(124,106,255,0.2);
+  }
+  .np-title {
+    font-size: 26px; font-weight: 800; color: var(--text); line-height: 1.2; margin-bottom: 8px;
+  }
+  .np-title .accent { color: var(--accent); }
+  .np-subtitle {
+    font-size: 14px; color: var(--text-sec); line-height: 1.5; margin-bottom: 20px;
+    max-width: 300px; margin-left: auto; margin-right: auto;
+  }
+
+  /* Demo card — the centrepiece */
+  .np-demo {
+    background: var(--card);
+    border: 1px solid var(--border-light);
+    border-radius: 20px;
+    padding: 16px;
+    margin: 0 4px 20px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  }
+  .np-demo::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(124,106,255,0.06) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .np-demo-header {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 14px; position: relative;
+  }
+  .np-demo-header .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.15); }
+  }
+
+  /* Stacked demo cards */
+  .np-stack { display: flex; flex-direction: column; gap: 8px; position: relative; }
+  .demo-card {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px 14px;
+    position: relative; overflow: hidden;
+  }
+  .demo-card .strip {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  }
+  .demo-card .strip.urgent { background: linear-gradient(180deg, #FBBF24, #f59e0b); }
+  .demo-card .strip.soon { background: linear-gradient(180deg, #7C6AFF, #A78BFA); }
+  .demo-card .strip.done { background: linear-gradient(180deg, #34D399, #6ee7b7); }
+  .demo-card .emoji-box {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;
+  }
+  .demo-card .emoji-box.birthday { background: var(--orange-soft); }
+  .demo-card .emoji-box.anniversary { background: var(--pink-soft); }
+  .demo-card .emoji-box.holiday { background: var(--green-soft); }
+  .demo-card .info { flex: 1; min-width: 0; }
+  .demo-card .title { font-size: 14px; font-weight: 700; color: var(--text); }
+  .demo-card .person { font-size: 12px; color: var(--text-sec); margin-top: 1px; }
+  .demo-card .ring {
+    width: 40px; height: 40px; position: relative; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .demo-card .ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+  .demo-card .ring-number {
+    font-size: 12px; font-weight: 800; line-height: 1;
+  }
+  .demo-card .ring-label {
+    font-size: 7px; color: var(--text-muted); font-weight: 600; line-height: 1; margin-top: 1px;
+  }
+  .demo-card .ring.urgent .ring-number { color: var(--orange); }
+  .demo-card .ring.soon .ring-number { color: var(--accent); }
+  .demo-card .ideas-chip {
+    display: inline-flex; gap: 4px; align-items: center;
+    font-size: 10px; font-weight: 600; color: var(--accent);
+    background: var(--accent-soft); padding: 3px 7px; border-radius: 6px;
+    margin-top: 4px;
+  }
+
+  /* Benefits grid (compact) */
+  .np-benefits {
+    padding: 8px 20px 0;
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+  }
+  .np-benefit {
+    padding: 12px; border-radius: 14px;
+    background: var(--surface); border: 1px solid var(--border);
+    text-align: left;
+  }
+  .np-benefit .ic {
+    width: 28px; height: 28px; border-radius: 8px; display: flex;
+    align-items: center; justify-content: center; font-size: 15px; margin-bottom: 8px;
+  }
+  .np-benefit h4 { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.3; margin-bottom: 2px; }
+  .np-benefit p { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+
+  /* Social proof */
+  .np-social {
+    margin: 16px 20px 0; padding: 14px 16px; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(124,106,255,0.08), rgba(236,72,153,0.05));
+    border: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .np-social .avatars { display: flex; }
+  .np-social .avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid var(--bg);
+    display: flex; align-items: center; justify-content: center; font-size: 13px;
+    margin-left: -8px;
+  }
+  .np-social .avatar:first-child { margin-left: 0; }
+  .np-social .txt { font-size: 12px; color: var(--text-sec); line-height: 1.4; }
+  .np-social .txt strong { color: var(--text); }
+
+  /* Price block — new */
+  .np-price {
+    margin: 20px 20px 0; padding: 18px; border-radius: 18px;
+    background:
+      linear-gradient(135deg, rgba(124,106,255,0.14) 0%, rgba(124,106,255,0.04) 100%);
+    border: 1px solid rgba(124,106,255,0.28);
+    position: relative; overflow: hidden;
+  }
+  .np-price::after {
+    content: "⭐"; position: absolute; right: -8px; top: -20px;
+    font-size: 80px; opacity: 0.06;
+  }
+  .np-price .ribbon {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700;
+    color: var(--green); background: var(--green-soft);
+    padding: 3px 7px; border-radius: 5px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .np-price .amount-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .np-price .amount { font-size: 32px; font-weight: 800; color: var(--text); line-height: 1; }
+  .np-price .star { color: var(--orange); }
+  .np-price .unit { font-size: 13px; font-weight: 600; color: var(--text-sec); }
+  .np-price .once { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+  .np-price .breakdown {
+    display: flex; gap: 8px; margin-top: 10px;
+  }
+  .np-price .breakdown .chip {
+    flex: 1; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.03);
+    font-size: 11px; color: var(--text-sec); text-align: center; line-height: 1.3;
+  }
+  .np-price .breakdown .chip strong { color: var(--text); display: block; font-weight: 700; }
+
+  /* Objection handling / FAQ */
+  .np-faq { padding: 16px 20px 0; }
+  .np-faq-item {
+    padding: 12px 0; border-top: 1px solid var(--border);
+  }
+  .np-faq-item:first-child { border-top: none; padding-top: 0; }
+  .np-faq-item .q {
+    font-size: 13px; font-weight: 600; color: var(--text);
+    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+  }
+  .np-faq-item .q::before {
+    content: "?"; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; flex-shrink: 0;
+  }
+  .np-faq-item .a { font-size: 12px; color: var(--text-muted); line-height: 1.5; padding-left: 24px; }
+
+  /* Sticky CTA */
+  .np-sticky {
+    padding: 16px 20px; margin-top: 20px;
+    background: linear-gradient(180deg, transparent, var(--bg) 30%);
+  }
+  .btn-buy-new {
+    width: 100%; padding: 16px; border-radius: 14px; border: none;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 8px 24px var(--accent-glow); font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-buy-new .price-mini { font-size: 14px; opacity: 0.85; font-weight: 600; }
+
+  /* ============== ONBOARDING STEPS ============== */
+  .ob {
+    padding: 24px 20px 20px;
+    background: var(--bg);
+    min-height: 560px;
+    display: flex; flex-direction: column;
+  }
+  .ob-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 20px; }
+  .ob-dot { width: 20px; height: 4px; border-radius: 2px; background: var(--surface-hover); }
+  .ob-dot.done { background: rgba(124,106,255,0.4); }
+  .ob-dot.current { background: var(--accent); }
+
+  .ob-hero { text-align: center; margin-bottom: 18px; }
+  .ob-hero .big-emoji {
+    width: 80px; height: 80px; border-radius: 24px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 40px; margin: 0 auto 16px;
+  }
+  .ob-hero .big-emoji.green {
+    background: linear-gradient(145deg, rgba(52,211,153,0.2), rgba(52,211,153,0.08));
+    border: 1px solid rgba(52,211,153,0.25);
+  }
+  .ob-hero .big-emoji.accent {
+    background: linear-gradient(145deg, rgba(124,106,255,0.2), rgba(124,106,255,0.08));
+    border: 1px solid rgba(124,106,255,0.25);
+  }
+  .ob-hero .big-emoji.orange {
+    background: linear-gradient(145deg, rgba(251,191,36,0.2), rgba(251,191,36,0.08));
+    border: 1px solid rgba(251,191,36,0.25);
+  }
+  .ob-hero .big-emoji.pink {
+    background: linear-gradient(145deg, rgba(236,72,153,0.2), rgba(236,72,153,0.08));
+    border: 1px solid rgba(236,72,153,0.25);
+  }
+  .ob-hero .small-emoji { font-size: 36px; margin-bottom: 12px; }
+  .ob-hero h2 { font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 8px; line-height: 1.25; }
+  .ob-hero p { font-size: 14px; color: var(--text-sec); line-height: 1.6; max-width: 320px; margin: 0 auto 8px; }
+  .ob-hero .strong { color: var(--text); font-weight: 600; }
+
+  .ob-visual {
+    background: var(--card); border-radius: 16px; padding: 16px;
+    margin-bottom: 16px; text-align: left; position: relative; overflow: hidden;
+  }
+  .ob-info-box {
+    padding: 12px 14px; background: var(--bg); border-radius: 12px;
+    border-left: 3px solid var(--accent);
+    font-size: 13px; color: var(--text-sec); line-height: 1.6;
+    margin-bottom: 20px;
+  }
+  .ob-info-box strong { color: var(--text); font-weight: 600; }
+
+  .ob-checklist { text-align: left; }
+  .ob-checklist-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 0;
+    border-top: 1px solid var(--border);
+  }
+  .ob-checklist-row:first-child { border-top: none; }
+  .ob-checklist-row .v { color: var(--green); font-size: 16px; flex-shrink: 0; }
+  .ob-checklist-row .t { font-size: 14px; color: var(--text); }
+
+  .ob-cta { margin-top: auto; }
+  .btn-ob-primary {
+    width: 100%; padding: 14px; border: none; border-radius: 14px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
+    font-family: inherit; box-shadow: 0 4px 16px var(--accent-glow);
+  }
+  .btn-ob-skip {
+    width: 100%; padding: 10px; border: none; background: transparent;
+    color: var(--text-muted); font-size: 12px; cursor: pointer;
+    margin-top: 8px; font-family: inherit;
+  }
+
+  /* Step 2 — form mockup */
+  .form-mock { display: flex; flex-direction: column; gap: 10px; }
+  .form-row {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 12px;
+  }
+  .form-row.highlight { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,255,0.12); }
+  .form-label { font-size: 10px; color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+  .form-value { font-size: 14px; color: var(--text); font-weight: 500; }
+  .form-value.placeholder { color: var(--text-muted); }
+  .form-chips { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .form-chip {
+    padding: 5px 10px; border-radius: 8px; font-size: 11px;
+    background: var(--bg); color: var(--text-sec); font-weight: 500;
+  }
+  .form-chip.active { background: var(--accent); color: #fff; }
+
+  /* Step 3 — ideas mockup */
+  .ideas-occasion-card {
+    background: var(--card); border-radius: 14px; padding: 14px;
+    margin-bottom: 10px; position: relative; overflow: hidden;
+  }
+  .ideas-occasion-card .strip {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, #FBBF24, #f59e0b);
+  }
+  .ideas-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  }
+  .ideas-header .mini-emoji {
+    width: 36px; height: 36px; border-radius: 10px; background: var(--orange-soft);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .ideas-header .info { flex: 1; }
+  .ideas-header .t { font-size: 14px; font-weight: 700; }
+  .ideas-header .sub { font-size: 11px; color: var(--text-muted); }
+  .ideas-header .chip {
+    font-size: 10px; font-weight: 700; color: var(--orange);
+    background: var(--orange-soft); padding: 3px 7px; border-radius: 6px;
+  }
+  .idea-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    background: var(--surface); border-radius: 10px; margin-top: 6px;
+    border-left: 2px solid var(--accent);
+  }
+  .idea-row .bullet { color: var(--accent); font-size: 14px; line-height: 1; }
+  .idea-row .text { flex: 1; font-size: 13px; color: var(--text); }
+  .idea-row .price { font-size: 11px; color: var(--text-muted); }
+  .idea-add {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px; margin-top: 6px; border-radius: 10px;
+    background: transparent; border: 1px dashed var(--border-light);
+    font-size: 12px; color: var(--text-muted); cursor: pointer;
+  }
+
+  /* Step 4 — timeline */
+  .timeline { padding: 8px 0; }
+  .timeline-row {
+    display: flex; gap: 12px; align-items: flex-start; position: relative;
+  }
+  .timeline-row .dot-col {
+    display: flex; flex-direction: column; align-items: center; flex-shrink: 0;
+  }
+  .timeline-row .dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  .timeline-row .line {
+    width: 2px; height: 36px; background: var(--surface-hover);
+  }
+  .timeline-row .content { padding-bottom: 14px; padding-top: 0; }
+  .timeline-row .label { font-size: 13px; font-weight: 600; }
+  .timeline-row .desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+
+  /* Empty state improvements */
+  .empty-card {
+    background: linear-gradient(135deg, rgba(124,106,255,0.08), rgba(236,72,153,0.04));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 12px;
+  }
+
+  /* Rationale panels */
+  .rationale {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 18px 20px; margin-bottom: 16px;
+  }
+  .rationale h3 {
+    font-size: 14px; font-weight: 700; margin-bottom: 10px; color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .rationale ul { list-style: none; padding: 0; }
+  .rationale li {
+    font-size: 13px; color: var(--text-sec); line-height: 1.6;
+    padding: 6px 0; padding-left: 22px; position: relative;
+  }
+  .rationale li::before {
+    content: "→"; position: absolute; left: 0; color: var(--accent);
+    font-weight: 700;
+  }
+  .rationale li strong { color: var(--text); }
+
+  .rationale.warn { border-color: rgba(251,191,36,0.25); background: rgba(251,191,36,0.04); }
+  .rationale.warn h3 { color: var(--orange); }
+  .rationale.warn li::before { color: var(--orange); }
+
+  .rationale.good { border-color: rgba(52,211,153,0.25); background: rgba(52,211,153,0.04); }
+  .rationale.good h3 { color: var(--green); }
+  .rationale.good li::before { color: var(--green); }
+
+  /* Diff blocks */
+  .diff-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  @media (min-width: 880px) { .diff-grid { grid-template-columns: 1fr 1fr; } }
+  .diff-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px 16px;
+  }
+  .diff-card.old { border-left: 3px solid var(--red); }
+  .diff-card.new { border-left: 3px solid var(--green); }
+  .diff-card .label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .diff-card.old .label { color: var(--red); }
+  .diff-card.new .label { color: var(--green); }
+  .diff-card p { font-size: 13px; color: var(--text-sec); line-height: 1.55; margin-bottom: 4px; }
+  .diff-card code { font-family: 'SF Mono', Menlo, monospace; font-size: 11px; color: var(--text); background: var(--bg); padding: 1px 6px; border-radius: 4px; }
+
+  .copy-pair {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 10px;
+  }
+  .copy-pair .old-text, .copy-pair .new-text {
+    padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.5;
+  }
+  .copy-pair .old-text {
+    background: rgba(248,113,113,0.05); color: var(--text-sec);
+    text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.4);
+    margin-bottom: 6px;
+  }
+  .copy-pair .new-text {
+    background: rgba(52,211,153,0.06); color: var(--text);
+  }
+  .copy-pair .label {
+    font-size: 10px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+  }
+
+  /* Intro block */
+  .intro {
+    background: linear-gradient(135deg, rgba(124,106,255,0.08), rgba(236,72,153,0.04));
+    border: 1px solid var(--border);
+    border-radius: 18px; padding: 24px; margin-bottom: 24px;
+  }
+  .intro h2 { font-size: 20px; font-weight: 800; margin-bottom: 10px; }
+  .intro p { font-size: 14px; color: var(--text-sec); line-height: 1.65; margin-bottom: 10px; }
+  .intro p:last-child { margin-bottom: 0; }
+  .intro strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-title">🎁📅 Подарочный календарь — редизайн</div>
+  <div class="nav-subtitle">Paywall + post-purchase onboarding · основано на паттернах Smart Reservations</div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="switchTab(event, 'overview')">1. Обзор</button>
+    <button class="nav-tab" onclick="switchTab(event, 'paywall-compare')">2. Paywall: сейчас vs новый</button>
+    <button class="nav-tab" onclick="switchTab(event, 'paywall-new')">3. Новый paywall полностью</button>
+    <button class="nav-tab" onclick="switchTab(event, 'onboarding')">4. Онбординг 4 шага</button>
+    <button class="nav-tab" onclick="switchTab(event, 'empty-state')">5. Улучшенный empty state</button>
+    <button class="nav-tab" onclick="switchTab(event, 'copy')">6. Копирайт</button>
+  </div>
+</nav>
+
+<!-- ============== OVERVIEW ============== -->
+<section class="section active" id="overview">
+  <div class="intro">
+    <h2>Проблема текущей фичи</h2>
+    <p>Фича <strong>«События»</strong> — скрытая жемчужина: сильная механика (счётчик дней, идеи подарков, повторяющиеся даты), но <strong>продаётся вяло</strong> и <strong>не показывает ценность после покупки</strong>.</p>
+    <p>По сравнению с <strong>«Умной бронью»</strong> (15⭐, имеет 4-шаговый онбординг с демо-картами, до/после, дефолтами) — «События» стоят <strong>дороже (19⭐)</strong> и дают <strong>ноль объяснений</strong>: после оплаты человек попадает на пустой экран с мелкими чипами категорий.</p>
+  </div>
+
+  <div class="rationale warn">
+    <h3>⚠️ Что слабо сейчас</h3>
+    <ul>
+      <li><strong>Paywall — список преимуществ без контекста.</strong> 4 пункта «Все важные события», «Сохраняй идеи», «Счётчик дней», «Удобное планирование» — это буллиты, а не демонстрация. Пользователь не видит, <strong>как это выглядит</strong>.</li>
+      <li><strong>Нейминг «События»</strong> — слишком широкий. Пересекается с общим значением слова. «<strong>Подарочный календарь</strong>» сразу говорит о ценности.</li>
+      <li><strong>После покупки — ничего.</strong> Просто toast «Доступ открыт!» и экран с кнопкой «+ Добавить». Нет объяснения механик: счётчик, повторяющиеся даты, идеи подарков, уведомления.</li>
+      <li><strong>Нет social proof и нет обработки возражений</strong> (напомнит ли? что за «навсегда»? входит ли в Pro?).</li>
+      <li><strong>19 звёзд</strong> для чего-то непонятного — психологически дорого. Нужно декомпозировать ценность.</li>
+    </ul>
+  </div>
+
+  <div class="rationale good">
+    <h3>✅ Что делаем</h3>
+    <ul>
+      <li><strong>Paywall: demo-first.</strong> Первое, что видит пользователь, — живой стек карточек «Мама · ДР · 🔥 через 3 дня», «Юбилей · 12 дней», «Новый год · 281 день». Сразу понятно, <strong>что получишь</strong>.</li>
+      <li><strong>Ренейм: «Подарочный календарь»</strong> (в заголовках и в навигации). Тег «📅 Gift Calendar» как брендовый акцент.</li>
+      <li><strong>4-шаговый онбординг после оплаты</strong> (паритет с Smart Reservations): Welcome → Создай первое событие → Добавь идеи подарков → Получай напоминания.</li>
+      <li><strong>Декомпозиция цены:</strong> 19⭐ = ~35 ₽, дешевле одной открытки, навсегда, входит в Pro.</li>
+      <li><strong>FAQ-блок</strong> с 3 самыми частыми возражениями прямо на paywall'е.</li>
+      <li><strong>Social proof:</strong> «Добавили уже 12 000 событий» (если есть метрика) или «Ты не один — 🎂 🎁 💍».</li>
+      <li><strong>Улучшенный empty state</strong>: крупная первая кнопка + пре-загруженные примеры (не просто chip'ы, а визуально «заглядывающие» карточки).</li>
+    </ul>
+  </div>
+
+  <div class="rationale">
+    <h3>🎯 Метрики, которые должны вырасти</h3>
+    <ul>
+      <li><strong>Paywall → покупка</strong> (conversion): demo-first paywall обычно даёт +30–50% к конверсии.</li>
+      <li><strong>Day-1 retention после покупки:</strong> онбординг подводит к созданию первого события в той же сессии (сейчас многие покупают и уходят).</li>
+      <li><strong>Среднее число событий на юзера:</strong> empty state с живыми примерами → +1 событие к медиане.</li>
+      <li><strong>Refund rate</strong> / недовольство: декомпозиция цены + ясный онбординг → меньше ощущения «за что заплатил».</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============== PAYWALL COMPARE ============== -->
+<section class="section" id="paywall-compare">
+  <h1 class="section-h1">Paywall — сейчас vs новый</h1>
+  <p class="section-lead">Текущий paywall построен как список буллитов с градиентной «шапкой». Новый — <strong>demo-first</strong>: первый экран показывает реальные карточки с живым обратным отсчётом, а уже потом объясняет.</p>
+
+  <div class="frames two">
+    <!-- CURRENT -->
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag old">БЫЛО</span> Текущий paywall</div>
+      <div class="frame-note">Список из 4 буллитов, цена 19⭐ без контекста, нет демо.</div>
+      <div class="phone">
+        <div class="phone-header">
+          <div class="left"><span>‹</span><span>Назад</span></div>
+          <span>9:41</span>
+        </div>
+        <div class="phone-body">
+          <div class="current-paywall-hero">
+            <div class="emoji">🎁📅</div>
+            <h1>Не забывай важные даты и подарки</h1>
+            <p>Храни события, идеи и будущие подарки в одном месте. Смотри, сколько дней осталось, и готовься заранее без суеты.</p>
+          </div>
+          <div style="padding: 16px 0;">
+            <div class="current-feature">
+              <div class="ic" style="background: var(--accent-soft);">📋</div>
+              <div class="txt">Все важные события и даты под рукой</div>
+            </div>
+            <div class="current-feature">
+              <div class="ic" style="background: var(--orange-soft);">💡</div>
+              <div class="txt">Сохраняй идеи подарков заранее</div>
+            </div>
+            <div class="current-feature">
+              <div class="ic" style="background: var(--green-soft);">⏳</div>
+              <div class="txt">Счётчик дней — ничего не забудешь</div>
+            </div>
+            <div class="current-feature">
+              <div class="ic" style="background: var(--blue-soft);">🎯</div>
+              <div class="txt">Удобное планирование для близких</div>
+            </div>
+          </div>
+          <div class="current-price">
+            <div><span class="amount">19</span><span class="unit">Stars</span></div>
+            <div class="info">Одна покупка навсегда. Без подписки.</div>
+            <div class="pro">✓ Также входит в подписку Pro</div>
+          </div>
+          <div class="current-cta">
+            <button class="btn-buy">⭐ Купить навсегда за 19 ⭐</button>
+            <button class="btn-later">Не сейчас</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW -->
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag new">СТАЛО</span> Demo-first paywall</div>
+      <div class="frame-note">Первое, что видно — стек реальных карточек с живым таймером. Продаёт визуалом, а не текстом.</div>
+      <div class="phone">
+        <div class="phone-header">
+          <div class="left"><span>‹</span><span>Назад</span></div>
+          <span>9:41</span>
+        </div>
+        <div class="phone-body new-paywall">
+          <div class="np-hero">
+            <div class="np-brand">📅 Подарочный календарь</div>
+            <h1 class="np-title">Никогда не забудь <span class="accent">важную дату</span></h1>
+            <p class="np-subtitle">Все дни рождения, юбилеи и идеи подарков — в одном месте с напоминаниями.</p>
+            <div class="np-demo">
+              <div class="np-demo-header"><span class="dot"></span>Как это выглядит у тебя</div>
+              <div class="np-stack">
+                <div class="demo-card">
+                  <div class="strip urgent"></div>
+                  <div class="emoji-box birthday">🎂</div>
+                  <div class="info">
+                    <div class="title">День рождения мамы</div>
+                    <div class="person">Елена · 15 апреля</div>
+                    <span class="ideas-chip">💡 3 идеи</span>
+                  </div>
+                  <div class="ring urgent">
+                    <svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/><circle cx="20" cy="20" r="17" fill="none" stroke="#FBBF24" stroke-width="3" stroke-linecap="round" stroke-dasharray="107" stroke-dashoffset="92"/></svg>
+                    <div style="display:flex;flex-direction:column;align-items:center;z-index:1;"><div class="ring-number">3</div><div class="ring-label">ДНЯ</div></div>
+                  </div>
+                </div>
+                <div class="demo-card">
+                  <div class="strip soon"></div>
+                  <div class="emoji-box anniversary">💍</div>
+                  <div class="info">
+                    <div class="title">Годовщина</div>
+                    <div class="person">С Аней · 27 апреля</div>
+                  </div>
+                  <div class="ring soon">
+                    <svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/><circle cx="20" cy="20" r="17" fill="none" stroke="#7C6AFF" stroke-width="3" stroke-linecap="round" stroke-dasharray="107" stroke-dashoffset="45"/></svg>
+                    <div style="display:flex;flex-direction:column;align-items:center;z-index:1;"><div class="ring-number">12</div><div class="ring-label">ДН.</div></div>
+                  </div>
+                </div>
+                <div class="demo-card">
+                  <div class="strip soon" style="background: linear-gradient(180deg,#34D399,#6ee7b7);"></div>
+                  <div class="emoji-box holiday">🎄</div>
+                  <div class="info">
+                    <div class="title">Новый год</div>
+                    <div class="person">Подарки коллегам</div>
+                  </div>
+                  <div class="ring" style="color: var(--green);">
+                    <svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/><circle cx="20" cy="20" r="17" fill="none" stroke="#34D399" stroke-width="3" stroke-linecap="round" stroke-dasharray="107" stroke-dashoffset="5"/></svg>
+                    <div style="display:flex;flex-direction:column;align-items:center;z-index:1;"><div class="ring-number" style="color:var(--green);">261</div><div class="ring-label">ДН.</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="np-benefits">
+            <div class="np-benefit">
+              <div class="ic" style="background: var(--accent-soft); color: var(--accent);">🔔</div>
+              <h4>Пуш за 7, 3, 1 день</h4>
+              <p>Telegram предупредит заранее</p>
+            </div>
+            <div class="np-benefit">
+              <div class="ic" style="background: var(--orange-soft); color: var(--orange);">💡</div>
+              <h4>Идеи подарков</h4>
+              <p>Копи заранее, не в панике</p>
+            </div>
+            <div class="np-benefit">
+              <div class="ic" style="background: var(--pink-soft); color: var(--pink);">🔁</div>
+              <h4>Повтор каждый год</h4>
+              <p>Настроил раз — напоминает всегда</p>
+            </div>
+            <div class="np-benefit">
+              <div class="ic" style="background: var(--green-soft); color: var(--green);">∞</div>
+              <h4>Без ограничений</h4>
+              <p>Хоть 100 событий</p>
+            </div>
+          </div>
+
+          <div class="np-social">
+            <div class="avatars">
+              <div class="avatar" style="background: var(--orange-soft);">🎂</div>
+              <div class="avatar" style="background: var(--pink-soft);">💍</div>
+              <div class="avatar" style="background: var(--green-soft);">🎄</div>
+            </div>
+            <div class="txt"><strong>Самые частые</strong> события — мама, вторая половинка, Новый год. Уже добавлено <strong>12 000+</strong>.</div>
+          </div>
+
+          <div class="np-price">
+            <div class="ribbon">★ Одна покупка навсегда</div>
+            <div class="amount-row">
+              <span class="amount">19<span class="star">⭐</span></span>
+              <span class="unit">≈ 35 ₽</span>
+            </div>
+            <div class="once">Дешевле одной поздравительной открытки</div>
+            <div class="breakdown">
+              <div class="chip"><strong>Навсегда</strong>без подписки</div>
+              <div class="chip"><strong>∞ событий</strong>без лимита</div>
+              <div class="chip"><strong>Pro-бонус</strong>входит в подписку</div>
+            </div>
+          </div>
+
+          <div class="np-faq">
+            <div class="np-faq-item">
+              <div class="q">Как я узнаю, что дата приближается?</div>
+              <div class="a">Telegram пришлёт пуш за 7, 3 и 1 день до события — ты успеешь подготовить подарок.</div>
+            </div>
+            <div class="np-faq-item">
+              <div class="q">Что значит «повторяется»?</div>
+              <div class="a">День рождения каждый год — ставишь одну дату, календарь сам пересчитывает обратный отсчёт ежегодно.</div>
+            </div>
+            <div class="np-faq-item">
+              <div class="q">Работает ли без Pro?</div>
+              <div class="a">Да. Покупка 19⭐ — одна и навсегда. Если уже есть Pro — бесплатно.</div>
+            </div>
+          </div>
+
+          <div class="np-sticky">
+            <button class="btn-buy-new">⭐ Получить навсегда<span class="price-mini">· 19 ⭐</span></button>
+            <button class="btn-later">Не сейчас</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Ключевые изменения</div>
+  <div class="diff-grid">
+    <div class="diff-card old">
+      <div class="label">БЫЛО</div>
+      <p><strong>Hero:</strong> градиент + emoji 🎁📅 + текст. Занимает 1/3 экрана, не показывает продукт.</p>
+      <p><strong>Ценность:</strong> 4 буллита с иконками — абстрактные формулировки.</p>
+      <p><strong>Цена:</strong> «19 Stars» — сколько это в рублях? Дорого или нет — непонятно.</p>
+      <p><strong>Возражения:</strong> не закрыты. Только мелкая пометка про Pro.</p>
+    </div>
+    <div class="diff-card new">
+      <div class="label">СТАЛО</div>
+      <p><strong>Hero:</strong> компактный бренд-тег + заголовок + <code>demo-стек</code> с 3 реальными карточками и живыми таймерами.</p>
+      <p><strong>Ценность:</strong> 4 benefit-карточки 2×2 с конкретикой («пуш за 7 дней», «повтор каждый год»).</p>
+      <p><strong>Цена:</strong> «19⭐ ≈ 35 ₽» + блок-декомпозиция («навсегда», «∞ событий», «Pro-бонус»).</p>
+      <p><strong>Возражения:</strong> встроенный FAQ закрывает 3 главных: «как напомнит?», «что значит повторяется?», «работает без Pro?».</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============== PAYWALL FULL NEW ============== -->
+<section class="section" id="paywall-new">
+  <h1 class="section-h1">Новый paywall — зум-ин по блокам</h1>
+  <p class="section-lead">Разбираю по секциям — что, зачем, с каким копирайтом.</p>
+
+  <div class="section-label">Блок 1 — Hero с demo-стеком</div>
+  <div class="frames two">
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag step">BLOCK 1</span> Hero + демо</div>
+      <div class="phone">
+        <div class="phone-header"><div class="left"><span>‹</span><span>Назад</span></div><span>9:41</span></div>
+        <div class="phone-body new-paywall">
+          <div class="np-hero">
+            <div class="np-brand">📅 Подарочный календарь</div>
+            <h1 class="np-title">Никогда не забудь <span class="accent">важную дату</span></h1>
+            <p class="np-subtitle">Все дни рождения, юбилеи и идеи подарков — в одном месте с напоминаниями.</p>
+            <div class="np-demo">
+              <div class="np-demo-header"><span class="dot"></span>Как это выглядит у тебя</div>
+              <div class="np-stack">
+                <div class="demo-card">
+                  <div class="strip urgent"></div>
+                  <div class="emoji-box birthday">🎂</div>
+                  <div class="info">
+                    <div class="title">День рождения мамы</div>
+                    <div class="person">Елена · 15 апреля</div>
+                  </div>
+                  <div class="ring urgent">
+                    <svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/><circle cx="20" cy="20" r="17" fill="none" stroke="#FBBF24" stroke-width="3" stroke-linecap="round" stroke-dasharray="107" stroke-dashoffset="92"/></svg>
+                    <div style="display:flex;flex-direction:column;align-items:center;z-index:1;"><div class="ring-number">3</div><div class="ring-label">ДНЯ</div></div>
+                  </div>
+                </div>
+                <div class="demo-card">
+                  <div class="strip soon"></div>
+                  <div class="emoji-box anniversary">💍</div>
+                  <div class="info">
+                    <div class="title">Годовщина</div>
+                    <div class="person">С Аней · 27 апреля</div>
+                  </div>
+                  <div class="ring soon">
+                    <svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/><circle cx="20" cy="20" r="17" fill="none" stroke="#7C6AFF" stroke-width="3" stroke-linecap="round" stroke-dasharray="107" stroke-dashoffset="45"/></svg>
+                    <div style="display:flex;flex-direction:column;align-items:center;z-index:1;"><div class="ring-number">12</div><div class="ring-label">ДН.</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-wrap">
+      <div class="rationale">
+        <h3>🎯 Зачем</h3>
+        <ul>
+          <li><strong>Demo-first:</strong> первое впечатление — не «шапка с emoji», а реальный продукт. Мозг сразу достраивает: «вот что я получу».</li>
+          <li><strong>Живой dot</strong> (зелёный пульсирующий) — намёк, что «это работает прямо сейчас».</li>
+          <li><strong>Срочность:</strong> первая карточка — через 3 дня (🔥 оранжевый), вторая — через 12 (спокойный фиолетовый). Визуализируем, как выглядит разный статус.</li>
+          <li><strong>Ideas-chip</strong> у «ДР мамы» («💡 3 идеи») — подсказка, что это не просто календарь: к дате привязаны идеи подарков.</li>
+          <li><strong>Заголовок:</strong> не «Не забывай», а «<strong>Никогда не забудь</strong>» — обещание, а не напоминание.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Блок 2 — Benefits 2×2 + Social proof</div>
+  <div class="frames two">
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag step">BLOCK 2</span> Преимущества + proof</div>
+      <div class="phone">
+        <div class="phone-header"><div class="left"><span>‹</span><span>Назад</span></div><span>9:41</span></div>
+        <div class="phone-body new-paywall" style="padding: 20px 0 0;">
+          <div class="np-benefits">
+            <div class="np-benefit">
+              <div class="ic" style="background: var(--accent-soft); color: var(--accent);">🔔</div>
+              <h4>Пуш за 7, 3, 1 день</h4>
+              <p>Telegram предупредит заранее</p>
+            </div>
+            <div class="np-benefit">
+              <div class="ic" style="background: var(--orange-soft); color: var(--orange);">💡</div>
+              <h4>Идеи подарков</h4>
+              <p>Копи заранее, не в панике</p>
+            </div>
+            <div class="np-benefit">
+              <div class="ic" style="background: var(--pink-soft); color: var(--pink);">🔁</div>
+              <h4>Повтор каждый год</h4>
+              <p>Настроил раз — напоминает всегда</p>
+            </div>
+            <div class="np-benefit">
+              <div class="ic" style="background: var(--green-soft); color: var(--green);">∞</div>
+              <h4>Без ограничений</h4>
+              <p>Хоть 100 событий</p>
+            </div>
+          </div>
+          <div class="np-social">
+            <div class="avatars">
+              <div class="avatar" style="background: var(--orange-soft);">🎂</div>
+              <div class="avatar" style="background: var(--pink-soft);">💍</div>
+              <div class="avatar" style="background: var(--green-soft);">🎄</div>
+            </div>
+            <div class="txt"><strong>Самые частые</strong> события — мама, вторая половинка, Новый год. Уже добавлено <strong>12 000+</strong>.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-wrap">
+      <div class="rationale">
+        <h3>🎯 Зачем</h3>
+        <ul>
+          <li><strong>2×2 grid вместо списка:</strong> проще сканируется глазом. Каждая карточка — <em>конкретика</em>, а не лозунг.</li>
+          <li><strong>«Пуш за 7, 3, 1 день»:</strong> снимает возражение «а как напомнит?». Цифры вызывают доверие.</li>
+          <li><strong>«Копи заранее, не в панике»:</strong> эмоциональный язык — пользователь узнаёт себя.</li>
+          <li><strong>Social proof:</strong> аватарки + число (12 000+ событий, если есть метрика — подставим реальную; или заменим на «Ты не один»).</li>
+          <li><strong>Альтернатива:</strong> если нет метрики — блок превращается в «Примеры: 🎂 ДР · 💍 юбилей · 🎄 НГ · 👶 рождение · 🎓 выпускной».</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Блок 3 — Цена с декомпозицией</div>
+  <div class="frames two">
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag step">BLOCK 3</span> Цена</div>
+      <div class="phone">
+        <div class="phone-header"><div class="left"><span>‹</span><span>Назад</span></div><span>9:41</span></div>
+        <div class="phone-body new-paywall" style="padding: 20px 0;">
+          <div class="np-price">
+            <div class="ribbon">★ Одна покупка навсегда</div>
+            <div class="amount-row">
+              <span class="amount">19<span class="star">⭐</span></span>
+              <span class="unit">≈ 35 ₽</span>
+            </div>
+            <div class="once">Дешевле одной поздравительной открытки</div>
+            <div class="breakdown">
+              <div class="chip"><strong>Навсегда</strong>без подписки</div>
+              <div class="chip"><strong>∞ событий</strong>без лимита</div>
+              <div class="chip"><strong>Pro-бонус</strong>входит в подписку</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-wrap">
+      <div class="rationale">
+        <h3>🎯 Зачем</h3>
+        <ul>
+          <li><strong>«19⭐ ≈ 35 ₽»:</strong> конвертация в рубли — это ключ. 19 Stars выглядят абстрактно, 35 ₽ — это «полчашки кофе».</li>
+          <li><strong>Якорь «Дешевле одной открытки»:</strong> сравнение с альтернативой. Классический прайсинг-приём (Cialdini, Contrast Principle).</li>
+          <li><strong>3 чипа ценности</strong> внизу — закрывают: «это подписка?», «есть лимит?», «это отдельная покупка от Pro?». Все три возражения — в одном взгляде.</li>
+          <li><strong>Ribbon «Одна покупка навсегда»</strong> — снимает страх подписочных списаний.</li>
+          <li><strong>Визуальный приём</strong>: фоновая звезда ⭐ с opacity 6% — декор, не отвлекает, но делает блок «драгоценным».</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Блок 4 — FAQ и CTA</div>
+  <div class="frames two">
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag step">BLOCK 4</span> Возражения + кнопка</div>
+      <div class="phone">
+        <div class="phone-header"><div class="left"><span>‹</span><span>Назад</span></div><span>9:41</span></div>
+        <div class="phone-body new-paywall" style="padding: 0;">
+          <div class="np-faq" style="padding-top: 20px;">
+            <div class="np-faq-item">
+              <div class="q">Как я узнаю, что дата приближается?</div>
+              <div class="a">Telegram пришлёт пуш за 7, 3 и 1 день до события — ты успеешь подготовить подарок.</div>
+            </div>
+            <div class="np-faq-item">
+              <div class="q">Что значит «повторяется»?</div>
+              <div class="a">День рождения каждый год — ставишь одну дату, календарь сам пересчитывает обратный отсчёт ежегодно.</div>
+            </div>
+            <div class="np-faq-item">
+              <div class="q">Работает ли без Pro?</div>
+              <div class="a">Да. Покупка 19⭐ — одна и навсегда. Если уже есть Pro — бесплатно.</div>
+            </div>
+          </div>
+          <div class="np-sticky">
+            <button class="btn-buy-new">⭐ Получить навсегда<span class="price-mini">· 19 ⭐</span></button>
+            <button class="btn-later">Не сейчас</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="frame-wrap">
+      <div class="rationale">
+        <h3>🎯 Зачем</h3>
+        <ul>
+          <li><strong>FAQ перед кнопкой:</strong> пользователь подходит к CTA без невысказанных сомнений. Каждый «?» закрыт.</li>
+          <li><strong>CTA-копирайт «Получить навсегда»</strong> вместо «Купить»: фокус на результат, а не на транзакцию.</li>
+          <li><strong>Цена на кнопке справа мелким</strong> — не отталкивает, но честно показана.</li>
+          <li><strong>Градиент и тень</strong> — тот же, что у других премиум-кнопок в приложении (консистентно).</li>
+          <li><strong>«Не сейчас»</strong> вместо «Закрыть» — soft dismiss, даёт пользователю face-saving exit.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== ONBOARDING ============== -->
+<section class="section" id="onboarding">
+  <h1 class="section-h1">Онбординг после покупки — 4 шага</h1>
+  <p class="section-lead">После успешной оплаты <code>paid → sync → <strong>onboarding sheet</strong> → gift-notes screen</code>. 4 шага, localStorage-ключ <code>gift_notes_onboard_done</code>, первый раз показываем обязательно, потом — никогда.</p>
+
+  <div class="frames four">
+    <!-- STEP 1 -->
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag step">ШАГ 1/4</span> Welcome</div>
+      <div class="frame-note">Подтверждение покупки + чеклист «что теперь умеешь».</div>
+      <div class="phone">
+        <div class="phone-header"><div class="left"><span>‹</span><span></span></div><span>9:41</span></div>
+        <div class="phone-body">
+          <div class="ob">
+            <div class="ob-dots">
+              <div class="ob-dot current"></div>
+              <div class="ob-dot"></div>
+              <div class="ob-dot"></div>
+              <div class="ob-dot"></div>
+            </div>
+            <div class="ob-hero">
+              <div class="big-emoji green">✓</div>
+              <h2>Подарочный календарь&nbsp;подключён!</h2>
+              <p>Теперь у тебя есть <span class="strong">персональный помощник</span>, который не даст забыть важные даты.</p>
+            </div>
+            <div class="ob-visual">
+              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">Что теперь умеешь</div>
+              <div class="ob-checklist">
+                <div class="ob-checklist-row"><span class="v">✓</span><span class="t">Добавлять ДР, юбилеи, праздники</span></div>
+                <div class="ob-checklist-row"><span class="v">✓</span><span class="t">Сохранять идеи подарков заранее</span></div>
+                <div class="ob-checklist-row"><span class="v">✓</span><span class="t">Получать напоминания за 7, 3, 1 день</span></div>
+                <div class="ob-checklist-row"><span class="v">✓</span><span class="t">Настраивать повтор каждый год</span></div>
+              </div>
+            </div>
+            <div class="ob-cta">
+              <button class="btn-ob-primary">Далее →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag step">ШАГ 2/4</span> Как создать</div>
+      <div class="frame-note">Показываем мокап формы: «Мама · 15 апреля · 🎂 ДР · повтор каждый год».</div>
+      <div class="phone">
+        <div class="phone-header"><div class="left"><span>‹</span><span></span></div><span>9:41</span></div>
+        <div class="phone-body">
+          <div class="ob">
+            <div class="ob-dots">
+              <div class="ob-dot done"></div>
+              <div class="ob-dot current"></div>
+              <div class="ob-dot"></div>
+              <div class="ob-dot"></div>
+            </div>
+            <div class="ob-hero">
+              <div class="small-emoji">📝</div>
+              <h2>Создай первое событие</h2>
+              <p>Событие = дата + кто именно. Календарь сам посчитает, сколько осталось дней.</p>
+            </div>
+            <div class="ob-visual">
+              <div class="form-mock">
+                <div class="form-row highlight">
+                  <div class="form-label">Кто</div>
+                  <div class="form-value">Мама · Елена</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-label">Когда</div>
+                  <div class="form-value">15 апреля</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-label">Тип</div>
+                  <div class="form-chips">
+                    <div class="form-chip active">🎂 ДР</div>
+                    <div class="form-chip">💍 Юбилей</div>
+                    <div class="form-chip">🎄 Праздник</div>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-label">Повторять</div>
+                  <div class="form-chips">
+                    <div class="form-chip active">🔁 каждый год</div>
+                    <div class="form-chip">Без повтора</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="ob-info-box">
+              Установил <strong>один раз</strong> — в следующем году напомнит автоматически.
+            </div>
+            <div class="ob-cta">
+              <button class="btn-ob-primary">Далее →</button>
+              <button class="btn-ob-skip">Пропустить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag step">ШАГ 3/4</span> Идеи подарков</div>
+      <div class="frame-note">Показываем, что к событию можно привязать список идей и ссылок.</div>
+      <div class="phone">
+        <div class="phone-header"><div class="left"><span>‹</span><span></span></div><span>9:41</span></div>
+        <div class="phone-body">
+          <div class="ob">
+            <div class="ob-dots">
+              <div class="ob-dot done"></div>
+              <div class="ob-dot done"></div>
+              <div class="ob-dot current"></div>
+              <div class="ob-dot"></div>
+            </div>
+            <div class="ob-hero">
+              <div class="small-emoji">💡</div>
+              <h2>Копи идеи заранее</h2>
+              <p>К каждому событию привязываешь <span class="strong">список идей</span> — чтобы не выдумывать в последний момент.</p>
+            </div>
+            <div class="ob-visual">
+              <div class="ideas-occasion-card">
+                <div class="strip"></div>
+                <div class="ideas-header">
+                  <div class="mini-emoji">🎂</div>
+                  <div class="info">
+                    <div class="t">День рождения мамы</div>
+                    <div class="sub">Елена · через 3 дня</div>
+                  </div>
+                  <div class="chip">3 идеи</div>
+                </div>
+                <div class="idea-row">
+                  <span class="bullet">•</span>
+                  <span class="text">Шёлковый шарф Hermès</span>
+                  <span class="price">18 000 ₽</span>
+                </div>
+                <div class="idea-row">
+                  <span class="bullet">•</span>
+                  <span class="text">Ужин в «Белуге»</span>
+                  <span class="price">~8 000 ₽</span>
+                </div>
+                <div class="idea-row">
+                  <span class="bullet">•</span>
+                  <span class="text">Подписка на Storytel</span>
+                  <span class="price">450 ₽/мес</span>
+                </div>
+                <div class="idea-add">＋ Добавить идею</div>
+              </div>
+            </div>
+            <div class="ob-info-box">
+              Как увидел что-то подходящее — <strong>сразу добавил</strong>. К моменту праздника уже есть выбор.
+            </div>
+            <div class="ob-cta">
+              <button class="btn-ob-primary">Далее →</button>
+              <button class="btn-ob-skip">Пропустить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag step">ШАГ 4/4</span> Напоминания + CTA</div>
+      <div class="frame-note">Timeline: за 7 дней → 3 → 1 → день события. Плюс финальный CTA.</div>
+      <div class="phone">
+        <div class="phone-header"><div class="left"><span>‹</span><span></span></div><span>9:41</span></div>
+        <div class="phone-body">
+          <div class="ob">
+            <div class="ob-dots">
+              <div class="ob-dot done"></div>
+              <div class="ob-dot done"></div>
+              <div class="ob-dot done"></div>
+              <div class="ob-dot current"></div>
+            </div>
+            <div class="ob-hero">
+              <div class="small-emoji">🔔</div>
+              <h2>Не дадим забыть</h2>
+              <p>Telegram пришлёт пуш по графику — достаточно, чтобы успеть, не надоедая.</p>
+            </div>
+            <div class="ob-visual">
+              <div class="timeline">
+                <div class="timeline-row">
+                  <div class="dot-col"><div class="dot" style="background: var(--accent);"></div><div class="line"></div></div>
+                  <div class="content">
+                    <div class="label" style="color: var(--accent);">За 7 дней</div>
+                    <div class="desc">«Через неделю — ДР у мамы. 3 идеи уже есть.»</div>
+                  </div>
+                </div>
+                <div class="timeline-row">
+                  <div class="dot-col"><div class="dot" style="background: var(--orange);"></div><div class="line"></div></div>
+                  <div class="content">
+                    <div class="label" style="color: var(--orange);">За 3 дня</div>
+                    <div class="desc">«Через 3 дня. Пора выбрать из идей.»</div>
+                  </div>
+                </div>
+                <div class="timeline-row">
+                  <div class="dot-col"><div class="dot" style="background: var(--red);"></div><div class="line"></div></div>
+                  <div class="content">
+                    <div class="label" style="color: var(--red);">🔥 Завтра</div>
+                    <div class="desc">«Завтра. Успеваешь поздравить.»</div>
+                  </div>
+                </div>
+                <div class="timeline-row">
+                  <div class="dot-col"><div class="dot" style="background: var(--green);"></div></div>
+                  <div class="content">
+                    <div class="label" style="color: var(--green);">Сегодня 🎉</div>
+                    <div class="desc">«С ДР! Не забудь позвонить.»</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="ob-cta">
+              <button class="btn-ob-primary">+ Создать первое событие</button>
+              <button class="btn-ob-skip">Посмотреть позже</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Логика переходов</div>
+  <div class="rationale">
+    <h3>⚙️ Технически</h3>
+    <ul>
+      <li>После <code>paid</code> → <code>POST /tg/billing/gift-notes/sync</code> → тост <code>«Доступ открыт!»</code> → <code>setScreen('gift-notes-onboarding')</code>.</li>
+      <li>Новый компонент <code>GiftNotesOnboardingContent</code> с <code>obStep: 0..3</code>, по образцу <code>SmartResSettingsContent</code> (MiniApp.tsx:3392).</li>
+      <li>LocalStorage ключ: <code>gift_notes_onboarded</code> (без id вишлиста — фича аккаунт-wide).</li>
+      <li>Кнопка «+ Создать первое событие» на 4-м шаге → <code>finishOnboard()</code> → <code>setScreen('gift-notes')</code> → сразу открывает форму (<code>showGnCreateOccasion = true</code>).</li>
+      <li>Кнопка «Посмотреть позже» → <code>finishOnboard()</code> → <code>setScreen('gift-notes')</code> → empty state.</li>
+      <li>Все шаги, кроме первого, имеют «Пропустить». Шаг 1 — обязательно «Далее» (это самый дешёвый шаг).</li>
+      <li>i18n ключи: <code>gn_onboard_s1_title</code>, <code>gn_onboard_s1_body</code>, … 4 шага × 2 языка (RU / EN).</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============== EMPTY STATE ============== -->
+<section class="section" id="empty-state">
+  <h1 class="section-h1">Улучшенный empty state</h1>
+  <p class="section-lead">Empty state показывается, если пользователь пропустил онбординг или удалил все события. Сейчас — мелкие chip'ы, которые легко не заметить. Новый — крупная заглавная карточка + примеры, которые уже <strong>выглядят</strong> как будущие события.</p>
+
+  <div class="frames two">
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag old">БЫЛО</span> Текущий empty state</div>
+      <div class="phone">
+        <div class="phone-header"><div class="left"><span>‹</span><span>Подарочный календарь</span></div><span>9:41</span></div>
+        <div class="phone-body">
+          <div style="padding: 16px 20px;">
+            <h1 style="font-size:22px;font-weight:800;margin-bottom:2px;">События</h1>
+            <div style="font-size:13px;color:var(--text-sec);margin-bottom:20px;">0 событий</div>
+            <div style="text-align:center;padding:48px 24px;">
+              <div style="font-size:48px;margin-bottom:12px;">📅</div>
+              <div style="font-size:15px;font-weight:600;margin-bottom:4px;">Нет событий. Добавь первое!</div>
+              <div style="font-size:13px;color:var(--text-sec);line-height:1.4;max-width:280px;margin:0 auto;">Добавьте первый повод — день рождения, годовщину или праздник. Записывайте идеи подарков, чтобы ничего не забыть.</div>
+            </div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">💡 Идеи для начала</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;font-size:13px;">🎂 День рождения</div>
+              <div style="padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;font-size:13px;">💍 Юбилей</div>
+              <div style="padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;font-size:13px;">🎄 Новый год</div>
+              <div style="padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;font-size:13px;">👶 Рождение</div>
+              <div style="padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;font-size:13px;">🎓 Выпускной</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame-wrap">
+      <div class="frame-label"><span class="tag new">СТАЛО</span> Новый empty state</div>
+      <div class="phone">
+        <div class="phone-header"><div class="left"><span>‹</span><span>Подарочный календарь</span></div><span>9:41</span></div>
+        <div class="phone-body">
+          <div style="padding: 16px 20px 120px;">
+            <h1 style="font-size:22px;font-weight:800;margin-bottom:2px;">📅 Подарочный календарь</h1>
+            <div style="font-size:13px;color:var(--text-sec);margin-bottom:20px;">Добавь первое событие — и календарь оживёт</div>
+
+            <div class="empty-card">
+              <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">💡 Начни с шаблона</div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <div class="demo-card" style="opacity:0.85;cursor:pointer;">
+                  <div class="strip urgent"></div>
+                  <div class="emoji-box birthday">🎂</div>
+                  <div class="info">
+                    <div class="title">День рождения</div>
+                    <div class="person" style="font-size:11px;color:var(--text-muted);">Нажми чтобы заполнить</div>
+                  </div>
+                  <div style="color:var(--accent);font-size:18px;">＋</div>
+                </div>
+                <div class="demo-card" style="opacity:0.85;cursor:pointer;">
+                  <div class="strip soon" style="background:linear-gradient(180deg,#EC4899,#f472b6);"></div>
+                  <div class="emoji-box anniversary">💍</div>
+                  <div class="info">
+                    <div class="title">Юбилей / Годовщина</div>
+                    <div class="person" style="font-size:11px;color:var(--text-muted);">Нажми чтобы заполнить</div>
+                  </div>
+                  <div style="color:var(--accent);font-size:18px;">＋</div>
+                </div>
+                <div class="demo-card" style="opacity:0.85;cursor:pointer;">
+                  <div class="strip" style="background:linear-gradient(180deg,#34D399,#6ee7b7);"></div>
+                  <div class="emoji-box holiday">🎄</div>
+                  <div class="info">
+                    <div class="title">Праздник</div>
+                    <div class="person" style="font-size:11px;color:var(--text-muted);">Нажми чтобы заполнить</div>
+                  </div>
+                  <div style="color:var(--accent);font-size:18px;">＋</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
+              <div style="padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:12px;color:var(--text-sec);cursor:pointer;">👶 Рождение</div>
+              <div style="padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:12px;color:var(--text-sec);cursor:pointer;">🎓 Выпускной</div>
+              <div style="padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:12px;color:var(--text-sec);cursor:pointer;">🏠 Новоселье</div>
+              <div style="padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-size:12px;color:var(--text-sec);cursor:pointer;">🎁 Другое</div>
+            </div>
+          </div>
+          <div style="position:sticky;bottom:0;padding:16px 20px;background:linear-gradient(to top, var(--bg) 70%, transparent);">
+            <button class="btn-ob-primary">+ Создать событие с нуля</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Разница</div>
+  <div class="rationale good">
+    <h3>Что изменилось</h3>
+    <ul>
+      <li><strong>Три крупных шаблона</strong> выглядят как готовые карточки (с полосой приоритета, emoji-боксом, плюсиком). Пользователь видит, <strong>как это будет</strong>, ещё до создания.</li>
+      <li><strong>«Нажми чтобы заполнить»</strong> — прямая инструкция. Клик по шаблону → форма с предзаполненным типом и повтором.</li>
+      <li><strong>Второй ряд — мелкие чипы</strong> для редких типов (рождение, выпускной, новоселье). Не засоряют главное.</li>
+      <li><strong>Заголовок сменился:</strong> «События / 0 событий» → «📅 Подарочный календарь / Добавь первое событие — и календарь оживёт».</li>
+      <li><strong>Sticky CTA «+ Создать событие с нуля»</strong> — для тех, кто хочет свободу.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============== COPY ============== -->
+<section class="section" id="copy">
+  <h1 class="section-h1">Копирайт — до/после</h1>
+  <p class="section-lead">Готовые строки для i18n. Все ключи с префиксом <code>gn_</code> (gift notes).</p>
+
+  <div class="section-label">Paywall</div>
+
+  <div class="copy-pair">
+    <div class="label">HERO TITLE · gn_hero_title</div>
+    <div class="old-text">Не забывай важные даты и подарки</div>
+    <div class="new-text">Никогда не забудь важную дату</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">HERO SUBTITLE · gn_hero_subtitle</div>
+    <div class="old-text">Храни события, идеи и будущие подарки в одном месте. Смотри, сколько дней осталось, и готовься заранее без суеты.</div>
+    <div class="new-text">Все дни рождения, юбилеи и идеи подарков — в одном месте с напоминаниями.</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">BRAND TAG · gn_brand (новый)</div>
+    <div class="new-text">📅 Подарочный календарь</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">DEMO HEADER · gn_demo_header (новый)</div>
+    <div class="new-text">Как это выглядит у тебя</div>
+  </div>
+
+  <div class="section-label">Benefits 2×2</div>
+  <div class="copy-pair">
+    <div class="label">BENEFIT 1 · gn_feature_push (новый)</div>
+    <div class="old-text">Все важные события и даты под рукой</div>
+    <div class="new-text">🔔 Пуш за 7, 3, 1 день · Telegram предупредит заранее</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">BENEFIT 2 · gn_feature_ideas</div>
+    <div class="old-text">Сохраняй идеи подарков заранее</div>
+    <div class="new-text">💡 Идеи подарков · Копи заранее, не в панике</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">BENEFIT 3 · gn_feature_recurring (новый)</div>
+    <div class="old-text">Счётчик дней — ничего не забудешь</div>
+    <div class="new-text">🔁 Повтор каждый год · Настроил раз — напоминает всегда</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">BENEFIT 4 · gn_feature_unlimited (новый)</div>
+    <div class="old-text">Удобное планирование для близких</div>
+    <div class="new-text">∞ Без ограничений · Хоть 100 событий</div>
+  </div>
+
+  <div class="section-label">Цена</div>
+  <div class="copy-pair">
+    <div class="label">PRICE INFO · gn_purchase_info</div>
+    <div class="old-text">Одна покупка навсегда. Без подписки.</div>
+    <div class="new-text">≈ 35 ₽ · Дешевле одной поздравительной открытки</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">PRICE CHIPS · gn_price_chip_1/2/3 (новые)</div>
+    <div class="new-text">1. Навсегда · без подписки<br>2. ∞ событий · без лимита<br>3. Pro-бонус · входит в подписку</div>
+  </div>
+
+  <div class="section-label">FAQ (новые)</div>
+  <div class="copy-pair">
+    <div class="label">FAQ Q1 · gn_faq_q_notify</div>
+    <div class="new-text"><strong>Как я узнаю, что дата приближается?</strong><br>Telegram пришлёт пуш за 7, 3 и 1 день до события — ты успеешь подготовить подарок.</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">FAQ Q2 · gn_faq_q_recurring</div>
+    <div class="new-text"><strong>Что значит «повторяется»?</strong><br>День рождения каждый год — ставишь одну дату, календарь сам пересчитывает обратный отсчёт ежегодно.</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">FAQ Q3 · gn_faq_q_pro</div>
+    <div class="new-text"><strong>Работает ли без Pro?</strong><br>Да. Покупка 19⭐ — одна и навсегда. Если уже есть Pro — бесплатно.</div>
+  </div>
+
+  <div class="section-label">CTA</div>
+  <div class="copy-pair">
+    <div class="label">CTA · gn_upsell_cta</div>
+    <div class="old-text">⭐ Купить навсегда за 19 ⭐</div>
+    <div class="new-text">⭐ Получить навсегда · 19 ⭐</div>
+  </div>
+
+  <div class="section-label">Онбординг — Step 1 (Welcome)</div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s1_title (новый)</div>
+    <div class="new-text">Подарочный календарь подключён!</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s1_body (новый)</div>
+    <div class="new-text">Теперь у тебя есть <strong>персональный помощник</strong>, который не даст забыть важные даты.</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s1_checklist_header (новый)</div>
+    <div class="new-text">Что теперь умеешь</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s1_check_1/2/3/4 (новые)</div>
+    <div class="new-text">✓ Добавлять ДР, юбилеи, праздники<br>✓ Сохранять идеи подарков заранее<br>✓ Получать напоминания за 7, 3, 1 день<br>✓ Настраивать повтор каждый год</div>
+  </div>
+
+  <div class="section-label">Онбординг — Step 2 (Create)</div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s2_title (новый)</div>
+    <div class="new-text">Создай первое событие</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s2_body (новый)</div>
+    <div class="new-text">Событие = дата + кто именно. Календарь сам посчитает, сколько осталось дней.</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s2_info (новый)</div>
+    <div class="new-text">Установил <strong>один раз</strong> — в следующем году напомнит автоматически.</div>
+  </div>
+
+  <div class="section-label">Онбординг — Step 3 (Ideas)</div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s3_title (новый)</div>
+    <div class="new-text">Копи идеи заранее</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s3_body (новый)</div>
+    <div class="new-text">К каждому событию привязываешь <strong>список идей</strong> — чтобы не выдумывать в последний момент.</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s3_info (новый)</div>
+    <div class="new-text">Как увидел что-то подходящее — <strong>сразу добавил</strong>. К моменту праздника уже есть выбор.</div>
+  </div>
+
+  <div class="section-label">Онбординг — Step 4 (Reminders + final CTA)</div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s4_title (новый)</div>
+    <div class="new-text">Не дадим забыть</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s4_body (новый)</div>
+    <div class="new-text">Telegram пришлёт пуш по графику — достаточно, чтобы успеть, не надоедая.</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s4_cta (новый)</div>
+    <div class="new-text">+ Создать первое событие</div>
+  </div>
+  <div class="copy-pair">
+    <div class="label">gn_onboard_s4_skip (новый)</div>
+    <div class="new-text">Посмотреть позже</div>
+  </div>
+</section>
+
+<script>
+  function switchTab(e, id) {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    e.target.classList.add('active');
+    document.getElementById(id).classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+
+</body>
+</html>

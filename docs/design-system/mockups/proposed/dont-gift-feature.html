@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Что лучше не дарить — Макеты</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+    --pro-gradient: linear-gradient(135deg, #7C6AFF, #A78BFA);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Rubik', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #111114;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Navigation ── */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(17,17,20,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+  }
+  .nav-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-sec);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .nav-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-sec);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .nav-tab:hover { background: var(--surface-hover); }
+  .nav-tab.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* ── Sections ── */
+  .section {
+    display: none;
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px 16px 40px;
+  }
+  .section.active { display: block; }
+
+  .section-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin: 24px 0 12px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  .variant-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 20px 0 10px;
+    padding: 6px 12px;
+    background: var(--accent-soft);
+    border-radius: 8px;
+    display: inline-block;
+  }
+
+  /* ── Phone Frame ── */
+  .phone {
+    background: var(--bg);
+    border-radius: 24px;
+    border: 2px solid var(--border-light);
+    overflow: hidden;
+    margin: 12px 0;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .phone-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .phone-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .phone-header .back { font-size: 20px; color: var(--accent); }
+  .phone-header .title {
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .phone-body {
+    padding: 12px 16px 20px;
+  }
+
+  /* ── Wishlist item cards (context) ── */
+  .wish-card {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: var(--surface);
+    border-radius: 14px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+  }
+  .wish-thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    background: var(--card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+  .wish-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .wish-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .wish-price {
+    font-size: 13px;
+    color: var(--text-sec);
+  }
+  .wish-priority {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  /* ── Banner variants ── */
+
+  /* Variant A: Minimal */
+  .banner-minimal {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .banner-minimal:hover { background: var(--surface-hover); }
+  .banner-minimal .icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--red-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .banner-minimal .content { flex: 1; }
+  .banner-minimal .title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .banner-minimal .subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+  .banner-minimal .chevron {
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+
+  /* Variant B: Emotional */
+  .banner-emotional {
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(248,113,113,0.08), rgba(124,106,255,0.08));
+    border-radius: 16px;
+    border: 1px solid rgba(248,113,113,0.15);
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .banner-emotional:hover {
+    border-color: rgba(248,113,113,0.25);
+  }
+  .banner-emotional .top-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .banner-emotional .emoji { font-size: 20px; }
+  .banner-emotional .title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .banner-emotional .subtitle {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.4;
+  }
+  .banner-emotional .action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+  }
+  .banner-emotional .action-btn {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .banner-emotional .dismiss {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* Variant C: Premium */
+  .banner-premium {
+    position: relative;
+    padding: 16px;
+    background: var(--surface);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    margin-bottom: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .banner-premium:hover { border-color: var(--border-light); }
+  .banner-premium::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--red), var(--accent));
+  }
+  .banner-premium .badge-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .banner-premium .pro-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--pro-gradient);
+    padding: 2px 7px;
+    border-radius: 5px;
+    letter-spacing: 0.5px;
+  }
+  .banner-premium .title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .banner-premium .subtitle {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.4;
+  }
+  .banner-premium .bottom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+  }
+  .banner-premium .setup-btn {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ── Paywall ── */
+  .paywall-sheet {
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    overflow: hidden;
+  }
+  .paywall-handle {
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    margin: 10px auto;
+  }
+  .paywall-body {
+    padding: 8px 20px 24px;
+  }
+  .paywall-illustration {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 140px;
+    margin-bottom: 20px;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .paywall-illustration.rational {
+    background: linear-gradient(135deg, rgba(248,113,113,0.1), rgba(124,106,255,0.08));
+  }
+  .paywall-illustration.emotional {
+    background: linear-gradient(135deg, rgba(52,211,153,0.08), rgba(124,106,255,0.1));
+  }
+  .paywall-illustration .mock-card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 12px 16px;
+    width: 240px;
+    border: 1px solid var(--border);
+  }
+  .paywall-illustration .mock-card .mock-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .paywall-illustration .mock-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .paywall-illustration .mock-tag {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .paywall-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .paywall-subtitle {
+    font-size: 14px;
+    color: var(--text-sec);
+    text-align: center;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .paywall-benefits {
+    list-style: none;
+    margin-bottom: 24px;
+  }
+  .paywall-benefits li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.4;
+  }
+  .paywall-benefits li + li {
+    border-top: 1px solid var(--border);
+  }
+  .paywall-benefits .icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .btn-pro {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border-radius: 14px;
+    border: none;
+    background: var(--pro-gradient);
+    color: #fff;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-pro:hover { opacity: 0.9; }
+
+  .btn-secondary {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-sec);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+
+  /* ── Pro Edit Screen ── */
+  .edit-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-sec);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 20px 0 10px;
+  }
+  .edit-section-title:first-child { margin-top: 4px; }
+
+  .tags-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .tag {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-sec);
+  }
+  .tag.selected {
+    background: var(--red-soft);
+    border-color: rgba(248,113,113,0.3);
+    color: var(--red);
+  }
+  .tag .emoji { font-size: 15px; }
+  .tag .remove {
+    font-size: 12px;
+    opacity: 0.6;
+    margin-left: 2px;
+  }
+
+  .text-input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .text-input:focus {
+    border-color: var(--accent);
+  }
+  .text-input::placeholder {
+    color: var(--text-muted);
+  }
+  textarea.text-input {
+    resize: none;
+    min-height: 72px;
+    line-height: 1.5;
+  }
+
+  .custom-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-radius: 10px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+  }
+  .custom-item .text {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .custom-item .delete {
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: pointer;
+  }
+
+  .add-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .add-row .text-input { flex: 1; }
+  .add-btn {
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .add-btn:hover { background: var(--accent-glow); }
+
+  .char-counter {
+    text-align: right;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Preview block */
+  .preview-block {
+    margin-top: 20px;
+    padding: 14px;
+    background: rgba(124,106,255,0.06);
+    border: 1px dashed rgba(124,106,255,0.2);
+    border-radius: 14px;
+  }
+  .preview-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .preview-label .eye { font-size: 13px; }
+
+  .save-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border-radius: 14px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    margin-top: 20px;
+    transition: opacity 0.15s;
+  }
+  .save-btn:hover { opacity: 0.9; }
+
+  /* ── Wishlist Edit: 3 states ── */
+  .mode-card {
+    padding: 14px 16px;
+    background: var(--surface);
+    border-radius: 14px;
+    border: 2px solid var(--border);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .mode-card:hover { border-color: var(--border-light); }
+  .mode-card.selected {
+    border-color: var(--accent);
+    background: rgba(124,106,255,0.05);
+  }
+  .mode-card .radio {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mode-card.selected .radio {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+  .mode-card.selected .radio::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+  }
+  .mode-card .mode-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 3px;
+    padding-right: 30px;
+  }
+  .mode-card .mode-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+    padding-right: 30px;
+  }
+  .mode-card .mode-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--green);
+    margin-top: 6px;
+    padding: 3px 8px;
+    background: var(--green-soft);
+    border-radius: 6px;
+  }
+
+  .local-form {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Guest/Public view ── */
+  .guest-dont-gift {
+    background: var(--surface);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .guest-dont-gift .header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+  }
+  .guest-dont-gift .header .icon-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: var(--red-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .guest-dont-gift .header .text {
+    flex: 1;
+  }
+  .guest-dont-gift .header .text .label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .guest-dont-gift .header .text .count {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .guest-dont-gift .header .chevron {
+    color: var(--text-muted);
+    font-size: 14px;
+    transition: transform 0.2s;
+  }
+  .guest-dont-gift.expanded .header .chevron {
+    transform: rotate(180deg);
+  }
+  .guest-dont-gift .body {
+    padding: 0 16px 16px;
+  }
+  .guest-dont-gift .guest-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .guest-dont-gift .guest-tag {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    background: var(--red-soft);
+    font-size: 12px;
+    color: var(--red);
+    font-weight: 500;
+  }
+  .guest-dont-gift .guest-custom {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.5;
+    padding-left: 4px;
+  }
+  .guest-dont-gift .guest-custom li {
+    margin-bottom: 4px;
+  }
+  .guest-dont-gift .guest-comment {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-sec);
+    font-style: italic;
+    line-height: 1.5;
+  }
+
+  /* ── Separator ── */
+  .separator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .separator::before,
+  .separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Floating button context ── */
+  .fab {
+    position: relative;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 16px 0 8px;
+  }
+  .fab-btn {
+    padding: 12px 24px;
+    border-radius: 14px;
+    background: var(--accent);
+    color: #fff;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    box-shadow: 0 4px 16px var(--accent-glow);
+    cursor: pointer;
+  }
+
+  /* ── Toggle Switch ── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+  }
+  .toggle-row .label {
+    font-size: 14px;
+    color: var(--text);
+  }
+  .toggle-row .hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .toggle-switch {
+    width: 46px;
+    height: 26px;
+    border-radius: 13px;
+    background: var(--text-muted);
+    position: relative;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle-switch.on { background: var(--accent); }
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+  }
+  .toggle-switch.on::after {
+    transform: translateX(20px);
+  }
+
+  /* ── Owner profile header for guest view ── */
+  .guest-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 0 14px;
+  }
+  .guest-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    border: 2px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .guest-profile-info .name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .guest-profile-info .items-count {
+    font-size: 12px;
+    color: var(--text-sec);
+  }
+
+  /* ── Notes block ── */
+  .notes {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 16px;
+    margin-top: 20px;
+    border: 1px solid var(--border);
+  }
+  .notes h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-sec);
+    margin-bottom: 10px;
+  }
+  .notes p, .notes li {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+  .notes ul {
+    padding-left: 18px;
+    margin-top: 6px;
+  }
+  .notes li { margin-bottom: 4px; }
+
+  /* ── Emotional paywall illustration ── */
+  .emo-illustration {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .emo-wishlist-mini {
+    display: flex;
+    gap: 6px;
+  }
+  .emo-gift {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    position: relative;
+  }
+  .emo-gift.ok { background: var(--green-soft); }
+  .emo-gift.no {
+    background: var(--red-soft);
+    opacity: 0.7;
+  }
+  .emo-gift.no::after {
+    content: '';
+    position: absolute;
+    width: 36px;
+    height: 2px;
+    background: var(--red);
+    transform: rotate(-45deg);
+    border-radius: 1px;
+  }
+
+  /* ── Wishlist edit context ── */
+  .edit-field-group {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+  }
+  .edit-field-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-sec);
+    margin-bottom: 8px;
+  }
+  .edit-field-value {
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  /* ── Description text ── */
+  .desc-text {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.6;
+    margin: 8px 0 16px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-radius: 12px;
+    border-left: 3px solid var(--accent);
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <div class="nav-title">Что лучше не дарить — Макеты</div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showSection('banners')">1. Плашки</div>
+    <div class="nav-tab" onclick="showSection('paywall')">2. Paywall</div>
+    <div class="nav-tab" onclick="showSection('pro-edit')">3. Настройка Pro</div>
+    <div class="nav-tab" onclick="showSection('wishlist-edit')">4. Ред. вишлиста</div>
+    <div class="nav-tab" onclick="showSection('public-view')">5. Публичный вид</div>
+    <div class="nav-tab" onclick="showSection('notes')">6. Заметки</div>
+  </div>
+</nav>
+
+<!-- ════════════════════════════════════════ -->
+<!-- SECTION 1: BANNERS -->
+<!-- ════════════════════════════════════════ -->
+<div class="section active" id="banners">
+  <div class="section-label">Плашка в вишлисте — 3 варианта</div>
+  <p class="desc-text">Плашка появляется между контекстными элементами вишлиста (после первых 1-2 желаний), если пользователь еще не настроил "Что не дарить" для этого списка. Не блокирует скролл, легко dismissable.</p>
+
+  <!-- Variant A -->
+  <div class="variant-label">Вариант A — Минималистичный</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-thumb">📱</div>
+        <div class="wish-info">
+          <div class="wish-title">iPhone 16 Pro</div>
+          <div class="wish-price">119 990 ₽ <span class="wish-priority" style="background:#F04E6E"></span></div>
+        </div>
+      </div>
+
+      <div class="banner-minimal">
+        <div class="icon">🚫</div>
+        <div class="content">
+          <div class="title">Что лучше не дарить</div>
+          <div class="subtitle">Подскажи друзьям, чего лучше избегать</div>
+        </div>
+        <div class="chevron">›</div>
+      </div>
+
+      <div class="wish-card">
+        <div class="wish-thumb">🎧</div>
+        <div class="wish-info">
+          <div class="wish-title">AirPods Max</div>
+          <div class="wish-price">59 990 ₽ <span class="wish-priority" style="background:#E8930A"></span></div>
+        </div>
+      </div>
+      <div class="wish-card">
+        <div class="wish-thumb">📚</div>
+        <div class="wish-info">
+          <div class="wish-title">Kindle Paperwhite</div>
+          <div class="wish-price">14 990 ₽</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Variant B -->
+  <div class="variant-label">Вариант B — Эмоциональный</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-thumb">📱</div>
+        <div class="wish-info">
+          <div class="wish-title">iPhone 16 Pro</div>
+          <div class="wish-price">119 990 ₽ <span class="wish-priority" style="background:#F04E6E"></span></div>
+        </div>
+      </div>
+
+      <div class="banner-emotional">
+        <div class="top-row">
+          <span class="emoji">🎁</span>
+          <span class="title">Что лучше не дарить</span>
+        </div>
+        <div class="subtitle">Подскажи, каких подарков лучше избегать — друзьям будет проще выбрать</div>
+        <div class="action-row">
+          <span class="action-btn">Настроить →</span>
+          <span class="dismiss">Скрыть</span>
+        </div>
+      </div>
+
+      <div class="wish-card">
+        <div class="wish-thumb">🎧</div>
+        <div class="wish-info">
+          <div class="wish-title">AirPods Max</div>
+          <div class="wish-price">59 990 ₽ <span class="wish-priority" style="background:#E8930A"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Variant C -->
+  <div class="variant-label">Вариант C — Премиальный</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="wish-card">
+        <div class="wish-thumb">📱</div>
+        <div class="wish-info">
+          <div class="wish-title">iPhone 16 Pro</div>
+          <div class="wish-price">119 990 ₽ <span class="wish-priority" style="background:#F04E6E"></span></div>
+        </div>
+      </div>
+
+      <div class="banner-premium">
+        <div class="badge-row">
+          <span class="pro-badge">PRO</span>
+        </div>
+        <div class="title">Что лучше не дарить</div>
+        <div class="subtitle">Предупреди про нежелательные подарки и аллергии — вишлист станет полезнее</div>
+        <div class="bottom-row">
+          <span class="setup-btn">Настроить <span style="font-size:16px">→</span></span>
+        </div>
+      </div>
+
+      <div class="wish-card">
+        <div class="wish-thumb">🎧</div>
+        <div class="wish-info">
+          <div class="wish-title">AirPods Max</div>
+          <div class="wish-price">59 990 ₽ <span class="wish-priority" style="background:#E8930A"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li><b>Расположение:</b> после 1-го желания — пользователь уже в контексте вишлиста, плашка выглядит как естественное улучшение</li>
+      <li><b>Вариант A</b> лучше всего вписывается в существующий row-паттерн (как SettingsActionRow), минимум отвлечения</li>
+      <li><b>Вариант B</b> более заметен, подходит для первого знакомства с фичей, есть кнопка "Скрыть"</li>
+      <li><b>Вариант C</b> явно позиционирует как Pro-фичу, цветной акцент сверху привлекает внимание без навязчивости</li>
+      <li>Все варианты dismissable — по тапу "Скрыть" или через ×, запоминаем выбор per-wishlist</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════ -->
+<!-- SECTION 2: PAYWALL -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="paywall">
+  <div class="section-label">Paywall для Free-пользователя — 2 варианта</div>
+  <p class="desc-text">Появляется как BottomSheet при тапе на плашку, если у пользователя нет Pro. Цель — показать пользу, а не давить продажей.</p>
+
+  <!-- Rational -->
+  <div class="variant-label">Вариант 1 — Рациональный</div>
+  <div class="phone">
+    <div class="paywall-sheet">
+      <div class="paywall-handle"></div>
+      <div class="paywall-body">
+        <div class="paywall-illustration rational">
+          <div class="mock-card">
+            <div class="mock-title">🚫 Что лучше не дарить</div>
+            <div class="mock-tags">
+              <span class="mock-tag">🍬 Сладкое</span>
+              <span class="mock-tag">💐 Цветы</span>
+              <span class="mock-tag">🧴 Парфюм</span>
+            </div>
+            <div style="margin-top:8px; font-size:11px; color:var(--text-muted); font-style:italic;">
+              «Аллергия на цветы с сильным запахом»
+            </div>
+          </div>
+        </div>
+
+        <div class="paywall-title">Что лучше не дарить</div>
+        <div class="paywall-subtitle">Помоги друзьям не ошибиться с подарком</div>
+
+        <ul class="paywall-benefits">
+          <li>
+            <span class="icon" style="background:var(--red-soft)">🚫</span>
+            <span>Укажи нежелательные категории — сладкое, парфюм, цветы и другие</span>
+          </li>
+          <li>
+            <span class="icon" style="background:var(--orange-soft)">⚠️</span>
+            <span>Предупреди про аллергии и ограничения</span>
+          </li>
+          <li>
+            <span class="icon" style="background:var(--green-soft)">✅</span>
+            <span>Дарящие увидят подсказки прямо в вишлисте</span>
+          </li>
+        </ul>
+
+        <div style="text-align:center;margin-bottom:12px;">
+          <span style="font-size:12px;color:var(--text-muted);">Входит в подписку</span>
+          <span style="font-size:12px;font-weight:700;color:var(--accent);margin-left:4px;">Pro</span>
+        </div>
+
+        <button class="btn-pro">Попробовать Pro</button>
+        <button class="btn-secondary">Не сейчас</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Emotional -->
+  <div class="variant-label">Вариант 2 — Эмоциональный / Lifestyle</div>
+  <div class="phone">
+    <div class="paywall-sheet">
+      <div class="paywall-handle"></div>
+      <div class="paywall-body">
+        <div class="paywall-illustration emotional">
+          <div class="emo-illustration">
+            <div class="emo-wishlist-mini">
+              <div class="emo-gift ok">📱</div>
+              <div class="emo-gift ok">📚</div>
+              <div class="emo-gift no">🍬</div>
+              <div class="emo-gift no">💐</div>
+              <div class="emo-gift ok">🎧</div>
+            </div>
+            <div style="font-size:12px;color:var(--text-sec);margin-top:4px;">Друзья увидят, что стоит избегать</div>
+          </div>
+        </div>
+
+        <div class="paywall-title">Идеальный подарок — ближе, чем кажется</div>
+        <div class="paywall-subtitle">Расскажи, что не стоит дарить, и друзья точно попадут в цель</div>
+
+        <ul class="paywall-benefits">
+          <li>
+            <span class="icon" style="background:var(--red-soft)">💔</span>
+            <span>Больше никаких неловких «спасибо» за ненужные подарки</span>
+          </li>
+          <li>
+            <span class="icon" style="background:var(--accent-soft)">🎯</span>
+            <span>Друзья будут выбирать с уверенностью</span>
+          </li>
+          <li>
+            <span class="icon" style="background:var(--green-soft)">💚</span>
+            <span>Честность делает подарки лучше</span>
+          </li>
+        </ul>
+
+        <button class="btn-pro">Подключить Pro</button>
+        <button class="btn-secondary">Потом</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li><b>Вариант 1 (рациональный):</b> показываем mock самого блока — пользователь видит результат до покупки. Список преимуществ конкретный и утилитарный.</li>
+      <li><b>Вариант 2 (эмоциональный):</b> визуал с перечёркнутыми подарками — сразу считывается смысл. Тексты про эмоции и отношения, а не про фичи.</li>
+      <li>Оба варианта — BottomSheet (существующий паттерн ProUpsellSheet), swipe-to-dismiss, "Не сейчас" не вызывает чувства вины</li>
+      <li>CTA ведёт к Telegram Stars checkout (существующий flow)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════ -->
+<!-- SECTION 3: PRO EDIT -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="pro-edit">
+  <div class="section-label">Экран настройки для Pro-пользователя</div>
+  <p class="desc-text">BottomSheet (maxHeight: 85vh) с настройкой нежелательных подарков. Открывается по тапу на плашку или из настроек. Включает live-превью, как это увидят гости.</p>
+
+  <div class="phone">
+    <div class="paywall-sheet">
+      <div class="paywall-handle"></div>
+      <div class="paywall-body">
+        <div style="font-size:17px;font-weight:600;text-align:center;margin-bottom:4px;">
+          Что лучше не дарить
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:16px;">
+          Настройте подсказки для дарящих
+        </div>
+
+        <div class="edit-section-title">Категории</div>
+        <div class="tags-grid">
+          <div class="tag selected"><span class="emoji">🍬</span> Сладкое <span class="remove">✕</span></div>
+          <div class="tag selected"><span class="emoji">💐</span> Цветы <span class="remove">✕</span></div>
+          <div class="tag"><span class="emoji">🧴</span> Парфюм</div>
+          <div class="tag"><span class="emoji">💄</span> Косметика</div>
+          <div class="tag selected"><span class="emoji">💍</span> Украшения <span class="remove">✕</span></div>
+          <div class="tag"><span class="emoji">👔</span> Одежда</div>
+          <div class="tag"><span class="emoji">👟</span> Обувь</div>
+          <div class="tag"><span class="emoji">🏺</span> Сувениры</div>
+          <div class="tag"><span class="emoji">🧸</span> Мягкие игрушки</div>
+          <div class="tag"><span class="emoji">🍷</span> Алкоголь</div>
+          <div class="tag"><span class="emoji">🎫</span> Сертификаты</div>
+          <div class="tag"><span class="emoji">📱</span> Техника</div>
+          <div class="tag"><span class="emoji">🕯</span> Свечи</div>
+          <div class="tag"><span class="emoji">🍕</span> Еда</div>
+        </div>
+
+        <div class="edit-section-title">Свои варианты</div>
+        <div class="custom-item">
+          <span class="text">Статуэтки и сувениры</span>
+          <span class="delete">✕</span>
+        </div>
+        <div class="custom-item">
+          <span class="text">Посуда для кухни</span>
+          <span class="delete">✕</span>
+        </div>
+        <div class="add-row">
+          <input class="text-input" placeholder="Добавить свой вариант...">
+          <button class="add-btn">+</button>
+        </div>
+
+        <div class="edit-section-title">Комментарий</div>
+        <textarea class="text-input" placeholder="Например: аллергия на цветы с сильным запахом">Аллергия на цветы с сильным запахом, не люблю ничего для кухни.</textarea>
+        <div class="char-counter">67 / 400</div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="label">Показывать гостям</div>
+            <div class="hint">Блок будет виден в публичном вишлисте</div>
+          </div>
+          <div class="toggle-switch on"></div>
+        </div>
+
+        <!-- Preview block -->
+        <div class="preview-block">
+          <div class="preview-label">
+            <span class="eye">👁</span> Так это увидят другие
+          </div>
+          <div class="guest-dont-gift expanded" style="margin-bottom:0;border:1px solid var(--border-light);">
+            <div class="header" style="padding-bottom:10px;">
+              <div class="icon-circle">🚫</div>
+              <div class="text">
+                <div class="label">Что лучше не дарить</div>
+              </div>
+            </div>
+            <div class="body">
+              <div class="guest-tags">
+                <span class="guest-tag">🍬 Сладкое</span>
+                <span class="guest-tag">💐 Цветы</span>
+                <span class="guest-tag">💍 Украшения</span>
+              </div>
+              <ul class="guest-custom">
+                <li>Статуэтки и сувениры</li>
+                <li>Посуда для кухни</li>
+              </ul>
+              <div class="guest-comment">«Аллергия на цветы с сильным запахом, не люблю ничего для кухни.»</div>
+            </div>
+          </div>
+        </div>
+
+        <button class="save-btn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li><b>Гибридный формат:</b> теги для быстрого выбора + текстовые пункты для конкретики + свободный комментарий</li>
+      <li><b>Live-превью:</b> пользователь видит результат до сохранения — это мотивирует заполнить и убирает страх "а как это увидят"</li>
+      <li><b>Теги как toggle-chips:</b> тап выбирает/снимает, красный фон выбранных визуально кодирует "нежелательное"</li>
+      <li><b>BottomSheet</b> вместо отдельного экрана — не теряется контекст вишлиста, быстрее закрыть</li>
+      <li>Visibility toggle внизу — осознанный выбор после заполнения, не перед</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════ -->
+<!-- SECTION 4: WISHLIST EDIT -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="wishlist-edit">
+  <div class="section-label">Настройка в редактировании вишлиста</div>
+  <p class="desc-text">Блок "Что не дарить" в экране редактирования конкретного вишлиста. Три режима через radio cards — понятно без инструкций, текущий статус считывается мгновенно.</p>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Редактировать вишлист</span>
+    </div>
+    <div class="phone-body">
+      <!-- Context: other edit fields -->
+      <div class="edit-field-group">
+        <div class="edit-field-label">Название</div>
+        <div class="edit-field-value">День рождения 2026</div>
+      </div>
+      <div class="edit-field-group">
+        <div class="edit-field-label">Описание</div>
+        <div class="edit-field-value" style="color:var(--text-sec)">Мне исполняется 30! 🎉</div>
+      </div>
+
+      <!-- Don't Gift Section -->
+      <div class="section-label" style="margin-top:20px;">Что лучше не дарить</div>
+
+      <!-- Mode 1: Use global -->
+      <div class="mode-card selected">
+        <div class="radio"></div>
+        <div class="mode-title">Общий список из настроек</div>
+        <div class="mode-desc">Будет использоваться ваш глобальный список нежелательных подарков</div>
+        <div class="mode-status">✓ Заполнено · 3 категории</div>
+      </div>
+
+      <!-- Mode 2: Local list -->
+      <div class="mode-card">
+        <div class="radio"></div>
+        <div class="mode-title">Отдельный список для этого вишлиста</div>
+        <div class="mode-desc">Настроить индивидуально — например, для тематического вишлиста</div>
+      </div>
+
+      <!-- Mode 3: Hidden -->
+      <div class="mode-card">
+        <div class="radio"></div>
+        <div class="mode-title">Не показывать</div>
+        <div class="mode-desc">Блок «Что не дарить» будет скрыт в этом вишлисте</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:16px"></div>
+
+  <!-- State: local mode selected with expanded form -->
+  <div class="variant-label">Состояние: выбран локальный список</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Редактировать вишлист</span>
+    </div>
+    <div class="phone-body">
+      <div class="section-label" style="margin-top:0;">Что лучше не дарить</div>
+
+      <!-- Mode 1 -->
+      <div class="mode-card">
+        <div class="radio"></div>
+        <div class="mode-title">Общий список из настроек</div>
+        <div class="mode-desc">Ваш глобальный список</div>
+      </div>
+
+      <!-- Mode 2: SELECTED + expanded form -->
+      <div class="mode-card selected">
+        <div class="radio"></div>
+        <div class="mode-title">Отдельный список для этого вишлиста</div>
+        <div class="mode-desc">Настроить индивидуально</div>
+
+        <div class="local-form">
+          <div class="tags-grid" style="margin-bottom:10px;">
+            <div class="tag selected" style="font-size:12px;padding:6px 10px;">
+              <span class="emoji" style="font-size:13px;">🍷</span> Алкоголь <span class="remove">✕</span>
+            </div>
+            <div class="tag selected" style="font-size:12px;padding:6px 10px;">
+              <span class="emoji" style="font-size:13px;">🧸</span> Мягкие игрушки <span class="remove">✕</span>
+            </div>
+            <div class="tag" style="font-size:12px;padding:6px 10px;">
+              <span class="emoji" style="font-size:13px;">🍬</span> Сладкое
+            </div>
+            <div class="tag" style="font-size:12px;padding:6px 10px;">
+              <span class="emoji" style="font-size:13px;">💐</span> Цветы
+            </div>
+            <div class="tag" style="font-size:12px;padding:6px 10px;">
+              <span class="emoji" style="font-size:13px;">🧴</span> Парфюм
+            </div>
+          </div>
+          <textarea class="text-input" style="font-size:13px;min-height:48px;" placeholder="Комментарий для гостей...">Это тематический вишлист, алкоголь не нужен</textarea>
+          <div class="char-counter">42 / 400</div>
+        </div>
+      </div>
+
+      <!-- Mode 3 -->
+      <div class="mode-card">
+        <div class="radio"></div>
+        <div class="mode-title">Не показывать</div>
+        <div class="mode-desc">Скрыть блок в этом вишлисте</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li><b>Radio cards</b> вместо segmented control — 3 варианта с описаниями не влезут в сегменты, а карточки дают место для пояснений</li>
+      <li><b>Статус-бейдж</b> "✓ Заполнено · 3 категории" сразу показывает, что глобальный список уже настроен</li>
+      <li><b>Инлайн-форма</b> раскрывается внутри выбранной карточки — не уводит на другой экран, контекст сохраняется</li>
+      <li><b>Упрощённая форма:</b> в локальном режиме показываем только теги + комментарий (без кастомных пунктов) — достаточно для per-wishlist оверрайда. Полная форма — в настройках.</li>
+      <li>Отвергнуты: <b>segmented control</b> (мало места для текста), <b>dropdown</b> (скрывает варианты), <b>list with checkmarks</b> (не считывается как exclusive choice)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════ -->
+<!-- SECTION 5: PUBLIC VIEW -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="public-view">
+  <div class="section-label">Публичный вишлист — вид для дарящего</div>
+  <p class="desc-text">Блок "Что не дарить" размещается между описанием вишлиста и списком желаний. По умолчанию свёрнут — не отвлекает от основного контента, но заметен.</p>
+
+  <!-- Collapsed state -->
+  <div class="variant-label">Свёрнутое состояние</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Вишлист</span>
+    </div>
+    <div class="phone-body">
+      <div class="guest-profile">
+        <div class="guest-avatar">АМ</div>
+        <div class="guest-profile-info">
+          <div class="name">Аня Морозова</div>
+          <div class="items-count">8 желаний · до 15 мая</div>
+        </div>
+      </div>
+
+      <div style="font-size:14px;color:var(--text-sec);margin-bottom:14px;line-height:1.5;">
+        Мне исполняется 30! Буду рада любым подаркам из списка 🎉
+      </div>
+
+      <!-- Don't gift block: collapsed -->
+      <div class="guest-dont-gift">
+        <div class="header">
+          <div class="icon-circle">🚫</div>
+          <div class="text">
+            <div class="label">Что лучше не дарить</div>
+            <div class="count">5 пунктов</div>
+          </div>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+
+      <div class="separator">🎁 Список желаний</div>
+
+      <div class="wish-card">
+        <div class="wish-thumb">📱</div>
+        <div class="wish-info">
+          <div class="wish-title">iPhone 16 Pro</div>
+          <div class="wish-price">119 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card">
+        <div class="wish-thumb">🎧</div>
+        <div class="wish-info">
+          <div class="wish-title">AirPods Max</div>
+          <div class="wish-price">59 990 ₽</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expanded state -->
+  <div class="variant-label">Развёрнутое состояние</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Вишлист</span>
+    </div>
+    <div class="phone-body">
+      <div class="guest-profile">
+        <div class="guest-avatar">АМ</div>
+        <div class="guest-profile-info">
+          <div class="name">Аня Морозова</div>
+          <div class="items-count">8 желаний · до 15 мая</div>
+        </div>
+      </div>
+
+      <div style="font-size:14px;color:var(--text-sec);margin-bottom:14px;line-height:1.5;">
+        Мне исполняется 30! Буду рада любым подаркам из списка 🎉
+      </div>
+
+      <!-- Don't gift block: expanded -->
+      <div class="guest-dont-gift expanded">
+        <div class="header">
+          <div class="icon-circle">🚫</div>
+          <div class="text">
+            <div class="label">Что лучше не дарить</div>
+          </div>
+          <span class="chevron">▾</span>
+        </div>
+        <div class="body">
+          <div class="guest-tags">
+            <span class="guest-tag">🍬 Сладкое</span>
+            <span class="guest-tag">💐 Цветы</span>
+            <span class="guest-tag">💍 Украшения</span>
+          </div>
+          <ul class="guest-custom">
+            <li>Статуэтки и сувениры</li>
+            <li>Посуда для кухни</li>
+          </ul>
+          <div class="guest-comment">«Аллергия на цветы с сильным запахом, не люблю ничего для кухни.»</div>
+        </div>
+      </div>
+
+      <div class="separator">🎁 Список желаний</div>
+
+      <div class="wish-card">
+        <div class="wish-thumb">📱</div>
+        <div class="wish-info">
+          <div class="wish-title">iPhone 16 Pro</div>
+          <div class="wish-price">119 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card">
+        <div class="wish-thumb">🎧</div>
+        <div class="wish-info">
+          <div class="wish-title">AirPods Max</div>
+          <div class="wish-price">59 990 ₽</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li><b>Расположение:</b> между описанием и списком — дарящий видит контекст до того, как начнёт выбирать</li>
+      <li><b>Свёрнут по умолчанию:</b> не перегружает экран, "5 пунктов" мотивирует раскрыть</li>
+      <li><b>Тон доброжелательный:</b> иконка 🚫 в мягком розовом круге — не агрессивный запрет, а мягкая подсказка</li>
+      <li><b>Сепаратор</b> "🎁 Список желаний" визуально отделяет блок от основного контента</li>
+      <li>Отвергнуты: расположение внизу (не увидят), всплывающий tooltip (раздражает), отдельная вкладка (overk kill)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════ -->
+<!-- SECTION 6: NOTES -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="notes">
+  <div class="section-label">Продуктовые заметки</div>
+
+  <div class="notes" style="margin-top:0;">
+    <h4>Логика приоритета данных</h4>
+    <ul>
+      <li><b>1.</b> Wishlist mode = "hidden" → блок не показывается</li>
+      <li><b>2.</b> Wishlist mode = "local" + есть данные → показываем локальный список</li>
+      <li><b>3.</b> Wishlist mode = "global" → показываем глобальный список из UserProfile</li>
+      <li><b>4.</b> Глобальный список пуст → блок не отображается</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h4>Иерархия экранов (BottomSheet vs Inline)</h4>
+    <ul>
+      <li><b>Плашка в вишлисте:</b> inline-block между карточками желаний</li>
+      <li><b>Paywall:</b> BottomSheet (существующий ProUpsellSheet)</li>
+      <li><b>Настройка Pro:</b> BottomSheet (85vh, scrollable)</li>
+      <li><b>Режим в ред. вишлиста:</b> inline-block внутри формы редактирования</li>
+      <li><b>Публичный блок:</b> inline collapsible card</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h4>Что потребуется для реализации</h4>
+    <ul>
+      <li><b>Schema:</b> добавить dontGift* поля в модель Wishlist (сейчас только на UserProfile)</li>
+      <li><b>Schema:</b> поле dontGiftMode на Wishlist: 'global' | 'local' | 'hidden' (default: 'global')</li>
+      <li><b>API:</b> CRUD эндпоинты per-wishlist: GET/PUT /tg/wishlist/:id/dont-gift</li>
+      <li><b>API:</b> обновить public endpoints — проверять wishlist mode, fallback на global</li>
+      <li><b>Frontend:</b> баннер-компонент + dismiss state (localStorage per wishlist)</li>
+      <li><b>Frontend:</b> radio cards в экране edit wishlist</li>
+      <li><b>Frontend:</b> обновить гостевой рендеринг — поддержка local/global источника</li>
+      <li><b>Analytics:</b> banner_shown/clicked, paywall_shown/cta_clicked, global/wishlist_created, mode_changed, public_block_shown</li>
+      <li><b>i18n:</b> ~20 новых ключей для плашки, режимов, описаний</li>
+      <li><b>Paywall:</b> новый upsell context 'dont_gift_banner' (отличать от 'dont_gift' в настройках)</li>
+      <li><b>God Mode:</b> блок аналитики по фиче</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h4>Аналитические события</h4>
+    <ul>
+      <li><code>banner_shown_do_not_gift</code> — плашка показана в вишлисте</li>
+      <li><code>banner_clicked_do_not_gift</code> — тап по плашке</li>
+      <li><code>banner_dismissed_do_not_gift</code> — плашка скрыта</li>
+      <li><code>paywall_shown_do_not_gift</code> — paywall показан</li>
+      <li><code>paywall_cta_clicked_do_not_gift</code> — CTA нажат</li>
+      <li><code>global_do_not_gift_created</code> — глобальный список создан/обновлён</li>
+      <li><code>wishlist_do_not_gift_created</code> — локальный список создан</li>
+      <li><code>wishlist_do_not_gift_mode_changed</code> — режим изменён (global/local/hidden)</li>
+      <li><code>public_block_shown_do_not_gift</code> — блок показан гостю</li>
+      <li><code>public_block_expanded_do_not_gift</code> — гость раскрыл блок</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h4>Отвергнутые варианты</h4>
+    <ul>
+      <li><b>Segmented control для 3 режимов:</b> не влезает текст описания, не сканируется за 1 секунду</li>
+      <li><b>Accordion list с чекмарками:</b> визуально не считывается как exclusive choice (можно спутать с чеклистом)</li>
+      <li><b>Отдельный экран для настройки:</b> слишком тяжело для ~30 сек заполнения, BottomSheet достаточно</li>
+      <li><b>Плашка сверху вишлиста:</b> воспринимается как системное предупреждение, засоряет "витрину"</li>
+      <li><b>Плашка внизу:</b> никто не доскроллит, низкая конверсия</li>
+      <li><b>Tabs в публичном блоке:</b> overcomplicated для 1 секции, достаточно collapse/expand</li>
+      <li><b>Кастомные пункты в per-wishlist форме:</b> избыточно, теги + комментарий покрывают 95% кейсов</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Поделиться подборкой — Макеты</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --blue: #60A5FA;
+    --blue-soft: rgba(96,165,250,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+    --pro-gradient: linear-gradient(135deg, #7C6AFF, #A78BFA);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Rubik', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #111114;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(17,17,20,0.92); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border); padding: 12px 16px;
+  }
+  .nav-title { font-size: 14px; font-weight: 600; color: var(--text-sec); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .nav-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab {
+    flex-shrink: 0; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 500;
+    color: var(--text-sec); background: var(--surface); border: 1px solid var(--border);
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .nav-tab:hover { background: var(--surface-hover); }
+  .nav-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .section { display: none; max-width: 400px; margin: 0 auto; padding: 20px 16px 40px; }
+  .section.active { display: block; }
+  .section-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin: 24px 0 12px; }
+  .section-label:first-child { margin-top: 0; }
+  .variant-label {
+    font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 1px;
+    margin: 20px 0 10px; padding: 6px 12px; background: var(--accent-soft); border-radius: 8px; display: inline-block;
+  }
+  .desc-text {
+    font-size: 13px; color: var(--text-sec); line-height: 1.6; margin: 8px 0 16px;
+    padding: 12px 16px; background: var(--surface); border-radius: 12px; border-left: 3px solid var(--accent);
+  }
+
+  /* Phone frame */
+  .phone {
+    background: var(--bg); border-radius: 24px; border: 2px solid var(--border-light);
+    overflow: hidden; margin: 12px 0; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .phone-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 16px 12px; border-bottom: 1px solid var(--border);
+  }
+  .phone-header .back { font-size: 20px; color: var(--accent); cursor: pointer; }
+  .phone-header .title { font-size: 17px; font-weight: 600; }
+  .phone-body { padding: 12px 16px 20px; }
+
+  /* Wish cards */
+  .wish-card {
+    display: flex; gap: 12px; padding: 12px;
+    background: var(--surface); border-radius: 14px; margin-bottom: 8px;
+    border: 1px solid var(--border); position: relative; transition: all 0.15s;
+  }
+  .wish-card.selected { border-color: var(--accent); background: rgba(124,106,255,0.05); }
+  .wish-thumb {
+    width: 52px; height: 52px; border-radius: 12px; background: var(--card);
+    display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;
+  }
+  .wish-info { flex: 1; min-width: 0; }
+  .wish-title { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 2px; }
+  .wish-price { font-size: 13px; color: var(--text-sec); }
+
+  /* Checkbox */
+  .checkbox {
+    position: absolute; top: 8px; left: 8px; width: 24px; height: 24px;
+    border-radius: 7px; border: 2px solid var(--text-muted);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: transparent; z-index: 2; transition: all 0.15s;
+  }
+  .wish-card.selected .checkbox {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+
+  /* Bottom bar */
+  .bottom-bar {
+    padding: 12px 16px; border-top: 1px solid var(--border);
+    background: var(--surface); display: flex; flex-direction: column; gap: 8px;
+  }
+  .bottom-bar .counter { font-size: 13px; color: var(--text-sec); text-align: center; font-weight: 500; }
+  .btn-primary {
+    width: 100%; padding: 14px; border-radius: 14px; border: none;
+    background: var(--accent); color: #fff; font-family: inherit;
+    font-size: 16px; font-weight: 600; text-align: center; cursor: pointer;
+  }
+  .btn-primary:disabled { opacity: 0.4; cursor: default; }
+  .btn-pro-gradient {
+    width: 100%; padding: 14px; border-radius: 14px; border: none;
+    background: var(--pro-gradient); color: #fff; font-family: inherit;
+    font-size: 16px; font-weight: 600; text-align: center; cursor: pointer;
+  }
+  .btn-secondary {
+    width: 100%; padding: 12px; border-radius: 12px; border: none;
+    background: transparent; color: var(--text-sec); font-family: inherit;
+    font-size: 14px; font-weight: 500; text-align: center; cursor: pointer;
+  }
+  .btn-ghost {
+    padding: 8px 16px; border-radius: 10px; border: none;
+    background: transparent; color: var(--text-sec); font-family: inherit;
+    font-size: 13px; font-weight: 500; cursor: pointer;
+  }
+
+  /* Manage menu item */
+  .menu-item {
+    background: var(--surface); border: none; border-radius: 14px; padding: 16px 18px;
+    text-align: start; cursor: pointer; font-family: inherit;
+    font-size: 16px; color: var(--text); display: flex; align-items: center; gap: 12px;
+    width: 100%;
+  }
+  .pro-badge {
+    font-size: 10px; font-weight: 700; color: #fff; margin-left: auto;
+    background: var(--pro-gradient); padding: 2px 7px; border-radius: 5px; letter-spacing: 0.5px;
+  }
+
+  /* BottomSheet */
+  .sheet { background: var(--surface); border-radius: 20px 20px 0 0; overflow: hidden; }
+  .sheet-handle { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.15); margin: 10px auto; }
+  .sheet-body { padding: 8px 20px 24px; }
+  .sheet-title { font-size: 17px; font-weight: 600; text-align: center; margin-bottom: 4px; }
+
+  /* Mini preview card */
+  .mini-card {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; background: var(--card); border-radius: 12px;
+    border: 1px solid var(--border); margin-bottom: 6px;
+  }
+  .mini-thumb {
+    width: 40px; height: 40px; border-radius: 10px; background: var(--surface);
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+  }
+  .mini-title { font-size: 13px; font-weight: 500; color: var(--text); }
+  .mini-price { font-size: 12px; color: var(--text-muted); }
+
+  /* Input */
+  .text-input {
+    width: 100%; padding: 12px 14px; border-radius: 12px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text); font-family: inherit; font-size: 14px; outline: none;
+    transition: border-color 0.15s; box-sizing: border-box;
+  }
+  .text-input:focus { border-color: var(--accent); }
+  .text-input::placeholder { color: var(--text-muted); }
+
+  /* Info block */
+  .info-block {
+    padding: 12px 14px; border-radius: 12px;
+    font-size: 12px; line-height: 1.5; display: flex; align-items: flex-start; gap: 8px;
+  }
+  .info-block .icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+
+  /* Success state */
+  .success-icon {
+    width: 72px; height: 72px; border-radius: 20px;
+    background: var(--green-soft); display: flex; align-items: center;
+    justify-content: center; font-size: 36px; margin: 0 auto 16px;
+  }
+
+  /* Link box */
+  .link-box {
+    padding: 12px 14px; border-radius: 12px; background: var(--bg);
+    border: 1px solid var(--border); display: flex; align-items: center; gap: 10px;
+    cursor: pointer;
+  }
+  .link-box .url {
+    flex: 1; font-size: 13px; color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .link-box .copy { font-size: 13px; color: var(--accent); font-weight: 600; flex-shrink: 0; }
+
+  /* Guest view */
+  .guest-header {
+    text-align: center; padding: 20px 0;
+  }
+  .guest-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 8px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 12px; font-weight: 600;
+  }
+  .guest-title { font-size: 22px; font-weight: 700; margin: 12px 0 4px; }
+  .guest-subtitle { font-size: 14px; color: var(--text-sec); }
+
+  /* Expired */
+  .expired-icon {
+    width: 72px; height: 72px; border-radius: 20px;
+    background: var(--orange-soft); display: flex; align-items: center;
+    justify-content: center; font-size: 36px; margin: 0 auto 16px;
+  }
+
+  /* TTL badge */
+  .ttl-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 6px;
+    background: var(--orange-soft); color: var(--orange);
+    font-size: 11px; font-weight: 600;
+  }
+
+  /* CTA banner */
+  .cta-banner {
+    padding: 16px; border-radius: 16px; text-align: center;
+    background: linear-gradient(135deg, rgba(124,106,255,0.08), rgba(52,211,153,0.06));
+    border: 1px solid rgba(124,106,255,0.12);
+  }
+  .cta-banner .title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .cta-banner .subtitle { font-size: 13px; color: var(--text-sec); margin-bottom: 12px; }
+  .cta-banner .btn {
+    display: inline-flex; padding: 10px 24px; border-radius: 12px;
+    background: var(--accent); color: #fff; font-family: inherit;
+    font-size: 14px; font-weight: 600; border: none; cursor: pointer;
+  }
+
+  /* Bulk action bar */
+  .bulk-bar {
+    display: grid; gap: 8px; padding: 12px 16px;
+    border-top: 1px solid var(--border); background: var(--surface);
+  }
+  .bulk-btn {
+    padding: 12px; border-radius: 12px; border: none; font-family: inherit;
+    font-size: 13px; font-weight: 600; text-align: center; cursor: pointer;
+  }
+
+  /* Notes */
+  .notes {
+    background: var(--surface); border-radius: 14px; padding: 16px;
+    margin-top: 20px; border: 1px solid var(--border);
+  }
+  .notes h4 { font-size: 13px; font-weight: 600; color: var(--text-sec); margin-bottom: 10px; }
+  .notes p, .notes li { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+  .notes ul { padding-left: 18px; margin-top: 6px; }
+  .notes li { margin-bottom: 4px; }
+
+  /* Separator */
+  .separator {
+    display: flex; align-items: center; gap: 12px; padding: 14px 0; color: var(--text-muted); font-size: 12px;
+  }
+  .separator::before, .separator::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* Nudge banner */
+  .nudge {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px; background: var(--surface); border-radius: 14px;
+    border: 1px solid var(--border); margin-bottom: 10px; cursor: pointer;
+  }
+  .nudge .icon-circle {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+  }
+  .nudge .content { flex: 1; }
+  .nudge .title { font-size: 14px; font-weight: 500; color: var(--text); }
+  .nudge .subtitle { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-title">Поделиться подборкой — Макеты</div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showSection('entry')">1. Точки входа</div>
+    <div class="nav-tab" onclick="showSection('select')">2. Выбор</div>
+    <div class="nav-tab" onclick="showSection('configure')">3. Настройка</div>
+    <div class="nav-tab" onclick="showSection('success')">4. Успех</div>
+    <div class="nav-tab" onclick="showSection('public')">5. Публичный</div>
+    <div class="nav-tab" onclick="showSection('expired')">6. Истекший</div>
+    <div class="nav-tab" onclick="showSection('paywall')">7. Paywall</div>
+    <div class="nav-tab" onclick="showSection('discover')">8. Discovery</div>
+    <div class="nav-tab" onclick="showSection('notes')">9. Заметки</div>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- 1. ENTRY POINTS -->
+<!-- ═══════════════════════════════════════ -->
+<div class="section active" id="entry">
+  <div class="section-label">Точки входа в фичу</div>
+  <p class="desc-text">Две основные точки входа: кнопка в меню управления вишлистом и action в bulk-select режиме. Обе ведут в единый flow.</p>
+
+  <div class="variant-label">Вариант A — В меню управления вишлистом</div>
+  <div class="phone">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <div class="sheet-title">Управление</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
+          <button class="menu-item"><span style="font-size:20px">✏️</span> Переименовать</button>
+          <button class="menu-item"><span style="font-size:20px">↕️</span> Изменить порядок</button>
+          <button class="menu-item"><span style="font-size:20px">☑️</span> Выбрать несколько</button>
+          <button class="menu-item"><span style="font-size:20px">🔒</span> Настройки приватности</button>
+          <button class="menu-item" style="border:1px solid rgba(124,106,255,0.15);">
+            <span style="font-size:20px">📋</span>
+            Поделиться подборкой
+            <span class="pro-badge">PRO</span>
+          </button>
+          <button class="menu-item"><span style="font-size:20px">🚫</span> Что лучше не дарить</button>
+          <button class="menu-item" style="color:var(--orange)"><span style="font-size:20px">📦</span> Архивировать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="variant-label">Вариант B — В bulk-select action bar</div>
+  <div class="phone">
+    <div class="phone-body">
+      <!-- Selection header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 12px;">
+        <button class="btn-ghost">Отмена</button>
+        <span style="font-size:14px;font-weight:600;color:var(--text);">Выбрано: 3</span>
+        <button class="btn-ghost">Все</button>
+      </div>
+
+      <div class="wish-card selected">
+        <div class="checkbox">✓</div>
+        <div class="wish-thumb">📱</div>
+        <div class="wish-info">
+          <div class="wish-title">iPhone 16 Pro</div>
+          <div class="wish-price">119 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card selected">
+        <div class="checkbox">✓</div>
+        <div class="wish-thumb">🎧</div>
+        <div class="wish-info">
+          <div class="wish-title">AirPods Max</div>
+          <div class="wish-price">59 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card selected">
+        <div class="checkbox">✓</div>
+        <div class="wish-thumb">📚</div>
+        <div class="wish-info">
+          <div class="wish-title">Kindle Paperwhite</div>
+          <div class="wish-price">14 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card">
+        <div class="checkbox"></div>
+        <div class="wish-thumb">⌚</div>
+        <div class="wish-info">
+          <div class="wish-title">Apple Watch Ultra</div>
+          <div class="wish-price">79 990 ₽</div>
+        </div>
+      </div>
+    </div>
+    <!-- Bulk action bar with new button -->
+    <div class="bulk-bar" style="grid-template-columns:1fr 1fr 1fr 1fr;">
+      <button class="bulk-btn" style="background:var(--red-soft);color:var(--red);">🗑️<br><span style="font-size:11px">Удалить</span></button>
+      <button class="bulk-btn" style="background:var(--orange-soft);color:var(--orange);">📦<br><span style="font-size:11px">Архив</span></button>
+      <button class="bulk-btn" style="background:var(--accent-soft);color:var(--accent);">↗️<br><span style="font-size:11px">Перенести</span></button>
+      <button class="bulk-btn" style="background:var(--blue-soft);color:var(--blue);border:1px solid rgba(96,165,250,0.2);">📋<br><span style="font-size:11px">Подборка</span></button>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li><b>Вариант A (меню)</b> — точка входа для сценария «хочу поделиться подборкой», открывает свой selection flow</li>
+      <li><b>Вариант B (bulk bar)</b> — для сценария «уже выбрал желания, хочу отправить». Экономит один шаг</li>
+      <li><b>Оба варианта используются одновременно</b> — это не либо/либо</li>
+      <li>PRO-бейдж в меню сигнализирует премиальность без блокировки UI</li>
+      <li>В bulk bar кнопка "Подборка" голубая — визуально отличается от destructive actions (красный, оранжевый)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- 2. SELECTION MODE -->
+<!-- ═══════════════════════════════════════ -->
+<div class="section" id="select">
+  <div class="section-label">Режим выбора желаний</div>
+  <p class="desc-text">Пользователь выбирает 1+ желаний для подборки. Стандартный multi-select с чекбоксами, счётчиком и CTA внизу. Вход через меню → "Поделиться подборкой".</p>
+
+  <div class="variant-label">Выбор из вишлиста</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Поделиться подборкой</span>
+    </div>
+    <div class="phone-body">
+      <div style="font-size:13px;color:var(--text-sec);margin-bottom:14px;line-height:1.5;">
+        Выберите желания, которые хотите включить в подборку
+      </div>
+
+      <div class="wish-card selected">
+        <div class="checkbox">✓</div>
+        <div class="wish-thumb">📱</div>
+        <div class="wish-info">
+          <div class="wish-title">iPhone 16 Pro</div>
+          <div class="wish-price">119 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card">
+        <div class="checkbox"></div>
+        <div class="wish-thumb">🎧</div>
+        <div class="wish-info">
+          <div class="wish-title">AirPods Max</div>
+          <div class="wish-price">59 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card selected">
+        <div class="checkbox">✓</div>
+        <div class="wish-thumb">📚</div>
+        <div class="wish-info">
+          <div class="wish-title">Kindle Paperwhite</div>
+          <div class="wish-price">14 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card">
+        <div class="checkbox"></div>
+        <div class="wish-thumb">⌚</div>
+        <div class="wish-info">
+          <div class="wish-title">Apple Watch Ultra</div>
+          <div class="wish-price">79 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card selected">
+        <div class="checkbox">✓</div>
+        <div class="wish-thumb">🎮</div>
+        <div class="wish-info">
+          <div class="wish-title">PlayStation 5 Slim</div>
+          <div class="wish-price">49 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card">
+        <div class="checkbox"></div>
+        <div class="wish-thumb">🧴</div>
+        <div class="wish-info">
+          <div class="wish-title">Набор уходовой косметики</div>
+          <div class="wish-price">8 900 ₽</div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-bar">
+      <div class="counter">Выбрано: 3 из 6</div>
+      <button class="btn-primary">Продолжить</button>
+    </div>
+  </div>
+
+  <!-- Empty selection state -->
+  <div class="variant-label">Пустой выбор — CTA задизейблен</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Поделиться подборкой</span>
+    </div>
+    <div class="phone-body">
+      <div style="font-size:13px;color:var(--text-sec);margin-bottom:14px;line-height:1.5;">
+        Выберите желания, которые хотите включить в подборку
+      </div>
+      <div class="wish-card">
+        <div class="checkbox"></div>
+        <div class="wish-thumb">📱</div>
+        <div class="wish-info">
+          <div class="wish-title">iPhone 16 Pro</div>
+          <div class="wish-price">119 990 ₽</div>
+        </div>
+      </div>
+      <div class="wish-card">
+        <div class="checkbox"></div>
+        <div class="wish-thumb">🎧</div>
+        <div class="wish-info">
+          <div class="wish-title">AirPods Max</div>
+          <div class="wish-price">59 990 ₽</div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-bar">
+      <div class="counter">Выбрано: 0 из 6</div>
+      <button class="btn-primary" disabled>Продолжить</button>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li>Реиспользуется существующий multi-select паттерн (checkboxes 24x24, accent background)</li>
+      <li>Счётчик "Выбрано: N из M" — ясность, сколько всего и сколько выбрано</li>
+      <li>CTA disabled при 0 выбранных — без валидации, просто неактивен</li>
+      <li>Минимум 1 желание — при снятии последнего CTA деактивируется</li>
+      <li>Нет жёсткого верхнего лимита, UX не ломается при 50+ карточках (scroll)</li>
+      <li>При входе из bulk-select (вариант B) — желания уже выбраны, сразу переход к шагу 3</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- 3. CONFIGURE -->
+<!-- ═══════════════════════════════════════ -->
+<div class="section" id="configure">
+  <div class="section-label">Настройка подборки перед отправкой</div>
+  <p class="desc-text">BottomSheet с названием, превью карточек, TTL-предупреждением и CTA "Поделиться". Название обязательно, дефолт подставляется автоматически.</p>
+
+  <div class="variant-label">Экран настройки</div>
+  <div class="phone">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <div class="sheet-title">Поделиться подборкой</div>
+        <div style="font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:16px;">
+          Получатель увидит только эти желания
+        </div>
+
+        <!-- Title input -->
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+          Название подборки
+        </div>
+        <input class="text-input" value="Идеи подарка" placeholder="Введите название...">
+        <div style="text-align:right;font-size:11px;color:var(--text-muted);margin-top:4px;margin-bottom:16px;">
+          14 / 100
+        </div>
+
+        <!-- Mini previews -->
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+          Желания в подборке · 3
+        </div>
+        <div class="mini-card">
+          <div class="mini-thumb">📱</div>
+          <div>
+            <div class="mini-title">iPhone 16 Pro</div>
+            <div class="mini-price">119 990 ₽</div>
+          </div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-thumb">📚</div>
+          <div>
+            <div class="mini-title">Kindle Paperwhite</div>
+            <div class="mini-price">14 990 ₽</div>
+          </div>
+        </div>
+        <div class="mini-card">
+          <div class="mini-thumb">🎮</div>
+          <div>
+            <div class="mini-title">PlayStation 5 Slim</div>
+            <div class="mini-price">49 990 ₽</div>
+          </div>
+        </div>
+
+        <!-- TTL notice -->
+        <div class="info-block" style="background:var(--orange-soft);color:var(--orange);margin-top:16px;">
+          <span class="icon">⏱</span>
+          <span>Ссылка будет активна <b>45 дней</b></span>
+        </div>
+
+        <!-- Snapshot notice -->
+        <div class="info-block" style="background:var(--accent-soft);color:var(--accent);margin-top:8px;">
+          <span class="icon">📌</span>
+          <span>Подборка зафиксируется — изменения вишлиста не повлияют на неё</span>
+        </div>
+
+        <button class="btn-primary" style="margin-top:16px;">
+          📤 Поделиться
+        </button>
+        <button class="btn-secondary">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Validation: empty title -->
+  <div class="variant-label">Валидация: пустое название</div>
+  <div class="phone">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <div class="sheet-title">Поделиться подборкой</div>
+        <div style="font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:16px;">
+          Получатель увидит только эти желания
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+          Название подборки
+        </div>
+        <input class="text-input" value="" placeholder="Введите название..." style="border-color:var(--red);">
+        <div style="font-size:12px;color:var(--red);margin-top:4px;margin-bottom:16px;">
+          Введите название подборки
+        </div>
+        <button class="btn-primary" disabled>📤 Поделиться</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li><b>BottomSheet</b> вместо полноэкранного — сохраняем контекст, быстро закрыть</li>
+      <li><b>Дефолт "Идеи подарка"</b> — пользователю не надо думать, если не хочет</li>
+      <li><b>Мини-превью</b> — подтверждение выбора, нет сомнений "а что я выбрал?"</li>
+      <li><b>TTL-предупреждение</b> оранжевое — заметно, но не пугает</li>
+      <li><b>Snapshot-подсказка</b> — объясняет иммутабельность без технических терминов</li>
+      <li><b>Лимит названия</b> — 100 символов, счётчик справа</li>
+      <li>Пустое название → красная рамка, CTA disabled</li>
+      <li>Закрытие sheet → ничего не создаётся, безопасный выход</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- 4. SUCCESS -->
+<!-- ═══════════════════════════════════════ -->
+<div class="section" id="success">
+  <div class="section-label">Успех — подборка создана</div>
+  <p class="desc-text">После создания показываем success state с действиями: поделиться через Telegram, скопировать ссылку, отключить ссылку.</p>
+
+  <div class="variant-label">Подборка создана</div>
+  <div class="phone">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body" style="text-align:center;">
+        <div class="success-icon">✅</div>
+        <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px;">
+          Подборка создана
+        </div>
+        <div style="font-size:14px;color:var(--text-sec);margin-bottom:4px;">
+          «Идеи подарка» · 3 желания
+        </div>
+        <div class="ttl-badge" style="margin:8px auto 20px;">
+          ⏱ Активна 45 дней
+        </div>
+
+        <!-- Link box -->
+        <div class="link-box" style="margin-bottom:16px;">
+          <span class="url">wishboard.me/p/xK9m2...</span>
+          <span class="copy">Скопировать</span>
+        </div>
+
+        <!-- Actions -->
+        <button class="btn-primary" style="background:#2196F3;margin-bottom:8px;">
+          📤 Отправить в Telegram
+        </button>
+        <button class="btn-primary" style="background:var(--accent);margin-bottom:8px;">
+          📋 Скопировать ссылку
+        </button>
+
+        <div style="height:8px"></div>
+
+        <button class="btn-secondary" style="color:var(--text-muted);font-size:13px;">
+          Отключить ссылку
+        </button>
+
+        <button class="btn-secondary" style="margin-top:4px;">
+          Готово
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error state -->
+  <div class="variant-label">Ошибка создания</div>
+  <div class="phone">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body" style="text-align:center;">
+        <div style="width:72px;height:72px;border-radius:20px;background:var(--red-soft);display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 16px;">
+          ❌
+        </div>
+        <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;">
+          Не удалось создать
+        </div>
+        <div style="font-size:14px;color:var(--text-sec);margin-bottom:20px;line-height:1.5;">
+          Проверьте интернет-соединение и попробуйте ещё раз
+        </div>
+        <button class="btn-primary">Попробовать снова</button>
+        <button class="btn-secondary">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li><b>Success-first</b> — сразу показываем результат и действия</li>
+      <li><b>Telegram share</b> — основной CTA (голубой), как в существующем share flow</li>
+      <li><b>Копировать ссылку</b> — для non-Telegram шеринга</li>
+      <li><b>"Отключить ссылку"</b> — вторичное действие, мелкий текст, без акцента</li>
+      <li><b>TTL-бейдж</b> напоминает о сроке жизни</li>
+      <li><b>Error state</b> — понятный, с retry, без паники</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- 5. PUBLIC VIEW -->
+<!-- ═══════════════════════════════════════ -->
+<div class="section" id="public">
+  <div class="section-label">Публичный экран — light-подборка</div>
+  <p class="desc-text">Получатель видит чистый, красивый экран с карточками. Без бронирования, без комментариев, без "что не дарить". Только просмотр.</p>
+
+  <div class="variant-label">Экран получателя</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="guest-header">
+        <div class="guest-badge">📋 Подборка из вишлиста</div>
+        <div class="guest-title">Идеи подарка</div>
+        <div class="guest-subtitle">3 желания</div>
+        <div class="ttl-badge" style="margin-top:10px;">
+          ⏱ Ссылка действует до 26.05.2026
+        </div>
+      </div>
+
+      <!-- Items -->
+      <div class="wish-card" style="cursor:pointer;">
+        <div class="wish-thumb">📱</div>
+        <div class="wish-info">
+          <div class="wish-title">iPhone 16 Pro</div>
+          <div class="wish-price">119 990 ₽</div>
+        </div>
+        <span style="color:var(--text-muted);font-size:16px;align-self:center;">›</span>
+      </div>
+      <div class="wish-card" style="cursor:pointer;">
+        <div class="wish-thumb">📚</div>
+        <div class="wish-info">
+          <div class="wish-title">Kindle Paperwhite</div>
+          <div class="wish-price">14 990 ₽</div>
+        </div>
+        <span style="color:var(--text-muted);font-size:16px;align-self:center;">›</span>
+      </div>
+      <div class="wish-card" style="cursor:pointer;">
+        <div class="wish-thumb">🎮</div>
+        <div class="wish-info">
+          <div class="wish-title">PlayStation 5 Slim</div>
+          <div class="wish-price">49 990 ₽</div>
+        </div>
+        <span style="color:var(--text-muted);font-size:16px;align-self:center;">›</span>
+      </div>
+
+      <!-- Info block -->
+      <div class="info-block" style="background:var(--accent-soft);color:var(--accent);margin-top:16px;">
+        <span class="icon">💡</span>
+        <span style="line-height:1.5;">Это подборка из вишлиста. Здесь нельзя бронировать. Для полного списка попросите владельца отправить вишлист.</span>
+      </div>
+
+      <!-- CTA banner -->
+      <div class="cta-banner" style="margin-top:16px;">
+        <div class="title">Хотите свой вишлист?</div>
+        <div class="subtitle">Создайте список желаний и делитесь им с друзьями</div>
+        <button class="btn" onclick="">Создать в WishBoard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Item detail (tap on card) -->
+  <div class="variant-label">Карточка желания — развёрнутая</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Идеи подарка</span>
+    </div>
+    <div class="phone-body">
+      <div style="width:100%;height:200px;border-radius:16px;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:60px;margin-bottom:16px;">
+        📱
+      </div>
+      <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px;">
+        iPhone 16 Pro
+      </div>
+      <div style="font-size:16px;font-weight:600;color:var(--accent);margin-bottom:12px;">
+        119 990 ₽
+      </div>
+      <div style="font-size:14px;color:var(--text-sec);line-height:1.6;margin-bottom:16px;">
+        256 ГБ, Desert Titanium. Можно любой цвет кроме белого.
+      </div>
+      <button class="btn-primary" style="background:var(--accent);">
+        🔗 Открыть в магазине
+      </button>
+
+      <div class="info-block" style="background:var(--accent-soft);color:var(--accent);margin-top:12px;">
+        <span class="icon">📋</span>
+        <span>Это желание из подборки. Бронирование недоступно.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li><b>Бейдж "📋 Подборка из вишлиста"</b> — сразу ясно, что это не полный вишлист</li>
+      <li><b>TTL-бейдж</b> с конкретной датой — прозрачность для получателя</li>
+      <li><b>Карточки без кнопок бронирования</b> — чистый просмотр</li>
+      <li><b>Шеврон ›</b> на карточках — приглашает тапнуть и посмотреть детали</li>
+      <li><b>Инфоблок</b> внизу — объясняет ограничения мягко</li>
+      <li><b>CTA "Создать в WishBoard"</b> — монетизация через acquisition</li>
+      <li><b>Детальная карточка</b> — фото, название, цена, описание, ссылка на магазин</li>
+      <li>Убрано: бронирование, комментарии, "что не дарить", статусы, приватность</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- 6. EXPIRED -->
+<!-- ═══════════════════════════════════════ -->
+<div class="section" id="expired">
+  <div class="section-label">Истекшая ссылка</div>
+  <p class="desc-text">Получатель открывает ссылку после 45 дней. Понятное сообщение, без паники, с направлением действий.</p>
+
+  <div class="variant-label">Срок действия истёк</div>
+  <div class="phone">
+    <div class="phone-body" style="text-align:center;padding:40px 20px;">
+      <div class="expired-icon">⏱</div>
+      <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;">
+        Срок подборки истёк
+      </div>
+      <div style="font-size:14px;color:var(--text-sec);line-height:1.6;margin-bottom:24px;">
+        Эта подборка была активна 45 дней и больше недоступна. Попросите владельца отправить новую ссылку.
+      </div>
+
+      <div class="cta-banner">
+        <div class="title">Хотите свой вишлист?</div>
+        <div class="subtitle">Создайте список желаний в WishBoard</div>
+        <button class="btn">Создать вишлист</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li>Тёплый оранжевый тон (не красная ошибка) — это нормальное поведение, не сбой</li>
+      <li>Объяснение + направление действий: "попросите владельца"</li>
+      <li>CTA на создание вишлиста — даже в expired state монетизируем через acquisition</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- 7. PAYWALL -->
+<!-- ═══════════════════════════════════════ -->
+<div class="section" id="paywall">
+  <div class="section-label">Paywall для Free-пользователя</div>
+  <p class="desc-text">Free-пользователь нажал "Поделиться подборкой" → видит объясняющий paywall через ProUpsellSheet.</p>
+
+  <div class="variant-label">Paywall</div>
+  <div class="phone">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body" style="text-align:center;">
+        <!-- Illustration -->
+        <div style="padding:20px 16px;margin-bottom:16px;border-radius:16px;background:linear-gradient(135deg, rgba(96,165,250,0.1), rgba(124,106,255,0.08));">
+          <div style="display:flex;gap:6px;justify-content:center;">
+            <div style="width:44px;height:44px;border-radius:11px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:20px;">📱</div>
+            <div style="width:44px;height:44px;border-radius:11px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:20px;">📚</div>
+            <div style="width:44px;height:44px;border-radius:11px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:20px;">🎮</div>
+          </div>
+          <div style="margin-top:6px;font-size:10px;color:var(--text-muted);">→</div>
+          <div style="display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:8px;background:var(--blue-soft);color:var(--blue);font-size:12px;font-weight:600;margin-top:4px;">
+            📋 Подборка → 📤
+          </div>
+        </div>
+
+        <div style="font-size:20px;font-weight:800;color:var(--text);line-height:1.3;">
+          Поделиться подборкой
+        </div>
+        <div style="font-size:14px;color:var(--text-sec);margin-top:8px;line-height:1.5;">
+          Отправьте не весь вишлист, а только выбранные желания
+        </div>
+
+        <div style="margin-top:18px;text-align:start;padding:0 4px;">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+            <span style="width:28px;height:28px;border-radius:8px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:14px;">📋</span>
+            <span style="font-size:14px;color:var(--text);line-height:1.4;">Выберите нужные желания и отправьте как подборку</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+            <span style="width:28px;height:28px;border-radius:8px;background:var(--green-soft);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:14px;">🔒</span>
+            <span style="font-size:14px;color:var(--text);line-height:1.4;">Остальные желания останутся скрытыми</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;">
+            <span style="width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;">⏱</span>
+            <span style="font-size:14px;color:var(--text);line-height:1.4;">Ссылка автоматически деактивируется через 45 дней</span>
+          </div>
+        </div>
+
+        <div style="margin-top:18px;font-size:14px;color:var(--text-sec);">
+          <span style="font-size:24px;font-weight:800;color:var(--text);">100</span>
+          <span style="font-size:16px;font-weight:600;color:var(--text);"> Stars</span>
+          / месяц
+        </div>
+
+        <button class="btn-pro-gradient" style="margin-top:14px;">Подключить Pro</button>
+        <button class="btn-secondary">Не сейчас</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- 8. DISCOVERY -->
+<!-- ═══════════════════════════════════════ -->
+<div class="section" id="discover">
+  <div class="section-label">Discoverability — как пользователь узнаёт о фиче</div>
+  <p class="desc-text">Ненавязчивое подведение: changelog, нудж в share-экране, пункт в меню. Без агрессивных баннеров.</p>
+
+  <div class="variant-label">1. Changelog — "Что нового"</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Что нового</span>
+    </div>
+    <div class="phone-body">
+      <div style="background:var(--surface);border-radius:14px;padding:16px;border:1px solid var(--accent);border-left:3px solid var(--accent);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <span style="font-size:15px;font-weight:600;color:var(--text);">11.04.2026</span>
+          <span class="pro-badge" style="margin-left:0;">PRO</span>
+        </div>
+        <div style="font-size:14px;color:var(--text);margin-bottom:6px;">
+          📋 Поделиться подборкой — отправьте только выбранные желания
+        </div>
+        <div style="font-size:13px;color:var(--text-sec);line-height:1.5;">
+          • Выберите нужные желания из вишлиста<br>
+          • Задайте название и отправьте как отдельную ссылку<br>
+          • Получатель увидит только выбранное<br>
+          • Ссылка действует 45 дней
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="variant-label">2. Нудж на экране шеринга полного вишлиста</div>
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">‹</span>
+      <span class="title">Поделиться</span>
+    </div>
+    <div class="phone-body">
+      <!-- Owner card (simplified) -->
+      <div style="padding:24px;border-radius:16px;text-align:center;margin-bottom:16px;background:linear-gradient(135deg, rgba(124,106,255,0.08), transparent);border:1px solid rgba(124,106,255,0.12);">
+        <div style="width:56px;height:56px;border-radius:50%;background:var(--accent-soft);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-size:22px;font-weight:600;color:var(--accent);">АМ</div>
+        <div style="font-size:16px;font-weight:600;color:var(--text);">Аня Морозова</div>
+        <div style="font-size:13px;color:var(--text-sec);">День рождения 2026 · 8 желаний</div>
+      </div>
+
+      <!-- Share actions (existing) -->
+      <button class="btn-primary" style="background:#2196F3;margin-bottom:8px;">📤 Отправить в Telegram</button>
+      <button class="btn-primary" style="background:var(--accent);margin-bottom:16px;">📋 Скопировать ссылку</button>
+
+      <!-- Nudge for curated selection -->
+      <div class="nudge">
+        <div class="icon-circle" style="background:var(--blue-soft);color:var(--blue);">📋</div>
+        <div class="content">
+          <div class="title">Хотите отправить не всё?</div>
+          <div class="subtitle">Выберите желания и создайте отдельную подборку</div>
+        </div>
+        <span style="color:var(--text-muted);font-size:14px;">›</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="variant-label">3. Пункт в меню — постоянная точка входа</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">
+        Уже показано выше (секция 1) — кнопка в меню управления вишлистом с PRO-бейджем для Free.
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h4>UX-решения</h4>
+    <ul>
+      <li><b>Changelog</b> — стандартный канал discovery, пользователи проверяют при red dot</li>
+      <li><b>Нудж на share-экране</b> — контекстный: пользователь уже в sharing mindset, самый высококонверсионный момент</li>
+      <li><b>Меню вишлиста</b> — постоянная точка входа, не зависит от discovery</li>
+      <li>Нудж ненавязчивый — row-паттерн, не баннер. Показывать первые N раз или до первого создания подборки</li>
+      <li>Отвергнуто: popup/modal при заходе в вишлист, floating badge на кнопке "Поделиться", push-уведомление</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- 9. NOTES -->
+<!-- ═══════════════════════════════════════ -->
+<div class="section" id="notes">
+  <div class="section-label">Продуктовые заметки</div>
+
+  <div class="notes" style="margin-top:0;">
+    <h4>Полный UX-flow</h4>
+    <ul>
+      <li><b>1.</b> Пользователь в вишлисте → тапает "Управление" → "Поделиться подборкой"</li>
+      <li><b>1b.</b> Или: long press → bulk select → выбирает → тапает "Подборка" в action bar</li>
+      <li><b>2.</b> FREE → paywall. PRO → selection mode</li>
+      <li><b>3.</b> Выбирает 1+ желаний → "Продолжить"</li>
+      <li><b>4.</b> BottomSheet: название + превью + TTL notice → "Поделиться"</li>
+      <li><b>5.</b> Создание snapshot → success state → Telegram share / copy link</li>
+      <li><b>6.</b> Получатель открывает ссылку → light-подборка без бронирования</li>
+      <li><b>7.</b> После 45 дней → expired state</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h4>UI-copy — все тексты</h4>
+    <ul>
+      <li><b>Кнопка меню:</b> «Поделиться подборкой»</li>
+      <li><b>Bulk bar:</b> «Подборка»</li>
+      <li><b>Заголовок selection:</b> «Поделиться подборкой»</li>
+      <li><b>Подзаголовок:</b> «Выберите желания, которые хотите включить в подборку»</li>
+      <li><b>Счётчик:</b> «Выбрано: N из M»</li>
+      <li><b>CTA selection:</b> «Продолжить»</li>
+      <li><b>Заголовок настройки:</b> «Поделиться подборкой»</li>
+      <li><b>Подзаголовок настройки:</b> «Получатель увидит только эти желания»</li>
+      <li><b>Лейбл названия:</b> «Название подборки»</li>
+      <li><b>Дефолт названия:</b> «Идеи подарка»</li>
+      <li><b>Валидация:</b> «Введите название подборки»</li>
+      <li><b>TTL:</b> «Ссылка будет активна 45 дней»</li>
+      <li><b>Snapshot:</b> «Подборка зафиксируется — изменения вишлиста не повлияют на неё»</li>
+      <li><b>CTA отправки:</b> «📤 Поделиться»</li>
+      <li><b>Success:</b> «Подборка создана»</li>
+      <li><b>Success sub:</b> «"Название" · N желаний»</li>
+      <li><b>Деактивация:</b> «Отключить ссылку»</li>
+      <li><b>Telegram share:</b> «📤 Отправить в Telegram»</li>
+      <li><b>Copy:</b> «📋 Скопировать ссылку»</li>
+      <li><b>Guest badge:</b> «📋 Подборка из вишлиста»</li>
+      <li><b>Guest info:</b> «Это подборка из вишлиста. Здесь нельзя бронировать. Для полного списка попросите владельца отправить вишлист.»</li>
+      <li><b>Item detail info:</b> «Это желание из подборки. Бронирование недоступно.»</li>
+      <li><b>Expired title:</b> «Срок подборки истёк»</li>
+      <li><b>Expired body:</b> «Эта подборка была активна 45 дней и больше недоступна. Попросите владельца отправить новую ссылку.»</li>
+      <li><b>Nudge title:</b> «Хотите отправить не всё?»</li>
+      <li><b>Nudge sub:</b> «Выберите желания и создайте отдельную подборку»</li>
+      <li><b>Paywall title:</b> «Поделиться подборкой»</li>
+      <li><b>Paywall sub:</b> «Отправьте не весь вишлист, а только выбранные желания»</li>
+      <li><b>Error:</b> «Не удалось создать»</li>
+      <li><b>Error sub:</b> «Проверьте интернет-соединение и попробуйте ещё раз»</li>
+      <li><b>CTA acquisition:</b> «Создать в WishBoard»</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h4>Edge cases — обработка в дизайне</h4>
+    <ul>
+      <li><b>1 желание</b> — валидно, CTA активен, мини-превью показывает 1 карточку</li>
+      <li><b>Много желаний (50+)</b> — мини-превью скроллится, показывает первые 5 + "и ещё N"</li>
+      <li><b>Снял весь выбор</b> — CTA деактивируется, счётчик "Выбрано: 0"</li>
+      <li><b>Пустое название</b> — красная рамка, текст ошибки, CTA disabled</li>
+      <li><b>Длинное название (100+ символов)</b> — обрезка ввода, счётчик символов</li>
+      <li><b>Закрыл sheet</b> — ничего не создаётся, swipe-to-dismiss безопасен</li>
+      <li><b>Ошибка API</b> — error state с retry и cancel</li>
+      <li><b>Удалённое желание</b> — snapshot не зависит от оригинала, карточка остаётся</li>
+      <li><b>Изменённое желание</b> — snapshot иммутабелен, старая версия сохраняется</li>
+      <li><b>Без фото</b> — emoji-placeholder (существующий паттерн wish-thumb)</li>
+      <li><b>Без цены</b> — строка цены скрывается</li>
+      <li><b>Длинное название желания</b> — text-overflow: ellipsis (существующий паттерн)</li>
+      <li><b>После TTL</b> — expired state, CTA на создание вишлиста</li>
+      <li><b>Повторный share</b> — success state с copy/share остаётся доступным</li>
+      <li><b>Маленький вишлист (1-2 желания)</b> — работает, можно выбрать 1</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h4>Что потребуется для реализации (следующий этап)</h4>
+    <ul>
+      <li><b>Schema:</b> модель CuratedSelection (id, wishlistId, title, items JSON snapshot, shareToken, expiresAt, deactivatedAt, createdAt)</li>
+      <li><b>API:</b> POST /tg/wishlists/:id/selections — создание, GET /public/selections/:token — публичный, DELETE — деактивация</li>
+      <li><b>TTL:</b> expiresAt = createdAt + 45 days, cron cleanup опционально</li>
+      <li><b>Frontend:</b> selection flow (reuse bulk-select), configure sheet, success state, public page</li>
+      <li><b>Share:</b> Telegram deep link + clipboard</li>
+      <li><b>i18n:</b> ~30 новых ключей</li>
+      <li><b>Analytics:</b> selection_started, selection_created, selection_shared, selection_link_opened, selection_expired_viewed, paywall_shown_selection</li>
+      <li><b>Paywall:</b> новый UpsellContext 'curated_selection'</li>
+      <li><b>Public page:</b> /s/[token] — SSR light-version</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h4>Отвергнутые варианты</h4>
+    <ul>
+      <li><b>Отдельный FAB "Подборка"</b> — перегружает интерфейс, конфликтует с "Добавить желание"</li>
+      <li><b>Подборка как тип вишлиста</b> — противоречит требованию "не отдельный вишлист"</li>
+      <li><b>Drag-and-drop выбор</b> — сложно на мобильном, multi-select проще</li>
+      <li><b>Бронирование в подборке</b> — явно исключено по ТЗ, усложняет snapshot-модель</li>
+      <li><b>Auto-sync с вишлистом</b> — противоречит snapshot-модели, создаёт путаницу</li>
+      <li><b>Popup при входе в вишлист</b> — навязчиво, не premium feel</li>
+      <li><b>Бессрочная ссылка</b> — не нужно, 45 дней оптимально для подборки</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WishBoard — Secret Santa · North Star v2</title>
+<style>
+:root{--bg:#1B1B1F;--surface:#26262C;--card:#2F2F38;--accent:#7C6AFF;--accent-soft:rgba(124,106,255,0.12);--accent-light:#A78BFA;--success:#34D399;--success-soft:rgba(52,211,153,0.12);--warning:#FBBF24;--danger:#F87171;--prio-1:#6B7FD4;--prio-2:#E8930A;--prio-3:#F04E6E;--text:#F4F4F6;--text-secondary:#9CA3AF;--text-muted:#6B7280;--border:rgba(255,255,255,0.06);--border-light:rgba(255,255,255,0.10);--gradient-accent:linear-gradient(135deg,#7C6AFF 0%,#9B8AFF 100%);--gradient-fade-bg:linear-gradient(to top,#1B1B1F 65%,transparent);--r-sm:6px;--r-md:10px;--r-lg:12px;--r-xl:14px;--r-xxl:16px;--r-xxxl:20px;--r-pill:100px;--sh-elevated:0 2px 12px rgba(0,0,0,0.18);--font-sans:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-sans);background:#0c0c0e;color:var(--text);min-height:100vh;padding:40px 20px;line-height:1.4}
+.page-title{text-align:center;color:var(--text);font-size:20px;font-weight:700;margin:0 auto 8px;letter-spacing:-0.01em}
+.page-subtitle{text-align:center;color:var(--text-secondary);font-size:14px;margin:0 auto 32px;max-width:720px}
+.phones{display:flex;flex-wrap:wrap;gap:32px;justify-content:center;align-items:flex-start}
+.phone{width:375px;min-height:812px;background:var(--bg);border-radius:44px;position:relative;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.6),0 0 0 10px #1a1a1c,0 0 0 12px #0a0a0b;flex-shrink:0}
+.phone.tall{min-height:900px}
+.status-bar{height:48px;padding:16px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;font-size:14px;font-weight:600}
+.phone-label{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-size:10px;padding:4px 10px;border-radius:var(--r-pill);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;z-index:10;backdrop-filter:blur(8px);white-space:nowrap}
+.side-note{max-width:none;color:var(--text-secondary);font-size:13px;line-height:1.6}
+.side-note .tag{display:inline-block;font-size:10px;padding:3px 8px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-light);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px}
+.side-note h3{color:var(--text);font-size:16px;margin:0 0 12px;letter-spacing:-0.01em}
+.side-note h4{color:var(--accent-light);font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700}
+.side-note p{margin:0 0 10px}
+.side-note ul{margin:0 0 14px;padding-left:18px}
+.side-note li{margin-bottom:4px}
+.side-note b{color:var(--text);font-weight:600}
+.screen-header{height:52px;padding:6px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hdr-btn{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.04);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text);font-size:18px;cursor:pointer;flex-shrink:0}
+.hdr-title{flex:1;text-align:center;font-size:15px;font-weight:700;color:var(--text);letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:var(--r-sm);font-size:11px;font-weight:700;white-space:nowrap}
+.chip.lg{padding:5px 10px;border-radius:var(--r-pill);font-size:12px}
+.chip.success{background:var(--success-soft);color:var(--success)}
+.chip.accent{background:var(--accent-soft);color:var(--accent)}
+.chip.surface{background:var(--surface);color:var(--text-secondary)}
+.btn{border:none;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:transform 0.15s ease;letter-spacing:-0.01em;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:var(--r-xl);min-height:44px}
+.btn.full{width:100%}
+.btn.danger{background:var(--danger-soft);color:var(--danger)}
+.btn.surface{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.sticky{position:absolute;bottom:0;left:0;right:0;padding:24px 16px 28px;background:var(--gradient-fade-bg);pointer-events:none;display:flex;flex-direction:column;gap:6px}
+.sticky>*{pointer-events:auto}
+</style>
+<style>
+  .santa-hero {
+    margin: 4px 16px 18px;
+    border-radius: var(--r-xxl);
+    padding: 20px;
+    background:
+      radial-gradient(ellipse at top right, rgba(255,255,255,0.12), transparent 55%),
+      linear-gradient(135deg, #0f5f3c 0%, #1a8552 60%, #d92020 130%);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+  }
+  .santa-hero::after {
+    content: '🎅';
+    position: absolute;
+    top: -20px; right: -10px;
+    font-size: 120px;
+    opacity: 0.1;
+    transform: rotate(-12deg);
+  }
+  .santa-hero::before {
+    content: '❄️ ❄️ ❄️';
+    position: absolute;
+    top: 10px; left: 14px;
+    font-size: 14px;
+    opacity: 0.3;
+  }
+  .santa-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+    position: relative;
+  }
+  .santa-sub {
+    font-size: 13px;
+    color: rgba(255,255,255,0.85);
+    line-height: 1.4;
+    margin-bottom: 14px;
+    position: relative;
+  }
+  .santa-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(10px);
+    color: #fff;
+    padding: 5px 12px;
+    border-radius: var(--r-pill);
+    font-size: 12px;
+    font-weight: 700;
+    position: relative;
+  }
+  .santa-status-pill .dot {
+    width: 6px; height: 6px;
+    background: #34d399;
+    border-radius: 50%;
+    box-shadow: 0 0 6px #34d399;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .alias-card {
+    background: linear-gradient(135deg, var(--card), rgba(107,127,212,0.05));
+    border: 1px solid rgba(107,127,212,0.3);
+    border-radius: var(--r-xxl);
+    padding: 20px;
+    margin: 0 16px 16px;
+    text-align: center;
+  }
+  .alias-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .alias-emoji {
+    font-size: 56px;
+    margin-bottom: 8px;
+    display: block;
+    line-height: 1;
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+  }
+  .alias-name {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--prio-1);
+  }
+  .alias-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    line-height: 1.4;
+  }
+
+  .assignment-card {
+    background: linear-gradient(135deg, rgba(124,106,255,0.08), rgba(91,75,214,0.04));
+    border: 1px solid rgba(124,106,255,0.3);
+    border-radius: var(--r-xxl);
+    padding: 20px;
+    margin: 0 16px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .assignment-label {
+    font-size: 10px;
+    color: var(--accent-light);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+  .assignment-target {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+  .target-emoji {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(240,78,110,0.2), rgba(240,78,110,0.08));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px;
+    flex-shrink: 0;
+  }
+  .target-info { flex: 1; min-width: 0; }
+  .target-name {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--prio-3);
+  }
+  .target-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+  .view-wishlist-btn {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--r-lg);
+    font-size: 13px;
+    font-weight: 700;
+    width: 100%;
+    cursor: pointer;
+    font-family: inherit;
+    box-shadow: var(--sh-glow-med);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .budget-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 14px;
+    margin: 0 16px 16px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+  .budget-icon {
+    width: 40px; height: 40px;
+    border-radius: var(--r-md);
+    background: rgba(52,211,153,0.12);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .budget-title { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+  .budget-val { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; margin-top: 2px; }
+
+  .participants-list {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 14px;
+    margin: 0 16px 16px;
+  }
+  .pl-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .pl-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .pl-p {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    background: var(--surface);
+    border-radius: var(--r-lg);
+    font-size: 12px;
+  }
+  .pl-p-emoji {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: rgba(107,127,212,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .pl-p-name { font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pl-p-status { font-size: 10px; color: var(--text-muted); }
+
+  .polls-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 14px;
+    margin: 0 16px 16px;
+  }
+  .poll-q {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .poll-opt {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    margin-bottom: 6px;
+    font-size: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .poll-opt.winner {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .poll-opt-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: rgba(124,106,255,0.1);
+    pointer-events: none;
+  }
+  .poll-opt.winner .poll-opt-fill { background: rgba(124,106,255,0.18); }
+  .poll-opt-label { position: relative; flex: 1; font-weight: 600; }
+  .poll-opt-pct { position: relative; font-weight: 700; color: var(--text-secondary); }
+  .poll-opt.winner .poll-opt-pct { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Secret Santa · North Star v2</h1>
+<p class="page-subtitle">Sub-product внутри WishBoard. Анонимные alias'ы (animal emoji + прилагательное), receiver assignment, групповой chat, polls. Ролевая визуализация: participant vs organizer vs giver.</p>
+
+<div class="phones">
+
+<!-- Phone 1: Santa campaign (participant view) -->
+<div class="phone tall">
+  <div class="phone-label">Santa · participant</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+
+  <div class="screen-header">
+    <div class="hdr-btn">‹</div>
+    <div class="hdr-title">Семья 2026</div>
+    <div class="hdr-btn">💬</div>
+  </div>
+
+  <!-- Campaign hero -->
+  <div class="santa-hero">
+    <div class="santa-status-pill"><span class="dot"></span> активная</div>
+    <div style="margin-top: 10px;"></div>
+    <div class="santa-title">🎅 Тайный Санта</div>
+    <div class="santa-sub">8 участников · до розыгрыша подарков 3 недели</div>
+  </div>
+
+  <!-- My alias -->
+  <div class="alias-card">
+    <div class="alias-label">Ты в этой игре —</div>
+    <span class="alias-emoji">🦌</span>
+    <div class="alias-name">Храбрый Лось</div>
+    <div class="alias-hint">Никто не знает что это ты. Используй свой alias в чате.</div>
+  </div>
+
+  <!-- My assignment -->
+  <div class="assignment-card">
+    <div class="assignment-label">🎁 Ты даришь</div>
+    <div class="assignment-target">
+      <div class="target-emoji">🦊</div>
+      <div class="target-info">
+        <div class="target-name">Рыжий Лис</div>
+        <div class="target-sub">Бюджет: 3 000 – 5 000 ₽ · у него есть вишлист</div>
+      </div>
+    </div>
+    <button class="view-wishlist-btn">
+      📋 Посмотреть вишлист получателя
+    </button>
+  </div>
+
+  <!-- Budget reminder -->
+  <div class="budget-card">
+    <div class="budget-icon">💰</div>
+    <div style="flex: 1;">
+      <div class="budget-title">Бюджет подарка</div>
+      <div class="budget-val">3 000 – 5 000 ₽</div>
+    </div>
+    <span class="chip surface" style="font-size: 10px;">согласовано</span>
+  </div>
+
+  <!-- Participants (anonymized) -->
+  <div class="participants-list">
+    <div class="pl-header">
+      <div class="gg-p-title" style="font-size: 14px; font-weight: 700;">Участники (anonymous)</div>
+      <span style="font-size: 12px; color: var(--text-muted); font-weight: 600;">8</span>
+    </div>
+    <div class="pl-grid">
+      <div class="pl-p">
+        <div class="pl-p-emoji">🦌</div>
+        <div>
+          <div class="pl-p-name">Храбрый Лось</div>
+          <div class="pl-p-status" style="color: var(--accent);">ты</div>
+        </div>
+      </div>
+      <div class="pl-p">
+        <div class="pl-p-emoji">🦊</div>
+        <div>
+          <div class="pl-p-name">Рыжий Лис</div>
+          <div class="pl-p-status">твой получатель</div>
+        </div>
+      </div>
+      <div class="pl-p">
+        <div class="pl-p-emoji">🐼</div>
+        <div>
+          <div class="pl-p-name">Мудрая Панда</div>
+          <div class="pl-p-status">в игре</div>
+        </div>
+      </div>
+      <div class="pl-p">
+        <div class="pl-p-emoji">🐺</div>
+        <div>
+          <div class="pl-p-name">Весёлый Волк</div>
+          <div class="pl-p-status">в игре</div>
+        </div>
+      </div>
+      <div class="pl-p">
+        <div class="pl-p-emoji">🦉</div>
+        <div>
+          <div class="pl-p-name">Тихая Сова</div>
+          <div class="pl-p-status">в игре</div>
+        </div>
+      </div>
+      <div class="pl-p">
+        <div class="pl-p-emoji">🐨</div>
+        <div>
+          <div class="pl-p-name">Сонный Коала</div>
+          <div class="pl-p-status">в игре</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active poll -->
+  <div class="polls-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">📊 Активный опрос</div>
+      <div style="font-size: 11px; color: var(--text-muted);">5 из 8 проголосовали</div>
+    </div>
+    <div class="poll-q">Когда делаем итоговую встречу?</div>
+    <div class="poll-opt winner">
+      <div class="poll-opt-fill" style="width: 60%;"></div>
+      <span class="poll-opt-label">25 декабря, 19:00</span>
+      <span class="poll-opt-pct">60%</span>
+    </div>
+    <div class="poll-opt">
+      <div class="poll-opt-fill" style="width: 20%;"></div>
+      <span class="poll-opt-label">26 декабря, 15:00</span>
+      <span class="poll-opt-pct">20%</span>
+    </div>
+    <div class="poll-opt">
+      <div class="poll-opt-fill" style="width: 20%;"></div>
+      <span class="poll-opt-label">30 декабря, любое время</span>
+      <span class="poll-opt-pct">20%</span>
+    </div>
+  </div>
+</div>
+
+<!-- Phone 2: Santa organizer progress -->
+<div class="phone tall">
+  <div class="phone-label">Santa · organizer</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+
+  <div class="screen-header">
+    <div class="hdr-btn">‹</div>
+    <div class="hdr-title">Семья 2026 · организатор</div>
+    <div class="hdr-btn">⚙</div>
+  </div>
+
+  <!-- Organizer dashboard -->
+  <div style="padding: 0 16px 16px;">
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 16px;">
+      <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+        <span class="chip success lg">✅ жеребьёвка прошла</span>
+        <span class="chip accent lg">🎁 8 назначено</span>
+      </div>
+      <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+        Ты не видишь кто кому достался. Даже как организатор.
+      </div>
+    </div>
+  </div>
+
+  <!-- Gift progress grid -->
+  <div style="padding: 0 16px 16px;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+      <div style="font-size: 14px; font-weight: 700;">📊 Прогресс подарков</div>
+      <span style="font-size: 12px; color: var(--accent); font-weight: 700;">6 из 8</span>
+    </div>
+
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 2px 12px;">
+      <div style="display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--border); align-items: center;">
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--success);"></div>
+          <span style="font-size: 13px; font-weight: 600;">Куплено</span>
+        </div>
+        <span style="font-size: 13px; font-weight: 700; color: var(--success);">3</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--border); align-items: center;">
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></div>
+          <span style="font-size: 13px; font-weight: 600;">Выбрано из вишлиста</span>
+        </div>
+        <span style="font-size: 13px; font-weight: 700; color: var(--accent);">2</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--border); align-items: center;">
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--prio-2);"></div>
+          <span style="font-size: 13px; font-weight: 600;">Сам выбирает</span>
+        </div>
+        <span style="font-size: 13px; font-weight: 700; color: var(--prio-2);">1</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--border); align-items: center;">
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted);"></div>
+          <span style="font-size: 13px; font-weight: 600;">Без вишлиста</span>
+        </div>
+        <span style="font-size: 13px; font-weight: 700; color: var(--text-muted);">1</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 11px 0; align-items: center;">
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--danger);"></div>
+          <span style="font-size: 13px; font-weight: 600;">Не определился</span>
+        </div>
+        <span style="font-size: 13px; font-weight: 700; color: var(--danger);">1</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div style="padding: 0 16px 16px;">
+    <div style="font-size: 14px; font-weight: 700; margin-bottom: 12px;">📅 Таймлайн</div>
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 14px;">
+      <div style="display: flex; gap: 10px; align-items: center; padding: 6px 0;">
+        <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--success); display: flex; align-items: center; justify-content: center; font-size: 12px; color: #000; font-weight: 800;">✓</div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; font-weight: 600;">Приглашения разосланы</div>
+          <div style="font-size: 11px; color: var(--text-muted);">15 ноября</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; padding: 6px 0;">
+        <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--success); display: flex; align-items: center; justify-content: center; font-size: 12px; color: #000; font-weight: 800;">✓</div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; font-weight: 600;">Жеребьёвка</div>
+          <div style="font-size: 11px; color: var(--text-muted);">1 декабря · все получили alias</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; padding: 6px 0;">
+        <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); border: 2px solid var(--accent); box-sizing: border-box;"></div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; font-weight: 600; color: var(--accent);">Сейчас: выбор и покупка</div>
+          <div style="font-size: 11px; color: var(--text-muted);">декабрь</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; padding: 6px 0;">
+        <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--surface); border: 2px dashed var(--border-light); box-sizing: border-box;"></div>
+        <div style="flex: 1;">
+          <div style="font-size: 13px; font-weight: 600; color: var(--text-muted);">Итоговая встреча</div>
+          <div style="font-size: 11px; color: var(--text-muted);">25 декабря, 19:00</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sticky">
+    <button class="btn surface full" style="margin-bottom: 6px;">📧 Отправить напоминание</button>
+    <button class="btn danger full" style="font-size: 13px;">Отменить кампанию</button>
+  </div>
+</div>
+
+</div>
+
+<div style="max-width: 1200px; margin: 40px auto 0;">
+  <div class="side-note" style="max-width: none;">
+    <span class="tag">North Star — Secret Santa</span>
+    <h3>Sub-product внутри WishBoard</h3>
+    <p>Тайный Санта — отдельное мини-приложение внутри WishBoard. Свои экраны, своя логика: жеребьёвка, alias'ы, exclusions, chat, polls.</p>
+
+    <h4>Phone 1 — participant view</h4>
+    <ul>
+      <li><b>Santa-hero</b>: deep-green / red gradient (зима/праздник, не бренд-purple). ❄️ декор, «🎅 Тайный Санта». Status-pill с animated green dot = «активная».</li>
+      <li><b>Alias card</b>: «Ты в этой игре — 🦌 Храбрый Лось» — animal emoji 56px с shadow, name в prio-1 blue (отличается от accent-purple чтобы не путать с brand). Hint: «Никто не знает что это ты».</li>
+      <li><b>Assignment card</b> (accent-purple tint): «🎁 Ты даришь — 🦊 Рыжему Лису». Бюджет в той же строке. CTA «📋 Посмотреть вишлист получателя».</li>
+      <li><b>Participants grid</b>: 2-column grid с animal-emoji. Твой alias отмечен «ты», получатель отмечен «твой получатель». Остальные — просто «в игре» (anonymous).</li>
+      <li><b>Poll</b>: inline bar-chart с lead-option выделен accent-border. 5 из 8 проголосовали — progress social.</li>
+    </ul>
+
+    <h4>Phone 2 — organizer view</h4>
+    <ul>
+      <li><b>Status tiles</b>: «✅ жеребьёвка прошла» + «🎁 8 назначено». «Ты не видишь кто кому достался» — privacy guarantee.</li>
+      <li><b>Gift progress</b>: 5 состояний с цветными dots (куплено / выбрано из вишлиста / сам выбирает / без вишлиста / не определился). Агрегированные counts — organizer видит <b>прогресс</b>, не кто-кому.</li>
+      <li><b>Timeline</b>: 4 этапа (приглашения → жеребьёвка → выбор → встреча). Пройдённые — green-check, текущий — accent-ring, будущие — dashed.</li>
+      <li><b>Sticky footer</b>: «📧 Отправить напоминание» (surface) + «Отменить кампанию» (danger-text, тихая).</li>
+    </ul>
+
+    <h4>Уникальный визуальный язык</h4>
+    <ul>
+      <li><b>Animal emoji</b> + adjective вместо имён: 🦌 Храбрый Лось / 🦊 Рыжий Лис / 🐼 Мудрая Панда — legit anonymous-friendly</li>
+      <li><b>Бренд-gradient not used</b>: Santa имеет свой green/red gradient. Это отдельный sub-product, не должен смешиваться с main app</li>
+      <li><b>Role-specific UI</b>: participant видит assignment + alias, organizer видит aggregate progress + timeline</li>
+      <li><b>Privacy-first</b>: «не видит кто кому» — ясно прописано и показано что organizer <b>не</b> получает доступа к draw</li>
+    </ul>
+
+    <h4>Что лучше current prod</h4>
+    <ul>
+      <li>Alias-card визуально отдельный и крупный — сейчас alias теряется</li>
+      <li>Assignment-card emphasizes «кто твой target» — главный интерес participant'а</li>
+      <li>Timeline для organizer'а — сейчас это растянуто по нескольким экранам</li>
+      <li>Aggregate gift-progress — организатор видит summary без нарушения privacy</li>
+      <li>Green/red seasonal gradient — Santa узнаётся с 1 взгляда, не путается с Paywall</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>

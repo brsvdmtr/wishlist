@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WishBoard — Public showcase profile · North Star v2</title>
+<style>
+:root{--bg:#1B1B1F;--surface:#26262C;--card:#2F2F38;--accent:#7C6AFF;--accent-soft:rgba(124,106,255,0.12);--accent-light:#A78BFA;--success:#34D399;--success-soft:rgba(52,211,153,0.12);--warning:#FBBF24;--warning-soft:rgba(251,191,36,0.12);--danger:#F87171;--danger-soft:rgba(248,113,113,0.12);--text:#F4F4F6;--text-secondary:#9CA3AF;--text-muted:#6B7280;--border:rgba(255,255,255,0.06);--gradient-accent:linear-gradient(135deg,#7C6AFF 0%,#9B8AFF 100%);--r-sm:6px;--r-md:10px;--r-lg:12px;--r-xl:14px;--r-xxl:16px;--r-xxxl:20px;--r-pill:100px;--sh-glow-cta:0 8px 24px rgba(124,106,255,0.40);--sh-glow-med:0 4px 16px rgba(124,106,255,0.25);--font-sans:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-sans);background:#0c0c0e;color:var(--text);min-height:100vh;padding:40px 20px;line-height:1.4}
+.page-title{text-align:center;color:var(--text);font-size:20px;font-weight:700;margin:0 auto 8px;letter-spacing:-0.01em}
+.page-subtitle{text-align:center;color:var(--text-secondary);font-size:14px;margin:0 auto 32px;max-width:720px}
+.phone-with-note{display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;justify-content:center;margin:0 auto;max-width:1300px}
+.phone{width:375px;min-height:812px;background:var(--bg);border-radius:44px;position:relative;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.6),0 0 0 10px #1a1a1c,0 0 0 12px #0a0a0b;flex-shrink:0}
+.phone.tall{min-height:900px}
+.status-bar{height:48px;padding:16px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;font-size:14px;font-weight:600}
+.phone-label{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-size:10px;padding:4px 10px;border-radius:var(--r-pill);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;z-index:10;backdrop-filter:blur(8px);white-space:nowrap}
+.side-note{max-width:340px;color:var(--text-secondary);font-size:13px;line-height:1.6}
+.side-note .tag{display:inline-block;font-size:10px;padding:3px 8px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-light);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px}
+.side-note h3{color:var(--text);font-size:16px;margin:0 0 12px;letter-spacing:-0.01em}
+.side-note h4{color:var(--accent-light);font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700}
+.side-note p{margin:0 0 10px}
+.side-note ul{margin:0 0 14px;padding-left:18px}
+.side-note li{margin-bottom:4px}
+.side-note b{color:var(--text);font-weight:600}
+.content{padding:0 16px 140px}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:0 4px;gap:8px}
+.section-header h2{margin:0;font-size:17px;font-weight:700;letter-spacing:-0.01em;display:flex;align-items:center;gap:8px}
+.section-header .action{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;flex-shrink:0}
+.btn{border:none;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:transform 0.15s ease;letter-spacing:-0.01em;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:var(--r-xl);min-height:44px}
+.btn:active{transform:scale(0.98)}
+.btn.full{width:100%}
+.btn.lg{min-height:52px;font-size:16px;padding:16px 24px}
+.btn.primary-gradient{background:var(--gradient-accent);color:#fff;box-shadow:var(--sh-glow-cta),inset 0 1px 0 rgba(255,255,255,0.2)}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:var(--r-sm);font-size:11px;font-weight:700;white-space:nowrap}
+.chip.accent{background:var(--accent-soft);color:var(--accent)}
+.chip.pro{background:var(--gradient-accent);color:#fff;box-shadow:0 2px 8px rgba(124,106,255,0.25);padding:5px 10px;border-radius:var(--r-pill);font-size:11px;letter-spacing:0.3px}
+.thumb.green{background:var(--success-soft)}
+.banner{padding:12px 14px;border-radius:var(--r-xl);display:flex;gap:12px;align-items:flex-start;font-size:13px;line-height:1.5}
+.banner.danger{background:var(--danger-soft);color:var(--danger)}
+.banner .b-icon{flex-shrink:0;font-size:16px;line-height:1;margin-top:1px}
+.banner .b-body{flex:1;min-width:0}
+.banner .b-title{font-weight:700;margin-bottom:2px;font-size:14px}
+</style>
+<style>
+  .cover {
+    height: 160px;
+    background:
+      radial-gradient(ellipse at top right, rgba(255,255,255,0.15), transparent 50%),
+      linear-gradient(135deg, #7C6AFF 0%, #A78BFA 50%, #FBBF24 130%);
+    position: relative;
+    margin: 0 0 -56px;
+  }
+  .cover-actions {
+    position: absolute;
+    top: 56px; right: 12px;
+    display: flex;
+    gap: 8px;
+  }
+  .cover-btn {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.15);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .back-in-cover {
+    position: absolute;
+    top: 56px; left: 12px;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.15);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+  }
+
+  .profile-header {
+    padding: 0 16px 20px;
+    position: relative;
+  }
+  .profile-avatar {
+    width: 112px;
+    height: 112px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px;
+    font-weight: 800;
+    color: #fff;
+    border: 4px solid var(--bg);
+    margin-bottom: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .profile-name-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .profile-name {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  .profile-handle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+  .profile-bio {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+  .profile-stats {
+    display: flex;
+    gap: 20px;
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .p-stat { flex: 1; text-align: center; }
+  .p-stat .n { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+  .p-stat .l { font-size: 11px; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .prefs-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+  .prefs-title {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .prefs-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 14px;
+    font-size: 13px;
+  }
+  .prefs-grid .k { color: var(--text-muted); }
+  .prefs-grid .v { color: var(--text); font-weight: 600; }
+
+  .brand-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .brand-chip {
+    padding: 5px 10px;
+    border-radius: var(--r-pill);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  .pinned-wl {
+    background: linear-gradient(135deg, var(--card), rgba(251,191,36,0.04));
+    border: 1px solid rgba(251,191,36,0.2);
+    border-radius: var(--r-xl);
+    padding: 14px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    position: relative;
+  }
+  .pinned-star {
+    position: absolute;
+    top: -6px; right: 10px;
+    background: var(--warning);
+    color: #000;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: var(--r-pill);
+  }
+  .wl-emoji-m {
+    width: 48px; height: 48px;
+    border-radius: var(--r-lg);
+    background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+  .wl-body-m { flex: 1; min-width: 0; }
+  .wl-m-title { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+  .wl-m-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+  .regular-wl {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 12px;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Public showcase profile · North Star v2</h1>
+<p class="page-subtitle">PRO-only фича. Открывается по @handle (анна.смирнова) или публичной ссылке. Витрина вишлистов + bio + предпочтения. Guest-view. Подписка = long-term relationship.</p>
+
+<div class="phone-with-note">
+
+<div class="phone tall">
+  <div class="phone-label">Showcase profile</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+
+  <!-- Cover with gradient -->
+  <div class="cover">
+    <div class="back-in-cover">‹</div>
+    <div class="cover-actions">
+      <div class="cover-btn">⤴</div>
+      <div class="cover-btn">⋯</div>
+    </div>
+  </div>
+
+  <div class="profile-header">
+    <div class="profile-avatar">А</div>
+
+    <div class="profile-name-row">
+      <div class="profile-name">Анна Смирнова</div>
+      <span class="chip pro">⭐ PRO</span>
+    </div>
+    <div class="profile-handle">@annasm · WishBoard с января 2025</div>
+    <div class="profile-bio">Книги, свечи Diptyque, уютные мелочи для дома 🕯 Никаких цветов и сладкого — аллергия 🙏</div>
+
+    <button class="btn primary-gradient lg full" style="margin-bottom: 16px;">+ Подписаться на профиль</button>
+
+    <div class="profile-stats">
+      <div class="p-stat">
+        <div class="n">7</div>
+        <div class="l">вишлистов</div>
+      </div>
+      <div class="p-stat">
+        <div class="n">142</div>
+        <div class="l">желания</div>
+      </div>
+      <div class="p-stat">
+        <div class="n">34</div>
+        <div class="l">подписчика</div>
+      </div>
+    </div>
+
+    <!-- Prefs card -->
+    <div class="prefs-card">
+      <div class="prefs-title">Размеры и предпочтения</div>
+      <div class="prefs-grid">
+        <span class="k">Одежда</span>
+        <span class="v">M · иногда L</span>
+        <span class="k">Обувь</span>
+        <span class="v">37 (EU)</span>
+        <span class="k">Кольцо</span>
+        <span class="v">16.5</span>
+      </div>
+      <div class="brand-chips">
+        <span class="brand-chip">Diptyque</span>
+        <span class="brand-chip">Molskine</span>
+        <span class="brand-chip">Aesop</span>
+        <span class="brand-chip">Muji</span>
+      </div>
+    </div>
+
+    <!-- Don't-gift preview block -->
+    <div class="banner danger" style="margin-bottom: 16px;">
+      <div class="b-icon">🚫</div>
+      <div class="b-body">
+        <div class="b-title" style="color: var(--danger);">Что не дарить</div>
+        <div style="color: var(--text-secondary); font-size: 12px; margin-top: 4px;">💐 цветы · 🍫 сладкое · 💄 косметика</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="content" style="padding-bottom: 24px;">
+
+    <!-- Pinned section -->
+    <div class="section-header">
+      <h2>⭐ Закреплённые</h2>
+    </div>
+
+    <div class="pinned-wl">
+      <div class="pinned-star">ЗАКРЕПЛЁН</div>
+      <div class="wl-emoji-m" style="background: rgba(251,191,36,0.15);">🎂</div>
+      <div class="wl-body-m">
+        <div class="wl-m-title">День рождения</div>
+        <div class="wl-m-meta">28 апреля · 12 желаний · 4 забронировано</div>
+      </div>
+      <span class="chip accent" style="font-size: 10px;">скоро</span>
+    </div>
+
+    <div class="pinned-wl">
+      <div class="pinned-star">ЗАКРЕПЛЁН</div>
+      <div class="wl-emoji-m">📚</div>
+      <div class="wl-body-m">
+        <div class="wl-m-title">Книжная полка 2026</div>
+        <div class="wl-m-meta">ambient · 23 желания · 5 забронировано</div>
+      </div>
+    </div>
+
+    <!-- All wishlists -->
+    <div class="section-header" style="margin-top: 24px;">
+      <h2>Все вишлисты</h2>
+      <span class="action">7 →</span>
+    </div>
+
+    <div class="regular-wl">
+      <div class="wl-emoji-m green">🎄</div>
+      <div class="wl-body-m">
+        <div class="wl-m-title">Новый год 2027</div>
+        <div class="wl-m-meta">8 желаний</div>
+      </div>
+      <div style="color: var(--text-muted); font-size: 20px;">›</div>
+    </div>
+
+    <div class="regular-wl">
+      <div class="wl-emoji-m" style="background: rgba(248,113,113,0.1);">🎨</div>
+      <div class="wl-body-m">
+        <div class="wl-m-title">Мастер-классы</div>
+        <div class="wl-m-meta">5 желаний</div>
+      </div>
+      <div style="color: var(--text-muted); font-size: 20px;">›</div>
+    </div>
+
+    <div class="regular-wl">
+      <div class="wl-emoji-m" style="background: rgba(52,211,153,0.1);">🏡</div>
+      <div class="wl-body-m">
+        <div class="wl-m-title">Уют дома</div>
+        <div class="wl-m-meta">34 желания</div>
+      </div>
+      <div style="color: var(--text-muted); font-size: 20px;">›</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="side-note">
+  <span class="tag">North Star — Showcase profile (PRO)</span>
+  <h3>Витрина как relationship anchor</h3>
+  <p>Public profile — одна из 4 новых PRO-фич (plan_pro_f18). Это отдельная monetisation dimension: не «unlock feature», а «своя identity в WishBoard».</p>
+
+  <h4>Cover gradient — мягкий premium signal</h4>
+  <p>160px cover с multi-stop gradient (accent → warning). В current prod это обычно user-uploadable — здесь в mock показан default premium-gradient.</p>
+
+  <h4>Profile identity block</h4>
+  <ul>
+    <li><b>112px avatar</b> в gradient-кольце, bordered in bg-color (создаёт «приподнятость» над cover)</li>
+    <li><b>Имя + PRO-бейдж</b> — 22/800 title + pill-chip с accent-градиентом</li>
+    <li><b>Handle + дата</b> — «@annasm · WishBoard с января 2025» — social signal долгосрочного отношения</li>
+    <li><b>Bio</b> — 14px обычный текст. Личный голос (эмодзи, упоминание аллергии) вместо клинического описания.</li>
+  </ul>
+
+  <h4>Subscribe CTA</h4>
+  <p>Primary-gradient «+ Подписаться на профиль» — главное действие для guest-viewer. Это entry в long-term relationship: ты получаешь все обновления её вишлистов.</p>
+
+  <h4>Stats row</h4>
+  <p>7 вишлистов / 142 желания / 34 подписчика — social proof. Помогает понять «эта учётка активная».</p>
+
+  <h4>Размеры и предпочтения</h4>
+  <ul>
+    <li>Grid: одежда M · обувь 37 · кольцо 16.5 — <b>practical</b> данные для дарения</li>
+    <li>Brand-chips: Diptyque · Molskine · Aesop — subtle preference signal</li>
+    <li>Current prod имеет эти поля, но визуально они теряются</li>
+  </ul>
+
+  <h4>Don't-gift banner сверху</h4>
+  <p>Red-tinted banner «🚫 Что не дарить» — важнее чем preferences, показываем выше. Aligns с principle «state is unmistakable».</p>
+
+  <h4>Pinned wishlists</h4>
+  <p>Warning-tinted card с «ЗАКРЕПЛЁН» badge. Владелец профиля выбирает 1-3 закреплённых. «Скоро» chip для тех у кого дедлайн близко.</p>
+
+  <h4>All wishlists list</h4>
+  <p>Компактные rows с emoji + name + count. Легче сканировать чем полноразмерные карточки на 7 штук.</p>
+
+  <h4>Что лучше current prod</h4>
+  <ul>
+    <li>Premium cover-gradient (сейчас flat bg)</li>
+    <li>PRO-бейдж рядом с именем — relation-signal</li>
+    <li>Don't-gift banner сверху (сейчас скрыт или опущен)</li>
+    <li>Pinned-секция визуально выделена warning-tint</li>
+    <li>Subscribe CTA — primary, не secondary</li>
+    <li>Stats row под bio — social proof inline</li>
+  </ul>
+</div>
+
+</div>
+
+</body>
+</html>

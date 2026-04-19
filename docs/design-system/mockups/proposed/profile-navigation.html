@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Навигация в профили — мокапы</title>
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+    --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font);
+    background: #111;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 60px;
+  }
+
+  /* Top nav */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(17,17,17,0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-light);
+    padding: 12px 20px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-btn {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-sec);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: var(--font);
+    transition: all 0.2s;
+  }
+  .nav-btn:hover { background: rgba(255,255,255,0.04); }
+  .nav-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* Sections */
+  .mockup-section { display: none; padding: 20px; max-width: 440px; margin: 0 auto; }
+  .mockup-section.active { display: block; }
+
+  .section-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+  .section-desc { font-size: 14px; color: var(--text-sec); line-height: 1.5; margin-bottom: 24px; }
+
+  /* Pros / Cons list */
+  .pros-cons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 32px;
+    padding: 16px;
+    background: var(--surface);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+  }
+  .pros-cons h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+  .pros-cons .pros h4 { color: var(--green); }
+  .pros-cons .cons h4 { color: var(--red); }
+  .pros-cons ul { list-style: none; padding: 0; }
+  .pros-cons li { font-size: 12px; line-height: 1.5; color: var(--text-sec); padding-left: 14px; position: relative; margin-bottom: 6px; }
+  .pros-cons .pros li::before { content: '+'; position: absolute; left: 0; color: var(--green); font-weight: 700; }
+  .pros-cons .cons li::before { content: '−'; position: absolute; left: 0; color: var(--red); font-weight: 700; }
+
+  /* Phone frame */
+  .phone {
+    background: var(--bg);
+    border-radius: 32px;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    margin-bottom: 16px;
+  }
+  .phone-header {
+    padding: 14px 16px 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .phone-header .avatar {
+    width: 40px; height: 40px; border-radius: 20px; flex-shrink: 0;
+    background: #5D4FC7; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700;
+    background-image: url('https://images.unsplash.com/photo-1517849845537-4d257902454a?w=80');
+    background-size: cover;
+  }
+  .phone-header .name { flex: 1; }
+  .phone-header .name h3 { font-size: 16px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .phone-header .name .pro-chip { font-size: 9px; padding: 2px 6px; border-radius: 4px; background: var(--accent); color: #fff; font-weight: 700; letter-spacing: 0.04em; }
+  .phone-header .name p { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
+  .phone-header .calendar { color: var(--text-sec); font-size: 20px; }
+
+  .tabs-row {
+    display: flex;
+    gap: 0;
+    padding: 12px 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-item { flex: 1; text-align: center; padding: 8px 0 12px; cursor: pointer; }
+  .tab-item .count { font-size: 22px; font-weight: 700; color: var(--text); }
+  .tab-item .count.active { color: var(--accent); }
+  .tab-item .label { font-size: 11px; color: var(--text-sec); margin-top: 2px; }
+  .tab-item.active { border-bottom: 2px solid var(--accent); }
+
+  .phone-content { padding: 16px; }
+
+  /* Sub-tabs (Мои / Подписки) */
+  .sub-tabs {
+    display: flex;
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 16px;
+    gap: 4px;
+  }
+  .sub-tab {
+    flex: 1; padding: 8px 4px; text-align: center;
+    border-radius: 8px; font-size: 13px; font-weight: 600;
+    color: var(--text-sec); cursor: pointer;
+  }
+  .sub-tab.active { background: var(--accent); color: #fff; }
+
+  /* Segmented control */
+  .segmented {
+    display: flex;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 3px;
+    margin-bottom: 16px;
+    gap: 3px;
+  }
+  .seg {
+    flex: 1; padding: 7px 4px; text-align: center;
+    border-radius: 7px; font-size: 12px; font-weight: 600;
+    color: var(--text-sec); cursor: pointer;
+  }
+  .seg.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+  .seg .badge { display: inline-block; margin-left: 4px; font-size: 9px; padding: 1px 5px; background: var(--accent); color: #fff; border-radius: 6px; vertical-align: middle; }
+
+  /* Section header inside Подписки */
+  .block-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 20px 0 10px; padding: 0 2px;
+  }
+  .block-header:first-child { margin-top: 0; }
+  .block-header .title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .block-header .count-pill {
+    font-size: 11px; color: var(--text-sec);
+    background: var(--surface); padding: 2px 8px; border-radius: 10px;
+  }
+
+  /* Wishlist subscription card */
+  .sub-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .sub-card:hover { background: var(--surface-hover); border-color: var(--border-light); }
+  .sub-card.unread { border-color: rgba(251,191,36,0.25); }
+  .sub-card .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .sub-card .main { flex: 1; min-width: 0; }
+  .sub-card .title { font-size: 15px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .sub-card .sub-meta { font-size: 12px; color: var(--text-sec); display: flex; align-items: center; gap: 6px; }
+  .sub-card .arrow { font-size: 20px; color: var(--text-muted); }
+  .sub-card .mini-avatar {
+    width: 16px; height: 16px; border-radius: 8px; flex-shrink: 0;
+    background: #7C6AFF;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; color: #fff;
+  }
+  .unread-dot {
+    min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px;
+    background: var(--orange); color: #fff; font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Profile subscription card */
+  .profile-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 14px 14px 14px 14px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .profile-card:hover { background: var(--surface-hover); }
+  .profile-card .av {
+    width: 48px; height: 48px; border-radius: 24px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 18px;
+  }
+  .profile-card .av.blue { background: #6B7FC7; background-image: url('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80'); background-size: cover; }
+  .profile-card .av.pink { background: #E06B9F; background-image: url('https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80'); background-size: cover; }
+  .profile-card .av.orange { background: #E09A6B; background-image: url('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80'); background-size: cover; }
+  .profile-card .av.green { background: #6BBFA1; }
+  .profile-card .info { flex: 1; min-width: 0; }
+  .profile-card .info .n { font-size: 15px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; }
+  .profile-card .info .n .pro { font-size: 8px; padding: 1px 5px; border-radius: 3px; background: var(--accent); color: #fff; font-weight: 700; }
+  .profile-card .info .sub { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
+  .profile-card .arrow { font-size: 20px; color: var(--text-muted); }
+
+  /* Mixed type badge (for variant C) */
+  .type-badge {
+    font-size: 9px; font-weight: 700; padding: 2px 7px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .type-badge.wl { background: rgba(124,106,255,0.18); color: #B0A5FF; }
+  .type-badge.pr { background: rgba(52,211,153,0.18); color: #7FDFBA; }
+
+  /* Filter chips (variant C) */
+  .chips { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; }
+  .chip {
+    padding: 6px 12px; border-radius: 16px;
+    border: 1px solid var(--border-light);
+    font-size: 12px; color: var(--text-sec); white-space: nowrap; cursor: pointer;
+  }
+  .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Flow diagram for variant D */
+  .flow-step {
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    border-radius: 0 10px 10px 0;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .flow-step strong { color: var(--accent); font-weight: 700; }
+  .flow-step .muted { color: var(--text-sec); font-size: 12px; margin-top: 4px; }
+
+  /* Highlight box */
+  .highlight {
+    outline: 2px dashed var(--orange);
+    outline-offset: 2px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { outline-color: var(--orange); }
+    50% { outline-color: rgba(251,191,36,0.4); }
+  }
+  .callout {
+    background: rgba(251,191,36,0.08);
+    border-left: 3px solid var(--orange);
+    padding: 10px 14px;
+    border-radius: 0 10px 10px 0;
+    font-size: 12px;
+    color: var(--text-sec);
+    margin: 12px 0;
+  }
+  .callout strong { color: var(--orange); font-weight: 700; }
+
+  /* Public profile subscribe CTA */
+  .pp-header {
+    padding: 0;
+    position: relative;
+  }
+  .pp-cover {
+    height: 110px;
+    background: linear-gradient(135deg, #3a2d6e 0%, #1a1538 50%, #2d1f4e 100%);
+  }
+  .pp-info {
+    padding: 0 16px 16px;
+    margin-top: -36px;
+  }
+  .pp-avatar-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .pp-avatar {
+    width: 72px; height: 72px; border-radius: 36px; flex-shrink: 0;
+    border: 3px solid var(--bg);
+    background: #5D4FC7;
+    background-image: url('https://images.unsplash.com/photo-1517849845537-4d257902454a?w=200');
+    background-size: cover;
+  }
+  .pp-name-row { padding: 10px 0 0; }
+  .pp-name { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .pp-name .pro { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--accent); color: #fff; font-weight: 700; }
+  .pp-username { font-size: 13px; color: var(--text-sec); margin-top: 2px; }
+  .pp-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .pp-btn {
+    flex: 1; padding: 10px; border-radius: 10px;
+    background: var(--accent); color: #fff; border: none;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .pp-btn.outline { background: transparent; border: 1px solid var(--border-light); color: var(--text); }
+  .pp-btn.subscribed { background: var(--green-soft); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
+
+  /* Empty state */
+  .empty {
+    text-align: center; padding: 32px 16px; color: var(--text-muted);
+    border: 1px dashed var(--border-light); border-radius: 14px;
+    background: rgba(255,255,255,0.015);
+  }
+  .empty .em { font-size: 32px; margin-bottom: 8px; }
+  .empty .t { font-size: 14px; color: var(--text); font-weight: 600; margin-bottom: 4px; }
+  .empty .h { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+  /* Verdict block */
+  .verdict {
+    background: linear-gradient(135deg, rgba(124,106,255,0.08), rgba(52,211,153,0.04));
+    border: 1px solid rgba(124,106,255,0.2);
+    padding: 16px; border-radius: 14px; margin-top: 24px;
+  }
+  .verdict h4 { font-size: 13px; color: var(--accent); margin-bottom: 8px; letter-spacing: 0.04em; }
+  .verdict p { font-size: 13px; color: var(--text); line-height: 1.55; }
+  .verdict strong { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <button class="nav-btn active" data-variant="A">A — Два блока (твой вариант)</button>
+  <button class="nav-btn" data-variant="B">B — Сегменты (табы)</button>
+  <button class="nav-btn" data-variant="C">C — Общий список с бейджами</button>
+  <button class="nav-btn" data-variant="D">D — Без подписок на профиль</button>
+  <button class="nav-btn" data-variant="PP">Профиль с CTA</button>
+</div>
+
+<!-- VARIANT A: Two vertical blocks -->
+<section class="mockup-section active" id="variant-A">
+  <div class="section-title">A — Два вертикальных блока</div>
+  <div class="section-desc">На вкладке «Подписки» подписки на вишлисты и подписки на профили идут друг за другом как два отдельных блока с заголовками.</div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <div class="avatar"></div>
+      <div class="name">
+        <h3>WishBoard <span class="pro-chip">PRO</span></h3>
+        <p>Привет, Dmitriy!</p>
+      </div>
+      <div class="calendar">📅</div>
+    </div>
+    <div class="tabs-row">
+      <div class="tab-item"><div class="count">3</div><div class="label">Вишлисты</div></div>
+      <div class="tab-item"><div class="count">56</div><div class="label">Желания</div></div>
+      <div class="tab-item"><div class="count">0</div><div class="label">Мои брони</div></div>
+    </div>
+    <div class="phone-content">
+      <div class="sub-tabs">
+        <div class="sub-tab">Мои</div>
+        <div class="sub-tab active">Подписки</div>
+      </div>
+
+      <div class="block-header">
+        <div class="title">🎁 Вишлисты</div>
+        <div class="count-pill">1</div>
+      </div>
+      <div class="sub-card unread">
+        <div class="row">
+          <div class="main">
+            <div class="title">Кошкин вишлист 😻 <span class="unread-dot">3</span></div>
+            <div class="sub-meta">
+              <div class="mini-avatar">Е</div>
+              <span>Екатерина · 6 желаний</span>
+            </div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+
+      <div class="block-header">
+        <div class="title">👤 Профили</div>
+        <div class="count-pill">2</div>
+      </div>
+      <div class="profile-card">
+        <div class="av pink"></div>
+        <div class="info">
+          <div class="n">Маша Соколова <span class="pro">PRO</span></div>
+          <div class="sub">@masha · Москва</div>
+        </div>
+        <span class="arrow">›</span>
+      </div>
+      <div class="profile-card">
+        <div class="av orange"></div>
+        <div class="info">
+          <div class="n">Артём Громов</div>
+          <div class="sub">@artem · 2 вишлиста</div>
+        </div>
+        <span class="arrow">›</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Кнопка «Подписаться на профиль»</strong> появляется на странице публичного профиля (см. таб «Профиль с CTA»).
+  </div>
+
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>Плюсы</h4>
+      <ul>
+        <li>Профиль — отдельная сущность, можно фолловить человека без вишлиста</li>
+        <li>Визуально чисто: два разных типа — два разных блока</li>
+        <li>Работает как соцграф: «кого я фолловлю»</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>Минусы</h4>
+      <ul>
+        <li>Новая сущность: нужно добавить backend для подписок на профили</li>
+        <li>Дублирование если подписан и на вишлист, и на профиль одного человека</li>
+        <li>Нужно продумать уведомления (когда человек опубликовал новый вишлист?)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- VARIANT B: Segmented control -->
+<section class="mockup-section" id="variant-B">
+  <div class="section-title">B — Сегменты (табы внутри Подписок)</div>
+  <div class="section-desc">Под «Подписки» добавляется ещё один переключатель «Вишлисты / Профили». Экономит место, но прячет один из списков.</div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <div class="avatar"></div>
+      <div class="name">
+        <h3>WishBoard <span class="pro-chip">PRO</span></h3>
+        <p>Привет, Dmitriy!</p>
+      </div>
+      <div class="calendar">📅</div>
+    </div>
+    <div class="tabs-row">
+      <div class="tab-item"><div class="count">3</div><div class="label">Вишлисты</div></div>
+      <div class="tab-item"><div class="count">56</div><div class="label">Желания</div></div>
+      <div class="tab-item"><div class="count">0</div><div class="label">Мои брони</div></div>
+    </div>
+    <div class="phone-content">
+      <div class="sub-tabs">
+        <div class="sub-tab">Мои</div>
+        <div class="sub-tab active">Подписки</div>
+      </div>
+
+      <div class="segmented">
+        <div class="seg active">Вишлисты <span class="badge">3</span></div>
+        <div class="seg">Профили</div>
+      </div>
+
+      <div class="sub-card unread">
+        <div class="row">
+          <div class="main">
+            <div class="title">Кошкин вишлист 😻 <span class="unread-dot">3</span></div>
+            <div class="sub-meta">
+              <div class="mini-avatar">Е</div>
+              <span>Екатерина · 6 желаний</span>
+            </div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+      <div class="sub-card">
+        <div class="row">
+          <div class="main">
+            <div class="title">Подарки на годовщину</div>
+            <div class="sub-meta">
+              <div class="mini-avatar" style="background:#E09A6B">А</div>
+              <span>Артём · 12 желаний · 📅 12 мая</span>
+            </div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>Плюсы</h4>
+      <ul>
+        <li>Компактно — один скролл вместо двух</li>
+        <li>Явное переключение, ясно «где что»</li>
+        <li>Легко масштабируется (можно добавить ещё сегмент)</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>Минусы</h4>
+      <ul>
+        <li>Три уровня вложенности: Вишлисты-таб → Подписки → Профили. Много когнитивной нагрузки</li>
+        <li>Профили скрыты за кликом — новую фичу заметят не все</li>
+        <li>Та же backend-цена как в варианте A</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- VARIANT C: Unified list -->
+<section class="mockup-section" id="variant-C">
+  <div class="section-title">C — Общий список с бейджами типа</div>
+  <div class="section-desc">Один список, в котором и вишлисты, и профили перемешаны. У каждой карточки маленький бейдж «Вишлист» / «Профиль». Сверху чипы-фильтры.</div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <div class="avatar"></div>
+      <div class="name">
+        <h3>WishBoard <span class="pro-chip">PRO</span></h3>
+        <p>Привет, Dmitriy!</p>
+      </div>
+      <div class="calendar">📅</div>
+    </div>
+    <div class="tabs-row">
+      <div class="tab-item"><div class="count">3</div><div class="label">Вишлисты</div></div>
+      <div class="tab-item"><div class="count">56</div><div class="label">Желания</div></div>
+      <div class="tab-item"><div class="count">0</div><div class="label">Мои брони</div></div>
+    </div>
+    <div class="phone-content">
+      <div class="sub-tabs">
+        <div class="sub-tab">Мои</div>
+        <div class="sub-tab active">Подписки</div>
+      </div>
+
+      <div class="chips">
+        <div class="chip active">Все</div>
+        <div class="chip">🎁 Вишлисты</div>
+        <div class="chip">👤 Профили</div>
+      </div>
+
+      <div class="sub-card unread">
+        <div class="row">
+          <div class="main">
+            <div class="title">Кошкин вишлист 😻 <span class="type-badge wl">Вишлист</span> <span class="unread-dot">3</span></div>
+            <div class="sub-meta">
+              <div class="mini-avatar">Е</div>
+              <span>Екатерина · 6 желаний</span>
+            </div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+      <div class="profile-card">
+        <div class="av pink"></div>
+        <div class="info">
+          <div class="n">Маша Соколова <span class="type-badge pr">Профиль</span></div>
+          <div class="sub">@masha · Москва</div>
+        </div>
+        <span class="arrow">›</span>
+      </div>
+      <div class="sub-card">
+        <div class="row">
+          <div class="main">
+            <div class="title">Подарки на годовщину <span class="type-badge wl">Вишлист</span></div>
+            <div class="sub-meta">
+              <div class="mini-avatar" style="background:#E09A6B">А</div>
+              <span>Артём · 12 желаний · 📅 12 мая</span>
+            </div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>Плюсы</h4>
+      <ul>
+        <li>Видишь всё сразу, один список</li>
+        <li>Лента «новое у всех, кого я фолловлю» — как в соцсетях</li>
+        <li>Есть чипы если нужно отфильтровать</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>Минусы</h4>
+      <ul>
+        <li>Визуальный шум: разные типы карточек в одном списке</li>
+        <li>Сложнее сортировать (по unread? по дате?)</li>
+        <li>Та же backend-цена</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- VARIANT D: No profile subs, just navigation -->
+<section class="mockup-section" id="variant-D">
+  <div class="section-title">D — Без подписок на профиль, только переходы</div>
+  <div class="section-desc">Не вводим новую сущность «подписка на профиль». Вместо этого делаем аватарки владельцев тапабельными везде, где они показываются — в карточке подписки, в шапке чужого вишлиста, в комментариях и т.д. → открывается публичный профиль.</div>
+
+  <div class="flow-step">
+    <strong>1.</strong> На карточке подписки «Кошкин вишлист» тапаешь <strong>на аватарку/имя Екатерины</strong> → открывается её профиль (не вишлист).
+    <div class="muted">Тап на остальную часть карточки — по-прежнему ведёт в сам вишлист.</div>
+  </div>
+  <div class="flow-step">
+    <strong>2.</strong> Внутри чужого вишлиста в шапке тапаешь на аватар/имя владельца → профиль.
+    <div class="muted">Это уже работает по сути (аватар виден), просто нужно сделать его тапабельным.</div>
+  </div>
+  <div class="flow-step">
+    <strong>3.</strong> В комментариях, в списке бронирующих — везде где видно другого человека, тап по его имени/аватару → профиль.
+  </div>
+
+  <div class="phone" style="margin-top: 20px;">
+    <div class="phone-header"><div class="avatar"></div><div class="name"><h3>WishBoard <span class="pro-chip">PRO</span></h3><p>Привет, Dmitriy!</p></div><div class="calendar">📅</div></div>
+    <div class="tabs-row">
+      <div class="tab-item"><div class="count">3</div><div class="label">Вишлисты</div></div>
+      <div class="tab-item"><div class="count">56</div><div class="label">Желания</div></div>
+      <div class="tab-item"><div class="count">0</div><div class="label">Мои брони</div></div>
+    </div>
+    <div class="phone-content">
+      <div class="sub-tabs">
+        <div class="sub-tab">Мои</div>
+        <div class="sub-tab active">Подписки</div>
+      </div>
+
+      <div class="sub-card unread">
+        <div class="row">
+          <div class="main">
+            <div class="title">Кошкин вишлист 😻 <span class="unread-dot">3</span></div>
+            <div class="sub-meta highlight" style="padding: 2px 6px; border-radius: 6px;">
+              <div class="mini-avatar">Е</div>
+              <span style="color:var(--accent); text-decoration: underline; text-decoration-color: rgba(124,106,255,0.4);">Екатерина</span>
+              <span>· 6 желаний</span>
+            </div>
+          </div>
+          <span class="arrow">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Тап по "Екатерина"</strong> → открывается её публичный профиль. Тап по остальной карточке → по-прежнему в вишлист.
+  </div>
+
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>Плюсы</h4>
+      <ul>
+        <li>Ноль нового бэкенда</li>
+        <li>Быстро реализовать</li>
+        <li>Естественный флоу: нашёл вишлист → заинтересовался автором → посмотрел профиль</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>Минусы</h4>
+      <ul>
+        <li>Нельзя зафолловить человека без его вишлиста (но ты можешь и так на него подписаться через его вишлист)</li>
+        <li>Профили некому показывать как отдельной «ленте» — живут внутри вишлистов</li>
+        <li>Если у человека нет публичных вишлистов, его профиль недостижим из приложения</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- PUBLIC PROFILE with subscribe CTA -->
+<section class="mockup-section" id="variant-PP">
+  <div class="section-title">Публичный профиль с CTA «Подписаться»</div>
+  <div class="section-desc">Для вариантов A/B/C нужна кнопка «Подписаться на профиль» — она естественно живёт на странице самого профиля. Вот два состояния: до подписки и после.</div>
+
+  <div class="phone">
+    <div class="pp-header">
+      <div class="pp-cover"></div>
+      <div class="pp-info">
+        <div class="pp-avatar-row">
+          <div class="pp-avatar"></div>
+        </div>
+        <div class="pp-name-row">
+          <div class="pp-name">Екатерина <span class="pro">PRO</span></div>
+          <div class="pp-username">@ekaterina</div>
+        </div>
+        <div class="pp-actions">
+          <button class="pp-btn highlight">+ Подписаться</button>
+          <button class="pp-btn outline">💬 Написать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone" style="margin-top: 12px;">
+    <div class="pp-header">
+      <div class="pp-cover"></div>
+      <div class="pp-info">
+        <div class="pp-avatar-row">
+          <div class="pp-avatar"></div>
+        </div>
+        <div class="pp-name-row">
+          <div class="pp-name">Екатерина <span class="pro">PRO</span></div>
+          <div class="pp-username">@ekaterina · Подписан</div>
+        </div>
+        <div class="pp-actions">
+          <button class="pp-btn subscribed">✓ Подписан</button>
+          <button class="pp-btn outline">💬 Написать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Нюанс.</strong> Кнопку «Подписаться» показывать только если у профиля опубликован Showcase — иначе подписываться не на что (нет контента для ленты).
+  </div>
+</section>
+
+<div style="max-width: 440px; margin: 0 auto; padding: 0 20px;">
+  <div class="verdict">
+    <h4>Мой вывод</h4>
+    <p>Если цель — <strong>монетизация через Showcase и соцграф</strong>, то твой вариант <strong>A (два блока)</strong> — самый правильный: он делает «профиль» полноценной первоклассной сущностью и стимулирует пользователей выкладывать Showcase, чтобы собирать подписчиков.</p>
+    <p style="margin-top: 10px;">Если цель — <strong>сделать переходы в профиль сейчас, без новых фич</strong>, то <strong>D</strong> — самый дешёвый и безопасный: разблокирует навигацию за пару часов работы, без миграций и лишних экранов.</p>
+    <p style="margin-top: 10px;">Я бы в итоге сделал <strong>D сейчас</strong> (тапабельные аватарки везде — это база, должно быть в любом случае), а <strong>A позже</strong> как отдельную фичу «фолловить человека», когда будет достаточно пользователей с опубликованным Showcase.</p>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.mockup-section').forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('variant-' + btn.dataset.variant).classList.add('active');
+      window.scrollTo(0, 0);
+    });
+  });
+</script>
+
+</body>
+</html>

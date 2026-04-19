@@ -16,7 +16,9 @@
     "db:migrate": "pnpm -C packages/db db:migrate:dev",
     "db:deploy": "pnpm -C packages/db db:migrate:deploy",
     "db:studio": "pnpm -C packages/db db:studio",
-    "test": "vitest run"
+    "test": "vitest run",
+    "ui:audit": "node scripts/ui-audit.mjs",
+    "ui:audit:json": "node scripts/ui-audit.mjs --json"
   },
   "devDependencies": {
     "@types/node": "20.14.11",

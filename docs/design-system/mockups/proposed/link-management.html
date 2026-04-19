@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Управление ссылками — Макеты</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1B1B1F;
+    --surface: #26262C;
+    --surface-hover: #2E2E36;
+    --card: #2F2F38;
+    --accent: #7C6AFF;
+    --accent-soft: rgba(124,106,255,0.12);
+    --accent-glow: rgba(124,106,255,0.25);
+    --green: #34D399;
+    --green-soft: rgba(52,211,153,0.12);
+    --orange: #FBBF24;
+    --orange-soft: rgba(251,191,36,0.12);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+    --blue: #60A5FA;
+    --blue-soft: rgba(96,165,250,0.12);
+    --text: #F4F4F6;
+    --text-sec: #9CA3AF;
+    --text-muted: #6B7280;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Rubik', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #111114;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(17,17,20,0.92); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border); padding: 12px 16px;
+  }
+  .nav-title { font-size: 14px; font-weight: 600; color: var(--text-sec); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .nav-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; flex-wrap: wrap; }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab {
+    flex-shrink: 0; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 500;
+    color: var(--text-sec); background: var(--surface); border: 1px solid var(--border);
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .nav-tab:hover { background: var(--surface-hover); }
+  .nav-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .section { display: none; max-width: 400px; margin: 0 auto; padding: 20px 16px 40px; }
+  .section.active { display: block; }
+  .section-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin: 24px 0 12px; }
+  .section-label:first-child { margin-top: 0; }
+  .desc-text {
+    font-size: 13px; color: var(--text-sec); line-height: 1.6; margin: 8px 0 16px;
+    padding: 12px 16px; background: var(--surface); border-radius: 12px; border-left: 3px solid var(--accent);
+  }
+
+  /* Phone frame */
+  .phone {
+    background: var(--bg); border-radius: 24px; border: 2px solid var(--border-light);
+    overflow: hidden; margin: 12px 0; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .phone-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 16px 12px; border-bottom: 1px solid var(--border);
+  }
+  .phone-header .back { font-size: 20px; color: var(--accent); cursor: pointer; }
+  .phone-header .title { font-size: 17px; font-weight: 600; }
+  .phone-body { padding: 12px 16px 20px; }
+
+  /* Settings row */
+  .settings-row {
+    display: flex; align-items: center; padding: 14px 0; gap: 12px;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .settings-row:active { opacity: 0.7; }
+  .settings-icon {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .settings-icon.accent { background: var(--accent-soft); }
+  .settings-icon.disabled { background: var(--surface); opacity: 0.4; }
+  .settings-label { flex: 1; min-width: 0; }
+  .settings-label-text { font-size: 15px; font-weight: 500; color: var(--text); line-height: 1.3; display: flex; align-items: center; gap: 6px; }
+  .settings-label-hint { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .settings-value { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .settings-value-text { font-size: 14px; color: var(--text-muted); }
+  .settings-value-text.small { font-size: 12px; }
+  .settings-chevron { font-size: 14px; color: var(--text-muted); font-weight: 300; }
+  .settings-divider { height: 1px; background: var(--border); margin-left: 40px; }
+  .settings-coming-soon { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+
+  /* Toggle */
+  .toggle {
+    width: 50px; height: 28px; border-radius: 14px;
+    position: relative; cursor: pointer; transition: background 0.25s;
+  }
+  .toggle.on { background: var(--accent); box-shadow: 0 0 12px var(--accent-glow), 0 0 4px rgba(124,106,255,0.15); }
+  .toggle.off { background: var(--surface); border: 1.5px solid var(--border-light); }
+  .toggle-knob {
+    width: 22px; height: 22px; border-radius: 50%; background: #fff;
+    position: absolute; top: 3px; transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .toggle.on .toggle-knob { left: 25px; }
+  .toggle.off .toggle-knob { left: 3px; }
+
+  /* PRO badge */
+  .pro-badge {
+    font-size: 9px; font-weight: 700; color: #fff;
+    background: linear-gradient(135deg, #7C6AFF, #A78BFA);
+    padding: 2px 6px; border-radius: 4px; text-transform: uppercase;
+  }
+
+  /* Section header */
+  .group-title {
+    font-size: 14px; font-weight: 700; color: var(--text); margin: 20px 0 10px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .group-title:first-child { margin-top: 4px; }
+
+  /* Link card */
+  .link-card {
+    background: var(--card); border-radius: 16px; padding: 16px;
+    border: 1px solid var(--border); margin-bottom: 10px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .link-card:active { opacity: 0.8; transform: scale(0.98); }
+  .link-card-top {
+    display: flex; align-items: flex-start; gap: 12px;
+  }
+  .link-card-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .link-card-icon.lite { background: var(--blue-soft); }
+  .link-card-icon.wishlist { background: var(--accent-soft); }
+  .link-card-icon.profile { background: var(--green-soft); }
+  .link-card-content { flex: 1; min-width: 0; }
+  .link-card-name {
+    font-size: 15px; font-weight: 600; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .link-card-type {
+    font-size: 13px; color: var(--text-muted); margin-top: 3px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .link-card-meta {
+    font-size: 12px; color: var(--text-muted); margin-top: 6px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .link-card-meta .dot { margin: 0 2px; }
+  .link-card-status {
+    flex-shrink: 0; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  }
+  .link-card-status-text { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .link-card-status-text.normal { color: var(--text-muted); }
+  .link-card-status-text.warning { color: var(--orange); }
+  .link-card-status-text.danger { color: var(--red); }
+  .link-card-status-text.permanent { color: var(--text-muted); font-weight: 400; }
+
+  /* Temporary badge */
+  .badge-temp {
+    font-size: 10px; font-weight: 600; color: var(--orange);
+    background: var(--orange-soft); padding: 2px 6px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+
+  /* Chevron on card */
+  .link-card-chevron {
+    font-size: 16px; color: var(--text-muted); font-weight: 300;
+    flex-shrink: 0; align-self: center;
+  }
+
+  /* Bottom sheet */
+  .sheet-overlay {
+    position: relative; margin: 12px 0;
+  }
+  .sheet-bg {
+    background: rgba(0,0,0,0.5); border-radius: 24px 24px 0 0;
+    padding-top: 60px;
+  }
+  .sheet {
+    background: var(--bg); border-radius: 20px 20px 0 0;
+    padding: 12px 20px 24px; position: relative;
+  }
+  .sheet-handle {
+    width: 36px; height: 4px; border-radius: 2px; background: var(--border-light);
+    margin: 0 auto 16px;
+  }
+  .sheet-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+
+  /* Detail sheet */
+  .detail-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-label { font-size: 14px; color: var(--text-muted); }
+  .detail-value { font-size: 14px; color: var(--text); font-weight: 500; display: flex; align-items: center; gap: 6px; }
+
+  /* Action buttons */
+  .action-btn {
+    width: 100%; padding: 14px; border-radius: 14px; border: none;
+    font-family: inherit; font-size: 15px; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all 0.15s;
+  }
+  .action-btn:active { opacity: 0.8; transform: scale(0.98); }
+  .action-btn.default { background: var(--surface); color: var(--text); }
+  .action-btn.danger { background: var(--red-soft); color: var(--red); }
+  .action-btn.primary { background: var(--accent); color: #fff; }
+  .action-btn.ghost { background: var(--surface); color: var(--text-sec); }
+  .action-btn.red-fill { background: var(--red); color: #fff; }
+
+  .action-group { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+
+  /* Confirm buttons row */
+  .confirm-buttons { display: flex; gap: 10px; margin-top: 20px; }
+  .confirm-buttons .action-btn { flex: 1; }
+  .confirm-buttons .action-btn.red-fill { flex: 2; }
+
+  /* Confirm body text */
+  .confirm-body { font-size: 15px; color: var(--text-sec); line-height: 1.6; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center; padding: 60px 24px;
+  }
+  .empty-icon {
+    width: 80px; height: 80px; border-radius: 24px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px; margin: 0 auto 20px;
+  }
+  .empty-icon.accent { background: var(--accent-soft); }
+  .empty-icon.red { background: var(--red-soft); }
+  .empty-title { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+  .empty-body { font-size: 14px; color: var(--text-sec); line-height: 1.5; max-width: 300px; margin: 0 auto; }
+  .empty-hint { font-size: 13px; color: var(--text-muted); margin-top: 12px; line-height: 1.4; }
+
+  /* Toast */
+  .toast {
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--green); color: #fff;
+    padding: 10px 20px; border-radius: 12px;
+    font-size: 14px; font-weight: 600;
+    box-shadow: 0 4px 16px rgba(52,211,153,0.3);
+    display: flex; align-items: center; gap: 6px;
+    z-index: 10;
+  }
+
+  /* Highlight new row — subtle left accent bar */
+  .new-row-highlight {
+    position: relative;
+  }
+
+  /* Warning icon */
+  .warn-icon { font-size: 14px; }
+
+  /* Section title in settings */
+  .settings-section-title {
+    font-size: 12px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.8px;
+    margin: 20px 0 8px; padding-left: 4px;
+  }
+  .settings-block {
+    background: var(--surface); border-radius: 16px; padding: 0 16px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<div class="nav">
+  <div class="nav-title">Управление ссылками — Макеты</div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showSection('settings')">1. Настройки</div>
+    <div class="nav-tab" onclick="showSection('list')">2. Список ссылок</div>
+    <div class="nav-tab" onclick="showSection('detail-lite')">3. Detail: Lite</div>
+    <div class="nav-tab" onclick="showSection('detail-wl')">4. Detail: Вишлист</div>
+    <div class="nav-tab" onclick="showSection('detail-profile')">5. Detail: Профиль</div>
+    <div class="nav-tab" onclick="showSection('confirm')">6. Confirm</div>
+    <div class="nav-tab" onclick="showSection('empty')">7. Пусто</div>
+    <div class="nav-tab" onclick="showSection('invalid')">8. Недействительна</div>
+    <div class="nav-tab" onclick="showSection('after-revoke')">9. После revoke</div>
+    <div class="nav-tab" onclick="showSection('urgency')">10. Urgency</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 1. SETTINGS — PRIVACY SECTION              -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section active" id="sec-settings">
+  <div class="section-label">Настройки &rarr; секция Приватность</div>
+  <div class="desc-text">Новая строка «Управление ссылками» добавляется после «Подсказки по подаркам» и перед «Видимость бронирования».</div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">&lsaquo;</span>
+      <span class="title">Настройки</span>
+    </div>
+    <div class="phone-body">
+      <div class="settings-section-title">Приватность</div>
+      <div class="settings-block">
+        <!-- Row 1: Profile visibility -->
+        <div class="settings-row">
+          <div class="settings-icon accent">👁</div>
+          <div class="settings-label">
+            <div class="settings-label-text">Видимость профиля</div>
+          </div>
+          <div class="settings-value">
+            <span class="settings-value-text">Все</span>
+            <span class="settings-chevron">›</span>
+          </div>
+        </div>
+        <div class="settings-divider"></div>
+
+        <!-- Row 2: Subscribe policy -->
+        <div class="settings-row">
+          <div class="settings-icon accent">👥</div>
+          <div class="settings-label">
+            <div class="settings-label-text">Политика подписок</div>
+          </div>
+          <div class="settings-value">
+            <span class="settings-value-text">Все</span>
+            <span class="settings-chevron">›</span>
+          </div>
+        </div>
+        <div class="settings-divider"></div>
+
+        <!-- Row 3: Comments -->
+        <div class="settings-row">
+          <div class="settings-icon accent">💬</div>
+          <div class="settings-label">
+            <div class="settings-label-text">Комментарии <span class="pro-badge">PRO</span></div>
+          </div>
+          <div class="settings-value">
+            <span class="settings-value-text small">Все гости</span>
+            <span class="settings-chevron">›</span>
+          </div>
+        </div>
+        <div class="settings-divider"></div>
+
+        <!-- Row 4: Hints toggle -->
+        <div class="settings-row">
+          <div class="settings-icon accent">💡</div>
+          <div class="settings-label">
+            <div class="settings-label-text">Подсказки по подаркам</div>
+          </div>
+          <div class="settings-value">
+            <div class="toggle on"><div class="toggle-knob"></div></div>
+          </div>
+        </div>
+        <div class="settings-divider"></div>
+
+        <!-- Row 5: LINK MANAGEMENT — NEW -->
+        <div class="settings-row new-row-highlight">
+          <div class="settings-icon accent">🔗</div>
+          <div class="settings-label">
+            <div class="settings-label-text">Управление ссылками</div>
+          </div>
+          <div class="settings-value">
+            <span class="settings-value-text small" style="color: var(--accent);">3 активных</span>
+            <span class="settings-chevron">›</span>
+          </div>
+        </div>
+        <div class="settings-divider"></div>
+
+        <!-- Row 6: Reserved visibility (disabled) -->
+        <div class="settings-row" style="opacity: 0.4; cursor: default;">
+          <div class="settings-icon disabled">🔒</div>
+          <div class="settings-label">
+            <div class="settings-label-text">Видимость бронирования</div>
+          </div>
+          <div class="settings-value">
+            <span class="settings-coming-soon">Скоро</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 2. LINK MANAGEMENT — FULL LIST              -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="sec-list">
+  <div class="section-label">Экран «Управление ссылками»</div>
+  <div class="desc-text">Две секции: временные (сортировка по ближайшему истечению) и постоянные. Каждая карточка тапабельна &rarr; detail sheet.</div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">&lsaquo;</span>
+      <span class="title">Управление ссылками</span>
+    </div>
+    <div class="phone-body">
+
+      <!-- Temporary links section -->
+      <div class="group-title" style="font-size: 12px; color: var(--text-muted); letter-spacing: 0.8px;">Временные ссылки</div>
+
+      <!-- Lite #1: expiring soon -->
+      <div class="link-card">
+        <div class="link-card-top">
+          <div class="link-card-icon lite">📋</div>
+          <div class="link-card-content">
+            <div class="link-card-name">
+              Идеи на ДР Кати
+              <span class="warn-icon">⚠️</span>
+            </div>
+            <div class="link-card-type">
+              Lite-вишлист
+              <span class="badge-temp">Временная</span>
+            </div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text danger">Истекает<br>завтра</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+      <!-- Lite #2: normal -->
+      <div class="link-card">
+        <div class="link-card-top">
+          <div class="link-card-icon lite">📋</div>
+          <div class="link-card-content">
+            <div class="link-card-name">Подарки для мамы</div>
+            <div class="link-card-type">
+              Lite-вишлист
+              <span class="badge-temp">Временная</span>
+            </div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text normal">Осталось<br>32 дн.</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+      <!-- Permanent links section -->
+      <div class="group-title" style="font-size: 12px; color: var(--text-muted); letter-spacing: 0.8px; margin-top: 24px;">Постоянные ссылки</div>
+
+      <!-- Wishlist link -->
+      <div class="link-card">
+        <div class="link-card-top">
+          <div class="link-card-icon wishlist">🎁</div>
+          <div class="link-card-content">
+            <div class="link-card-name">Мой основной вишлист</div>
+            <div class="link-card-type">Ссылка на вишлист</div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text permanent">Без срока</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+      <!-- Profile link -->
+      <div class="link-card">
+        <div class="link-card-top">
+          <div class="link-card-icon profile">👤</div>
+          <div class="link-card-content">
+            <div class="link-card-name">dmitriy</div>
+            <div class="link-card-type">Ссылка на профиль</div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text permanent">Без срока</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 3. DETAIL BOTTOM SHEET — LITE WISHLIST      -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="sec-detail-lite">
+  <div class="section-label">Detail sheet — Lite-вишлист</div>
+  <div class="desc-text">По тапу на карточку lite-ссылки. Показывает детали + 3 действия: копировать, поделиться, отключить.</div>
+
+  <div class="phone">
+    <div class="phone-header" style="opacity: 0.3;">
+      <span class="back">&lsaquo;</span>
+      <span class="title">Управление ссылками</span>
+    </div>
+    <div style="padding: 16px; opacity: 0.15;">
+      <div class="link-card" style="pointer-events: none;">
+        <div class="link-card-top">
+          <div class="link-card-icon lite">📋</div>
+          <div class="link-card-content">
+            <div class="link-card-name">Идеи на ДР Кати</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+
+      <!-- Header -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <div class="link-card-icon lite" style="width: 44px; height: 44px; font-size: 22px;">📋</div>
+        <div>
+          <div style="font-size: 18px; font-weight: 700;">Подарки для мамы</div>
+          <div style="font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+            Lite-вишлист
+            <span class="badge-temp">Временная</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Details -->
+      <div style="background: var(--surface); border-radius: 14px; padding: 4px 16px; margin-bottom: 16px;">
+        <div class="detail-row">
+          <span class="detail-label">Создана</span>
+          <span class="detail-value">28 марта 2026</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Действует до</span>
+          <span class="detail-value">
+            12 мая 2026
+            <span style="font-size: 12px; color: var(--text-muted); font-weight: 400;">(32 дн.)</span>
+          </span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Подписчики</span>
+          <span class="detail-value">3</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Просмотры</span>
+          <span class="detail-value">12</span>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="action-group">
+        <button class="action-btn default">📋 Скопировать ссылку</button>
+        <button class="action-btn default">📤 Поделиться ещё раз</button>
+        <button class="action-btn danger">🚫 Отключить ссылку</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 4. DETAIL BOTTOM SHEET — WISHLIST           -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="sec-detail-wl">
+  <div class="section-label">Detail sheet — Вишлист</div>
+  <div class="desc-text">Для обычного вишлиста. Без срока действия, без подписчиков (curated subscriptions). Показывает просмотры по shareToken.</div>
+
+  <div class="phone">
+    <div class="phone-header" style="opacity: 0.3;">
+      <span class="back">&lsaquo;</span>
+      <span class="title">Управление ссылками</span>
+    </div>
+    <div style="padding: 16px; opacity: 0.15;">
+      <div class="link-card" style="pointer-events: none;">
+        <div class="link-card-top">
+          <div class="link-card-icon wishlist">🎁</div>
+          <div class="link-card-content">
+            <div class="link-card-name">Мой основной вишлист</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <div class="link-card-icon wishlist" style="width: 44px; height: 44px; font-size: 22px;">🎁</div>
+        <div>
+          <div style="font-size: 18px; font-weight: 700;">Мой основной вишлист</div>
+          <div style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">Ссылка на вишлист</div>
+        </div>
+      </div>
+
+      <div style="background: var(--surface); border-radius: 14px; padding: 4px 16px; margin-bottom: 16px;">
+        <div class="detail-row">
+          <span class="detail-label">Срок</span>
+          <span class="detail-value">Без ограничения</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Просмотры</span>
+          <span class="detail-value">24</span>
+        </div>
+      </div>
+
+      <!-- Info hint -->
+      <div style="background: var(--blue-soft); border-radius: 12px; padding: 12px 16px; font-size: 13px; color: var(--blue); line-height: 1.5; margin-bottom: 16px;">
+        После отключения старая ссылка перестанет работать. При повторном шеринге создастся новая.
+      </div>
+
+      <div class="action-group">
+        <button class="action-btn default">📋 Скопировать ссылку</button>
+        <button class="action-btn default">📤 Поделиться ещё раз</button>
+        <button class="action-btn danger">🚫 Отключить ссылку</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 5. DETAIL BOTTOM SHEET — PROFILE            -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="sec-detail-profile">
+  <div class="section-label">Detail sheet — Профиль</div>
+  <div class="desc-text">Для ссылки на профиль. Отключение = profileVisibility &rarr; NOBODY. Кнопка «Закрыть профиль» вместо «Отключить ссылку».</div>
+
+  <div class="phone">
+    <div class="phone-header" style="opacity: 0.3;">
+      <span class="back">&lsaquo;</span>
+      <span class="title">Управление ссылками</span>
+    </div>
+    <div style="padding: 16px; opacity: 0.15;">
+      <div class="link-card" style="pointer-events: none;">
+        <div class="link-card-top">
+          <div class="link-card-icon profile">👤</div>
+          <div class="link-card-content">
+            <div class="link-card-name">dmitriy</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <div class="link-card-icon profile" style="width: 44px; height: 44px; font-size: 22px;">👤</div>
+        <div>
+          <div style="font-size: 18px; font-weight: 700;">dmitriy</div>
+          <div style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">Ссылка на профиль</div>
+        </div>
+      </div>
+
+      <div style="background: var(--surface); border-radius: 14px; padding: 4px 16px; margin-bottom: 16px;">
+        <div class="detail-row">
+          <span class="detail-label">Срок</span>
+          <span class="detail-value">Без ограничения</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Видимость</span>
+          <span class="detail-value" style="color: var(--green);">Открыт для всех</span>
+        </div>
+      </div>
+
+      <!-- Info hint -->
+      <div style="background: var(--orange-soft); border-radius: 12px; padding: 12px 16px; font-size: 13px; color: var(--orange); line-height: 1.5; margin-bottom: 16px;">
+        Закрытие профиля скроет его для всех, кто ещё не подписан. Подписчики сохранят доступ.
+      </div>
+
+      <div class="action-group">
+        <button class="action-btn default">📋 Скопировать ссылку</button>
+        <button class="action-btn default">📤 Поделиться ещё раз</button>
+        <button class="action-btn danger">🔒 Закрыть профиль</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 6. CONFIRM MODAL                            -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="sec-confirm">
+  <div class="section-label">Confirm modal на отключение</div>
+  <div class="desc-text">Обязательное подтверждение. Текст объясняет необратимость действия. «Отмена» (ghost) + «Отключить» (red, flex:2).</div>
+
+  <div class="phone">
+    <div class="phone-header" style="opacity: 0.2;">
+      <span class="back">&lsaquo;</span>
+      <span class="title">Управление ссылками</span>
+    </div>
+    <div style="padding: 16px; opacity: 0.1;">
+      <div class="link-card" style="pointer-events: none;">
+        <div class="link-card-top">
+          <div class="link-card-icon lite">📋</div>
+          <div class="link-card-content">
+            <div class="link-card-name">Подарки для мамы</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Отключить ссылку?</div>
+      <div class="confirm-body">
+        Ссылка станет недействительной без возможности восстановления.<br><br>
+        Все, кому ты её отправлял, больше не смогут открыть её.<br><br>
+        Если позже захочешь снова поделиться, нужно будет создать новую ссылку.
+      </div>
+      <div class="confirm-buttons">
+        <button class="action-btn ghost">Отмена</button>
+        <button class="action-btn red-fill">Отключить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Profile variant -->
+  <div class="section-label" style="margin-top: 32px;">Вариант для профиля</div>
+  <div class="phone">
+    <div class="phone-header" style="opacity: 0.2;">
+      <span class="back">&lsaquo;</span>
+      <span class="title">Управление ссылками</span>
+    </div>
+    <div style="padding: 16px; opacity: 0.1;"></div>
+
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Закрыть профиль?</div>
+      <div class="confirm-body">
+        Профиль станет недоступен по ссылке.<br><br>
+        Новые пользователи не смогут найти тебя, но текущие подписчики сохранят доступ к твоим вишлистам.<br><br>
+        Ты сможешь открыть профиль снова в настройках приватности.
+      </div>
+      <div class="confirm-buttons">
+        <button class="action-btn ghost">Отмена</button>
+        <button class="action-btn red-fill">Закрыть</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 7. EMPTY STATE                              -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="sec-empty">
+  <div class="section-label">Пустое состояние</div>
+  <div class="desc-text">Когда у пользователя нет ни одной активной ссылки. Без CTA-кнопки, мягкое пояснение.</div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">&lsaquo;</span>
+      <span class="title">Управление ссылками</span>
+    </div>
+    <div class="phone-body">
+      <div class="empty-state">
+        <div class="empty-icon accent">🔗</div>
+        <div class="empty-title">У тебя пока нет активных ссылок</div>
+        <div class="empty-body">
+          Здесь будут ссылки на профиль, вишлисты и временные lite-вишлисты, которыми ты делишься с другими.
+        </div>
+        <div class="empty-hint">
+          Поделись профилем или вишлистом, чтобы они появились здесь.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 8. INVALID LINK SCREEN                      -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="sec-invalid">
+  <div class="section-label">Экран недействительной ссылки</div>
+  <div class="desc-text">Показывается при переходе по отключённой или истёкшей ссылке. Не молчаливый redirect, а объяснение. CTA зависит от наличия вишлистов.</div>
+
+  <!-- Variant A: user has wishlists -->
+  <div class="section-label" style="margin-top: 16px;">Вариант A: у пользователя есть вишлисты</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="empty-state" style="padding-top: 80px;">
+        <div class="empty-icon red">🚫</div>
+        <div class="empty-title">Ссылка недействительна</div>
+        <div class="empty-body">
+          Владелец отключил эту ссылку или срок её действия истёк.<br><br>
+          Попроси новую ссылку.
+        </div>
+        <div style="margin-top: 28px;">
+          <button class="action-btn primary" style="max-width: 280px; margin: 0 auto;">На главный экран</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Variant B: new user -->
+  <div class="section-label" style="margin-top: 24px;">Вариант B: у пользователя нет вишлистов</div>
+  <div class="phone">
+    <div class="phone-body">
+      <div class="empty-state" style="padding-top: 80px;">
+        <div class="empty-icon red">🚫</div>
+        <div class="empty-title">Ссылка недействительна</div>
+        <div class="empty-body">
+          Владелец отключил эту ссылку или срок её действия истёк.<br><br>
+          Попроси новую ссылку.
+        </div>
+        <div style="margin-top: 28px;">
+          <button class="action-btn primary" style="max-width: 280px; margin: 0 auto;">Создать свой вишлист</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 9. AFTER REVOKE — TOAST + LIST UPDATE       -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="sec-after-revoke">
+  <div class="section-label">После успешного отключения</div>
+  <div class="desc-text">Bottom sheet закрывается, ссылка исчезает из списка, toast «Ссылка отключена» сверху. Счётчик «N активных» обновляется.</div>
+
+  <div class="phone" style="position: relative;">
+    <!-- Toast -->
+    <div class="toast">✓ Ссылка отключена</div>
+
+    <div class="phone-header">
+      <span class="back">&lsaquo;</span>
+      <span class="title">Управление ссылками</span>
+    </div>
+    <div class="phone-body">
+
+      <div class="group-title" style="font-size: 12px; color: var(--text-muted); letter-spacing: 0.8px;">Временные ссылки</div>
+
+      <!-- Only one lite left (the other was revoked) -->
+      <div class="link-card">
+        <div class="link-card-top">
+          <div class="link-card-icon lite">📋</div>
+          <div class="link-card-content">
+            <div class="link-card-name">
+              Идеи на ДР Кати
+              <span class="warn-icon">⚠️</span>
+            </div>
+            <div class="link-card-type">
+              Lite-вишлист
+              <span class="badge-temp">Временная</span>
+            </div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text danger">Истекает<br>завтра</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+      <div class="group-title" style="font-size: 12px; color: var(--text-muted); letter-spacing: 0.8px; margin-top: 24px;">Постоянные ссылки</div>
+
+      <div class="link-card">
+        <div class="link-card-top">
+          <div class="link-card-icon wishlist">🎁</div>
+          <div class="link-card-content">
+            <div class="link-card-name">Мой основной вишлист</div>
+            <div class="link-card-type">Ссылка на вишлист</div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text permanent">Без срока</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+      <div class="link-card">
+        <div class="link-card-top">
+          <div class="link-card-icon profile">👤</div>
+          <div class="link-card-content">
+            <div class="link-card-name">dmitriy</div>
+            <div class="link-card-type">Ссылка на профиль</div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text permanent">Без срока</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 10. URGENCY STATES                          -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="sec-urgency">
+  <div class="section-label">Состояния срочности для lite-ссылок</div>
+  <div class="desc-text">Три уровня визуальной срочности по оставшемуся сроку. Бейдж «Временная» всегда виден.</div>
+
+  <div class="phone">
+    <div class="phone-header">
+      <span class="back">&lsaquo;</span>
+      <span class="title">Управление ссылками</span>
+    </div>
+    <div class="phone-body">
+
+      <div class="group-title" style="font-size: 12px; color: var(--text-muted); letter-spacing: 0.8px;">Временные ссылки</div>
+
+      <!-- Expires today (red) -->
+      <div class="link-card" style="border-color: rgba(248,113,113,0.2);">
+        <div class="link-card-top">
+          <div class="link-card-icon lite">📋</div>
+          <div class="link-card-content">
+            <div class="link-card-name">
+              Книги для Ани
+              <span class="warn-icon">🔴</span>
+            </div>
+            <div class="link-card-type">
+              Lite-вишлист
+              <span class="badge-temp">Временная</span>
+            </div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text danger">Истекает<br>сегодня</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+      <!-- Expires tomorrow (orange) -->
+      <div class="link-card" style="border-color: rgba(251,191,36,0.15);">
+        <div class="link-card-top">
+          <div class="link-card-icon lite">📋</div>
+          <div class="link-card-content">
+            <div class="link-card-name">
+              Идеи на ДР Кати
+              <span class="warn-icon">⚠️</span>
+            </div>
+            <div class="link-card-type">
+              Lite-вишлист
+              <span class="badge-temp">Временная</span>
+            </div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text warning">Истекает<br>завтра</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+      <!-- 3 days left (orange) -->
+      <div class="link-card">
+        <div class="link-card-top">
+          <div class="link-card-icon lite">📋</div>
+          <div class="link-card-content">
+            <div class="link-card-name">
+              Техника
+              <span class="warn-icon">⚠️</span>
+            </div>
+            <div class="link-card-type">
+              Lite-вишлист
+              <span class="badge-temp">Временная</span>
+            </div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text warning">Осталось<br>3 дн.</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+      <!-- 12 days left (normal) -->
+      <div class="link-card">
+        <div class="link-card-top">
+          <div class="link-card-icon lite">📋</div>
+          <div class="link-card-content">
+            <div class="link-card-name">Одежда на лето</div>
+            <div class="link-card-type">
+              Lite-вишлист
+              <span class="badge-temp">Временная</span>
+            </div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text normal">Осталось<br>12 дн.</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+      <!-- 32 days left (normal, no icon) -->
+      <div class="link-card">
+        <div class="link-card-top">
+          <div class="link-card-icon lite">📋</div>
+          <div class="link-card-content">
+            <div class="link-card-name">Подарки для мамы</div>
+            <div class="link-card-type">
+              Lite-вишлист
+              <span class="badge-temp">Временная</span>
+            </div>
+          </div>
+          <div class="link-card-status">
+            <span class="link-card-status-text normal">Осталось<br>32 дн.</span>
+          </div>
+          <span class="link-card-chevron">›</span>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div style="margin-top: 20px; padding: 14px 16px; background: var(--surface); border-radius: 12px; font-size: 12px; line-height: 1.8;">
+        <div style="color: var(--text-muted); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Логика цветов</div>
+        <div><span style="color: var(--red);">&#9679;</span> Истекает сегодня &mdash; <code style="color: var(--red);">red</code> + красная рамка</div>
+        <div><span style="color: var(--orange);">&#9679;</span> &le; 3 дней &mdash; <code style="color: var(--orange);">orange</code> + ⚠️</div>
+        <div><span style="color: var(--text-muted);">&#9679;</span> > 3 дней &mdash; <code style="color: var(--text-muted);">muted</code>, без иконки</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>
