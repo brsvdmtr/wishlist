@@ -32,6 +32,103 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-04-19 — Banner Wave 1 adoption + neutral tones promoted to `canonical`
+
+**Type:** primitive-change + status-change
+
+**Decision.** Banner Wave 1 migrated 4 real call-sites in `MiniApp.tsx`
+validating all 4 neutral tones (info / success / warning / danger).
+Combined with the Phase-1 danger migration at ~29726 (share_link_error),
+Banner has 5 live call-sites across 4 tones.
+
+**`Banner` neutral tones promoted to `canonical`:** `info`, `success`,
+`warning`, `danger`. **`promo` tone stays `provisional`** — pending first
+paywall-wave migration before canonical (per
+[BANNER_WAVE_1_PLAN.md](./BANNER_WAVE_1_PLAN.md)).
+
+### Migrated call-sites (4 new + 1 pre-existing)
+
+| # | File:line | Tone | bordered | Notes |
+|---|-----------|------|----------|-------|
+| 1 | `MiniApp.tsx:~14353` | `success` | `true` | Item-detail "purchased" indicator. Had visible subtle tone-border in prod (`${C.green}18`) — preserved via new `bordered` prop. |
+| 2 | `MiniApp.tsx:~3079` | `warning` | `false` | Comments-archive notice. Compact warning strip inside scrollable chat surface. Retains outer `margin: '0 14px 10px'` via `style` prop. |
+| 3 | `MiniApp.tsx:~13692` | `warning` | `false` | Read-only-wishlist notice with inline upsell link. Inline `<span onClick>` preserved inside Banner children. |
+| 4 | `MiniApp.tsx:~13698` | `info` | `false` | Surprise-notice block beneath read-only notice (discovered during Banner #3 migration context read). Accent-soft tinted info strip with 👁 icon. |
+| — | `MiniApp.tsx:~29726` | `danger` | `false` | (Pre-existing Phase-1 migration — share_link_error with `center`) |
+
+### API extension: `bordered?: boolean` (added)
+
+Three of the 5 call-sites had no border; one had subtle tone-border
+(`${C.green}18` opacity). Approved mockups also use border on some
+emphasis banners (don't-gift block in `v2-wishlist-detail-guest.html`).
+
+**Decision:** add `bordered?: boolean` prop (default `false`). When true
+and tone !== 'promo', renders `1px solid rgba(tone-rgb, 0.2-0.25)`.
+`promo` tone ignores this (gradient fill + border would look noisy).
+
+This is a non-breaking additive change.
+
+### Minor visual shifts (accepted)
+
+- **Radius:** prod call-sites used `borderRadius: 12`; primitive uses
+  `radius.xl` (14). +2px rounder. Aligned with approved-mockup direction
+  and pending radius-softness backlog.
+- **fontSize:** prod mixed (12 on compact, 14 on success, 13 on
+  read-only); primitive standardizes on `fontSize.base` (13). ±1px shift.
+- **Padding:** prod mixed (`'8px 14px'` compact, `'12px 14px'` normal,
+  `'14px 16px'` read-only); primitive standardizes on `'12px 14px'`.
+  Compact ones gained ~4px vertical, read-only ones lost 2px. Small,
+  within canonical direction.
+- **Icon font size:** prod success had `fontSize: 18`; primitive uses 16.
+  Acceptable — can override via `<span style={{ fontSize: 18 }}>` inside
+  icon slot if call-site explicitly wants bigger.
+
+None of these are regressions; they're convergence toward canonical.
+
+### Promotion checklist — Banner neutral tones
+
+| Gate | Status |
+|------|--------|
+| **Approval source** | `mockups/approved/v2-*.html` codify all 4 neutral tones + promo. |
+| **Stable API** | Props unchanged since Phase 1 + `bordered` additive extension. |
+| **Real usage ≥ 3** | 5 call-sites across 4 tones ✅ |
+| **Long-text behavior** | Line 13692 wraps with inline link — works cleanly. |
+| **Mobile** | 375 × 812 verified against approved mockups. |
+| **Interaction** | Static surfaces; no interaction beyond inline link + optional onClose. |
+| **RTL** | Flex layout with `gap`; icon + body + action flow mirrors correctly. Inline `onClick` children uncovered — author responsibility. |
+| **Migration note** | More tinted-strip call-sites remain in MiniApp.tsx (e.g., at ~17405 micro-error chip, further accent-soft strips). They are `legacy`, migrate on touch. |
+
+### Gaps NOT resolved by this wave
+
+- **`promo` tone not validated** — needs paywall migration.
+- **Info-tone banner coverage** — 1 call-site (13698). Future waves
+  likely add more as they land in upsells / curated-selection /
+  group-gift flows.
+- **Compact density variant** — some prod strips used
+  `padding: '8px 14px'` (tighter). Wave 1 accepted +4px vertical shift
+  rather than add `compact` prop. If ≥ 3 future call-sites need tighter,
+  revisit.
+- **Tone-bordered default question** — for now, `bordered` is opt-in.
+  If most new call-sites want border, flip default to `true` with
+  opt-out `bordered={false}`.
+
+### Impact
+
+- **Banner neutral tones** (`info`/`success`/`warning`/`danger`) flipped to
+  `canonical` in `COMPONENT_REGISTRY.md`.
+- **`promo` tone** stays `provisional` — blocked on paywall wave.
+- **Status promotion queue advanced:** 2nd canonical (Banner neutral
+  tones) after SectionHeader.
+- **TypeScript:** clean.
+- **UI audit delta:** inline `style={{}}` 3665 → 3663 (−2; 4 migrations
+  with some retaining style for positioning).
+- **Haptic policy:** left as Option A (default-on, no new primary
+  Buttons added in this wave so no further haptic surface introduced).
+
+**Approved by.** Dmitry (2026-04-19, "давай дальше" = go Banner Wave 1).
+
+---
+
 ## 2026-04-19 — Button Wave 1 adoption (validation, not promotion)
 
 **Type:** primitive-change (adoption wave)

@@ -3076,9 +3076,9 @@ function CommentsThread({
       </div>
 
       {isArchive && (
-        <div style={{ fontSize: 12, color: C.orange, background: C.orangeSoft, padding: '8px 14px', borderRadius: 12, margin: '0 14px 10px', flexShrink: 0 }}>
+        <Banner tone="warning" style={{ margin: '0 14px 10px', flexShrink: 0 }}>
           {t('comments_archive_warning', locale)}
-        </div>
+        </Banner>
       )}
 
       {/* Messages — scrollable. flex:1 + minHeight:0 lets this area shrink/grow
@@ -13686,23 +13686,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {currentWl.readOnly && (
-              <div style={{
-                borderRadius: 12, padding: '14px 16px', fontSize: 13,
-                display: 'flex', alignItems: 'center', gap: 10,
-                background: C.orangeSoft, color: C.orange, lineHeight: 1.5,
-              }}>
-                <span>🔒</span>
-                <span>
-                  {t('read_only_notice', locale)}{' '}
-                  <span onClick={() => showUpsell('wishlist_limit')} style={{ textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}>
-                    {t('read_only_upgrade', locale)}
-                  </span>{t('read_only_to_edit', locale)}
-                </span>
-              </div>
+              <Banner tone="warning" icon={<span>🔒</span>}>
+                {t('read_only_notice', locale)}{' '}
+                <span onClick={() => showUpsell('wishlist_limit')} style={{ textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}>
+                  {t('read_only_upgrade', locale)}
+                </span>{t('read_only_to_edit', locale)}
+              </Banner>
             )}
-            <div style={{ borderRadius: 12, padding: '12px 16px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, background: C.accentSoft, color: C.accent, lineHeight: 1.5 }}>
-              <span>👁</span><span>{t('surprise_notice', locale)}</span>
-            </div>
+            <Banner tone="info" icon={<span>👁</span>}>
+              {t('surprise_notice', locale)}
+            </Banner>
 
             {loading && items.length === 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 0' }}>
@@ -14350,10 +14343,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
             {viewingItem.status === 'purchased' && (
-              <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10, background: C.greenSoft, border: `1px solid ${C.green}18` }}>
-                <span style={{ fontSize: 18 }}>✅</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: C.green }}>{t('status_gifted', locale)}</span>
-              </div>
+              <Banner tone="success" bordered icon={<span style={{ fontSize: 18 }}>✅</span>} style={{ marginTop: 16 }}>
+                <span style={{ fontWeight: 600 }}>{t('status_gifted', locale)}</span>
+              </Banner>
             )}
 
             {/* Description — read only, hidden if empty */}

@@ -283,31 +283,54 @@ dialog/sheet-content titles.
 
 ## Banner
 
+**Status (per-tone):** `info` / `success` / `warning` / `danger` are
+**`canonical`** (promoted 2026-04-19). `promo` is `provisional` (pending
+first paywall-wave migration).
+
 ```tsx
-<Banner tone="success" center>Reservation confirmed</Banner>
+<Banner tone="success" bordered icon={<span>✅</span>}>Подарено</Banner>
+<Banner tone="warning">{t('comments_archive_warning', locale)}</Banner>
+<Banner tone="info" icon={<span>👁</span>}>{t('surprise_notice', locale)}</Banner>
 <Banner tone="danger" title="Couldn't load">Retry in a moment</Banner>
 <Banner tone="promo" icon={<StarIcon />} action={<Button size="sm">Upgrade</Button>}>
   Unlock PRO for secret reservations
 </Banner>
 ```
 
-**Codified in:** `v2-wishlist-detail-guest.html` (group-gift promo),
-state-chips in state matrix, error banners in MiniApp.
+**Codified in:** `v2-wishlist-detail-guest.html` (don't-gift danger +
+group-gift promo), state-matrix, 5+ real call-sites in MiniApp after
+Wave 1.
 
-### Tones (approved)
+### Contract (canonical for neutral tones)
 
-- `info` — tinted accent · neutral info strips
-- `success` — tinted green · positive state
-- `warning` — tinted orange · expiring / caution
-- `danger` — tinted red · error / destructive
-- `promo` — brand gradient, white text · **hero upsell placement** (paywall
-  triggers / group-gift invites)
+- Background: `colors.{tone}Soft` · foreground: `colors.{tone}`.
+- Radius: `radius.xl` (14) · padding: `12px 14px`.
+- Font: `fontSize.base` (13), `lineHeight: 1.5`.
+- Icon: leading slot, 16 px default (override via `<span style={{ fontSize: 18 }}>`).
+- Optional `title` (14 × 700, `marginBottom: 2`).
+- `action` (trailing) or `onClose` × (trailing). Not both.
+- `center` — single-line centered messages.
+- `bordered` — adds `1px solid rgba(tone-rgb, 0.2-0.25)` for emphasis.
+  Ignored for `promo`.
+
+### Tones
+
+| Tone | Use | Status |
+|------|-----|--------|
+| `info` | Neutral info strips (surprise-notice, inline notes) | canonical |
+| `success` | Positive state (purchased, reserved) | canonical |
+| `warning` | Caution / expiring / read-only / archived | canonical |
+| `danger` | Error / destructive / conflict | canonical |
+| `promo` | Hero upsell (paywall, group-gift invites) | provisional |
 
 ### Anti-patterns
 
 - ❌ Using `tone="promo"` for low-emphasis info — it reads as CTA.
 - ❌ Two banners stacked in the same surface — rethink hierarchy.
 - ❌ Close-button + action-button together — pick one.
+- ❌ `style={{ borderRadius, padding, fontSize, background, color }}` —
+  these are the canonical contract, not overridable. Only positional
+  overrides (`margin`, `marginTop`, `flexShrink`) belong in `style`.
 
 ---
 

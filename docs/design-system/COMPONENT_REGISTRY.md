@@ -135,17 +135,26 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
 
 ### `Banner`
 
-- **Status:** `provisional`
+- **Status (per-tone):**
+  - `info` / `success` / `warning` / `danger` → **`canonical`** (promoted 2026-04-19)
+  - `promo` → `provisional`
 - **Implementation:** [packages/ui/src/Banner.tsx](../../packages/ui/src/Banner.tsx)
 - **Approval source:** `v2-wishlist-detail-guest.html` (don't-gift danger
-  + group-gift promo); state-matrix; home error states
+  + group-gift promo); state-matrix; home error states +
+  [`DESIGN_DECISIONS.md#2026-04-19--banner-wave-1-adoption--neutral-tones-promoted-to-canonical`](./DESIGN_DECISIONS.md#2026-04-19--banner-wave-1-adoption--neutral-tones-promoted-to-canonical)
 - **Target visual direction:** `matches-approved-mockup`
-- **Can be promoted to canonical:** **`yes` for neutral tones**
-  (`info` / `success` / `warning` / `danger`) — codified and validated.
-  `promo` tone: `not-yet` pending paywall migration.
-- **Promotion blockers:**
-  - `promo` tone needs first paywall surface to use it in situ
-  - Optional close-button vs action-slot contract not yet hardened
+- **API:** `tone` · `title` · `icon` · `action` · `onClose` · `center` ·
+  `bordered` (added during Wave 1 promotion)
+- **Adoption:** 5 call-sites in MiniApp.tsx across all 4 neutral tones.
+  Remaining tinted-strip inline divs are `legacy`, migrate on touch.
+- **Promotion blockers (for `promo`):**
+  - Needs first paywall migration to validate CTA composition
+  - Action-slot contract (button inside banner) not yet exercised in prod
+- **Migration notes:** `<div style={{ background: C.{tone}Soft, color:
+  C.{tone}, padding: '12px 14px', borderRadius: 12, display: flex, gap:
+  10 }}>` → `<Banner tone="{tone}" icon={...}>...</Banner>`. If prod
+  had subtle tone-border → add `bordered`. Keep outer positional
+  overrides (margin, flexShrink) via `style` prop.
 
 ### `Chip` (new, 2026-04-19)
 
@@ -245,17 +254,17 @@ Status updated 2026-04-19 after North Star approval.
 
 ### Completed
 - ✅ **`SectionHeader`** — canonical 2026-04-19
+- ✅ **`Banner` neutral tones** (`info` / `success` / `warning` / `danger`) — canonical 2026-04-19
 
 ### Next up
-1. **`Banner` neutral tones** (`info` / `success` / `warning` / `danger`) → clean codified tone language; needs 3+ adoptions
-2. **`Card` default / flat / interactive** → split from hero; needs 3+ adoptions
-3. **`Chip`** → after 3+ adoptions
-4. **`Button`** → after Wave-1 MiniApp.tsx migration validates `primary-gradient` + haptic
-5. **`ListRow`** → after state-matrix adoption in real call-sites
-6. **`Card variant="hero"`** → after first paywall migration
-7. **`Banner tone="promo"`** → same (follows paywall migration)
-8. **`Sheet`** → after BottomSheet iOS behavior absorption
-9. **`CounterBadge`, `StatTile`, `AvatarStack`** → after adoption validates APIs
+1. **`Card` default / flat / interactive** → split from hero; needs 3+ adoptions
+2. **`Chip`** → after 3+ adoptions
+3. **`Button`** → after Wave-1 MiniApp.tsx migration validates `primary-gradient` + haptic
+4. **`ListRow`** → after state-matrix adoption in real call-sites
+5. **`Card variant="hero"`** → after first paywall migration
+6. **`Banner tone="promo"`** → same (follows paywall migration)
+7. **`Sheet`** → after BottomSheet iOS behavior absorption
+8. **`CounterBadge`, `StatTile`, `AvatarStack`** → after adoption validates APIs
 
 ---
 
