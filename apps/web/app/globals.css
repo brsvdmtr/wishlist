@@ -36,7 +36,12 @@ body {
    independently of the MiniApp.tsx inline <style> block. Keep in sync.
    ──────────────────────────────────────────────────────────────────── */
 
-@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+/* fadeIn — pure opacity fade (no transform).
+   Transform on screen-level wrappers creates a new containing block for
+   position:fixed descendants (sticky CTAs), causing them to "jump" at
+   animation end. Pure opacity avoids this. Slide-up is handled by
+   slideUp / toastIn keyframes where needed. */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: translateY(0); } }
 @keyframes toastIn { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }

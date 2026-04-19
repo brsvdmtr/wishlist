@@ -65,9 +65,19 @@ opt out with `pressedEffect={false}`.
 
 ### Canonical animations
 
+> **⚠️ Rule: `fadeIn` is pure-opacity only — no transform.**
+> Screen-level wrappers use `animation.fadeIn` on their root div. If
+> `fadeIn` included `transform: translateY`, that transform would create
+> a new CSS containing block for `position: fixed` descendants (sticky
+> CTAs). The fixed button would anchor to the transforming ancestor
+> during animation, then re-anchor to viewport on animation end —
+> causing a visible "jump" on initial render. `fadeIn` is therefore
+> kept transform-free. Use `slideUp` / `toastIn` when slide motion is
+> needed (those apply to elements without position:fixed descendants).
+
 ```ts
-animation: animation.fadeIn        // entrance 0.3s
-animation: animation.slideUp       // sheet/modal slide up
+animation: animation.fadeIn        // entrance 0.3s — pure opacity only
+animation: animation.slideUp       // sheet/modal slide up (fixed-at-bottom)
 animation: animation.toastIn       // toast appear
 animation: animation.pulse         // 1.5s loop (loading skeleton accent)
 animation: animation.dotPulse      // 2s loop (active-dot indicator)

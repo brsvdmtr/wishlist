@@ -11057,7 +11057,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       touchAction: 'pan-y',
     }}>
       <style>{`
-        @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+        /* fadeIn — pure opacity (no transform). Transform on screen wrappers
+           breaks position:fixed descendants. See docs/design-system/INTERACTION_SYSTEM.md. */
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
         @keyframes slideUp { from { opacity:0; transform:translateY(100%) } to { opacity:1; transform:translateY(0) } }
         @keyframes toastIn { from { opacity:0; transform:translateY(20px) scale(0.95) } to { opacity:1; transform:translateY(0) scale(1) } }
         @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
