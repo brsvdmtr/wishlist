@@ -3355,14 +3355,19 @@ async function getOrCreateProfile(userId: string, locale?: Locale) {
   let profile = await prisma.userProfile.findUnique({ where: { userId } });
 
   if (!profile) {
-    // New user: create with a fresh supportId immediately.
+    // New user: create with a fresh supportId immediately. Use upsert instead
+    // of create so parallel requests (e.g. mini-app boot firing several GETs
+    // for the same user) don't race into P2002 unique-constraint crashes on
+    // UserProfile.userId — observed as a 500 on /tg/me/profile in the wild.
     const supportId = await generateUniqueSupportId();
-    profile = await prisma.userProfile.create({
-      data: {
+    profile = await prisma.userProfile.upsert({
+      where: { userId },
+      create: {
         userId,
         defaultCurrency: locale === 'ru' ? 'RUB' : 'USD',
         supportId,
       },
+      update: {}, // if another request won the race, keep their row intact
     });
   } else if (!profile.supportId) {
     // Existing user without supportId (pre-migration row): lazy backfill.
