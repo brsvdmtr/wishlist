@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
+import { Banner, Button, SectionHeader } from '@wishlist/ui';
 import { initSentry, captureException } from './sentry';
 
 // ═══════════════════════════════════════════════════════
@@ -2389,7 +2390,7 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
         </div>
         <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {item.status === 'available' && !secretByMe && (
-            <button onClick={(e) => { e.stopPropagation(); onReserve(item); }} style={{ ...btnPrimary, width: 'auto', padding: '8px 16px', fontSize: 13 }}>{t('reserve_btn', locale)}</button>
+            <Button variant="primary" size="sm" fullWidth={false} onClick={(e) => { e.stopPropagation(); onReserve(item); }}>{t('reserve_btn', locale)}</Button>
           )}
           {secretByMe && (
             <span style={{
@@ -3803,7 +3804,7 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
       </div>
     );
     const nextBtn = (label: string) => (
-      <button onClick={() => setObStep(obStep + 1)} style={{ ...btnPrimary }}>{label}</button>
+      <Button variant="primary" onClick={() => setObStep(obStep + 1)}>{label}</Button>
     );
     const skipBtn = (
       <div style={{ textAlign: 'center', marginTop: 8 }}>
@@ -3930,8 +3931,8 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
             </div>
           ))}
         </div>
-        <button onClick={finishOnboard} style={{ ...btnPrimary }}>⚙️ {isRu ? 'Настроить под себя' : 'Customize settings'}</button>
-        <button onClick={finishOnboard} style={{ ...btnSecondary, marginTop: 8 }}>{isRu ? 'Оставить по умолчанию' : 'Keep defaults'}</button>
+        <Button variant="primary" onClick={finishOnboard}>⚙️ {isRu ? 'Настроить под себя' : 'Customize settings'}</Button>
+        <Button variant="secondary" onClick={finishOnboard} style={{ marginTop: 8 }}>{isRu ? 'Оставить по умолчанию' : 'Keep defaults'}</Button>
       </div>
     );
   }
@@ -11245,7 +11246,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 : t('error_loading', locale)}
             </div>
             <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{errorMsg || t('error_unknown', locale)}</div>
-            <button style={{ ...btnPrimary, marginTop: 8, width: 200 }} onClick={() => window.location.reload()}>{t('retry', locale)}</button>
+            <Button variant="primary" fullWidth={false} style={{ marginTop: 8, width: 200 }} onClick={() => window.location.reload()}>{t('retry', locale)}</Button>
           </div>
         );
       })()}
@@ -11984,7 +11985,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {!reorderMode && <div style={{ height: 70 }} />}
             {!reorderMode && (
               <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', pointerEvents: 'none' }}>
-                <button style={{ ...btnPrimary, height: 50, borderRadius: 14, fontSize: 15, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</button>
+                <Button variant="primary" size="lg" style={{ pointerEvents: 'auto' }} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</Button>
               </div>
             )}
           </div>
@@ -12582,7 +12583,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {resTab === 'history' && !reservationPro && (
                 <div style={{ textAlign: 'center', padding: '40px 24px' }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 8 }}>{t('res_pro_upsell_history_title', locale)}</div>
+                  <SectionHeader center marginBottom={8}>{t('res_pro_upsell_history_title', locale)}</SectionHeader>
                   <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 24 }}>{t('res_pro_upsell_history_desc', locale)}</div>
                   <button onClick={() => setUpsellSheet({ context: 'reservation_pro' })} style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700,
@@ -13665,12 +13666,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
             {/* Right: vertical action stack */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-              <button
+              <Button
+                variant="primary"
+                size="sm"
+                fullWidth={false}
                 onClick={() => setScreen('share')}
-                style={{ ...btnPrimary, width: 'auto', padding: '8px 16px', fontSize: 13 }}
               >
                 {t('share_btn', locale)}
-              </button>
+              </Button>
               {/* Manage button — always visible to owner (wishlist-detail is owner-only) */}
               <button
                 onClick={() => setShowWlManage(true)}
@@ -13850,18 +13853,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 padding: '10px 0', marginBottom: 8,
               }}>
-                <button onClick={() => { setBulkSelectionMode(false); setBulkSelectedIds(new Set()); }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
+                <Button variant="ghost" size="sm" fullWidth={false} style={{ padding: '6px 12px' }} onClick={() => { setBulkSelectionMode(false); setBulkSelectedIds(new Set()); }}>
                   {t('bulk_cancel', locale)}
-                </button>
+                </Button>
                 <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
                   {t('bulk_selected', locale, { count: bulkSelectedIds.size })}
                 </span>
-                <button onClick={() => {
+                <Button variant="ghost" size="sm" fullWidth={false} style={{ padding: '6px 12px' }} onClick={() => {
                   if (bulkSelectedIds.size === items.length) setBulkSelectedIds(new Set());
                   else setBulkSelectedIds(new Set(items.map(i => i.id)));
-                }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
+                }}>
                   {bulkSelectedIds.size === items.length ? t('bulk_cancel', locale) : t('bulk_select_all', locale)}
-                </button>
+                </Button>
               </div>
             )}
             {curatedSelectionMode && !bulkSelectionMode && (
@@ -18123,9 +18126,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {ScreenHeader}
               <div style={{ textAlign: 'center', padding: '40px 24px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 20 }}>
                 <div style={{ fontSize: 48, marginBottom: 14 }}>🎁</div>
-                <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 8 }}>
-                  {t('referral_disabled_title', locale)}
-                </div>
+                <SectionHeader center marginBottom={8}>{t('referral_disabled_title', locale)}</SectionHeader>
                 <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.5, maxWidth: 320, margin: '0 auto' }}>
                   {t('referral_disabled_body', locale)}
                 </div>
@@ -18282,7 +18283,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 10 }}>
                   {t('referral_progress_section', locale)}
                 </div>
-                <div style={{ padding: '12px 14px', borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.orange}`, fontSize: 13, color: C.text, display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div
+                  onClick={openReferralHistoryScreen}
+                  style={{ padding: '12px 14px', borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.orange}`, fontSize: 13, color: C.text, display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer' }}>
                   <div style={{ width: 36, height: 36, borderRadius: '50%', background: C.orangeSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>⏳</div>
                   <div style={{ flex: 1, fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
                     {t('referral_event_pending', locale)}
@@ -18290,9 +18293,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       · {referralMe.stats.pendingActivation + referralMe.stats.qualified}
                     </span>
                   </div>
-                  <div
-                    onClick={openReferralHistoryScreen}
-                    style={{ color: C.accent, fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                  <div style={{ color: C.accent, fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
                     →
                   </div>
                 </div>
@@ -21461,9 +21462,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {t('cat_delete_confirm', locale, { name: showCatDelete?.name ?? '' })}
           </p>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button style={{ ...btnSecondary, flex: 1 }} onClick={() => setShowCatDelete(null)}>
+            <Button variant="secondary" fullWidth={false} style={{ flex: 1 }} onClick={() => setShowCatDelete(null)}>
               {t('wl_cancel', locale)}
-            </button>
+            </Button>
             <button
               style={{ ...btnPrimary, flex: 1, background: C.red, opacity: catDeleteLoading ? 0.6 : 1 }}
               onClick={() => void handleCatDelete()}
@@ -21845,9 +21846,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {t('wl_archive_confirm_body', locale)}
           </p>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button style={{ ...btnSecondary, flex: 1 }} onClick={() => setShowArchiveWlConfirm(false)}>
+            <Button variant="secondary" fullWidth={false} style={{ flex: 1 }} onClick={() => setShowArchiveWlConfirm(false)}>
               {t('wl_cancel', locale)}
-            </button>
+            </Button>
             <button
               style={{ ...btnPrimary, flex: 1, background: C.orange, opacity: archivingWl ? 0.6 : 1 }}
               onClick={() => void handleArchiveWishlist()}
@@ -22343,14 +22344,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       <BottomSheet isOpen={!!resPurchasedConfirmItem} onClose={() => setResPurchasedConfirmItem(null)} title="">
         <div style={{ textAlign: 'center', padding: '8px 0 0' }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>{resPurchasedConfirmItem?.meta?.purchased ? '🔄' : '🎁'}</div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+          <SectionHeader center marginBottom={6}>
             {resPurchasedConfirmItem?.meta?.purchased ? t('res_unpurchase_confirm_title', locale) : t('res_purchased_confirm_title', locale)}
-          </div>
+          </SectionHeader>
           <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 20, whiteSpace: 'pre-line' }}>
             {resPurchasedConfirmItem?.meta?.purchased ? t('res_unpurchase_confirm_body', locale) : t('res_purchased_confirm_body', locale)}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setResPurchasedConfirmItem(null)} style={{ ...btnSecondary, flex: 1 }}>{t('cancel', locale)}</button>
+            <Button variant="secondary" fullWidth={false} style={{ flex: 1 }} onClick={() => setResPurchasedConfirmItem(null)}>{t('cancel', locale)}</Button>
             <button onClick={handleResPurchasedToggle} disabled={resPurchasedLoading} style={{
               ...btnPrimary, flex: 2, opacity: resPurchasedLoading ? 0.6 : 1,
               ...(resPurchasedConfirmItem?.meta?.purchased ? { background: C.redSoft, color: C.red } : {}),
@@ -24185,9 +24186,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           return (
             <div style={{ textAlign: 'center' as const, padding: '4px 0 0' }}>
               <div style={{ fontSize: 44, marginBottom: 10 }}>{isTerminal ? '🗑' : '🔓'}</div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 8, fontFamily: font }}>
-                {t('sr_cancel_confirm_title', locale)}
-              </div>
+              <SectionHeader center marginBottom={8}>{t('sr_cancel_confirm_title', locale)}</SectionHeader>
               <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 20 }}>
                 {t('sr_cancel_confirm_body', locale)}
               </div>
@@ -29727,9 +29726,9 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
         </div>
 
         {linkError ? (
-          <div style={{ borderRadius: 12, padding: '12px 16px', fontSize: 13, background: C_local.redSoft, color: C_local.red, width: '100%', lineHeight: 1.5, boxSizing: 'border-box', textAlign: 'center' }}>
+          <Banner tone="danger" center style={{ width: '100%', boxSizing: 'border-box' }}>
             {t('share_link_error', locale)}
-          </div>
+          </Banner>
         ) : (
           <>
             <div style={{
