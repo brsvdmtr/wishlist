@@ -41,33 +41,36 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
 
 - **Status (per-variant):**
   - `primary` / `secondary` / `ghost` → **`canonical`** (promoted 2026-04-20 after Wave 1 + 1-day haptic observation)
-  - `primary-gradient` / `danger` / `surface` → `provisional`
+  - `primary-gradient` → **`canonical`** (promoted 2026-04-20 via paywall wave; gap #1 resolved — mockup canonicalizes 2-stop gradient)
+  - `danger` / `surface` → `provisional`
 - **Implementation:** [packages/ui/src/Button.tsx](../../packages/ui/src/Button.tsx)
 - **Approval source:** every approved v2 mockup codifies variant × size
-  grid + [DESIGN_DECISIONS.md#2026-04-20--button-primarysecondaryghost-promoted-to-canonical](./DESIGN_DECISIONS.md#2026-04-20--button-primarysecondaryghost-promoted-to-canonical)
+  grid + [DESIGN_DECISIONS.md#2026-04-20--paywall-b-full-full-redesign-to-match-approved-v2-paywallhtml--yearly-pro-plan](./DESIGN_DECISIONS.md#2026-04-20--paywall-b-full-full-redesign-to-match-approved-v2-paywallhtml--yearly-pro-plan)
 - **Target visual direction:** `matches-approved-mockup` for canonical
   variants; `needs-redesign` for `danger` (prod uses flat fill, not tint).
 - **API:** `variant / size / fullWidth / loading / disabled / pressedEffect / haptic / leftIcon / rightIcon / style` (unchanged since Wave 1)
-- **Adoption:** 12 call-sites in MiniApp.tsx Wave 1 (primary × 6,
-  secondary × 4, ghost × 2). Haptic validated live 1-day.
+- **Adoption:** 13 call-sites in MiniApp.tsx (Wave 1: primary × 6,
+  secondary × 4, ghost × 2; Paywall wave: primary-gradient × 1 sticky
+  CTA + ghost × 1 "Not now"). Haptic validated live.
 - **Promotion blockers (for remaining variants):**
-  - **`primary-gradient`** (Gap #1): 3 prod sites use bespoke
-    gradient (accent→accentDeeper `#6B5CE7`) instead of canonical
-    (accent→accentStrong `#9B8AFF`). Options: add
-    `primary-gradient-deep` variant OR migrate with visual shift OR
-    declare "legacy bespoke" and skip.
   - **`danger`** (Gap #2): prod uses flat `C.red` / `C.orange`.
     Current variant is tinted-only. Need `danger-solid` variant OR
     tone sub-prop OR accept tint-shift.
   - **`surface`**: 0 adoptions yet. Validate via 2-3 real sites
     first.
+- **Legacy sites (migrate on touch):** 3 prod bespoke `primary-gradient-deep`
+  3-stop sites at ~16650, ~16785, ~16993 (MiniApp.tsx) use
+  `linear-gradient(135deg, C.accent, #6B5CE7)` instead of canonical
+  2-stop. Replace with `<Button variant="primary-gradient">` when you
+  touch those sites.
 - **Migration notes:** `<button style={{...btnPrimary, padding, fontSize}}>` → `<Button variant="primary" size="...">`. Keep `style` for positional overrides (flex, margin, width). Drop `boxShadow`/`borderRadius` overrides — variant provides them. `opacity: X?0.6:1 + disabled={X}` pattern: keep inline for now (loading prop shows spinner, different UX).
 
 ### `Card`
 
 - **Status (per-variant):**
   - `default` / `interactive` → **`canonical`** (promoted 2026-04-19, 5 call-sites)
-  - `flat` / `current` / `hero` → `provisional`
+  - `hero` → **`canonical`** (promoted 2026-04-20 via paywall wave; hero-class primitives are inherently 1-per-surface)
+  - `flat` / `current` → `provisional`
 - **Implementation:** [packages/ui/src/Card.tsx](../../packages/ui/src/Card.tsx)
 - **Approval source:** all v2 mockups (default/flat/interactive/current);
   `v2-paywall.html` (hero) + [DESIGN_DECISIONS.md#2026-04-19--card-wave-1-adoption--defaultinteractive-variants-promoted-to-canonical](./DESIGN_DECISIONS.md#2026-04-19--card-wave-1-adoption--defaultinteractive-variants-promoted-to-canonical)
@@ -81,7 +84,6 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
     doesn't match either `default` (has border) or `flat` (different bg).
     Open question in future Card wave.
   - `current` — visual target codified in mockups but no prod adoption.
-  - `hero` — waits for paywall migration.
 - **Migration notes:** `<div style={{ background: C.card, borderRadius:
   14, padding: 16, border: '1px solid C.border' }}>` → `<Card variant="default">`.
   Add `variant="interactive"` + `onClick` for clickable cards. Keep
@@ -272,15 +274,17 @@ Status updated 2026-04-19 after North Star approval.
 - ✅ **`SectionHeader`** — canonical 2026-04-19
 - ✅ **`Banner` neutral tones** — canonical 2026-04-19
 - ✅ **`Card` default + interactive** — canonical 2026-04-19
-- ✅ **`Chip` primitive** — canonical 2026-04-20 (15 call-sites × 4 tones)
+- ✅ **`Chip` primitive** — canonical 2026-04-20 (15+ call-sites across 5 tones)
 - ✅ **`ListRow variant="card"`** — canonical 2026-04-20 (5 call-sites + 3 states)
 - ✅ **`Button` primary/secondary/ghost** — canonical 2026-04-20 (12 adoptions + 1-day haptic observation)
+- ✅ **`Button primary-gradient`** — canonical 2026-04-20 (paywall sticky CTA; gap #1 closed)
+- ✅ **`Card variant="hero"`** — canonical 2026-04-20 (paywall hero; hero-class primitives are 1-per-surface)
 
 ### Next up
-1. **`Button primary-gradient` + `danger` + `surface`** → gap resolution (or surface adoption)
+1. **`Button danger` + `surface`** → gap #2 resolution (or surface adoption)
 2. **`ListRow compact` / `plain`** → after adoption
 3. **`Card flat` / `current`** → after adoption validates in real surfaces
-4. **`Card variant="hero"` / `Banner tone="promo"`** → after paywall migration
+4. **`Banner tone="promo"`** → after promo-banner surface surfaces
 5. **`Sheet`** → after BottomSheet iOS behavior absorption
 6. **`CounterBadge`, `StatTile`, `AvatarStack`** → after adoption validates APIs
 

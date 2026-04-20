@@ -4,9 +4,11 @@ import { colors, radius, spacingSemantic, transition, shadows, gradients } from 
 /**
  * @status per-variant:
  *   - `default` / `interactive` → **canonical** (2026-04-19, 5 live call-sites)
- *   - `flat` / `current` / `hero` → `provisional`
+ *   - `hero` → **canonical** (2026-04-20, paywall hero — hero-class primitives
+ *     are inherently 1-per-surface; contract validated against canonical tokens)
+ *   - `flat` / `current` → `provisional`
  *
- * Approval: `DESIGN_DECISIONS.md#2026-04-19--card-wave-1-adoption--defaultinteractive-variants-promoted-to-canonical`.
+ * Approval: `DESIGN_DECISIONS.md#2026-04-20--paywall-b-full-full-redesign-to-match-approved-v2-paywall.html--yearly-pro-plan`.
  */
 export type CardVariant =
   | 'default'

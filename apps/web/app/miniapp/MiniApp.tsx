@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
 import { Banner, Button, Card, Chip, ListRow, SectionHeader } from '@wishlist/ui';
 import { initSentry, captureException } from './sentry';
@@ -90,6 +90,10 @@ const PRIO_GLOW: Record<number, string> = {
 
 // Card redesign — rolled out to all users
 const CARD_REDESIGN_ENABLED = true;
+// PRO pricing — kept in sync with apps/api env defaults (PRO_PRICE_XTR, PRO_YEARLY_PRICE_XTR).
+// If ops bump the backend env vars, update these too.
+const PRO_PRICE_MONTHLY_STARS = 100;
+const PRO_PRICE_YEARLY_STARS = 800;
 // Profile redesign canary — test before full rollout
 const PROFILE_REDESIGN_IDS = new Set(['8747175307']);
 // Item detail redesign — rolled out to all users
@@ -3319,7 +3323,7 @@ function getAddonOffers(locale: Locale): Record<string, { title: string; tag: st
 function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, availableSkus, cappedAddonCodes, locale, referralConfig, onOpenReferral, onReferralImpression }: {
   state: UpsellSheetState;
   onClose: () => void;
-  onUpgrade: () => void;
+  onUpgrade: (plan: 'monthly' | 'yearly') => void;
   checkoutLoading: boolean;
   onBuyAddon: (skuCode: string, targetId?: string) => void;
   addonCheckoutLoading: boolean;
@@ -3337,6 +3341,10 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
   onReferralImpression: (context: string) => void;
 }) {
   const content = state ? getUpsellContent(locale)[state.context] : null;
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
+  const monthlyPrice = PRO_PRICE_MONTHLY_STARS;
+  const yearlyPrice = PRO_PRICE_YEARLY_STARS;
+  const yearlyPerMonth = Math.round(yearlyPrice / 12);
   // Fire impression when the paywall becomes visible AND the referral alt
   // CTA would render. Debounced per-open via ref so we don't double-fire on
   // re-renders within the same paywall open. Resets on close.
@@ -3354,238 +3362,196 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
     paywallImpressionFiredRef.current = key;
     onReferralImpression(key);
   }, [state, referralConfig, onReferralImpression]);
+
+  // Group PRO benefits into 3 sections per approved v2-paywall mockup:
+  //   - "Новое в PRO": isNew && !resSection (showcase, secret-res, curated, don't-gift)
+  //   - "Reservation PRO": resSection (smart-res, notes, reminders, bought, filters, history)
+  //   - "Основные PRO": everything else (limits, comments, url-import, hints, subs, categories, calendar)
+  const benefits = useMemo(() => getProBenefits(locale), [locale]);
+  const secNew = useMemo(() => benefits.filter(b => b.isNew && !b.resSection), [benefits]);
+  const secRes = useMemo(() => benefits.filter(b => b.resSection), [benefits]);
+  const secCore = useMemo(() => benefits.filter(b => !b.isNew && !b.resSection), [benefits]);
+  // Render a single feature row (used inside each PRO-features card).
+  const FeatureRow = ({ icon, title, subtitle, isNew, last }: { icon: string; title: string; subtitle: string; isNew?: boolean; last?: boolean }) => (
+    <div style={{
+      display: 'flex', gap: 12, padding: '12px 14px', alignItems: 'flex-start',
+      borderBottom: last ? 'none' : `1px solid ${C.border}`,
+    }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 10,
+        background: isNew
+          ? `linear-gradient(135deg, ${C.accent}33, ${C.accent}1a)`
+          : C.accentSoft,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 18, flexShrink: 0,
+      }}>{icon}</div>
+      <div style={{ flex: 1, paddingTop: 2 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.text, display: 'flex', gap: 6, alignItems: 'center', letterSpacing: '-0.01em' }}>
+          <span>{title}</span>
+          {isNew && <Chip tone="new" size="sm">{t('paywall_new_badge', locale)}</Chip>}
+        </div>
+        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, lineHeight: 1.4 }}>{subtitle}</div>
+      </div>
+    </div>
+  );
+
+  // Small uppercase section label (paywall-specific — not a SectionHeader primitive,
+  // which uses large title typography).
+  const SectionLabel = ({ children, accent }: { children: ReactNode; accent?: boolean }) => (
+    <div style={{
+      fontSize: 11, fontWeight: 700, color: accent ? C.accent : C.textMuted,
+      letterSpacing: '0.08em', textTransform: 'uppercase',
+      margin: '18px 8px 10px',
+    }}>{children}</div>
+  );
+
+  const ctaPrice = selectedPlan === 'yearly' ? yearlyPrice : monthlyPrice;
+  const ctaLabel = checkoutLoading
+    ? t('upsell_checkout_loading', locale)
+    : selectedPlan === 'yearly'
+      ? t('paywall_cta_yearly', locale, { price: String(ctaPrice) })
+      : t('paywall_cta_monthly', locale, { price: String(ctaPrice) });
+
   return (
     <BottomSheet isOpen={state !== null} onClose={onClose}>
       {content && (
-        <div style={{ textAlign: 'center', padding: '0 0 8px' }}>
-          {/* Custom illustration for special paywall contexts */}
-          {state?.context === 'curated_selection' ? (
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '20px 16px', marginBottom: 16, borderRadius: 16,
-              background: `linear-gradient(135deg, rgba(96,165,250,0.1), rgba(124,106,255,0.08))`,
-            }}>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                {['🎁', '📱', '✈️'].map((e, i) => (
-                  <div key={i} style={{
-                    width: 44, height: 44, borderRadius: 12, fontSize: 20,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: C.accentSoft, border: `2px solid ${C.accent}30`,
-                  }}>{e}</div>
-                ))}
-                <div style={{ fontSize: 20, color: C.accent, margin: '0 6px' }}>→</div>
-                <div style={{
-                  width: 44, height: 44, borderRadius: 12, fontSize: 20,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'rgba(96,165,250,0.15)', border: '2px solid rgba(96,165,250,0.3)',
-                }}>📋</div>
-              </div>
-              <div style={{ fontSize: 12, color: C.textSec, marginTop: 10 }}>
-                {locale === 'ru' ? 'Только нужные желания в одной ссылке' : 'Only selected wishes in one link'}
-              </div>
+        <div style={{ padding: '0 0 8px' }}>
+          {/* ── Context chip: why this paywall opened ── */}
+          {content && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <Chip tone="accent" size="md" icon={<span>{content.emoji}</span>}>
+                {content.title}
+              </Chip>
             </div>
-          ) : state?.context === 'dont_gift_banner' ? (
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '20px 16px', marginBottom: 16, borderRadius: 16,
-              background: `linear-gradient(135deg, rgba(52,211,153,0.08), rgba(124,106,255,0.1))`,
-            }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {[
-                  { emoji: '📱', ok: true },
-                  { emoji: '📚', ok: true },
-                  { emoji: '🍬', ok: false },
-                  { emoji: '💐', ok: false },
-                  { emoji: '🎧', ok: true },
-                ].map((g, i) => (
-                  <div key={i} style={{
-                    width: 48, height: 48, borderRadius: 12, fontSize: 22,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: g.ok ? C.greenSoft : C.redSoft,
-                    position: 'relative', opacity: g.ok ? 1 : 0.7,
+          )}
+
+          {/* ── Hero (crown + title + tagline) ── */}
+          <Card variant="hero" padding="lg" style={{ textAlign: 'center', margin: '4px 0 18px' }}>
+            <div style={{ fontSize: 48, marginBottom: 10, filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.35))', lineHeight: 1 }}>👑</div>
+            <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', color: '#fff' }}>
+              {t('paywall_hero_title', locale)}
+            </div>
+            <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.45, fontWeight: 500, color: 'rgba(255,255,255,0.92)', whiteSpace: 'pre-line' }}>
+              {t('paywall_hero_sub', locale)}
+            </div>
+          </Card>
+
+          {/* ── Section 1: What's NEW in PRO ── */}
+          {secNew.length > 0 && (
+            <>
+              <SectionLabel accent>✨ {t('paywall_sec_new', locale)}</SectionLabel>
+              <Card padding="none">
+                {secNew.map((b, i) => (
+                  <FeatureRow key={`new-${i}`} icon={b.icon} title={b.title} subtitle={b.subtitle} isNew last={i === secNew.length - 1} />
+                ))}
+              </Card>
+            </>
+          )}
+
+          {/* ── Section 2: Reservation PRO ── */}
+          {secRes.length > 0 && (
+            <>
+              <SectionLabel>⏱ {t('paywall_sec_res', locale)}</SectionLabel>
+              <Card padding="none">
+                {secRes.map((b, i) => (
+                  <FeatureRow key={`res-${i}`} icon={b.icon} title={b.title} subtitle={b.subtitle} last={i === secRes.length - 1} />
+                ))}
+              </Card>
+            </>
+          )}
+
+          {/* ── Section 3: Core PRO ── */}
+          {secCore.length > 0 && (
+            <>
+              <SectionLabel>📦 {t('paywall_sec_core', locale)}</SectionLabel>
+              <Card padding="none">
+                {secCore.map((b, i) => (
+                  <FeatureRow key={`core-${i}`} icon={b.icon} title={b.title} subtitle={b.subtitle} last={i === secCore.length - 1} />
+                ))}
+              </Card>
+            </>
+          )}
+
+          {/* ── Plan selector (monthly vs yearly) ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18 }}>
+            {(['monthly', 'yearly'] as const).map((plan) => {
+              const isYear = plan === 'yearly';
+              const isSelected = selectedPlan === plan;
+              return (
+                <div
+                  key={plan}
+                  onClick={() => setSelectedPlan(plan)}
+                  role="button"
+                  aria-pressed={isSelected}
+                  style={{
+                    position: 'relative',
+                    background: isSelected ? `linear-gradient(135deg, ${C.accentSoft}, rgba(124,106,255,0.04))` : C.card,
+                    border: `1.5px solid ${isSelected ? C.accent : C.border}`,
+                    borderRadius: 14,
+                    padding: '14px 14px 12px',
+                    cursor: 'pointer',
+                    textAlign: 'start',
+                    boxShadow: isSelected ? '0 0 0 2px rgba(124,106,255,0.15)' : 'none',
+                    transition: 'border-color 0.15s, box-shadow 0.15s',
+                  }}
+                >
+                  {isYear && (
+                    <div style={{
+                      position: 'absolute', top: -9, right: 10,
+                      background: C.green, color: '#000',
+                      padding: '3px 8px', borderRadius: 100,
+                      fontSize: 10, fontWeight: 800, letterSpacing: '0.3px',
+                    }}>{t('paywall_save_badge', locale)}</div>
+                  )}
+                  <div style={{
+                    fontSize: 11, color: isSelected ? C.accent : C.textMuted,
+                    marginBottom: 4, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
                   }}>
-                    {g.emoji}
-                    {!g.ok && <div style={{
-                      position: 'absolute', width: 36, height: 2, background: C.red,
-                      transform: 'rotate(-45deg)', borderRadius: 1,
-                    }} />}
+                    {t(isYear ? 'paywall_plan_yearly_name' : 'paywall_plan_monthly_name', locale)}
                   </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 12, color: C.textSec, marginTop: 10 }}>
-                {locale === 'ru' ? 'Друзья увидят, что стоит избегать' : 'Friends will see what to avoid'}
-              </div>
-            </div>
-          ) : (
-            /* Default hero emoji with gradient glow */
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 68, height: 68, borderRadius: 22,
-              background: `linear-gradient(145deg, ${C.accent}22, ${C.accent}08)`,
-              border: `1px solid ${C.accent}18`,
-              fontSize: 32, marginBottom: 16,
-            }}>
-              {content.emoji}
-            </div>
-          )}
-
-          <div style={{ fontSize: 20, fontWeight: 800, color: C.text, lineHeight: 1.3, fontFamily: font }}>
-            {content.title}
-          </div>
-          <div style={{ fontSize: 14, color: C.textSec, marginTop: 8, lineHeight: 1.5, padding: '0 4px' }}>
-            {content.subtitle}
-          </div>
-
-          {/* Benefits list for feature gates */}
-          {content.benefits && (
-            <div style={{ marginTop: 18, textAlign: 'start', padding: '0 4px' }}>
-              {content.benefits.map((b, i) => {
-                // Custom icons for special paywall contexts
-                const bannerIcons = ['💔', '🎯', '💚'];
-                const curatedIcons = ['✅', '🔒', '⏱️'];
-                const bannerBgs = [C.redSoft, C.accentSoft, C.greenSoft];
-                const curatedBgs = [C.greenSoft, C.accentSoft, 'rgba(96,165,250,0.12)'];
-                const bannerColors = [C.red, C.accent, C.green];
-                const curatedColors = [C.green, C.accent, '#60A5FA'];
-                const isBanner = state?.context === 'dont_gift_banner';
-                const isCurated = state?.context === 'curated_selection';
-                const isCustom = isBanner || isCurated;
-                return (
-                  <div key={i} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '10px 0', fontSize: 14, color: C.text, lineHeight: 1.4,
-                    borderTop: i > 0 ? `1px solid ${C.border}` : 'none',
-                  }}>
-                    <span style={{
-                      width: 28, height: 28, borderRadius: 8,
-                      background: isCurated ? curatedBgs[i] : isBanner ? bannerBgs[i] : C.accentSoft,
-                      color: isCurated ? curatedColors[i] : isBanner ? bannerColors[i] : C.accent,
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 14, flexShrink: 0,
-                    }}>{isCurated ? curatedIcons[i] : isBanner ? bannerIcons[i] : '✓'}</span>
-                    {b}
+                  <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: C.text }}>
+                    {isYear ? yearlyPrice : monthlyPrice} ⭐
                   </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Two semantic blocks for limit gates */}
-          {content.showTable && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
-              {/* Block 1: what you have now (Free) */}
-              <div style={{ background: C.bg, borderRadius: 14, padding: '12px 14px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                  {t('plan_now_block', locale)}
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>
+                    {isYear
+                      ? t('paywall_plan_yearly_per', locale, { perMonth: String(yearlyPerMonth) })
+                      : t('paywall_plan_monthly_per', locale)}
+                  </div>
                 </div>
-                {[t('plan_free_f1', locale), t('plan_free_f2', locale), t('plan_free_f3', locale)].map((f, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '3px 0', fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
-                    <span style={{ color: C.textMuted, flexShrink: 0, marginTop: 1 }}>–</span>
-                    {f}
-                  </div>
-                ))}
-              </div>
-              {/* Block 2: with Pro */}
-              <div style={{ background: C.card, borderRadius: 14, padding: '12px 14px', border: `1px solid ${C.accent}30` }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                  {t('plan_pro_block', locale)}
-                </div>
-                {getProBenefits(locale).map((b, i, arr) => {
-                  const firstRes = b.resSection && (i === 0 || !arr[i - 1]?.resSection);
-                  return (
-                    <Fragment key={i}>
-                      {firstRes && (
-                        <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, marginTop: 8, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                          {t('plan_pro_res_section', locale)}
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '3px 0', fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
-                        <span style={{ color: C.green, flexShrink: 0, fontWeight: 700, marginTop: 1 }}>✓</span>
-                        {b.title}
-                        {b.isNew && (
-                          <span style={{
-                            display: 'inline-block', padding: '1px 6px', borderRadius: 4,
-                            fontSize: 9, fontWeight: 800, background: C.accent, color: '#fff',
-                            marginLeft: 6, verticalAlign: 'middle', letterSpacing: 0.5,
-                          }}>NEW</span>
-                        )}
-                      </div>
-                    </Fragment>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Price */}
-          <div style={{ marginTop: 22, fontSize: 14, color: C.textSec }}>
-            <span style={{ fontSize: 24, fontWeight: 800, color: C.text }}>100</span>
-            {' '}
-            <span style={{ fontSize: 16, fontWeight: 600, color: C.text }}>Stars</span>
-            {' '}{t('upsell_per_month', locale)}
+              );
+            })}
           </div>
 
-          {/* CTA */}
-          <button
-            style={{
-              ...btnPrimary, marginTop: 18, width: '100%',
-              fontSize: 16, padding: '16px 24px',
-              background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
-            }}
-            onClick={onUpgrade}
-            disabled={checkoutLoading || addonCheckoutLoading}
-          >
-            {checkoutLoading ? t('upsell_checkout_loading', locale) : t('upsell_cta', locale)}
-          </button>
-
-          {/* ── Referral alt CTA — secondary, "or get it free by inviting" ──
-              Only shown when the program is live AND the paywall entry-point
-              is enabled in config. Never replaces the primary Stars CTA —
-              keeps paid conversion as the main path. Impression fires via
-              inner component — once per paywall mount when visible. */}
+          {/* ── Referral alt CTA — only when program is live ── */}
           {referralConfig && referralConfig.enabled && referralConfig.inRollout && referralConfig.ui.entryPointPaywall && (
-            <div style={{ marginTop: 14 }}>
+            <div
+              onClick={onOpenReferral}
+              style={{
+                marginTop: 14, padding: 14, borderRadius: 14,
+                background: 'rgba(124,106,255,0.04)',
+                border: `1px dashed rgba(124,106,255,0.25)`,
+                cursor: 'pointer',
+                display: 'flex', gap: 12, alignItems: 'center', textAlign: 'start',
+              }}
+            >
               <div style={{
-                position: 'relative', textAlign: 'center', marginBottom: 12,
-              }}>
-                <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: C.border }} />
-                <span style={{
-                  position: 'relative', background: C.card, padding: '0 12px',
-                  fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600,
-                }}>
-                  {t('referral_paywall_alt_divider', locale)}
-                </span>
-              </div>
-              <div
-                onClick={onOpenReferral}
-                style={{
-                  padding: 14, borderRadius: 16,
-                  background: `linear-gradient(135deg, ${C.accent}1a, ${C.accent}06)`,
-                  border: `1px solid ${C.accent}32`,
-                  cursor: 'pointer',
-                  display: 'flex', gap: 10, alignItems: 'center',
-                  textAlign: 'start',
-                }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: 12,
-                  background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 20, flexShrink: 0,
-                }}>🎁</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2 }}>
-                    {t('referral_paywall_alt_title', locale)}
-                  </div>
-                  <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>
-                    {t('referral_paywall_alt_sub', locale, { days: String(referralConfig.reward.daysPerRef) })}
-                  </div>
+                width: 32, height: 32, borderRadius: 10, background: C.accentSoft,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, flexShrink: 0,
+              }}>🎁</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>
+                  {t('referral_paywall_alt_title', locale)}
                 </div>
-                <div style={{ color: C.accent, fontSize: 16, flexShrink: 0 }}>›</div>
+                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, lineHeight: 1.4 }}>
+                  {t('referral_paywall_alt_sub', locale, { days: String(referralConfig.reward.daysPerRef) })}
+                </div>
               </div>
+              <div style={{ color: C.accent, fontSize: 16, flexShrink: 0 }}>›</div>
             </div>
           )}
 
-          {/* ── One-time add-on offers (for limit-gate contexts) ── */}
+          {/* ── One-time add-on offers (limit-gate contexts only) ── */}
           {(() => {
             const contextSkuCodes = state?.context ? (CONTEXT_ADDON_SKUS[state.context] ?? []) : [];
             const skusToShow = contextSkuCodes
@@ -3595,8 +3561,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
             const offers = getAddonOffers(locale);
             const isLoading = addonCheckoutLoading || checkoutLoading;
             return (
-              <div style={{ marginTop: 24 }}>
-                {/* Section header */}
+              <div style={{ marginTop: 18 }}>
                 <div style={{ textAlign: 'start', marginBottom: 10 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.textSec, letterSpacing: 0.1 }}>
                     {t('addon_section_header', locale)}
@@ -3605,27 +3570,13 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
                     {t('addon_section_hint', locale)}
                   </div>
                 </div>
-
-                {/* Offer cards */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {skusToShow.map(sku => {
                     const offer = offers[sku.code];
                     if (!offer) return null;
                     const isCapped = cappedAddonCodes.includes(sku.code);
                     return (
-                      <div
-                        key={sku.code}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 12,
-                          background: isCapped ? C.card : C.surface,
-                          borderRadius: 14,
-                          padding: '12px 14px',
-                          border: `1px solid ${isCapped ? C.borderLight : C.border}`,
-                          textAlign: 'start',
-                          opacity: isCapped ? 0.7 : 1,
-                        }}
-                      >
-                        {/* Left: title + tag (or cap message) */}
+                      <Card key={sku.code} variant="default" padding="sm" style={{ display: 'flex', alignItems: 'center', gap: 12, textAlign: 'start', opacity: isCapped ? 0.7 : 1 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: isCapped ? C.textSec : C.text, lineHeight: 1.3 }}>
                             {offer.title}
@@ -3634,46 +3585,26 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
                             {isCapped ? t('addon_cap_reached_sub', locale) : offer.tag}
                           </div>
                         </div>
-
-                        {/* Right: cap badge OR price + buy button */}
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                           {isCapped ? (
-                            <div style={{
-                              fontSize: 12, fontWeight: 600, color: C.textSec,
-                              background: C.surface, border: `1px solid ${C.border}`,
-                              borderRadius: 8, padding: '5px 10px', whiteSpace: 'nowrap',
-                            }}>
-                              {t('addon_cap_reached', locale)}
-                            </div>
+                            <Chip tone="surface" size="md">{t('addon_cap_reached', locale)}</Chip>
                           ) : (
                             <>
                               <div style={{ fontSize: 12, fontWeight: 700, color: C.textSec, whiteSpace: 'nowrap' }}>
                                 {sku.price} ⭐
                               </div>
-                              <button
+                              <Button
+                                variant="secondary" size="sm" fullWidth={false}
                                 onClick={() => onBuyAddon(sku.code, state?.wishlistId)}
                                 disabled={isLoading}
-                                style={{
-                                  background: isLoading ? C.surface : C.accentSoft,
-                                  color: C.accent,
-                                  border: `1px solid ${C.accent}40`,
-                                  borderRadius: 8,
-                                  padding: '5px 12px',
-                                  fontSize: 13,
-                                  fontWeight: 700,
-                                  cursor: isLoading ? 'default' : 'pointer',
-                                  fontFamily: font,
-                                  whiteSpace: 'nowrap',
-                                  opacity: isLoading ? 0.5 : 1,
-                                  transition: 'opacity 0.15s',
-                                }}
+                                loading={addonCheckoutLoading}
                               >
-                                {addonCheckoutLoading ? '…' : t('addon_cta_buy', locale)}
-                              </button>
+                                {t('addon_cta_buy', locale)}
+                              </Button>
                             </>
                           )}
                         </div>
-                      </div>
+                      </Card>
                     );
                   })}
                 </div>
@@ -3681,14 +3612,28 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
             );
           })()}
 
-          <button
-            style={{ ...btnGhost, width: '100%', marginTop: 14, fontSize: 14 }}
-            onClick={onClose}
-          >
-            {t('upsell_not_now', locale)}
-          </button>
-          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 10 }}>
-            {t('upsell_auto_renew', locale)}
+          {/* ── Sticky footer: primary CTA + ghost + trust row ── */}
+          <div style={{
+            position: 'sticky', bottom: 0,
+            marginTop: 20, marginLeft: -16, marginRight: -16,
+            padding: '16px 16px 8px',
+            background: `linear-gradient(to top, ${C.card} 75%, transparent)`,
+            display: 'flex', flexDirection: 'column', gap: 6,
+          }}>
+            <Button
+              variant="primary-gradient" size="lg"
+              onClick={() => onUpgrade(selectedPlan)}
+              disabled={checkoutLoading || addonCheckoutLoading}
+              loading={checkoutLoading}
+            >
+              {ctaLabel}
+            </Button>
+            <Button variant="ghost" size="md" onClick={onClose}>
+              {t('upsell_not_now', locale)}
+            </Button>
+            <div style={{ textAlign: 'center', fontSize: 11, color: C.textMuted, marginTop: -2 }}>
+              {selectedPlan === 'yearly' ? t('paywall_trust_yearly', locale) : t('paywall_trust', locale)}
+            </div>
           </div>
         </div>
       )}
@@ -6803,11 +6748,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   }, [viewingItem, descriptionText, tgFetch, pushToast]);
 
   // --- Upgrade to PRO
-  const handleUpgradeToPro = useCallback(async () => {
-    trackEvent('pro_cta_clicked');
+  const handleUpgradeToPro = useCallback(async (plan: 'monthly' | 'yearly' = 'monthly') => {
+    trackEvent('pro_cta_clicked', { plan });
     setCheckoutLoading(true);
     try {
-      const res = await tgFetch('/tg/billing/pro/checkout', { method: 'POST' });
+      const res = await tgFetch('/tg/billing/pro/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
       if (res.status === 409) {
         pushToast(t('toast_already_pro', locale), 'success');
         setCheckoutLoading(false);

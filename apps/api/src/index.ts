@@ -2390,7 +2390,12 @@ type PlanCode = keyof typeof PLANS;
 type PlanInfo = (typeof PLANS)[PlanCode];
 
 const PRO_PRICE_XTR = parseInt(process.env.PRO_PRICE_XTR ?? '100', 10);
+const PRO_YEARLY_PRICE_XTR = parseInt(process.env.PRO_YEARLY_PRICE_XTR ?? '800', 10);
 const PRO_SUBSCRIPTION_PERIOD = parseInt(process.env.PRO_SUBSCRIPTION_PERIOD ?? '2592000', 10);
+// Yearly one-time purchase extends entitlement by this many seconds.
+// Telegram Stars doesn't support subscription_period > 30 days, so yearly is a
+// non-recurring invoice; the bot extends currentPeriodEnd manually on success.
+const PRO_YEARLY_EXTEND_SECONDS = parseInt(process.env.PRO_YEARLY_EXTEND_SECONDS ?? '31536000', 10);
 const PRO_PLAN_CODE = process.env.PRO_PLAN_CODE ?? 'PRO';
 
 // ─── Reservation Pro — feature gate ─────────────────────────────────────────
@@ -2481,7 +2486,7 @@ async function getUserEntitlement(userId: string, godMode = false): Promise<{
   plan: PlanInfo;
   isPro: boolean;
   proSource: 'subscription' | 'promo' | 'god_mode' | null;
-  subscription: { id: string; status: string; periodEnd: string; cancelledAt: string | null; cancelAtPeriodEnd: boolean } | null;
+  subscription: { id: string; status: string; periodEnd: string; cancelledAt: string | null; cancelAtPeriodEnd: boolean; billingPeriod: string | null } | null;
   promoPro: PromoProInfo;
 }> {
   // 1. Check paid subscription first (highest priority)
@@ -2519,6 +2524,7 @@ async function getUserEntitlement(userId: string, godMode = false): Promise<{
         periodEnd: sub.currentPeriodEnd.toISOString(),
         cancelledAt: sub.cancelledAt?.toISOString() ?? null,
         cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+        billingPeriod: sub.billingPeriod ?? null,
       },
       promoPro,
     };
@@ -9121,6 +9127,7 @@ tgRouter.get(
       promoPro: ent.promoPro,
       usage: { wishlists: wishlistCount },
       proPriceStars: PRO_PRICE_XTR,
+      proYearlyPriceStars: PRO_YEARLY_PRICE_XTR,
       godMode: user.godMode,
       canGodMode,
       // Effective entitlements layer
@@ -11960,14 +11967,24 @@ tgRouter.get(
 );
 
 // POST /tg/billing/pro/checkout — create Stars invoice link
+// Body: { plan?: 'monthly' | 'yearly' } — defaults to monthly for back-compat
+// Monthly = Stars subscription (auto-renews every 30 days).
+// Yearly  = one-time Stars purchase; bot extends currentPeriodEnd by 365 days.
+//           Yearly stacks on top of an existing active subscription (start = max(now, currentEnd)).
 tgRouter.post(
   '/billing/pro/checkout',
   asyncHandler(async (req, res) => {
+    const parsed = z.object({
+      plan: z.enum(['monthly', 'yearly']).optional(),
+    }).safeParse(req.body ?? {});
+    const plan = parsed.success && parsed.data.plan ? parsed.data.plan : 'monthly';
+    const isYearly = plan === 'yearly';
+
     const user = await getOrCreateTgUser(req.tgUser!);
     const ent = await getUserEntitlement(user.id);
 
-    // If already active PRO — return current state, don't create new checkout
-    if (ent.isPro && ent.subscription?.status === 'ACTIVE' && !ent.subscription.cancelAtPeriodEnd) {
+    // Block duplicate monthly signup; allow yearly on top (stacking is expected UX).
+    if (!isYearly && ent.isPro && ent.subscription?.status === 'ACTIVE' && !ent.subscription.cancelAtPeriodEnd && ent.subscription.billingPeriod !== 'yearly') {
       trackEvent('checkout_already_subscribed', user.id);
       return res.json({ subscription: ent.subscription, alreadySubscribed: true });
     }
@@ -11976,27 +11993,38 @@ tgRouter.post(
     if (!botToken) return res.status(500).json({ error: 'Bot not configured' });
 
     const checkoutSessionId = crypto.randomUUID();
-    const payload = `pro_monthly:${req.tgUser!.id}:${checkoutSessionId}`;
+    const payloadType = isYearly ? 'pro_yearly' : 'pro_monthly';
+    const payload = `${payloadType}:${req.tgUser!.id}:${checkoutSessionId}`;
+    const price = isYearly ? PRO_YEARLY_PRICE_XTR : PRO_PRICE_XTR;
+    const locale = getRequestLocale(req);
 
-    trackEvent('checkout_started', user.id);
+    trackEvent('checkout_started', user.id, { plan });
+
+    const invoiceBody: Record<string, unknown> = {
+      title: isYearly ? t('api_invoice_title_yearly', locale) : 'Wishlist Pro',
+      description: isYearly ? t('api_invoice_desc_yearly', locale) : t('api_invoice_desc', locale),
+      payload,
+      currency: 'XTR',
+      prices: [{
+        label: isYearly ? t('api_invoice_label_yearly', locale) : t('api_invoice_label', locale),
+        amount: price,
+      }],
+    };
+    // Only monthly gets subscription_period — yearly is one-time (TG Stars caps period at 30d).
+    if (!isYearly) {
+      invoiceBody.subscription_period = PRO_SUBSCRIPTION_PERIOD;
+    }
 
     const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Wishlist Pro',
-        description: t('api_invoice_desc', getRequestLocale(req)),
-        payload,
-        currency: 'XTR',
-        prices: [{ label: t('api_invoice_label', getRequestLocale(req)), amount: PRO_PRICE_XTR }],
-        subscription_period: PRO_SUBSCRIPTION_PERIOD,
-      }),
+      body: JSON.stringify(invoiceBody),
     });
 
     const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
     if (!data.ok || !data.result) {
-      logger.error({ data }, 'billing createInvoiceLink failed');
-      trackEvent('checkout_failed', user.id, { reason: data.description });
+      logger.error({ data, plan }, 'billing createInvoiceLink failed');
+      trackEvent('checkout_failed', user.id, { reason: data.description, plan });
       return res.status(502).json({ error: 'Failed to create invoice' });
     }
 
@@ -12006,13 +12034,13 @@ tgRouter.post(
         userId: user.id,
         telegramPaymentChargeId: `checkout_${checkoutSessionId}`,
         invoicePayload: payload,
-        totalAmount: PRO_PRICE_XTR,
+        totalAmount: price,
         currency: 'XTR',
         eventType: 'invoice_created',
       },
     });
 
-    return res.json({ invoiceUrl: data.result, checkoutSessionId });
+    return res.json({ invoiceUrl: data.result, checkoutSessionId, plan });
   }),
 );
 
@@ -16842,6 +16870,82 @@ setInterval(async () => {
     }
   } catch (err) {
     logger.error({ err }, 'santa-hints expiry check failed');
+  }
+}, 60 * 60 * 1000);
+
+// PRO renewal reminders (hourly). Fires at two milestones:
+//   - 7 days before currentPeriodEnd (window 6d–8d)
+//   - 1 day  before currentPeriodEnd (window 12h–36h)
+// Sent only to subs that won't auto-renew: yearly one-time purchases, or
+// monthly subs the user cancelled (cancelAtPeriodEnd=true). Active monthly
+// auto-renewals are silent (Telegram charges automatically, no action needed).
+// Idempotency: synthetic PaymentEvent id `reminder:<ms>:<subId>:<periodEndISO>`
+// — the @unique on telegramPaymentChargeId prevents duplicate sends.
+setInterval(async () => {
+  try {
+    const now = new Date();
+    const windows = [
+      { milestone: '7d' as const, lo: now.getTime() + 6 * 24 * 60 * 60 * 1000, hi: now.getTime() + 8 * 24 * 60 * 60 * 1000, key: 'bot_pro_renewal_7d' as const },
+      { milestone: '1d' as const, lo: now.getTime() + 12 * 60 * 60 * 1000, hi: now.getTime() + 36 * 60 * 60 * 1000, key: 'bot_pro_renewal_1d' as const },
+    ];
+
+    for (const w of windows) {
+      const subs = await prisma.subscription.findMany({
+        where: {
+          planCode: PRO_PLAN_CODE,
+          status: 'ACTIVE',
+          currentPeriodEnd: { gte: new Date(w.lo), lte: new Date(w.hi) },
+          OR: [
+            { billingPeriod: 'yearly' },
+            { cancelAtPeriodEnd: true },
+          ],
+        },
+        include: {
+          user: {
+            select: { id: true, telegramChatId: true, profile: { select: { languageMode: true, manualLanguage: true, notifyMarketing: true } } },
+          },
+        },
+      });
+
+      for (const sub of subs) {
+        if (!sub.user.telegramChatId) continue;
+        if (sub.user.profile && sub.user.profile.notifyMarketing === false) continue;
+
+        const reminderId = `reminder:${w.milestone}:${sub.id}:${sub.currentPeriodEnd.toISOString()}`;
+        const existing = await prisma.paymentEvent.findUnique({ where: { telegramPaymentChargeId: reminderId } });
+        if (existing) continue;
+
+        const locale = resolveEffectiveLocale(
+          sub.user.profile ? { languageMode: sub.user.profile.languageMode as any, manualLanguage: sub.user.profile.manualLanguage as any } : null,
+        );
+        const dateFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+        const fmtDate = sub.currentPeriodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
+        const text = t(w.key, locale, { date: fmtDate });
+
+        const outcome = await sendLifecycleDM(sub.user.telegramChatId, text, MINI_APP_URL_FOR_DM);
+        if (outcome === 'transient_failure') continue; // retry next hour
+
+        // Persist idempotency marker (even on permanent failure — we've tried and
+        // won't spam on retry; user can re-engage from the app).
+        await prisma.paymentEvent.create({
+          data: {
+            subscriptionId: sub.id,
+            userId: sub.userId,
+            telegramPaymentChargeId: reminderId,
+            invoicePayload: reminderId,
+            totalAmount: 0,
+            currency: 'XTR',
+            eventType: `reminder_sent_${w.milestone}`,
+          },
+        }).catch((err) => logger.warn({ err, reminderId }, 'reminder marker insert failed'));
+
+        if (outcome === 'delivered') {
+          trackEvent(`pro_renewal_reminder_${w.milestone}`, sub.userId, { billingPeriod: sub.billingPeriod });
+        }
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, 'pro-renewal-reminder cycle failed');
   }
 }, 60 * 60 * 1000);
 

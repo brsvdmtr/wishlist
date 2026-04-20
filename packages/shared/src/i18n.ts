@@ -962,6 +962,12 @@ const ru: Dict = {
     'Некоторые друзья ещё не начали диалог с ботом.\n\nОтправь им эту ссылку — когда они откроют её, бот покажет намёк:\n{{link}}',
   bot_pro_activated:
     '🎉 PRO подключен!\n\n✅ 10 вишлистов\n✅ 100 желаний в каждом\n✅ Комментарии и импорт по ссылке\n\nДействует до {{date}}',
+  bot_pro_activated_yearly:
+    '👑 PRO · Год подключен!\n\n✅ Все 19 PRO-фич\n✅ Экономия 33% vs помесячно\n✅ Один платёж — год без забот\n\nДействует до {{date}}',
+  bot_pro_renewal_7d:
+    '👑 Твой PRO истекает через 7 дней ({{date}}).\n\nПродли сейчас, чтобы не потерять доступ к 19 PRO-функциям.',
+  bot_pro_renewal_1d:
+    '⏰ Твой PRO истекает завтра ({{date}}).\n\nОткрой приложение и продли, чтобы сохранить доступ.',
   bot_open_app: 'Открыть WishBoard ✨',
   bot_multiple_urls: 'Нашёл несколько ссылок. Создаю карточку по первой 👌',
   bot_import_drafts_full:
@@ -1013,6 +1019,25 @@ const ru: Dict = {
   api_wishlist_items_limit: 'Лимит желаний в этом вишлисте',
   api_invoice_desc: 'Больше вишлистов, комментарии, добавление по ссылке и намёки на подарок',
   api_invoice_label: 'PRO на месяц',
+  api_invoice_title_yearly: 'WishBoard PRO · Год',
+  api_invoice_desc_yearly: 'PRO на целый год. 19 функций, экономия 33% vs помесячно.',
+  api_invoice_label_yearly: 'PRO на год',
+  paywall_hero_title: 'WishBoard PRO',
+  paywall_hero_sub: '19 функций для тех,\nкто дарит и получает всерьёз',
+  paywall_sec_new: 'Новое в PRO',
+  paywall_sec_res: 'Reservation PRO · для тех кто дарит',
+  paywall_sec_core: 'Основные PRO',
+  paywall_plan_monthly_name: 'Месяц',
+  paywall_plan_yearly_name: 'Год',
+  paywall_plan_monthly_per: 'каждый месяц',
+  paywall_plan_yearly_per: '{{perMonth}} ⭐ / мес',
+  paywall_save_badge: '−33%',
+  paywall_cta_monthly: 'Начать PRO · {{price}} ⭐/мес',
+  paywall_cta_yearly: 'Начать PRO · {{price}} ⭐/год',
+  paywall_trust: '💳 ⭐ Stars · Отмена в любой момент',
+  paywall_trust_yearly: '💳 ⭐ Stars · Разовый платёж за год',
+  paywall_chip_unlock: 'Чтобы разблокировать {{feature}}',
+  paywall_new_badge: 'NEW',
 
   // ── Notification strings ──────────────────────────────────────────────────
   notif_reserved: '🎁 {{name}} забронировал желание «{{title}}»',
@@ -3387,6 +3412,12 @@ const en: Dict = {
     "Some friends haven't started a chat with the bot yet.\n\nSend them this link — when they open it, the bot will show the hint:\n{{link}}",
   bot_pro_activated:
     '🎉 PRO activated!\n\n✅ 10 wishlists\n✅ 100 wishes each\n✅ Comments and import by link\n\nActive until {{date}}',
+  bot_pro_activated_yearly:
+    '👑 PRO · Year activated!\n\n✅ All 19 PRO features\n✅ Save 33% vs monthly\n✅ One payment — a year of peace\n\nActive until {{date}}',
+  bot_pro_renewal_7d:
+    '👑 Your PRO expires in 7 days ({{date}}).\n\nRenew now to keep all 19 PRO features.',
+  bot_pro_renewal_1d:
+    '⏰ Your PRO expires tomorrow ({{date}}).\n\nOpen the app and renew to keep access.',
   bot_open_app: 'Open WishBoard ✨',
   bot_multiple_urls: 'Found multiple links. Creating a card from the first one 👌',
   bot_import_drafts_full: 'Too many unprocessed wishes. Sort some in the app first 📦',
@@ -3436,6 +3467,25 @@ const en: Dict = {
   api_wishlist_items_limit: 'Wish limit for this wishlist',
   api_invoice_desc: 'More wishlists, comments, import by link and gift hints',
   api_invoice_label: 'PRO for a month',
+  api_invoice_title_yearly: 'WishBoard PRO · Year',
+  api_invoice_desc_yearly: 'PRO for a full year. 19 features, save 33% vs monthly.',
+  api_invoice_label_yearly: 'PRO for a year',
+  paywall_hero_title: 'WishBoard PRO',
+  paywall_hero_sub: '19 features for people\nwho gift and receive seriously',
+  paywall_sec_new: 'New in PRO',
+  paywall_sec_res: 'Reservation PRO · for gifters',
+  paywall_sec_core: 'Core PRO',
+  paywall_plan_monthly_name: 'Monthly',
+  paywall_plan_yearly_name: 'Yearly',
+  paywall_plan_monthly_per: 'every month',
+  paywall_plan_yearly_per: '{{perMonth}} ⭐ / mo',
+  paywall_save_badge: '−33%',
+  paywall_cta_monthly: 'Start PRO · {{price}} ⭐/mo',
+  paywall_cta_yearly: 'Start PRO · {{price}} ⭐/yr',
+  paywall_trust: '💳 ⭐ Stars · Cancel anytime',
+  paywall_trust_yearly: '💳 ⭐ Stars · One-time yearly payment',
+  paywall_chip_unlock: 'To unlock {{feature}}',
+  paywall_new_badge: 'NEW',
 
   // ── Notification strings ──────────────────────────────────────────────────
   notif_reserved: '🎁 {{name}} reserved the wish "{{title}}"',

@@ -17,12 +17,13 @@ import {
 /**
  * @status per-variant:
  *   - `primary` / `secondary` / `ghost` → **canonical** (promoted 2026-04-20, 12 adoptions + 1-day haptic observation)
- *   - `primary-gradient` / `danger` / `surface` → `provisional`
+ *   - `primary-gradient` → **canonical** (promoted 2026-04-20 via paywall wave; gap #1 resolved — mockup canonicalizes 2-stop gradient)
+ *   - `danger` / `surface` → `provisional`
  *
  * Sizes (sm / md / lg), `pressedEffect`, and `haptic` behaviors are part
  * of the canonical contract.
  *
- * Approval: `DESIGN_DECISIONS.md#2026-04-20--button-primarysecondaryghost-promoted-to-canonical`.
+ * Approval: `DESIGN_DECISIONS.md#2026-04-20--paywall-b-full-full-redesign-to-match-approved-v2-paywall.html--yearly-pro-plan`.
  * Visual source of truth: every approved v2 mockup.
  */
 export type ButtonVariant = 'primary' | 'primary-gradient' | 'secondary' | 'ghost' | 'danger' | 'surface';

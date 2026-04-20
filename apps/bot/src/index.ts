@@ -956,8 +956,8 @@ if (!token) {
       const parts = raw.split(':');
       const payloadType = parts[0];
 
-      if (payloadType === 'pro_monthly') {
-        // pro_monthly:<telegramId>:<uuid>
+      if (payloadType === 'pro_monthly' || payloadType === 'pro_yearly') {
+        // pro_monthly:<telegramId>:<uuid>  |  pro_yearly:<telegramId>:<uuid>
         if (parts.length < 3) {
           logger.warn({ invoicePayload: raw, reason: 'invalid_pro_payload' }, 'pre_checkout rejected');
           await ctx.answerPreCheckoutQuery(false, 'Invalid payment');
@@ -1115,6 +1115,97 @@ if (!token) {
           Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
         );
         logger.info({ userId: user.id, chargeId, periodEnd: periodEnd.toISOString() }, 'subscription activated');
+        return;
+      }
+
+      // ── PRO yearly (one-time): pro_yearly:<telegramId>:<uuid> ─────────────
+      //   Telegram Stars doesn't support subscription_period > 30 days, so
+      //   yearly is a non-recurring invoice. We extend currentPeriodEnd by
+      //   365 days from max(now, existing end), set cancelAtPeriodEnd=true
+      //   (nothing to auto-renew), and log the event. Renewal is handled
+      //   by the yearly-expiry reminder cron in apps/api.
+      if (payloadType === 'pro_yearly') {
+        if (parts.length < 3) return;
+        const telegramId = parts[1];
+
+        const user = await prisma.user.findUnique({ where: { telegramId }, select: { id: true } });
+        if (!user) {
+          logger.error({ telegramId }, 'yearly payment user not found');
+          return;
+        }
+
+        const chargeId = payment.telegram_payment_charge_id;
+        const providerChargeId = payment.provider_payment_charge_id ?? null;
+
+        // Idempotency
+        const existing = await prisma.paymentEvent.findUnique({ where: { telegramPaymentChargeId: chargeId } });
+        if (existing) {
+          logger.info({ chargeId }, 'duplicate yearly payment, skip');
+          return;
+        }
+
+        const now = new Date();
+        const YEARLY_MS = 365 * 24 * 60 * 60 * 1000;
+
+        // Stack: yearly starts from max(now, currentPeriodEnd). Protects the
+        // user's remaining monthly entitlement when upgrading mid-cycle.
+        const existingSub = await prisma.subscription.findUnique({
+          where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
+        });
+        const startFrom = existingSub && existingSub.currentPeriodEnd > now
+          ? existingSub.currentPeriodEnd
+          : now;
+        const periodEnd = new Date(startFrom.getTime() + YEARLY_MS);
+
+        await prisma.$transaction(async (tx) => {
+          const sub = await tx.subscription.upsert({
+            where: { userId_planCode: { userId: user.id, planCode: 'PRO' } },
+            create: {
+              userId: user.id,
+              planCode: 'PRO',
+              status: 'ACTIVE',
+              starsPrice: payment.total_amount,
+              telegramChargeId: chargeId,
+              currentPeriodStart: now,
+              currentPeriodEnd: periodEnd,
+              source: 'telegram_stars',
+              billingPeriod: 'yearly',
+              cancelAtPeriodEnd: true,
+            },
+            update: {
+              status: 'ACTIVE',
+              starsPrice: payment.total_amount,
+              telegramChargeId: chargeId,
+              currentPeriodEnd: periodEnd,
+              cancelledAt: null,
+              cancelAtPeriodEnd: true,
+              source: 'telegram_stars',
+              billingPeriod: 'yearly',
+            },
+          });
+          await tx.paymentEvent.create({
+            data: {
+              subscriptionId: sub.id,
+              userId: user.id,
+              telegramPaymentChargeId: chargeId,
+              providerPaymentChargeId: providerChargeId,
+              invoicePayload: payment.invoice_payload,
+              totalAmount: payment.total_amount,
+              currency: payment.currency,
+              eventType: 'payment_success_yearly',
+              rawPayload: JSON.stringify(payment),
+            },
+          });
+        });
+
+        const locale = getLocale(ctx);
+        const dateFmtLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+        const fmtDate = periodEnd.toLocaleDateString(dateFmtLocale, { day: 'numeric', month: 'long', year: 'numeric' });
+        await ctx.reply(
+          t('bot_pro_activated_yearly', locale, { date: fmtDate }),
+          Markup.inlineKeyboard([Markup.button.webApp(t('bot_open_app', locale), MINI_APP_URL)]),
+        );
+        logger.info({ userId: user.id, chargeId, periodEnd: periodEnd.toISOString(), stackedFromExisting: existingSub?.currentPeriodEnd ?? null }, 'yearly subscription activated');
         return;
       }
 

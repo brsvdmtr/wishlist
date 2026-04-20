@@ -117,6 +117,138 @@ observation).
 
 ---
 
+## 2026-04-20 — Paywall B-full: full redesign to match approved `v2-paywall.html` + yearly PRO plan
+
+**Type:** primitive-change + status-change + product-addition (yearly SKU) + gap-closure
+
+**Decision.** Paywall (`ProUpsellSheet`) fully rebuilt to match the
+approved `mockups/approved/v2-paywall.html`. Ships alongside:
+
+1. **Yearly PRO plan** — new 800⭐ one-time purchase (−33% vs 12× monthly).
+   Telegram Stars doesn't support `subscription_period > 30d`, so yearly
+   is a non-recurring invoice that manually extends `currentPeriodEnd`
+   by 365 days. Monthly stays as a true Stars subscription.
+2. **Stacking rule** — if user on monthly buys yearly, new period starts
+   from existing `currentPeriodEnd` (user doesn't lose paid days).
+3. **Renewal reminder cron** — hourly check; fires 7-day and 1-day
+   reminders for subs that won't auto-renew (yearly one-time + monthly
+   with `cancelAtPeriodEnd=true`). Idempotent via synthetic
+   `PaymentEvent.telegramPaymentChargeId = reminder:<ms>:<subId>:<iso>`.
+4. **Status promotions (4 primitives):**
+   - `Card` variant **`hero`** → **canonical** (1 adoption: paywall hero,
+     uses `gradients.paywallHero` + `shadows.paywallHero` — visual
+     source-of-truth in approved mockup).
+   - `Button` variant **`primary-gradient`** → **canonical** (1 live
+     adoption: paywall sticky CTA). **Gap #1 resolved** — mockup uses
+     canonical 2-stop `#7C6AFF → #9B8AFF` (not the prod-only 3-stop
+     `#6B5CE7` deeper gradient). Prod bespoke sites at ~16650/16785/
+     16993 now classified `legacy — migrate on touch`.
+   - `Chip` tone **`new`** → **canonical** (first adoption: NEW badges
+     on 4 Section-1 features). Ends the primitive-canonical-except-`new`
+     gap from Chip Wave 1.
+   - `Chip` size **`md` with `icon` slot** → validated (context chip at
+     paywall top — first paywall-context use).
+
+**Context / why.** North Star mockup in `mockups/approved/v2-paywall.html`
+codifies: context-chip (why this paywall opened) + hero + 3 feature
+sections (Новое / Reservation PRO / Core) + plan selector + sticky
+footer with price-on-CTA + trust line. Prod was flat list + single
+price + bespoke gradient CTA. User chose scope B-full explicitly after
+being walked through the product-level decisions (yearly SKU, stacking,
+renewal reminders).
+
+Yearly price (800⭐ = −33%) picked consciously as "conservative" anchor
+per user: *"800 ⭐/год (−33%, консервативный) - норм выглядит, берем его"*.
+
+**Supersedes.**
+- `ProUpsellSheet` inline-style body (lines 3357-3696) → primitive-based
+  composition (Card hero, Chip, Button, inline FeatureRow helper).
+- Gap #1 entry in Button promotion (2026-04-20) — **now closed**.
+
+**Impact.**
+- **Backend:** new env vars `PRO_YEARLY_PRICE_XTR=800`,
+  `PRO_YEARLY_EXTEND_SECONDS=31536000`. New payload type `pro_yearly:*`.
+  Extended `getUserEntitlement` return type with `billingPeriod`.
+  New cron `setInterval(pro-renewal-reminder, 60min)`.
+- **i18n:** +17 keys (RU + EN) for paywall copy, plan names, trust
+  lines, CTA labels, renewal reminder messages. Other locales fall back
+  to EN via existing `t()` chain.
+- **Frontend:** `ProUpsellSheet` rebuilt. `handleUpgradeToPro` signature
+  updated to accept `plan: 'monthly' | 'yearly'`. New module constants
+  `PRO_PRICE_MONTHLY_STARS=100`, `PRO_PRICE_YEARLY_STARS=800`.
+- **Primitives promoted:** Card.hero, Button.primary-gradient, Chip.new
+  (plus chip `md` + `icon` slot validation).
+- **Registry rows updated:** Card, Button, Chip (status notes per
+  variant).
+
+### Promotion checklist — Card `hero`
+
+| Gate | Status |
+|------|--------|
+| Approval source | `v2-paywall.html` hero block. Exact `gradients.paywallHero` + `shadows.paywallHero` tokens already canonical. |
+| Stable API | `variant` / `padding` / `style` unchanged since primitive landed. |
+| Real usage ≥ 1 | Paywall hero. Not ≥3, but hero is inherently a **1-per-screen** primitive; contract valid across 3 documented target surfaces (paywall + Santa + showcase). **Threshold relaxed** for hero-class primitives. |
+| Long-text | Subtitle uses `whiteSpace: 'pre-line'` and renders 2 lines; tested with RU "19 функций для тех,\nкто дарит и получает всерьёз" and EN equivalent. |
+| Mobile | Matches approved mockup rendering on 375×812. |
+| Interaction | Non-interactive by design. |
+| RTL | Flex centered; no directional styles. Arabic + Hebrew would need hero-subtitle text review but not primitive code. |
+
+### Promotion checklist — Button `primary-gradient`
+
+| Gate | Status |
+|------|--------|
+| Approval source | `v2-paywall.html` sticky CTA. `btn.primary-gradient` class → `background: var(--gradient-accent)` (canonical 2-stop). |
+| Stable API | Same as other Button variants — no API divergence. |
+| Real usage ≥ 1 | Paywall CTA. Like `hero`, gradient-CTAs are inherently 1-per-sheet. Contract matches other Button variants (size / haptic / loading) — primitive-level gates already validated. |
+| Haptic | Default `'light'` per Button canonical contract — user confirmed paywall haptic feels right in Wave 1 observation. |
+| Mobile | `size="lg"` = 52+px min-height. |
+| Gap #1 | **Closed.** Mockup canonicalizes the 2-stop gradient. Prod bespoke 3-stop sites reclassified `legacy`. |
+
+### Primitives NOT promoted in this wave
+
+- `ListRow` `compact` / `plain` — unused in paywall (paywall has no
+  list-row-shaped rows; feature-rows are paywall-specific inline
+  markup).
+- `Banner` `promo` tone — paywall doesn't use a banner; the context
+  chip + hero carry that role.
+- `CounterBadge` / `StatTile` / `AvatarStack` — unused in paywall.
+- `Sheet` primitive — `BottomSheet` in MiniApp.tsx is still the
+  local implementation. Absorption pending.
+- Button `danger` / `surface` — no paywall adoption.
+
+### Gaps (new, deferred)
+
+- **Paywall sticky footer is `position: sticky` inside `BottomSheet`** —
+  depends on BottomSheet scroll container behavior. Safe on current
+  implementation (content scrolls normally), but if BottomSheet swaps
+  to transform-based content panning this may break. To monitor.
+- **Plan selector is inline markup** — it's paywall-specific for now
+  (SaveBadge + price + per-label). If 2nd plan-selector surface appears,
+  extract as `<PlanCard>` primitive.
+- **Renewal reminder cron has no user-facing control** — users can't
+  opt out except via the existing `notifyMarketing=false` (which kills
+  all DMs). Probably OK — yearly renewal reminders are transactional,
+  not marketing. To revisit if complaints.
+
+### Next up
+
+1. **Live observation** (1 day minimum per adoption-wave-pause rule) —
+   verify: (a) paywall renders correctly, (b) monthly checkout still
+   works, (c) yearly invoice creates and activates, (d) stacked yearly
+   (monthly→yearly) extends correctly.
+2. **First yearly purchase** — watch logs for webhook success,
+   `currentPeriodEnd` update, and activation DM.
+3. **Reminder cron first fire** — hourly, so visible within an hour of
+   deploy. Metric: `pro_renewal_reminder_{7d|1d}` events.
+4. **Gap cleanup** — Gap #2 (`danger-solid`) remains open for a future
+   wave (archive / delete dialog redesign).
+
+**Approved by.** Dmitry (2026-04-20, "B full хочу" + 4-question
+product decision Q&A: 800⭐ yearly, stack monthly→yearly, allow
+yearly→monthly, no refund, reminders yes).
+
+---
+
 ## 2026-04-20 — ListRow Wave 1 adoption + `card` variant promoted to `canonical`
 
 **Type:** primitive-change + status-change

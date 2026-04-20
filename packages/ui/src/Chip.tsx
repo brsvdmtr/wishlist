@@ -2,10 +2,15 @@ import React, { type ReactNode, type HTMLAttributes, type CSSProperties } from '
 import { colors, radius, fontSize, fontWeight, gradients, shadows } from '@wishlist/ui-tokens';
 
 /**
- * @status **canonical** (2026-04-20, 15 live call-sites across 4 tones).
+ * @status **canonical** (2026-04-20, 15+ live call-sites across 5 tones).
  * Unified chip replacing ad-hoc chip styles across the monolith.
  *
- * Approval: `DESIGN_DECISIONS.md#2026-04-20--chip-wave-1-adoption--primitive-promoted-to-canonical`.
+ * Tones canonical: `accent` / `success` / `warning` / `danger` / `surface` /
+ * `new` (paywall NEW badges) / `prio-*` / `pro`.
+ *
+ * Approval: `DESIGN_DECISIONS.md#2026-04-20--paywall-b-full-full-redesign-to-match-approved-v2-paywall.html--yearly-pro-plan`
+ * (extends original Chip Wave 1 approval to cover `new` tone + `md` size
+ * with `icon` slot, both first used in the paywall redesign).
  * Visual source of truth: every approved v2 mockup.
  */
 export type ChipTone =
