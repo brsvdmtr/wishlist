@@ -11093,9 +11093,50 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{ position: 'relative' }}>
             {santaSeason?.inSeason && <SnowflakeOverlay height={72} />}
           {/* Mobile-only header — hidden on desktop (sidebar handles navigation) */}
-          {!isDesktop && (
+          {!isDesktop && (() => {
+            // Per v2-home-all-tabs.html mockup: 2-line contextual greeting.
+            //   Wishlists tab: "С возвращением," / "{name} 👋"
+            //   Wishes tab:    "Все мои желания" / "{count} желаний · {wlCount} вишлистов"
+            //   Reservations:  "Мои брони" / "{n} активных[ · {m} секретных 🔒]"
+            const userName = tgUser?.first_name ?? '';
+            const wlCount = wishlists.length;
+            const activeReservations = reservations.length + santaReservationItems.length;
+            const secretCount = secretReservations.length;
+
+            const headerTop =
+              homeTab === 'wishes'        ? t('home_hdr_wishes_title', locale) :
+              homeTab === 'reservations'  ? t('home_hdr_reservations_title', locale) :
+              t('home_hdr_welcome', locale);
+
+            const headerBottom = (() => {
+              if (homeTab === 'wishes') {
+                const noun = pluralize(totalItems,
+                  t('home_hdr_wishes_noun_one', locale),
+                  t('home_hdr_wishes_noun_few', locale),
+                  t('home_hdr_wishes_noun_many', locale), locale);
+                const wlNoun = pluralize(wlCount,
+                  t('home_hdr_wishes_wl_noun_one', locale),
+                  t('home_hdr_wishes_wl_noun_few', locale),
+                  t('home_hdr_wishes_wl_noun_many', locale), locale);
+                return t('home_hdr_wishes_sub', locale, {
+                  count: String(totalItems), noun,
+                  wlCount: String(wlCount), wlNoun,
+                });
+              }
+              if (homeTab === 'reservations') {
+                const active = t('home_hdr_reservations_sub_active', locale, { n: String(activeReservations) });
+                const secret = secretCount > 0
+                  ? t('home_hdr_reservations_sub_secret', locale, { n: String(secretCount) })
+                  : '';
+                return active + secret;
+              }
+              // Wishlists tab — welcome + name
+              return userName ? `${userName} 👋` : t('home_hdr_welcome_fallback', locale);
+            })();
+
+            return (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, position: 'relative', zIndex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
               {/* Avatar → Profile; hat prop adds the seasonal SVG overlay */}
               <button
                 onClick={() => { loadProfile(); loadShowcase(); setScreen('profile'); }}
@@ -11105,30 +11146,29 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <UserAvatar
                   avatarUrl={profileData?.avatarUrl}
                   name={resolveOwnerName(profileData, tgUser)}
-                  size={36}
+                  size={40}
                   accent={C.accent}
                   hat={santaSeason?.inSeason ?? false}
                 />
               </button>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h1 style={{ fontSize: 24, fontWeight: 800, fontFamily: font, color: C.text, margin: 0, lineHeight: 1.1 }}>WishBoard</h1>
-                  {planInfo.code === 'PRO' && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 800, letterSpacing: 0.6, padding: '3px 8px',
-                      borderRadius: 6,
-                      background: `linear-gradient(135deg, ${C.accent}20, ${C.accent}12)`,
-                      border: `1px solid ${C.accent}30`,
-                      color: C.accent,
-                    }}>PRO</span>
-                  )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 13, color: C.textMuted, fontWeight: 500, lineHeight: 1.2, fontFamily: font }}>
+                  {headerTop}
                 </div>
-                <p style={{ fontSize: 13, color: C.textMuted, margin: 0, lineHeight: 1.2 }}>
-                  {tgUser ? t('greeting', locale, { name: tgUser.first_name }) : t('my_wishlists', locale)}
-                </p>
+                <div style={{
+                  fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font,
+                  lineHeight: 1.2, letterSpacing: '-0.01em',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {headerBottom}
+                </div>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              {/* PRO chip — only on Wishlists tab per mockup right-slot spec */}
+              {planInfo.code === 'PRO' && homeTab === 'wishlists' && (
+                <Chip tone="pro" size="md">⭐ PRO</Chip>
+              )}
               {/* Gift Notes entry icon */}
               <button
                 onClick={async () => {
@@ -11160,7 +11200,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </button>
             </div>
           </div>
-          )}
+            );
+          })()}
 
           {/* Desktop page header */}
           {isDesktop && (
@@ -11184,16 +11225,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           )}
           </div>{/* end seasonal wrapper */}
 
-          {/* ─── Primary home nav: Вишлисты | Желания | Мои брони ─── */}
+          {/* ─── Primary home nav: Вишлисты | Желания | Мои брони ───
+              v2-home-all-tabs.html: pill-style tab-bar (accent-fill on
+              active), counter-badge on Брони for unread. Subtler than
+              the old big-number+underline design. */}
           {(() => {
+            // Badge on Брони = active reservation count when user hasn't
+            // viewed the tab yet. Hiding once active avoids pointless self-
+            // notification. No dedicated "unread" tracking yet — can be
+            // replaced with `reservationsCount - reservationsSeenCount` later.
+            const reservationsBadge = homeTab === 'reservations' ? 0 : reservationsCount;
             const homeTabs = [
-              { tab: 'wishlists' as HomeTab, count: wishlists.length, label: t('home_tab_wishlists', locale) },
-              { tab: 'wishes' as HomeTab, count: totalItems, label: t('home_tab_wishes', locale) },
-              { tab: 'reservations' as HomeTab, count: reservationsCount, label: t('home_tab_bookings', locale) },
+              { tab: 'wishlists' as HomeTab, label: t('home_tab_wishlists', locale), badge: 0 },
+              { tab: 'wishes' as HomeTab, label: t('home_tab_wishes', locale), badge: 0 },
+              { tab: 'reservations' as HomeTab, label: t('home_tab_bookings', locale), badge: reservationsBadge },
             ];
-            const activeIdx = homeTabs.findIndex(s => s.tab === homeTab);
             return (
-              <div style={{ position: 'relative', display: 'flex', marginBottom: 20, borderBottom: `1px solid ${C.border}` }}>
+              <div style={{
+                display: 'flex', gap: 4, padding: 4, marginBottom: 20,
+                background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+              }}>
                 {homeTabs.map((seg) => {
                   const isActive = homeTab === seg.tab;
                   return (
@@ -11205,34 +11256,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         else if (seg.tab === 'reservations' && reservations.length === 0 && santaReservationItems.length === 0) void loadReservations();
                       }}
                       style={{
-                        flex: 1, background: 'none', border: 'none', cursor: 'pointer',
-                        padding: '10px 4px 14px', fontFamily: font,
+                        flex: 1, border: 'none', cursor: 'pointer',
+                        padding: '9px 10px', fontFamily: font,
+                        borderRadius: 10,
+                        background: isActive ? C.accent : 'transparent',
+                        color: isActive ? '#fff' : C.textMuted,
+                        fontSize: 13, fontWeight: isActive ? 700 : 600,
+                        boxShadow: isActive ? '0 2px 8px rgba(124,106,255,0.3)' : 'none',
+                        transition: 'background 0.18s, color 0.18s, box-shadow 0.18s',
                         WebkitTapHighlightColor: 'transparent',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                        position: 'relative',
                       }}
                     >
-                      <span style={{
-                        fontSize: 22, fontWeight: 800, lineHeight: 1, fontFamily: font,
-                        color: isActive ? C.accent : C.text,
-                        transition: 'color 0.18s',
-                      }}>{seg.count}</span>
-                      <span style={{
-                        fontSize: 11,
-                        fontWeight: isActive ? 700 : 500,
-                        color: isActive ? C.text : C.textMuted,
-                        transition: 'color 0.18s',
-                      }}>{seg.label}</span>
+                      {seg.label}
+                      {seg.badge > 0 && (
+                        <CounterBadge
+                          count={seg.badge}
+                          tone="danger"
+                          size="sm"
+                          borderColor={isActive ? C.accent : C.card}
+                          style={{ top: -8, right: -8 }}
+                        />
+                      )}
                     </button>
                   );
                 })}
-                {/* Animated underline */}
-                <div style={{
-                  position: 'absolute', bottom: 0, height: 2, borderRadius: 1,
-                  width: 'calc(100% / 3)',
-                  left: `calc(100% / 3 * ${activeIdx < 0 ? 0 : activeIdx})`,
-                  background: C.accent,
-                  transition: 'left 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                }} />
               </div>
             );
           })()}
@@ -11614,6 +11662,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 state={wl.readOnly ? 'muted' : 'neutral'}
                 onClick={() => void openWishlist(wl)}
                 style={{ animation: `fadeIn 0.3s ease ${(i + 1) * 0.08}s both` }}
+                /* Mockup thumb: 48×48 rounded square with emoji hashed from title */
+                leading={(
+                  <div style={{
+                    width: 48, height: 48, borderRadius: 12,
+                    background: wl.readOnly ? C.surface : C.accentSoft,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 24, flexShrink: 0,
+                  }}>{getEmoji(wl.title)}</div>
+                )}
                 title={<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span>{wl.title}</span>{wl.readOnly && <Chip tone="warning" size="sm">{t('view_only', locale)}</Chip>}</div>}
                 subtitle={t('wishlist_count', locale, { count: wl.itemCount, reserved: wl.reservedCount })}
                 trailing={<span style={{ fontSize: 20, color: C.textMuted }}>›</span>}
@@ -11661,7 +11718,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {!reorderMode && <div style={{ height: 70 }} />}
             {!reorderMode && (
               <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', pointerEvents: 'none' }}>
-                <Button variant="primary" size="lg" style={{ pointerEvents: 'auto' }} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</Button>
+                <Button variant="primary-gradient" size="lg" style={{ pointerEvents: 'auto' }} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</Button>
               </div>
             )}
           </div>
