@@ -527,6 +527,74 @@ Mitigation:
 
 ---
 
+## 2026-04-20 — Home H1 + H2 waves: header/tab-bar/thumbs + LockedTile primitive
+
+**Type:** migration wave + new-primitive
+
+**Decision.** First two sub-waves of bringing `v2-home-all-tabs.html`
+North Star mockup into prod.
+
+### H1 — Header + Tab-bar + Wishlist thumbs + gradient CTA
+
+- Removed `WishBoard` wordmark from mobile header; switched to 2-line
+  contextual greeting per tab (Wishlists / Wishes / Reservations each
+  gets its own top+bottom text that reflects current context).
+- `PRO` badge moved into header right-slot (only shows on Wishlists tab
+  per mockup right-slot contextual rule).
+- Avatar bumped 36 → 40px to match mockup density.
+- Tab-bar switched from big-number+underline → pill-style with
+  accent-fill on active + shadow glow. Hidden inactive tab counts;
+  added `CounterBadge` (`tone="danger"`, `size="sm"`) on Брони when
+  user isn't on that tab.
+- Wishlist cards get a 48×48 emoji thumb via `getEmoji(wl.title)`
+  hash (title-derived; no schema change). accent-soft bg for
+  writable wishlists, surface bg for readOnly.
+- Sticky "Создать вишлист" CTA upgraded from `Button.primary` →
+  `Button.primary-gradient` (matches mockup).
+
+Mine/Subscribed sub-tab kept as-is — mockup suggests moving
+subscriptions into a section on Wishlists tab, but that's structural
+UX change and deferred to a later wave.
+
+### H2 — LockedTile primitive + wishlist-limit inline upsell
+
+- New primitive `LockedTile` (provisional) in `@wishlist/ui`. API:
+  `icon / title / subtitle / ctaLabel / onClick`. Soft inline paywall
+  nudge with accent-tinted gradient bg + dashed accent border + 40×40
+  icon slot + accent-soft CTA pill.
+- Migrated wishlist-limit upsell: replaced the plain `btnGhost Connect
+  PRO` + plan-status text with a single `<LockedTile>` that shows
+  `🔒 Лимит {count}/{max} на FREE / Открой до 10 вишлистов в PRO /
+  Unlock`. For PRO users the plan-status text remains.
+- Reservations-history upsell NOT migrated — existing tab button +
+  🔒 + paywall-sheet covers that surface; adding an inline LockedTile
+  would duplicate UX.
+
+### i18n
+
++12 (H1) + 5 (H2) = 17 keys for RU + EN (34 entries). Other locales
+fall back to EN via existing `t()` chain.
+
+### Impact
+
+- Canonical primitives: 10 (unchanged).
+- Provisional primitives: LockedTile added → Card (flat/current),
+  ListRow (compact/plain), Banner (promo), Button (danger-soft,
+  surface), StatTile, AvatarStack, LockedTile.
+- MiniApp.tsx: −46 lines (tab-bar simplified) + LockedTile adoption.
+
+### Next up
+
+1. Observation window 1-2 days after H1+H2 deploy.
+2. H3 — Wishes tab redesign (quick-filters + priority sections +
+   compact rows).
+3. H4 — Reservations tab redesign (variants + quick-filters).
+
+**Approved by.** Dmitry (2026-04-20, "Вариант A" for H1 → "неплохо,
+поехали дальше" for H2).
+
+---
+
 ## 2026-04-20 — ListRow Wave 1 adoption + `card` variant promoted to `canonical`
 
 **Type:** primitive-change + status-change

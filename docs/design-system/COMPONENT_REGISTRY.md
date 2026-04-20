@@ -189,6 +189,19 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
     canonical by extension (inherit primitive contract)
 - **Migration notes:** `<span style={{ padding, borderRadius, background, color, fontSize, fontWeight }}>` → `<Chip tone="..." size="...">`. Use `size="lg"` for 13-px status pills (pill-radius), default (md) for 11-px badges. Accept minor visual shifts to canonical tokens.
 
+### `LockedTile` (new, 2026-04-20)
+
+- **Status:** `provisional` (1 call-site, needs observation)
+- **Implementation:** [packages/ui/src/LockedTile.tsx](../../packages/ui/src/LockedTile.tsx)
+- **Approval source:** `v2-home-all-tabs.html` Wishlists-tab limit upsell + Reservations-tab history upsell. Soft inline paywall nudge, NOT a modal.
+- **Target visual direction:** `matches-approved-mockup`
+- **API:** `icon / title / subtitle? / ctaLabel / onClick? / style?`
+- **Adoption:** 1 call-site — wishlist-limit upsell on Home › Wishlists tab (replaces plain `btnGhost Connect PRO` + plan-status text).
+- **Promotion blockers:**
+  - Needs ≥3 call-sites (reservation-history, item-limit, subscription-limit, etc.)
+  - Live observation after H2 deploy to verify tone feels right (not aggressive)
+- **Migration notes:** use for INLINE soft upsells ("limit reached / feature gated") where a full paywall modal would be too intrusive. Pair with `showUpsell(<context>)` or `setUpsellSheet({ context })` callback.
+
 ### `CounterBadge`
 
 - **Status:** **`canonical`** (promoted 2026-04-20, 4 call-sites)

@@ -26,3 +26,4 @@ export { Chip, type ChipProps, type ChipTone, type ChipSize } from './Chip';
 export { CounterBadge, type CounterBadgeProps } from './CounterBadge';
 export { StatTile, type StatTileProps, type StatTileTone } from './StatTile';
 export { AvatarStack, type AvatarStackProps, type AvatarEntry, type AvatarStackSize } from './AvatarStack';
+export { LockedTile, type LockedTileProps } from './LockedTile';

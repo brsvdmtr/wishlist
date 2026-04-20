@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, Chip, CounterBadge, ListRow, SectionHeader, Sheet as BottomSheet } from '@wishlist/ui';
+import { Banner, Button, Card, Chip, CounterBadge, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet } from '@wishlist/ui';
 import { initSentry, captureException } from './sentry';
 
 // ═══════════════════════════════════════════════════════
@@ -11704,15 +11704,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
 
-            {!reorderMode && (
-              <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
-                {t('plan_status', locale, { plan: planInfo.code === 'PRO' ? 'Pro' : 'Free', count: wishlists.length, max: planLimits.wishlists })}
-              </div>
-            )}
             {!reorderMode && planInfo.code === 'FREE' && (
-              <button style={{ ...btnGhost, width: '100%', fontSize: 13, color: C.accent }} onClick={() => showUpsell('wishlist_limit')}>
-                {t('connect_pro', locale)}
-              </button>
+              <LockedTile
+                icon="🔒"
+                title={t('locked_wl_title', locale, { count: String(wishlists.length), max: String(planLimits.wishlists) })}
+                subtitle={t('locked_wl_sub', locale, { proMax: '10' })}
+                ctaLabel={t('locked_cta_unlock', locale)}
+                onClick={() => showUpsell('wishlist_limit')}
+                style={{ marginTop: 8 }}
+              />
+            )}
+            {!reorderMode && planInfo.code === 'PRO' && (
+              <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
+                {t('plan_status', locale, { plan: 'Pro', count: wishlists.length, max: planLimits.wishlists })}
+              </div>
             )}
             {/* spacer for fixed CTA */}
             {!reorderMode && <div style={{ height: 70 }} />}
