@@ -7409,6 +7409,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     backActionRef.current = async () => {
       try { trackEvent('miniapp.backbutton_pressed', { screen }); } catch { /* never break Back */ }
 
+      // Paywall open: swallow Back — close the sheet instead of navigating.
+      // Without this the screen navigates away while the sheet stays visible
+      // (same class of bug as the item-form case below).
+      if (upsellSheet) {
+        try { trackEvent(`pro_sheet_dismissed_${upsellSheet.context}`); } catch { /* ok */ }
+        setUpsellSheet(null);
+        return;
+      }
+
       // Item form sheet open: intercept Back. Previously the underlying
       // screen navigated away while the sheet stayed visible (confusing).
       // Now: if clean — close sheet + navigate; if dirty — prompt first.
