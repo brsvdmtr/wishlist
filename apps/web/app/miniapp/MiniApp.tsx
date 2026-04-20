@@ -27404,25 +27404,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         return (
           <div style={{ padding: '16px 16px 40px' }}>
-            {/* Header badge */}
+            {/* Header badges — role + status — canonical Chip primitive. */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '6px 12px', borderRadius: 10,
-                background: gg.isOrganizer ? C.accentSoft : C.greenSoft,
-                color: gg.isOrganizer ? C.accent : C.green,
-                fontSize: 13, fontWeight: 600,
-              }}>
+              <Chip tone={gg.isOrganizer ? 'accent' : 'success'} size="lg">
                 {gg.isOrganizer ? '⚡ ' + t('gg_badge_organizer', locale) : '👤 ' + t('gg_badge_participant', locale)}
-              </div>
-              <div style={{
-                padding: '4px 10px', borderRadius: 8,
-                background: gg.status === 'OPEN' ? C.greenSoft : gg.status === 'COMPLETED' ? C.accentSoft : C.redSoft,
-                color: gg.status === 'OPEN' ? C.green : gg.status === 'COMPLETED' ? C.accent : C.red,
-                fontSize: 12, fontWeight: 600,
-              }}>
+              </Chip>
+              <Chip tone={gg.status === 'OPEN' ? 'success' : gg.status === 'COMPLETED' ? 'accent' : 'danger'} size="md">
                 {t(`gg_status_${gg.status.toLowerCase()}` as never, locale)}
-              </div>
+              </Chip>
             </div>
 
             {/* Item card */}
@@ -27466,15 +27455,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             </div>
 
-            {/* Deadline banner */}
+            {/* Deadline banner — canonical Banner primitive. */}
             {deadlineDate && (
-              <div style={{
-                padding: '10px 14px', borderRadius: 12, marginBottom: 16,
-                background: deadlinePassed ? C.redSoft : C.orangeSoft,
-                color: deadlinePassed ? C.red : C.orange,
-                fontSize: 13, fontWeight: 600, textAlign: 'center',
-              }}>
-                {deadlinePassed ? '⚠️ ' + t('gg_deadline_passed', locale) : '⏰ ' + deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)}
+              <div style={{ marginBottom: 16 }}>
+                <Banner tone={deadlinePassed ? 'danger' : 'warning'} icon={<span>{deadlinePassed ? '⚠️' : '⏰'}</span>}>
+                  <div style={{ textAlign: 'center', fontWeight: 600 }}>
+                    {deadlinePassed ? t('gg_deadline_passed', locale) : deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)}
+                  </div>
+                </Banner>
               </div>
             )}
 
