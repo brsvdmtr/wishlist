@@ -28941,14 +28941,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <div style={{ paddingBottom: 4, minWidth: 0 }}>
                         <div style={{ fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pp.profile.displayName || pp.profile.username || publicProfileUsername}</span>
-                          {hasShowcase && (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center',
-                              background: `linear-gradient(135deg, ${C.accent} 0%, #a78bfa 100%)`,
-                              color: '#fff', fontSize: 10, fontWeight: 700,
-                              padding: '2px 8px', borderRadius: 10, letterSpacing: '0.04em',
-                            }}>PRO</span>
-                          )}
+                          {hasShowcase && <Chip tone="pro" size="sm">PRO</Chip>}
                         </div>
                         {pp.profile.username && <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{pp.profile.username}</div>}
                       </div>
