@@ -4427,6 +4427,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   type ResStatusFilter = 'all' | 'not_purchased' | 'purchased' | 'with_comments';
   const [resStatusFilter, setResStatusFilter] = useState<ResStatusFilter>('all');
   const [resOwnerFilter, setResOwnerFilter] = useState<string | null>(null);
+  /** Reservations category quick-filter (v2-home-all-tabs). Applies only
+   *  to the Active sub-tab. 'all' shows everything; 'purchased' filters to
+   *  completed gifts; 'secret' hides non-secret sections; 'group_gift'
+   *  filters to group-gift items only. */
+  type ResCategory = 'all' | 'purchased' | 'secret' | 'group_gift';
+  const [resCategory, setResCategory] = useState<ResCategory>('all');
   type ResHistoryFilter = 'all' | 'completed' | 'unreserved' | 'archived';
   const [resHistoryFilter, setResHistoryFilter] = useState<ResHistoryFilter>('all');
   const [resFilterSheetOpen, setResFilterSheetOpen] = useState(false);
@@ -11948,6 +11954,49 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* Active tab */}
               {resTab === 'active' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 18 }}>
+                  {/* Category quick-filter chips (v2-home-all-tabs reservations).
+                      Counts per category; Secret/Group/Purchased are inherently
+                      narrow subsets so "All" remains the common default. */}
+                  {(() => {
+                    const purchasedCount = reservations.filter((r) => r.meta?.purchased).length;
+                    const groupCount = reservations.filter((r) => r.groupGiftRole).length;
+                    const secretCount = secretReservations.length;
+                    const totalCount = reservations.length + santaReservationItems.length + secretCount;
+                    if (totalCount === 0) return null;
+                    const cats: Array<{ key: ResCategory; label: string; n: number; visible: boolean }> = [
+                      { key: 'all',         label: t('res_cat_all', locale),       n: totalCount,    visible: true },
+                      { key: 'purchased',   label: t('res_cat_purchased', locale), n: purchasedCount, visible: purchasedCount > 0 },
+                      { key: 'secret',      label: t('res_cat_secret', locale),    n: secretCount,    visible: secretCount > 0 },
+                      { key: 'group_gift',  label: t('res_cat_group', locale),     n: groupCount,     visible: groupCount > 0 },
+                    ];
+                    return (
+                      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
+                        {cats.filter((c) => c.visible).map((c) => {
+                          const active = resCategory === c.key;
+                          return (
+                            <button
+                              key={c.key}
+                              onClick={() => setResCategory(active && c.key !== 'all' ? 'all' : c.key)}
+                              style={{
+                                flexShrink: 0,
+                                display: 'flex', alignItems: 'center', gap: 5,
+                                padding: '6px 14px', borderRadius: 20, border: 'none',
+                                fontSize: 13, fontWeight: active ? 700 : 500,
+                                cursor: 'pointer',
+                                background: active ? C.accent : C.surface,
+                                color: active ? '#fff' : C.text,
+                                transition: 'all 0.15s ease',
+                                fontFamily: font, whiteSpace: 'nowrap',
+                              }}
+                            >
+                              <span>{c.label}</span>
+                              <span style={{ fontWeight: 700, color: active ? '#fff' : C.textMuted, opacity: active ? 0.85 : 1 }}>{c.n}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                   {/* Filters bar */}
                   {reservationBeta && reservations.length > 0 && (
                     reservationPro ? (
@@ -12005,7 +12054,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     </div>
                   )}
                   {/* ── Secret reservations sub-section (top, above Santa & Public) ── */}
-                  {secretReservations.length > 0 && (() => {
+                  {secretReservations.length > 0 && (resCategory === 'all' || resCategory === 'secret') && (() => {
                     const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: SecretReservationDTO[] }> = {};
                     for (const r of secretReservations) {
                       const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, ownerAvatarUrl: r.ownerAvatarUrl, items: [] });
@@ -12101,7 +12150,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     );
                   })()}
                   {/* Santa reservations sub-section */}
-                  {santaReservationItems.length > 0 && (() => {
+                  {santaReservationItems.length > 0 && resCategory === 'all' && (() => {
                     const campGroups: Record<string, { campaignTitle: string; campaignStatus: string; items: SantaReservationItem[] }> = {};
                     for (const r of santaReservationItems) {
                       const g = campGroups[r.campaignId] ?? (campGroups[r.campaignId] = { campaignTitle: r.campaignTitle, campaignStatus: r.campaignStatus, items: [] });
@@ -12159,10 +12208,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       </div>
                     );
                   })()}
-                  {/* Regular reservations grouped by owner */}
-                  {filteredReservations.length > 0 && (() => {
+                  {/* Regular reservations grouped by owner.
+                      Apply category quick-filter (from v2-home-all-tabs):
+                        'secret'     → hide this section entirely
+                        'purchased'  → only purchased items
+                        'group_gift' → only items in a group gift
+                        'all'        → no filtering (current behavior) */}
+                  {resCategory !== 'secret' && filteredReservations.length > 0 && (() => {
+                    const catFiltered = resCategory === 'purchased'
+                      ? filteredReservations.filter((r) => r.meta?.purchased)
+                      : resCategory === 'group_gift'
+                        ? filteredReservations.filter((r) => r.groupGiftRole)
+                        : filteredReservations;
+                    if (catFiltered.length === 0) return null;
                     const groups: Record<string, { ownerName: string; ownerAvatarUrl: string | null; items: ReservationItem[] }> = {};
-                    for (const r of filteredReservations) {
+                    for (const r of catFiltered) {
                       const g = groups[r.ownerId] ?? (groups[r.ownerId] = { ownerName: r.ownerName, ownerAvatarUrl: r.ownerAvatarUrl, items: [] });
                       g.items.push(r);
                     }
