@@ -15452,7 +15452,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ══════════════════════════════════════════════ */}
       {screen === 'guest-view' && guestWl && (
         <div style={{ padding: '16px 20px 120px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '8px 0 20px' }}>
+          {/* ── Owner card — relational anchor (v2-wishlist-detail-guest) ──
+              Accent-tinted Card.current wraps owner avatar + title + meta +
+              subscribe button. Signals "this is someone else's list" with
+              visual warmth — not a neutral page header. */}
+          <Card variant="current" padding="md" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
             {(() => {
               const ownerClickable = !!guestWl.ownerUsername;
               const openOwnerProfile = () => {
@@ -15468,6 +15472,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 window.scrollTo(0, 0);
                 trackEvent('profile_open_from_guest_view', { username: uname });
               };
+              // Compose meta in one line per mockup: "{deadline} · {count} желаний"
+              const totalCount = guestMainList.length + guestNoPriceBlock.length;
+              const itemCountStr = totalCount > 0
+                ? `${totalCount} ${pluralize(totalCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}`
+                : null;
+              const metaParts: string[] = [];
+              if (guestWl.deadline) metaParts.push(fmtDeadline(guestWl.deadline)!);
+              if (itemCountStr) metaParts.push(itemCountStr);
+              const metaLine = metaParts.join(' · ');
               return (
                 <>
                   <div
@@ -15477,7 +15490,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     <UserAvatar
                       avatarUrl={guestWl.ownerAvatarUrl}
                       name={guestWl.ownerName ?? '🎁'}
-                      size={48}
+                      size={52}
                       accent={C.accent}
                     />
                   </div>
@@ -15490,11 +15503,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         {guestWl.ownerName}{ownerClickable ? ' ›' : ''}
                       </div>
                     )}
-                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: font, color: C.text }}>{guestWl.title}</div>
-                    {guestWl.description && <div style={{ fontSize: 13, color: C.textMuted }}>{guestWl.description}</div>}
-                    {guestWl.deadline && (
-                      <div style={{ fontSize: 12, color: C.textMuted }}>📅 {fmtDeadline(guestWl.deadline)}</div>
+                    <div style={{ fontSize: 17, fontWeight: 700, fontFamily: font, color: C.text, letterSpacing: '-0.01em', lineHeight: 1.2 }}>{guestWl.title}</div>
+                    {metaLine && (
+                      <div style={{ fontSize: 12, color: C.textSec, marginTop: 2 }}>{metaLine}</div>
                     )}
+                    {guestWl.description && !metaLine && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{guestWl.description}</div>}
                   </div>
                 </>
               );
@@ -15512,17 +15525,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 }}
                 disabled={subscribing}
                 style={{
-                  flexShrink: 0, padding: '8px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                  fontFamily: font, fontSize: 12, fontWeight: 600,
-                  background: isSubscribed ? C.surface : C.accent,
-                  color: isSubscribed ? C.textSec : '#fff',
+                  flexShrink: 0, padding: '8px 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
+                  fontFamily: font, fontSize: 12, fontWeight: 700,
+                  background: isSubscribed ? C.surface : C.accentSoft,
+                  color: isSubscribed ? C.textSec : C.accent,
                   opacity: subscribing ? 0.7 : 1,
                 }}
               >
-                {isSubscribed ? `✓ ${t('sub_subscribed_btn', locale)}` : t('sub_subscribe_btn', locale)}
+                {isSubscribed ? `✓ ${t('sub_subscribed_btn', locale)}` : `+ ${t('sub_subscribe_btn', locale)}`}
               </button>
             )}
-          </div>
+          </Card>
 
           {/* ── Don't Gift block (guest view) ─────────────────────────── */}
           {guestDontGift && (guestDontGift.presets.length > 0 || guestDontGift.customItems.length > 0 || guestDontGift.comment) && (
