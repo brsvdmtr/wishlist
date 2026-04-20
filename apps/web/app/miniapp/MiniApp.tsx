@@ -11921,6 +11921,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {/* ── RESERVATIONS TAB ────────────────────────────────────── */}
           {homeTab === 'reservations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {/* StatTile hero row — active / secret / history counts per
+                  v2-reservations-pro.html summary. Shown only when user has
+                  any reservations; hidden on empty state. */}
+              {(reservations.length + santaReservationItems.length + secretReservations.length > 0) && (
+                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                  <StatTile
+                    n={reservations.length + santaReservationItems.length}
+                    label={t('res_stat_active', locale)}
+                    tone="success"
+                  />
+                  {secretReservations.length > 0 && (
+                    <StatTile
+                      n={secretReservations.length}
+                      label={t('res_stat_secret', locale)}
+                      tone="accent"
+                    />
+                  )}
+                  {reservationPro && resHistory.length > 0 && (
+                    <StatTile
+                      n={resHistory.length}
+                      label={t('res_stat_history', locale)}
+                      tone="neutral"
+                    />
+                  )}
+                </div>
+              )}
               {/* Active/History segment */}
               <div style={{ display: 'flex', margin: '4px 0 0', background: C.surface, borderRadius: 10, padding: 3, gap: 2 }}>
                 <button onClick={() => setResTab('active')} style={{
