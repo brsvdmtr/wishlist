@@ -32,6 +32,85 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-04-20 — ListRow Wave 1 adoption + `card` variant promoted to `canonical`
+
+**Type:** primitive-change + status-change
+
+**Decision.** ListRow Wave 1 migrated 5 real map-based call-sites in
+MiniApp.tsx (7+ rendered rows). **`ListRow variant="card"` promoted to
+`canonical`**. `compact` / `plain` stay `provisional` — no adoption
+in this wave to validate.
+
+### Migrated call-sites (5 call-sites, 7+ rendered rows)
+
+| # | File:line | Variant / state | Notes |
+|---|-----------|-----------------|-------|
+| 1 | `MiniApp.tsx:~18368` | `card`, neutral | Referral share sheet — 3 rendered rows (Telegram / Copy / Other). Leading 42×42 emoji square, title/subtitle, chevron trailing. |
+| 2 | `MiniApp.tsx:~11651` | `card`, neutral | Curated-subs rows. Title + count subtitle. Preserves fadeIn animation. |
+| 3 | `MiniApp.tsx:~11706` | `card`, neutral | Profile-subs rows. UserAvatar 48 leading, displayName + `<Chip tone="pro" size="sm">` in title, @username subtitle. |
+| 4 | `MiniApp.tsx:~11923` | `card`, `state="muted"` (when `wl.readOnly`) | **Home wishlist list** (HIGH VISIBILITY). Title + view-only chip, count subtitle, progress bar + deadline in meta slot, chevron trailing. Staggered fadeIn preserved. |
+| 5 | `MiniApp.tsx:~11594` | `card`, `state="warning"` (when unread) | **Home subscription list** (HIGH VISIBILITY). Title + unread-count chip, avatar+meta subtitle, chevron trailing. |
+
+### States validated in-wave
+
+- ✅ **`neutral`** — 3 call-sites
+- ✅ **`muted`** — 1 call-site (wishlist readOnly)
+- ✅ **`warning`** — 1 call-site (subscription unread)
+- ❌ **`current` / `reservedByMe` / `secret` / `conflict` / `done`** — not exercised in this wave. State contract inherited by extension (same `{bg, border}` shape per state).
+
+### Promotion checklist — `ListRow variant="card"`
+
+| Gate | Status |
+|------|--------|
+| **Approval source** | All approved v2 mockups use ListRow.card pattern. State-matrix mockup codifies 8 state variants. |
+| **Stable API** | Props `variant / state / leading / trailing / title / subtitle / meta / interactive` unchanged since Phase 2 fixation. |
+| **Real usage ≥ 3** | 5 call-sites ✅ |
+| **Long-text** | Title has 2-line clamp + ellipsis (primitive-built-in). Subtitle same. Meta slot wraps. Validated on wishlist titles and subscription names. |
+| **Mobile** | 375 × 812 matches approved mockups. |
+| **Interaction** | `interactive` adds cursor + transition.all. Used in all 5 migrations. |
+| **RTL** | Flex with logical `gap`, icon + body + action flows correctly. |
+| **Migration notes** | `<div onClick style={{background:card, border, borderRadius, padding, display:flex, gap, cursor:pointer}}><leading-node/><body><title/><subtitle/>{meta?}</body><trailing/></div>` → `<ListRow variant="card" interactive onClick leading={...} title={...} subtitle={...} meta={...} trailing={...} />`. Staggered animation + other positional via `style`. State-tint via `state` prop. |
+
+### Visual shifts (accepted — canonical direction)
+
+- Radius 16 → 14 (primitive canonical). Slightly less rounded. Matches
+  approved mockup grid.
+- Padding 18 → 16 (primitive default). Slightly tighter.
+- Wishlist readOnly opacity 0.6 → `state="muted"` opacity 0.55. Imperceptible.
+- Subscription unread border color: `${C.orange}40` (~25% alpha) →
+  `state="warning"` border (warning-tinted + gradient-tint bg). More
+  structural signal, less color-alpha hack.
+- Title gains built-in 2-line clamp (previously single-line ellipsis
+  on some rows). Longer wishlist titles now wrap cleanly instead of
+  truncating.
+
+### Gaps NOT resolved
+
+- **`compact` variant** — no prod adoption. Primitive contract
+  validated via `card` shape (same slot system, smaller padding/gap);
+  canonical-by-extension reasonable but conservative choice is to keep
+  `compact` provisional pending real adoption.
+- **`plain` variant** — same. Settings rows (probable candidate) not
+  migrated in this wave.
+- **`current` / `reservedByMe` / `secret` / `conflict` / `done` states**
+  — no adoption. Contract same as `neutral` + tint/opacity/border swap;
+  inherit by extension but unvalidated in prod.
+
+### Impact
+
+- **Canonical primitives: 5** (SectionHeader, Banner neutral tones,
+  Card default/interactive, Chip, **ListRow card**).
+- **TypeScript:** clean.
+- **ui:audit:** inline `style={{}}` 3650 → 3632 (−18, largest single-wave
+  reduction in this session), hex 665 → 663 (−2).
+- **Product visibility:** home wishlist list + subscription list + profile
+  subs list + curated subs list + referral share sheet — 5 highly-visited
+  surfaces now render through canonical primitive.
+
+**Approved by.** Dmitry (2026-04-20, "продолжай" after Chip Wave 1).
+
+---
+
 ## 2026-04-20 — Chip Wave 1 adoption + primitive promoted to `canonical`
 
 **Type:** primitive-change + status-change

@@ -241,6 +241,10 @@ dialog/sheet-content titles.
 
 ## ListRow
 
+**Status (per-variant):** `card` is **`canonical`** (promoted 2026-04-20,
+5 live call-sites + 3 states validated). `compact` / `plain` are
+`provisional`.
+
 ```tsx
 <ListRow
   variant="card"

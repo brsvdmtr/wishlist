@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, Chip, SectionHeader } from '@wishlist/ui';
+import { Banner, Button, Card, Chip, ListRow, SectionHeader } from '@wishlist/ui';
 import { initSentry, captureException } from './sentry';
 
 // ═══════════════════════════════════════════════════════
@@ -11592,8 +11592,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </div>
                 )}
                 {subscriptions.map((sub, i) => (
-                <div
+                <ListRow
                   key={sub.id}
+                  variant="card"
+                  interactive
+                  state={sub.unreadCount > 0 ? 'warning' : 'neutral'}
                   onClick={async () => {
                     if (sub.unreadCount > 0) {
                       void tgFetch(`/tg/me/subscriptions/${sub.id}/read`, { method: 'POST' });
@@ -11614,32 +11617,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       setScreen('my-wishlists');
                     }
                   }}
-                  style={{
-                    background: C.card, borderRadius: 16, padding: 18, cursor: 'pointer',
-                    border: sub.unreadCount > 0 ? `1px solid ${C.orange}40` : `1px solid ${C.border}`,
-                    animation: `fadeIn 0.3s ease ${i * 0.08}s both`,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, fontFamily: font, color: C.text }}>{sub.wishlist.title}</div>
-                        {sub.unreadCount > 0 && (
-                          <span style={{
-                            minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
-                            background: C.orange, color: '#fff', fontSize: 10, fontWeight: 700,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                          }}>{sub.unreadCount}</span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 12, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                        <UserAvatar avatarUrl={sub.wishlist.ownerAvatarUrl} name={sub.wishlist.ownerName} size={16} accent={C.accent} />
-                        <span>{sub.wishlist.ownerName} · {sub.wishlist.itemCount} {t('stats_wishes', locale)}{sub.wishlist.deadline ? ` · 📅 ${fmtDeadline(sub.wishlist.deadline)}` : ''}</span>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 20, color: C.textMuted }}>›</span>
-                  </div>
-                </div>
+                  style={{ animation: `fadeIn 0.3s ease ${i * 0.08}s both` }}
+                  title={<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span>{sub.wishlist.title}</span>{sub.unreadCount > 0 && <Chip tone="warning" size="sm">{sub.unreadCount}</Chip>}</div>}
+                  subtitle={<div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}><UserAvatar avatarUrl={sub.wishlist.ownerAvatarUrl} name={sub.wishlist.ownerName} size={16} accent={C.accent} /><span>{sub.wishlist.ownerName} · {sub.wishlist.itemCount} {t('stats_wishes', locale)}{sub.wishlist.deadline ? ` · 📅 ${fmtDeadline(sub.wishlist.deadline)}` : ''}</span></div>}
+                  trailing={<span style={{ fontSize: 20, color: C.textMuted }}>›</span>}
+                />
               ))}
 
               {/* Curated selection subscriptions (lite-wishlists) */}
@@ -11649,8 +11631,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     📋 {t('curated_saved_section', locale)}
                   </div>
                   {curatedSubs.map((cs, i) => (
-                    <div
+                    <ListRow
                       key={cs.id}
+                      variant="card"
+                      interactive
                       onClick={async () => {
                         setScreen('loading');
                         try {
@@ -11673,22 +11657,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           setScreen('my-wishlists');
                         }
                       }}
-                      style={{
-                        background: C.card, borderRadius: 16, padding: 18, cursor: 'pointer',
-                        border: `1px solid ${C.border}`,
-                        animation: `fadeIn 0.3s ease ${i * 0.08}s both`,
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 16, fontWeight: 700, fontFamily: font, color: C.text, marginBottom: 2 }}>{cs.title}</div>
-                          <div style={{ fontSize: 12, color: C.textMuted }}>
-                            {cs.ownerName ? `${cs.ownerName} · ` : ''}{cs.itemCount} {locale === 'ru' ? (cs.itemCount === 1 ? 'желание' : cs.itemCount < 5 ? 'желания' : 'желаний') : (cs.itemCount === 1 ? 'wish' : 'wishes')}
-                          </div>
-                        </div>
-                        <span style={{ fontSize: 20, color: C.textMuted }}>›</span>
-                      </div>
-                    </div>
+                      style={{ animation: `fadeIn 0.3s ease ${i * 0.08}s both` }}
+                      title={cs.title}
+                      subtitle={`${cs.ownerName ? `${cs.ownerName} · ` : ''}${cs.itemCount} ${locale === 'ru' ? (cs.itemCount === 1 ? 'желание' : cs.itemCount < 5 ? 'желания' : 'желаний') : (cs.itemCount === 1 ? 'wish' : 'wishes')}`}
+                      trailing={<span style={{ fontSize: 20, color: C.textMuted }}>›</span>}
+                    />
                   ))}
                 </>
               )}
@@ -11704,8 +11677,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </div>
                 )}
                 {profileSubs.map((p, i) => (
-                  <div
+                  <ListRow
                     key={p.id}
+                    variant="card"
+                    interactive
                     onClick={() => {
                       setPublicProfileUsername(p.username);
                       setPublicProfileSubscribed(true);
@@ -11716,25 +11691,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       window.scrollTo(0, 0);
                       trackEvent('profile_open_from_subs', { username: p.username });
                     }}
-                    style={{
-                      background: C.card, borderRadius: 16, padding: 14, cursor: 'pointer',
-                      border: `1px solid ${C.border}`,
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      animation: `fadeIn 0.3s ease ${i * 0.06}s both`,
-                    }}
-                  >
-                    <UserAvatar avatarUrl={p.avatarUrl} name={p.displayName} size={48} accent={C.accent} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.displayName}</div>
-                        {p.isPro && (
-                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: C.accent, color: '#fff', fontWeight: 700, letterSpacing: '0.04em', flexShrink: 0 }}>PRO</span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 12, color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{p.username}</div>
-                    </div>
-                    <span style={{ fontSize: 20, color: C.textMuted, flexShrink: 0 }}>›</span>
-                  </div>
+                    style={{ animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}
+                    leading={<UserAvatar avatarUrl={p.avatarUrl} name={p.displayName} size={48} accent={C.accent} />}
+                    title={<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.displayName}</span>{p.isPro && <Chip tone="pro" size="sm">PRO</Chip>}</div>}
+                    subtitle={`@${p.username}`}
+                    trailing={<span style={{ fontSize: 20, color: C.textMuted }}>›</span>}
+                  />
                 ))}
               </div>
             );
@@ -11921,42 +11883,34 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
             {/* ── Normal mode ── */}
             {!reorderMode && wishlists.map((wl, i) => (
-              <div key={wl.id} onClick={() => void openWishlist(wl)} style={{
-                background: C.card, borderRadius: 16, padding: 18, cursor: 'pointer',
-                border: `1px solid ${C.border}`, animation: `fadeIn 0.3s ease ${(i + 1) * 0.08}s both`,
-                opacity: wl.readOnly ? 0.6 : 1,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: font, color: C.text }}>{wl.title}</div>
-                      {wl.readOnly && (
-                        <span style={{
-                          fontSize: 10, fontWeight: 600, padding: '2px 6px',
-                          borderRadius: 4, background: C.orangeSoft, color: C.orange,
-                        }}>{t('view_only', locale)}</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
-                      {t('wishlist_count', locale, { count: wl.itemCount, reserved: wl.reservedCount })}
-                    </div>
-                  </div>
-                  <span style={{ fontSize: 20, color: C.textMuted }}>›</span>
-                </div>
-                {wl.itemCount > 0 && (
-                  <div style={{ marginTop: 12, height: 4, borderRadius: 100, background: C.surface, overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%',
-                      width: `${(wl.reservedCount / wl.itemCount) * 100}%`,
-                      background: `linear-gradient(90deg, ${C.accent}, ${C.green})`,
-                      borderRadius: 100, transition: 'width 0.5s',
-                    }} />
-                  </div>
-                )}
-                {wl.deadline && (
-                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8 }}>📅 {fmtDeadline(wl.deadline)}</div>
-                )}
-              </div>
+              <ListRow
+                key={wl.id}
+                variant="card"
+                interactive
+                state={wl.readOnly ? 'muted' : 'neutral'}
+                onClick={() => void openWishlist(wl)}
+                style={{ animation: `fadeIn 0.3s ease ${(i + 1) * 0.08}s both` }}
+                title={<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span>{wl.title}</span>{wl.readOnly && <Chip tone="warning" size="sm">{t('view_only', locale)}</Chip>}</div>}
+                subtitle={t('wishlist_count', locale, { count: wl.itemCount, reserved: wl.reservedCount })}
+                trailing={<span style={{ fontSize: 20, color: C.textMuted }}>›</span>}
+                meta={(wl.itemCount > 0 || wl.deadline) ? (
+                  <>
+                    {wl.itemCount > 0 && (
+                      <div style={{ height: 4, borderRadius: 100, background: C.surface, overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${(wl.reservedCount / wl.itemCount) * 100}%`,
+                          background: `linear-gradient(90deg, ${C.accent}, ${C.green})`,
+                          borderRadius: 100, transition: 'width 0.5s',
+                        }} />
+                      </div>
+                    )}
+                    {wl.deadline && (
+                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>📅 {fmtDeadline(wl.deadline)}</div>
+                    )}
+                  </>
+                ) : undefined}
+              />
             ))}
 
             {!reorderMode && wishlists.length === 0 && (
@@ -18366,17 +18320,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     { ic: '📋', bg: C.surface, title: t('referral_share_sheet_copy_title', locale), sub: referralMe.link.replace(/^https?:\/\//, ''), onClick: async () => { await copyLink(); setReferralShareSheet(false); } },
                     { ic: '↗', bg: C.accentSoft, title: t('referral_share_sheet_other_title', locale), sub: t('referral_share_sheet_other_sub', locale), onClick: systemShare },
                   ].map((row, i) => (
-                    <div
+                    <ListRow
                       key={i}
+                      variant="card"
+                      interactive
                       onClick={row.onClick}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14, marginBottom: 8, borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, cursor: 'pointer' }}>
-                      <div style={{ width: 42, height: 42, borderRadius: 12, background: row.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{row.ic}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 2 }}>{row.title}</div>
-                        <div style={{ fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.sub}</div>
-                      </div>
-                      <div style={{ color: C.textMuted, fontSize: 18, flexShrink: 0 }}>›</div>
-                    </div>
+                      style={{ marginBottom: 8 }}
+                      leading={<div style={{ width: 42, height: 42, borderRadius: 12, background: row.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{row.ic}</div>}
+                      title={row.title}
+                      subtitle={row.sub}
+                      trailing={<span style={{ color: C.textMuted, fontSize: 18 }}>›</span>}
+                    />
                   ))}
                 </div>
               </div>

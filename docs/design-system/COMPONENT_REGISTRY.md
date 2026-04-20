@@ -132,17 +132,23 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
 
 ### `ListRow`
 
-- **Status:** `provisional`
+- **Status (per-variant):**
+  - `card` → **`canonical`** (promoted 2026-04-20, 5 call-sites + 3 states validated)
+  - `compact` / `plain` → `provisional`
 - **Implementation:** [packages/ui/src/ListRow.tsx](../../packages/ui/src/ListRow.tsx)
 - **Approval source:** all v2 mockups (card/compact/plain);
-  `v2-wish-state-matrix.html` (8 `state` variants)
+  `v2-wish-state-matrix.html` (8 `state` variants) +
+  [DESIGN_DECISIONS.md#2026-04-20--listrow-wave-1-adoption--card-variant-promoted-to-canonical](./DESIGN_DECISIONS.md#2026-04-20--listrow-wave-1-adoption--card-variant-promoted-to-canonical)
 - **Target visual direction:** `matches-approved-mockup`
-- **Can be promoted to canonical:** `not-yet`
-- **Promotion blockers:**
-  - State-tint matrix needs real-call-site validation (states applied
-    conditionally based on real data)
-  - 3 call-sites → 1 in `CuratedSelectionClient.tsx` only; need
-    MiniApp.tsx adoption for confidence
+- **API:** `variant / state / leading / trailing / title / subtitle / meta / interactive / style` (unchanged)
+- **Adoption:** 5 call-sites in MiniApp.tsx (referral share 3 rows,
+  curated subs, profile subs, wishlist home list, subscription home list).
+- **States validated:** `neutral` (3×), `muted` (1), `warning` (1).
+  Other states inherit by extension but are unvalidated in prod.
+- **Promotion blockers (for `compact` / `plain`):**
+  - `compact` — no real adoption yet. Candidates: reservation rows (compact dense lists), Santa participants. Future wave.
+  - `plain` — same. Candidates: settings rows, sheet inner lists.
+- **Migration notes:** `<div onClick style={{background:card, border, borderRadius, padding, display:flex, gap, cursor:pointer}}>...</div>` → `<ListRow variant="card" interactive onClick leading={...} title={...} subtitle={...} meta={...} trailing={...} />`. State-tint via `state` prop instead of inline background/opacity.
 
 ### `Banner`
 
@@ -269,13 +275,14 @@ Status updated 2026-04-19 after North Star approval.
 
 ### Completed
 - ✅ **`SectionHeader`** — canonical 2026-04-19
-- ✅ **`Banner` neutral tones** (`info` / `success` / `warning` / `danger`) — canonical 2026-04-19
+- ✅ **`Banner` neutral tones** — canonical 2026-04-19
 - ✅ **`Card` default + interactive** — canonical 2026-04-19
 - ✅ **`Chip` primitive** — canonical 2026-04-20 (15 call-sites × 4 tones)
+- ✅ **`ListRow variant="card"`** — canonical 2026-04-20 (5 call-sites + 3 states)
 
 ### Next up
 1. **`Button`** primary/secondary/ghost → after review (gap #1 `primary-gradient-deep` and gap #2 `danger-solid` to resolve separately)
-2. **`ListRow`** → after state-matrix adoption in real call-sites
+2. **`ListRow compact` / `plain`** → after adoption
 3. **`Card flat` / `current`** → after adoption validates in real surfaces
 4. **`Card variant="hero"` / `Banner tone="promo"`** → after paywall migration
 5. **`Sheet`** → after BottomSheet iOS behavior absorption

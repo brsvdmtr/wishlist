@@ -2,11 +2,12 @@ import React, { type ReactNode, type HTMLAttributes, type CSSProperties } from '
 import { colors, radius, fontSize, fontWeight, spacingSemantic, transition, gradients } from '@wishlist/ui-tokens';
 
 /**
- * @status provisional — `card` / `compact` / `plain` variants codified
- * across approved v2 mockups. `state` tint system codified in
- * `v2-wish-state-matrix.html`. Ready for canonical promotion after
- * real-call-site adoption validates the `state` × `variant` surface.
- * See `docs/design-system/COMPONENT_REGISTRY.md`.
+ * @status per-variant:
+ *   - `card` → **canonical** (2026-04-20, 5 call-sites + 3 states validated)
+ *   - `compact` / `plain` → `provisional`
+ *
+ * Approval: `DESIGN_DECISIONS.md#2026-04-20--listrow-wave-1-adoption--card-variant-promoted-to-canonical`.
+ * State-tint contract codified in `mockups/approved/v2-wish-state-matrix.html`.
  */
 export type ListRowVariant = 'card' | 'compact' | 'plain';
 
