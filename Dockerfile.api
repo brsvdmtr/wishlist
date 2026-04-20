@@ -34,10 +34,11 @@ RUN pnpm --filter @wishlist/shared build
 RUN pnpm build:api
 
 # Create non-root user with home dir (needed for Chromium) + persistent upload directory
+# /app/logs exists so bind-mounted log dir has a mount point with the right owner.
 RUN addgroup --system --gid 1001 apiuser && \
     adduser --system --uid 1001 --home /home/apiuser apiuser && \
-    mkdir -p /data/uploads /tmp/crashes && \
-    chown -R apiuser:apiuser /app /data/uploads /home/apiuser /tmp/crashes
+    mkdir -p /data/uploads /tmp/crashes /app/logs && \
+    chown -R apiuser:apiuser /app /data/uploads /home/apiuser /tmp/crashes /app/logs
 
 USER apiuser
 

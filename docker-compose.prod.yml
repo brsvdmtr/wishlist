@@ -43,6 +43,9 @@ services:
       SYSTEM_USER_EMAIL: ${SYSTEM_USER_EMAIL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_PRETTY: ${LOG_PRETTY:-false}
+      # Rotated JSON log on bind-mounted host dir — survives container recreation.
+      # Set empty (LOG_FILE_PATH=) in .env to disable.
+      LOG_FILE_PATH: ${LOG_FILE_PATH_API:-/app/logs/api.log}
       APP_RELEASE: ${APP_RELEASE:-unknown}
       UPLOAD_DIR: /data/uploads
       ONBOARDING_V2_ROLLOUT: ${ONBOARDING_V2_ROLLOUT:-ab50}
@@ -60,6 +63,7 @@ services:
       PRO_SUBSCRIPTION_PERIOD: ${PRO_SUBSCRIPTION_PERIOD:-2592000}
     volumes:
       - wishlist_uploads:/data/uploads
+      - ./logs/api:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -109,6 +113,8 @@ services:
       SITE_URL: ${SITE_URL:-${NEXT_PUBLIC_SITE_URL:-https://wishlistik.ru}}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_PRETTY: ${LOG_PRETTY:-false}
+      # Rotated JSON log on bind-mounted host dir — survives container recreation.
+      LOG_FILE_PATH: ${LOG_FILE_PATH_BOT:-/app/logs/bot.log}
       APP_RELEASE: ${APP_RELEASE:-unknown}
       ADMIN_ALERT_CHAT_IDS: ${ADMIN_ALERT_CHAT_IDS:-}
       SUPPORT_CHAT_ID: ${SUPPORT_CHAT_ID:-}
@@ -117,6 +123,8 @@ services:
       # which loads referral.ts → throws on import if salt is unset in prod.
       # MUST match the value set on the api container so hashes are consistent.
       REFERRAL_IP_HASH_SALT: ${REFERRAL_IP_HASH_SALT}
+    volumes:
+      - ./logs/bot:/app/logs
     depends_on:
       api:
         condition: service_started

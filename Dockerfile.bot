@@ -35,9 +35,10 @@ COPY apps/bot ./apps/bot
 # Build TypeScript
 RUN pnpm --filter @wishlist/bot build
 
-# Create non-root user
+# Create non-root user + empty /app/logs so bind-mounted log dir has a mount point with the right owner.
 RUN addgroup --system --gid 1001 botuser && \
     adduser --system --uid 1001 botuser && \
+    mkdir -p /app/logs && \
     chown -R botuser:botuser /app
 
 USER botuser
