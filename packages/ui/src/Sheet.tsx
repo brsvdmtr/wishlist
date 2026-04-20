@@ -83,6 +83,31 @@ export function Sheet({
     return () => el.removeEventListener('touchmove', block);
   }, [visible]);
 
+  // Keyboard-aware maxHeight: when the iOS keyboard opens,
+  // `window.visualViewport.height` shrinks. Without this effect the sheet
+  // stays at `85vh` of the original viewport, leaving a big empty dark
+  // region between content and the keyboard. We shrink the sheet to match
+  // the visual viewport — so sheet bottom sits right above the keyboard.
+  useEffect(() => {
+    if (!visible || typeof window === 'undefined') return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const sync = () => {
+      const sheet = sheetRef.current;
+      if (!sheet) return;
+      // Account for a small buffer so the handle isn't flush against the
+      // keyboard top edge. 8px matches native iOS sheet inset.
+      sheet.style.maxHeight = `${Math.floor(vv.height - 8)}px`;
+    };
+    sync();
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    return () => {
+      vv.removeEventListener('resize', sync);
+      vv.removeEventListener('scroll', sync);
+    };
+  }, [visible]);
+
   // Sheet: take FULL ownership of scrolling + swipe-to-dismiss.
   useEffect(() => {
     const sheet = sheetRef.current;
@@ -119,25 +144,42 @@ export function Sheet({
     const onMove = (e: TouchEvent) => {
       if (prevY === null || !e.touches[0]) return;
 
-      // Let iOS handle text-selection gestures in focused inputs.
+      const currentY = e.touches[0].clientY;
+      const dy = currentY - prevY;
+      const absDy = Math.abs(dy);
+
+      // If a text field is focused, give iOS ~10px to classify the gesture
+      // as text-selection. Once cumulative movement exceeds 10px, it's clearly
+      // a scroll intent — blur the field, then fall through to normal scroll
+      // handling (preventDefault + scrollTop + dismiss).
       const active = document.activeElement;
-      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-        return;
+      const fieldFocused = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+      if (fieldFocused && !blurFired) {
+        cumulativeMove += absDy;
+        if (cumulativeMove > 10) {
+          blurActiveField();
+          blurFired = true;
+          // Do NOT return — continue into normal scroll handling with the
+          // now-blurred field. Blur triggers keyboard dismiss + viewport
+          // resize; visualViewport listener updates maxHeight accordingly.
+        } else {
+          // Still below threshold — let iOS handle text selection.
+          return;
+        }
       }
 
       e.preventDefault();
 
-      const currentY = e.touches[0].clientY;
-      const dy = currentY - prevY;
       prevY = currentY;
 
       const now = performance.now();
       samples.push({ t: now, y: currentY });
       while (samples.length > 0 && now - samples[0]!.t > 100) samples.shift();
 
-      // Blur keyboard on significant scroll (not on micro-movements)
+      // Secondary blur check — when no field was focused at start but one got
+      // focused mid-gesture (unusual but possible).
       if (!blurFired) {
-        cumulativeMove += Math.abs(dy);
+        cumulativeMove += absDy;
         if (cumulativeMove > 20) {
           blurActiveField();
           blurFired = true;
