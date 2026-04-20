@@ -48,6 +48,11 @@ first with a registry entry.
 
 ## Button
 
+**Status (per-variant):** `primary` / `secondary` / `ghost` are
+**`canonical`** (promoted 2026-04-20, 12 live call-sites + 1-day haptic
+observation). `primary-gradient` / `danger` / `surface` are
+`provisional`.
+
 ```tsx
 import { Button } from '@wishlist/ui';
 

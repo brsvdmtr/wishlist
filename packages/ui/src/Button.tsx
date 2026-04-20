@@ -15,11 +15,15 @@ import {
 } from '@wishlist/ui-tokens';
 
 /**
- * @status provisional — visual contract codified in approved v2 mockups
- * (see `docs/design-system/mockups/approved/v2-home-all-tabs.html`,
- * `v2-paywall.html`, `v2-onboarding.html`, `v2-wishlist-detail-*.html`).
- * Ready for canonical promotion after adoption validates the API.
- * See `docs/design-system/COMPONENT_REGISTRY.md`.
+ * @status per-variant:
+ *   - `primary` / `secondary` / `ghost` → **canonical** (promoted 2026-04-20, 12 adoptions + 1-day haptic observation)
+ *   - `primary-gradient` / `danger` / `surface` → `provisional`
+ *
+ * Sizes (sm / md / lg), `pressedEffect`, and `haptic` behaviors are part
+ * of the canonical contract.
+ *
+ * Approval: `DESIGN_DECISIONS.md#2026-04-20--button-primarysecondaryghost-promoted-to-canonical`.
+ * Visual source of truth: every approved v2 mockup.
  */
 export type ButtonVariant = 'primary' | 'primary-gradient' | 'secondary' | 'ghost' | 'danger' | 'surface';
 export type ButtonSize = 'sm' | 'md' | 'lg';

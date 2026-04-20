@@ -39,34 +39,29 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
 
 ### `Button`
 
-- **Status:** `provisional` (Wave 1 adoption complete 2026-04-19; awaiting
-  owner review + gap resolution for canonical)
+- **Status (per-variant):**
+  - `primary` / `secondary` / `ghost` → **`canonical`** (promoted 2026-04-20 after Wave 1 + 1-day haptic observation)
+  - `primary-gradient` / `danger` / `surface` → `provisional`
 - **Implementation:** [packages/ui/src/Button.tsx](../../packages/ui/src/Button.tsx)
-- **Approval source:** `mockups/approved/v2-home-all-tabs.html`,
-  `v2-paywall.html`, `v2-onboarding.html`, `v2-wishlist-detail-*.html` —
-  all variants codified visually. Adoption validation in
-  [`DESIGN_DECISIONS.md#2026-04-19--button-wave-1-adoption-validation-not-promotion`](./DESIGN_DECISIONS.md#2026-04-19--button-wave-1-adoption-validation-not-promotion).
-- **Target visual direction:** `matches-approved-mockup` for primary /
-  secondary / ghost / size sm/md/lg; **`needs-redesign`** for danger
-  variant (current: tinted only; prod uses flat red/orange)
-- **Can be promoted to canonical:** `not-yet` — partial readiness:
-  - **READY for canonical:** `variant="primary"` (md/sm/lg), `variant="secondary"`, `variant="ghost"` — validated across 12 real call-sites
-  - **NOT READY:** `variant="primary-gradient"` (bespoke gradient stops in 3 call-sites — gap #1), `variant="danger"` (prod uses flat-fill; gap #2)
-  - Haptics need 1-2 days of prod observation
-- **Adoption:** 12 call-sites in MiniApp.tsx Wave 1. Remaining ~129
-  btnPrimary/btnSecondary/btnGhost spreads are `legacy` and migrate on touch.
-- **Promotion blockers:**
-  - (gap #1) `primary-gradient-deep` variant missing OR accept canonical-gradient visual shift on 3 call-sites
-  - (gap #2) `danger-solid` variant missing OR accept tinted-danger visual shift on confirm-dialog red/orange buttons
-  - Haptic prod observation (is `light` pulse delightful or noisy at 6+ new locations?)
-  - Owner visual review of migrated sites vs. approved mockups
-- **Migration notes:** `<button style={{...btnPrimary, padding:'8px 16px',
-  fontSize:13}}>` → `<Button variant="primary" size="sm"
-  fullWidth={false}>`. Keep `style={{...}}` for position (`flex: 1`,
-  `marginTop`, `width: N`). Drop `boxShadow: '0 2px 12px rgba(0,0,0,0.18)'`
-  overrides — Button's primary variant already has this. Drop `borderRadius: 14`
-  overrides — same. `opacity: X ? 0.6 : 1` + `disabled={X}` pattern: keep
-  inline for now (don't migrate to `loading` prop — different UX).
+- **Approval source:** every approved v2 mockup codifies variant × size
+  grid + [DESIGN_DECISIONS.md#2026-04-20--button-primarysecondaryghost-promoted-to-canonical](./DESIGN_DECISIONS.md#2026-04-20--button-primarysecondaryghost-promoted-to-canonical)
+- **Target visual direction:** `matches-approved-mockup` for canonical
+  variants; `needs-redesign` for `danger` (prod uses flat fill, not tint).
+- **API:** `variant / size / fullWidth / loading / disabled / pressedEffect / haptic / leftIcon / rightIcon / style` (unchanged since Wave 1)
+- **Adoption:** 12 call-sites in MiniApp.tsx Wave 1 (primary × 6,
+  secondary × 4, ghost × 2). Haptic validated live 1-day.
+- **Promotion blockers (for remaining variants):**
+  - **`primary-gradient`** (Gap #1): 3 prod sites use bespoke
+    gradient (accent→accentDeeper `#6B5CE7`) instead of canonical
+    (accent→accentStrong `#9B8AFF`). Options: add
+    `primary-gradient-deep` variant OR migrate with visual shift OR
+    declare "legacy bespoke" and skip.
+  - **`danger`** (Gap #2): prod uses flat `C.red` / `C.orange`.
+    Current variant is tinted-only. Need `danger-solid` variant OR
+    tone sub-prop OR accept tint-shift.
+  - **`surface`**: 0 adoptions yet. Validate via 2-3 real sites
+    first.
+- **Migration notes:** `<button style={{...btnPrimary, padding, fontSize}}>` → `<Button variant="primary" size="...">`. Keep `style` for positional overrides (flex, margin, width). Drop `boxShadow`/`borderRadius` overrides — variant provides them. `opacity: X?0.6:1 + disabled={X}` pattern: keep inline for now (loading prop shows spinner, different UX).
 
 ### `Card`
 
@@ -279,9 +274,10 @@ Status updated 2026-04-19 after North Star approval.
 - ✅ **`Card` default + interactive** — canonical 2026-04-19
 - ✅ **`Chip` primitive** — canonical 2026-04-20 (15 call-sites × 4 tones)
 - ✅ **`ListRow variant="card"`** — canonical 2026-04-20 (5 call-sites + 3 states)
+- ✅ **`Button` primary/secondary/ghost** — canonical 2026-04-20 (12 adoptions + 1-day haptic observation)
 
 ### Next up
-1. **`Button`** primary/secondary/ghost → after review (gap #1 `primary-gradient-deep` and gap #2 `danger-solid` to resolve separately)
+1. **`Button primary-gradient` + `danger` + `surface`** → gap resolution (or surface adoption)
 2. **`ListRow compact` / `plain`** → after adoption
 3. **`Card flat` / `current`** → after adoption validates in real surfaces
 4. **`Card variant="hero"` / `Banner tone="promo"`** → after paywall migration

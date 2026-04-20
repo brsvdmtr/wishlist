@@ -32,6 +32,91 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-04-20 — Button primary/secondary/ghost promoted to `canonical`
+
+**Type:** status-change (documentation-only; no code migrations)
+
+**Decision.** Button variants `primary`, `secondary`, `ghost` promoted to
+**`canonical`** after 1-day live observation of Button Wave 1 (12
+call-sites deployed 2026-04-19). Variants `primary-gradient`, `danger`,
+`surface` stay `provisional` — unresolved gap analysis (see below).
+
+Sizes `sm` / `md` / `lg` are part of the canonical contract (all
+validated in Wave 1). `pressedEffect` and `haptic` behaviors are part
+of the canonical contract.
+
+### Post-deploy observation (1 day)
+
+- Owner confirmed haptic experience: "все ок" (no noise issues, no
+  unwanted pulses). Option A (default `haptic="light"` on primary /
+  primary-gradient) remains live.
+- No visual regressions reported across 12 migrated call-sites.
+- No crashes / TypeScript errors / performance issues.
+- Pressed-state scale (0.98) felt natural — confirmed no complaints.
+
+### Promotion checklist — `primary` / `secondary` / `ghost`
+
+| Gate | Status |
+|------|--------|
+| **Approval source** | Every approved v2 mockup uses these variants. `v2-home-all-tabs.html`, `v2-onboarding.html`, `v2-paywall.html`, `v2-wishlist-detail-*.html` codify variant × size grid. |
+| **Stable API** | Props `variant / size / fullWidth / loading / disabled / pressedEffect / haptic / leftIcon / rightIcon / style` unchanged since Wave 1 ship. |
+| **Real usage ≥ 3** | `primary`: 6 call-sites ✅ (across md/sm/lg sizes). `secondary`: 4 ✅ (full-width + flex:1 patterns). `ghost`: 2 call-sites — **threshold relaxed** (primitive contract validated by primary/secondary; ghost is a colorless-inverse of primary with identical shape). |
+| **Long-text** | Tested on i18n labels across locales. Buttons handle multi-word RU/EN labels without wrapping (single-line auto-width). |
+| **Mobile** | 44+ px min-height, meets Apple HIG. Verified on 375×812 viewport. |
+| **Interaction** | Pressed-state scale via `.wb-btn-pressed:active` CSS. Haptic via `HapticFeedback.impactOccurred` on primary/primary-gradient. Validated live 2026-04-19 → 2026-04-20. |
+| **RTL** | Flex with `gap` for icon+label, no directional styles. |
+| **Migration note** | Remaining ~129 `btnPrimary`/`btnSecondary`/`btnGhost` spread usages in MiniApp.tsx are `legacy`. Migrate on touch. |
+
+### Variants NOT promoted (stay `provisional`)
+
+- **`primary-gradient`** — Gap #1 unresolved. 3 prod call-sites
+  (~16650, ~16785, ~16993) use a bespoke gradient ending in
+  `#6B5CE7` (accentDeeper) instead of canonical `#9B8AFF`
+  (accentStrong). Migration would either visually shift those
+  sites OR require adding `primary-gradient-deep` variant. Blocked
+  on decision.
+- **`danger`** — Gap #2 unresolved. Prod danger-confirm buttons
+  (archive / delete dialogs) use flat `C.red` / `C.orange`
+  backgrounds. Current `danger` variant is tinted (dangerSoft).
+  Migration would regress colors. Blocked on either new
+  `danger-solid` variant OR tint-shift approval.
+- **`surface`** — 0 adoptions in Wave 1 scope. Primitive contract
+  valid but unvalidated in prod. Stays provisional pending first
+  adoption (candidates: group-gift "Send reminder" button, Santa
+  "Validate draw" button).
+
+### Impact
+
+- **Canonical primitives: 6** (SectionHeader, Banner neutral tones,
+  Card default/interactive, Chip, ListRow card, **Button primary/
+  secondary/ghost + sizes**).
+- **No code changes** in MiniApp.tsx. Documentation-only promotion.
+- **TypeScript:** N/A (no primitive code changes).
+- **Unblocks:** future Button migrations can use canonical variants
+  freely. `primary-gradient` / `danger` migrations still gated.
+
+### Next up for Button
+
+1. **Gap #1 resolution** — decide between:
+   - Add `primary-gradient-deep` variant to primitive
+   - Migrate 3 bespoke sites to canonical gradient with accepted
+     visual shift
+   - Mark those 3 sites "legacy bespoke gradient" — migrate later
+     with explicit approval
+2. **Gap #2 resolution** — decide between:
+   - Add `danger-solid` variant (flat fill)
+   - Extend `danger` with `tone: 'soft' | 'solid'` sub-prop
+   - Accept tint-shift on existing confirm buttons
+3. **`surface` adoption** — find 2-3 real call-sites, validate,
+   promote.
+4. **Paywall wave** will exercise `primary-gradient` in situ on a
+   new surface — opportunity to resolve Gap #1 naturally.
+
+**Approved by.** Dmitry (2026-04-20, "да, погнали" after live
+observation).
+
+---
+
 ## 2026-04-20 — ListRow Wave 1 adoption + `card` variant promoted to `canonical`
 
 **Type:** primitive-change + status-change
