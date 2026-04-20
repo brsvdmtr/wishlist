@@ -42,20 +42,22 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
 - **Status (per-variant):**
   - `primary` / `secondary` / `ghost` → **`canonical`** (promoted 2026-04-20 after Wave 1 + 1-day haptic observation)
   - `primary-gradient` → **`canonical`** (promoted 2026-04-20 via paywall wave; gap #1 resolved — mockup canonicalizes 2-stop gradient)
-  - `danger` / `surface` → `provisional`
+  - `danger-solid` → **`canonical`** (promoted 2026-04-20 via destructive-confirm wave; 5 call-sites; gap #2 resolved)
+  - `danger` (soft) / `surface` → `provisional`
 - **Implementation:** [packages/ui/src/Button.tsx](../../packages/ui/src/Button.tsx)
 - **Approval source:** every approved v2 mockup codifies variant × size
   grid + [DESIGN_DECISIONS.md#2026-04-20--paywall-b-full-full-redesign-to-match-approved-v2-paywallhtml--yearly-pro-plan](./DESIGN_DECISIONS.md#2026-04-20--paywall-b-full-full-redesign-to-match-approved-v2-paywallhtml--yearly-pro-plan)
 - **Target visual direction:** `matches-approved-mockup` for canonical
   variants; `needs-redesign` for `danger` (prod uses flat fill, not tint).
 - **API:** `variant / size / fullWidth / loading / disabled / pressedEffect / haptic / leftIcon / rightIcon / style` (unchanged since Wave 1)
-- **Adoption:** 13 call-sites in MiniApp.tsx (Wave 1: primary × 6,
-  secondary × 4, ghost × 2; Paywall wave: primary-gradient × 1 sticky
-  CTA + ghost × 1 "Not now"). Haptic validated live.
+- **Adoption:** 18 call-sites in MiniApp.tsx (Wave 1: primary × 6,
+  secondary × 4, ghost × 2; Paywall wave: primary-gradient × 1 +
+  ghost × 1; Destructive-confirm wave: danger-solid × 5). Haptic
+  validated live.
 - **Promotion blockers (for remaining variants):**
-  - **`danger`** (Gap #2): prod uses flat `C.red` / `C.orange`.
-    Current variant is tinted-only. Need `danger-solid` variant OR
-    tone sub-prop OR accept tint-shift.
+  - **`danger`** (soft tint): 0 adoptions. Kept provisional until
+    a real soft-danger surface appears (tinted inline hint rather
+    than flat confirm CTA).
   - **`surface`**: 0 adoptions yet. Validate via 2-3 real sites
     first.
 - **Legacy sites (migrate on touch):** 3 prod bespoke `primary-gradient-deep`
@@ -279,9 +281,10 @@ Status updated 2026-04-19 after North Star approval.
 - ✅ **`Button` primary/secondary/ghost** — canonical 2026-04-20 (12 adoptions + 1-day haptic observation)
 - ✅ **`Button primary-gradient`** — canonical 2026-04-20 (paywall sticky CTA; gap #1 closed)
 - ✅ **`Card variant="hero"`** — canonical 2026-04-20 (paywall hero; hero-class primitives are 1-per-surface)
+- ✅ **`Button danger-solid`** — canonical 2026-04-20 (5 destructive-confirm dialogs; gap #2 closed)
 
 ### Next up
-1. **`Button danger` + `surface`** → gap #2 resolution (or surface adoption)
+1. **`Button danger` (soft) + `surface`** → adoption-blocked (0 call-sites for soft-danger tint; `surface` awaits real usage)
 2. **`ListRow compact` / `plain`** → after adoption
 3. **`Card flat` / `current`** → after adoption validates in real surfaces
 4. **`Banner tone="promo"`** → after promo-banner surface surfaces

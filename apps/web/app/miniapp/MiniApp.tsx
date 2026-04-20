@@ -3612,13 +3612,13 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
             );
           })()}
 
-          {/* ── Sticky footer: primary CTA + ghost + trust row ── */}
+          {/* ── Footer: primary CTA + "Not now" ghost ──
+              NOT position:sticky — sheet manages its own scroll and a
+              sticky footer with a transparent gradient was showing
+              underlying content bleed-through at the end of scroll. */}
           <div style={{
-            position: 'sticky', bottom: 0,
-            marginTop: 20, marginLeft: -16, marginRight: -16,
-            padding: '16px 16px 8px',
-            background: `linear-gradient(to top, ${C.card} 75%, transparent)`,
-            display: 'flex', flexDirection: 'column', gap: 6,
+            marginTop: 22,
+            display: 'flex', flexDirection: 'column', gap: 8,
           }}>
             <Button
               variant="primary-gradient" size="lg"
@@ -3631,9 +3631,6 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
             <Button variant="ghost" size="md" onClick={onClose}>
               {t('upsell_not_now', locale)}
             </Button>
-            <div style={{ textAlign: 'center', fontSize: 11, color: C.textMuted, marginTop: -2 }}>
-              {selectedPlan === 'yearly' ? t('paywall_trust_yearly', locale) : t('paywall_trust', locale)}
-            </div>
           </div>
         </div>
       )}
@@ -20828,24 +20825,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <p style={{ margin: 0, fontSize: 14, color: C.textSec, lineHeight: 1.5 }}>
             {t('drafts_bulk_delete_desc', locale)}
           </p>
-          <button
-            style={{
-              ...btnPrimary,
-              background: C.red, width: '100%', padding: '14px 0', fontSize: 15,
-              opacity: draftsBulkLoading ? 0.6 : 1,
-            }}
+          <Button
+            variant="danger-solid" size="md"
             disabled={draftsBulkLoading}
+            loading={draftsBulkLoading}
             onClick={() => void handleBulkDelete()}
           >
-            {draftsBulkLoading ? '…' : t('drafts_bulk_delete_cta', locale, { n: draftsSelected.length })}
-          </button>
-          <button
-            style={{ ...btnGhost, width: '100%', padding: '14px 0', fontSize: 15, color: C.textMuted }}
+            {t('drafts_bulk_delete_cta', locale, { n: draftsSelected.length })}
+          </Button>
+          <Button
+            variant="ghost" size="md"
             disabled={draftsBulkLoading}
             onClick={() => setShowBulkDeleteConfirm(false)}
           >
             {t('drafts_cancel_select', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -20859,24 +20853,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <p style={{ margin: 0, fontSize: 14, color: C.textSec, lineHeight: 1.5 }}>
             {t('archive_bulk_delete_desc', locale)}
           </p>
-          <button
-            style={{
-              ...btnPrimary,
-              background: C.red, width: '100%', padding: '14px 0', fontSize: 15,
-              opacity: archiveBulkLoading ? 0.6 : 1,
-            }}
+          <Button
+            variant="danger-solid" size="md"
             disabled={archiveBulkLoading}
+            loading={archiveBulkLoading}
             onClick={() => void handleBulkHardDelete()}
           >
-            {archiveBulkLoading ? '…' : t('archive_bulk_delete_cta', locale, { n: archiveSelected.length })}
-          </button>
-          <button
-            style={{ ...btnGhost, width: '100%', padding: '14px 0', fontSize: 15, color: C.textMuted }}
+            {t('archive_bulk_delete_cta', locale, { n: archiveSelected.length })}
+          </Button>
+          <Button
+            variant="ghost" size="md"
             disabled={archiveBulkLoading}
             onClick={() => setShowArchiveBulkDeleteConfirm(false)}
           >
             {t('archive_cancel_select', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -20892,18 +20883,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <p style={{ margin: 0, fontSize: 14, color: C.textSec, lineHeight: 1.5 }}>
                 {t('archive_purge_step1_desc', locale)}
               </p>
-              <button
-                style={{ ...btnPrimary, background: C.red, width: '100%', padding: '14px 0', fontSize: 15 }}
+              <Button
+                variant="danger-solid" size="md"
                 onClick={() => setArchivePurgeStep(2)}
               >
                 {t('archive_purge_btn', locale)}
-              </button>
-              <button
-                style={{ ...btnGhost, width: '100%', padding: '14px 0', fontSize: 15, color: C.textMuted }}
+              </Button>
+              <Button
+                variant="ghost" size="md"
                 onClick={() => { setShowArchivePurgeConfirm(false); setArchivePurgeStep(1); }}
               >
                 {t('archive_cancel_select', locale)}
-              </button>
+              </Button>
             </>
           ) : (
             <>
@@ -20912,24 +20903,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   n: archiveMode === 'global' ? globalArchiveItems.length : archiveItems.length,
                 })}
               </p>
-              <button
-                style={{
-                  ...btnPrimary,
-                  background: C.red, width: '100%', padding: '14px 0', fontSize: 15,
-                  opacity: archiveBulkLoading ? 0.6 : 1,
-                }}
+              <Button
+                variant="danger-solid" size="md"
                 disabled={archiveBulkLoading}
+                loading={archiveBulkLoading}
                 onClick={() => void handlePurgeArchive()}
               >
-                {archiveBulkLoading ? '…' : t('archive_purge_cta', locale)}
-              </button>
-              <button
-                style={{ ...btnGhost, width: '100%', padding: '14px 0', fontSize: 15, color: C.textMuted }}
+                {t('archive_purge_cta', locale)}
+              </Button>
+              <Button
+                variant="ghost" size="md"
                 disabled={archiveBulkLoading}
                 onClick={() => setArchivePurgeStep(1)}
               >
                 ← {t('archive_cancel_select', locale)}
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -21358,13 +21346,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <Button variant="secondary" fullWidth={false} style={{ flex: 1 }} onClick={() => setShowCatDelete(null)}>
               {t('wl_cancel', locale)}
             </Button>
-            <button
-              style={{ ...btnPrimary, flex: 1, background: C.red, opacity: catDeleteLoading ? 0.6 : 1 }}
+            <Button
+              variant="danger-solid" size="md" fullWidth={false} style={{ flex: 1 }}
               onClick={() => void handleCatDelete()}
               disabled={catDeleteLoading}
+              loading={catDeleteLoading}
             >
-              {catDeleteLoading ? '…' : t('cat_delete', locale)}
-            </button>
+              {t('cat_delete', locale)}
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -23344,9 +23333,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           if (upsellSheet) trackEvent(`pro_sheet_dismissed_${upsellSheet.context}`);
           setUpsellSheet(null);
         }}
-        onUpgrade={() => {
-          if (upsellSheet) trackEvent(`pro_cta_clicked_${upsellSheet.context}`);
-          void handleUpgradeToPro();
+        onUpgrade={(plan) => {
+          if (upsellSheet) trackEvent(`pro_cta_clicked_${upsellSheet.context}`, { plan });
+          void handleUpgradeToPro(plan);
         }}
         checkoutLoading={checkoutLoading}
         onBuyAddon={handleBuyAddon}

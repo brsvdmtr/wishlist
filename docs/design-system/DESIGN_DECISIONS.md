@@ -249,6 +249,95 @@ yearly→monthly, no refund, reminders yes).
 
 ---
 
+## 2026-04-20 — Paywall hotfix + Button `danger-solid` promoted to canonical (gap #2 closed)
+
+**Type:** bug-fix + status-change + primitive-change
+
+**Decision.** Three paywall hotfixes + `Button` variant `danger-solid`
+added and promoted to canonical in one ship.
+
+### Paywall hotfixes (from user QA)
+
+1. **Sticky footer bleed-through.** The `position: sticky` bottom bar
+   with `linear-gradient(to top, card 75%, transparent)` was showing
+   underlying content through the 25% transparent portion at end-of-
+   scroll, producing a visible "hole". **Fix:** dropped `position:
+   sticky` entirely — the footer is now an inline block at the end of
+   content. Works cleanly with the BottomSheet's own scroll.
+2. **Yearly checkout failed ("что-то пошло не так").** Root cause:
+   parent-level `onUpgrade={() => handleUpgradeToPro()}` was an
+   arrow function that **ignored the `plan` argument**, so every CTA
+   click (monthly OR yearly) sent `plan: 'monthly'` to the backend.
+   Selecting yearly in the UI had no effect on the actual invoice.
+   **Fix:** `onUpgrade={(plan) => handleUpgradeToPro(plan)}`.
+3. **Trust line "💳 ⭐ Stars · Отмена в любой момент" removed** —
+   user feedback: takes too much vertical space without adding value.
+
+### `Button` variant `danger-solid` → canonical (gap #2 closed)
+
+Added new variant `danger-solid` (flat `colors.danger` fill + white
+text + `shadows.elevated`). Prod has always used this pattern for
+destructive-confirm CTAs (bulk delete, archive purge, category
+delete) — previously inlined via `{ ...btnPrimary, background: C.red }`.
+
+**Migrated 5 call-sites in a single wave:**
+- Draft bulk delete confirm
+- Archive bulk hard-delete confirm
+- Archive purge step 1 confirm
+- Archive purge step 2 confirm
+- Category delete confirm
+
+All 5 are destructive-confirm dialog buttons. The primitive's
+contract (flat fill + elevated shadow + white text) matches prod
+exactly — zero visual regression on migration.
+
+### Promotion checklist — Button `danger-solid`
+
+| Gate | Status |
+|------|--------|
+| Approval source | Prod-proven pattern used consistently for destructive-confirm across 5+ sites since app launch. No mockup regression — mockups use the same flat red. |
+| Stable API | Same as other Button variants — no divergence. |
+| Real usage ≥ 3 | 5 call-sites migrated in this PR. ✅ |
+| Long-text | Tested with `drafts_bulk_delete_cta`, `archive_bulk_delete_cta`, `archive_purge_cta` — all fit within md-size button. |
+| Mobile | `size="md"` = 44+ px min-height. Meets HIG. |
+| Interaction | Standard Button pressed-state; `loading` prop shows spinner. Haptic is not defaulted on danger (don't want to encourage confirmation by feel). |
+| RTL | Flex layout, inherited from Button base. |
+| Guidance | `danger-solid` for dialog confirm CTA; `danger` (soft) stays provisional until a real soft-danger surface appears. |
+
+### Soft `danger` stays `provisional`
+
+No real call-site for the soft-tinted `danger` variant yet. Prod only
+uses the solid pattern for destructive actions. The soft variant is
+reserved for cases like "cancel reservation" inline hints where
+flat-red would feel aggressive — but we don't have one yet. Stays
+provisional pending first real adoption.
+
+### Impact
+
+- **Primitives promoted:** Button.danger-solid (canonical).
+- **Call-site migrations:** 5 destructive-confirm dialogs now use
+  primitive. Raw `btnPrimary + background: C.red` pattern removed
+  from those sites.
+- **Audit trajectory:** −5 raw inline-style blocks; −10 raw `C.red`
+  uses across those sites.
+- **Remaining `C.red`/`C.redSoft` uses** in MiniApp.tsx are now
+  *non-CTA* (status badges, chips, error banners, avatar frames —
+  legitimate non-button surfaces).
+
+### Next up
+
+1. **Live observation** — watch that yearly checkout now creates a
+   yearly invoice (payload `pro_yearly:*`, price 800⭐).
+2. **`danger` (soft) adoption or deprecation** — if no soft-danger
+   surface materializes in next wave, consider removing from the
+   variant union.
+3. Remaining gaps from Paywall B-full still open (Button `surface`,
+   ListRow `compact`/`plain`, Card `flat`/`current`, Sheet absorption).
+
+**Approved by.** Dmitry (2026-04-20, "пофикси это и давай Gap #2").
+
+---
+
 ## 2026-04-20 — ListRow Wave 1 adoption + `card` variant promoted to `canonical`
 
 **Type:** primitive-change + status-change

@@ -18,15 +18,22 @@ import {
  * @status per-variant:
  *   - `primary` / `secondary` / `ghost` → **canonical** (promoted 2026-04-20, 12 adoptions + 1-day haptic observation)
  *   - `primary-gradient` → **canonical** (promoted 2026-04-20 via paywall wave; gap #1 resolved — mockup canonicalizes 2-stop gradient)
- *   - `danger` / `surface` → `provisional`
+ *   - `danger-solid` → **canonical** (promoted 2026-04-20 via destructive-confirm wave; gap #2 resolved — flat fill for confirm CTAs)
+ *   - `danger` (soft/tinted) / `surface` → `provisional`
  *
  * Sizes (sm / md / lg), `pressedEffect`, and `haptic` behaviors are part
  * of the canonical contract.
  *
+ * Destructive-action guidance:
+ *   - `danger-solid`: confirm CTA inside a destructive dialog ("Delete 5 items", "Purge archive").
+ *     Paired with a cancel Button in the same dialog.
+ *   - `danger` (soft): inline destructive hint or secondary in a non-dialog context
+ *     (pending real adoption — currently 0 call-sites).
+ *
  * Approval: `DESIGN_DECISIONS.md#2026-04-20--paywall-b-full-full-redesign-to-match-approved-v2-paywall.html--yearly-pro-plan`.
  * Visual source of truth: every approved v2 mockup.
  */
-export type ButtonVariant = 'primary' | 'primary-gradient' | 'secondary' | 'ghost' | 'danger' | 'surface';
+export type ButtonVariant = 'primary' | 'primary-gradient' | 'secondary' | 'ghost' | 'danger' | 'danger-solid' | 'surface';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
@@ -77,7 +84,11 @@ const variantStyles: Record<ButtonVariant, CSSProperties> = {
   },
   secondary: { background: colors.accentSoft, color: colors.accent },
   ghost: { background: colors.transparent, color: colors.textMuted },
+  /** Soft danger — tinted background. For inline "maybe destructive" actions (e.g. "Snooze"). */
   danger: { background: colors.dangerSoft, color: colors.danger },
+  /** Solid danger — flat fill. Canonical for destructive-confirm CTAs
+   *  (bulk delete, purge archive, category delete, account delete). */
+  'danger-solid': { background: colors.danger, color: colors.white, boxShadow: shadows.elevated },
   /** Surface = card-colored with border; secondary-neutral actions. */
   surface: { background: colors.card, color: colors.text, border: `1px solid ${colors.border}` },
 };
