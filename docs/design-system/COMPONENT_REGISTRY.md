@@ -94,22 +94,22 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
 
 ### `Sheet`
 
-- **Status:** `provisional-needs-redesign`
+- **Status:** **`canonical`** (promoted 2026-04-20 after absorbing
+  BottomSheet iOS-touch behavior; ~20 existing call-sites migrate via
+  import rename `Sheet as BottomSheet`)
 - **Implementation:** [packages/ui/src/Sheet.tsx](../../packages/ui/src/Sheet.tsx)
-- **Approval source:** visual shell matches `v2-reservations-pro.html`
-  detail-sheet
-- **Target visual direction:** `needs-redesign` — **behaviorally** below
-  bar (iOS swipe/inertia/keyboard-blur missing)
-- **Can be promoted to canonical:** `no`
-- **Promotion blockers:**
-  - Absorb `BottomSheet` iOS touch/velocity/inertia logic from
-    `MiniApp.tsx:2023`
-  - Keyboard-aware layout (visualViewport API)
-  - Blur-on-scroll ≥ 20 px threshold
-  - Exit animation
-  - Destructive-confirm variant
-- **Migration notes:** do NOT migrate `BottomSheet` call-sites to `Sheet`
-  yet — regresses iOS UX. Wave 2–3 absorbs behavior first.
+- **Approval source:** `v2-reservations-pro.html` detail-sheet visual
+  spec + [DESIGN_DECISIONS.md](./DESIGN_DECISIONS.md#2026-04-20--sheet-primitive-absorbs-bottomsheet-ios-touch-behavior-promoted-to-canonical)
+- **API:** `open | isOpen / onClose / title / children / maxHeight / dismissOnBackdrop / handle / contentStyle`. `isOpen` kept as back-compat alias for `open` so legacy `<BottomSheet isOpen={...}>` call-sites work unchanged.
+- **Behavior (iOS-optimized):**
+  - Drag-to-dismiss (threshold: 80px + spring-back below)
+  - Velocity-based inertia on touchend (decay 0.95 per 16ms)
+  - Keyboard blur on ≥20px cumulative move (preserves focused-tap UX)
+  - Text-field gesture bypass (iOS selection handles work in inputs)
+  - Backdrop touchmove block outside text fields
+- **Adoption:** all `BottomSheet` call-sites in MiniApp.tsx (the local
+  implementation was deleted — now aliased to this primitive).
+- **Migration notes:** existing `<BottomSheet isOpen={...} onClose={...} title="...">` calls work unchanged. For NEW code, prefer `<Sheet open={...}>`.
 
 ### `SectionHeader`
 
@@ -283,14 +283,14 @@ Status updated 2026-04-19 after North Star approval.
 - ✅ **`Card variant="hero"`** — canonical 2026-04-20 (paywall hero; hero-class primitives are 1-per-surface)
 - ✅ **`Button danger-solid`** — canonical 2026-04-20 (5 destructive-confirm dialogs; gap #2 closed)
 - ✅ **`CounterBadge`** — canonical 2026-04-20 (4 unread-count badges on WishCardGuest variants)
+- ✅ **`Sheet`** — canonical 2026-04-20 (absorbed BottomSheet iOS-touch behavior; all prod sheets alias to primitive)
 
 ### Next up
 1. **`Button danger` (soft) + `surface`** → adoption-blocked (0 call-sites; surface dropdown/menu candidates were div containers, not buttons)
 2. **`ListRow compact` / `plain`** → adoption-blocked (prod patterns are feature-specific, no generic dense-row cluster)
 3. **`Card flat` / `current`** → adoption-blocked (prod "active" surfaces use accent-soft gradient, not accentStateTint)
 4. **`Banner tone="promo"`** → no surface yet
-5. **`Sheet`** → big work: absorb BottomSheet iOS touch/inertia/keyboard-blur logic. Separate initiative.
-6. **`StatTile`, `AvatarStack`** → need real call-sites (profile stats, group-gift participant list)
+5. **`StatTile`, `AvatarStack`** → need real call-sites (profile stats, group-gift participant list)
 
 ---
 

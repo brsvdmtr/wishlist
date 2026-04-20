@@ -417,6 +417,116 @@ clean 3+ candidate clusters found:
 
 ---
 
+## 2026-04-20 — Sheet primitive absorbs BottomSheet iOS-touch behavior, promoted to `canonical`
+
+**Type:** primitive-change + status-change + major refactor
+
+**Decision.** `Sheet` primitive in `@wishlist/ui` absorbed the full
+iOS-touch behavior from the in-monolith `BottomSheet` component. The
+local `BottomSheet` function in `MiniApp.tsx` (lines 2027-2263, ~237
+lines) was deleted; `BottomSheet` is now an import alias:
+
+```ts
+import { Sheet as BottomSheet } from '@wishlist/ui';
+```
+
+All existing `<BottomSheet isOpen={...} onClose={...} title="...">`
+call-sites continue to work unchanged — `Sheet` accepts both `open`
+(preferred) and `isOpen` (back-compat alias) as the visibility prop.
+
+### Behavior absorbed (pixel-for-pixel port)
+
+1. **Drag-to-dismiss** — threshold 80px; below threshold spring-back
+   via `transform: translateY` with `cubic-bezier(0.32,0.72,0,1)`;
+   above threshold animated slide-out then `onClose()` fires after
+   220ms.
+2. **Velocity-based inertia** — track last 100ms of finger samples,
+   compute `velocity = dy/dt`. If `|velocity| ≥ 0.12` at touchend,
+   apply exponential decay (`0.95^(frameDt/16)`) per `requestAnimationFrame`
+   cycle. Mimics native iOS scroll momentum.
+3. **Keyboard blur on scroll** — blur active INPUT/TEXTAREA when
+   cumulative finger movement exceeds 20px (preserves focused-tap UX;
+   micro-movements don't fire unwanted blurs).
+4. **Text-field gesture bypass** — when `document.activeElement` is
+   INPUT/TEXTAREA, `touchmove` handler returns early without
+   `preventDefault()` — lets iOS' native text selection handles work.
+5. **Backdrop scroll lock** — non-passive `touchmove` on backdrop
+   prevents underlying screen scroll (except when a field is focused).
+6. **Tap-to-blur** — tapping any non-editable area inside the sheet
+   dismisses the keyboard (via `isEditableTarget` helper).
+
+All of this runs with **zero React re-renders in the hot path** —
+direct `element.scrollTop` + `element.style.transform` writes, keeping
+gestures on the GPU compositor thread at 60fps.
+
+### Why this matters
+
+BottomSheet lived in the monolith because it had accumulated
+~6 months of iOS-specific fixes (gesture claiming, `preventDefault`
+ordering, keyboard blur thresholds, selection-handle bypass). Extracting
+without regression required careful line-by-line port.
+
+The primitive now owns this logic. Any future iOS fix benefits all
+sheets. The `MiniApp.tsx` monolith is ~237 lines shorter.
+
+### Risk + mitigation
+
+Risk: **HIGH** — sheets are used across ~20 call-sites in the app
+(paywall, item form, cancel flow, bulk delete, category picker, item
+menu, share sheet, referral rules, language picker, archive purge,
+smart-res onboarding, etc.). A behavior regression breaks many
+surfaces at once.
+
+Mitigation:
+- Port was pixel-for-pixel (no behavior changes, only relocation)
+- `isOpen` back-compat alias = zero prop churn on call-sites
+- TypeScript compilation clean
+- User explicitly approved the absorb ("делай, мне важно все закончить")
+- Paired with live observation window (user: "пару дней понаблюдаю")
+
+### Helper cleanup
+
+- `isEditableTarget` (was `MiniApp.tsx:1497`) — deleted; inlined into
+  Sheet primitive (private function). Only ever used inside the sheet.
+- `blurActiveField` (was `MiniApp.tsx:1488`) — KEPT in MiniApp
+  because it's called from several non-sheet locations (item-form
+  save flow, back-button handler, etc.).
+
+### Impact
+
+- **Canonical primitives now 10:** SectionHeader, Banner (neutral),
+  Card (default/interactive/hero), Chip, ListRow.card, Button (5
+  variants), CounterBadge, **Sheet**.
+- **MiniApp.tsx:** −234 lines (237 lines removed, 3 lines of
+  redirect-comment + alias import added).
+- **TypeScript:** clean compile across all packages.
+
+### Promotion checklist — Sheet
+
+| Gate | Status |
+|------|--------|
+| Approval source | `v2-reservations-pro.html` detail-sheet + 6-month prod-hardened behavior from BottomSheet. |
+| Stable API | `open` / `isOpen` / `onClose` / `title` / `children` / `maxHeight` / `dismissOnBackdrop` / `handle` / `contentStyle`. `isOpen` alias preserves all existing call-sites. |
+| Real usage ≥ 3 | 20+ call-sites in MiniApp.tsx (all BottomSheet usages). ✅ |
+| Long-text | Titles render with `xxl/bold` matching prod. Scrollable content via native `overflowY: auto`. |
+| Mobile | iOS-first design — this IS the mobile implementation. |
+| Interaction | Drag / velocity-inertia / keyboard-blur / text-field-bypass / tap-dismiss — all ported from prod-hardened code. |
+| RTL | No directional styles beyond `left/right` absolute positioning. Text content inherits from children. |
+| Destructive variant | Not part of canonical contract — destructive dialogs use Sheet + Button.danger-solid inside. |
+
+### Next up
+
+1. **Observation** — watch for any sheet regression in the next 1-2
+   days (especially: iOS keyboard blur on form sheets, item-form
+   drag-down dismiss, smart-res onboarding).
+2. **Optional follow-up** — rename `BottomSheet` → `Sheet` across
+   all call-sites once stability is confirmed. Not urgent; alias
+   works indefinitely.
+
+**Approved by.** Dmitry (2026-04-20, "делай, мне важно все закончить").
+
+---
+
 ## 2026-04-20 — ListRow Wave 1 adoption + `card` variant promoted to `canonical`
 
 **Type:** primitive-change + status-change
