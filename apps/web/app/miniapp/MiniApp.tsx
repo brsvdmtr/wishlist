@@ -24212,18 +24212,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 3 }}>
                 <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{c.title}</span>
-                {/* Role pill */}
-                <span style={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
-                  padding: '2px 6px', borderRadius: 5,
-                  background: c._role === 'organizer' ? `${C.accent}18` : `${C.textMuted}14`,
-                  color: c._role === 'organizer' ? C.accent : C.textMuted,
-                  flexShrink: 0,
-                }}>
+                {/* Role pill — canonical Chip primitive (v2-santa-campaign). */}
+                <Chip tone={c._role === 'organizer' ? 'accent' : 'surface'} size="sm">
                   {c._role === 'organizer'
                     ? t('santa_role_organizer', locale)
                     : t('santa_role_member', locale)}
-                </span>
+                </Chip>
               </div>
               <div style={{ fontSize: 12, color: C.textMuted }}>
                 {t('santa_campaign_participants', locale, { count: c.participantCount })}
