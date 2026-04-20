@@ -189,17 +189,13 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
     canonical by extension (inherit primitive contract)
 - **Migration notes:** `<span style={{ padding, borderRadius, background, color, fontSize, fontWeight }}>` → `<Chip tone="..." size="...">`. Use `size="lg"` for 13-px status pills (pill-radius), default (md) for 11-px badges. Accept minor visual shifts to canonical tokens.
 
-### `LockedTile` (new, 2026-04-20)
+### `LockedTile`
 
-- **Status:** `provisional` (1 call-site, needs observation)
+- **Status:** **`canonical`** (promoted 2026-04-20, 3 adoptions)
 - **Implementation:** [packages/ui/src/LockedTile.tsx](../../packages/ui/src/LockedTile.tsx)
-- **Approval source:** `v2-home-all-tabs.html` Wishlists-tab limit upsell + Reservations-tab history upsell. Soft inline paywall nudge, NOT a modal.
-- **Target visual direction:** `matches-approved-mockup`
+- **Approval source:** `v2-home-all-tabs.html` Wishlists-tab limit upsell + Reservations-tab history upsell.
 - **API:** `icon / title / subtitle? / ctaLabel / onClick? / style?`
-- **Adoption:** 1 call-site — wishlist-limit upsell on Home › Wishlists tab (replaces plain `btnGhost Connect PRO` + plan-status text).
-- **Promotion blockers:**
-  - Needs ≥3 call-sites (reservation-history, item-limit, subscription-limit, etc.)
-  - Live observation after H2 deploy to verify tone feels right (not aggressive)
+- **Adoption:** 3 call-sites — (1) Home › Wishlists wishlist-limit, (2) Wishlist-detail owner item-limit, (3) Home › Reservations history upsell for FREE.
 - **Migration notes:** use for INLINE soft upsells ("limit reached / feature gated") where a full paywall modal would be too intrusive. Pair with `showUpsell(<context>)` or `setUpsellSheet({ context })` callback.
 
 ### `CounterBadge`
@@ -215,15 +211,21 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
   with 22×22 size override via `style`.
 - **Migration notes:** `<span style={{ position:'absolute', top:-6, right:-6, background: C.orange/C.red, ... }}>{n}</span>` → `<CounterBadge count={n} tone="warning|danger" style={{ minWidth: X, height: X }} />`. Parent MUST have `position: relative`. Primitive defaults to `top:-6, right:-6` — override via `style` if different (e.g. inside-card positioning uses `top:6, right:6`).
 
-### `StatTile` (new, 2026-04-19)
+### `StatTile`
 
-- **Status:** `provisional`
+- **Status:** **`canonical`** (promoted 2026-04-20, 3 adoptions)
 - **Implementation:** [packages/ui/src/StatTile.tsx](../../packages/ui/src/StatTile.tsx)
-- **Approval source:** `v2-wishlist-detail-owner.html`,
-  `v2-secret-reservation.html` (inline variant)
-- **Target visual direction:** `matches-approved-mockup`
-- **Can be promoted to canonical:** `not-yet`
-- **Promotion blockers:** brand new; need 3+ surfaces using it
+- **Approval source:** `v2-wishlist-detail-owner.html` stat-row,
+  `v2-reservations-pro.html` summary, referral-program hero.
+- **API:** `n / label / tone ('neutral'|'accent'|'success'|'warning'|'danger') / inline? / style?`
+- **Adoption:** 3 call-sites — (1) Wishlist-detail owner header
+  (total/reserved/purchased), (2) Home › Reservations hero
+  (active/secret/history), (3) Referral hero stats (invited/
+  in-progress/reward-days).
+- **Migration notes:** use for number-prominent tiles in hero/summary
+  contexts. For inline number+label pairs in compact rows, don't
+  use — just inline span + fontSize. StatTile implies equal-width
+  flex tile with accent border+tint.
 
 ### `AvatarStack` (new, 2026-04-19)
 
@@ -297,13 +299,23 @@ Status updated 2026-04-19 after North Star approval.
 - ✅ **`Button danger-solid`** — canonical 2026-04-20 (5 destructive-confirm dialogs; gap #2 closed)
 - ✅ **`CounterBadge`** — canonical 2026-04-20 (4 unread-count badges on WishCardGuest variants)
 - ✅ **`Sheet`** — canonical 2026-04-20 (absorbed BottomSheet iOS-touch behavior; all prod sheets alias to primitive)
+- ✅ **`StatTile`** — canonical 2026-04-20 (3 adoptions: wishlist-detail owner, reservations hero, referral hero)
+- ✅ **`LockedTile`** — canonical 2026-04-20 (3 adoptions: wishlist-limit, item-limit, res-history upsell)
 
-### Next up
-1. **`Button danger` (soft) + `surface`** → adoption-blocked (0 call-sites; surface dropdown/menu candidates were div containers, not buttons)
-2. **`ListRow compact` / `plain`** → adoption-blocked (prod patterns are feature-specific, no generic dense-row cluster)
-3. **`Card flat` / `current`** → adoption-blocked (prod "active" surfaces use accent-soft gradient, not accentStateTint)
-4. **`Banner tone="promo"`** → no surface yet
-5. **`StatTile`, `AvatarStack`** → need real call-sites (profile stats, group-gift participant list)
+### Not-yet-canonical (classified by reason)
+
+**Adoption-blocked by prod reality** (prod doesn't have the surface, or uses a drifted pattern):
+1. **`Card current`** — 2/3 adoptions (guest owner-card + purchased-toggle). Needs 1 more. Close to canonical.
+2. **`Card flat`** — 0 adoptions. Prod "card-bg no-border" pattern drifts from primitive.
+3. **`ListRow compact` / `plain`** — 0 adoptions. Prod rows are feature-specific.
+4. **`AvatarStack`** — 0 adoptions. Needs real multi-participant data surfaces (shared wishlists, group-gift contributors).
+
+**Candidates for deprecation** (6 months prod history, no adoption):
+5. **`Button danger` (soft/tinted)** — prod destructive buttons all use `danger-solid`. Soft variant has no real use case. Flag for deprecation in next governance review.
+6. **`Banner tone="promo"`** — no promo-banner surface has materialized. Gradient-promo role is filled by Card.hero (paywall hero) and Chip.pro (inline badges). Flag for deprecation.
+
+**Blocked by product decision**:
+7. **`Button surface`** — candidates are `div` containers (item-menu dropdown), not buttons. Would need a dedicated "Menu item" primitive instead.
 
 ---
 

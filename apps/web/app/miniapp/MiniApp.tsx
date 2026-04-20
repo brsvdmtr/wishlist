@@ -10438,14 +10438,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ))}
         </div>
 
-        <button onClick={() => { void updateOnboardingStep('onboarding-create-wishlist'); setScreen('onboarding-create-wishlist'); }}
-          style={{
-            width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
-            background: 'linear-gradient(135deg, #7c6aff, #a855f7)', color: '#fff', fontSize: 17, fontWeight: 700,
-            cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgba(124,106,255,0.4)', marginTop: 16,
-          }}>
-          {t('onboarding_success_continue', locale)}
-        </button>
+        <div style={{ marginTop: 16 }}>
+          <Button
+            variant="primary-gradient"
+            size="lg"
+            onClick={() => { void updateOnboardingStep('onboarding-create-wishlist'); setScreen('onboarding-create-wishlist'); }}
+          >
+            {t('onboarding_success_continue', locale)}
+          </Button>
+        </div>
         <button onClick={() => { setOnboardingTryUrl(''); setOnboardingTryError(null); setScreen('onboarding-try'); }}
           style={{
             width: '100%', padding: '14px 0', borderRadius: 16, background: 'rgba(255,255,255,0.06)',
@@ -10477,18 +10478,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {/* PRIMARY: Add manually */}
-          <button onClick={() => {
-            trackEvent('onboarding_recovery_manual');
-            trackEvent('onboarding_try_import_fallback_to_manual', { entry: 'recovery_screen' });
-            void updateOnboardingStep('onboarding-manual', 'manual');
-            setScreen('onboarding-manual');
-          }} style={{
-            width: '100%', padding: '16px 0', borderRadius: 16, border: 'none',
-            background: 'linear-gradient(135deg, #7c6aff, #a855f7)', color: '#fff', fontSize: 16, fontWeight: 700,
-            cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgba(124,106,255,0.4)',
-          }}>
+          <Button
+            variant="primary-gradient"
+            size="lg"
+            onClick={() => {
+              trackEvent('onboarding_recovery_manual');
+              trackEvent('onboarding_try_import_fallback_to_manual', { entry: 'recovery_screen' });
+              void updateOnboardingStep('onboarding-manual', 'manual');
+              setScreen('onboarding-manual');
+            }}
+          >
             ✏️ {t('onboarding_recovery_manual', locale)}
-          </button>
+          </Button>
           {/* SECONDARY: Choose from catalog */}
           <button onClick={() => {
             trackEvent('onboarding_recovery_catalog');
@@ -12377,6 +12378,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: C.accent, color: '#fff', boxShadow: `0 4px 16px ${C.accentGlow}` }}>⭐ {t('res_pro_upsell_btn', locale)}</span>
                     </div>
                   )}
+                  {/* History LockedTile — v2-home-all-tabs reservations-tab
+                      inline upsell for FREE. Sits at bottom of Active list. */}
+                  {!reservationPro && (reservations.length + secretReservations.length > 0) && (
+                    <LockedTile
+                      icon="📜"
+                      title={t('locked_history_title', locale)}
+                      subtitle={t('locked_history_sub', locale)}
+                      ctaLabel={t('locked_cta_unlock', locale)}
+                      onClick={() => setUpsellSheet({ context: 'reservation_pro' })}
+                      style={{ marginTop: 8 }}
+                    />
+                  )}
                 </div>
               )}
 
@@ -14089,11 +14102,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               );
             })()}
 
-            {!itemReorderMode && !catReorderMode && !currentWl.readOnly && (
-              <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
-                {t('items_limit_status', locale, { count: items.length, max: planLimits.items + (addOns.extraItemsPerWishlist?.[currentWl.id] ?? 0) })}
-              </div>
-            )}
+            {!itemReorderMode && !catReorderMode && !currentWl.readOnly && (() => {
+              const maxItems = planLimits.items + (addOns.extraItemsPerWishlist?.[currentWl.id] ?? 0);
+              const atLimit = planInfo.code === 'FREE' && items.length >= maxItems;
+              if (atLimit) {
+                return (
+                  <LockedTile
+                    icon="🔒"
+                    title={t('locked_items_title', locale, { count: String(items.length), max: String(maxItems) })}
+                    subtitle={t('locked_items_sub', locale, { proMax: '50' })}
+                    ctaLabel={t('locked_cta_unlock', locale)}
+                    onClick={() => showUpsell('item_limit', { wishlistId: currentWl.id })}
+                    style={{ marginTop: 8 }}
+                  />
+                );
+              }
+              return (
+                <div style={{ textAlign: 'center', padding: '4px 0', fontSize: 12, color: C.textMuted }}>
+                  {t('items_limit_status', locale, { count: items.length, max: maxItems })}
+                </div>
+              );
+            })()}
           </div>
 
         </div>
@@ -14996,12 +15025,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
                     {/* Status section */}
                     <div style={sectionLabel}>{t('res_detail_status_label', locale)}</div>
-                    <div
+                    <Card
+                      variant="current"
+                      padding="sm"
                       onClick={() => setResPurchasedConfirmItem(resItem)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10,
-                        padding: 12, borderRadius: 12, cursor: 'pointer',
-                        background: C.accentSoft, border: '1px solid rgba(124,106,255,0.2)',
+                        cursor: 'pointer',
                       }}
                     >
                       <span style={{ fontSize: 20 }}>✓</span>
@@ -15023,7 +15053,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
                         }} />
                       </div>
-                    </div>
+                    </Card>
 
                     {/* Note section */}
                     <div style={{ ...sectionLabel, marginTop: 18 }}>{t('res_detail_note_label', locale)}</div>
@@ -18067,27 +18097,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               )}
             </div>
 
-            {/* ── Stats strip (only when has progress) ────────────────── */}
+            {/* ── Stats strip (only when has progress) — StatTile primitive ── */}
             {hasInvited && (
               <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                <div style={{ flex: 1, padding: '14px 10px', borderRadius: 14, background: C.accentSoft, border: `1px solid ${C.accent}28`, textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, lineHeight: 1 }}>{referralMe.stats.totalAttributions}</div>
-                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
-                    {t('referral_stat_invited', locale)}
-                  </div>
-                </div>
-                <div style={{ flex: 1, padding: '14px 10px', borderRadius: 14, background: C.surface, border: `1px solid ${C.border}`, textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: C.text, lineHeight: 1 }}>{referralMe.stats.pendingActivation + referralMe.stats.qualified}</div>
-                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
-                    {t('referral_stat_in_progress', locale)}
-                  </div>
-                </div>
-                <div style={{ flex: 1, padding: '14px 10px', borderRadius: 14, background: C.greenSoft, border: `1px solid rgba(52,211,153,0.25)`, textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: C.green, lineHeight: 1 }}>+{totalRewardDays}</div>
-                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
-                    {t('referral_stat_reward_days', locale)}
-                  </div>
-                </div>
+                <StatTile
+                  n={referralMe.stats.totalAttributions}
+                  label={t('referral_stat_invited', locale)}
+                  tone="accent"
+                />
+                <StatTile
+                  n={referralMe.stats.pendingActivation + referralMe.stats.qualified}
+                  label={t('referral_stat_in_progress', locale)}
+                  tone="neutral"
+                />
+                <StatTile
+                  n={`+${totalRewardDays}`}
+                  label={t('referral_stat_reward_days', locale)}
+                  tone="success"
+                />
               </div>
             )}
 

@@ -2,11 +2,14 @@ import React, { type CSSProperties, type ReactNode } from 'react';
 import { colors, radius, fontSize, fontWeight } from '@wishlist/ui-tokens';
 
 /**
- * @status provisional — compact number + label tile.
+ * @status **canonical** (2026-04-20, 3 adoptions: wishlist-detail-owner
+ * header, reservations-tab hero, referral-home stats strip).
  *
  * Source: approved `v2-wishlist-detail-owner.html` stat-row (12 желаний /
- * 4 забронировано / 2 куплено). Also `v2-secret-reservation.html`
- * hero-meta row (5 активных / 2 требуют внимания).
+ * 4 забронировано / 2 куплено), `v2-reservations-pro.html` summary,
+ * referral-program hero metrics.
+ *
+ * Approval: `DESIGN_DECISIONS.md#2026-04-20--stattile-promoted-to-canonical`.
  */
 export type StatTileTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
 

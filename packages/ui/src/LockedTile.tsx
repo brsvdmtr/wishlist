@@ -2,7 +2,11 @@ import React, { type ReactNode, type HTMLAttributes, type CSSProperties } from '
 import { colors, radius, fontSize, fontWeight, fontFamily } from '@wishlist/ui-tokens';
 
 /**
- * @status provisional — inline "limit reached / feature gated" upsell tile.
+ * @status **canonical** (2026-04-20, 3 adoptions: wishlist-limit on
+ * Home.Wishlists, item-limit on WishlistDetail.Owner, reservations-
+ * history on Home.Reservations).
+ *
+ * Inline "limit reached / feature gated" upsell tile.
  * Soft paywall nudge that sits inline in list flow, NOT a modal.
  *
  * Approval source: `v2-home-all-tabs.html` Wishlists-tab limit tile

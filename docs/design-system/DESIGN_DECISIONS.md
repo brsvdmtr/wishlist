@@ -595,6 +595,95 @@ fall back to EN via existing `t()` chain.
 
 ---
 
+## 2026-04-20 — Close-out: StatTile + LockedTile → canonical; 5 variants reclassified
+
+**Type:** status-change + governance
+
+**Decision.** End-of-day close-out of adoption work:
+
+### Promoted to `canonical`
+
+- **StatTile** — 3 adoptions: wishlist-detail-owner header (total/
+  reserved/purchased, W6), reservations-tab hero (active/secret/
+  history, W9), referral-program hero stats strip (invited/progress/
+  reward-days, close-out).
+- **LockedTile** — 3 adoptions: wishlist-limit on Home.Wishlists (H2),
+  item-limit on WishlistDetail.Owner (close-out), reservations-history
+  inline upsell on Home.Reservations (close-out).
+
+Canonical primitives now **12**: SectionHeader, Banner, Card (default/
+interactive/hero), Chip, ListRow.card, Button (primary/secondary/
+ghost/primary-gradient/danger-solid), CounterBadge, Sheet, **StatTile,
+LockedTile**.
+
+### Reclassified (still provisional or flagged for deprecation)
+
+- **Card.current** — 2/3 adoptions (guest owner-card W7 + res-detail
+  purchased-toggle close-out). One shy of canonical. Close to promote
+  on next wave.
+- **Card.flat** — 0 adoptions. Prod "card-bg no-border" pattern drifts
+  from primitive spec. Requires either primitive adjustment or a new
+  surface that uses the surface-bg variant.
+- **ListRow.compact / plain** — 0 adoptions. Prod rows are all
+  feature-specific. May never promote; consider removing from union
+  if still unused in 30 days.
+- **AvatarStack** — 0 adoptions. Needs real multi-participant data
+  (shared wishlists, group-gift contributors). Blocked on schema/data
+  work that doesn't exist yet.
+- **Button.danger (soft)** — 0 adoptions. Prod destructive-confirm all
+  use `danger-solid`. **Flagged for deprecation** in next governance
+  review (30-day window from today).
+- **Banner.promo** — 0 adoptions. Promo role filled by Card.hero
+  (paywall hero) and Chip.pro. **Flagged for deprecation.**
+- **Button.surface** — 0 adoptions. Dropdown candidates are `div`
+  containers, not buttons. Needs a new "Menu item" primitive, not
+  this variant.
+
+### Onboarding CTA migrations
+
+2 onboarding CTAs migrated from hardcoded gradients to
+`Button.primary-gradient`:
+- onboarding-success "Continue" button
+- onboarding-recovery "Add manually" primary
+
+4 other onboarding CTAs (catalog/create-wishlist/share/retry) kept
+for future wave — they have conditional disabled-state logic that
+requires careful migration.
+
+### Impact
+
+- Canonical primitives: 10 → **12**
+- Inline-style migrations: ~8 sites (referral stats, wishlist-limit,
+  item-limit, reservations-hero, res-purchased toggle, onboarding
+  CTAs × 2, card-current variants)
+- Docs updated: `COMPONENT_REGISTRY.md` with classification of
+  remaining provisional primitives and explicit "deprecation candidate"
+  flags for Button.danger-soft and Banner.promo.
+
+### What's honestly NOT done (deferred)
+
+Body-level migrations of 20+ hours remain untouched:
+- Wish-state-matrix card variants (6+ tint variants: reserved-public-
+  by-me green, smart-active/expiring borders, group-gift pink, santa
+  blue, diff-warning amber, conflict danger)
+- Wishlist-detail owner body (meta-chips row, category headers,
+  settings row)
+- Wishlist-detail guest items-list state rendering
+- Onboarding 4 sub-screen CTAs (catalog/create-wl/share/retry)
+- Reservations-pro full card variants (smart TTL progress bar, group-
+  gift fraction, expiring warning, purchased strike-through)
+- Secret-reservation 5 derivedState card variants
+- Showcase-profile cover gradient, bio layout, pinned wishlists
+- Santa-campaign detail (participants list, draw animations)
+- Group-gift progress bar, participants list, pinned info
+
+These are best tackled screen-by-screen with explicit scope approval
+from owner. Estimated: 20-30h honest work.
+
+**Approved by.** Dmitry (2026-04-20, "закрывай все оставшееся").
+
+---
+
 ## 2026-04-20 — ListRow Wave 1 adoption + `card` variant promoted to `canonical`
 
 **Type:** primitive-change + status-change
