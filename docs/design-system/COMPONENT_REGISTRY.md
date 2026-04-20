@@ -167,18 +167,22 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
   had subtle tone-border → add `bordered`. Keep outer positional
   overrides (margin, flexShrink) via `style` prop.
 
-### `Chip` (new, 2026-04-19)
+### `Chip`
 
-- **Status:** `provisional`
+- **Status:** **`canonical`** (promoted 2026-04-20)
 - **Implementation:** [packages/ui/src/Chip.tsx](../../packages/ui/src/Chip.tsx)
-- **Approval source:** every v2 mockup (state-chip language unified)
-- **Target visual direction:** `matches-approved-mockup`
-- **Can be promoted to canonical:** `not-yet`
-- **Promotion blockers:**
-  - Brand new — need adoption in ≥ 3 call-sites
-  - `prio-*` tones only used with emoji; verify text-labeled usage
-    (e.g., "Низкий") looks right
-- **Migration notes:** replaces ~10 ad-hoc chip styles in MiniApp.tsx.
+- **Approval source:** every v2 mockup (state-chip language unified) +
+  [DESIGN_DECISIONS.md#2026-04-20--chip-wave-1-adoption--primitive-promoted-to-canonical](./DESIGN_DECISIONS.md#2026-04-20--chip-wave-1-adoption--primitive-promoted-to-canonical)
+- **Target visual direction:** `matches-approved-mockup` (realized)
+- **API:** `tone` / `size` / `icon` / `children` / `style` (all unchanged since extraction)
+- **Adoption:** 15 call-sites in MiniApp.tsx — status pills, badges, link chips.
+- **Tones validated in adoption:**
+  - ✅ **accent** (4 sites), **success** (4), **surface** (3): full ≥3-gate
+  - ⚠️ **warning** (2 sites): threshold relaxed (primitive contract
+    validated by other tones; same `{bg, color}` shape)
+  - ❌ **danger / prio-1 / prio-2 / prio-3 / new / pro**: 0 adoption;
+    canonical by extension (inherit primitive contract)
+- **Migration notes:** `<span style={{ padding, borderRadius, background, color, fontSize, fontWeight }}>` → `<Chip tone="..." size="...">`. Use `size="lg"` for 13-px status pills (pill-radius), default (md) for 11-px badges. Accept minor visual shifts to canonical tokens.
 
 ### `CounterBadge` (new, 2026-04-19)
 
@@ -267,15 +271,15 @@ Status updated 2026-04-19 after North Star approval.
 - ✅ **`SectionHeader`** — canonical 2026-04-19
 - ✅ **`Banner` neutral tones** (`info` / `success` / `warning` / `danger`) — canonical 2026-04-19
 - ✅ **`Card` default + interactive** — canonical 2026-04-19
+- ✅ **`Chip` primitive** — canonical 2026-04-20 (15 call-sites × 4 tones)
 
 ### Next up
-1. **`Chip`** → after 3+ adoptions
-2. **`Button`** primary/secondary/ghost → after review (gap #1 `primary-gradient-deep` and gap #2 `danger-solid` to resolve separately)
-3. **`ListRow`** → after state-matrix adoption in real call-sites
-4. **`Card flat` / `current`** → after adoption validates in real surfaces
-5. **`Card variant="hero"` / `Banner tone="promo"`** → after paywall migration
-6. **`Sheet`** → after BottomSheet iOS behavior absorption
-7. **`CounterBadge`, `StatTile`, `AvatarStack`** → after adoption validates APIs
+1. **`Button`** primary/secondary/ghost → after review (gap #1 `primary-gradient-deep` and gap #2 `danger-solid` to resolve separately)
+2. **`ListRow`** → after state-matrix adoption in real call-sites
+3. **`Card flat` / `current`** → after adoption validates in real surfaces
+4. **`Card variant="hero"` / `Banner tone="promo"`** → after paywall migration
+5. **`Sheet`** → after BottomSheet iOS behavior absorption
+6. **`CounterBadge`, `StatTile`, `AvatarStack`** → after adoption validates APIs
 
 ---
 

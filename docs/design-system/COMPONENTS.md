@@ -349,6 +349,9 @@ Wave 1.
 
 ## Chip
 
+**Status: `canonical`** (promoted 2026-04-20 — 15 live call-sites across
+accent / success / warning / surface tones).
+
 ```tsx
 import { Chip } from '@wishlist/ui';
 

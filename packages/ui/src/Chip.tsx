@@ -2,12 +2,11 @@ import React, { type ReactNode, type HTMLAttributes, type CSSProperties } from '
 import { colors, radius, fontSize, fontWeight, gradients, shadows } from '@wishlist/ui-tokens';
 
 /**
- * @status provisional — unified chip component replacing ~10 ad-hoc
- * chip styles across approved mockups. Tones: neutral, accent, success,
- * warning, danger, surface, prio-1/2/3, new, pro.
+ * @status **canonical** (2026-04-20, 15 live call-sites across 4 tones).
+ * Unified chip replacing ad-hoc chip styles across the monolith.
  *
- * Source-of-truth: state-chip language in every approved v2 mockup.
- * See `docs/design-system/COMPONENTS.md#chip`.
+ * Approval: `DESIGN_DECISIONS.md#2026-04-20--chip-wave-1-adoption--primitive-promoted-to-canonical`.
+ * Visual source of truth: every approved v2 mockup.
  */
 export type ChipTone =
   | 'accent'

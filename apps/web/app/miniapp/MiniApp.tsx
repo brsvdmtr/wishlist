@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, SectionHeader } from '@wishlist/ui';
+import { Banner, Button, Card, Chip, SectionHeader } from '@wishlist/ui';
 import { initSentry, captureException } from './sentry';
 
 // ═══════════════════════════════════════════════════════
@@ -2334,11 +2334,11 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel 
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
-          {item.url && <span style={{ fontSize: 11, color: C.textMuted, background: C.surface, padding: '2px 8px', borderRadius: 6 }}>{t('link_label', locale)}</span>}
+          {item.url && <Chip tone="surface">{t('link_label', locale)}</Chip>}
         </div>
         <div style={{ marginTop: 10 }}>
-          {isReserved && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600 }}>{t('status_someone_reserved', locale)}</span>}
-          {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>{t('status_gifted', locale)}</span>}
+          {isReserved && <Chip tone="accent" size="lg">{t('status_someone_reserved', locale)}</Chip>}
+          {isPurchased && <Chip tone="success" size="lg">{t('status_gifted', locale)}</Chip>}
         </div>
         {sourceLabel && (
           <div style={{ marginTop: 6 }}>
@@ -2385,7 +2385,7 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
-          {item.url && <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, color: C.accent, background: C.accentSoft, padding: '2px 8px', borderRadius: 6, textDecoration: 'none' }}>{t('link_label', locale)}</a>}
+          {item.url && <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none' }}><Chip tone="accent">{t('link_label', locale)}</Chip></a>}
         </div>
         <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {item.status === 'available' && !secretByMe && (
@@ -2404,18 +2404,18 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
           )}
           {isReservedByMe && (
             <>
-              <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>
+              <Chip tone="success" size="lg">
                 {t('reserved_by_me', locale)}
-              </span>
+              </Chip>
               <button onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ background: 'none', border: 'none', padding: '6px 8px', fontSize: 12, color: C.textMuted, cursor: 'pointer', fontFamily: font }}>{t('cancel', locale)}</button>
             </>
           )}
           {isReserved && !isReservedByMe && (
-            <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.orangeSoft, color: C.orange, fontSize: 13, fontWeight: 600 }}>
+            <Chip tone="warning" size="lg">
               {t('already_reserved', locale)}
-            </span>
+            </Chip>
           )}
-          {isPurchased && <span style={{ display: 'inline-block', padding: '6px 12px', borderRadius: 10, background: C.greenSoft, color: C.green, fontSize: 13, fontWeight: 600 }}>{t('status_gifted', locale)}</span>}
+          {isPurchased && <Chip tone="success" size="lg">{t('status_gifted', locale)}</Chip>}
         </div>
       </div>
     </Card>
@@ -2873,12 +2873,9 @@ function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, anim
             </span>
           )}
           {item.groupGiftRole ? (
-            <span style={{
-              fontSize: 11, background: C.accentSoft, color: C.accent,
-              padding: '2px 8px', borderRadius: 6, fontWeight: 600,
-            }}>
-              👥 {t('gg_reservation_badge', locale)}
-            </span>
+            <Chip tone="accent" icon="👥">
+              {t('gg_reservation_badge', locale)}
+            </Chip>
           ) : (
             <span style={{
               fontSize: 11, background: C.greenSoft, color: C.green,
@@ -12406,11 +12403,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                       </div>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                                         {item.groupGiftRole ? (
-                                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: C.accentSoft, color: C.accent, display: 'inline-flex', alignItems: 'center', gap: 3 }}>👥 {t('gg_reservation_badge', locale)}</span>
+                                          <Chip tone="accent" icon="👥">{t('gg_reservation_badge', locale)}</Chip>
                                         ) : item.meta?.purchased ? (
-                                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: C.accentSoft, color: C.accent, display: 'inline-flex', alignItems: 'center', gap: 3 }}>✓ {t('res_purchased', locale)}</span>
+                                          <Chip tone="accent" icon="✓">{t('res_purchased', locale)}</Chip>
                                         ) : (
-                                          <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>✓ {t('reservations_reserved', locale)}</span>
+                                          <Chip tone="success" icon="✓">{t('reservations_reserved', locale)}</Chip>
                                         )}
                                         {item.price != null && (
                                           <span style={{ fontSize: 13, fontWeight: 600, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>
@@ -15319,9 +15316,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <span style={{ fontSize: 14, color: C.textSec }}>
                     {sel.items.length} {locale === 'ru' ? (sel.items.length === 1 ? 'желание' : sel.items.length < 5 ? 'желания' : 'желаний') : (sel.items.length === 1 ? 'wish' : 'wishes')}
                   </span>
-                  <span style={{ fontSize: 12, color: '#FBBF24', background: 'rgba(251,191,36,0.1)', padding: '2px 8px', borderRadius: 6 }}>
+                  <Chip tone="warning" style={{ fontWeight: 600 }}>
                     {t('curated_public_valid_until', locale, { date: expiryDate })}
-                  </span>
+                  </Chip>
                 </div>
 
                 {/* Subscribe/Unsubscribe button — only for non-owners */}
@@ -16296,10 +16293,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
                           {item.status === 'completed' && (
-                            <span style={{ fontSize: 11, background: C.greenSoft, color: C.green, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_received', locale)}</span>
+                            <Chip tone="success">{t('archive_received', locale)}</Chip>
                           )}
                           {item.status === 'deleted' && (
-                            <span style={{ fontSize: 11, background: C.surface, color: C.textMuted, padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{t('archive_deleted', locale)}</span>
+                            <Chip tone="surface">{t('archive_deleted', locale)}</Chip>
                           )}
                           {item.price != null && <span style={{ fontSize: 13, color: C.textMuted }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
                         </div>
@@ -22006,9 +22003,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       </div>
                     </div>
                     {isArchived && (
-                      <span style={{ fontSize: 11, color: C.textMuted, background: C.surface, padding: '2px 8px', borderRadius: 6 }}>
+                      <Chip tone="surface">
                         {t('wl_transfer_archived', locale)}
-                      </span>
+                      </Chip>
                     )}
                     {!isArchived && !hasSpace && (
                       <span style={{ fontSize: 11, color: C.red }}>

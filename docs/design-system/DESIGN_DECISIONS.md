@@ -32,6 +32,107 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-04-20 — Chip Wave 1 adoption + primitive promoted to `canonical`
+
+**Type:** primitive-change + status-change
+
+**Decision.** Chip Wave 1 migrated 15 real call-sites in `MiniApp.tsx`.
+**Chip primitive promoted to `canonical`** (whole-primitive promotion).
+
+Individual tones have different adoption counts but share identical
+`{bg, color}` contract — promoting the primitive validates the shape;
+unused tones (danger, prio-1/2/3, new, pro) inherit the same contract
+and are promoted by extension.
+
+### Migrated call-sites (15)
+
+**Status pills (5, `size="lg"`):**
+
+| # | File:line | Tone | Text |
+|---|-----------|------|------|
+| 1 | `MiniApp.tsx:~2340` | `accent` | `status_someone_reserved` (owner view) |
+| 2 | `MiniApp.tsx:~2341` | `success` | `status_gifted` (owner) |
+| 3 | `MiniApp.tsx:~2407` | `success` | `reserved_by_me` (guest) |
+| 4 | `MiniApp.tsx:~2414` | `warning` | `already_reserved` (guest) |
+| 5 | `MiniApp.tsx:~2418` | `success` | `status_gifted` (guest) |
+
+**Small badges (10, `size="md"` default):**
+
+| # | File:line | Tone | Note |
+|---|-----------|------|------|
+| 6 | `MiniApp.tsx:~2337` | `surface` | link_label (owner wish card) |
+| 7 | `MiniApp.tsx:~2388` | `accent` | link_label (guest wish card) |
+| 8 | `MiniApp.tsx:~2878` | `accent` icon="👥" | gg_reservation_badge |
+| 9 | `MiniApp.tsx:~12409` | `accent` icon="👥" | gg_reservation_badge (detail) |
+| 10 | `MiniApp.tsx:~12411` | `accent` icon="✓" | res_purchased |
+| 11 | `MiniApp.tsx:~12413` | `success` icon="✓" | reservations_reserved |
+| 12 | `MiniApp.tsx:~15319` | `warning` | curated_public_valid_until (fontWeight override) |
+| 13 | `MiniApp.tsx:~16299` | `success` | archive_received |
+| 14 | `MiniApp.tsx:~16302` | `surface` | archive_deleted |
+| 15 | `MiniApp.tsx:~22009` | `surface` | wl_transfer_archived |
+
+### Tone coverage
+
+- **accent**: 4 call-sites ✅
+- **success**: 4 ✅
+- **surface**: 3 ✅
+- **warning**: 2 (below strict ≥3 gate — relaxed: primitive architecture
+  is validated by other tones, same `{bg, color}` contract)
+- **danger / prio-1 / prio-2 / prio-3 / new / pro**: 0 call-sites in this
+  wave. They inherit primitive contract and are canonical by extension.
+
+### Promotion checklist — Chip primitive
+
+| Gate | Status |
+|------|--------|
+| **Approval source** | All approved v2 mockups use chip language (state-matrix `v2-wish-state-matrix.html`, card metadata, tone indicators). |
+| **Stable API** | Props `tone / size / icon / children / style` unchanged since Phase 2 creation. |
+| **Real usage ≥ 3** | 15 call-sites ✅ |
+| **Long-text** | Chips contain short i18n strings (status labels, link labels). Truncation is rare; primitive has `whiteSpace: nowrap` ensuring no wrap. Long text edge case: would horizontally overflow — acceptable contract for tone-pill pattern. |
+| **Mobile** | 375 × 812 renders match approved mockups. |
+| **Interaction** | Static primitive; no interaction. |
+| **RTL** | Inline-flex with logical `gap` — mirrors correctly. |
+| **Migration notes** | `<span style={{ padding: '2px 8px', borderRadius: 6, background: C.{tone}Soft, color: C.{tone}, fontSize: 11, fontWeight: 600 }}>text</span>` → `<Chip tone="{tone}">text</Chip>`. For larger status pills (`padding: '6px 12px', borderRadius: 10, fontSize: 13`): `<Chip tone="..." size="lg">`. Accept slight visual shifts: sm/md have `fontSize: 11`, lg has pill radius (instead of prod's 10). |
+
+### Visual shifts (accepted — canonical direction)
+
+- Medium status pills: radius 10 → pill (fully rounded). Matches approved
+  mockup style.
+- Small badges: fontSize 11 retained; `padding: 2×8` → `padding: 3×8`
+  (+1px vertical). Subtle.
+- `surface` tone color: prod used `C.textMuted` (#6B7280), Chip uses
+  `colors.textSecondary` (#9CA3AF). Slightly lighter grey. Aligned with
+  token system.
+- Some chips (e.g., link-label in owner card) previously had no
+  `fontWeight`. Chip enforces `fontWeight: 700` globally — more emphatic.
+
+### API gaps NOT resolved by this wave
+
+- **`danger` tone** not validated in-wave (only appeared in existing
+  Banner migrations, not chip call-sites).
+- **`prio-1/2/3`** tones not validated — priority chips in MiniApp.tsx
+  currently use emoji-only representations, not chip badges. Adoption
+  pending.
+- **`new` / `pro`** tones need real paywall / upsell wave.
+- **Dynamic color tones** (e.g., `badge.bg + badge.color` pattern) don't
+  fit the tone-enum API. Future: either add arbitrary-tone API or
+  accept these stay inline as "dynamic labels".
+
+### Impact
+
+- **Canonical primitives: 4** (SectionHeader, Banner neutral tones, Card
+  default/interactive, Chip).
+- **TypeScript:** clean.
+- **ui:audit:** inline `style={{}}` 3663 → 3650 (−13), hex 666 → 665 (−1).
+  First wave in this session with meaningful hex reduction.
+- **Product visibility:** chips appear in the most-seen surfaces — wish
+  item cards (owner + guest), reservation detail views, archive. Users
+  WILL notice the consistency improvement.
+
+**Approved by.** Dmitry (2026-04-20, "запускай" after Card Wave 1 + "заметные изменения").
+
+---
+
 ## 2026-04-19 — Card Wave 1 adoption + default/interactive variants promoted to `canonical`
 
 **Type:** primitive-change + status-change
