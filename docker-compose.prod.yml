@@ -51,6 +51,13 @@ services:
       MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
       GOD_MODE_TELEGRAM_IDS: ${GOD_MODE_TELEGRAM_IDS:-}
       MINI_APP_URL: ${MINI_APP_URL:-https://wishlistik.ru/miniapp}
+      # PRO pricing overrides (defaults matched in apps/api/src/index.ts).
+      # Allows ops to A/B-test price or run temporary low-price test purchases
+      # without a redeploy — edit /opt/wishlist/.env + restart api.
+      PRO_PRICE_XTR: ${PRO_PRICE_XTR:-100}
+      PRO_YEARLY_PRICE_XTR: ${PRO_YEARLY_PRICE_XTR:-800}
+      PRO_YEARLY_EXTEND_SECONDS: ${PRO_YEARLY_EXTEND_SECONDS:-31536000}
+      PRO_SUBSCRIPTION_PERIOD: ${PRO_SUBSCRIPTION_PERIOD:-2592000}
     volumes:
       - wishlist_uploads:/data/uploads
     depends_on:
