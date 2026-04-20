@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, Chip, CounterBadge, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet } from '@wishlist/ui';
+import { Banner, Button, Card, Chip, CounterBadge, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile } from '@wishlist/ui';
 import { initSentry, captureException } from './sentry';
 
 // ═══════════════════════════════════════════════════════
@@ -13509,19 +13509,28 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ══════════════════════════════════════════════ */}
       {screen === 'wishlist-detail' && currentWl && (
         <div style={{ padding: '16px 20px', paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))' }}>
-          {/* ── Wishlist detail header ── */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
-            {/* Left: title + meta */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h1 style={{
-                fontSize: 20, fontWeight: 700, fontFamily: font, color: C.text, margin: 0,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-                overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3,
-              }}>{currentWl.title}</h1>
-              <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0' }}>
-                {t('wishes_count', locale, { count: items.length > 0 ? items.length : (loading || itemsLoadFailed) ? currentWl.itemCount : 0 })}
-                {currentWl.deadline && ` • ${fmtDeadline(currentWl.deadline)}`}
-              </p>
+          {/* ── Wishlist detail header (v2-wishlist-detail-owner.html) ──
+              Left: 48×48 accent-soft emoji thumb + title + deadline subtitle.
+              Right: share / manage action stack. */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 12,
+                background: C.accentSoft,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 24, flexShrink: 0,
+              }}>{getEmoji(currentWl.title)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h1 style={{
+                  fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0,
+                  letterSpacing: '-0.02em', lineHeight: 1.15,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>{currentWl.title}</h1>
+                {currentWl.deadline && (
+                  <p style={{ fontSize: 13, color: C.textSec, margin: '2px 0 0' }}>{fmtDeadline(currentWl.deadline)}</p>
+                )}
+              </div>
             </div>
             {/* Right: vertical action stack */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
@@ -13542,6 +13551,29 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </button>
             </div>
           </div>
+
+          {/* ── Stat tiles row — total / reserved / purchased ──
+              Adopts StatTile primitive (v2-wishlist-detail-owner mockup
+              stat-row). Counts from items list when loaded, fallback to
+              server itemCount/reservedCount before load. */}
+          {(() => {
+            const loaded = items.length > 0;
+            const total = loaded ? items.length : currentWl.itemCount;
+            const reserved = loaded
+              ? items.filter((it) => it.status === 'reserved' || it.status === 'purchased').length
+              : currentWl.reservedCount;
+            const purchased = loaded ? items.filter((it) => it.status === 'purchased').length : 0;
+            if (total === 0) return null;
+            return (
+              <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+                <StatTile n={total} label={t('wl_stat_wishes', locale)} tone="neutral" />
+                <StatTile n={reserved} label={t('wl_stat_reserved', locale)} tone="success" />
+                {purchased > 0 && (
+                  <StatTile n={purchased} label={t('wl_stat_purchased', locale)} tone="accent" />
+                )}
+              </div>
+            );
+          })()}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {currentWl.readOnly && (
