@@ -2062,7 +2062,8 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel 
       onClick={() => onTap(item)}
       style={{
         display: 'flex', gap: 14, alignItems: 'flex-start',
-        opacity: isPurchased ? 0.5 : 1,
+        // Match v2-wish-state-matrix .faint = opacity 0.55 (owner purchased).
+        opacity: isPurchased ? 0.55 : 1,
         WebkitTapHighlightColor: 'transparent',
       }}
     >
@@ -2074,21 +2075,13 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel 
             color: isPurchased ? C.textMuted : C.text,
             textDecoration: isPurchased ? 'line-through' : 'none',
             lineHeight: 1.3, paddingRight: 8,
+            display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
           }}>
-            {item.title}
+            <span>{item.title}</span>
             {(item.placementCount ?? 1) > 1 && (
-              <span
-                title={locale === 'ru' ? 'Общее желание — в нескольких списках' : 'Shared wish — in multiple wishlists'}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 3,
-                  marginLeft: 6, padding: '1px 6px', borderRadius: 6,
-                  fontSize: 10, fontWeight: 700, lineHeight: 1.2,
-                  color: C.accent, background: C.accentSoft,
-                  verticalAlign: 'baseline', whiteSpace: 'nowrap',
-                }}
-              >
+              <Chip tone="accent" size="sm">
                 🔗 {locale === 'ru' ? 'В ' : 'In '}{item.placementCount}
-              </span>
+              </Chip>
             )}
           </div>
           <span style={{
@@ -2132,7 +2125,8 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
       onClick={() => onTap(item)}
       style={{
         display: 'flex', gap: 14, alignItems: 'flex-start',
-        opacity: isPurchased ? 0.5 : 1,
+        // Match v2-wish-state-matrix .faint-strong = opacity 0.45 (guest purchased).
+        opacity: isPurchased ? 0.45 : 1,
         WebkitTapHighlightColor: 'transparent',
       }}
     >
@@ -2158,15 +2152,7 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
             <Button variant="primary" size="sm" fullWidth={false} onClick={(e) => { e.stopPropagation(); onReserve(item); }}>{t('reserve_btn', locale)}</Button>
           )}
           {secretByMe && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: '6px 12px', borderRadius: 10,
-              background: 'rgba(167,139,250,0.14)', color: '#A78BFA',
-              border: '1px solid rgba(167,139,250,0.25)',
-              fontSize: 13, fontWeight: 600,
-            }}>
-              {t('sr_card_chip_secret', locale)}
-            </span>
+            <Chip tone="accent" size="lg">{t('sr_card_chip_secret', locale)}</Chip>
           )}
           {isReservedByMe && (
             <>
@@ -2177,7 +2163,9 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
             </>
           )}
           {isReserved && !isReservedByMe && (
-            <Chip tone="warning" size="lg">
+            /* Match mockup: "⏳ уже забронировано" is muted-neutral, not a warning.
+               Intent: out-of-pool for me, not an alert. */
+            <Chip tone="surface" size="lg">
               {t('already_reserved', locale)}
             </Chip>
           )}
