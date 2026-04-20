@@ -4491,6 +4491,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [allItems, setAllItems] = useState<AllItem[]>([]);
   const [allItemsLoading, setAllItemsLoading] = useState(false);
   const [allItemsPriorityFilter, setAllItemsPriorityFilter] = useState<number | null>(null);
+  const [allItemsStatusFilter, setAllItemsStatusFilter] = useState<'reserved' | null>(null);
   // Keyboard open detection — used to hide fixed CTAs so they don't float above the keyboard
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
@@ -4884,11 +4885,41 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [santaExclAddMemberUserId, setSantaExclAddMemberUserId] = useState('');
   const [santaExclAddMemberSaving, setSantaExclAddMemberSaving] = useState(false);
 
-  // ── Wishes tab: filtered by priority ─────────────────────────────────────
+  // ── Wishes tab: counts for filter-chip labels + grouping ────────────────
+  // Per v2-home-all-tabs.html: filter chips show per-priority counts
+  // ("😍 Очень хочу 5") and a status chip "✓ Забронированы".
+  const wishesCounts = useMemo(() => ({
+    total: allItems.length,
+    p1: allItems.filter((it) => it.priority === 1).length,
+    p2: allItems.filter((it) => it.priority === 2).length,
+    p3: allItems.filter((it) => it.priority === 3).length,
+    reserved: allItems.filter((it) => it.status === 'reserved' || it.status === 'purchased').length,
+  }), [allItems]);
+
+  // ── Wishes tab: filtered (priority AND/OR status chip) ───────────────────
   const filteredAllItems = useMemo(() => {
-    if (allItemsPriorityFilter === null) return allItems;
-    return allItems.filter((item) => item.priority === allItemsPriorityFilter);
-  }, [allItems, allItemsPriorityFilter]);
+    let out = allItems;
+    if (allItemsPriorityFilter !== null) {
+      out = out.filter((item) => item.priority === allItemsPriorityFilter);
+    }
+    if (allItemsStatusFilter === 'reserved') {
+      out = out.filter((item) => item.status === 'reserved' || item.status === 'purchased');
+    }
+    return out;
+  }, [allItems, allItemsPriorityFilter, allItemsStatusFilter]);
+
+  // ── Wishes tab: group into {byPriority, reserved} sections (no-filter view). ─
+  // Matches mockup "По приоритету" (active wishes, priority DESC) +
+  // "Забронированы" (reserved + purchased). Strictly informational when any
+  // filter is active — in that mode we just render a flat filteredAllItems list.
+  const wishesGrouped = useMemo(() => {
+    const reserved = filteredAllItems.filter((it) => it.status === 'reserved' || it.status === 'purchased');
+    const byPriority = filteredAllItems
+      .filter((it) => it.status !== 'reserved' && it.status !== 'purchased')
+      .slice()
+      .sort((a, b) => (b.priority ?? 1) - (a.priority ?? 1));
+    return { byPriority, reserved };
+  }, [filteredAllItems]);
 
   // ── Guest view: computed filtered + sorted items ─────────────────────────
   const { guestMainList, guestNoPriceBlock } = useMemo(() => {
@@ -11734,29 +11765,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={isDesktop ? {
               display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16,
             } : { display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
-              {/* Priority filter chips */}
+              {/* Priority + status filter chips (mockup v2-home-all-tabs):
+                  counts embedded per-chip. "All" · 😍 · 😊 · 🙂 · ✓ Reserved. */}
               {!allItemsLoading && allItems.length > 0 && (
                 <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
-                  {/* "All" chip */}
+                  {/* "All N" chip */}
                   <button
-                    onClick={() => setAllItemsPriorityFilter(null)}
+                    onClick={() => { setAllItemsPriorityFilter(null); setAllItemsStatusFilter(null); }}
                     style={{
                       flexShrink: 0,
                       padding: '6px 14px',
                       borderRadius: 20,
                       border: 'none',
                       fontSize: 13,
-                      fontWeight: allItemsPriorityFilter === null ? 700 : 500,
+                      fontWeight: (allItemsPriorityFilter === null && allItemsStatusFilter === null) ? 700 : 500,
                       cursor: 'pointer',
-                      background: allItemsPriorityFilter === null ? C.accent : C.surface,
-                      color: allItemsPriorityFilter === null ? '#fff' : C.text,
+                      background: (allItemsPriorityFilter === null && allItemsStatusFilter === null) ? C.accent : C.surface,
+                      color: (allItemsPriorityFilter === null && allItemsStatusFilter === null) ? '#fff' : C.text,
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    {t('filter_all', locale)}
+                    {t('filter_all', locale)} {wishesCounts.total}
                   </button>
                   {getPriorities(locale).slice().reverse().map((p) => {
                     const active = allItemsPriorityFilter === p.value;
+                    const n = p.value === 3 ? wishesCounts.p3 : p.value === 2 ? wishesCounts.p2 : wishesCounts.p1;
                     return (
                       <button
                         key={p.value}
@@ -11779,9 +11812,34 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       >
                         <span>{p.emoji}</span>
                         <span>{p.label}</span>
+                        {n > 0 && (
+                          <span style={{ fontWeight: 700, color: active ? PRIO_COLOR[p.value] : C.textMuted }}>{n}</span>
+                        )}
                       </button>
                     );
                   })}
+                  {/* Status chip: Reserved — toggles reserved+purchased subset */}
+                  {wishesCounts.reserved > 0 && (() => {
+                    const active = allItemsStatusFilter === 'reserved';
+                    return (
+                      <button
+                        onClick={() => setAllItemsStatusFilter(active ? null : 'reserved')}
+                        style={{
+                          flexShrink: 0,
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          padding: '6px 14px', borderRadius: 20, border: 'none',
+                          fontSize: 13, fontWeight: active ? 700 : 500,
+                          cursor: 'pointer',
+                          background: active ? C.greenSoft : C.surface,
+                          color: active ? C.green : C.text,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <span>{t('wishes_filter_reserved', locale)}</span>
+                        <span style={{ fontWeight: 700, color: active ? C.green : C.textMuted }}>{wishesCounts.reserved}</span>
+                      </button>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -11810,44 +11868,59 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </button>
                 </div>
               )}
-              {filteredAllItems.map((item) => {
+              {/* Item rendering — grouped into "По приоритету" + "Забронированы"
+                  sections when no filter active (mockup v2-home-all-tabs wishes-tab).
+                  With any filter active we revert to a flat list for clarity. */}
+              {(() => {
                 const useNewCards = CARD_REDESIGN_ENABLED;
-                if (useNewCards) {
-                  return (
-                    <WishCardCompact
-                      key={item.id}
-                      item={item}
-                      locale={locale}
-                      sourceLabel={item.wishlistTitle}
-                      onTap={(it: Item) => {
-                        const wl = wishlists.find(w => w.id === it.wishlistId) ?? null;
-                        setCurrentWl(wl);
-                        if (wl) void loadItems(wl.id);
-                        setViewingItem(it);
-                        setHomeReturnTab('wishes');
-                        setScreen('item-detail');
-                      }}
-                    />
+                const renderItem = (item: AllItem) => {
+                  const onTap = (it: Item) => {
+                    const wl = wishlists.find(w => w.id === it.wishlistId) ?? null;
+                    setCurrentWl(wl);
+                    if (wl) void loadItems(wl.id);
+                    setViewingItem(it);
+                    setHomeReturnTab('wishes');
+                    setScreen('item-detail');
+                  };
+                  return useNewCards ? (
+                    <WishCardCompact key={item.id} item={item} locale={locale} sourceLabel={item.wishlistTitle} onTap={onTap} />
+                  ) : (
+                    <WishCardOwner key={item.id} item={item} locale={locale} sourceLabel={item.wishlistTitle} onTap={onTap} onDelete={() => {}} />
                   );
+                };
+
+                // Flat mode — any filter active, or desktop grid. Sections only
+                // make sense in the vertical list view.
+                const isFiltered = allItemsPriorityFilter !== null || allItemsStatusFilter !== null;
+                if (isFiltered || isDesktop) {
+                  return filteredAllItems.map(renderItem);
                 }
-                return (
-                  <WishCardOwner
-                    key={item.id}
-                    item={item}
-                    locale={locale}
-                    sourceLabel={item.wishlistTitle}
-                    onTap={(it) => {
-                      const wl = wishlists.find(w => w.id === it.wishlistId) ?? null;
-                      setCurrentWl(wl);
-                      if (wl) void loadItems(wl.id);
-                      setViewingItem(it);
-                      setHomeReturnTab('wishes');
-                      setScreen('item-detail');
-                    }}
-                    onDelete={() => {}}
-                  />
+
+                const SecHeader = ({ label }: { label: string }) => (
+                  <div style={{
+                    fontSize: 13, fontWeight: 700, color: C.textMuted,
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    margin: '10px 4px 6px', fontFamily: font,
+                  }}>{label}</div>
                 );
-              })}
+
+                return (
+                  <>
+                    {wishesGrouped.byPriority.length > 0 && (
+                      <>
+                        <SecHeader label={t('wishes_sec_by_priority', locale)} />
+                        {wishesGrouped.byPriority.map(renderItem)}
+                      </>
+                    )}
+                    {wishesGrouped.reserved.length > 0 && (
+                      <>
+                        <SecHeader label={t('wishes_sec_reserved', locale)} />
+                        {wishesGrouped.reserved.map(renderItem)}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
 
