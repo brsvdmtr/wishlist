@@ -56,7 +56,10 @@ export function Sheet({
   onClose,
   title,
   children,
-  maxHeight = '85vh',
+  // `dvh` = dynamic viewport height. On iOS 15.4+/Safari 16+ the browser
+  // automatically shrinks this when the keyboard opens — no JS needed.
+  // Falls back to `vh` on older browsers (rare in Telegram mini-apps).
+  maxHeight = '85dvh',
   dismissOnBackdrop = true,
   handle = true,
   contentStyle,
@@ -83,54 +86,11 @@ export function Sheet({
     return () => el.removeEventListener('touchmove', block);
   }, [visible]);
 
-  // Keyboard-aware maxHeight: when the iOS keyboard opens,
-  // `window.visualViewport.height` shrinks. Without this effect the sheet
-  // stays at `85vh` of the original viewport, leaving a big empty dark
-  // region between content and the keyboard.
-  //
-  // Smooth animation strategy:
-  //   - Poll the final steady-state vv.height via a debounced "settle"
-  //     check (100ms after last event). iOS emits dozens of resize events
-  //     during the 250ms keyboard animation; we only commit the final value.
-  //   - Apply via CSS `max-height` transition (matching the iOS keyboard
-  //     250ms curve) so the size change animates smoothly.
-  useEffect(() => {
-    if (!visible || typeof window === 'undefined') return;
-    const vv = window.visualViewport;
-    if (!vv) return;
-
-    let settleTimer: number | null = null;
-    let lastApplied = -1;
-
-    const apply = (px: number) => {
-      const sheet = sheetRef.current;
-      if (!sheet || px === lastApplied) return;
-      lastApplied = px;
-      sheet.style.maxHeight = `${px}px`;
-    };
-
-    const settle = () => {
-      // 8px buffer so handle isn't flush against keyboard top edge.
-      apply(Math.floor(vv.height - 8));
-    };
-
-    const schedule = () => {
-      if (settleTimer !== null) window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(settle, 60);
-    };
-
-    // Initial value — sync immediately to avoid a "big-then-shrink" flash
-    // when the sheet opens with the keyboard already up.
-    settle();
-
-    vv.addEventListener('resize', schedule);
-    vv.addEventListener('scroll', schedule);
-    return () => {
-      if (settleTimer !== null) window.clearTimeout(settleTimer);
-      vv.removeEventListener('resize', schedule);
-      vv.removeEventListener('scroll', schedule);
-    };
-  }, [visible]);
+  // NOTE: keyboard-aware sizing is handled natively via `maxHeight: '85dvh'`
+  // (dynamic viewport height) in the style prop default. `dvh` shrinks
+  // automatically when the iOS keyboard opens. No JS handler needed —
+  // avoids the mid-animation "cut off" flashes we saw with visualViewport
+  // listeners trying to sync manually.
 
   // Sheet: take FULL ownership of scrolling + swipe-to-dismiss.
   useEffect(() => {
@@ -154,10 +114,6 @@ export function Sheet({
       sheet.style.transform = y === 0 ? '' : `translateY(${y}px)`;
     };
 
-    // Shared transition fragment: keep max-height animation on regardless of
-    // the drag-gesture transform state. Matches iOS keyboard curve (~250ms).
-    const MAX_H_TRANSITION = 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
-
     const onStart = (e: TouchEvent) => {
       if (!e.touches[0]) return;
       cancelMomentum();
@@ -166,9 +122,7 @@ export function Sheet({
       cumulativeMove = 0;
       blurFired = false;
       samples = [{ t: performance.now(), y: prevY }];
-      // Kill transform transition during drag, but keep max-height smooth
-      // (user may scroll → blur input → keyboard closes mid-drag).
-      sheet.style.transition = MAX_H_TRANSITION;
+      sheet.style.transition = 'none';
     };
 
     const onMove = (e: TouchEvent) => {
@@ -246,14 +200,14 @@ export function Sheet({
     const onEnd = () => {
       prevY = null;
       if (dismissOffset > 80) {
-        sheet.style.transition = `transform 0.22s ease-in, ${MAX_H_TRANSITION}`;
+        sheet.style.transition = 'transform 0.22s ease-in';
         setTranslate(sheet.offsetHeight + 40);
         setTimeout(() => onCloseRef.current(), 220);
         dismissOffset = 0;
         return;
       }
       if (dismissOffset > 0) {
-        sheet.style.transition = `transform 0.3s cubic-bezier(0.32,0.72,0,1), ${MAX_H_TRANSITION}`;
+        sheet.style.transition = 'transform 0.3s cubic-bezier(0.32,0.72,0,1)';
         setTranslate(0);
         dismissOffset = 0;
         return;
@@ -330,11 +284,7 @@ export function Sheet({
           background: colors.surface, borderRadius: '20px 20px 0 0',
           padding: 24, zIndex: 101, maxHeight, overflowY: 'auto',
           animation: 'slideUp 0.3s ease',
-          // Smooth max-height animation when keyboard opens/closes. Matches
-          // the iOS keyboard curve (~250ms ease-out). Drag handlers append
-          // their transform transition on top without clobbering this one.
-          transition: 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-          willChange: 'transform, max-height',
+          willChange: 'transform',
           overscrollBehavior: 'contain' as never,
           WebkitOverflowScrolling: 'touch' as never,
           ...contentStyle,
