@@ -27055,20 +27055,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             ))}
           </div>
 
-          {/* CTA */}
+          {/* CTA — canonical primary-gradient per v2-onboarding mockup */}
           <div style={{ padding: '20px 20px 44px', marginTop: 'auto' }}>
-            <button
+            <Button
+              variant="primary-gradient"
+              size="lg"
               onClick={() => void startOnboarding(wishlists.length === 0 ? 'first_open' : 'organic_returning_underactivated')}
               disabled={onboardingLoading}
-              style={{
-                width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
-                background: 'linear-gradient(135deg, #7c6aff 0%, #a855f7 100%)',
-                color: '#fff', fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font,
-                boxShadow: '0 8px 24px rgba(124,106,255,0.4)', opacity: onboardingLoading ? 0.7 : 1,
-              }}
+              loading={onboardingLoading}
             >
-              {onboardingLoading ? '…' : t('onboarding_entry_cta', locale)}
-            </button>
+              {t('onboarding_entry_cta', locale)}
+            </Button>
           </div>
         </div>
       )}
