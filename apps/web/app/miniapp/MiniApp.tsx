@@ -7497,14 +7497,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // change. Previous "register once" approach let iOS Telegram silently drop
   // the handler between screens, so Back did nothing. Re-registering each
   // time is cheap and makes the button bulletproof.
+  //
+  // Paywall override: when the paywall sheet is open we FORCE BackButton to
+  // stay visible + handler registered, even on screens that normally hide it
+  // (e.g. my-wishlists home). Without this, opening paywall on home and
+  // pressing Back has no affordance — the sheet gets stuck and the user has
+  // no way to dismiss it except swipe-down (which doesn't always work).
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (!tg?.BackButton) return;
-    const shouldHide =
+    const shouldHideByScreen =
       (screen === 'my-wishlists' && !santaWishlistPickerReturnId) ||
       screen === 'loading' ||
       screen === 'error' ||
       screen === 'maintenance';
+    const shouldHide = shouldHideByScreen && !upsellSheet;
     if (shouldHide) {
       tg.BackButton.hide();
       return;
@@ -7515,7 +7522,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     return () => {
       tg.BackButton.offClick(handler);
     };
-  }, [screen, santaWishlistPickerReturnId]);
+  }, [screen, santaWishlistPickerReturnId, upsellSheet]);
 
   // Scroll-to-top on entering screens that should always render from the top.
   // The app's scroll container is `scrollContainerRef` (position:fixed +
