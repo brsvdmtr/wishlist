@@ -13088,21 +13088,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         return (
           <div style={{ padding: '16px 16px 120px' }}>
-            {/* Privacy banner */}
-            <div style={{
-              padding: '12px 14px', borderRadius: 14,
-              background: 'rgba(167,139,250,0.14)', border: '1px solid rgba(167,139,250,0.25)',
-              marginBottom: 16, display: 'flex', gap: 10, alignItems: 'flex-start',
-            }}>
-              <span style={{ fontSize: 16, color: '#A78BFA' }}>🔒</span>
-              <div style={{ flex: 1 }}>
+            {/* Privacy banner — canonical Banner primitive with info tone.
+                Matches v2-secret-reservation.html privacy-anchor spec. */}
+            <div style={{ marginBottom: 16 }}>
+              <Banner tone="info" icon={<span>🔒</span>}>
+                <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 2 }}>
                   {t('sr_detail_privacy_banner_title', locale)}
                 </div>
                 <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>
                   {t('sr_detail_privacy_banner_body', locale)}
                 </div>
-              </div>
+                </div>
+              </Banner>
             </div>
 
             {/* Hero image — tap to open fullscreen */}
