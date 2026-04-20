@@ -6866,7 +6866,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         });
         tgRef.current?.WebApp?.HapticFeedback?.notificationOccurred?.('warning');
         const cancelledPeriodEnd = new Date(data.subscription.periodEnd).toLocaleDateString(
-          toIntlLocale(locale), { day: 'numeric', month: 'long' },
+          toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' },
         );
         pushToast(t('cancel_success', locale, { date: cancelledPeriodEnd }), 'success');
         trackEvent('subscription_cancelled');
@@ -16844,7 +16844,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 13, color: C.textSec }}>{t('settings_next_renewal', locale)}</span>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
-                            {new Date(subscription.periodEnd).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long' })}
+                            {new Date(subscription.periodEnd).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' })}
                           </span>
                         </div>
                       </div>
@@ -16861,7 +16861,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           <span>⏳</span>
                           <span>
                             {t('settings_renewal_disabled', locale)}{' '}
-                            <strong>{new Date(subscription.periodEnd).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long' })}</strong>.
+                            <strong>{new Date(subscription.periodEnd).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
                           </span>
                         </div>
                       </div>
@@ -23359,7 +23359,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         {(() => {
           const periodEndDate = subscription
             ? new Date(subscription.periodEnd).toLocaleDateString(
-                toIntlLocale(locale), { day: 'numeric', month: 'long' },
+                toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' },
               )
             : null;
 
