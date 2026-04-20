@@ -45,13 +45,16 @@ jobs:
             # recreated under memory pressure. Changed-service list drives
             # both `build` and `up -d`.
             #
-            # Path → service mapping:
+            # Path → service mapping (mirrors workspace deps in apps/*/package.json):
             #   apps/api/**, packages/db/**, packages/shared/**, pnpm-lock.yaml,
             #   Dockerfile.api   → api
             #   apps/bot/**, packages/db/**, packages/shared/**, pnpm-lock.yaml,
             #   Dockerfile.bot   → bot
-            #   apps/web/**, packages/shared/**, pnpm-lock.yaml,
-            #   Dockerfile.web   → web
+            #   apps/web/**, packages/shared/**, packages/ui/**, packages/ui-tokens/**,
+            #   pnpm-lock.yaml, Dockerfile.web → web
+            #     (ui + ui-tokens are transpilePackages in next.config.mjs —
+            #      Next compiles their TS source at build time, so changes must
+            #      trigger a web rebuild even though they're separate packages.)
             #   docker-compose.prod.yml → all three (compose spec itself changed)
             #   .github/**              → none (CI-only change)
             CHANGED=$(git diff --name-only "$PREV_SHA" "$NEW_SHA" || echo "")
@@ -68,7 +71,7 @@ jobs:
               if echo "$CHANGED" | grep -qE '^(apps/bot/|packages/(db|shared)/|pnpm-lock\.yaml$|Dockerfile\.bot$)'; then
                 SERVICES="$SERVICES bot"
               fi
-              if echo "$CHANGED" | grep -qE '^(apps/web/|packages/shared/|pnpm-lock\.yaml$|Dockerfile\.web$)'; then
+              if echo "$CHANGED" | grep -qE '^(apps/web/|packages/(shared|ui|ui-tokens)/|pnpm-lock\.yaml$|Dockerfile\.web$)'; then
                 SERVICES="$SERVICES web"
               fi
             fi
