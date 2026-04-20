@@ -6,9 +6,11 @@ import { colors, radius, spacingSemantic, transition, shadows, gradients } from 
  *   - `default` / `interactive` → **canonical** (2026-04-19, 5 live call-sites)
  *   - `hero` → **canonical** (2026-04-20, paywall hero — hero-class primitives
  *     are inherently 1-per-surface; contract validated against canonical tokens)
- *   - `flat` / `current` → `provisional`
+ *   - `current` → **canonical** (2026-04-21, 3 adoptions: guest owner-card,
+ *     res-detail purchased toggle, paywall plan selector selected state)
+ *   - `flat` → `provisional` (0 adoptions; prod drift)
  *
- * Approval: `DESIGN_DECISIONS.md#2026-04-20--paywall-b-full-full-redesign-to-match-approved-v2-paywall.html--yearly-pro-plan`.
+ * Approval: `DESIGN_DECISIONS.md#2026-04-21--final-close-out-all-remaining-waves`.
  */
 export type CardVariant =
   | 'default'

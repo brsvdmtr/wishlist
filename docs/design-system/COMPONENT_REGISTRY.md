@@ -301,12 +301,12 @@ Status updated 2026-04-19 after North Star approval.
 - ✅ **`Sheet`** — canonical 2026-04-20 (absorbed BottomSheet iOS-touch behavior; all prod sheets alias to primitive)
 - ✅ **`StatTile`** — canonical 2026-04-20 (3 adoptions: wishlist-detail owner, reservations hero, referral hero)
 - ✅ **`LockedTile`** — canonical 2026-04-20 (3 adoptions: wishlist-limit, item-limit, res-history upsell)
+- ✅ **`Card current`** — canonical 2026-04-21 (3 adoptions: guest owner-card, res-detail purchased-toggle, paywall plan selector selected state)
 
 ### Not-yet-canonical (classified by reason)
 
 **Adoption-blocked by prod reality** (prod doesn't have the surface, or uses a drifted pattern):
-1. **`Card current`** — 2/3 adoptions (guest owner-card + purchased-toggle). Needs 1 more. Close to canonical.
-2. **`Card flat`** — 0 adoptions. Prod "card-bg no-border" pattern drifts from primitive.
+1. **`Card flat`** — 0 adoptions. Prod "card-bg no-border" pattern drifts from primitive.
 3. **`ListRow compact` / `plain`** — 0 adoptions. Prod rows are feature-specific.
 4. **`AvatarStack`** — 0 adoptions. Needs real multi-participant data surfaces (shared wishlists, group-gift contributors).
 

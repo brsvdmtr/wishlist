@@ -2631,12 +2631,9 @@ function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, anim
               {t('gg_reservation_badge', locale)}
             </Chip>
           ) : (
-            <span style={{
-              fontSize: 11, background: C.greenSoft, color: C.green,
-              padding: '2px 8px', borderRadius: 6, fontWeight: 600,
-            }}>
+            <Chip tone="success">
               {t('reservations_reserved', locale)}
-            </span>
+            </Chip>
           )}
         </div>
         {item.groupGiftRole && (
@@ -2652,13 +2649,9 @@ function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, anim
               <span style={{ fontSize: 12, color: C.red, fontWeight: 600 }}>{t('smart_res_expired', locale)}</span>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{
-                  fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 600,
-                  background: isExpiring ? 'rgba(251,191,36,0.15)' : 'rgba(52,211,153,0.12)',
-                  color: isExpiring ? C.orange : C.green,
-                }}>
+                <Chip tone={isExpiring ? 'warning' : 'success'}>
                   ⏱ {formatSmartResTimer(remainMs)}
-                </span>
+                </Chip>
                 {meta!.extensionCount > 0 && (
                   <span style={{ fontSize: 10, color: C.textMuted }}>{t('smart_res_extended_badge', locale, { count: String(meta!.extensionCount), max: String(meta!.maxExtensions) })}</span>
                 )}
@@ -3222,28 +3215,22 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
             </>
           )}
 
-          {/* ── Plan selector (monthly vs yearly) ── */}
+          {/* ── Plan selector (monthly vs yearly) ──
+              Selected → Card.current (accent-tinted) with role=button;
+              unselected → Card.interactive. Keyboard-a11y via role+aria. */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18 }}>
             {(['monthly', 'yearly'] as const).map((plan) => {
               const isYear = plan === 'yearly';
               const isSelected = selectedPlan === plan;
               return (
-                <div
+                <Card
                   key={plan}
+                  variant={isSelected ? 'current' : 'interactive'}
+                  padding="sm"
                   onClick={() => setSelectedPlan(plan)}
                   role="button"
                   aria-pressed={isSelected}
-                  style={{
-                    position: 'relative',
-                    background: isSelected ? `linear-gradient(135deg, ${C.accentSoft}, rgba(124,106,255,0.04))` : C.card,
-                    border: `1.5px solid ${isSelected ? C.accent : C.border}`,
-                    borderRadius: 14,
-                    padding: '14px 14px 12px',
-                    cursor: 'pointer',
-                    textAlign: 'start',
-                    boxShadow: isSelected ? '0 0 0 2px rgba(124,106,255,0.15)' : 'none',
-                    transition: 'border-color 0.15s, box-shadow 0.15s',
-                  }}
+                  style={{ position: 'relative', textAlign: 'start' }}
                 >
                   {isYear && (
                     <div style={{
@@ -3267,7 +3254,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
                       ? t('paywall_plan_yearly_per', locale, { perMonth: String(yearlyPerMonth) })
                       : t('paywall_plan_monthly_per', locale)}
                   </div>
-                </div>
+                </Card>
               );
             })}
           </div>
@@ -10355,22 +10342,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           )}
 
           {/* Submit */}
-          <button
+          <Button
+            variant="primary-gradient"
+            size="lg"
             onClick={() => void submitOnboardingManual()}
             disabled={onboardingManualLoading || !onboardingManualTitle.trim()}
-            style={{
-              width: '100%', padding: '16px 0', borderRadius: 16, border: 'none',
-              background: (!onboardingManualTitle.trim() || onboardingManualLoading)
-                ? 'rgba(124,106,255,0.3)' : 'linear-gradient(135deg, #7c6aff, #a855f7)',
-              color: '#fff', fontSize: 16, fontWeight: 700,
-              cursor: (!onboardingManualTitle.trim() || onboardingManualLoading) ? 'default' : 'pointer',
-              fontFamily: font,
-              opacity: (!onboardingManualTitle.trim() || onboardingManualLoading) ? 0.6 : 1,
-              boxShadow: (!onboardingManualTitle.trim() || onboardingManualLoading) ? 'none' : '0 8px 24px rgba(124,106,255,0.4)',
-              transition: 'opacity 0.2s, box-shadow 0.2s',
-            }}>
-            {onboardingManualLoading ? '...' : t('onboarding_manual_submit', locale)}
-          </button>
+            loading={onboardingManualLoading}
+          >
+            {t('onboarding_manual_submit', locale)}
+          </Button>
         </div>
 
         {/* Step indicator dots */}
@@ -10594,18 +10574,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             ))}
           </div>
 
-          <button onClick={() => void submitCatalogSelection()}
+          <Button
+            variant="primary-gradient"
+            size="lg"
+            onClick={() => void submitCatalogSelection()}
             disabled={onboardingCatalogSelected.length === 0 || onboardingLoading}
-            style={{
-              width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
-              background: onboardingCatalogSelected.length > 0 ? 'linear-gradient(135deg, #7c6aff, #a855f7)' : 'rgba(255,255,255,0.1)',
-              color: onboardingCatalogSelected.length > 0 ? '#fff' : 'rgba(255,255,255,0.3)',
-              fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font,
-              boxShadow: onboardingCatalogSelected.length > 0 ? '0 8px 24px rgba(124,106,255,0.4)' : 'none',
-              opacity: onboardingLoading ? 0.7 : 1,
-            }}>
-            {onboardingLoading ? '…' : t('onboarding_catalog_add_btn', locale)}
-          </button>
+            loading={onboardingLoading}
+          >
+            {t('onboarding_catalog_add_btn', locale)}
+          </Button>
         </div>
       </div>
     );
@@ -10687,19 +10664,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
           background: 'linear-gradient(0deg, rgba(15,10,30,1) 60%, rgba(15,10,30,0) 100%)',
         }}>
-          <button
+          <Button
+            variant="primary-gradient"
+            size="lg"
             onClick={() => void createOnboardingWishlist(onboardingWlTitle)}
             disabled={!onboardingWlTitle.trim() || onboardingLoading}
-            style={{
-              width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
-              background: onboardingWlTitle.trim() ? 'linear-gradient(135deg, #7c6aff, #a855f7)' : 'rgba(255,255,255,0.1)',
-              color: onboardingWlTitle.trim() ? '#fff' : 'rgba(255,255,255,0.3)',
-              fontSize: 17, fontWeight: 700, cursor: 'pointer', fontFamily: font,
-              boxShadow: onboardingWlTitle.trim() ? '0 8px 24px rgba(124,106,255,0.4)' : 'none',
-              opacity: onboardingLoading ? 0.7 : 1,
-            }}>
-            {onboardingLoading ? '…' : t('onboarding_create_wl_btn', locale)}
-          </button>
+            loading={onboardingLoading}
+          >
+            {t('onboarding_create_wl_btn', locale)}
+          </Button>
         </div>
       </div>
     );
@@ -10772,14 +10745,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ))}
         </div>
 
-        <button onClick={() => { void updateOnboardingStep('onboarding-complete'); setScreen('onboarding-complete'); }}
-          style={{
-            width: '100%', padding: '17px 0', borderRadius: 16, border: 'none',
-            background: 'linear-gradient(135deg, #7c6aff, #a855f7)', color: '#fff', fontSize: 17, fontWeight: 700,
-            cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgba(124,106,255,0.4)', marginTop: 16,
-          }}>
-          {t('onboarding_share_next', locale)}
-        </button>
+        <div style={{ marginTop: 16 }}>
+          <Button
+            variant="primary-gradient"
+            size="lg"
+            onClick={() => { void updateOnboardingStep('onboarding-complete'); setScreen('onboarding-complete'); }}
+          >
+            {t('onboarding_share_next', locale)}
+          </Button>
+        </div>
       </div>
     );
   }
@@ -12150,9 +12124,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                             <strong style={{ color: C.text }}>{it.price != null ? fmtPrice(it.price, locale, it.currency ?? 'RUB') : sr.snapshot.priceText}</strong>
                                           </div>
                                         )}
-                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 100, fontSize: 10, fontWeight: 600, background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
+                                        {/* Secret-reservation state badge — maps derivedState to Chip tone. */}
+                                        <Chip
+                                          tone={
+                                            state === 'ITEM_UPDATED' ? 'accent' :
+                                            state === 'PUBLIC_RESERVED_BY_OTHER' ? 'warning' :
+                                            state === 'ITEM_FULFILLED' ? 'success' :
+                                            state === 'ITEM_UNAVAILABLE' ? 'danger' :
+                                            'accent'
+                                          }
+                                          size="sm"
+                                        >
                                           {badge.text}
-                                        </div>
+                                        </Chip>
                                       </div>
                                     </div>
                                   </div>
@@ -12182,9 +12166,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                               <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: font }}>{group.campaignTitle}</div>
                               {group.campaignStatus === 'COMPLETED' && (
-                                <div style={{ fontSize: 10, fontWeight: 600, color: C.textMuted, background: C.surface, borderRadius: 5, padding: '2px 5px' }}>
+                                <Chip tone="surface" size="sm">
                                   {t('santa_reservations_completed', locale)}
-                                </div>
+                                </Chip>
                               )}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -13587,6 +13571,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {t('wl_manage_btn', locale)}
               </button>
             </div>
+          </div>
+
+          {/* ── Meta chips row — visibility / comment policy (v2 mockup) ── */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            <Chip tone="accent" size="md">
+              {currentWl.visibility === 'public_profile' ? `🌐 ${t('wl_meta_visibility_public', locale)}`
+                : currentWl.visibility === 'private' ? `🔒 ${t('wl_meta_visibility_private', locale)}`
+                : `🔗 ${t('wl_meta_visibility_link', locale)}`}
+            </Chip>
+            <Chip tone="surface" size="md">
+              💬 {currentWl.commentPolicy === 'subscribers' ? t('wl_meta_comments_subs', locale) : t('wl_meta_comments_all', locale)}
+            </Chip>
           </div>
 
           {/* ── Stat tiles row — total / reserved / purchased ──
@@ -24484,21 +24480,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={{ marginBottom: 20 }}>
               <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '8px 0 4px' }}>{camp.title}</h1>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{
-                  fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 8,
-                  background: camp.status === 'ACTIVE' ? C.greenSoft : camp.status === 'CANCELLED' ? C.redSoft : `${C.accent}20`,
-                  color: camp.status === 'ACTIVE' ? C.green : camp.status === 'CANCELLED' ? C.red : C.accent,
-                }}>
+                <Chip
+                  tone={camp.status === 'ACTIVE' ? 'success' : camp.status === 'CANCELLED' ? 'danger' : 'accent'}
+                  size="md"
+                >
                   {t(statusKey, locale) || camp.status}
-                </span>
+                </Chip>
                 {isOwner && <span style={{ fontSize: 12, color: C.textMuted }}>👑 {t('santa_role_owner', locale)}</span>}
                 {!isOwner && myRole === 'ADMIN' && <span style={{ fontSize: 12, color: C.accent }}>{t('santa_organizer_badge', locale)}</span>}
                 {showRoundBadge && currentRoundNumber && (
-                  <span style={{ fontSize: 12, fontWeight: 600, color: C.accent, background: `${C.accent}15`, padding: '3px 10px', borderRadius: 8 }}>
+                  <Chip tone="accent" size="md">
                     {totalRounds > 1
                       ? t('santa_round_of', locale, { current: String(currentRoundNumber), total: String(totalRounds) })
                       : t('santa_round_label', locale, { n: String(currentRoundNumber) })}
-                  </span>
+                  </Chip>
                 )}
               </div>
               {camp.description && (
@@ -24517,8 +24512,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
             {/* Pending exit request banner (for participant who submitted a request) */}
             {pendingExitRequestId && (
-              <div style={{ background: `${C.accent}15`, border: `1px solid ${C.accent}40`, borderRadius: 12, padding: '12px 16px', marginBottom: 12, fontSize: 13, color: C.accent, textAlign: 'center' }}>
-                ⏳ {t('santa_exit_request_pending_banner', locale)}
+              <div style={{ marginBottom: 12 }}>
+                <Banner tone="info" icon={<span>⏳</span>}>
+                  {t('santa_exit_request_pending_banner', locale)}
+                </Banner>
               </div>
             )}
 
@@ -27493,14 +27490,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
 
-            {/* Pinned info */}
+            {/* Pinned info — Banner primitive with warning tone (amber left-strip effect). */}
             {gg.pinnedInfo && (
-              <div style={{
-                padding: 14, borderRadius: 14, marginBottom: 16,
-                background: C.surface, borderLeft: `3px solid ${C.orange}`,
-              }}>
-                <div style={{ fontSize: 12, color: C.orange, fontWeight: 600, marginBottom: 4 }}>{'📌 ' + t('gg_pinned_info', locale)}</div>
-                <div style={{ fontSize: 14, color: C.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{gg.pinnedInfo}</div>
+              <div style={{ marginBottom: 16 }}>
+                <Banner tone="warning" icon={<span>📌</span>}>
+                  <div style={{ fontSize: 12, color: C.orange, fontWeight: 600, marginBottom: 4 }}>{t('gg_pinned_info', locale)}</div>
+                  <div style={{ fontSize: 14, color: C.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{gg.pinnedInfo}</div>
+                </Banner>
               </div>
             )}
 
@@ -28990,8 +28986,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       </button>
                     )}
                     {isOwn && (
-                      <div style={{ fontSize: 12, color: C.accent, marginTop: 12, background: C.accentSoft, padding: '4px 12px', borderRadius: 8, display: 'inline-block' }}>
-                        {t('public_profile_this_is_you', locale)}
+                      <div style={{ marginTop: 12 }}>
+                        <Chip tone="accent" size="lg">{t('public_profile_this_is_you', locale)}</Chip>
                       </div>
                     )}
                   </div>
