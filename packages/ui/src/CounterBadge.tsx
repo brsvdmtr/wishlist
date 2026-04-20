@@ -2,14 +2,20 @@ import React, { type CSSProperties } from 'react';
 import { colors, shadows, radius } from '@wishlist/ui-tokens';
 
 /**
- * @status provisional — top-right counter circle for tab-bar badges,
- * notification indicators, chip counters.
+ * @status **canonical** (2026-04-20, 4 live call-sites — unread-count
+ * badges on WishCardGuest across 3 guest-list surfaces + 1 grouped-by-
+ * category surface. All use `tone="warning"` with 22×22 size override).
+ *
+ * Top-right counter circle for tab-bar badges, notification indicators,
+ * chip counters.
  *
  * Source: approved `v2-home-all-tabs.html` (counter-badge "5" on
  * Брони tab). Codified 2026-04-19 as the non-inline notification pattern.
  *
  * MUST be placed inside a `position: relative` parent. Defaults to
  * `position: absolute; top: -6px; right: -6px`.
+ *
+ * Approval: `DESIGN_DECISIONS.md#2026-04-20--counterbadge-promoted-to-canonical`.
  */
 export interface CounterBadgeProps {
   count: number;

@@ -189,18 +189,18 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
     canonical by extension (inherit primitive contract)
 - **Migration notes:** `<span style={{ padding, borderRadius, background, color, fontSize, fontWeight }}>` → `<Chip tone="..." size="...">`. Use `size="lg"` for 13-px status pills (pill-radius), default (md) for 11-px badges. Accept minor visual shifts to canonical tokens.
 
-### `CounterBadge` (new, 2026-04-19)
+### `CounterBadge`
 
-- **Status:** `provisional`
+- **Status:** **`canonical`** (promoted 2026-04-20, 4 call-sites)
 - **Implementation:** [packages/ui/src/CounterBadge.tsx](../../packages/ui/src/CounterBadge.tsx)
-- **Approval source:** `v2-home-all-tabs.html` tab-bar counter (after
-  2026-04-19 post-review tweak)
+- **Approval source:** `v2-home-all-tabs.html` tab-bar counter + 4
+  prod adoptions on WishCardGuest + [DESIGN_DECISIONS.md](./DESIGN_DECISIONS.md#2026-04-20--counterbadge-promoted-to-canonical)
 - **Target visual direction:** `matches-approved-mockup`
-- **Can be promoted to canonical:** `not-yet`
-- **Promotion blockers:**
-  - Brand new primitive, needs adoption
-  - Multi-location usage patterns (tab-bar / chip-trailing / avatar-
-    overlap) not yet validated
+- **API:** `count / showZero / max / tone / size / borderColor / style` (unchanged since landing)
+- **Adoption:** 4 call-sites in MiniApp.tsx — unread-count badges on
+  WishCardGuest across guest-list render branches. All use `tone="warning"`
+  with 22×22 size override via `style`.
+- **Migration notes:** `<span style={{ position:'absolute', top:-6, right:-6, background: C.orange/C.red, ... }}>{n}</span>` → `<CounterBadge count={n} tone="warning|danger" style={{ minWidth: X, height: X }} />`. Parent MUST have `position: relative`. Primitive defaults to `top:-6, right:-6` — override via `style` if different (e.g. inside-card positioning uses `top:6, right:6`).
 
 ### `StatTile` (new, 2026-04-19)
 
@@ -282,14 +282,15 @@ Status updated 2026-04-19 after North Star approval.
 - ✅ **`Button primary-gradient`** — canonical 2026-04-20 (paywall sticky CTA; gap #1 closed)
 - ✅ **`Card variant="hero"`** — canonical 2026-04-20 (paywall hero; hero-class primitives are 1-per-surface)
 - ✅ **`Button danger-solid`** — canonical 2026-04-20 (5 destructive-confirm dialogs; gap #2 closed)
+- ✅ **`CounterBadge`** — canonical 2026-04-20 (4 unread-count badges on WishCardGuest variants)
 
 ### Next up
-1. **`Button danger` (soft) + `surface`** → adoption-blocked (0 call-sites for soft-danger tint; `surface` awaits real usage)
-2. **`ListRow compact` / `plain`** → after adoption
-3. **`Card flat` / `current`** → after adoption validates in real surfaces
-4. **`Banner tone="promo"`** → after promo-banner surface surfaces
-5. **`Sheet`** → after BottomSheet iOS behavior absorption
-6. **`CounterBadge`, `StatTile`, `AvatarStack`** → after adoption validates APIs
+1. **`Button danger` (soft) + `surface`** → adoption-blocked (0 call-sites; surface dropdown/menu candidates were div containers, not buttons)
+2. **`ListRow compact` / `plain`** → adoption-blocked (prod patterns are feature-specific, no generic dense-row cluster)
+3. **`Card flat` / `current`** → adoption-blocked (prod "active" surfaces use accent-soft gradient, not accentStateTint)
+4. **`Banner tone="promo"`** → no surface yet
+5. **`Sheet`** → big work: absorb BottomSheet iOS touch/inertia/keyboard-blur logic. Separate initiative.
+6. **`StatTile`, `AvatarStack`** → need real call-sites (profile stats, group-gift participant list)
 
 ---
 

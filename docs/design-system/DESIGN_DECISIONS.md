@@ -338,6 +338,85 @@ provisional pending first real adoption.
 
 ---
 
+## 2026-04-20 — CounterBadge promoted to `canonical`
+
+**Type:** status-change + migration wave
+
+**Decision.** `CounterBadge` primitive promoted from `provisional` to
+`canonical`. Migrated 4 live call-sites in MiniApp.tsx — all inline
+unread-count badge markup replaced with `<CounterBadge count={n} tone="warning" />`.
+
+### Migrated call-sites
+
+All in `apps/web/app/miniapp/MiniApp.tsx` (guest-view of friends'
+wishlists — "X new items since your last visit" badge on item cards):
+
+1. **WishCardGuest flat list** — uncategorized items
+2. **WishCardGuest category-grouped** — when wishlist has categories
+3. **WishCardGuest guest-view plain** — older render path
+4. **WishCardGuest guest-view without category** — fallback render
+
+All 4 used identical inline markup (`<span style={{ position:'absolute',
+top:-6, right:-6, background: C.orange, ... }}>`) — perfect-fit
+migration with 0 visual shift: `C.orange` === `colors.warning` ===
+`#FBBF24` (confirmed via token lookup).
+
+### Promotion checklist
+
+| Gate | Status |
+|------|--------|
+| Approval source | `v2-home-all-tabs.html` codifies the unread-count pattern; all 4 call-sites exhibit it identically. |
+| Stable API | `count / showZero / max / tone / size / borderColor / style` unchanged since primitive landed. |
+| Real usage ≥ 3 | 4 call-sites ✅ (across 2 render branches × 2 list shapes). |
+| Long-text | `max=99` → shows `99+` for larger counts; tested implicitly via prod data (some users hit >50 unread). |
+| Mobile | 22×22 with 2px border (via style override) — visible but unobtrusive. |
+| Interaction | `pointerEvents: 'none'` — purely visual, click-through to underlying card. |
+| RTL | `top/right` positioning. Arabic + Hebrew would need primitive-level `right→left` flip (not addressed this wave — 0 RTL adoptions). |
+| Tone correctness | All 4 sites use `warning` (amber/orange) matching "new, needs attention" semantics. `danger` tone reserved for error-style counts. |
+
+### Primitives NOT touched this wave (deliberate)
+
+Scouted for Card.current, ListRow.compact/plain, Button.surface — no
+clean 3+ candidate clusters found:
+
+- **Card `current`** — mockup codifies it but prod's "selected/active"
+  surfaces use inline gradients that don't match `gradients.accentStateTint`
+  (usually accent-soft start instead of card start). Forcing migration
+  would cause visual shifts on live surfaces. Pending: either find
+  genuinely-matching sites OR adjust the primitive to match prod
+  reality, then migrate.
+- **ListRow `compact`/`plain`** — prod's dense list rows are all
+  feature-specific (paywall FeatureRow, group-gift participant tile,
+  copy-link row) — no shared "settings menu" pattern to migrate.
+  Variants stay provisional.
+- **Button `surface`** — candidates reviewed were either already
+  ListRow (how-it-works) or non-button div elements (item-menu
+  dropdown container). No real button usage found.
+
+### Impact
+
+- **Canonical primitives now 9:** SectionHeader, Banner (neutral),
+  Card (default/interactive/hero), Chip, ListRow (card), Button
+  (primary/secondary/ghost/primary-gradient/danger-solid), **CounterBadge**.
+- **Provisional remaining:** Card (flat/current), ListRow (compact/plain),
+  Banner (promo/tones), Button (danger soft/surface), Sheet,
+  StatTile, AvatarStack.
+- **Audit:** −4 inline style blocks, ~48 raw inline-style declarations
+  replaced with primitive call.
+
+### Next up
+
+1. **Sheet primitive absorb** — big work (iOS touch/inertia/keyboard-blur
+  from `BottomSheet` in `MiniApp.tsx:2023`). Separate initiative, not
+  an adoption wave.
+2. **StatTile / AvatarStack** — need real call-sites (probably profile
+   stats + group-gift participant list). Deferred.
+
+**Approved by.** Dmitry (2026-04-20, "давай все запихивать и я пару
+дней понаблюдаю, нет смысла раскладывать на столь маленькие итерации").
+
+---
+
 ## 2026-04-20 — ListRow Wave 1 adoption + `card` variant promoted to `canonical`
 
 **Type:** primitive-change + status-change

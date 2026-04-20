@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, Chip, ListRow, SectionHeader } from '@wishlist/ui';
+import { Banner, Button, Card, Chip, CounterBadge, ListRow, SectionHeader } from '@wishlist/ui';
 import { initSentry, captureException } from './sentry';
 
 // ═══════════════════════════════════════════════════════
@@ -15733,18 +15733,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           locale={locale}
                           secretByMe={hasSecret}
                         />
-                        {itemUnreadCount > 0 && (
-                          <span style={{
-                            position: 'absolute', top: -6, right: -6, zIndex: 10,
-                            minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
-                            background: C.orange, color: '#fff',
-                            fontSize: 11, fontWeight: 800, fontFamily: font,
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                            border: `2px solid ${C.bg}`,
-                            pointerEvents: 'none',
-                          }}>{itemUnreadCount}</span>
-                        )}
+                        <CounterBadge count={itemUnreadCount} tone="warning" style={{ zIndex: 10, minWidth: 22, height: 22 }} />
                       </div>
                     );
                   }
@@ -15760,16 +15749,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         secretByMe={hasSecret}
                       />
                       {itemUnreadCount > 0 && (
-                        <span style={{
-                          position: 'absolute', top: 6, right: 6, zIndex: 10,
-                          minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
-                          background: C.orange, color: '#fff',
-                          fontSize: 11, fontWeight: 800, fontFamily: font,
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                          border: `2px solid ${C.bg}`,
-                          pointerEvents: 'none',
-                        }}>{itemUnreadCount}</span>
+                        <CounterBadge count={itemUnreadCount} tone="warning" style={{ top: 6, right: 6, zIndex: 10, minWidth: 22, height: 22 }} />
                       )}
                     </div>
                   );
@@ -15858,16 +15838,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               locale={locale}
                             />
                             {itemUnreadCount > 0 && (
-                              <span style={{
-                                position: 'absolute', top: -6, right: -6, zIndex: 10,
-                                minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
-                                background: C.orange, color: '#fff',
-                                fontSize: 11, fontWeight: 800, fontFamily: font,
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                                border: `2px solid ${C.bg}`,
-                                pointerEvents: 'none',
-                              }}>{itemUnreadCount}</span>
+                              <CounterBadge count={itemUnreadCount} tone="warning" style={{ zIndex: 10, minWidth: 22, height: 22 }} />
                             )}
                           </div>
                         );
@@ -15883,16 +15854,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             locale={locale}
                           />
                           {itemUnreadCount > 0 && (
-                            <span style={{
-                              position: 'absolute', top: -6, right: -6, zIndex: 10,
-                              minWidth: 22, height: 22, borderRadius: 11, padding: '0 6px',
-                              background: C.orange, color: '#fff',
-                              fontSize: 11, fontWeight: 800, fontFamily: font,
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                              border: `2px solid ${C.bg}`,
-                              pointerEvents: 'none',
-                            }}>{itemUnreadCount}</span>
+                            <CounterBadge count={itemUnreadCount} tone="warning" style={{ zIndex: 10, minWidth: 22, height: 22 }} />
                           )}
                         </div>
                       );
