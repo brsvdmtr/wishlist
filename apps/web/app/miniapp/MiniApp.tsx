@@ -4675,7 +4675,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [allItems, setAllItems] = useState<AllItem[]>([]);
   const [allItemsLoading, setAllItemsLoading] = useState(false);
   const [allItemsPriorityFilter, setAllItemsPriorityFilter] = useState<number | null>(null);
-  const [allItemsStatusFilter, setAllItemsStatusFilter] = useState<'reserved' | null>(null);
+  const [allItemsStatusFilter, setAllItemsStatusFilter] = useState<'reserved' | 'purchased' | null>(null);
   // Keyboard open detection — used to hide fixed CTAs so they don't float above the keyboard
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
@@ -5088,6 +5088,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
     if (allItemsStatusFilter === 'reserved') {
       out = out.filter((item) => item.status === 'reserved' || item.status === 'purchased');
+    } else if (allItemsStatusFilter === 'purchased') {
+      out = out.filter((item) => item.status === 'purchased');
     }
     return out;
   }, [allItems, allItemsPriorityFilter, allItemsStatusFilter]);
@@ -9068,24 +9070,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   }, [screen, currentWl?.id, loadWlDontGift]);
 
-  // Create wishlist sheet autofocus — tricky dance on iOS:
-  // - `autoFocus` prop triggers keyboard BEFORE sheet slides in → "keyboard
-  //   first, sheet second" stutter.
-  // - `setTimeout(focus, 320ms)` waits for sheet, but iOS strips the
-  //   user-gesture bit → keyboard never appears, user must tap input.
-  // - Solution: focus from the FAB tap handler via a chained `requestAnimationFrame`
-  //   — preserves the gesture context (iOS allows keyboard), but happens
-  //   a few frames in so the sheet has begun animating.
+  // Create wishlist sheet autofocus — abandoned on iOS.
+  // Telegram WebView on iOS is too strict: neither `autoFocus` nor
+  // setTimeout nor chained RAF reliably opens the keyboard without a
+  // visible "keyboard-first-then-sheet" stutter. Fallback = tap-to-type,
+  // which is standard iOS UX anyway (Telegram's own composer works this way).
   const createWlTitleInputRef = useRef<HTMLInputElement>(null);
-  const focusCreateWlInputSoon = useCallback(() => {
-    // Chained RAF: ~2 frames (~33ms) — enough for React to mount the input,
-    // too short for iOS to lose the gesture context.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        createWlTitleInputRef.current?.focus();
-      });
-    });
-  }, []);
 
   const saveWlDontGift = useCallback(async (wlId: string) => {
     if (wlDgSaving) return;
@@ -11515,27 +11505,43 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             // t() falls back to the key string when translation missing,
             // so `|| fallback` never kicks in for untranslated keys. Hardcoding
             // ensures the tiles read as intended.
+            // All stat tiles navigate to the Wishes aggregate view (allItems),
+            // filtering by status as the semantic requires. This matches what
+            // the tile counts: reserved/gifted stats come from `allItems`, so
+            // tapping lands on the list matching the count.
             const tiles = [
               {
                 n: totalWishes,
                 l: locale === 'ru' ? 'желаний' : 'wishes',
                 tone: 'neutral' as const,
-                onClick: () => { setHomeTab('wishes'); void loadAllItems(); },
+                onClick: () => {
+                  setAllItemsPriorityFilter(null);
+                  setAllItemsStatusFilter(null);
+                  setHomeTab('wishes');
+                  void loadAllItems();
+                },
               },
               {
                 n: totalReserved,
                 l: locale === 'ru' ? 'забронировано' : 'reserved',
                 tone: 'accent' as const,
                 onClick: () => {
-                  setHomeTab('reservations');
-                  if (reservations.length === 0 && santaReservationItems.length === 0) void loadReservations();
+                  setAllItemsPriorityFilter(null);
+                  setAllItemsStatusFilter('reserved');
+                  setHomeTab('wishes');
+                  void loadAllItems();
                 },
               },
               {
                 n: totalGifted,
                 l: locale === 'ru' ? 'подарено' : 'gifted',
                 tone: 'success' as const,
-                onClick: () => comingSoon(locale === 'ru' ? 'Подарено' : 'Gifted'),
+                onClick: () => {
+                  setAllItemsPriorityFilter(null);
+                  setAllItemsStatusFilter('purchased');
+                  setHomeTab('wishes');
+                  void loadAllItems();
+                },
               },
               {
                 n: expiringCount,
@@ -12054,7 +12060,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* v2.1 FAB — bottom-right rounded-square (+) above FloatingNav */}
             {!reorderMode && (
               <button
-                onClick={() => { setShowCreateWl(true); focusCreateWlInputSoon(); }}
+                onClick={() => setShowCreateWl(true)}
                 aria-label={t('create_wishlist_btn', locale)}
                 style={{
                   position: 'fixed',
