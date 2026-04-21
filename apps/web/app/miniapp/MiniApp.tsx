@@ -2691,11 +2691,17 @@ function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, anim
   return (
     <div
       onClick={onTap}
+      className="wb-card-pressed"
       style={{
-        background: C.card, borderRadius: 14, padding: 16,
+        background: 'var(--wb-card)',
+        border: '1px solid var(--wb-border)',
+        borderRadius: 18, padding: 16,
         display: 'flex', gap: 14, alignItems: 'flex-start',
-        border: `1px solid ${C.border}`, cursor: 'pointer',
+        cursor: 'pointer',
         WebkitTapHighlightColor: 'transparent',
+        WebkitBackdropFilter: 'blur(14px)' as never,
+        backdropFilter: 'blur(14px)' as never,
+        transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
         animation: `fadeIn 0.3s ease ${animDelay}s both`,
       }}
     >
@@ -2703,26 +2709,34 @@ function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, anim
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{
-            fontSize: 15, fontWeight: 600, fontFamily: font, color: C.text,
+            fontSize: 15, fontWeight: 600, fontFamily: font,
+            color: 'var(--wb-text)',
             lineHeight: 1.3, paddingRight: 8,
+            letterSpacing: '-0.015em',
           }}>
             {item.title}
           </div>
           {item.unreadComments > 0 && (
             <span style={{
               minWidth: 20, height: 20, borderRadius: 10,
-              background: C.accent, color: '#fff',
+              background: 'var(--wb-accent)', color: '#fff',
               fontSize: 11, fontWeight: 700,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               padding: '0 6px', flexShrink: 0,
+              boxShadow: '0 0 10px var(--wb-accent-shadow-soft)',
             }}>
               {item.unreadComments}
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
           {item.price != null && (
-            <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>
+            <span style={{
+              fontSize: 13, fontWeight: 650,
+              color: 'var(--wb-text-secondary)',
+              fontFamily: font,
+              fontFeatureSettings: '"tnum"',
+            }}>
               {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
             </span>
           )}
@@ -2737,7 +2751,7 @@ function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, anim
           )}
         </div>
         {item.groupGiftRole && (
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: 'var(--wb-text-muted)', marginTop: 6, letterSpacing: '-0.003em' }}>
             {item.groupGiftRole === 'organizer'
               ? t('gg_reservation_you_organizer', locale)
               : `${t('gg_reservation_organizer', locale)}: ${item.groupGiftOrganizerName ?? ''}`}
@@ -2774,9 +2788,12 @@ function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, anim
             <button
               onClick={(e) => { e.stopPropagation(); onExtend(); }}
               style={{
-                background: C.accentSoft, border: `1px solid rgba(124,106,255,0.3)`,
-                borderRadius: 10, padding: '6px 14px', fontSize: 12,
-                color: C.accent, cursor: 'pointer', fontFamily: font, fontWeight: 500,
+                background: 'var(--wb-accent-soft)',
+                border: '1px solid var(--wb-accent-soft-strong)',
+                borderRadius: 12, padding: '7px 14px', fontSize: 12,
+                color: 'var(--wb-accent-strong)',
+                cursor: 'pointer', fontFamily: font, fontWeight: 650,
+                letterSpacing: '-0.005em',
               }}
             >
               {t('smart_res_extend_btn', locale)}
@@ -2786,9 +2803,12 @@ function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, anim
             <button
               onClick={(e) => { e.stopPropagation(); onGroupGift(); }}
               style={{
-                background: C.accentSoft, border: `1px solid rgba(124,106,255,0.3)`,
-                borderRadius: 10, padding: '6px 14px', fontSize: 12,
-                color: C.accent, cursor: 'pointer', fontFamily: font, fontWeight: 500,
+                background: 'var(--wb-accent-soft)',
+                border: '1px solid var(--wb-accent-soft-strong)',
+                borderRadius: 12, padding: '7px 14px', fontSize: 12,
+                color: 'var(--wb-accent-strong)',
+                cursor: 'pointer', fontFamily: font, fontWeight: 650,
+                letterSpacing: '-0.005em',
               }}
             >
               👥 {t('gg_reservation_badge', locale)}
@@ -2798,9 +2818,12 @@ function ReservationCard({ item, onTap, onUnreserve, onExtend, onGroupGift, anim
             <button
               onClick={(e) => { e.stopPropagation(); onUnreserve(); }}
               style={{
-                background: C.redSoft, border: `1px solid rgba(248,113,113,0.3)`,
-                borderRadius: 10, padding: '6px 14px', fontSize: 12,
-                color: C.red, cursor: 'pointer', fontFamily: font, fontWeight: 500,
+                background: 'var(--wb-danger-soft)',
+                border: '1px solid rgba(251,113,133,0.28)',
+                borderRadius: 12, padding: '7px 14px', fontSize: 12,
+                color: 'var(--wb-danger)',
+                cursor: 'pointer', fontFamily: font, fontWeight: 650,
+                letterSpacing: '-0.005em',
               }}
             >
               {t('reservations_unreserve', locale)}
@@ -24858,8 +24881,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 >
                   {t(statusKey, locale) || camp.status}
                 </Chip>
-                {isOwner && <span style={{ fontSize: 12, color: C.textMuted }}>👑 {t('santa_role_owner', locale)}</span>}
-                {!isOwner && myRole === 'ADMIN' && <span style={{ fontSize: 12, color: C.accent }}>{t('santa_organizer_badge', locale)}</span>}
+                {isOwner && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--wb-text-muted)', letterSpacing: '-0.005em' }}>👑 {t('santa_role_owner', locale)}</span>}
+                {!isOwner && myRole === 'ADMIN' && <span style={{ fontSize: 12, fontWeight: 650, color: 'var(--wb-accent-strong)', letterSpacing: '-0.005em' }}>{t('santa_organizer_badge', locale)}</span>}
                 {showRoundBadge && currentRoundNumber && (
                   <Chip tone="accent" size="md">
                     {totalRounds > 1
@@ -24869,10 +24892,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 )}
               </div>
               {camp.description && (
-                <p style={{ fontSize: 14, color: C.textSec, marginTop: 8, lineHeight: 1.5 }}>{camp.description}</p>
+                <p style={{
+                  fontSize: 14, color: 'var(--wb-text-secondary)',
+                  marginTop: 8, lineHeight: 1.5, letterSpacing: '-0.005em',
+                }}>{camp.description}</p>
               )}
               {(camp.minBudget || camp.maxBudget) && (
-                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
+                <div style={{
+                  fontSize: 13, color: 'var(--wb-text-muted)',
+                  marginTop: 6, fontFeatureSettings: '"tnum"',
+                }}>
                   {camp.minBudget && camp.maxBudget
                     ? t('santa_campaign_budget', locale, { min: camp.minBudget, max: camp.maxBudget, currency: camp.currency })
                     : camp.minBudget
