@@ -13284,64 +13284,83 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </Banner>
             </div>
 
-            {/* Hero image — tap to open fullscreen */}
+            {/* v2.1 Hero image — fallback = accent-soft gradient; radius matches mockup */}
             <div
               onClick={imageUrl ? () => setSecretPhotoOpen(true) : undefined}
               style={{
-                width: '100%', height: 200, borderRadius: 18,
+                width: '100%', height: 220, borderRadius: 22,
                 background: imageUrl
                   ? `url(${imageUrl}) center/cover no-repeat`
-                  : 'linear-gradient(135deg, rgba(124,106,255,0.2), rgba(167,139,250,0.15))',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 56, marginBottom: 16,
+                  : 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 64, marginBottom: 16,
                 opacity: (isUnavailable || isFulfilled) ? 0.7 : 1,
                 cursor: imageUrl ? 'pointer' : 'default',
+                border: '1px solid var(--wb-border)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
                 WebkitTapHighlightColor: 'transparent',
               }}
             >
-              {!imageUrl && '🎁'}
+              {!imageUrl && <span style={{ filter: 'drop-shadow(0 8px 20px var(--wb-accent-shadow-soft))' }}>🎁</span>}
             </div>
 
-            {/* Title + price side by side (title left, price top-right) */}
+            {/* v2.1 Title + price */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
               <h1 style={{
                 flex: 1, minWidth: 0,
-                fontSize: 22, fontWeight: 700, margin: 0, fontFamily: font, color: C.text, lineHeight: 1.25,
+                fontSize: 26, fontWeight: 700, margin: 0, fontFamily: font,
+                color: 'var(--wb-text)',
+                lineHeight: 1.05, letterSpacing: '-0.035em',
               }}>{title}</h1>
               {priceText && (
-                <div style={{ fontSize: 17, fontWeight: 700, color: C.accent, whiteSpace: 'nowrap', paddingTop: 3 }}>
+                <div style={{
+                  fontSize: 18, fontWeight: 700,
+                  color: 'var(--wb-accent-strong)',
+                  whiteSpace: 'nowrap', paddingTop: 4,
+                  fontFeatureSettings: '"tnum"',
+                  letterSpacing: '-0.025em',
+                }}>
                   {priceText}
                 </div>
               )}
             </div>
 
-            {/* Owner chip (clickable if username) + privacy chip */}
+            {/* v2.1 Owner chip (glass pill) + privacy chip */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
               <div
                 onClick={ownerClickable ? openOwnerProfile : undefined}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 8,
                   padding: '5px 12px 5px 5px', borderRadius: 100,
-                  background: C.surface, border: `1px solid ${C.border}`,
+                  background: 'var(--wb-card)',
+                  border: '1px solid var(--wb-border)',
                   cursor: ownerClickable ? 'pointer' : 'default',
+                  WebkitBackdropFilter: 'blur(14px)' as never,
+                  backdropFilter: 'blur(14px)' as never,
                   WebkitTapHighlightColor: 'transparent',
                 }}
               >
                 <UserAvatar avatarUrl={sr.ownerAvatarUrl} name={sr.ownerName} size={22} accent="#A78BFA" />
-                <span style={{ fontSize: 12, fontWeight: 600, color: ownerClickable ? C.accent : C.textSec }}>
+                <span style={{
+                  fontSize: 12, fontWeight: 650,
+                  color: ownerClickable ? 'var(--wb-accent-strong)' : 'var(--wb-text-secondary)',
+                  letterSpacing: '-0.005em',
+                }}>
                   {t('sr_detail_from_label', locale)} {sr.ownerName}{ownerClickable ? ' ›' : ''}
                 </span>
               </div>
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 fontSize: 11, padding: '5px 12px', borderRadius: 100,
-                background: 'rgba(167,139,250,0.14)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.25)',
-                fontWeight: 600,
+                background: 'var(--wb-accent-soft)',
+                color: 'var(--wb-accent-strong)',
+                border: '1px solid var(--wb-accent-soft-strong)',
+                fontWeight: 650, letterSpacing: '0.1px',
               }}>
                 🔒 {t('sr_detail_privacy_banner_title', locale)}
               </span>
             </div>
 
-            {/* URL chip (inline, above description) */}
+            {/* v2.1 URL chip */}
             {url && (
               <div style={{ marginBottom: 14 }}>
                 <a
@@ -13351,26 +13370,39 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   onClick={(e) => e.stopPropagation()}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
-                    color: C.accent, background: C.accentSoft, padding: '8px 14px',
-                    borderRadius: 12, textDecoration: 'none',
+                    color: 'var(--wb-accent-strong)',
+                    background: 'var(--wb-accent-soft)',
+                    border: '1px solid var(--wb-accent-soft-strong)',
+                    padding: '8px 14px', borderRadius: 14,
+                    textDecoration: 'none', fontWeight: 650,
+                    letterSpacing: '-0.005em',
                     maxWidth: '100%', overflow: 'hidden',
                   }}
                 >
                   <span style={{ flexShrink: 0 }}>🔗</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFeatureSettings: '"tnum"' }}>
                     {url.replace(/^https?:\/\//, '')}
                   </span>
                 </a>
               </div>
             )}
 
-            {/* Description */}
+            {/* v2.1 Description */}
             {description && (
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font, marginBottom: 8 }}>
+                <div style={{
+                  fontSize: 12, fontWeight: 600,
+                  color: 'var(--wb-text-muted)',
+                  fontFamily: font, marginBottom: 8,
+                  textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                }}>
                   {t('sr_detail_description_title', locale)}
                 </div>
-                <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                <div style={{
+                  fontSize: 14, color: 'var(--wb-text-secondary)',
+                  lineHeight: 1.6, letterSpacing: '-0.005em',
+                  whiteSpace: 'pre-wrap',
+                }}>
                   {description}
                 </div>
               </div>
