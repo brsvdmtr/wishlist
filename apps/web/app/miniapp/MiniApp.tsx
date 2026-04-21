@@ -15666,25 +15666,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           isPro={planInfo.code === 'PRO'}
           tgFetch={tgFetch}
         />
-        {/* Curated selection nudge in share screen */}
+        {/* v2.1 Curated selection nudge — glass card with accent-soft thumb */}
         <div style={{ padding: '0 20px', marginTop: -100 }}>
           <div
             onClick={() => {
               setScreen('wishlist-detail');
               setTimeout(() => enterCuratedSelectionMode(), 100);
             }}
+            className="wb-card-pressed"
             style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '14px 16px', background: C.surface, borderRadius: 14,
-              border: `1px solid ${C.border}`, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '14px 16px',
+              background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 18, cursor: 'pointer',
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(96,165,250,0.12)', color: '#60A5FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>📋</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{t('curated_nudge_title', locale)}</div>
-              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 1 }}>{t('curated_nudge_subtitle', locale)}</div>
+            <div style={{
+              width: 42, height: 42, borderRadius: 13,
+              background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+              color: 'var(--wb-accent-strong)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+              flexShrink: 0,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+            }}>📋</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--wb-text)', letterSpacing: '-0.012em' }}>{t('curated_nudge_title', locale)}</div>
+              <div style={{ fontSize: 12.5, color: 'var(--wb-text-secondary)', marginTop: 2, letterSpacing: '-0.003em' }}>{t('curated_nudge_subtitle', locale)}</div>
             </div>
-            <span style={{ color: C.textMuted, fontSize: 14 }}>›</span>
+            <span style={{ color: 'var(--wb-text-muted)', fontSize: 18 }}>›</span>
           </div>
         </div>
       </>)}
