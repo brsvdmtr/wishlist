@@ -4,6 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMe
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
 import { Banner, Button, Card, Chip, CounterBadge, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider } from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
+import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
 
 // ═══════════════════════════════════════════════════════
@@ -11679,46 +11680,35 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </>
             )}
 
-            {/* ── Normal mode ── */}
-            {!reorderMode && wishlists.map((wl, i) => (
-              <ListRow
-                key={wl.id}
-                variant="card"
-                interactive
-                state={wl.readOnly ? 'muted' : 'neutral'}
-                onClick={() => void openWishlist(wl)}
-                style={{ animation: `fadeIn 0.3s ease ${(i + 1) * 0.08}s both` }}
-                /* Mockup thumb: 48×48 rounded square with emoji hashed from title */
-                leading={(
-                  <div style={{
-                    width: 48, height: 48, borderRadius: 12,
-                    background: wl.readOnly ? C.surface : C.accentSoft,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 24, flexShrink: 0,
-                  }}>{getEmoji(wl.title)}</div>
-                )}
-                title={<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span>{wl.title}</span>{wl.readOnly && <Chip tone="warning" size="sm">{t('view_only', locale)}</Chip>}</div>}
-                subtitle={t('wishlist_count', locale, { count: wl.itemCount, reserved: wl.reservedCount })}
-                trailing={<span style={{ fontSize: 20, color: C.textMuted }}>›</span>}
-                meta={(wl.itemCount > 0 || wl.deadline) ? (
-                  <>
-                    {wl.itemCount > 0 && (
-                      <div style={{ height: 4, borderRadius: 100, background: C.surface, overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${(wl.reservedCount / wl.itemCount) * 100}%`,
-                          background: `linear-gradient(90deg, ${C.accent}, ${C.green})`,
-                          borderRadius: 100, transition: 'width 0.5s',
-                        }} />
-                      </div>
-                    )}
-                    {wl.deadline && (
-                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>📅 {fmtDeadline(wl.deadline)}</div>
-                    )}
-                  </>
-                ) : undefined}
-              />
-            ))}
+            {/* ── Normal mode — v2.1 WishlistCard ── */}
+            {!reorderMode && wishlists.map((wl, i) => {
+              // Derive chip: deadline countdown OR 100% progress milestone.
+              const pct = wl.itemCount > 0 ? Math.round((wl.reservedCount / wl.itemCount) * 100) : 0;
+              let chipHint: { tone: 'accent' | 'success' | 'warning'; label: string } | undefined;
+              if (wl.readOnly) {
+                chipHint = { tone: 'warning', label: t('view_only', locale) };
+              } else if (wl.deadline) {
+                const raw = fmtDeadline(wl.deadline);
+                if (raw) chipHint = { tone: 'accent', label: raw };
+              } else if (pct >= 75 && wl.itemCount > 0) {
+                chipHint = { tone: 'success', label: `${pct}%` };
+              }
+              return (
+                <WishlistCardV21
+                  key={wl.id}
+                  emoji={getEmoji(wl.title) ?? '🎁'}
+                  title={wl.title}
+                  subtitle={t('wishlist_count', locale, { count: wl.itemCount, reserved: wl.reservedCount })}
+                  progress={wl.itemCount > 0 ? pct : undefined}
+                  chip={chipHint}
+                  countdown={wl.deadline ? `📅 ${fmtDeadline(wl.deadline)}` : undefined}
+                  highlight={i === 0 && !wl.readOnly}
+                  readOnly={wl.readOnly}
+                  onClick={() => void openWishlist(wl)}
+                  index={i}
+                />
+              );
+            })}
 
             {!reorderMode && wishlists.length === 0 && (
               <div style={{ textAlign: 'center', padding: '48px 24px' }}>
