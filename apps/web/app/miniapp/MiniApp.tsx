@@ -14403,41 +14403,57 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         };
         return (
         <div style={{ padding: '0 0 40px' }}>
-          {/* Hero image */}
+          {/* v2.1 Hero image — larger fallback emoji + accent-soft gradient */}
           <div style={{ position: 'relative' }}>
             {viewingItem.imageUrl ? (
-              <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', aspectRatio: '16/10', objectFit: 'cover', display: 'block', background: C.surface }} />
+              <img src={viewingItem.imageUrl} alt="" style={{ width: '100%', aspectRatio: '16/10', objectFit: 'cover', display: 'block', background: 'var(--wb-surface)' }} />
             ) : (
-              <div style={{ width: '100%', aspectRatio: '16/8', background: `linear-gradient(145deg, ${C.surface}, ${C.card})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 72 }}>
-                {getEmoji(viewingItem.title)}
+              <div style={{
+                width: '100%', aspectRatio: '16/8',
+                background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 80,
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+              }}>
+                <span style={{ filter: 'drop-shadow(0 8px 24px var(--wb-accent-shadow-soft))' }}>
+                  {getEmoji(viewingItem.title)}
+                </span>
               </div>
             )}
-            {/* Priority float on image */}
+            {/* v2.1 Priority float — glass chip with backdrop */}
             <div style={{
-              position: 'absolute', bottom: 12, right: 12,
-              padding: '5px 11px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-              background: viewingItem.priority === 3 ? 'rgba(240,78,110,0.85)' : viewingItem.priority === 2 ? 'rgba(232,147,10,0.85)' : 'rgba(107,127,212,0.85)',
+              position: 'absolute', bottom: 14, right: 14,
+              padding: '6px 12px', borderRadius: 100,
+              fontSize: 11, fontWeight: 700,
+              backdropFilter: 'blur(14px) saturate(160%)',
+              WebkitBackdropFilter: 'blur(14px) saturate(160%)' as never,
+              background: viewingItem.priority === 3 ? 'rgba(251,113,133,0.85)' : viewingItem.priority === 2 ? 'rgba(251,191,36,0.85)' : 'rgba(107,127,212,0.85)',
               color: '#fff',
+              letterSpacing: '0.1px',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22)',
             }}>
               {prioEmoji(viewingItem.priority)} {getPriorities(locale).find(p => p.value === viewingItem!.priority)?.label}
             </div>
           </div>
 
           <div style={{ padding: '20px 20px 0' }}>
-            {/* Title + ⋯ menu */}
+            {/* v2.1 Title + ⋯ menu — display-md typography */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, position: 'relative' }}>
               <h1 onClick={() => void copyTitleV2()} style={{
-                flex: 1, minWidth: 0, fontSize: 20, fontWeight: 700, fontFamily: font,
-                color: C.text, margin: 0, lineHeight: 1.3, letterSpacing: '-0.3px',
+                flex: 1, minWidth: 0,
+                fontSize: 24, fontWeight: 700, fontFamily: font,
+                color: 'var(--wb-text)',
+                margin: 0, lineHeight: 1.1, letterSpacing: '-0.03em',
                 cursor: displayTitle ? 'pointer' : 'default',
               }}>{displayTitle}</h1>
               {!isDraftItem && viewingItem.status !== 'purchased' && (
                 <button onClick={() => setShowItemMenu(v => !v)} style={{
-                  width: 36, height: 36, borderRadius: 12, flexShrink: 0, marginTop: 2,
-                  background: showItemMenu ? 'rgba(124,106,255,0.15)' : 'rgba(255,255,255,0.06)',
-                  border: `1px solid ${showItemMenu ? 'rgba(124,106,255,0.3)' : 'rgba(255,255,255,0.08)'}`,
-                  color: showItemMenu ? C.accent : C.textMuted, fontSize: 16, cursor: 'pointer',
+                  width: 40, height: 40, borderRadius: 14, flexShrink: 0, marginTop: 2,
+                  background: showItemMenu ? 'var(--wb-accent-soft)' : 'var(--wb-surface)',
+                  border: `1px solid ${showItemMenu ? 'var(--wb-accent-soft-strong)' : 'var(--wb-border)'}`,
+                  color: showItemMenu ? 'var(--wb-accent-strong)' : 'var(--wb-text)',
+                  fontSize: 17, cursor: 'pointer',
+                  WebkitBackdropFilter: 'blur(20px) saturate(140%)' as never,
+                  backdropFilter: 'blur(20px) saturate(140%)' as never,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>⋯</button>
               )}
@@ -14481,18 +14497,29 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               )}
             </div>
 
-            {/* Price + Link */}
+            {/* v2.1 Price + Link */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
               {viewingItem.price != null && (
-                <span style={{ fontSize: 22, fontWeight: 800, color: C.accent, letterSpacing: '-0.3px', fontVariantNumeric: 'tabular-nums' }}>
+                <span style={{
+                  fontSize: 26, fontWeight: 700,
+                  color: 'var(--wb-accent-strong)',
+                  letterSpacing: '-0.035em',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
                   {fmtPrice(viewingItem.price, locale, viewingItem.currency ?? 'RUB')}
                 </span>
               )}
               {viewingItem.url && (
                 <a href={viewingItem.url} target="_blank" rel="noreferrer" style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px',
-                  background: 'rgba(255,255,255,0.05)', border: `1px solid rgba(255,255,255,0.08)`,
-                  borderRadius: 20, fontSize: 12, color: C.textSec, textDecoration: 'none',
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px',
+                  background: 'var(--wb-surface)',
+                  border: '1px solid var(--wb-border)',
+                  borderRadius: 100, fontSize: 12,
+                  color: 'var(--wb-text-secondary)',
+                  textDecoration: 'none', fontWeight: 600,
+                  WebkitBackdropFilter: 'blur(14px)' as never,
+                  backdropFilter: 'blur(14px)' as never,
+                  fontFeatureSettings: '"tnum"',
                 }}>
                   🔗 {viewingItem.sourceDomain || new URL(viewingItem.url).hostname.replace(/^www\./, '')} ↗
                 </a>
