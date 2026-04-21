@@ -20547,13 +20547,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {done.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('✓', t('gn_done', locale), done.length, '#34D399')}{done.map(card)}</div>}
             {archived.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('📦', t('gn_archive', locale), archived.length)}{archived.map(card)}</div>}
 
-            {/* CTA — fixed at bottom */}
-            <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 12px', pointerEvents: 'none' }}>
-              <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
-                style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
-                {isEmpty ? t('gn_empty_cta_custom', locale) : `+ ${t('gn_add_occasion', locale)}`}
-              </button>
-            </div>
+            {/* v2.1 FAB — + bottom-right above FloatingNav */}
+            <button
+              onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
+              aria-label={isEmpty ? t('gn_empty_cta_custom', locale) : t('gn_add_occasion', locale)}
+              style={{
+                position: 'fixed', right: 20,
+                bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+                width: 58, height: 58, borderRadius: 20,
+                background: 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))',
+                color: '#fff', fontSize: 26, fontWeight: 300, lineHeight: 1,
+                border: 'none', cursor: 'pointer', zIndex: 50,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 14px 40px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.24), 0 1px 2px rgba(0,0,0,0.3)',
+                transition: 'transform 0.15s ease',
+              }}
+            >
+              +
+            </button>
           </div>
         );
       })()}
@@ -20688,13 +20699,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 </Card>
               ))}
 
-              {/* Add idea CTA — fixed at bottom */}
-              <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 12px', pointerEvents: 'none' }}>
-                <button onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }}
-                  style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
-                  + {t('gn_add_idea', locale)}
-                </button>
-              </div>
+              {/* v2.1 FAB — + idea bottom-right above FloatingNav */}
+              <button
+                onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }}
+                aria-label={t('gn_add_idea', locale)}
+                style={{
+                  position: 'fixed', right: 20,
+                  bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+                  width: 58, height: 58, borderRadius: 20,
+                  background: 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))',
+                  color: '#fff', fontSize: 26, fontWeight: 300, lineHeight: 1,
+                  border: 'none', cursor: 'pointer', zIndex: 50,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 14px 40px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.24), 0 1px 2px rgba(0,0,0,0.3)',
+                  transition: 'transform 0.15s ease',
+                }}
+              >
+                +
+              </button>
             </div>
 
             {/* Edit BottomSheet */}
