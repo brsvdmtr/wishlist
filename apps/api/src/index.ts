@@ -346,6 +346,58 @@ async function sendTgBotMessage(chatId: string, text: string, replyMarkup?: Reco
 }
 
 
+/**
+ * Create a Telegram Stars invoice link. Wraps the raw TG API call with a
+ * single retry on network failure (timeout / DNS / IPv4 block) so a
+ * transient blip doesn't surface as an unhandled 500 in a billing handler.
+ *
+ * Returns a discriminated union so callers can distinguish:
+ *   - ok=true              → use .url
+ *   - ok=false, retryable  → network problem, suggest retry (503)
+ *   - ok=false, !retryable → Telegram rejected (invalid payload/etc), 502
+ *
+ * Observed root cause: 2026-04-20 unhandled 500 on /tg/billing/pro/checkout
+ * from `fetch failed: Connect Timeout Error` on the TG API. The whole
+ * request was lost — user saw a plain 500 instead of a retry hint.
+ */
+type InvoiceLinkResult =
+  | { ok: true; url: string }
+  | { ok: false; retryable: boolean; description?: string };
+
+async function createTgInvoiceLink(
+  botToken: string,
+  invoiceBody: Record<string, unknown>,
+): Promise<InvoiceLinkResult> {
+  const url = `https://api.telegram.org/bot${botToken}/createInvoiceLink`;
+  const payload = JSON.stringify(invoiceBody);
+  let lastError: string | undefined;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const tgRes = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      });
+      const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
+      if (data.ok && data.result) return { ok: true, url: data.result };
+      // Telegram returned a structured rejection — not retryable (invalid payload,
+      // blocked bot, etc). Surface description so caller can log + toast.
+      return { ok: false, retryable: false, description: data.description };
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      if (attempt < 2) {
+        // Small backoff before the retry attempt.
+        await new Promise((r) => setTimeout(r, 500));
+        continue;
+      }
+    }
+  }
+
+  logger.warn({ err: lastError }, 'createTgInvoiceLink network failure after retry');
+  return { ok: false, retryable: true, description: lastError };
+}
+
 /** Send alert to all ADMIN_ALERT_CHAT_IDS. Best-effort, never throws. */
 async function sendAdminAlert(text: string): Promise<void> {
   const token = process.env.BOT_TOKEN;
@@ -12051,16 +12103,15 @@ tgRouter.post(
       invoiceBody.subscription_period = PRO_SUBSCRIPTION_PERIOD;
     }
 
-    const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(invoiceBody),
-    });
-
-    const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
-    if (!data.ok || !data.result) {
-      logger.error({ data, plan }, 'billing createInvoiceLink failed');
-      trackEvent('checkout_failed', user.id, { reason: data.description, plan });
+    const tg = await createTgInvoiceLink(botToken, invoiceBody);
+    if (!tg.ok) {
+      if (tg.retryable) {
+        logger.warn({ reason: tg.description, plan }, 'billing createInvoiceLink network failure');
+        trackEvent('checkout_failed', user.id, { reason: 'tg_network_timeout', plan });
+        return res.status(503).json({ error: 'telegram_unavailable' });
+      }
+      logger.error({ description: tg.description, plan }, 'billing createInvoiceLink failed');
+      trackEvent('checkout_failed', user.id, { reason: tg.description, plan });
       return res.status(502).json({ error: 'Failed to create invoice' });
     }
 
@@ -12076,7 +12127,7 @@ tgRouter.post(
       },
     });
 
-    return res.json({ invoiceUrl: data.result, checkoutSessionId, plan });
+    return res.json({ invoiceUrl: tg.url, checkoutSessionId, plan });
   }),
 );
 
@@ -12262,22 +12313,21 @@ tgRouter.post(
     const payload = `addon:${skuCode}:${req.tgUser!.id}:${targetId ?? '_'}:${sessionId}`;
     const locale = getRequestLocale(req);
 
-    const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: t(`addon_title_${skuCode}` as any, locale, {}),
-        description: t(`addon_desc_${skuCode}` as any, locale, {}),
-        payload,
-        currency: 'XTR',
-        prices: [{ label: t('api_invoice_label', locale), amount: sku.price }],
-      }),
+    const tg = await createTgInvoiceLink(botToken, {
+      title: t(`addon_title_${skuCode}` as any, locale, {}),
+      description: t(`addon_desc_${skuCode}` as any, locale, {}),
+      payload,
+      currency: 'XTR',
+      prices: [{ label: t('api_invoice_label', locale), amount: sku.price }],
     });
-
-    const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
-    if (!data.ok || !data.result) {
-      logger.error({ data }, 'billing addon createInvoiceLink failed');
-      trackEvent('addon_checkout_failed', user.id, { skuCode, reason: data.description });
+    if (!tg.ok) {
+      if (tg.retryable) {
+        logger.warn({ reason: tg.description, skuCode }, 'billing addon createInvoiceLink network failure');
+        trackEvent('addon_checkout_failed', user.id, { skuCode, reason: 'tg_network_timeout' });
+        return res.status(503).json({ error: 'telegram_unavailable' });
+      }
+      logger.error({ description: tg.description, skuCode }, 'billing addon createInvoiceLink failed');
+      trackEvent('addon_checkout_failed', user.id, { skuCode, reason: tg.description });
       return res.status(502).json({ error: 'Failed to create invoice' });
     }
 
@@ -12294,7 +12344,7 @@ tgRouter.post(
     });
 
     trackEvent('addon_checkout_started', user.id, { skuCode, targetId });
-    return res.json({ invoiceUrl: data.result, sessionId });
+    return res.json({ invoiceUrl: tg.url, sessionId });
   }),
 );
 
@@ -12348,24 +12398,20 @@ tgRouter.post(
     const sessionId = crypto.randomUUID();
     const payload = `addon:${GIFT_NOTES_SKU}:${req.tgUser!.id}:_:${sessionId}`;
     trackEvent('gift_notes_checkout_started', user.id);
-    const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/createInvoiceLink`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Gift Notes \uD83C\uDF81',
-        description: 'Gift Notes — forever',
-        payload, currency: 'XTR',
-        prices: [{ label: 'Gift Notes', amount: GIFT_NOTES_PRICE_XTR }],
-      }),
+    const tg = await createTgInvoiceLink(botToken, {
+      title: 'Gift Notes \uD83C\uDF81',
+      description: 'Gift Notes — forever',
+      payload, currency: 'XTR',
+      prices: [{ label: 'Gift Notes', amount: GIFT_NOTES_PRICE_XTR }],
     });
-    const data = (await tgRes.json()) as { ok: boolean; result?: string; description?: string };
-    if (!data.ok || !data.result) {
-      trackEvent('gift_notes_checkout_failed', user.id);
-      return res.status(502).json({ error: 'Failed to create invoice' });
+    if (!tg.ok) {
+      trackEvent('gift_notes_checkout_failed', user.id, { reason: tg.retryable ? 'tg_network_timeout' : tg.description });
+      return res.status(tg.retryable ? 503 : 502).json({ error: tg.retryable ? 'telegram_unavailable' : 'Failed to create invoice' });
     }
     await prisma.paymentEvent.create({
       data: { userId: user.id, telegramPaymentChargeId: `gn_checkout_${sessionId}`, invoicePayload: payload, totalAmount: GIFT_NOTES_PRICE_XTR, currency: 'XTR', eventType: 'gift_notes_invoice_created' },
     });
-    return res.json({ invoiceUrl: data.result, sessionId });
+    return res.json({ invoiceUrl: tg.url, sessionId });
   }),
 );
 
