@@ -9068,16 +9068,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   }, [screen, currentWl?.id, loadWlDontGift]);
 
-  // Deferred autofocus for Create wishlist sheet — avoids the keyboard
-  // popping up BEFORE the sheet has finished its 0.3s slide-up.
+  // Create wishlist sheet autofocus — tricky dance on iOS:
+  // - `autoFocus` prop triggers keyboard BEFORE sheet slides in → "keyboard
+  //   first, sheet second" stutter.
+  // - `setTimeout(focus, 320ms)` waits for sheet, but iOS strips the
+  //   user-gesture bit → keyboard never appears, user must tap input.
+  // - Solution: focus from the FAB tap handler via a chained `requestAnimationFrame`
+  //   — preserves the gesture context (iOS allows keyboard), but happens
+  //   a few frames in so the sheet has begun animating.
   const createWlTitleInputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (!showCreateWl) return;
-    const id = window.setTimeout(() => {
-      createWlTitleInputRef.current?.focus();
-    }, 320);
-    return () => window.clearTimeout(id);
-  }, [showCreateWl]);
+  const focusCreateWlInputSoon = useCallback(() => {
+    // Chained RAF: ~2 frames (~33ms) — enough for React to mount the input,
+    // too short for iOS to lose the gesture context.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        createWlTitleInputRef.current?.focus();
+      });
+    });
+  }, []);
 
   const saveWlDontGift = useCallback(async (wlId: string) => {
     if (wlDgSaving) return;
@@ -12046,7 +12054,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* v2.1 FAB — bottom-right rounded-square (+) above FloatingNav */}
             {!reorderMode && (
               <button
-                onClick={() => setShowCreateWl(true)}
+                onClick={() => { setShowCreateWl(true); focusCreateWlInputSoon(); }}
                 aria-label={t('create_wishlist_btn', locale)}
                 style={{
                   position: 'fixed',
