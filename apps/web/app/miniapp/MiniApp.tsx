@@ -11326,113 +11326,77 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {/* ── Seasonal snowflakes — header area only, purely decorative ── */}
           <div style={{ position: 'relative' }}>
             {santaSeason?.inSeason && <SnowflakeOverlay height={72} />}
-          {/* Mobile-only header — hidden on desktop (sidebar handles navigation) */}
+          {/* v2.1 mobile header — hidden on desktop (sidebar handles navigation).
+              Simple 🔍 / "Мои вишлисты" / ⚙ per the mockup. Old
+              greeting+avatar pattern (v2) is gone: avatar entry moved
+              to FloatingNav 👤 Я; reservations toggle to 🎁 Брони. */}
           {!isDesktop && (() => {
-            // Per v2-home-all-tabs.html mockup: 2-line contextual greeting.
-            //   Wishlists tab: "С возвращением," / "{name} 👋"
-            //   Wishes tab:    "Все мои желания" / "{count} желаний · {wlCount} вишлистов"
-            //   Reservations:  "Мои брони" / "{n} активных[ · {m} секретных 🔒]"
-            const userName = tgUser?.first_name ?? '';
-            const wlCount = wishlists.length;
             const activeReservations = reservations.length + santaReservationItems.length;
-            const secretCount = secretReservations.length;
-
-            const headerTop =
-              homeTab === 'wishes'        ? t('home_hdr_wishes_title', locale) :
-              homeTab === 'reservations'  ? t('home_hdr_reservations_title', locale) :
-              t('home_hdr_welcome', locale);
-
-            const headerBottom = (() => {
-              if (homeTab === 'wishes') {
-                const noun = pluralize(totalItems,
-                  t('home_hdr_wishes_noun_one', locale),
-                  t('home_hdr_wishes_noun_few', locale),
-                  t('home_hdr_wishes_noun_many', locale), locale);
-                const wlNoun = pluralize(wlCount,
-                  t('home_hdr_wishes_wl_noun_one', locale),
-                  t('home_hdr_wishes_wl_noun_few', locale),
-                  t('home_hdr_wishes_wl_noun_many', locale), locale);
-                return t('home_hdr_wishes_sub', locale, {
-                  count: String(totalItems), noun,
-                  wlCount: String(wlCount), wlNoun,
-                });
-              }
-              if (homeTab === 'reservations') {
-                const active = t('home_hdr_reservations_sub_active', locale, { n: String(activeReservations) });
-                const secret = secretCount > 0
-                  ? t('home_hdr_reservations_sub_secret', locale, { n: String(secretCount) })
-                  : '';
-                return active + secret;
-              }
-              // Wishlists tab — welcome + name
-              return userName ? `${userName} 👋` : t('home_hdr_welcome_fallback', locale);
-            })();
+            const subtitleText = homeTab === 'reservations'
+              ? `${activeReservations} ${pluralize(activeReservations, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}`
+              : `${wishlists.length} ${pluralize(wishlists.length, 'активный', 'активных', 'активных', locale)}`;
+            const titleText = homeTab === 'reservations' ? t('reservations_title', locale) : t('my_wishlists', locale);
 
             return (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, position: 'relative', zIndex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
-              {/* Avatar → Profile; hat prop adds the seasonal SVG overlay */}
-              <button
-                onClick={() => { loadProfile(); loadShowcase(); setScreen('profile'); }}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
-                aria-label={t('profile_title', locale)}
-              >
-                <UserAvatar
-                  avatarUrl={profileData?.avatarUrl}
-                  name={resolveOwnerName(profileData, tgUser)}
-                  size={40}
-                  accent={C.accent}
-                  hat={santaSeason?.inSeason ?? false}
-                />
-              </button>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 13, color: C.textMuted, fontWeight: 500, lineHeight: 1.2, fontFamily: font }}>
-                  {headerTop}
-                </div>
-                <div style={{
-                  fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font,
-                  lineHeight: 1.2, letterSpacing: '-0.01em',
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                  {headerBottom}
-                </div>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '6px 0 14px', gap: 8, position: 'relative', zIndex: 1 }}>
+            {/* 🔍 search (stub) */}
+            <button
+              onClick={() => pushToast(locale === 'ru' ? 'Поиск скоро будет доступен' : 'Search is coming soon', 'info')}
+              aria-label="Search"
+              style={{
+                width: 40, height: 40, borderRadius: 14, flexShrink: 0,
+                background: 'var(--wb-surface)', border: '1px solid var(--wb-border)',
+                color: 'var(--wb-text)', fontSize: 17, cursor: 'pointer',
+                WebkitBackdropFilter: 'blur(20px) saturate(140%)' as never,
+                backdropFilter: 'blur(20px) saturate(140%)' as never,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >🔍</button>
+
+            {/* Centered title + subtitle */}
+            <div style={{ flex: 1, textAlign: 'center', overflow: 'hidden' }}>
+              <div style={{
+                fontSize: 16, fontWeight: 650, color: 'var(--wb-text)',
+                letterSpacing: '-0.018em',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {titleText}
+              </div>
+              <div style={{
+                fontSize: 11, color: 'var(--wb-text-muted)', fontWeight: 500,
+                marginTop: 1,
+                display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const,
+                justifyContent: 'center',
+              }}>
+                <span>{subtitleText}</span>
+                {planInfo.code === 'PRO' && (
+                  <span style={{
+                    padding: '1px 6px', borderRadius: 6,
+                    fontSize: 9, fontWeight: 700,
+                    background: 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))',
+                    color: '#fff', letterSpacing: 0.3,
+                  }}>⭐ PRO</span>
+                )}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              {/* PRO chip — only on Wishlists tab per mockup right-slot spec */}
-              {planInfo.code === 'PRO' && homeTab === 'wishlists' && (
-                <Chip tone="pro" size="md">⭐ PRO</Chip>
-              )}
-              {/* Gift Notes entry icon */}
-              <button
-                onClick={async () => {
-                  setGnSeenBadge(true);
-                  try { window.localStorage.setItem('seen_event_calendar_v1', '1'); } catch { /* ok */ }
-                  if (gnAccess.unlocked) {
-                    setGnLoading(true);
-                    try { const r = await tgFetch('/tg/gift-occasions'); if (r.ok) { const d = await r.json() as { occasions: any[] }; setGnOccasions(d.occasions); } } catch {}
-                    setGnLoading(false);
-                    setScreen('gift-notes');
-                  } else {
-                    setScreen('gift-notes-paywall');
-                  }
-                }}
-                style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', fontSize: 18, color: C.textMuted, lineHeight: 1, position: 'relative' as const }}
-                aria-label={t('gn_title', locale)}
-              >
-                📅
-                {!gnSeenBadge && <span style={{ position: 'absolute', top: 4, right: 2, fontSize: 7, fontWeight: 800, color: '#FBBF24', background: 'rgba(251,191,36,0.2)', padding: '1px 3px', borderRadius: 3, lineHeight: 1.2, fontFamily: font }}>{t('gn_badge_new', locale)}</span>}
-              </button>
-              {/* Settings gear */}
-              <button
-                onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
-                style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer', fontSize: 20, color: C.textMuted, lineHeight: 1, position: 'relative' as const }}
-                aria-label={t('settings_title', locale)}
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                {hasNewInSettings && <span aria-hidden="true" style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: '50%', background: '#FBBF24' }} />}
-              </button>
-            </div>
+
+            {/* ⚙ settings (right) */}
+            <button
+              onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
+              aria-label={t('settings_title', locale)}
+              style={{
+                width: 40, height: 40, borderRadius: 14, flexShrink: 0,
+                background: 'var(--wb-surface)', border: '1px solid var(--wb-border)',
+                color: 'var(--wb-text)', fontSize: 16, cursor: 'pointer',
+                WebkitBackdropFilter: 'blur(20px) saturate(140%)' as never,
+                backdropFilter: 'blur(20px) saturate(140%)' as never,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                position: 'relative' as const,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              {hasNewInSettings && <span aria-hidden="true" style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: '50%', background: 'var(--wb-warning)' }} />}
+            </button>
           </div>
             );
           })()}
@@ -11459,74 +11423,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           )}
           </div>{/* end seasonal wrapper */}
 
-          {/* ─── Primary home nav: Вишлисты | Желания | Мои брони ───
-              v2-home-all-tabs.html: pill-style tab-bar (accent-fill on
-              active), counter-badge on Брони for unread. Subtler than
-              the old big-number+underline design. */}
-          {(() => {
-            // Badge on Брони = active reservation count when user hasn't
-            // viewed the tab yet. Hiding once active avoids pointless self-
-            // notification. No dedicated "unread" tracking yet — can be
-            // replaced with `reservationsCount - reservationsSeenCount` later.
-            const reservationsBadge = homeTab === 'reservations' ? 0 : reservationsCount;
-            const homeTabs = [
-              { tab: 'wishlists' as HomeTab, label: t('home_tab_wishlists', locale), badge: 0 },
-              { tab: 'wishes' as HomeTab, label: t('home_tab_wishes', locale), badge: 0 },
-              { tab: 'reservations' as HomeTab, label: t('home_tab_bookings', locale), badge: reservationsBadge },
-            ];
-            return (
-              <div style={{
-                display: 'flex', gap: 2, padding: 3, marginBottom: 20,
-                background: 'var(--wb-surface)',
-                border: '1px solid var(--wb-border)',
-                borderRadius: 14,
-                WebkitBackdropFilter: 'blur(20px)' as never,
-                backdropFilter: 'blur(20px)' as never,
-              }}>
-                {homeTabs.map((seg) => {
-                  const isActive = homeTab === seg.tab;
-                  return (
-                    <button
-                      key={seg.tab}
-                      onClick={() => {
-                        setHomeTab(seg.tab);
-                        if (seg.tab === 'wishes') void loadAllItems();
-                        else if (seg.tab === 'reservations' && reservations.length === 0 && santaReservationItems.length === 0) void loadReservations();
-                      }}
-                      style={{
-                        flex: 1, border: 'none', cursor: 'pointer',
-                        padding: '9px 10px', fontFamily: font,
-                        borderRadius: 11,
-                        background: isActive
-                          ? 'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))'
-                          : 'transparent',
-                        color: isActive ? 'var(--wb-text)' : 'var(--wb-text-muted)',
-                        fontSize: 13, fontWeight: 600,
-                        letterSpacing: '-0.005em',
-                        boxShadow: isActive
-                          ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 3px rgba(0,0,0,0.3)'
-                          : 'none',
-                        transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-                        WebkitTapHighlightColor: 'transparent',
-                        position: 'relative',
-                      }}
-                    >
-                      {seg.label}
-                      {seg.badge > 0 && (
-                        <CounterBadge
-                          count={seg.badge}
-                          tone="danger"
-                          size="sm"
-                          borderColor={isActive ? 'transparent' : C.card}
-                          style={{ top: -8, right: -8 }}
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })()}
+          {/* v2.1: outer 3-tab bar (Вишлисты/Желания/Мои брони) removed —
+              FloatingNav handles top-level navigation (🏠 Главная /
+              🎁 Брони / etc). homeTab state is retained internally:
+              'reservations' gets set when user taps 🎁 Брони in nav,
+              driving the reservations content below. 'wishes' aggregate
+              view is no longer reachable via UI — can be re-surfaced
+              later as a profile quick-action if users miss it. */}
 
           {/* Mine/Subscribed sub-selector — only in Wishlists tab */}
           {homeTab === 'wishlists' && (
