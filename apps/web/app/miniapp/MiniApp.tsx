@@ -11848,7 +11848,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   onClick={enterReorderMode}
                   style={{
                     background: 'none', border: 'none', padding: '4px 0 4px 12px', cursor: 'pointer',
-                    fontSize: 13, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 4,
+                    fontSize: 13, fontWeight: 600, letterSpacing: '-0.005em',
+                    color: 'var(--wb-text-secondary)',
+                    display: 'flex', alignItems: 'center', gap: 4,
                     fontFamily: font,
                   }}
                 >
@@ -11858,34 +11860,46 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
 
-            {/* ── Reorder mode ── */}
+            {/* ── v2.1 Reorder mode ── */}
             {reorderMode && (
               <>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-                  <button
-                    style={{ ...btnPrimary, flex: 1, opacity: reorderSaving ? 0.6 : 1 }}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                  <Button
+                    variant="primary-gradient"
+                    fullWidth
+                    loading={reorderSaving}
                     onClick={() => void handleSaveReorder()}
-                    disabled={reorderSaving}
                   >
-                    {reorderSaving ? '…' : t('wl_reorder_save', locale)}
-                  </button>
-                  <button
-                    style={{ ...btnGhost, flex: 1 }}
+                    {t('wl_reorder_save', locale)}
+                  </Button>
+                  <Button
+                    variant="surface"
+                    fullWidth
                     onClick={cancelReorderMode}
                   >
                     {t('wl_reorder_cancel', locale)}
-                  </button>
+                  </Button>
                 </div>
                 {reorderList.map((wl, i) => (
                   <div
                     key={wl.id}
                     style={{
-                      background: reorderDragIdx === i ? C.accent + '22' : C.card,
-                      borderRadius: 16, padding: '14px 18px',
-                      border: `1px solid ${reorderDragIdx === i ? C.accent : C.border}`,
+                      background: reorderDragIdx === i
+                        ? 'var(--wb-accent-soft)'
+                        : 'var(--wb-card)',
+                      border: reorderDragIdx === i
+                        ? '1px solid var(--wb-accent-soft-strong)'
+                        : '1px solid var(--wb-border)',
+                      borderRadius: 18, padding: '14px 18px',
                       display: 'flex', alignItems: 'center', gap: 12,
-                      transition: 'background 0.15s, border-color 0.15s',
+                      marginBottom: 8,
+                      transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
                       userSelect: 'none', touchAction: 'none',
+                      WebkitBackdropFilter: 'blur(14px)' as never,
+                      backdropFilter: 'blur(14px)' as never,
+                      boxShadow: reorderDragIdx === i
+                        ? '0 12px 32px var(--wb-accent-shadow-soft)'
+                        : undefined,
                     }}
                   >
                     <div
@@ -11894,15 +11908,25 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       onPointerUp={handleReorderPointerUp}
                       onPointerCancel={handleReorderPointerUp}
                       style={{
-                        fontSize: 20, color: C.textMuted, cursor: 'grab', padding: '4px 8px 4px 0',
+                        fontSize: 22,
+                        color: reorderDragIdx === i ? 'var(--wb-accent-strong)' : 'var(--wb-text-muted)',
+                        cursor: 'grab', padding: '4px 8px 4px 0',
                         lineHeight: 1, flexShrink: 0, touchAction: 'none',
                       }}
                     >
                       ⠿
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: font, color: C.text }}>{wl.title}</div>
-                      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 15, fontWeight: 650, fontFamily: font,
+                        color: 'var(--wb-text)',
+                        letterSpacing: '-0.015em',
+                      }}>{wl.title}</div>
+                      <div style={{
+                        fontSize: 12, color: 'var(--wb-text-secondary)',
+                        marginTop: 2, letterSpacing: '-0.003em',
+                        fontFeatureSettings: '"tnum"',
+                      }}>
                         {t('wishlist_count', locale, { count: wl.itemCount, reserved: wl.reservedCount })}
                       </div>
                     </div>
