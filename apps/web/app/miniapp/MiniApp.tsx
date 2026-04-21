@@ -16369,10 +16369,33 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={{ textAlign: 'center', padding: 40, color: C.textMuted }}>{t('loading', locale)}</div>
           ) : profileData && (
             <>
-              {/* ── Centered Hero Profile Header ── */}
-              <div style={{ position: 'relative', textAlign: 'center', paddingBottom: 4 }}>
-                {/* Background glow */}
-                <div style={{ position: 'absolute', top: -20, left: '50%', transform: 'translateX(-50%)', width: 200, height: 200, borderRadius: '50%', background: `radial-gradient(circle, ${C.accent}18 0%, transparent 70%)`, pointerEvents: 'none' }} />
+              {/* ── v2.1 Profile Hero — layered gradient + conic-ring + 88px avatar ── */}
+              <div style={{
+                position: 'relative', textAlign: 'center',
+                margin: '8px 0 18px',
+                padding: '24px 20px 22px',
+                borderRadius: 28, overflow: 'hidden',
+                background:
+                  'radial-gradient(circle at 50% 120%, var(--wb-accent-deep), transparent 60%),' +
+                  'radial-gradient(circle at 100% 0%, var(--wb-accent-strong), transparent 50%),' +
+                  'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),' +
+                  'var(--wb-card-strong)',
+                border: '1px solid var(--wb-border)',
+                boxShadow: '0 20px 50px -20px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.08)',
+                WebkitBackdropFilter: 'blur(20px)' as never,
+                backdropFilter: 'blur(20px)' as never,
+              }}>
+                {/* Conic-gradient ring overlay (decorative) */}
+                <div aria-hidden="true" style={{
+                  position: 'absolute', inset: -1, borderRadius: 'inherit',
+                  background: 'conic-gradient(from 140deg at 50% 50%, transparent 0deg, var(--wb-accent-soft-strong) 80deg, transparent 160deg)',
+                  opacity: 0.35, pointerEvents: 'none',
+                  WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+                  mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+                  WebkitMaskComposite: 'xor' as never,
+                  maskComposite: 'exclude',
+                  padding: 1,
+                }} />
 
                 {/* Edit button — top right */}
                 <button
@@ -16384,10 +16407,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     setEditingProfile(true);
                   }}
                   style={{
-                    position: 'absolute', top: 0, right: 0,
-                    background: C.surface, border: `1px solid ${C.borderLight}`,
-                    width: 36, height: 36, borderRadius: 12,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted,
+                    position: 'absolute', top: 12, right: 12, zIndex: 1,
+                    background: 'var(--wb-surface)', border: '1px solid var(--wb-border)',
+                    width: 36, height: 36, borderRadius: 14,
+                    WebkitBackdropFilter: 'blur(20px) saturate(140%)' as never,
+                    backdropFilter: 'blur(20px) saturate(140%)' as never,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--wb-text)',
                   }}
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -16396,18 +16421,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </svg>
                 </button>
 
-                {/* Avatar */}
-                <div style={{ display: 'inline-block', position: 'relative', marginBottom: 14 }}>
+                {/* Avatar XL — v2.1 88px with accent gradient + ambient shadow + inset top */}
+                <div style={{ display: 'inline-block', position: 'relative', marginBottom: 12 }}>
                   <div
                     onClick={() => setShowAvatarSheet(true)}
                     style={{
-                      width: 96, height: 96, borderRadius: '50%',
-                      background: `linear-gradient(135deg, ${C.accent}, ${C.accent}80)`,
+                      width: 88, height: 88, borderRadius: '50%',
+                      background: 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 38, fontWeight: 700, color: '#fff',
+                      fontSize: 36, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em',
                       cursor: 'pointer', position: 'relative',
-                      border: `3px solid ${C.accent}50`,
-                      boxShadow: `0 4px 24px ${C.accent}20`,
+                      boxShadow: '0 12px 32px var(--wb-accent-shadow), inset 0 2px 0 rgba(255,255,255,0.25)',
                       ...(profileData.avatarUrl
                         ? { backgroundImage: `url(${profileData.avatarUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
                         : {}),
@@ -16416,10 +16440,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     {avatarUploading && (
                       <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#fff' }}>…</div>
                     )}
-                    {santaSeason?.inSeason && <SantaHatOverlay size={96} />}
+                    {santaSeason?.inSeason && <SantaHatOverlay size={88} />}
+                    {/* Outer ring -3px */}
+                    <div aria-hidden="true" style={{ position: 'absolute', inset: -3, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.12)', pointerEvents: 'none' }} />
                   </div>
                   {!avatarUploading && (
-                    <div onClick={() => setShowAvatarSheet(true)} style={{ position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #141418', cursor: 'pointer' }}>
+                    <div onClick={() => setShowAvatarSheet(true)} style={{ position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, borderRadius: '50%', background: 'var(--wb-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--wb-bg-elev)', cursor: 'pointer', boxShadow: '0 0 12px var(--wb-accent-shadow-soft)' }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                     </div>
                   )}
