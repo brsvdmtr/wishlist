@@ -201,6 +201,11 @@ model User {
   referralAttributionsAsInviter ReferralAttribution[] @relation("ReferralInviter")
   referralAttributionsAsInvitee ReferralAttribution[] @relation("ReferralInvitee")
   referralRewards               ReferralReward[]
+
+  // v2.1 Appearance preferences (free: dark+violet only; PRO unlocks rest)
+  // Validated server-side in PATCH /tg/settings/appearance.
+  themePreference  String @default("dark")   // 'dark' | 'black'
+  accentPreference String @default("violet") // 'violet' | 'blue' | 'pink' | 'green'
 }
 
 model Wishlist {

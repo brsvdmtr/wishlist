@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, Chip, CounterBadge, HeroCard, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider } from '@wishlist/ui';
+import { Banner, Button, Card, Chip, CounterBadge, HeroCard, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider, useTheme } from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
 import { CalendarScreenV21 } from './screens/CalendarScreenV21';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
@@ -4391,12 +4391,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     notifications: { comments: boolean; reservations: boolean; subscriptions: boolean; marketing: boolean };
     privacy: { profileVisibility: string; subscribePolicy: string; commentsEnabled: boolean; hintsEnabled: boolean };
     appBehavior: { newWishlistPosition: string; cardDisplayMode?: string };
+    appearance?: { theme: 'dark' | 'black'; accent: 'violet' | 'blue' | 'pink' | 'green' };
     isPro: boolean;
     supportId?: string | null;
   };
   const [settingsData, setSettingsData] = useState<SettingsData | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+
+  // v2.1 — bridge ThemeProvider context to backend persistence.
+  // (a) On settings load, mirror server-stored theme/accent into context.
+  // (b) On user-driven theme/accent change, PATCH backend (debounced).
+  // The `synced` ref blocks the initial mirror from firing the PATCH
+  // (would otherwise round-trip on every cold load).
+  const themeCtx = useTheme();
+  const themeSyncedFromServerRef = useRef(false);
   // Track which screen the user came from before opening settings (for correct back navigation)
   const [settingsOriginScreen, setSettingsOriginScreen] = useState<Screen>('my-wishlists');
   const [firstSharePromptData, setFirstSharePromptData] = useState<{ wishlistId: string; wishlistTitle: string } | null>(null);
@@ -5178,6 +5187,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       throw wrapped;
     }
   }, [apiBase, trackEvent]);
+
+  // v2.1 ThemeProvider ↔ backend bridge.
+  // (a) Mirror server-stored appearance into the runtime theme context (once).
+  useEffect(() => {
+    const ap = settingsData?.appearance;
+    if (!ap || themeSyncedFromServerRef.current) return;
+    themeSyncedFromServerRef.current = true;
+    if (ap.theme !== themeCtx.theme) themeCtx.setTheme(ap.theme);
+    if (ap.accent !== themeCtx.accent) themeCtx.setAccent(ap.accent);
+  }, [settingsData?.appearance, themeCtx]);
+
+  // (b) On user-driven theme/accent change (post-mirror), PATCH backend.
+  // FREE-tier PRO combos are silently rejected server-side; UI also blocks
+  // them via AppearanceSettings.handleAccent/handleTheme paywall route.
+  useEffect(() => {
+    if (!themeSyncedFromServerRef.current) return;
+    void tgFetch('/tg/me/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appearance: { theme: themeCtx.theme, accent: themeCtx.accent } }),
+    }).catch(() => {
+      // Persistence is best-effort — local state still works (localStorage)
+      // until user re-opens the app and we re-sync from settings.
+    });
+  }, [themeCtx.theme, themeCtx.accent, tgFetch]);
 
   const flushTelemetry = useCallback(() => {
     const events = telemetryBufferRef.current;

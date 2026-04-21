@@ -9831,6 +9831,12 @@ tgRouter.get(
         newWishlistPosition: isPro ? profile.newWishlistPosition : 'bottom',
         cardDisplayMode: isPro ? (profile.cardDisplayMode ?? 'auto') : 'auto',
       },
+      // v2.1 — runtime theme + accent (PRO-gated). FREE users normalised
+      // to dark+violet to handle PRO→FREE downgrade gracefully.
+      appearance: {
+        theme: isPro ? (user.themePreference ?? 'dark') : 'dark',
+        accent: isPro ? (user.accentPreference ?? 'violet') : 'violet',
+      },
       isPro,
       // Owner-only — never exposed in public/share API responses
       supportId: profile.supportId,
@@ -9909,6 +9915,11 @@ tgRouter.patch(
         newWishlistPosition: z.enum(['top', 'bottom']).optional(),
         cardDisplayMode: z.enum(['auto', 'showcase', 'compact']).optional(),
       }).optional(),
+      // v2.1 — runtime theme + accent. PRO-gated except dark + violet.
+      appearance: z.object({
+        theme: z.enum(['dark', 'black']).optional(),
+        accent: z.enum(['violet', 'blue', 'pink', 'green']).optional(),
+      }).optional(),
     }).safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
 
@@ -9962,6 +9973,22 @@ tgRouter.patch(
       }
     }
 
+    // v2.1 appearance — theme/accent live on the User table, not UserProfile.
+    // Free combo: dark + violet only. Other combos require PRO; silently
+    // ignored from FREE callers (defense in depth — UI also blocks them).
+    if (data.appearance) {
+      const userUpdate: { themePreference?: string; accentPreference?: string } = {};
+      if (data.appearance.theme !== undefined) {
+        if (isPro || data.appearance.theme === 'dark') userUpdate.themePreference = data.appearance.theme;
+      }
+      if (data.appearance.accent !== undefined) {
+        if (isPro || data.appearance.accent === 'violet') userUpdate.accentPreference = data.appearance.accent;
+      }
+      if (Object.keys(userUpdate).length > 0) {
+        await prisma.user.update({ where: { id: user.id }, data: userUpdate });
+      }
+    }
+
     const profile = await prisma.userProfile.upsert({
       where: { userId: user.id },
       update: updateData,
@@ -9989,6 +10016,11 @@ tgRouter.patch(
       req.tgUser?.language_code,
     );
 
+    // Re-read user to pick up any appearance changes
+    const updatedUser = data.appearance
+      ? await prisma.user.findUnique({ where: { id: user.id }, select: { themePreference: true, accentPreference: true } })
+      : { themePreference: user.themePreference, accentPreference: user.accentPreference };
+
     return res.json({
       languageMode: updatedLangMode,
       manualLanguage: updatedManualLang,
@@ -10005,6 +10037,10 @@ tgRouter.patch(
         // "top" is PRO-only — normalize to "bottom" for FREE users
         newWishlistPosition: isPro ? profile.newWishlistPosition : 'bottom',
         cardDisplayMode: isPro ? (profile.cardDisplayMode ?? 'auto') : 'auto',
+      },
+      appearance: {
+        theme: isPro ? (updatedUser?.themePreference ?? 'dark') : 'dark',
+        accent: isPro ? (updatedUser?.accentPreference ?? 'violet') : 'violet',
       },
       isPro,
       // Owner-only — never exposed in public/share API responses
