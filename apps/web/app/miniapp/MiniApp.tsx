@@ -28658,71 +28658,163 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         return (
           <div style={{ padding: '24px 16px 40px', textAlign: 'center' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🎁</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font, marginBottom: 6 }}>{t('gg_join_title', locale)}</div>
-            <div style={{ fontSize: 14, color: C.textSec, marginBottom: 20 }}>{t('gg_join_invited', locale).replace('{{name}}', gg.organizerName)}</div>
+            <div style={{ fontSize: 52, marginBottom: 14, filter: 'drop-shadow(0 12px 28px var(--wb-accent-shadow-soft))' }}>🎁</div>
+            <div style={{
+              fontSize: 26, fontWeight: 700, fontFamily: font,
+              color: 'var(--wb-text)', marginBottom: 6,
+              letterSpacing: '-0.035em', lineHeight: 1.05,
+            }}>{t('gg_join_title', locale)}</div>
+            <div style={{
+              fontSize: 14, color: 'var(--wb-text-secondary)',
+              marginBottom: 20, letterSpacing: '-0.005em',
+            }}>{t('gg_join_invited', locale).replace('{{name}}', gg.organizerName)}</div>
 
-            {/* Item card */}
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, background: C.surface, borderRadius: 14, marginBottom: 16, textAlign: 'left' }}>
+            {/* v2.1 Item card */}
+            <div style={{
+              display: 'flex', gap: 14, alignItems: 'center', padding: 14,
+              background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 18, marginBottom: 14, textAlign: 'left',
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
+            }}>
               {gg.item.imageUrl ? (
-                <img src={gg.item.imageUrl} alt="" style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'cover' }} />
+                <img src={gg.item.imageUrl} alt="" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
               ) : (
-                <div style={{ width: 48, height: 48, borderRadius: 10, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🎁</div>
+                <div style={{
+                  width: 50, height: 50, borderRadius: 14,
+                  background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 24, flexShrink: 0,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+                }}>🎁</div>
               )}
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{gg.item.title}</div>
-                {gg.item.price != null && <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{gg.item.price.toLocaleString()} {currSym}</div>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 15, fontWeight: 600, color: 'var(--wb-text)',
+                  letterSpacing: '-0.015em', lineHeight: 1.3,
+                }}>{gg.item.title}</div>
+                {gg.item.price != null && (
+                  <div style={{
+                    fontSize: 13, color: 'var(--wb-text-secondary)',
+                    fontWeight: 650, marginTop: 2,
+                    fontFeatureSettings: '"tnum"',
+                  }}>{gg.item.price.toLocaleString()} {currSym}</div>
+                )}
               </div>
             </div>
 
-            {/* Stats */}
-            <div style={{ display: 'flex', justifyContent: 'space-around', margin: '16px 0', padding: 12, background: C.surface, borderRadius: 14 }}>
+            {/* v2.1 Stats row */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-around', margin: '14px 0',
+              padding: 14,
+              background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 18,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
+            }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{gg.progressPct}%</div>
-                <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_collected', locale)}</div>
+                <div style={{
+                  fontSize: 20, fontWeight: 700,
+                  color: 'var(--wb-accent-strong)',
+                  letterSpacing: '-0.02em', fontFeatureSettings: '"tnum"',
+                }}>{gg.progressPct}%</div>
+                <div style={{ fontSize: 11, color: 'var(--wb-text-muted)', marginTop: 2 }}>{t('gg_collected', locale)}</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{gg.participantCount}</div>
-                <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_participants', locale)}</div>
+                <div style={{
+                  fontSize: 20, fontWeight: 700, color: 'var(--wb-text)',
+                  letterSpacing: '-0.02em', fontFeatureSettings: '"tnum"',
+                }}>{gg.participantCount}</div>
+                <div style={{ fontSize: 11, color: 'var(--wb-text-muted)', marginTop: 2 }}>{t('gg_participants', locale)}</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: C.orange }}>{fmtAmt(gg.remaining)}</div>
-                <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_remaining', locale)}</div>
+                <div style={{
+                  fontSize: 20, fontWeight: 700,
+                  color: 'var(--wb-warning)',
+                  letterSpacing: '-0.02em', fontFeatureSettings: '"tnum"',
+                }}>{fmtAmt(gg.remaining)}</div>
+                <div style={{ fontSize: 11, color: 'var(--wb-text-muted)', marginTop: 2 }}>{t('gg_remaining', locale)}</div>
               </div>
             </div>
 
-            {/* Deadline */}
+            {/* Deadline banner */}
             {deadlineDate && daysLeft != null && daysLeft > 0 && (
-              <div style={{ padding: '10px 14px', borderRadius: 12, marginBottom: 16, background: C.orangeSoft, color: C.orange, fontSize: 13, fontWeight: 600 }}>
-                {'⏰ ' + t('gg_join_deadline', locale).replace('{{date}}', deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)).replace('{{days}}', String(daysLeft))}
+              <div style={{
+                padding: '10px 14px', borderRadius: 14, marginBottom: 14,
+                background: 'var(--wb-warning-soft)',
+                border: '1px solid rgba(251,191,36,0.28)',
+                color: 'var(--wb-warning)',
+                fontSize: 13, fontWeight: 650,
+                letterSpacing: '-0.005em',
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}>
+                ⏰ {t('gg_join_deadline', locale).replace('{{date}}', deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)).replace('{{days}}', String(daysLeft))}
               </div>
             )}
 
             {/* Organizer note */}
             {gg.note && (
-              <div style={{ padding: 14, borderRadius: 14, marginBottom: 16, background: C.surface, borderLeft: `3px solid ${C.accent}`, textAlign: 'left' }}>
-                <div style={{ fontSize: 14, color: C.text, whiteSpace: 'pre-wrap' }}>{gg.note}</div>
+              <div style={{
+                padding: 14, borderRadius: 14, marginBottom: 14,
+                background: 'var(--wb-card)',
+                border: '1px solid var(--wb-border)',
+                borderLeft: '3px solid var(--wb-accent)',
+                textAlign: 'left',
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}>
+                <div style={{
+                  fontSize: 14, color: 'var(--wb-text)',
+                  whiteSpace: 'pre-wrap', letterSpacing: '-0.005em',
+                  lineHeight: 1.45,
+                }}>{gg.note}</div>
               </div>
             )}
 
             {/* Amount input */}
-            <div style={{ textAlign: 'left', marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('gg_join_amount', locale)}</label>
+            <div style={{ textAlign: 'left', marginBottom: 14 }}>
+              <label style={{
+                display: 'block', fontSize: 11, fontWeight: 600,
+                color: 'var(--wb-text-muted)', marginBottom: 8,
+                textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+              }}>{t('gg_join_amount', locale)}</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="number" inputMode="numeric" value={joinAmt} onChange={e => setJoinAmt(e.target.value)}
-                  style={{ ...inputStyle, flex: 1, fontSize: 18, textAlign: 'center', fontWeight: 700 }} placeholder={t('gg_join_amount_ph', locale)} autoFocus />
-                <span style={{ fontSize: 16, color: C.textSec, fontWeight: 600 }}>{currSym}</span>
+                  style={{
+                    ...inputStyle, flex: 1, fontSize: 20, textAlign: 'center',
+                    fontWeight: 700, letterSpacing: '-0.025em',
+                    fontFeatureSettings: '"tnum"',
+                  }} placeholder={t('gg_join_amount_ph', locale)} autoFocus />
+                <span style={{
+                  fontSize: 18, color: 'var(--wb-text-secondary)',
+                  fontWeight: 650, letterSpacing: '-0.015em',
+                }}>{currSym}</span>
               </div>
             </div>
 
-            {/* Info */}
-            <div style={{ padding: 12, background: C.surface, borderRadius: 12, marginBottom: 20, display: 'flex', gap: 8, alignItems: 'flex-start', textAlign: 'left' }}>
+            {/* Info note */}
+            <div style={{
+              padding: 12, background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 14, marginBottom: 20,
+              display: 'flex', gap: 8, alignItems: 'flex-start', textAlign: 'left',
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
+            }}>
               <span style={{ fontSize: 14 }}>ℹ️</span>
-              <span style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>{t('gg_join_info', locale)}</span>
+              <span style={{
+                fontSize: 12.5, color: 'var(--wb-text-secondary)',
+                lineHeight: 1.45, letterSpacing: '-0.003em',
+              }}>{t('gg_join_info', locale)}</span>
             </div>
 
-            <button
-              disabled={joining}
+            <Button
+              variant="primary-gradient"
+              fullWidth
+              loading={joining}
               onClick={async () => {
                 setJoining(true);
                 try {
@@ -28734,7 +28826,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     }),
                   });
                   if (r.status === 409) {
-                    // Already a participant — go to detail
                     const updated = await (await tgFetch('/tg/group-gifts/' + gg.id)).json() as GroupGiftData;
                     setGroupGiftData(updated);
                     setScreen('group-gift-detail');
@@ -28752,9 +28843,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setJoining(false);
                 }
               }}
-              style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16, opacity: joining ? 0.6 : 1 }}>
-              {joining ? '...' : '✋ ' + t('gg_join_btn', locale)}
-            </button>
+            >
+              ✋ {t('gg_join_btn', locale)}
+            </Button>
           </div>
         );
       })()}
