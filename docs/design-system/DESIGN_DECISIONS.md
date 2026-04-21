@@ -32,6 +32,53 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-04-21 — v2.1 refresh shipped (Phases 0-4) · 12 waves over one session
+
+**Type:** status-change (rollout summary)
+
+**Decision.** v2.1 "modern 2026 refresh" rolled out to prod across 12
+sequential commits (a9b3545 → c98f8da). All 12 builds succeeded; 0 error
+spikes across the full session window per `AnalyticsEvent` checks.
+
+**Waves landed:**
+
+| SHA | Wave | Surface |
+|---|---|---|
+| `a9b3545` | Foundation | Tokens / primitives / governance / Settings AppearancePicker |
+| `1fb7854` | W22 | Home WishlistCard glass + emoji 54 + glow progress |
+| `2d03d8b` | W23 | Home Tabs glass + subtle gradient |
+| `4cef224` | W24 | Guest wishlist HeroCard layered gradient |
+| `712d00d` | W25 | ItemThumb v2.1 + WishCardGuest restyle |
+| `9118ba4` | W26 | Owner wishlist HeroCard parity |
+| `3e2b776` | W27 | Onboarding mesh backdrop + glass cards |
+| `8c706e2` | W28 | Profile hero conic-ring + 88px avatar |
+| `dd10365` | W29 | Paywall hero polish (gradient PRO + accent glow) |
+| `540c4b7` | W30 | Calendar new screen (UI scaffold + stub) |
+| `cb10594` | W31 | Global inputStyle v2.1 shift |
+| `c98f8da` | Phase 4 | Backend appearance persistence (User.themePreference + accentPreference) |
+
+**Phase 4 backend specifics.** Migration `20260426000000_add_user_appearance_prefs`
+applied cleanly at 2026-04-21T08:33:40Z. `GET/PATCH /tg/me/settings`
+extended with `appearance` block; PRO-only combos (theme=black,
+accent≠violet) silently rejected for FREE callers. MiniAppInner picks up
+two effects bridging `useTheme()` ↔ backend (initial mirror + on-change
+PATCH).
+
+**Pending in Phase 5:**
+
+- Showcase profile screen — full v2.1 redesign (was on plan; deferred)
+- CreateWish form — only inputStyle shifted; field-by-field restyle pending
+- FloatingNav adoption — primitive built, no persistent bottom nav exists
+  in current MiniApp IA, so adoption requires nav-architecture decision
+- Legacy purge — `btnBase / btnPrimary / btnSecondary / btnGhost / btnDanger`
+  constants + inline-style hex sites still in MiniApp.tsx
+- COMPONENT_REGISTRY status updates — propagate Phase 1-4 status changes
+
+**Approved by.** Dmitry (live observation across all 12 waves, prod
+checked between commits, "пока работает все четко" / "пилим дальше").
+
+---
+
 ## 2026-04-21 — v2.1 refresh approved as new visual direction (glass + mesh + theme system)
 
 **Type:** north-star-approval · supersession
