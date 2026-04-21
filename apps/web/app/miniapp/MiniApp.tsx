@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, Chip, CounterBadge, HeroCard, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider, useTheme } from '@wishlist/ui';
+import { Banner, Button, Card, Chip, CounterBadge, FloatingNav, HeroCard, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider, useTheme } from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
 import { CalendarScreenV21 } from './screens/CalendarScreenV21';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
@@ -11943,7 +11943,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* spacer for fixed CTA */}
             {!reorderMode && <div style={{ height: 70 }} />}
             {!reorderMode && (
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', pointerEvents: 'none' }}>
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', pointerEvents: 'none' }}>
                 <Button variant="primary-gradient" size="lg" style={{ pointerEvents: 'auto' }} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</Button>
               </div>
             )}
@@ -20540,7 +20540,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {archived.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('📦', t('gn_archive', locale), archived.length)}{archived.map(card)}</div>}
 
             {/* CTA — fixed at bottom */}
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', pointerEvents: 'none' }}>
+            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', pointerEvents: 'none' }}>
               <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
                 style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
                 {isEmpty ? t('gn_empty_cta_custom', locale) : `+ ${t('gn_add_occasion', locale)}`}
@@ -20681,7 +20681,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               ))}
 
               {/* Add idea CTA — fixed at bottom */}
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', pointerEvents: 'none' }}>
+              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', pointerEvents: 'none' }}>
                 <button onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }}
                   style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
                   + {t('gn_add_idea', locale)}
@@ -29709,16 +29709,74 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         );
       })()}
 
+      {/* ── v2.1 FloatingNav — Instagram-like persistent bottom nav ──
+          Visible on main app screens; hidden on full-takeover overlays
+          (onboarding / loading / error / maintenance) and sub-flows
+          that own the full viewport (item-create, share-prompt).
+          Source: docs/design-system/mockups/approved/v2.1-refresh-all-screens.html
+          (`.wb-nav` + `.wb-nav-item`) */}
+      {(() => {
+        const HIDE_ON: Screen[] = [
+          'loading', 'error', 'maintenance',
+          'onboarding-entry', 'onboarding-demo', 'onboarding-complete',
+          'onboarding-try', 'onboarding-success', 'onboarding-recovery',
+          'onboarding-manual', 'onboarding-catalog', 'onboarding-create-wishlist',
+          'onboarding-share', 'first-share-prompt',
+          'guest-link-expired', 'item-unavailable',
+          'legal', 'legal-doc', // simple full-page readers
+        ];
+        if (HIDE_ON.includes(screen)) return null;
+
+        // Derive active nav from (screen, homeTab).
+        let activeNav: 'home' | 'friends' | 'reservations' | 'me' = 'home';
+        if (screen === 'my-reservations' || (screen === 'my-wishlists' && homeTab === 'reservations')) {
+          activeNav = 'reservations';
+        } else if (screen === 'profile' || screen === 'settings' || screen === 'public-profile' || screen === 'showcase-editor' || screen === 'showcase-preview') {
+          activeNav = 'me';
+        }
+
+        return (
+          <FloatingNav
+            active={activeNav}
+            onSelect={(id) => {
+              if (id === 'home') {
+                setHomeTab('wishlists');
+                setScreen('my-wishlists');
+              } else if (id === 'reservations') {
+                setHomeTab('reservations');
+                if (reservations.length === 0 && santaReservationItems.length === 0) void loadReservations();
+                setScreen('my-wishlists');
+              } else if (id === 'me') {
+                void loadProfile();
+                void loadShowcase();
+                setScreen('profile');
+              } else if (id === 'friends') {
+                pushToast('Друзья — скоро будет доступно', 'info');
+              }
+            }}
+            items={[
+              { id: 'home', icon: '🏠', label: 'Главная' },
+              { id: 'friends', icon: '👥', label: 'Друзья' },
+              { id: 'reservations', icon: '🎁', label: 'Брони' },
+              { id: 'me', icon: '👤', label: 'Я' },
+            ]}
+            style={{ bottom: `calc(14px + env(safe-area-inset-bottom, 0px))` }}
+          />
+        );
+      })()}
+
       {/* ── TOASTS ── */}
       <div style={{ position: 'fixed', bottom: 24, left: 16, right: 16, zIndex: 200, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
         {toasts.map((t) => (
           <div key={t.id} style={{
-            background: C.card, borderRadius: 14, padding: '14px 18px',
+            background: 'var(--wb-card)', borderRadius: 14, padding: '14px 18px',
             fontSize: 14, fontWeight: 600, textAlign: 'center',
-            border: `1px solid ${C.borderLight}`,
+            border: '1px solid var(--wb-border-light)',
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            WebkitBackdropFilter: 'blur(20px)' as never,
+            backdropFilter: 'blur(20px)' as never,
             animation: 'toastIn 0.3s ease',
-            color: t.kind === 'success' ? C.green : t.kind === 'warning' ? C.orange : t.kind === 'info' ? C.textSec : C.red,
+            color: t.kind === 'success' ? 'var(--wb-success)' : t.kind === 'warning' ? 'var(--wb-warning)' : t.kind === 'info' ? 'var(--wb-text-secondary)' : 'var(--wb-danger)',
           }}>
             {t.message}
           </div>
