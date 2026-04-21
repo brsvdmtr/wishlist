@@ -18980,95 +18980,138 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', marginLeft: 40 }} />
         );
 
+        // v2.1: uppercase micro-label + glass container + backdrop-filter
         const SettingsSection = ({ title, children, first }: { title: string; children: React.ReactNode; first?: boolean }) => (
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, marginTop: first ? 4 : 18, textTransform: 'uppercase' as const, letterSpacing: 1, paddingLeft: 4 }}>{title}</div>
+            <div style={{
+              fontSize: 12, fontWeight: 600,
+              color: 'var(--wb-text-muted)',
+              marginBottom: 10, marginTop: first ? 4 : 22,
+              textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+              paddingLeft: 4,
+            }}>{title}</div>
             <div style={{
               background: santaSeason?.inSeason
-                ? `linear-gradient(to bottom, rgba(160,210,240,.09) 0%, transparent 10px), ${C.card}`
-                : C.card,
+                ? `linear-gradient(to bottom, rgba(160,210,240,.09) 0%, transparent 10px), var(--wb-card)`
+                : 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
               borderRadius: 20, padding: '4px 18px',
+              WebkitBackdropFilter: 'blur(16px)' as never,
+              backdropFilter: 'blur(16px)' as never,
               ...(santaSeason?.inSeason ? { borderTop: '1px solid rgba(180,220,245,.18)' } : {}),
             }}>{children}</div>
           </div>
         );
 
+        // v2.1 SettingsRow — emoji-ic in rounded-square gradient thumb
         const SettingsRow = ({ icon, label, value, hint, onClick, proBadge, disabled, valueSmall, newBadge }: {
           icon?: string; label: string; value: string; hint?: string; onClick?: () => void; proBadge?: boolean; disabled?: boolean; valueSmall?: boolean; newBadge?: boolean;
         }) => (
           <div onClick={disabled ? undefined : onClick} style={{
-            display: 'flex', alignItems: 'center', padding: '14px 0', gap: 12,
+            display: 'flex', alignItems: 'center', padding: '14px 0', gap: 14,
             cursor: onClick && !disabled ? 'pointer' : 'default',
             transition: 'opacity 0.15s',
           }}>
             {icon && (
               <div style={{
-                width: 28, height: 28, borderRadius: '50%',
-                background: disabled ? C.surface : C.accentSoft,
+                width: 36, height: 36, borderRadius: 12,
+                background: disabled
+                  ? 'var(--wb-surface)'
+                  : 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, flexShrink: 0, opacity: disabled ? 0.4 : 1,
+                fontSize: 16, flexShrink: 0, opacity: disabled ? 0.4 : 1,
+                boxShadow: disabled ? undefined : 'inset 0 1px 0 rgba(255,255,255,0.06)',
               }}>{icon}</div>
             )}
             <div style={{ flex: 1, minWidth: 0, opacity: disabled ? 0.4 : 1 }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 15, fontWeight: 500, color: C.text, lineHeight: 1.3 }}>{label}</span>
+                <span style={{
+                  fontSize: 15, fontWeight: 600,
+                  color: 'var(--wb-text)',
+                  lineHeight: 1.3, letterSpacing: '-0.012em',
+                }}>{label}</span>
                 {proBadge && <ProBadge />}
-                {newBadge && <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #34D399, #10B981)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>NEW</span>}
+                {newBadge && <span style={{
+                  fontSize: 9, fontWeight: 700, color: '#fff',
+                  background: 'linear-gradient(135deg, var(--wb-success), #10B981)',
+                  padding: '2px 6px', borderRadius: 4,
+                  textTransform: 'uppercase' as const, letterSpacing: 0.5,
+                }}>NEW</span>}
               </div>
-              {hint && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{hint}</div>}
+              {hint && <div style={{
+                fontSize: 12.5, color: 'var(--wb-text-secondary)',
+                marginTop: 2, letterSpacing: '-0.003em',
+              }}>{hint}</div>}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, maxWidth: '45%' }}>
               {disabled ? (
-                <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 500 }}>{t('settings_coming_soon', locale)}</span>
+                <span style={{ fontSize: 12, color: 'var(--wb-text-muted)', fontWeight: 500 }}>{t('settings_coming_soon', locale)}</span>
               ) : (
                 <>
-                  {value && <span style={{ fontSize: valueSmall ? 12 : 14, color: C.textMuted, textAlign: 'right' as const, lineHeight: 1.3 }}>{value}</span>}
-                  {onClick && <span style={{ fontSize: 14, color: C.textMuted, fontWeight: 300 }}>{'›'}</span>}
+                  {value && <span style={{
+                    fontSize: valueSmall ? 12 : 14,
+                    color: 'var(--wb-text-secondary)',
+                    textAlign: 'right' as const, lineHeight: 1.3,
+                    letterSpacing: '-0.005em',
+                  }}>{value}</span>}
+                  {onClick && <span style={{
+                    fontSize: 18, color: 'var(--wb-text-muted)',
+                    fontWeight: 300,
+                  }}>{'›'}</span>}
                 </>
               )}
             </div>
           </div>
         );
 
+        // v2.1 SettingsToggle — matches `.wb-toggle` spec with accent glow when on
         const SettingsToggle = ({ icon, label, value, disabled, proBadge, onChange }: {
           icon?: string; label: string; value: boolean; disabled?: boolean; proBadge?: boolean; onChange: (v: boolean) => void;
         }) => (
-          <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', gap: 14 }}>
             {icon && (
               <div style={{
-                width: 28, height: 28, borderRadius: '50%',
-                background: C.accentSoft,
+                width: 36, height: 36, borderRadius: 12,
+                background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, flexShrink: 0,
+                fontSize: 16, flexShrink: 0,
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
               }}>{icon}</div>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: 15, fontWeight: 500, color: disabled ? C.textMuted : C.text, lineHeight: 1.3 }}>{label}</span>
+              <span style={{
+                fontSize: 15, fontWeight: 600,
+                color: disabled ? 'var(--wb-text-muted)' : 'var(--wb-text)',
+                lineHeight: 1.3, letterSpacing: '-0.012em',
+              }}>{label}</span>
               {proBadge && <ProBadge />}
             </div>
             <button
               onClick={() => onChange(!value)}
               disabled={disabled && !proBadge}
               style={{
-                width: 50, height: 28, borderRadius: 14,
-                border: value ? 'none' : `1px solid ${C.borderLight}`,
+                width: 46, height: 28, borderRadius: 100,
+                border: value ? 'none' : '1px solid var(--wb-border)',
                 cursor: disabled ? 'default' : 'pointer',
                 background: value
-                  ? (disabled ? C.accent + '99' : C.accent)
-                  : C.surface,
+                  ? 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))'
+                  : 'rgba(255,255,255,0.08)',
                 position: 'relative',
-                transition: 'background 0.25s, box-shadow 0.25s',
+                transition: 'all 0.2s ease',
                 flexShrink: 0,
-                boxShadow: value && !disabled ? `0 0 12px ${C.accentGlow}, 0 0 4px rgba(124,106,255,0.15)` : 'none',
+                boxShadow: value && !disabled
+                  ? '0 0 16px var(--wb-accent-shadow-soft)'
+                  : 'none',
+                opacity: disabled ? 0.6 : 1,
               }}
             >
               <div style={{
-                width: 22, height: 22, borderRadius: 11,
-                background: disabled ? 'rgba(255,255,255,0.7)' : '#fff',
-                position: 'absolute', top: 3,
-                left: value ? 25 : 3,
+                width: 22, height: 22, borderRadius: '50%',
+                background: '#fff',
+                position: 'absolute', top: 2,
+                left: value ? 22 : 2,
                 transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.35), 0 0 0 0.5px rgba(0,0,0,0.05)',
               }} />
             </button>
           </div>
