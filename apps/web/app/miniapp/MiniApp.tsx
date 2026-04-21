@@ -12928,8 +12928,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {screen === 'my-reservations' && (
         <div style={{ padding: '16px 20px 120px' }}>
           <div style={{ marginBottom: 20 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>🎁 {t('reservations_title', locale)}</h1>
-            <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
+            <h1 style={{
+              fontSize: 26, fontWeight: 700, fontFamily: font,
+              color: 'var(--wb-text)', margin: 0,
+              letterSpacing: '-0.035em', lineHeight: 1.05,
+            }}>🎁 {t('reservations_title', locale)}</h1>
+            <p style={{
+              fontSize: 13, color: 'var(--wb-text-secondary)',
+              margin: '6px 0 0', letterSpacing: '-0.005em',
+            }}>
               {reservationsCount > 0
                 ? `${reservationsCount} ${pluralize(reservationsCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}`
                 : t('reservations_empty_hint', locale)}
