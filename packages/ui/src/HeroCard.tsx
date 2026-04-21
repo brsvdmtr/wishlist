@@ -45,6 +45,12 @@ export function HeroCard({ tone = 'accent', children, style }: HeroCardProps) {
         color: colors.white,
         position: 'relative',
         overflow: 'hidden',
+        // `isolation: isolate` creates a new stacking context so the
+        // child glow's `filter: blur()` is properly clipped by the
+        // parent's border-radius. Without it, Safari/WebKit sometimes
+        // paints the unclipped rectangular bounds of the blurred child,
+        // showing "corner ghosts" outside the rounded clipping path.
+        isolation: 'isolate',
         ...style,
       }}
     >
@@ -60,6 +66,8 @@ export function HeroCard({ tone = 'accent', children, style }: HeroCardProps) {
           background: 'radial-gradient(circle, rgba(255,255,255,0.22), transparent 70%)',
           pointerEvents: 'none',
           filter: 'blur(8px)',
+          // Anchor the filter layer to the parent's stacking context.
+          willChange: 'transform',
         }}
       />
       <div style={{ position: 'relative', zIndex: 1 }}>{children}</div>

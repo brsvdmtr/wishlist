@@ -7425,6 +7425,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return;
       }
 
+      // v2.1: modal bottom-sheets + mode overlays — close them instead of
+      // navigating away. Without this the back button "sticks" because the
+      // sheet is visible but underlying screen nav would be wrong.
+      if (showWlDontGiftEdit) { setShowWlDontGiftEdit(false); return; }
+      if (showWlPrivacy) { setShowWlPrivacy(false); return; }
+      if (showWlManage) { setShowWlManage(false); return; }
+      if (itemReorderMode) { cancelItemReorderMode(); return; }
+      if (catReorderMode) { cancelCatReorderMode?.(); return; }
+      if (reorderMode) { cancelReorderMode(); return; }
+      if (bulkSelectionMode) { setBulkSelectionMode(false); setBulkSelectedIds(new Set()); return; }
+      if (showItemMenu) { setShowItemMenu(false); return; }
+
       // Item form sheet open: intercept Back. Previously the underlying
       // screen navigated away while the sheet stayed visible (confusing).
       // Now: if clean — close sheet + navigate; if dirty — prompt first.
@@ -7577,6 +7589,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (screen === 'group-gift-chat') return;
     if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
   }, [screen]);
+  // (Pre-load dontGift effect lives lower in the file — after loadWlDontGift
+  // is declared — to avoid temporal-dead-zone reference.)
 
   // Group Gift chat: poll for new messages every 5s
   useEffect(() => {
@@ -9021,7 +9035,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   };
 
   // ── Per-wishlist Don't Gift handlers ──
-  const openWlDontGiftEdit = useCallback(async (wlId: string) => {
+  // Silently loads the per-wishlist dont-gift config without opening
+  // the edit sheet. Called on wishlist-detail mount so the wl-manage
+  // menu item can show a ✓ badge when user has customized this wishlist.
+  const loadWlDontGift = useCallback(async (wlId: string) => {
     try {
       const res = await tgFetch(`/tg/wishlists/${wlId}/dont-gift`);
       if (res.ok) {
@@ -9030,10 +9047,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         setWlDgPresets(data.presets);
         setWlDgCustomItems(data.customItems);
         setWlDgComment(data.comment ?? '');
+        // Also update the wishlist list's cached dontGiftMode so subsequent
+        // wl-manage opens see the correct state even without re-fetching.
+        setWishlists(prev => prev.map(w => w.id === wlId ? { ...w, dontGiftMode: data.mode } : w));
       }
     } catch { /* use defaults */ }
-    setShowWlDontGiftEdit(true);
   }, [tgFetch]);
+
+  const openWlDontGiftEdit = useCallback(async (wlId: string) => {
+    await loadWlDontGift(wlId);
+    setShowWlDontGiftEdit(true);
+  }, [loadWlDontGift]);
+
+  // Pre-load per-wishlist dont-gift config on wishlist-detail entry so
+  // the wl-manage menu's ✓ indicator reflects real state without user
+  // having to open the edit sheet first.
+  useEffect(() => {
+    if (screen === 'wishlist-detail' && currentWl?.id) {
+      void loadWlDontGift(currentWl.id);
+    }
+  }, [screen, currentWl?.id, loadWlDontGift]);
+
+  // Deferred autofocus for Create wishlist sheet — avoids the keyboard
+  // popping up BEFORE the sheet has finished its 0.3s slide-up.
+  const createWlTitleInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!showCreateWl) return;
+    const id = window.setTimeout(() => {
+      createWlTitleInputRef.current?.focus();
+    }, 320);
+    return () => window.clearTimeout(id);
+  }, [showCreateWl]);
 
   const saveWlDontGift = useCallback(async (wlId: string) => {
     if (wlDgSaving) return;
@@ -12779,7 +12823,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div>
                 <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('wishlist_name', locale)}</label>
                 <div style={{ position: 'relative' }}>
-                  <input style={{ ...inputStyle, paddingRight: wlTitle ? 40 : 16 }} placeholder={t('wishlist_name_placeholder', locale)} value={wlTitle} onChange={(e) => setWlTitle(e.target.value)} autoFocus />
+                  {/* No autoFocus — iOS pops keyboard before the sheet finishes
+                      its 0.3s slide-up, creating a visible "keyboard first,
+                      sheet second" stutter. Focus is deferred via
+                      `createWlTitleInputRef` + useEffect (see declaration). */}
+                  <input ref={createWlTitleInputRef} style={{ ...inputStyle, paddingRight: wlTitle ? 40 : 16 }} placeholder={t('wishlist_name_placeholder', locale)} value={wlTitle} onChange={(e) => setWlTitle(e.target.value)} />
                   {wlTitle && (
                     <button
                       onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -21904,12 +21952,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <span style={{ fontSize: 20 }}>🚫</span>
             {t('dont_gift_banner_title', locale)}
             {planInfo.code === 'FREE' && <ProBadge style={{ marginLeft: 'auto' }} />}
-            {planInfo.code !== 'FREE' && currentWl?.dontGiftMode && currentWl.dontGiftMode !== 'global' && (
-              <span style={{
-                marginLeft: 'auto', fontSize: 11, fontWeight: 650,
-                color: 'var(--wb-success)', letterSpacing: '-0.005em',
-              }}>✓</span>
-            )}
+            {planInfo.code !== 'FREE' && (() => {
+              // Show ✓ when user has actively customized per-wishlist config.
+              // Two signals: (a) `wlDontGiftMode` state loaded via pre-fetch
+              // on wishlist-detail mount, (b) `currentWl.dontGiftMode` from
+              // wishlist list cache (updated on save).
+              const mode = wlDontGiftMode !== 'global' ? wlDontGiftMode : currentWl?.dontGiftMode;
+              const configured = mode && mode !== 'global';
+              return configured ? (
+                <span style={{
+                  marginLeft: 'auto', fontSize: 11, fontWeight: 650,
+                  color: 'var(--wb-success)', letterSpacing: '-0.005em',
+                }}>✓</span>
+              ) : null;
+            })()}
           </button>
           {/* Smart Reservations per-wishlist settings */}
           <button
