@@ -24990,7 +24990,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {isOrg && camp.status !== 'COMPLETED' && camp.status !== 'CANCELLED' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
                 {camp.status === 'DRAFT' && (
-                  <button
+                  <Button
+                    variant="primary-gradient"
+                    fullWidth
                     onClick={async () => {
                       const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/open`, { method: 'POST' });
                       if (res.ok) {
@@ -24999,13 +25001,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         pushToast(t('done', locale), 'success');
                       } else pushToast(t('error_generic', locale), 'error');
                     }}
-                    style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 0', cursor: 'pointer', fontFamily: font }}
                   >
                     {t('santa_campaign_open_btn', locale)}
-                  </button>
+                  </Button>
                 )}
                 {camp.status === 'OPEN' && participants.filter(p => p.status === 'JOINED').length >= 2 && (
-                  <button
+                  <Button
+                    variant="surface"
+                    fullWidth
                     onClick={async () => {
                       const res = await tgFetch(`/tg/santa/campaigns/${camp.id}/lock`, { method: 'POST' });
                       if (res.ok) {
@@ -25014,16 +25017,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         pushToast(t('done', locale), 'success');
                       } else pushToast(t('error_generic', locale), 'error');
                     }}
-                    style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 14, fontWeight: 600, padding: '12px 0', cursor: 'pointer', fontFamily: font }}
                   >
                     {t('santa_campaign_lock_btn', locale)}
-                  </button>
+                  </Button>
                 )}
 
-                {/* Draw controls — owner-only when LOCKED */}
+                {/* v2.1 Draw controls — owner-only when LOCKED, glass card */}
                 {isOwner && camp.status === 'LOCKED' && (
-                  <div style={{ background: C.card, borderRadius: 14, padding: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 10 }}>
+                  <div style={{
+                    background: 'var(--wb-card)',
+                    border: '1px solid var(--wb-border)',
+                    borderRadius: 18, padding: 16,
+                    WebkitBackdropFilter: 'blur(14px)' as never,
+                    backdropFilter: 'blur(14px)' as never,
+                  }}>
+                    <div style={{
+                      fontSize: 12, fontWeight: 600,
+                      color: 'var(--wb-text-muted)',
+                      marginBottom: 10,
+                      textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                    }}>
                       {t('santa_draw_section_title', locale)}
                     </div>
 
@@ -25111,41 +25124,87 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 )}
 
                 {camp.status === 'DRAW_IN_PROGRESS' && (
-                  <div style={{ background: `${C.accent}15`, borderRadius: 12, padding: '12px 16px', fontSize: 13, color: C.accent, fontWeight: 600, textAlign: 'center' }}>
+                  <div style={{
+                    background: 'var(--wb-accent-soft)',
+                    border: '1px solid var(--wb-accent-soft-strong)',
+                    borderRadius: 14, padding: '12px 16px',
+                    fontSize: 13, color: 'var(--wb-accent-strong)',
+                    fontWeight: 650, textAlign: 'center',
+                    letterSpacing: '-0.005em',
+                    WebkitBackdropFilter: 'blur(14px)' as never,
+                    backdropFilter: 'blur(14px)' as never,
+                  }}>
                     ⏳ {t('santa_draw_in_progress', locale)}
                   </div>
                 )}
               </div>
             )}
 
-            {/* Invite link (owner only, OPEN campaigns) */}
+            {/* v2.1 Invite link card (owner only, OPEN campaigns) */}
             {isOwner && camp.inviteToken && ['DRAFT', 'OPEN'].includes(camp.status) && (
-              <div style={{ background: C.card, borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>{t('santa_campaign_invite_link', locale)}</div>
+              <div style={{
+                background: 'var(--wb-card)',
+                border: '1px solid var(--wb-border)',
+                borderRadius: 18, padding: '14px 16px', marginBottom: 16,
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}>
+                <div style={{
+                  fontSize: 12, fontWeight: 600,
+                  color: 'var(--wb-text-muted)',
+                  marginBottom: 8,
+                  textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                }}>{t('santa_campaign_invite_link', locale)}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13, color: C.textSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{
+                    fontSize: 13, color: 'var(--wb-text-secondary)',
+                    flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    fontFeatureSettings: '"tnum"',
+                  }}>
                     {`t.me/${botUsername}?start=santa_${camp.inviteToken}`}
                   </span>
-                  <button onClick={copyInviteLink} style={{ background: C.accent, border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 600, padding: '6px 12px', cursor: 'pointer', flexShrink: 0 }}>
+                  <button onClick={copyInviteLink} style={{
+                    background: 'var(--wb-accent-soft)',
+                    color: 'var(--wb-accent-strong)',
+                    border: '1px solid var(--wb-accent-soft-strong)',
+                    borderRadius: 11, fontSize: 12, fontWeight: 650,
+                    padding: '7px 12px', cursor: 'pointer', flexShrink: 0,
+                    letterSpacing: '-0.005em', fontFamily: font,
+                  }}>
                     {t('copy', locale)}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* My alias — shown after draw, to all participants including organizer */}
+            {/* v2.1 My alias card */}
             {myAlias && (
-              <div style={{ background: `${C.accent}12`, borderRadius: 14, padding: '12px 16px', marginBottom: 16, border: `1px solid ${C.accent}30` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <SantaAvatar alias={myAlias.alias} emoji={myAlias.emoji} size={40} hat={santaSeason?.inSeason} />
+              <div style={{
+                background: 'linear-gradient(135deg, var(--wb-card-strong), var(--wb-accent-soft))',
+                borderRadius: 18, padding: '14px 16px', marginBottom: 16,
+                border: '1px solid var(--wb-accent-soft-strong)',
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <SantaAvatar alias={myAlias.alias} emoji={myAlias.emoji} size={44} hat={santaSeason?.inSeason} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 2 }}>
+                    <div style={{
+                      fontSize: 11, fontWeight: 600,
+                      color: 'var(--wb-text-muted)',
+                      textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                      marginBottom: 2,
+                    }}>
                       {t('santa_your_name_label', locale)}
                     </div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
+                    <div style={{
+                      fontSize: 16, fontWeight: 700,
+                      color: 'var(--wb-text)',
+                      letterSpacing: '-0.02em',
+                    }}>
                       {renderSantaAlias(myAlias.adjectiveKey, myAlias.animalKey, locale) || myAlias.alias}
                     </div>
-                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                    <div style={{ fontSize: 11.5, color: 'var(--wb-text-secondary)', marginTop: 3, letterSpacing: '-0.003em' }}>
                       {locale === 'ru'
                         ? 'Имя меняется автоматически в каждом новом раунде'
                         : 'Name changes automatically each new round'}
