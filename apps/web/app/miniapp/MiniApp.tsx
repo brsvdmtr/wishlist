@@ -28156,14 +28156,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const price = ggAccess.priceXtr;
         return (
           <div style={{ padding: '24px 16px 40px', textAlign: 'center' }}>
+            {/* v2.1 hero emoji plate — glass + layered gradient + accent-glow drop */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 80, height: 80, borderRadius: 24,
-              background: `linear-gradient(145deg, ${C.accent}22, ${C.accent}08)`,
-              border: `1px solid ${C.accent}18`,
-              fontSize: 40, marginBottom: 20,
-            }}>👥</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: font, marginBottom: 8 }}>{t('gg_paywall_title', locale)}</div>
+              width: 88, height: 88, borderRadius: 22,
+              background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+              border: '1px solid var(--wb-accent-soft-strong)',
+              fontSize: 44, marginBottom: 20,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 32px var(--wb-accent-shadow-soft)',
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
+            }}>
+              <span style={{ filter: 'drop-shadow(0 4px 12px var(--wb-accent-shadow-soft))' }}>👥</span>
+            </div>
+            <div style={{
+              fontSize: 26, fontWeight: 700, fontFamily: font,
+              color: 'var(--wb-text)', marginBottom: 8,
+              letterSpacing: '-0.035em', lineHeight: 1.05,
+            }}>{t('gg_paywall_title', locale)}</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, margin: '20px 0' }}>
               {[
                 { emoji: '👥', text: t('gg_paywall_f1', locale) },
@@ -28171,31 +28181,67 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 { emoji: '🔗', text: t('gg_paywall_f3', locale) },
                 { emoji: '🎯', text: t('gg_paywall_f4', locale) },
               ].map((f, i) => (
-                <div key={i} style={{ background: C.surface, borderRadius: 14, padding: '14px 12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 24, marginBottom: 6 }}>{f.emoji}</div>
-                  <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.3 }}>{f.text}</div>
+                <div key={i} style={{
+                  background: 'var(--wb-card)',
+                  border: '1px solid var(--wb-border)',
+                  borderRadius: 18, padding: '14px 12px', textAlign: 'center',
+                  WebkitBackdropFilter: 'blur(14px)' as never,
+                  backdropFilter: 'blur(14px)' as never,
+                }}>
+                  <div style={{ fontSize: 26, marginBottom: 6 }}>{f.emoji}</div>
+                  <div style={{
+                    fontSize: 12.5, color: 'var(--wb-text-secondary)',
+                    lineHeight: 1.3, letterSpacing: '-0.003em',
+                  }}>{f.text}</div>
                 </div>
               ))}
             </div>
-            <div style={{ background: C.surface, borderRadius: 16, padding: '20px 16px', margin: '20px 0' }}>
+            <div style={{
+              background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 20, padding: '20px 16px', margin: '20px 0',
+              WebkitBackdropFilter: 'blur(16px)' as never,
+              backdropFilter: 'blur(16px)' as never,
+            }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <span style={{ fontSize: 28, fontWeight: 800, color: C.accent, fontFamily: font }}>{price}</span>
-                <span style={{ fontSize: 15, color: C.textSec }}>Stars</span>
+                <span style={{
+                  fontSize: 32, fontWeight: 700,
+                  color: 'var(--wb-accent-strong)',
+                  fontFamily: font,
+                  letterSpacing: '-0.035em',
+                  fontFeatureSettings: '"tnum"',
+                }}>{price}</span>
+                <span style={{ fontSize: 15, color: 'var(--wb-text-secondary)', fontWeight: 500 }}>Stars</span>
               </div>
-              <div style={{ display: 'inline-block', marginTop: 6, padding: '4px 10px', borderRadius: 8, background: C.accentSoft, color: C.accent, fontSize: 12, fontWeight: 600 }}>
+              <div style={{
+                display: 'inline-block', marginTop: 8, padding: '5px 11px',
+                borderRadius: 10,
+                background: 'var(--wb-accent-soft)',
+                border: '1px solid var(--wb-accent-soft-strong)',
+                color: 'var(--wb-accent-strong)',
+                fontSize: 12, fontWeight: 650,
+                letterSpacing: '-0.005em',
+              }}>
                 {t('gg_paywall_badge', locale)}
               </div>
             </div>
-            <button
-              onClick={() => void handleBuyAddon('group_gift_unlock')}
-              disabled={addonCheckoutLoading}
-              style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16, marginBottom: 10, opacity: addonCheckoutLoading ? 0.6 : 1 }}>
-              {addonCheckoutLoading ? '...' : '⭐ ' + t('gg_paywall_buy', locale).replace('{{price}}', String(price))}
-            </button>
-            <button onClick={() => setScreen('guest-item-detail')}
-              style={{ ...btnGhost, width: '100%', fontSize: 15 }}>
-              {t('gg_paywall_later', locale)}
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Button
+                variant="primary-gradient"
+                fullWidth
+                loading={addonCheckoutLoading}
+                onClick={() => void handleBuyAddon('group_gift_unlock')}
+              >
+                ⭐ {t('gg_paywall_buy', locale).replace('{{price}}', String(price))}
+              </Button>
+              <Button
+                variant="ghost"
+                fullWidth
+                onClick={() => setScreen('guest-item-detail')}
+              >
+                {t('gg_paywall_later', locale)}
+              </Button>
+            </div>
           </div>
         );
       })()}
