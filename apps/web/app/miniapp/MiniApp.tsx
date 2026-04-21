@@ -12727,7 +12727,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
               <div>
-                <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>📥 {t('drafts_title', locale)}</h1>
+                <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: 0 }}>📥 {t('drafts_title', locale)}</h1>
                 <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
                   {draftsSelectMode
                     ? t('drafts_selected_n', locale, { n: draftsSelected.length })
@@ -15483,7 +15483,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 }}>
                   📋 {t('curated_public_badge', locale)}
                 </div>
-                <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 8px', lineHeight: 1.2 }}>
+                <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '0 0 8px' }}>
                   {sel.title}
                 </h1>
                 {sel.ownerName && (
@@ -18948,7 +18948,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         return (
         <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 20px' }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '0 0 20px' }}>
             {t('settings_title', locale)}
           </h1>
 
@@ -19464,7 +19464,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return (
           <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
             {/* Header */}
-            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 4px' }}>
+            <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '0 0 4px' }}>
               {t('faq_title', locale)}
             </h1>
             <p style={{ fontSize: 13, color: C.textMuted, margin: '0 0 20px', lineHeight: 1.4 }}>
@@ -19546,7 +19546,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ══════════════════════════════════════════════ */}
       {screen === 'changelog' && (
         <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 4px' }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '0 0 4px' }}>
             {t('changelog_title', locale)}
           </h1>
           <p style={{ fontSize: 13, color: C.textMuted, margin: '0 0 20px', lineHeight: 1.4 }}>
@@ -19615,7 +19615,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ══════════════════════════════════════════════ */}
       {screen === 'legal' && (
         <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '0 0 4px' }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '0 0 4px' }}>
             {t('legal_hub_title', locale)}
           </h1>
           <p style={{ fontSize: 13, color: C.textMuted, margin: '0 0 20px', lineHeight: 1.4 }}>
@@ -24701,7 +24701,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ══════════════════════════════════════════════ */}
       {screen === 'santa-create' && (
         <div style={{ padding: '16px 20px 120px' }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, marginTop: 8, marginBottom: 24 }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, marginTop: 8, marginBottom: 24 }}>
             {t('santa_create_title', locale)}
           </h1>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -24850,7 +24850,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return (
           <div style={{ padding: '16px 20px 120px' }}>
             <div style={{ marginBottom: 20 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '8px 0 4px' }}>{camp.title}</h1>
+              <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '8px 0 4px' }}>{camp.title}</h1>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <Chip
                   tone={camp.status === 'ACTIVE' ? 'success' : camp.status === 'CANCELLED' ? 'danger' : 'accent'}
@@ -26878,7 +26878,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         return (
           <div style={{ padding: '16px 20px 120px' }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '8px 0 20px' }}>
+            <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '8px 0 20px' }}>
               🚫 {t('santa_excl_title', locale)}
             </h1>
 
@@ -27258,7 +27258,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ══════════════════════════════════════════════ */}
       {screen === 'santa-join' && (
         <div style={{ padding: '16px 20px 120px' }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: '8px 0 24px' }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '8px 0 24px' }}>
             🎅 {t('santa_join_title', locale)}
           </h1>
 
