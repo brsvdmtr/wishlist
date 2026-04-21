@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
 import { Banner, Button, Card, Chip, CounterBadge, FloatingNav, HeroCard, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider, useTheme } from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
@@ -9070,74 +9071,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
   }, [screen, currentWl?.id, loadWlDontGift]);
 
-  // Create wishlist sheet autofocus — iOS-friendly "focus bridge".
+  // Create wishlist sheet autofocus — iOS-synchronous via `flushSync`.
   //
   // Problem recap: `autoFocus`, setTimeout, and chained RAF all fail to
   // open the keyboard inside Telegram's iOS WebView — Apple strips the
   // user-gesture bit the moment control leaves the synchronous tap
-  // handler.
+  // handler. An earlier proxy-input approach re-opened the keyboard but
+  // caused a visible "keyboard-first, sheet-second" stagger because the
+  // sheet's React reconciliation didn't start until the next microtask.
   //
-  // Solution: during the FAB's sync tap handler, create a throwaway
-  // visible-to-iOS input, focus it → keyboard opens inside the gesture
-  // window. Then we mount the BottomSheet; once the real input is in
-  // the DOM, `useLayoutEffect` transfers focus from the proxy to it.
-  // Because SOMETHING always has focus during the transition, iOS
-  // keeps the keyboard open — no "keyboard vanishes" flicker.
+  // Solution: `flushSync` forces React to mount the Sheet *inside* the
+  // tap handler — when it returns, the real input is already in the DOM
+  // and we can focus it directly, still inside the gesture window.
+  // Sheet slide-up + keyboard raise now start in the same paint frame,
+  // so they animate together instead of sequentially.
   const createWlTitleInputRef = useRef<HTMLInputElement>(null);
-  const createWlFocusProxyRef = useRef<HTMLInputElement | null>(null);
-  const createWlShouldTransferFocusRef = useRef(false);
 
   const openCreateWlWithKeyboard = useCallback(() => {
-    // 1. Mount + focus a proxy input WITHIN the user-gesture event loop.
-    //    Safari/WKWebView treats this as a direct result of the tap.
-    const proxy = document.createElement('input');
-    proxy.type = 'text';
-    // Must be visible enough for iOS to accept focus. `opacity: 0`
-    // alone doesn't count as "hidden" for input, but combined with
-    // fixed top:0; pointer-events:none keeps it invisible to the user.
-    proxy.style.cssText =
-      'position:fixed; top:0; left:0; width:1px; height:1px; ' +
-      'opacity:0; pointer-events:none; z-index:-1; border:none; ' +
-      'background:transparent; font-size:16px;'; // 16px avoids iOS zoom
-    proxy.readOnly = true; // avoid accidental input
-    document.body.appendChild(proxy);
-    proxy.focus();
-    createWlFocusProxyRef.current = proxy;
-    createWlShouldTransferFocusRef.current = true;
-
-    // 2. Schedule the sheet to open on the NEXT tick so the focus call
-    //    above completes fully before React reconciles. Without this,
-    //    iOS sometimes races the focus with the re-render and the
-    //    keyboard flickers.
-    Promise.resolve().then(() => setShowCreateWl(true));
+    // flushSync makes React reconcile + commit synchronously. Without it
+    // the state update is batched and the sheet mounts ~1 microtask later,
+    // which is enough for iOS to finish the keyboard animation alone.
+    flushSync(() => setShowCreateWl(true));
+    // Sheet is now in the DOM — grab the real input and focus it. We're
+    // still inside the tap event's call stack, so iOS treats the focus
+    // as gesture-initiated and opens the keyboard.
+    createWlTitleInputRef.current?.focus();
   }, []);
-
-  // Transfer focus from proxy → real input when the sheet renders.
-  // `useLayoutEffect` runs sync after DOM commit, still close enough to
-  // the gesture for iOS to honor the focus shift without dismissing the
-  // keyboard.
-  useLayoutEffect(() => {
-    if (!showCreateWl || !createWlShouldTransferFocusRef.current) return;
-    const realInput = createWlTitleInputRef.current;
-    if (!realInput) return;
-    realInput.focus();
-    // Clean up the proxy — after the real input has focus.
-    const proxy = createWlFocusProxyRef.current;
-    if (proxy) {
-      proxy.remove();
-      createWlFocusProxyRef.current = null;
-    }
-    createWlShouldTransferFocusRef.current = false;
-  }, [showCreateWl]);
-
-  // Safety: if user closes the sheet before we transfer, clean up the proxy.
-  useEffect(() => {
-    if (!showCreateWl && createWlFocusProxyRef.current) {
-      createWlFocusProxyRef.current.remove();
-      createWlFocusProxyRef.current = null;
-      createWlShouldTransferFocusRef.current = false;
-    }
-  }, [showCreateWl]);
 
   const saveWlDontGift = useCallback(async (wlId: string) => {
     if (wlDgSaving) return;
@@ -12899,10 +12858,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div>
                 <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('wishlist_name', locale)}</label>
                 <div style={{ position: 'relative' }}>
-                  {/* No autoFocus — keyboard is opened synchronously during
-                      the FAB tap via the focus-bridge proxy (see
-                      `openCreateWlWithKeyboard`), then focus is transferred
-                      to this input in `useLayoutEffect` once it mounts. */}
+                  {/* No autoFocus — focus is applied directly inside the
+                      FAB tap handler via `openCreateWlWithKeyboard`, which
+                      flushSync-mounts this sheet and focuses this ref in
+                      the same synchronous call. */}
                   <input ref={createWlTitleInputRef} style={{ ...inputStyle, paddingRight: wlTitle ? 40 : 16 }} placeholder={t('wishlist_name_placeholder', locale)} value={wlTitle} onChange={(e) => setWlTitle(e.target.value)} />
                   {wlTitle && (
                     <button
