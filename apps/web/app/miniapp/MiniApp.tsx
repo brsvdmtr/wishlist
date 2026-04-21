@@ -24516,17 +24516,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <button
             key={c.id}
             onClick={() => void openCampaign(c.id)}
+            className="wb-card-pressed"
             style={{
-              background: C.card, border: 'none', borderRadius: 14,
+              background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 18,
               padding: '14px 16px', cursor: 'pointer', textAlign: 'start',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               opacity: dimmed ? 0.65 : 1,
-              transition: 'opacity 0.15s',
+              transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
+              fontFamily: 'inherit',
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 3 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{c.title}</span>
+                <span style={{ fontSize: 15, fontWeight: 650, color: 'var(--wb-text)', letterSpacing: '-0.015em' }}>{c.title}</span>
                 {/* Role pill — canonical Chip primitive (v2-santa-campaign). */}
                 <Chip tone={c._role === 'organizer' ? 'accent' : 'surface'} size="sm">
                   {c._role === 'organizer'
@@ -24534,15 +24540,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     : t('santa_role_member', locale)}
                 </Chip>
               </div>
-              <div style={{ fontSize: 12, color: C.textMuted }}>
+              <div style={{ fontSize: 12.5, color: 'var(--wb-text-secondary)', letterSpacing: '-0.005em' }}>
                 {t('santa_campaign_participants', locale, { count: c.participantCount })}
                 {' · '}
-                <span style={dimmed ? { fontWeight: 600 } : {}}>
+                <span style={dimmed ? { fontWeight: 650 } : {}}>
                   {t(`santa_campaign_status_${c.status.toLowerCase()}` as never, locale) || c.status}
                 </span>
               </div>
             </div>
-            <div style={{ color: C.textMuted, fontSize: 18, flexShrink: 0, paddingLeft: 8 }}>›</div>
+            <div style={{ color: 'var(--wb-text-muted)', fontSize: 18, flexShrink: 0, paddingLeft: 8 }}>›</div>
           </button>
         );
 
@@ -24552,39 +24558,55 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={{ position: 'relative', marginBottom: 24 }}>
               {santaSeason?.inSeason && <SnowflakeOverlay height={60} />}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
-                <h1 style={{ fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0 }}>🎅 {t('santa_hub_title', locale)}</h1>
+                <h1 style={{
+                  fontSize: 26, fontWeight: 700, fontFamily: font,
+                  color: 'var(--wb-text)', margin: 0,
+                  letterSpacing: '-0.035em', lineHeight: 1.05,
+                }}>🎅 {t('santa_hub_title', locale)}</h1>
                 {santaSeason?.canCreate && (
-                  <button
+                  <Button
+                    variant="primary-gradient"
+                    size="sm"
+                    fullWidth={false}
                     onClick={() => {
                       setSantaCreateTitle(''); setSantaCreateDesc('');
                       setSantaCreateMinBudget(''); setSantaCreateMaxBudget('');
                       setScreen('santa-create');
                     }}
-                    style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 600, padding: '8px 16px', cursor: 'pointer', flexShrink: 0 }}
                   >
                     {t('santa_home_create_btn', locale)}
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
 
             {/* ── Loading ── */}
             {santaCampaignsLoading && (
-              <div style={{ color: C.textMuted, fontSize: 14, textAlign: 'center', padding: 40 }}>{t('loading', locale)}</div>
+              <div style={{ color: 'var(--wb-text-muted)', fontSize: 14, textAlign: 'center', padding: 40 }}>{t('loading', locale)}</div>
             )}
 
             {/* ── Empty state ── */}
             {!santaCampaignsLoading && all.length === 0 && (
-              <div style={{ background: C.card, borderRadius: 16, padding: 24, textAlign: 'center' }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>🎁</div>
-                <div style={{ color: C.textMuted, fontSize: 14 }}>{t('santa_home_empty', locale)}</div>
+              <div style={{
+                background: 'var(--wb-card)',
+                border: '1px solid var(--wb-border)',
+                borderRadius: 22,
+                padding: 24, textAlign: 'center',
+                WebkitBackdropFilter: 'blur(16px)' as never,
+                backdropFilter: 'blur(16px)' as never,
+              }}>
+                <div style={{ fontSize: 48, marginBottom: 12, filter: 'drop-shadow(0 12px 24px var(--wb-accent-shadow-soft))' }}>🎁</div>
+                <div style={{ color: 'var(--wb-text-secondary)', fontSize: 14, lineHeight: 1.5, letterSpacing: '-0.005em' }}>{t('santa_home_empty', locale)}</div>
                 {santaSeason?.canCreate && (
-                  <button
-                    onClick={() => setScreen('santa-create')}
-                    style={{ marginTop: 16, background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 15, fontWeight: 600, padding: '12px 24px', cursor: 'pointer' }}
-                  >
-                    {t('santa_home_create_btn', locale)}
-                  </button>
+                  <div style={{ marginTop: 16 }}>
+                    <Button
+                      variant="primary-gradient"
+                      fullWidth={false}
+                      onClick={() => setScreen('santa-create')}
+                    >
+                      {t('santa_home_create_btn', locale)}
+                    </Button>
+                  </div>
                 )}
               </div>
             )}
