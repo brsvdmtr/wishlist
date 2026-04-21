@@ -35,7 +35,10 @@ export function FloatingNav<ID extends string = string>({
   return (
     <nav
       style={{
-        position: 'absolute',
+        // `fixed` — MiniAppInner's root uses `overflow: auto`, which
+        // makes `position: absolute` children scroll with content.
+        // Per v2.1 mockup the nav stays anchored to the viewport.
+        position: 'fixed',
         left: 10,
         right: 10,
         bottom: 14,

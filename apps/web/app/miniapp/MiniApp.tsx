@@ -11940,12 +11940,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {t('plan_status', locale, { plan: 'Pro', count: wishlists.length, max: planLimits.wishlists })}
               </div>
             )}
-            {/* spacer for fixed CTA */}
-            {!reorderMode && <div style={{ height: 70 }} />}
+            {/* v2.1 FAB — bottom-right rounded-square (+) above FloatingNav */}
             {!reorderMode && (
-              <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 12px', pointerEvents: 'none' }}>
-                <Button variant="primary-gradient" size="lg" style={{ pointerEvents: 'auto' }} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</Button>
-              </div>
+              <button
+                onClick={() => setShowCreateWl(true)}
+                aria-label={t('create_wishlist_btn', locale)}
+                style={{
+                  position: 'fixed',
+                  right: 20,
+                  bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+                  width: 58, height: 58, borderRadius: 20,
+                  background: 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))',
+                  color: '#fff', fontSize: 26, fontWeight: 300, lineHeight: 1,
+                  border: 'none', cursor: 'pointer', zIndex: 50,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 14px 40px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.24), 0 1px 2px rgba(0,0,0,0.3)',
+                  transition: 'transform 0.15s ease',
+                }}
+              >
+                +
+              </button>
             )}
           </div>
           )}
@@ -19828,30 +19842,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
        !catReorderMode &&
        !showItemForm &&
        !keyboardOpen && (
-        <div style={{
-          position: 'fixed',
-          bottom: 0, left: 0, right: 0,
-          zIndex: 50,
-          // Gradient fade so the button visually merges with the list background
-          background: `linear-gradient(to top, ${C.bg} 55%, transparent)`,
-          padding: '20px 20px 0',
-          paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
-          pointerEvents: 'none',
-        }}>
-          <button
-            onClick={() => { resetItemForm(); setShowItemForm(true); }}
-            style={{
-              ...btnPrimary,
-              height: 50,
-              borderRadius: 14,
-              fontSize: 15,
-              pointerEvents: 'auto',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
-            }}
-          >
-            {t('add_wish_btn', locale)}
-          </button>
-        </div>
+        <button
+          onClick={() => { resetItemForm(); setShowItemForm(true); }}
+          aria-label={t('add_wish_btn', locale)}
+          style={{
+            position: 'fixed',
+            right: 20,
+            bottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+            width: 58, height: 58, borderRadius: 20,
+            background: 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))',
+            color: '#fff', fontSize: 26, fontWeight: 300, lineHeight: 1,
+            border: 'none', cursor: 'pointer', zIndex: 50,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 14px 40px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.24), 0 1px 2px rgba(0,0,0,0.3)',
+            transition: 'transform 0.15s ease',
+          }}
+        >
+          +
+        </button>
       )}
 
       {/* ── Bulk action bottom bar ── */}
