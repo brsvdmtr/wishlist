@@ -28770,43 +28770,111 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)' }}>
-            {/* Header */}
-            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {/* v2.1 Chat header */}
+            <div style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid var(--wb-border)',
+              display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+              background: 'var(--wb-surface)',
+              WebkitBackdropFilter: 'blur(20px) saturate(140%)' as never,
+              backdropFilter: 'blur(20px) saturate(140%)' as never,
+            }}>
               <span style={{ fontSize: 18 }}>💬</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{
+                fontSize: 15, fontWeight: 650,
+                color: 'var(--wb-text)', fontFamily: font,
+                flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                letterSpacing: '-0.012em',
+              }}>
                 {t('gg_chat_title', locale)} · {gg.item.title}
               </span>
-              <span style={{ fontSize: 13, color: C.textMuted }}>{gg.participantCount}</span>
+              <span style={{
+                fontSize: 12, fontWeight: 650,
+                color: 'var(--wb-accent-strong)',
+                background: 'var(--wb-accent-soft)',
+                border: '1px solid var(--wb-accent-soft-strong)',
+                borderRadius: 100, padding: '3px 10px',
+                fontFeatureSettings: '"tnum"',
+              }}>👥 {gg.participantCount}</span>
             </div>
 
-            {/* Pinned */}
+            {/* Pinned banner */}
             {gg.pinnedInfo && (
-              <div style={{ padding: '8px 16px', background: C.orangeSoft, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-                <div style={{ fontSize: 11, color: C.orange, fontWeight: 600 }}>{'📌 ' + t('gg_chat_pinned', locale)}</div>
-                <div style={{ fontSize: 13, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{gg.pinnedInfo}</div>
+              <div style={{
+                padding: '10px 16px',
+                background: 'var(--wb-warning-soft)',
+                border: '1px solid rgba(251,191,36,0.28)',
+                borderBottom: '1px solid rgba(251,191,36,0.28)',
+                flexShrink: 0,
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}>
+                <div style={{
+                  fontSize: 11, color: 'var(--wb-warning)',
+                  fontWeight: 650, letterSpacing: '0.1px',
+                  textTransform: 'uppercase' as const,
+                }}>📌 {t('gg_chat_pinned', locale)}</div>
+                <div style={{
+                  fontSize: 13, color: 'var(--wb-text)',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  marginTop: 2, letterSpacing: '-0.005em',
+                }}>{gg.pinnedInfo}</div>
               </div>
             )}
 
             {/* Messages */}
             <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
               {groupGiftMessages.length === 0 && (
-                <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 14, padding: 40 }}>{t('gg_no_messages', locale)}</div>
+                <div style={{
+                  textAlign: 'center',
+                  color: 'var(--wb-text-muted)',
+                  fontSize: 14, padding: 40,
+                  letterSpacing: '-0.005em',
+                }}>{t('gg_no_messages', locale)}</div>
               )}
               {groupGiftMessages.map(m => (
                 m.type === 'SYSTEM' ? (
-                  <div key={m.id} style={{ textAlign: 'center', fontSize: 12, color: C.textMuted, padding: '4px 0' }}>{m.text}</div>
+                  <div key={m.id} style={{
+                    textAlign: 'center', fontSize: 12,
+                    color: 'var(--wb-text-muted)', padding: '4px 0',
+                    fontStyle: 'italic', letterSpacing: '-0.003em',
+                  }}>{m.text}</div>
                 ) : (
                   <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: m.isSelf ? 'flex-end' : 'flex-start', flexDirection: m.isSelf ? 'row-reverse' : 'row' }}>
-                    {!m.isSelf && <UserAvatar avatarUrl={m.senderAvatarUrl} name={m.senderName} size={28} accent={C.accent} />}
+                    {!m.isSelf && <UserAvatar avatarUrl={m.senderAvatarUrl} name={m.senderName} size={28} accent="#8B7BFF" />}
                     <div style={{
-                      maxWidth: '75%', padding: '8px 12px', borderRadius: 14,
-                      background: m.isSelf ? C.accent : C.surface,
-                      borderTopRightRadius: m.isSelf ? 4 : 14,
-                      borderTopLeftRadius: m.isSelf ? 14 : 4,
+                      maxWidth: '75%', padding: '9px 13px', borderRadius: 16,
+                      background: m.isSelf
+                        ? 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))'
+                        : 'var(--wb-card)',
+                      border: m.isSelf ? 'none' : '1px solid var(--wb-border)',
+                      borderTopRightRadius: m.isSelf ? 4 : 16,
+                      borderTopLeftRadius: m.isSelf ? 16 : 4,
+                      WebkitBackdropFilter: m.isSelf ? undefined : 'blur(14px)' as never,
+                      backdropFilter: m.isSelf ? undefined : 'blur(14px)' as never,
+                      boxShadow: m.isSelf
+                        ? '0 6px 16px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.18)'
+                        : undefined,
                     }}>
-                      {!m.isSelf && <div style={{ fontSize: 11, fontWeight: 600, color: C.accent, marginBottom: 2 }}>{m.senderName}</div>}
-                      <div style={{ fontSize: 14, color: m.isSelf ? '#fff' : C.text, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
-                      <div style={{ fontSize: 10, color: m.isSelf ? 'rgba(255,255,255,0.5)' : C.textMuted, marginTop: 2, textAlign: 'right' }}>
+                      {!m.isSelf && (
+                        <div style={{
+                          fontSize: 11, fontWeight: 650,
+                          color: 'var(--wb-accent-strong)',
+                          marginBottom: 2, letterSpacing: '-0.003em',
+                        }}>{m.senderName}</div>
+                      )}
+                      <div style={{
+                        fontSize: 14,
+                        color: m.isSelf ? '#fff' : 'var(--wb-text)',
+                        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                        letterSpacing: '-0.005em', lineHeight: 1.35,
+                      }}>{m.text}</div>
+                      <div style={{
+                        fontSize: 10,
+                        color: m.isSelf ? 'rgba(255,255,255,0.6)' : 'var(--wb-text-muted)',
+                        marginTop: 3, textAlign: 'right',
+                        fontFeatureSettings: '"tnum"',
+                      }}>
                         {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
@@ -28816,23 +28884,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <div style={{ padding: '10px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+            {/* v2.1 Input bar — glass with send FAB */}
+            <div style={{
+              padding: '10px 16px',
+              borderTop: '1px solid var(--wb-border)',
+              display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0,
+              background: 'var(--wb-surface)',
+              WebkitBackdropFilter: 'blur(20px) saturate(140%)' as never,
+              backdropFilter: 'blur(20px) saturate(140%)' as never,
+            }}>
               <input
                 value={chatMsg} onChange={e => setChatMsg(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && chatMsg.trim()) { e.preventDefault(); void sendChatMsg(); } }}
-                style={{ ...inputStyle, flex: 1, borderRadius: 20, padding: '10px 16px' }}
+                style={{ ...inputStyle, flex: 1, borderRadius: 100, padding: '10px 16px' }}
                 placeholder={t('gg_chat_input_ph', locale)}
               />
               <button
                 disabled={!chatMsg.trim() || sending}
                 onClick={() => void sendChatMsg()}
                 style={{
-                  width: 40, height: 40, borderRadius: 20, border: 'none',
-                  background: chatMsg.trim() ? C.accent : C.surface,
-                  color: '#fff', fontSize: 16, cursor: 'pointer',
+                  width: 44, height: 44, borderRadius: '50%', border: 'none',
+                  background: chatMsg.trim()
+                    ? 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))'
+                    : 'var(--wb-surface)',
+                  color: '#fff', fontSize: 18, fontWeight: 650, cursor: chatMsg.trim() ? 'pointer' : 'default',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   opacity: sending ? 0.5 : 1,
+                  boxShadow: chatMsg.trim()
+                    ? '0 6px 16px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.2)'
+                    : undefined,
+                  transition: 'all 0.15s ease',
+                  flexShrink: 0,
                 }}>↑</button>
             </div>
           </div>
