@@ -3215,36 +3215,38 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
   const secRes = useMemo(() => benefits.filter(b => b.resSection), [benefits]);
   const secCore = useMemo(() => benefits.filter(b => !b.isNew && !b.resSection), [benefits]);
   // Render a single feature row (used inside each PRO-features card).
+  // v2.1 FeatureRow — glass surface with accent-soft thumb + hairline divider
   const FeatureRow = ({ icon, title, subtitle, isNew, last }: { icon: string; title: string; subtitle: string; isNew?: boolean; last?: boolean }) => (
     <div style={{
-      display: 'flex', gap: 12, padding: '12px 14px', alignItems: 'flex-start',
-      borderBottom: last ? 'none' : `1px solid ${C.border}`,
+      display: 'flex', gap: 14, padding: '14px 16px', alignItems: 'center',
+      borderBottom: last ? 'none' : '1px solid var(--wb-hairline)',
     }}>
       <div style={{
-        width: 36, height: 36, borderRadius: 10,
+        width: 42, height: 42, borderRadius: 13,
         background: isNew
-          ? `linear-gradient(135deg, ${C.accent}33, ${C.accent}1a)`
-          : C.accentSoft,
+          ? 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))'
+          : 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 18, flexShrink: 0,
+        fontSize: 20, flexShrink: 0,
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
       }}>{icon}</div>
-      <div style={{ flex: 1, paddingTop: 2 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.text, display: 'flex', gap: 6, alignItems: 'center', letterSpacing: '-0.01em' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--wb-text)', display: 'flex', gap: 6, alignItems: 'center', letterSpacing: '-0.012em', flexWrap: 'wrap' }}>
           <span>{title}</span>
           {isNew && <Chip tone="new" size="sm">{t('paywall_new_badge', locale)}</Chip>}
         </div>
-        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, lineHeight: 1.4 }}>{subtitle}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--wb-text-secondary)', marginTop: 2, lineHeight: 1.4, letterSpacing: '-0.003em' }}>{subtitle}</div>
       </div>
     </div>
   );
 
-  // Small uppercase section label (paywall-specific — not a SectionHeader primitive,
-  // which uses large title typography).
+  // v2.1 SectionLabel — small uppercase muted, 0.7px letter-spacing (matches .wb-section-hdr h2).
   const SectionLabel = ({ children, accent }: { children: ReactNode; accent?: boolean }) => (
     <div style={{
-      fontSize: 11, fontWeight: 700, color: accent ? C.accent : C.textMuted,
-      letterSpacing: '0.08em', textTransform: 'uppercase',
-      margin: '18px 8px 10px',
+      fontSize: 12, fontWeight: 600,
+      color: accent ? 'var(--wb-accent-strong)' : 'var(--wb-text-muted)',
+      letterSpacing: '0.7px', textTransform: 'uppercase',
+      margin: '20px 8px 10px',
     }}>{children}</div>
   );
 
