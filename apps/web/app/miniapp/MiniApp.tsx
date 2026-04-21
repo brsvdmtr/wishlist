@@ -15609,95 +15609,140 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         <div style={{ padding: '16px 20px 120px' }}>
           {curatedViewExpired ? (
             <div style={{ textAlign: 'center', paddingTop: 80 }}>
-              <div style={{ width: 80, height: 80, borderRadius: 24, background: 'rgba(248,113,113,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto 20px' }}>🚫</div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: font, margin: '0 0 10px' }}>
+              <div style={{
+                width: 80, height: 80, borderRadius: 22,
+                background: 'var(--wb-danger-soft)',
+                border: '1px solid rgba(251,113,133,0.28)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 40, margin: '0 auto 20px',
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}>🚫</div>
+              <h2 style={{
+                fontSize: 22, fontWeight: 700,
+                color: 'var(--wb-text)', fontFamily: font,
+                margin: '0 0 10px', letterSpacing: '-0.025em',
+              }}>
                 {t('link_invalid_title', locale)}
               </h2>
-              <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, maxWidth: 300, margin: '0 auto', whiteSpace: 'pre-line' }}>
+              <p style={{
+                fontSize: 14.5, color: 'var(--wb-text-secondary)',
+                lineHeight: 1.5, maxWidth: 300, margin: '0 auto',
+                whiteSpace: 'pre-line', letterSpacing: '-0.005em',
+              }}>
                 {t('link_invalid_body', locale)}
               </p>
-              <button
-                onClick={() => { setScreen('my-wishlists'); setCuratedViewExpired(false); }}
-                style={{ ...btnPrimary, marginTop: 28, padding: '14px 28px', borderRadius: 14, fontSize: 15, fontWeight: 600, border: 'none', maxWidth: 280 }}
-              >
-                {wishlists.length > 0 ? t('link_invalid_cta_home', locale) : t('link_invalid_cta_create', locale)}
-              </button>
+              <div style={{ maxWidth: 280, margin: '28px auto 0' }}>
+                <Button
+                  variant="primary-gradient"
+                  fullWidth
+                  onClick={() => { setScreen('my-wishlists'); setCuratedViewExpired(false); }}
+                >
+                  {wishlists.length > 0 ? t('link_invalid_cta_home', locale) : t('link_invalid_cta_create', locale)}
+                </Button>
+              </div>
             </div>
           ) : curatedViewData ? (() => {
             const sel = curatedViewData;
             const expiryDate = new Date(sel.expiresAt).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'long', year: 'numeric' });
             return (
               <>
-                <div style={{
-                  display: 'inline-block', padding: '4px 12px', borderRadius: 8,
-                  background: 'rgba(96,165,250,0.12)', color: '#60A5FA',
-                  fontSize: 12, fontWeight: 600, marginBottom: 12,
-                }}>
+                <Chip tone="accent" size="md" style={{ marginBottom: 12 }}>
                   📋 {t('curated_public_badge', locale)}
-                </div>
+                </Chip>
                 <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '0 0 8px' }}>
                   {sel.title}
                 </h1>
                 {sel.ownerName && (
-                  <div style={{ fontSize: 14, color: C.textSec, marginBottom: 4 }}>
-                    {locale === 'ru' ? 'от' : 'by'} {sel.ownerName}
+                  <div style={{
+                    fontSize: 14, color: 'var(--wb-text-secondary)',
+                    marginBottom: 4, letterSpacing: '-0.005em',
+                  }}>
+                    {locale === 'ru' ? 'от' : 'by'} <b style={{ fontWeight: 650, color: 'var(--wb-text)' }}>{sel.ownerName}</b>
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-                  <span style={{ fontSize: 14, color: C.textSec }}>
+                  <span style={{
+                    fontSize: 14, color: 'var(--wb-text-secondary)',
+                    letterSpacing: '-0.005em', fontFeatureSettings: '"tnum"',
+                  }}>
                     {sel.items.length} {locale === 'ru' ? (sel.items.length === 1 ? 'желание' : sel.items.length < 5 ? 'желания' : 'желаний') : (sel.items.length === 1 ? 'wish' : 'wishes')}
                   </span>
-                  <Chip tone="warning" style={{ fontWeight: 600 }}>
+                  <Chip tone="warning" size="md">
                     {t('curated_public_valid_until', locale, { date: expiryDate })}
                   </Chip>
                 </div>
 
                 {/* Subscribe/Unsubscribe button — only for non-owners */}
                 {!sel.isOwner && (
-                  <button
-                    onClick={toggleCuratedSubscription}
-                    disabled={curatedSubscribing}
-                    style={{
-                      ...btnBase, width: '100%', padding: '14px 0', borderRadius: 14,
-                      fontSize: 15, fontWeight: 600, border: 'none', marginBottom: 16,
-                      background: sel.isSubscribed ? C.surface : C.accent,
-                      color: sel.isSubscribed ? C.textSec : '#fff',
-                      opacity: curatedSubscribing ? 0.6 : 1,
-                    }}
-                  >
-                    {sel.isSubscribed ? t('curated_unsubscribe_btn', locale) : t('curated_subscribe_btn', locale)}
-                  </button>
+                  <div style={{ marginBottom: 16 }}>
+                    <Button
+                      variant={sel.isSubscribed ? 'surface' : 'primary-gradient'}
+                      fullWidth
+                      loading={curatedSubscribing}
+                      onClick={toggleCuratedSubscription}
+                    >
+                      {sel.isSubscribed ? t('curated_unsubscribe_btn', locale) : t('curated_subscribe_btn', locale)}
+                    </Button>
+                  </div>
                 )}
 
-                {/* Item cards */}
+                {/* v2.1 item cards — glass + tokens */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {sel.items.map(item => (
                     <div key={item.id} style={{
-                      background: C.surface, borderRadius: 14, overflow: 'hidden',
-                      border: `1px solid ${C.border}`,
+                      background: 'var(--wb-card)',
+                      border: '1px solid var(--wb-border)',
+                      borderRadius: 18, overflow: 'hidden',
+                      WebkitBackdropFilter: 'blur(14px)' as never,
+                      backdropFilter: 'blur(14px)' as never,
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14 }}>
                         {item.imageUrl ? (
-                          <img src={item.imageUrl} alt="" style={{ width: 56, height: 56, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
+                          <img src={item.imageUrl} alt="" style={{ width: 54, height: 54, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
                         ) : (
-                          <div style={{ width: 56, height: 56, borderRadius: 10, flexShrink: 0, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🎁</div>
+                          <div style={{
+                            width: 54, height: 54, borderRadius: 14, flexShrink: 0,
+                            background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 26, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+                          }}>🎁</div>
                         )}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{item.title}</div>
+                          <div style={{
+                            fontSize: 15, fontWeight: 600,
+                            color: 'var(--wb-text)', letterSpacing: '-0.015em',
+                            lineHeight: 1.3,
+                          }}>{item.title}</div>
                           {item.priceText && (
-                            <div style={{ fontSize: 14, color: C.accent, fontWeight: 600, marginTop: 4 }}>{item.priceText} {item.currency === 'RUB' ? '₽' : item.currency === 'USD' ? '$' : item.currency === 'EUR' ? '€' : item.currency}</div>
+                            <div style={{
+                              fontSize: 13.5, fontWeight: 650, marginTop: 4,
+                              color: 'var(--wb-text-secondary)',
+                              fontFeatureSettings: '"tnum"',
+                            }}>
+                              {item.priceText} {item.currency === 'RUB' ? '₽' : item.currency === 'USD' ? '$' : item.currency === 'EUR' ? '€' : item.currency}
+                            </div>
                           )}
                         </div>
                       </div>
                       {(item.description || item.url) && (
-                        <div style={{ padding: '0 14px 14px', borderTop: `1px solid ${C.border}` }}>
-                          {item.description && <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, margin: '12px 0 0' }}>{item.description}</p>}
+                        <div style={{ padding: '0 14px 14px', borderTop: '1px solid var(--wb-hairline)' }}>
+                          {item.description && (
+                            <p style={{
+                              fontSize: 13.5, color: 'var(--wb-text-secondary)',
+                              lineHeight: 1.5, margin: '12px 0 0',
+                              letterSpacing: '-0.003em',
+                            }}>{item.description}</p>
+                          )}
                           {item.url && (
                             <a href={item.url} target="_blank" rel="noopener noreferrer" style={{
                               display: 'inline-flex', alignItems: 'center', gap: 6,
-                              marginTop: 12, padding: '8px 14px', borderRadius: 10,
-                              background: C.accentSoft, color: C.accent,
-                              fontSize: 13, fontWeight: 600, textDecoration: 'none',
+                              marginTop: 12, padding: '8px 14px', borderRadius: 12,
+                              background: 'var(--wb-accent-soft)',
+                              border: '1px solid var(--wb-accent-soft-strong)',
+                              color: 'var(--wb-accent-strong)',
+                              fontSize: 13, fontWeight: 650, textDecoration: 'none',
+                              letterSpacing: '-0.005em',
                             }}>
                               {locale === 'ru' ? 'Открыть ссылку' : 'Open link'} ↗
                             </a>
@@ -15708,12 +15753,30 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   ))}
                 </div>
 
-                {/* Info */}
-                <div style={{ marginTop: 16, borderRadius: 12, padding: '12px 16px', fontSize: 13, background: 'rgba(96,165,250,0.08)', color: '#60A5FA', lineHeight: 1.5 }}>
+                {/* Info note */}
+                <div style={{
+                  marginTop: 16, borderRadius: 14, padding: '12px 16px',
+                  fontSize: 13, fontWeight: 500,
+                  background: 'var(--wb-accent-soft)',
+                  border: '1px solid var(--wb-accent-soft-strong)',
+                  color: 'var(--wb-accent-strong)',
+                  lineHeight: 1.5, letterSpacing: '-0.005em',
+                  WebkitBackdropFilter: 'blur(14px)' as never,
+                  backdropFilter: 'blur(14px)' as never,
+                }}>
                   ℹ️ {t('curated_public_info', locale)}
                 </div>
                 {!sel.isOwner && !sel.isSubscribed && (
-                  <div style={{ marginTop: 10, borderRadius: 12, padding: '12px 16px', fontSize: 13, background: C.accentSoft, color: C.accent, lineHeight: 1.5 }}>
+                  <div style={{
+                    marginTop: 10, borderRadius: 14, padding: '12px 16px',
+                    fontSize: 13, fontWeight: 500,
+                    background: 'var(--wb-warning-soft)',
+                    border: '1px solid rgba(251,191,36,0.28)',
+                    color: 'var(--wb-warning)',
+                    lineHeight: 1.5, letterSpacing: '-0.005em',
+                    WebkitBackdropFilter: 'blur(14px)' as never,
+                    backdropFilter: 'blur(14px)' as never,
+                  }}>
                     💡 {t('curated_ttl_subscribe_hint', locale)}
                   </div>
                 )}
