@@ -11458,16 +11458,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               locale === 'ru' ? `Раздел «${label}» появится совсем скоро` : `"${label}" is coming soon`,
               'info',
             );
+            // Russian-first labels — mini-app's primary locale.
+            // t() falls back to the key string when translation missing,
+            // so `|| fallback` never kicks in for untranslated keys. Hardcoding
+            // ensures the tiles read as intended.
             const tiles = [
               {
                 n: totalWishes,
-                l: pluralize(totalWishes, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale),
+                l: locale === 'ru' ? 'желаний' : 'wishes',
                 tone: 'neutral' as const,
                 onClick: () => { setHomeTab('wishes'); void loadAllItems(); },
               },
               {
                 n: totalReserved,
-                l: t('reserved_label', locale) || 'забронировано',
+                l: locale === 'ru' ? 'забронировано' : 'reserved',
                 tone: 'accent' as const,
                 onClick: () => {
                   setHomeTab('reservations');
@@ -11476,15 +11480,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               },
               {
                 n: totalGifted,
-                l: t('gifted_label', locale) || 'подарено',
+                l: locale === 'ru' ? 'подарено' : 'gifted',
                 tone: 'success' as const,
-                onClick: () => comingSoon('Подарено'),
+                onClick: () => comingSoon(locale === 'ru' ? 'Подарено' : 'Gifted'),
               },
               {
                 n: expiringCount,
-                l: t('expiring_label', locale) || 'истекает',
+                l: locale === 'ru' ? 'истекает' : 'expiring',
                 tone: 'warning' as const,
-                onClick: () => comingSoon('Истекает'),
+                onClick: () => comingSoon(locale === 'ru' ? 'Истекает' : 'Expiring'),
               },
             ];
             const toneColor = (tone: 'neutral' | 'accent' | 'success' | 'warning') =>
