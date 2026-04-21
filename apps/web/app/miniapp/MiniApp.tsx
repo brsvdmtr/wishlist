@@ -28251,19 +28251,44 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const currSym = groupGiftCreateItem.currency === 'USD' ? '$' : groupGiftCreateItem.currency === 'EUR' ? '€' : '₽';
         return (
           <div style={{ padding: '16px 16px 40px' }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: font, marginBottom: 16 }}>{'👥 ' + t('gg_create_title', locale)}</div>
+            <div style={{
+              fontSize: 26, fontWeight: 700, fontFamily: font,
+              color: 'var(--wb-text)', marginBottom: 16,
+              letterSpacing: '-0.035em', lineHeight: 1.05,
+            }}>{'👥 ' + t('gg_create_title', locale)}</div>
 
-            {/* Item preview */}
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, background: C.surface, borderRadius: 14, marginBottom: 20 }}>
+            {/* v2.1 Item preview */}
+            <div style={{
+              display: 'flex', gap: 14, alignItems: 'center', padding: 14,
+              background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 18, marginBottom: 20,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
+            }}>
               {groupGiftCreateItem.imageUrl ? (
-                <img src={groupGiftCreateItem.imageUrl} alt="" style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover' }} />
+                <img src={groupGiftCreateItem.imageUrl} alt="" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
               ) : (
-                <div style={{ width: 52, height: 52, borderRadius: 12, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🎁</div>
+                <div style={{
+                  width: 50, height: 50, borderRadius: 14,
+                  background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 24, flexShrink: 0,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+                }}>🎁</div>
               )}
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>{groupGiftCreateItem.title}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 15, fontWeight: 600,
+                  color: 'var(--wb-text)', fontFamily: font,
+                  letterSpacing: '-0.015em', lineHeight: 1.3,
+                }}>{groupGiftCreateItem.title}</div>
                 {groupGiftCreateItem.price != null && (
-                  <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>
+                  <div style={{
+                    fontSize: 13, color: 'var(--wb-text-secondary)',
+                    fontWeight: 650, marginTop: 2,
+                    fontFeatureSettings: '"tnum"',
+                  }}>
                     {groupGiftCreateItem.price.toLocaleString()} {currSym}
                   </div>
                 )}
@@ -28273,39 +28298,71 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* Form */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('gg_create_target', locale)}</label>
+                <label style={{
+                  display: 'block', fontSize: 11, fontWeight: 600,
+                  color: 'var(--wb-text-muted)', marginBottom: 8,
+                  textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                }}>{t('gg_create_target', locale)}</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <input type="number" inputMode="numeric" value={ggTargetAmt} onChange={e => setGgTargetAmt(e.target.value)}
-                    style={{ ...inputStyle, flex: 1 }} placeholder={t('gg_amount_placeholder', locale)} />
-                  <span style={{ fontSize: 15, color: C.textSec, fontWeight: 600 }}>{currSym}</span>
+                    style={{ ...inputStyle, flex: 1, fontFeatureSettings: '"tnum"' }} placeholder={t('gg_amount_placeholder', locale)} />
+                  <span style={{
+                    fontSize: 16, color: 'var(--wb-text-secondary)',
+                    fontWeight: 650, letterSpacing: '-0.012em',
+                  }}>{currSym}</span>
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('gg_create_deadline', locale)}</label>
+                <label style={{
+                  display: 'block', fontSize: 11, fontWeight: 600,
+                  color: 'var(--wb-text-muted)', marginBottom: 8,
+                  textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                }}>{t('gg_create_deadline', locale)}</label>
                 <input type="date" value={ggDeadline} onChange={e => setGgDeadline(e.target.value)}
                   style={{ ...inputStyle, colorScheme: 'dark' }} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('gg_create_note', locale)}</label>
+                <label style={{
+                  display: 'block', fontSize: 11, fontWeight: 600,
+                  color: 'var(--wb-text-muted)', marginBottom: 8,
+                  textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                }}>{t('gg_create_note', locale)}</label>
                 <textarea value={ggNote} onChange={e => setGgNote(e.target.value)} maxLength={500}
                   style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} placeholder={t('gg_create_note_ph', locale)} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('gg_my_amount', locale)} ({currSym})</label>
+                <label style={{
+                  display: 'block', fontSize: 11, fontWeight: 600,
+                  color: 'var(--wb-text-muted)', marginBottom: 8,
+                  textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                }}>{t('gg_my_amount', locale)} ({currSym})</label>
                 <input type="number" inputMode="numeric" value={ggMyAmount} onChange={e => setGgMyAmount(e.target.value)}
-                  style={inputStyle} placeholder="0" />
+                  style={{ ...inputStyle, fontFeatureSettings: '"tnum"' }} placeholder="0" />
               </div>
             </div>
 
-            {/* Info */}
-            <div style={{ margin: '16px 0', padding: 12, background: C.surface, borderRadius: 12, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            {/* Info note */}
+            <div style={{
+              margin: '16px 0', padding: 12,
+              background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 14, display: 'flex', gap: 8, alignItems: 'flex-start',
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
+            }}>
               <span style={{ fontSize: 16 }}>ℹ️</span>
-              <span style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>{t('gg_create_info', locale)}</span>
+              <span style={{
+                fontSize: 12.5, color: 'var(--wb-text-secondary)',
+                lineHeight: 1.45, letterSpacing: '-0.003em',
+              }}>{t('gg_create_info', locale)}</span>
             </div>
 
-            <button
-              disabled={ggCreating || !ggTargetAmt || Number(ggTargetAmt) <= 0}
+            <Button
+              variant="primary-gradient"
+              fullWidth
+              loading={ggCreating}
               onClick={async () => {
+                if (!ggTargetAmt || Number(ggTargetAmt) <= 0) return;
                 setGgCreating(true);
                 try {
                   const r = await tgFetch('/tg/items/' + groupGiftCreateItemId + '/group-gift', {
@@ -28332,7 +28389,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setGroupGiftData(gg);
                   pushToast(t('gg_toast_created', locale), 'success');
                   trackEvent('group_gift_created', { groupGiftId: gg.id });
-                  // Update item status locally
                   setGuestItems(prev => prev.map(gi => gi.id === groupGiftCreateItemId ? { ...gi, status: 'reserved' as const } : gi));
                   setScreen('group-gift-detail');
                 } catch {
@@ -28341,9 +28397,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setGgCreating(false);
                 }
               }}
-              style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16, opacity: (ggCreating || !ggTargetAmt) ? 0.6 : 1 }}>
-              {ggCreating ? '...' : '👥 ' + t('gg_create_btn', locale)}
-            </button>
+            >
+              👥 {t('gg_create_btn', locale)}
+            </Button>
           </div>
         );
       })()}
