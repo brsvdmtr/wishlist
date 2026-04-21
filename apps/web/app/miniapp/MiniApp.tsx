@@ -2514,7 +2514,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
       onClick={() => onTap(item)}
       style={{
         borderRadius: 20, overflow: 'hidden', position: 'relative',
-        background: '#1c1c22', border: '1px solid rgba(255,255,255,0.05)',
+        background: 'var(--wb-card)', border: '1px solid rgba(255,255,255,0.05)',
         opacity: isPurchased ? 0.5 : 1,
         cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
       }}
@@ -21193,7 +21193,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           style={{
                             display: 'flex', alignItems: 'center', gap: 10,
                             padding: '10px 12px', borderRadius: 12,
-                            background: '#1c1c22', border: '1.5px solid rgba(255,255,255,0.06)',
+                            background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
                             cursor: 'pointer', userSelect: 'none',
                             animation: 'fadeIn 0.22s ease both',
                             transition: 'background 0.18s ease, border-color 0.18s ease',
@@ -21236,7 +21236,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           style={{
                             display: 'flex', alignItems: 'center', gap: 10,
                             padding: '10px 12px', borderRadius: 12,
-                            background: '#1c1c22', border: '1.5px solid rgba(255,255,255,0.06)',
+                            background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
                             cursor: 'pointer', userSelect: 'none',
                             animation: 'fadeIn 0.22s ease both',
                             transition: 'background 0.18s ease, border-color 0.18s ease',
@@ -23118,7 +23118,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <div
                   onClick={() => { setShowItemForm(false); void openPlacementsSheet(editingItem); }}
                   style={{
-                    background: '#1c1c22', border: '1px solid rgba(255,255,255,0.06)',
+                    background: 'var(--wb-card)', border: '1px solid rgba(255,255,255,0.06)',
                     borderRadius: 14, padding: '12px 14px',
                     display: 'flex', alignItems: 'center', gap: 10,
                     cursor: 'pointer',
@@ -23142,11 +23142,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
              fontSize stays at 16 (inputStyle default) to avoid iOS auto-zoom
              on focus, which otherwise causes screen jitter and caret loss. */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_name', locale)}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-text-muted)', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.7px' }}>{t('item_name', locale)}</div>
             <div style={{ position: 'relative' as const }}>
               <input
                 key={`title-${itemFieldKey}`}
-                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', padding: '12px 38px 12px 14px' }}
+                style={{ ...inputStyle, borderRadius: 14, border: '1px solid var(--wb-border)', background: 'var(--wb-card)', padding: '12px 38px 12px 14px' }}
                 placeholder={t('item_name_placeholder', locale)}
                 defaultValue={itemTitle}
                 onFocus={(e) => {
@@ -23167,12 +23167,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
           {/* URL with hint + preview — uncontrolled to fix iOS selection */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_url', locale)}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-text-muted)', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.7px' }}>{t('item_url', locale)}</div>
             <div style={{ position: 'relative' as const }}>
               <input
                 key={`url-${itemFieldKey}`}
                 ref={itemUrlInputRef}
-                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.06)', background: '#1c1c22', fontSize: 14, padding: '12px 38px 12px 14px', lineHeight: '20px' }}
+                style={{ ...inputStyle, borderRadius: 14, border: '1px solid var(--wb-border)', background: 'var(--wb-card)', fontSize: 14, padding: '12px 38px 12px 14px', lineHeight: '20px' }}
                 placeholder={t('item_url_placeholder', locale)}
                 defaultValue={itemUrl}
                 onInput={(e) => setItemUrl(e.currentTarget.value)}
@@ -23199,11 +23199,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
           {/* Description — after URL — uncontrolled to fix iOS selection */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('item_description', locale)}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.7px' }}>{t('item_description', locale)}</div>
             <div style={{ position: 'relative' as const }}>
               <textarea
                 key={`desc-${itemFieldKey}`}
-                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: '#1c1c22', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: '20px', fontSize: 14, paddingRight: 38 }}
+                style={{ ...inputStyle, borderRadius: 14, border: '1.5px solid rgba(255,255,255,0.07)', background: 'var(--wb-card)', minHeight: 56, resize: 'none', overflow: 'hidden', lineHeight: '20px', fontSize: 14, paddingRight: 38 }}
                 maxLength={500}
                 placeholder={t('item_description_placeholder', locale)}
                 defaultValue={itemDescription}
@@ -23222,13 +23222,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             const hasPhoto = !!(itemPhotoLocalUrl || (!itemPhotoDeleted && itemImageUrl));
             return (
           <div style={{ marginTop: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_photo', locale)}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-text-muted)', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.7px' }}>{t('item_photo', locale)}</div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <div
                 onClick={() => { setPhotoError(null); setPhotoPickerImgErr(false); photoInputRef.current?.click(); }}
                 style={{
                   width: 80, height: 80, borderRadius: 16, overflow: 'hidden', flexShrink: 0,
-                  background: '#1c1c22',
+                  background: 'var(--wb-card)',
                   border: hasPhoto ? 'none' : '2px dashed rgba(255,255,255,0.08)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: 'pointer', transition: 'border-color 0.2s',
@@ -23262,9 +23262,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           })()}
           {/* Price — input left, currency right */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_price', locale)}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-text-muted)', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.7px' }}>{t('item_price', locale)}</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1.5px solid rgba(255,255,255,0.07)', borderRadius: 14, background: '#1c1c22', overflow: 'hidden' }}
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1.5px solid rgba(255,255,255,0.07)', borderRadius: 14, background: 'var(--wb-card)', overflow: 'hidden' }}
                 onClick={() => priceInputRef.current?.focus()}>
                 <input
                   ref={priceInputRef}
@@ -23344,7 +23344,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
           {/* Priority — refreshed with glow */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{t('item_priority_question', locale)}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-text-muted)', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.7px' }}>{t('item_priority_question', locale)}</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {getPriorities(locale).map((p) => {
                 const isSelected = itemPriority === p.value;
@@ -23375,7 +23375,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             const isFreeAtLimit = planInfo.code === 'FREE' && wishlists.filter(w => w.id !== draftsWishlistId && !w.readOnly).length >= planLimits.wishlists;
             return (
               <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#7C6AFF', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-text-muted)', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.7px' }}>
                   {locale === 'ru' ? 'В каких wishlist\'ах разместить' : 'In which wishlists'}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
@@ -23384,8 +23384,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: 10,
                       padding: '10px 12px', borderRadius: 12,
-                      background: '#1c1c22',
-                      border: '1.5px solid rgba(255,255,255,0.06)',
+                      background: 'var(--wb-card)',
+                      border: '1px solid var(--wb-border)',
                       opacity: 0.75,
                     }}>
                       <div style={{
@@ -23417,8 +23417,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10,
                           padding: '10px 12px', borderRadius: 12,
-                          background: '#1c1c22',
-                          border: '1.5px solid rgba(255,255,255,0.06)',
+                          background: 'var(--wb-card)',
+                          border: '1px solid var(--wb-border)',
                           cursor: 'pointer', userSelect: 'none',
                         }}
                       >
@@ -23499,7 +23499,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               letterSpacing: '-0.01em', transition: 'all 0.15s',
               ...(itemTitle.trim()
                 ? { background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)', color: '#fff', boxShadow: '0 6px 24px rgba(124,106,255,0.35)' }
-                : { background: '#1c1c22', color: '#333', boxShadow: 'none' }),
+                : { background: 'var(--wb-card)', color: '#333', boxShadow: 'none' }),
               opacity: (loading || !itemTitle.trim()) ? 0.5 : 1,
             }}
             onClick={() => void handleSaveItem()}
