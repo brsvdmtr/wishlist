@@ -25214,34 +25214,54 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
 
-            {/* Participants */}
+            {/* v2.1 Participants list — glass card with hairline separators */}
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <div style={{
+                fontSize: 12, fontWeight: 600,
+                color: 'var(--wb-text-muted)',
+                marginBottom: 10,
+                textTransform: 'uppercase' as const,
+                letterSpacing: '0.7px',
+              }}>
                 {t('santa_campaign_participants', locale, { count: participants.filter(p => p.status === 'JOINED').length })}
               </div>
-              <div style={{ background: C.card, borderRadius: 14, overflow: 'hidden' }}>
+              <div style={{
+                background: 'var(--wb-card)',
+                border: '1px solid var(--wb-border)',
+                borderRadius: 18, overflow: 'hidden',
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}>
                 {participants.filter(p => p.status === 'JOINED').map((p, idx) => (
                   <div
                     key={p.id}
                     style={{
-                      padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10,
-                      borderBottom: idx < participants.filter(px => px.status === 'JOINED').length - 1 ? `1px solid ${C.border}` : 'none',
+                      padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
+                      borderTop: idx > 0 ? '1px solid var(--wb-hairline)' : 'none',
                     }}
                   >
-                    <SantaAvatar alias={p.displayName || p.id} emoji={p.emoji || '🎅'} size={32} hat={santaSeason?.inSeason} />
+                    <SantaAvatar alias={p.displayName || p.id} emoji={p.emoji || '🎅'} size={36} hat={santaSeason?.inSeason} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                        <span style={{
+                          fontSize: 15, fontWeight: 600,
+                          color: 'var(--wb-text)',
+                          letterSpacing: '-0.012em',
+                        }}>
                           {renderSantaAlias(p.adjectiveKey, p.animalKey, locale) || p.displayName || t('santa_participant_default', locale)}
-                          {p.isMe && <span style={{ fontSize: 11, color: C.textMuted, marginLeft: 4 }}>({t('me_label', locale)})</span>}
+                          {p.isMe && <span style={{ fontSize: 11, color: 'var(--wb-text-muted)', marginLeft: 4, fontWeight: 500 }}>({t('me_label', locale)})</span>}
                         </span>
                         {p.role === 'ADMIN' && (
-                          <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, background: `${C.accent}15`, padding: '1px 6px', borderRadius: 6 }}>
+                          <Chip tone="accent" size="sm">
                             {t('santa_role_admin', locale)}
-                          </span>
+                          </Chip>
                         )}
                       </div>
-                      {p.hasLinkedWishlist && <div style={{ fontSize: 12, color: C.green }}>🎁 {t('santa_wishlist_linked_label', locale)}</div>}
+                      {p.hasLinkedWishlist && (
+                        <div style={{ fontSize: 12, color: 'var(--wb-success)', marginTop: 2, fontWeight: 600, letterSpacing: '-0.005em' }}>
+                          🎁 {t('santa_wishlist_linked_label', locale)}
+                        </div>
+                      )}
                     </div>
                     {/* Role management (owner only) */}
                     {isOwner && !p.isMe && (
@@ -25263,7 +25283,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             pushToast(t('done', locale), 'success');
                           } else pushToast(t('error_generic', locale), 'error');
                         }}
-                        style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 8px', fontSize: 11, color: C.textMuted, cursor: 'pointer', fontFamily: font, flexShrink: 0 }}
+                        style={{
+                          background: 'var(--wb-surface)',
+                          border: '1px solid var(--wb-border)',
+                          borderRadius: 10, padding: '5px 10px',
+                          fontSize: 11, color: 'var(--wb-text-secondary)',
+                          fontWeight: 600, cursor: 'pointer', fontFamily: font, flexShrink: 0,
+                          WebkitBackdropFilter: 'blur(14px)' as never,
+                          backdropFilter: 'blur(14px)' as never,
+                        }}
                         title={p.role === 'ADMIN' ? t('santa_role_demote', locale) : t('santa_role_promote', locale)}
                       >
                         {p.role === 'ADMIN' ? '🛡✕' : '🛡+'}
