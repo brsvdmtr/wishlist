@@ -10920,7 +10920,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     <div ref={scrollContainerRef} dir={isRTL(locale) ? 'rtl' : 'ltr'} style={{
       position: isDesktop ? 'absolute' as const : 'fixed' as const, inset: 0,
       overflowY: 'auto', overflowX: 'hidden',
-      background: C.bg, fontFamily: font, color: C.text,
+      // v2.1: transparent so the .wb-phone::before mesh gradient set by
+      // ThemeProvider shows through. `var(--wb-text)` so text color tracks
+      // the theme switcher (Dark vs Black).
+      background: 'transparent', fontFamily: font, color: 'var(--wb-text)',
       // Prevent scroll-chaining into Telegram WebView: when this container
       // reaches its top/bottom edge the gesture must NOT propagate upward to
       // the native dismiss-swipe handler.  CSS alone covers modern WKWebView;
