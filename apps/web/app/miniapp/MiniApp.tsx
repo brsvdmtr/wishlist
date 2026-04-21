@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, Chip, CounterBadge, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider } from '@wishlist/ui';
+import { Banner, Button, Card, Chip, CounterBadge, HeroCard, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider } from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
@@ -15542,90 +15542,129 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ══════════════════════════════════════════════ */}
       {screen === 'guest-view' && guestWl && (
         <div style={{ padding: '16px 20px 120px' }}>
-          {/* ── Owner card — relational anchor (v2-wishlist-detail-guest) ──
-              Accent-tinted Card.current wraps owner avatar + title + meta +
-              subscribe button. Signals "this is someone else's list" with
-              visual warmth — not a neutral page header. */}
-          <Card variant="current" padding="md" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-            {(() => {
-              const ownerClickable = !!guestWl.ownerUsername;
-              const openOwnerProfile = () => {
-                const uname = guestWl.ownerUsername;
-                if (!uname) return;
-                setPublicProfileUsername(uname);
-                setPublicProfileSubscribed(false);
-                setPublicProfileError(null);
-                setPublicProfileData(null);
-                void loadProfileSubscribeStatus(uname);
-                void loadPublicProfile(uname);
-                setScreen('public-profile');
-                window.scrollTo(0, 0);
-                trackEvent('profile_open_from_guest_view', { username: uname });
-              };
-              // Compose meta in one line per mockup: "{deadline} · {count} желаний"
-              const totalCount = guestMainList.length + guestNoPriceBlock.length;
-              const itemCountStr = totalCount > 0
-                ? `${totalCount} ${pluralize(totalCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}`
-                : null;
-              const metaParts: string[] = [];
-              if (guestWl.deadline) metaParts.push(fmtDeadline(guestWl.deadline)!);
-              if (itemCountStr) metaParts.push(itemCountStr);
-              const metaLine = metaParts.join(' · ');
-              return (
-                <>
-                  <div
-                    onClick={ownerClickable ? openOwnerProfile : undefined}
-                    style={{ cursor: ownerClickable ? 'pointer' : 'default', flexShrink: 0 }}
-                  >
-                    <UserAvatar
-                      avatarUrl={guestWl.ownerAvatarUrl}
-                      name={guestWl.ownerName ?? '🎁'}
-                      size={52}
-                      accent={C.accent}
-                    />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {guestWl.ownerName && (
+          {/* ── v2.1 HeroCard — wishlist hero with emoji + meta + 3-stat row ──
+              Replaces the legacy owner-Card.current. Owner identity carried
+              in subtitle text + click-through; subscribe action moves below.
+              Source: docs/design-system/mockups/approved/v2.1-refresh-all-screens.html
+              (WishlistDetailScreen → .wb-hero) */}
+          {(() => {
+            const ownerClickable = !!guestWl.ownerUsername;
+            const openOwnerProfile = () => {
+              const uname = guestWl.ownerUsername;
+              if (!uname) return;
+              setPublicProfileUsername(uname);
+              setPublicProfileSubscribed(false);
+              setPublicProfileError(null);
+              setPublicProfileData(null);
+              void loadProfileSubscribeStatus(uname);
+              void loadPublicProfile(uname);
+              setScreen('public-profile');
+              window.scrollTo(0, 0);
+              trackEvent('profile_open_from_guest_view', { username: uname });
+            };
+            const totalCount = guestMainList.length + guestNoPriceBlock.length;
+            const allGuestItems = [...guestMainList, ...guestNoPriceBlock];
+            const reservedCount = allGuestItems.filter(it => it.status === 'reserved' || it.status === 'purchased').length;
+            const subParts: string[] = [];
+            if (guestWl.ownerName) subParts.push(guestWl.ownerName);
+            if (guestWl.deadline) {
+              const d = fmtDeadline(guestWl.deadline);
+              if (d) subParts.push(d);
+            }
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <HeroCard tone="accent">
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                    <div style={{ fontSize: 44, lineHeight: 1, filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.2))', flexShrink: 0 }}>
+                      {getEmoji(guestWl.title) ?? '🎁'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         onClick={ownerClickable ? openOwnerProfile : undefined}
-                        style={{ fontSize: 13, fontWeight: 600, color: C.accent, marginBottom: 2, cursor: ownerClickable ? 'pointer' : 'default', display: 'inline-block' }}
+                        style={{
+                          fontSize: 26, fontWeight: 700, color: '#fff',
+                          letterSpacing: '-0.035em', lineHeight: 1.05,
+                          cursor: ownerClickable ? 'pointer' : 'default',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}
                       >
-                        {guestWl.ownerName}{ownerClickable ? ' ›' : ''}
+                        {guestWl.title}
                       </div>
-                    )}
-                    <div style={{ fontSize: 17, fontWeight: 700, fontFamily: font, color: C.text, letterSpacing: '-0.01em', lineHeight: 1.2 }}>{guestWl.title}</div>
-                    {metaLine && (
-                      <div style={{ fontSize: 12, color: C.textSec, marginTop: 2 }}>{metaLine}</div>
-                    )}
-                    {guestWl.description && !metaLine && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{guestWl.description}</div>}
+                      {subParts.length > 0 && (
+                        <div
+                          onClick={ownerClickable ? openOwnerProfile : undefined}
+                          style={{
+                            fontSize: 13, opacity: 0.85, marginTop: 4,
+                            letterSpacing: '-0.005em',
+                            cursor: ownerClickable ? 'pointer' : 'default',
+                          }}
+                        >
+                          {subParts.join(' · ')}
+                          {ownerClickable && guestWl.ownerName ? ' ›' : ''}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </>
-              );
-            })()}
-            {/* Subscribe button — right corner, only for logged-in users */}
-            {tgUser && (
-              <button
-                key={isSubscribed ? 'subscribed' : 'not-subscribed'}
-                onClick={() => {
-                  if (isSubscribed) {
-                    void handleUnsubscribe(guestWl.id);
-                  } else {
-                    void handleSubscribe(guestWl.id);
-                  }
-                }}
-                disabled={subscribing}
-                style={{
-                  flexShrink: 0, padding: '8px 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
-                  fontFamily: font, fontSize: 12, fontWeight: 700,
-                  background: isSubscribed ? C.surface : C.accentSoft,
-                  color: isSubscribed ? C.textSec : C.accent,
-                  opacity: subscribing ? 0.7 : 1,
-                }}
-              >
-                {isSubscribed ? `✓ ${t('sub_subscribed_btn', locale)}` : `+ ${t('sub_subscribe_btn', locale)}`}
-              </button>
-            )}
-          </Card>
+
+                  {/* Stat row — total + reserved. Participants/avatar stack
+                      deferred until backend exposes per-wishlist contributors. */}
+                  {totalCount > 0 && (
+                    <div style={{ display: 'flex', gap: 18, marginTop: 18 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em', fontFeatureSettings: '"tnum"' }}>
+                          {totalCount}
+                        </div>
+                        <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>
+                          {pluralize(totalCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
+                        </div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em', fontFeatureSettings: '"tnum"' }}>
+                          {reservedCount}
+                        </div>
+                        <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>
+                          забронировано
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </HeroCard>
+
+                {/* Subscribe row — moved out of hero for v2.1 cleaner composition */}
+                {tgUser && (
+                  <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      key={isSubscribed ? 'subscribed' : 'not-subscribed'}
+                      onClick={() => {
+                        if (isSubscribed) void handleUnsubscribe(guestWl.id);
+                        else void handleSubscribe(guestWl.id);
+                      }}
+                      disabled={subscribing}
+                      style={{
+                        padding: '10px 16px', borderRadius: 100, border: '1px solid',
+                        borderColor: isSubscribed ? 'var(--wb-border)' : 'var(--wb-accent-soft-strong)',
+                        cursor: 'pointer', fontFamily: font, fontSize: 13, fontWeight: 650,
+                        background: isSubscribed ? 'var(--wb-card)' : 'var(--wb-accent-soft)',
+                        color: isSubscribed ? 'var(--wb-text-secondary)' : 'var(--wb-accent-strong)',
+                        WebkitBackdropFilter: 'blur(14px)' as never,
+                        backdropFilter: 'blur(14px)' as never,
+                        opacity: subscribing ? 0.7 : 1,
+                        transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                      }}
+                    >
+                      {isSubscribed ? `✓ ${t('sub_subscribed_btn', locale)}` : `+ ${t('sub_subscribe_btn', locale)}`}
+                    </button>
+                  </div>
+                )}
+
+                {guestWl.description && (
+                  <div style={{ fontSize: 13, color: 'var(--wb-text-secondary)', marginTop: 10, padding: '0 4px', lineHeight: 1.4 }}>
+                    {guestWl.description}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── Don't Gift block (guest view) ─────────────────────────── */}
           {guestDontGift && (guestDontGift.presets.length > 0 || guestDontGift.customItems.length > 0 || guestDontGift.comment) && (
