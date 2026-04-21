@@ -673,9 +673,18 @@ const btnPrimary: React.CSSProperties = { ...btnBase, background: C.accent, colo
 const btnSecondary: React.CSSProperties = { ...btnBase, background: C.accentSoft, color: C.accent };
 const btnGhost: React.CSSProperties = { ...btnBase, background: 'transparent', color: C.textSec, padding: '10px 16px', width: 'auto' };
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '14px 16px', borderRadius: 12,
-  border: `1px solid ${C.borderLight}`, background: C.surface,
-  color: C.text, fontSize: 16, lineHeight: '22px', fontFamily: font, outline: 'none', boxSizing: 'border-box',
+  // v2.1: r=16 (was 12), background: var(--wb-card) (translucent glass) +
+  // backdrop-filter, font-weight 500 (was unspecified, defaulted to 400),
+  // letter-spacing -0.012em. Source: `.wb-input` in v2.1 mockup.
+  width: '100%', padding: '14px 16px', borderRadius: 16,
+  border: '1px solid var(--wb-border)',
+  background: 'var(--wb-card)',
+  color: 'var(--wb-text)',
+  fontSize: 16, fontWeight: 500, lineHeight: '22px',
+  letterSpacing: '-0.012em',
+  fontFamily: font, outline: 'none', boxSizing: 'border-box',
+  WebkitBackdropFilter: 'blur(14px)' as never,
+  backdropFilter: 'blur(14px)' as never,
   // iOS WKWebView (Telegram): explicit user-select + touch-action so the native
   // selection handles work even when ancestor touchmove handlers exist.
   // Explicit lineHeight is required — without it, fontWeight + letterSpacing
