@@ -2316,17 +2316,21 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
   return (
     <div
       onClick={() => onTap(item)}
+      className="wb-card-pressed"
       style={{
-        borderRadius: 16, overflow: 'hidden',
-        border: '1px solid rgba(255,255,255,0.06)',
-        background: '#1c1c22',
+        borderRadius: 18, overflow: 'hidden',
+        border: '1px solid var(--wb-border)',
+        background: 'var(--wb-card)',
         display: 'flex', position: 'relative',
         minHeight: 88, opacity: isPurchased ? 0.45 : 1,
         cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+        WebkitBackdropFilter: 'blur(14px)' as never,
+        backdropFilter: 'blur(14px)' as never,
+        transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
-      {/* Top gradient strip */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: prioGrad, opacity: 0.5 }} />
+      {/* v2.1 top priority strip — accent gradient with glow */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: prioGrad, opacity: 0.7, boxShadow: '0 0 8px var(--wb-accent-shadow-soft)' }} />
 
       {/* Left panel — image or emoji */}
       {hasImg ? (
@@ -2340,9 +2344,9 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
           <div style={{
             position: 'absolute', bottom: 6, left: 6,
             width: 22, height: 22, borderRadius: '50%',
-            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px) saturate(140%)', WebkitBackdropFilter: 'blur(8px) saturate(140%)' as never,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, border: '1px solid rgba(255,255,255,0.1)',
+            fontSize: 12, border: '1px solid rgba(255,255,255,0.12)',
           }}>
             {PRIO_EMOJI[item.priority] ?? '🙂'}
           </div>
@@ -2350,26 +2354,32 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
       ) : (
         <div style={{
           width: 88, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 36, background: `linear-gradient(160deg, #1c1c22, ${C.accentSoft})`,
+          fontSize: 36,
+          background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
           minHeight: 88, position: 'relative',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
         }}>
-          {getEmoji(item.title)}
+          <span style={{ filter: 'drop-shadow(0 4px 12px var(--wb-accent-shadow-soft))' }}>
+            {getEmoji(item.title)}
+          </span>
           <div style={{
             position: 'absolute', bottom: 6, left: 6,
             width: 22, height: 22, borderRadius: '50%',
-            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px) saturate(140%)', WebkitBackdropFilter: 'blur(8px) saturate(140%)' as never,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, border: '1px solid rgba(255,255,255,0.1)',
+            fontSize: 12, border: '1px solid rgba(255,255,255,0.12)',
           }}>
             {PRIO_EMOJI[item.priority] ?? '🙂'}
           </div>
         </div>
       )}
 
-      {/* Info panel */}
+      {/* v2.1 Info panel — typography + CSS vars */}
       <div style={{ flex: 1, padding: '10px 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 }}>
         <div style={{
-          fontSize: 14, fontWeight: 650, color: isPurchased ? '#555' : '#fff', lineHeight: 1.25,
+          fontSize: 14, fontWeight: 650,
+          color: isPurchased ? 'var(--wb-text-muted)' : 'var(--wb-text)',
+          lineHeight: 1.25, letterSpacing: '-0.015em',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden',
           textDecoration: isPurchased ? 'line-through' : 'none', fontFamily: font,
         }}>
@@ -2381,7 +2391,8 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
                 display: 'inline-flex', alignItems: 'center', gap: 3,
                 marginLeft: 6, padding: '1px 6px', borderRadius: 6,
                 fontSize: 10, fontWeight: 700, lineHeight: 1.2,
-                color: '#a599ff', background: 'rgba(124,106,255,0.12)',
+                color: 'var(--wb-accent-strong)',
+                background: 'var(--wb-accent-soft)',
                 verticalAlign: 'baseline', whiteSpace: 'nowrap',
               }}
             >
@@ -2392,17 +2403,30 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 5 }}>
           {item.price != null ? (
-            <span style={{ fontSize: 17, fontWeight: 800, color: isPurchased ? '#444' : '#fff', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: font, textDecoration: isPurchased ? 'line-through' : 'none' }}>
+            <span style={{
+              fontSize: 17, fontWeight: 700,
+              color: isPurchased ? 'var(--wb-text-muted)' : 'var(--wb-text)',
+              letterSpacing: '-0.03em', lineHeight: 1, fontFamily: font,
+              fontFeatureSettings: '"tnum"',
+              textDecoration: isPurchased ? 'line-through' : 'none',
+            }}>
               {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
             </span>
           ) : (
-            <span style={{ fontSize: 12, color: '#444' }}>{t('price_not_set', locale)}</span>
+            <span style={{ fontSize: 12, color: 'var(--wb-text-muted)' }}>{t('price_not_set', locale)}</span>
           )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
           {item.sourceDomain && (
-            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, color: C.accent, background: 'rgba(124,106,255,0.08)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+            <span style={{
+              fontSize: 10, padding: '2px 7px', borderRadius: 6,
+              color: 'var(--wb-accent-strong)',
+              background: 'var(--wb-accent-soft)',
+              border: '1px solid var(--wb-accent-soft-strong)',
+              fontWeight: 600, whiteSpace: 'nowrap',
+              fontFeatureSettings: '"tnum"',
+            }}>
               {item.sourceDomain}
             </span>
           )}
@@ -2411,9 +2435,10 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
             <button
               onClick={(e) => { e.stopPropagation(); onReserve(item); }}
               style={{
-                background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)',
-                color: '#fff', border: 'none', padding: '5px 12px', borderRadius: 8,
+                background: 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))',
+                color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 10,
                 fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap',
+                boxShadow: '0 4px 12px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.2)',
               }}
             >
               {t('reserve_btn', locale)}
@@ -2423,8 +2448,9 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
             <span style={{
               display: 'inline-flex', alignItems: 'center',
               fontSize: 10, padding: '2px 8px', borderRadius: 6, fontWeight: 700,
-              color: '#A78BFA', background: 'rgba(167,139,250,0.12)',
-              border: '1px solid rgba(167,139,250,0.22)', whiteSpace: 'nowrap',
+              color: 'var(--wb-accent-strong)',
+              background: 'var(--wb-accent-soft)',
+              border: '1px solid var(--wb-accent-soft-strong)', whiteSpace: 'nowrap',
             }}>
               {t('sr_card_chip_secret', locale)}
             </span>
