@@ -2147,9 +2147,10 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{
             fontSize: 15, fontWeight: 600, fontFamily: font,
-            color: isPurchased ? C.textMuted : C.text,
+            color: isPurchased ? 'var(--wb-text-muted)' : 'var(--wb-text)',
             textDecoration: isPurchased ? 'line-through' : 'none',
             lineHeight: 1.3, paddingRight: 8,
+            letterSpacing: '-0.015em',
             display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
           }}>
             <span>{item.title}</span>
@@ -2159,27 +2160,35 @@ function WishCardOwner({ item, onTap, onDelete, onComplete, locale, sourceLabel 
               </Chip>
             )}
           </div>
-          <span style={{
-            flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
-            background: PRIO_BG[item.priority] ?? PRIO_BG[1],
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, lineHeight: 1,
-          }}>{prioEmoji(item.priority)}</span>
+          <Chip tone={item.priority === 3 ? 'danger' : item.priority === 2 ? 'warning' : 'surface'} size="sm">
+            {prioEmoji(item.priority)}
+          </Chip>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-          {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
-          {item.url && <Chip tone="surface">{t('link_label', locale)}</Chip>}
-        </div>
-        <div style={{ marginTop: 10 }}>
-          {isReserved && <Chip tone="accent" size="lg">{t('status_someone_reserved', locale)}</Chip>}
-          {isPurchased && <Chip tone="success" size="lg">{t('status_gifted', locale)}</Chip>}
+        {item.price != null && (
+          <div style={{
+            fontSize: 13, fontWeight: 650, marginTop: 2,
+            color: 'var(--wb-text-secondary)',
+            fontFamily: font,
+            fontFeatureSettings: '"tnum"',
+            textDecoration: isPurchased ? 'line-through' : 'none',
+          }}>
+            {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
+          </div>
+        )}
+        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {item.url && <Chip tone="surface" size="sm">{t('link_label', locale)}</Chip>}
+          {isReserved && <Chip tone="accent" size="md">{t('status_someone_reserved', locale)}</Chip>}
+          {isPurchased && <Chip tone="success" size="md">{t('status_gifted', locale)}</Chip>}
         </div>
         {sourceLabel && (
           <div style={{ marginTop: 6 }}>
             <span style={{
-              display: 'inline-block', fontSize: 10, fontWeight: 500, color: C.textMuted,
-              background: C.surface, border: `1px solid ${C.borderLight}`,
-              padding: '1px 8px', borderRadius: 20,
+              display: 'inline-block', fontSize: 10, fontWeight: 600,
+              color: 'var(--wb-text-muted)',
+              background: 'var(--wb-surface)',
+              border: '1px solid var(--wb-border)',
+              padding: '2px 9px', borderRadius: 100,
+              letterSpacing: '0.1px',
             }}>
               {sourceLabel}
             </span>
