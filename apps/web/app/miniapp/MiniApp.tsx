@@ -8609,7 +8609,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     }
 
     const deltaY = e.clientY - reorderPointerStartY.current;
-    const cardHeight = 82; // approximate card height + gap
+    // v2.1 card: padding 14*2 + inner 41 + border 2 + marginBottom 8 ≈ 79
+    const cardHeight = 79;
     const steps = Math.round(deltaY / cardHeight);
     const newIdx = Math.max(0, Math.min(reorderList.length - 1, idx + steps));
     setReorderDragOverIdx(newIdx);
@@ -11900,10 +11901,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       borderRadius: 18, padding: '14px 18px',
                       display: 'flex', alignItems: 'center', gap: 12,
                       marginBottom: 8,
-                      transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                      // No transition during drag — animated bg/border on
+                      // each drag step created lag ("через раз"). Also no
+                      // backdrop-filter — creates a stacking context that
+                      // interferes with pointer events during drag.
                       userSelect: 'none', touchAction: 'none',
-                      WebkitBackdropFilter: 'blur(14px)' as never,
-                      backdropFilter: 'blur(14px)' as never,
                       boxShadow: reorderDragIdx === i
                         ? '0 12px 32px var(--wb-accent-shadow-soft)'
                         : undefined,
@@ -19335,42 +19337,71 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 )}
               </div>
 
-              {/* v2.1 — Appearance (theme + accent). Russian-first; i18n added later via t() */}
-              <div style={{ marginTop: 22, marginBottom: 4, marginLeft: -16, marginRight: -16 }}>
-                <AppearanceSettings
-                  isPro={planInfo.code === 'PRO'}
-                  onOpenPaywall={() => setUpsellSheet({ context: 'appearance' })}
-                />
-              </div>
+              {/* v2.1 — Appearance (theme + accent). Locale-aware labels. */}
+              {(() => {
+                const ap = (() => {
+                  switch (locale) {
+                    case 'en':    return { accentTitle: 'Accent color',      themeTitle: 'App background', proHint: 'PRO', themeDarkName: 'Dark',    themeDarkSub: 'Default',        themeBlackName: 'Black',   themeBlackSub: 'OLED-friendly' };
+                    case 'zh-CN': return { accentTitle: '强调色',              themeTitle: '应用背景',        proHint: 'PRO', themeDarkName: '深色',    themeDarkSub: '默认',            themeBlackName: '黑色',    themeBlackSub: 'OLED 省电' };
+                    case 'hi':    return { accentTitle: 'एक्सेंट रंग',          themeTitle: 'ऐप पृष्ठभूमि',   proHint: 'PRO', themeDarkName: 'डार्क',  themeDarkSub: 'डिफ़ॉल्ट',        themeBlackName: 'ब्लैक',   themeBlackSub: 'OLED-किफायती' };
+                    case 'es':    return { accentTitle: 'Color de acento',   themeTitle: 'Fondo de app',    proHint: 'PRO', themeDarkName: 'Oscuro',  themeDarkSub: 'Predeterminado', themeBlackName: 'Negro',   themeBlackSub: 'OLED-ahorro' };
+                    case 'ar':    return { accentTitle: 'لون التمييز',       themeTitle: 'خلفية التطبيق',   proHint: 'PRO', themeDarkName: 'داكن',   themeDarkSub: 'افتراضي',        themeBlackName: 'أسود',    themeBlackSub: 'توفير OLED' };
+                    default:      return { accentTitle: 'Акцентный цвет',    themeTitle: 'Фон приложения',  proHint: 'PRO', themeDarkName: 'Тёмный',  themeDarkSub: 'По умолчанию',   themeBlackName: 'Чёрный',  themeBlackSub: 'OLED-экономия' };
+                  }
+                })();
+                return (
+                  <div style={{ marginTop: 22, marginBottom: 4, marginLeft: -16, marginRight: -16 }}>
+                    <AppearanceSettings
+                      isPro={planInfo.code === 'PRO'}
+                      onOpenPaywall={() => setUpsellSheet({ context: 'appearance' })}
+                      labels={ap}
+                    />
+                  </div>
+                );
+              })()}
 
-              {/* v2.1 stub — Calendar entry (full UI scaffold, backend pending) */}
-              <div
-                onClick={() => setScreen('calendar')}
-                style={{
-                  margin: '0 -16px 16px',
-                  padding: '14px 16px',
-                  background: 'var(--wb-card)',
-                  border: '1px solid var(--wb-border)',
-                  borderRadius: 18,
-                  display: 'flex', alignItems: 'center', gap: 14,
-                  cursor: 'pointer',
-                  WebkitBackdropFilter: 'blur(14px)' as never,
-                  backdropFilter: 'blur(14px)' as never,
-                }}
-              >
-                <div style={{
-                  width: 42, height: 42, borderRadius: 13,
-                  background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-                  flexShrink: 0,
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
-                }}>📅</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--wb-text)', letterSpacing: '-0.012em' }}>Календарь событий</div>
-                  <div style={{ fontSize: 12.5, color: 'var(--wb-text-secondary)', marginTop: 2 }}>Дни рождения и дедлайны вишлистов</div>
-                </div>
-                <div style={{ fontSize: 18, color: 'var(--wb-text-muted)' }}>›</div>
-              </div>
+              {/* v2.1 stub — Calendar entry (full UI scaffold, backend pending). Locale-aware. */}
+              {(() => {
+                const cal = (() => {
+                  switch (locale) {
+                    case 'en':    return { title: 'Event calendar',     sub: 'Birthdays and wishlist deadlines' };
+                    case 'zh-CN': return { title: '事件日历',             sub: '生日和心愿单截止日期' };
+                    case 'hi':    return { title: 'इवेंट कैलेंडर',       sub: 'जन्मदिन और विशलिस्ट डेडलाइन' };
+                    case 'es':    return { title: 'Calendario',         sub: 'Cumpleaños y fechas límite de listas' };
+                    case 'ar':    return { title: 'تقويم الأحداث',      sub: 'أعياد الميلاد ومواعيد قوائم الرغبات' };
+                    default:      return { title: 'Календарь событий',  sub: 'Дни рождения и дедлайны вишлистов' };
+                  }
+                })();
+                return (
+                  <div
+                    onClick={() => setScreen('calendar')}
+                    style={{
+                      margin: '0 -16px 16px',
+                      padding: '14px 16px',
+                      background: 'var(--wb-card)',
+                      border: '1px solid var(--wb-border)',
+                      borderRadius: 18,
+                      display: 'flex', alignItems: 'center', gap: 14,
+                      cursor: 'pointer',
+                      WebkitBackdropFilter: 'blur(14px)' as never,
+                      backdropFilter: 'blur(14px)' as never,
+                    }}
+                  >
+                    <div style={{
+                      width: 42, height: 42, borderRadius: 13,
+                      background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+                      flexShrink: 0,
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+                    }}>📅</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--wb-text)', letterSpacing: '-0.012em' }}>{cal.title}</div>
+                      <div style={{ fontSize: 12.5, color: 'var(--wb-text-secondary)', marginTop: 2 }}>{cal.sub}</div>
+                    </div>
+                    <div style={{ fontSize: 18, color: 'var(--wb-text-muted)' }}>›</div>
+                  </div>
+                );
+              })()}
 
               {/* General */}
               <SettingsSection title={t('settings_general', locale)}>
@@ -21795,9 +21826,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 enterCatReorderMode();
               }}
               style={{
-                background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+                background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
                 textAlign: 'start', cursor: 'pointer', fontFamily: font,
-                fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+                fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+                color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
               }}
             >
               <span style={{ fontSize: 20 }}>↕️</span>
@@ -21870,6 +21904,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <span style={{ fontSize: 20 }}>🚫</span>
             {t('dont_gift_banner_title', locale)}
             {planInfo.code === 'FREE' && <ProBadge style={{ marginLeft: 'auto' }} />}
+            {planInfo.code !== 'FREE' && currentWl?.dontGiftMode && currentWl.dontGiftMode !== 'global' && (
+              <span style={{
+                marginLeft: 'auto', fontSize: 11, fontWeight: 650,
+                color: 'var(--wb-success)', letterSpacing: '-0.005em',
+              }}>✓</span>
+            )}
           </button>
           {/* Smart Reservations per-wishlist settings */}
           <button
@@ -30442,15 +30482,33 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           activeNav = 'me';
         }
 
+        // Locale-aware labels (i18n dictionary has no nav_* keys yet; inline switch is simplest).
+        const navLabels = (() => {
+          switch (locale) {
+            case 'en':    return { home: 'Home',     friends: 'Friends', reservations: 'Bookings', me: 'Me',   friendsSoon: 'Friends — coming soon' };
+            case 'zh-CN': return { home: '主页',     friends: '好友',    reservations: '预订',     me: '我',   friendsSoon: '好友 — 即将推出' };
+            case 'hi':    return { home: 'होम',     friends: 'दोस्त',   reservations: 'बुकिंग',   me: 'मैं',  friendsSoon: 'दोस्त — जल्द ही' };
+            case 'es':    return { home: 'Inicio',   friends: 'Amigos',  reservations: 'Reservas', me: 'Yo',   friendsSoon: 'Amigos — próximamente' };
+            case 'ar':    return { home: 'الرئيسية', friends: 'الأصدقاء', reservations: 'الحجوزات', me: 'أنا', friendsSoon: 'الأصدقاء — قريباً' };
+            default:      return { home: 'Главная',  friends: 'Друзья',  reservations: 'Брони',    me: 'Я',    friendsSoon: 'Друзья — скоро будет доступно' };
+          }
+        })();
+
         return (
           <FloatingNav
             active={activeNav}
             onSelect={(id) => {
               if (id === 'home') {
+                // Always reset to default sub-state: homeTab='wishlists',
+                // myWishlistsTab='mine'. Tapping 🏠 from any sub-tab (Подписки /
+                // Reservations tab / Archive full-screen) returns to the root.
                 setHomeTab('wishlists');
+                setMyWishlistsTab('mine');
                 setScreen('my-wishlists');
               } else if (id === 'reservations') {
+                // Reset reservations sub-tab to 'active' — primary content.
                 setHomeTab('reservations');
+                setResTab('active');
                 if (reservations.length === 0 && santaReservationItems.length === 0) void loadReservations();
                 setScreen('my-wishlists');
               } else if (id === 'me') {
@@ -30458,14 +30516,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 void loadShowcase();
                 setScreen('profile');
               } else if (id === 'friends') {
-                pushToast('Друзья — скоро будет доступно', 'info');
+                pushToast(navLabels.friendsSoon, 'info');
               }
             }}
             items={[
-              { id: 'home', icon: '🏠', label: 'Главная' },
-              { id: 'friends', icon: '👥', label: 'Друзья' },
-              { id: 'reservations', icon: '🎁', label: 'Брони' },
-              { id: 'me', icon: '👤', label: 'Я' },
+              { id: 'home', icon: '🏠', label: navLabels.home },
+              { id: 'friends', icon: '👥', label: navLabels.friends },
+              { id: 'reservations', icon: '🎁', label: navLabels.reservations },
+              { id: 'me', icon: '👤', label: navLabels.me },
             ]}
             style={{ bottom: `calc(14px + env(safe-area-inset-bottom, 0px))` }}
           />
