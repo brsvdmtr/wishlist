@@ -25356,36 +25356,55 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
 
-            {/* ══ MY WISHLIST — Prominent block, visible to all JOINED participants ══ */}
+            {/* ══ v2.1 MY WISHLIST — Prominent block, visible to all JOINED participants ══ */}
             {(() => {
               const me = participants.find(p => p.isMe);
               if (!me || me.status !== 'JOINED') return null;
-              // isReadOnly only for terminal states; ACTIVE allows late linking (backend supports it)
               const isReadOnly = ['COMPLETED', 'CANCELLED'].includes(camp.status);
               return (
-                <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 10 }}>
+                <div style={{
+                  background: 'var(--wb-card)',
+                  border: '1px solid var(--wb-border)',
+                  borderRadius: 18, padding: 16, marginBottom: 16,
+                  WebkitBackdropFilter: 'blur(14px)' as never,
+                  backdropFilter: 'blur(14px)' as never,
+                }}>
+                  <div style={{
+                    fontSize: 12, fontWeight: 600,
+                    color: 'var(--wb-text-muted)',
+                    marginBottom: 10,
+                    textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                  }}>
                     🎁 {t('santa_my_wishlist_section', locale)}
                   </div>
                   {me.linkedWishlist ? (
-                    // State B: wishlist linked — only show status, never the title
                     <div>
-                      <div style={{ fontSize: 13, color: C.green, marginBottom: 8 }}>
+                      <div style={{
+                        fontSize: 13, fontWeight: 650,
+                        color: 'var(--wb-success)',
+                        marginBottom: 8, letterSpacing: '-0.005em',
+                      }}>
                         ✓ {t('santa_wishlist_linked_label', locale)}
                       </div>
-                      {isReadOnly ? (
-                        <div style={{ fontSize: 12, color: C.green }}>✓ {t('santa_wishlist_linked_label', locale)}</div>
-                      ) : (
+                      {isReadOnly ? null : (
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <button
+                          <Button
+                            variant="surface"
+                            size="sm"
+                            fullWidth={false}
                             onClick={() => { setSantaWishlistPickerReturnId(camp.id); setScreen('my-wishlists'); }}
-                            style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, fontSize: 13, fontWeight: 600, padding: '8px 14px', cursor: 'pointer', fontFamily: font }}
                           >
                             {t('santa_wishlist_open', locale)}
-                          </button>
+                          </Button>
                           <button
                             onClick={() => setShowSantaWishlistPicker(true)}
-                            style={{ background: 'none', border: 'none', color: C.accent, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '8px 0' }}
+                            style={{
+                              background: 'none', border: 'none',
+                              color: 'var(--wb-accent-strong)',
+                              fontSize: 13, fontWeight: 650, cursor: 'pointer',
+                              padding: '8px 0', fontFamily: font,
+                              letterSpacing: '-0.005em',
+                            }}
                           >
                             {t('santa_wishlist_change', locale)}
                           </button>
@@ -25393,28 +25412,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       )}
                     </div>
                   ) : isReadOnly ? (
-                    // Terminal state, no wishlist linked — informational only
-                    <div style={{ fontSize: 13, color: C.textMuted }}>
+                    <div style={{ fontSize: 13, color: 'var(--wb-text-muted)', letterSpacing: '-0.005em' }}>
                       {t('santa_campaign_wishlist_not_linked_active', locale)}
                     </div>
                   ) : (
-                    // State A: no wishlist linked, campaign is editable
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ fontSize: 13, color: C.textMuted }}>
+                      <div style={{
+                        fontSize: 13, color: 'var(--wb-text-secondary)',
+                        letterSpacing: '-0.005em', lineHeight: 1.4,
+                      }}>
                         {t('santa_wishlist_not_linked', locale)}
                       </div>
-                      <button
+                      <Button
+                        variant="primary-gradient"
+                        fullWidth
                         onClick={() => setShowSantaWishlistPicker(true)}
-                        style={{ background: C.accent, border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 600, padding: '12px 16px', cursor: 'pointer', width: '100%', fontFamily: font }}
                       >
                         {t('santa_wishlist_select_from_mine', locale)}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="surface"
+                        fullWidth
                         onClick={() => { setSantaWishlistPickerReturnId(camp.id); setShowSantaWishlistPicker(false); setScreen('my-wishlists'); }}
-                        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, color: C.text, fontSize: 13, fontWeight: 600, padding: '10px 16px', cursor: 'pointer', width: '100%', fontFamily: font }}
                       >
                         {t('santa_wishlist_picker_create_new', locale)}
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
