@@ -11431,7 +11431,57 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               view is no longer reachable via UI — can be re-surfaced
               later as a profile quick-action if users miss it. */}
 
-          {/* Mine/Subscribed sub-selector — only in Wishlists tab */}
+          {/* v2.1 StatRow — 4 tiles above inner tabs (Wishlists tab only) */}
+          {homeTab === 'wishlists' && (() => {
+            const totalWishes = wishlists.reduce((n, wl) => n + wl.itemCount, 0);
+            const totalReserved = wishlists.reduce((n, wl) => n + wl.reservedCount, 0);
+            const totalGifted = allItems.filter(it => it.status === 'purchased').length;
+            const expiringCount = wishlists.filter(wl => {
+              if (!wl.deadline) return false;
+              const days = (new Date(wl.deadline).getTime() - Date.now()) / 86400000;
+              return days > 0 && days <= 14;
+            }).length;
+            const tiles = [
+              { n: totalWishes, l: pluralize(totalWishes, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale), tone: 'neutral' as const },
+              { n: totalReserved, l: t('reserved_label', locale) || 'забронировано', tone: 'accent' as const },
+              { n: totalGifted, l: t('gifted_label', locale) || 'подарено', tone: 'success' as const },
+              { n: expiringCount, l: t('expiring_label', locale) || 'истекает', tone: 'warning' as const },
+            ];
+            const toneColor = (tone: 'neutral' | 'accent' | 'success' | 'warning') =>
+              tone === 'accent' ? 'var(--wb-accent-strong)'
+              : tone === 'success' ? 'var(--wb-success)'
+              : tone === 'warning' ? 'var(--wb-warning)'
+              : 'var(--wb-text)';
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 16 }}>
+                {tiles.map((tile, i) => (
+                  <div key={i} style={{
+                    background: 'var(--wb-card)',
+                    border: '1px solid var(--wb-border)',
+                    borderRadius: 16,
+                    padding: '12px 6px 10px',
+                    textAlign: 'center' as const,
+                    WebkitBackdropFilter: 'blur(16px)' as never,
+                    backdropFilter: 'blur(16px)' as never,
+                  }}>
+                    <div style={{
+                      fontSize: 22, fontWeight: 700,
+                      color: toneColor(tile.tone),
+                      letterSpacing: '-0.03em', lineHeight: 1,
+                      fontFeatureSettings: '"tnum"',
+                    }}>{tile.n}</div>
+                    <div style={{
+                      fontSize: 10, color: 'var(--wb-text-muted)',
+                      marginTop: 4, letterSpacing: '0.1px',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{tile.l}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* v2.1 inner tabs: Мои / Подписки / Архив — only in Wishlists tab */}
           {homeTab === 'wishlists' && (
             <div style={{
               display: 'flex', gap: 2, padding: 3, marginBottom: 16,
@@ -11441,16 +11491,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               WebkitBackdropFilter: 'blur(20px)' as never,
               backdropFilter: 'blur(20px)' as never,
             }}>
-              {(['mine', 'subscribed'] as const).map((tab) => {
-                const isActive = myWishlistsTab === tab;
-                const totalUnread = subUnreadCount;
+              {([
+                { id: 'mine' as const, label: t('sub_tab_my', locale), onClick: () => setMyWishlistsTab('mine'), badge: 0 },
+                { id: 'subscribed' as const, label: t('sub_tab_subscribed', locale), onClick: () => { setMyWishlistsTab('subscribed'); void loadSubscriptions(); }, badge: subUnreadCount },
+                { id: 'archive' as const, label: t('archive_title', locale) || 'Архив', onClick: () => { void loadGlobalArchive(); setScreen('archive'); }, badge: 0 },
+              ]).map((tab) => {
+                const isActive = tab.id !== 'archive' && myWishlistsTab === tab.id;
                 return (
                   <button
-                    key={tab}
-                    onClick={() => {
-                      setMyWishlistsTab(tab);
-                      if (tab === 'subscribed') void loadSubscriptions();
-                    }}
+                    key={tab.id}
+                    onClick={tab.onClick}
                     style={{
                       flex: 1, padding: '9px 8px', borderRadius: 11, border: 'none', cursor: 'pointer',
                       fontFamily: font, fontSize: 13, fontWeight: 600,
@@ -11465,16 +11515,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         : 'none',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                       WebkitTapHighlightColor: 'transparent',
+                      position: 'relative' as const,
                     }}
                   >
-                    {tab === 'mine' ? t('sub_tab_my', locale) : t('sub_tab_subscribed', locale)}
-                    {tab === 'subscribed' && totalUnread > 0 && (
+                    {tab.label}
+                    {tab.badge > 0 && (
                       <span style={{
                         minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
-                        background: 'var(--wb-warning)',
+                        background: 'var(--wb-accent)',
                         color: '#fff', fontSize: 10, fontWeight: 700,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>{totalUnread}</span>
+                        boxShadow: '0 0 8px var(--wb-accent-shadow-soft)',
+                      }}>{tab.badge}</span>
                     )}
                   </button>
                 );
