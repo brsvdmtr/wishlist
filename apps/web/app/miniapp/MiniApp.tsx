@@ -14486,7 +14486,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           } catch { pushToast(t('title_copy_error', locale), 'error'); }
         };
         return (
-        <div style={{ padding: '0 0 calc(110px + env(safe-area-inset-bottom, 0px))' }}>
+        <div style={{ padding: '0 0 140px', minHeight: 'calc(100vh + 1px)' }}>
           {/* v2.1 Hero image — larger fallback emoji + accent-soft gradient */}
           <div style={{ position: 'relative' }}>
             {viewingItem.imageUrl ? (
@@ -14787,7 +14787,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           }
         };
         return (
-        <div style={{ padding: '0 0 calc(110px + env(safe-area-inset-bottom, 0px))' }}>
+        <div style={{ padding: '0 0 140px', minHeight: 'calc(100vh + 1px)' }}>
           {/* Hero image */}
           <div style={{ padding: '16px 16px 0' }}>
             {viewingItem.imageUrl ? (
@@ -15106,7 +15106,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           GUEST — ITEM DETAIL (view only)
           ══════════════════════════════════════════════ */}
       {screen === 'guest-item-detail' && viewingItem && (
-        <div style={{ padding: '0 0 calc(110px + env(safe-area-inset-bottom, 0px))' }}>
+        <div style={{ padding: '0 0 140px', minHeight: 'calc(100vh + 1px)' }}>
           {/* Hero image */}
           <div style={{ padding: '16px 16px 0' }}>
             {viewingItem.imageUrl ? (
@@ -21813,9 +21813,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 setBulkSelectedIds(new Set());
               }}
               style={{
-                background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+                background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
                 textAlign: 'start', cursor: 'pointer', fontFamily: font,
-                fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+                fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+                color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
               }}
             >
               <span style={{ fontSize: 20 }}>☑️</span>
@@ -21923,9 +21926,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               setShowArchiveWlConfirm(true);
             }}
             style={{
-              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.orange, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+              color: 'var(--wb-warning)', display: 'flex', alignItems: 'center', gap: 12,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
             <span style={{ fontSize: 20 }}>📦</span>
@@ -21935,9 +21941,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <button
             onClick={() => startDeleteWishlist()}
             style={{
-              background: C.redSoft, border: 'none', borderRadius: 14, padding: '16px 18px',
+              background: 'var(--wb-danger-soft)', border: '1px solid rgba(251,113,133,0.28)', borderRadius: 16, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.red, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+              color: 'var(--wb-danger)', display: 'flex', alignItems: 'center', gap: 12,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
             <span style={{ fontSize: 20 }}>🗑️</span>
