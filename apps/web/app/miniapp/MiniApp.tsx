@@ -663,15 +663,40 @@ async function computeActorHash(telegramId: number): Promise<string> {
 // BUTTON / INPUT STYLES
 // ═══════════════════════════════════════════════════════
 
+// v2.1 legacy button constants — shifted to match `<Button>` primitive spec
+// (`packages/ui/src/Button.tsx`). Keeping the constants as a bridge so 145+
+// `style={{...btnX}}` call-sites get v2.1 styling without per-site JSX
+// refactors. Future Phase 5 wave can swap them for `<Button>` where safe.
 const btnBase: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none',
-  fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
-  transition: 'all 0.15s', width: '100%',
+  gap: 8, padding: '15px 22px', borderRadius: 18, border: 'none',
+  fontSize: 15, fontWeight: 650, cursor: 'pointer', fontFamily: font,
+  letterSpacing: '-0.015em',
+  transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+  width: '100%',
 };
-const btnPrimary: React.CSSProperties = { ...btnBase, background: C.accent, color: '#fff' };
-const btnSecondary: React.CSSProperties = { ...btnBase, background: C.accentSoft, color: C.accent };
-const btnGhost: React.CSSProperties = { ...btnBase, background: 'transparent', color: C.textSec, padding: '10px 16px', width: 'auto' };
+/** v2.1 primary: accent → accentDeep gradient + layered accent glow + inset highlight. */
+const btnPrimary: React.CSSProperties = {
+  ...btnBase,
+  background: 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))',
+  color: '#fff',
+  boxShadow: '0 12px 32px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.22)',
+};
+/** v2.1 secondary: accent-soft tint + accent-soft-strong border (hairline). */
+const btnSecondary: React.CSSProperties = {
+  ...btnBase,
+  background: 'var(--wb-accent-soft)',
+  color: 'var(--wb-accent-strong)',
+  border: '1px solid var(--wb-accent-soft-strong)',
+};
+/** v2.1 ghost: text-secondary on transparent, auto width, tighter padding. */
+const btnGhost: React.CSSProperties = {
+  ...btnBase,
+  background: 'transparent',
+  color: 'var(--wb-text-secondary)',
+  padding: '10px 16px',
+  width: 'auto',
+};
 const inputStyle: React.CSSProperties = {
   // v2.1: r=16 (was 12), background: var(--wb-card) (translucent glass) +
   // backdrop-filter, font-weight 500 (was unspecified, defaulted to 400),
