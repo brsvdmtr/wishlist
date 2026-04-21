@@ -5,6 +5,7 @@ import {
   fontSize,
   fontWeight,
   fontFamily,
+  letterSpacing,
   spacingSemantic,
   transition,
   shadows,
@@ -15,23 +16,18 @@ import {
 } from '@wishlist/ui-tokens';
 
 /**
- * @status per-variant:
- *   - `primary` / `secondary` / `ghost` → **canonical** (promoted 2026-04-20, 12 adoptions + 1-day haptic observation)
- *   - `primary-gradient` → **canonical** (promoted 2026-04-20 via paywall wave; gap #1 resolved — mockup canonicalizes 2-stop gradient)
- *   - `danger-solid` → **canonical** (promoted 2026-04-20 via destructive-confirm wave; gap #2 resolved — flat fill for confirm CTAs)
- *   - `danger` (soft/tinted) / `surface` → `provisional`
+ * @status v2.1 refresh — consumes CSS vars set by ThemeProvider so accent
+ * switches at runtime. All canonical variants inherit their previous status.
  *
- * Sizes (sm / md / lg), `pressedEffect`, and `haptic` behaviors are part
- * of the canonical contract.
+ * Per-variant status (post-refresh):
+ *   - `primary` / `secondary` / `ghost` → **canonical**
+ *   - `primary-gradient` → **canonical** (layered accent gradient + composed glow)
+ *   - `danger-solid` → **canonical** (destructive confirm CTAs)
+ *   - `surface` → **canonical-v2.1** (glass-secondary action — matches v2.1
+ *     Settings screen, Onboarding "Skip")
+ *   - `danger` (soft/tinted) → `provisional` (candidate for deprecation)
  *
- * Destructive-action guidance:
- *   - `danger-solid`: confirm CTA inside a destructive dialog ("Delete 5 items", "Purge archive").
- *     Paired with a cancel Button in the same dialog.
- *   - `danger` (soft): inline destructive hint or secondary in a non-dialog context
- *     (pending real adoption — currently 0 call-sites).
- *
- * Approval: `DESIGN_DECISIONS.md#2026-04-20--paywall-b-full-full-redesign-to-match-approved-v2-paywall.html--yearly-pro-plan`.
- * Visual source of truth: every approved v2 mockup.
+ * Approval: `DESIGN_DECISIONS.md#2026-04-21--v21-refresh-approved-as-new-visual-direction-glass--mesh--theme-system`.
  */
 export type ButtonVariant = 'primary' | 'primary-gradient' | 'secondary' | 'ghost' | 'danger' | 'danger-solid' | 'surface';
 export type ButtonSize = 'sm' | 'md' | 'lg';
@@ -63,34 +59,56 @@ const sizeStyles: Record<ButtonSize, CSSProperties> = {
     minHeight: buttonHeight.sm,
   },
   md: {
-    padding: `${spacingSemantic.buttonPaddingY}px ${spacingSemantic.buttonPaddingX}px`,
+    padding: `15px ${spacingSemantic.buttonPaddingX - 2}px`,
     fontSize: fontSize.lg,
-    minHeight: buttonHeight.md,
+    minHeight: 52,
   },
   lg: {
-    padding: `${spacingSemantic.buttonPaddingY + 2}px ${spacingSemantic.buttonPaddingX}px`,
+    padding: `17px ${spacingSemantic.buttonPaddingX}px`,
     fontSize: fontSize.xl,
-    minHeight: buttonHeight.lg,
+    minHeight: 56,
   },
 };
 
+/** Use gradient (accent → accentDeep) composed via CSS vars so accent switching works. */
+const gradientPrimary = 'linear-gradient(135deg, var(--wb-accent, #8B7BFF), var(--wb-accent-deep, #5B48E5))';
+const gradientDiagonal = 'linear-gradient(135deg, var(--wb-accent, #8B7BFF), var(--wb-accent-strong, #B4A6FF))';
+
+const ctaShadow = `0 12px 32px var(--wb-accent-shadow, ${colors.accentGlow}), inset 0 1px 0 rgba(255,255,255,0.22)`;
+
 const variantStyles: Record<ButtonVariant, CSSProperties> = {
-  primary: { background: colors.accent, color: colors.white, boxShadow: shadows.elevated },
-  /** Canonical brand gradient + composed glow + inset highlight. */
-  'primary-gradient': {
-    background: gradients.accentDiagonal,
+  primary: {
+    background: gradientPrimary,
     color: colors.white,
-    boxShadow: shadows.glowCtaComposed,
+    boxShadow: ctaShadow,
   },
-  secondary: { background: colors.accentSoft, color: colors.accent },
-  ghost: { background: colors.transparent, color: colors.textMuted },
-  /** Soft danger — tinted background. For inline "maybe destructive" actions (e.g. "Snooze"). */
+  /** Canonical brand gradient (diagonal) + composed glow + inset highlight. */
+  'primary-gradient': {
+    background: gradientPrimary,
+    color: colors.white,
+    boxShadow: ctaShadow,
+  },
+  secondary: {
+    background: `var(--wb-accent-soft, ${colors.accentSoft})`,
+    color: `var(--wb-accent-strong, ${colors.accentStrong})`,
+    border: `1px solid var(--wb-accent-soft-strong, ${colors.accentSoftStrong})`,
+  },
+  ghost: {
+    background: colors.transparent,
+    color: `var(--wb-text-secondary, ${colors.textSecondary})`,
+  },
+  /** Soft danger — tinted background. For inline "maybe destructive" actions. */
   danger: { background: colors.dangerSoft, color: colors.danger },
-  /** Solid danger — flat fill. Canonical for destructive-confirm CTAs
-   *  (bulk delete, purge archive, category delete, account delete). */
+  /** Solid danger — flat fill. Canonical for destructive-confirm CTAs. */
   'danger-solid': { background: colors.danger, color: colors.white, boxShadow: shadows.elevated },
-  /** Surface = card-colored with border; secondary-neutral actions. */
-  surface: { background: colors.card, color: colors.text, border: `1px solid ${colors.border}` },
+  /** Surface = glass card with strong border; neutral secondary (Settings, Onboarding skip). */
+  surface: {
+    background: `var(--wb-card-strong, ${colors.cardStrong})`,
+    color: `var(--wb-text, ${colors.text})`,
+    border: `1px solid var(--wb-border-strong, ${colors.borderStrong})`,
+    WebkitBackdropFilter: 'blur(14px)' as never,
+    backdropFilter: 'blur(14px)' as never,
+  },
 };
 
 function tryHaptic(kind: NonNullable<ButtonProps['haptic']>) {
@@ -149,13 +167,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         gap: spacingSemantic.inlineIconGap,
         borderRadius: radius.xl,
         border: 'none',
-        fontWeight: fontWeight.bold,
+        fontWeight: fontWeight.strong,
         fontFamily: fontFamily.sans,
         cursor: isDisabled ? 'not-allowed' : 'pointer',
-        transition: transition.all,
+        transition: transition.allEmph,
         width: fullWidth ? '100%' : 'auto',
         opacity: isDisabled ? 0.55 : 1,
-        letterSpacing: '-0.01em',
+        letterSpacing: letterSpacing.tighter,
         ...sizeStyles[size],
         ...variantStyles[variant],
         ...(pressedEffect && !isDisabled ? { ['--pressed-scale' as unknown as string]: pressedScale.button } : {}),
@@ -188,11 +206,5 @@ function ButtonSpinner() {
   );
 }
 
-/**
- * Global CSS hook required for pressed-scale to work:
- *
- *   .wb-btn-pressed:active { transform: scale(var(--pressed-scale, 0.98)); }
- *
- * Already registered in apps/web/app/globals.css as part of the
- * approved v2 interaction system.
- */
+// Keep `gradientDiagonal` exported type-wise for potential future overrides
+export const _internalGradients = { gradientPrimary, gradientDiagonal };

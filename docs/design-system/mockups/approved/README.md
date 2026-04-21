@@ -9,25 +9,43 @@ Mockups in this directory are the **canonical visual spec** for WishBoard.
 > running through the approval flow in
 > [`../../PROMOTION_CHECKLIST.md`](../../PROMOTION_CHECKLIST.md).
 
-## Current approved set — North Star v2 (2026-04-19)
+## Current approved set
 
-Approved as binding visual direction for the Mini App. Shared stylesheet
-(`_north-star-v2.css`) is the token-language mirror of
-[`@wishlist/ui-tokens`](../../../../packages/ui-tokens).
+### North Star v2.1 — "modern 2026 refresh" (2026-04-21) · **binding visual direction**
+
+Single-file click-through prototype with live theme/accent switching.
+Shifts visual language from solid dark → **glass surfaces over mesh
+gradient**, adds **themeable backgrounds & accents** (PRO-gated).
 
 | File | Surface | Approved |
 |------|---------|----------|
-| `v2-home-all-tabs.html` | Home × 3 tabs (Wishlists / Wishes / Reservations) + counter-badge + ⚙ settings | 2026-04-19 |
-| `v2-wishlist-detail-owner.html` | Owner wishlist editing | 2026-04-19 |
-| `v2-wishlist-detail-guest.html` | Guest share-link landing | 2026-04-19 |
-| `v2-wish-state-matrix.html` | All 15 item state combinations | 2026-04-19 |
-| `v2-paywall.html` | Paywall — real 19-PRO feature stack | 2026-04-19 |
-| `v2-reservations-pro.html` | Reservations PRO workflow (active + history + detail) | 2026-04-19 |
-| `v2-secret-reservation.html` | 5 secret-reservation derived states | 2026-04-19 |
-| `v2-showcase-profile.html` | Public PRO showcase profile | 2026-04-19 |
-| `v2-group-gift.html` | Group-gift detail + chat | 2026-04-19 |
-| `v2-santa-campaign.html` | Secret Santa participant + organizer | 2026-04-19 |
-| `v2-onboarding.html` | Onboarding entry (4 screens) | 2026-04-19 |
+| `v2.1-refresh-all-screens.html` | Onboarding · Home · Wishlist guest · Create wish · Paywall · Settings (theme+accent picker) · Profile · Calendar | **2026-04-21** |
+
+Decision log entry:
+[`DESIGN_DECISIONS.md#2026-04-21--v21-refresh-approved-as-new-visual-direction-glass--mesh--theme-system`](../../DESIGN_DECISIONS.md).
+
+### North Star v2 — feature-surface reference (2026-04-19) · `superseded-visual`
+
+**Visual language superseded by v2.1** at the token level. Files stay
+here as reference for **feature surface & information architecture** —
+consult them when v2.1 prototype omits a screen (reservations,
+secret-res, group-gift, santa, showcase, wish-state-matrix,
+wishlist-owner). Shared stylesheet (`_north-star-v2.css`) is
+historical; migrate to v2.1 tokens on touch.
+
+| File | Surface | Approved | Status |
+|------|---------|----------|--------|
+| `v2-home-all-tabs.html` | Home × 3 tabs | 2026-04-19 | `superseded-visual` · v2.1 covers |
+| `v2-wishlist-detail-owner.html` | Owner wishlist editing | 2026-04-19 | feature-ref · v2.1 pending |
+| `v2-wishlist-detail-guest.html` | Guest share-link landing | 2026-04-19 | `superseded-visual` · v2.1 covers |
+| `v2-wish-state-matrix.html` | All 15 item state combinations | 2026-04-19 | feature-ref · v2.1 pending |
+| `v2-paywall.html` | Paywall — 19-PRO feature stack | 2026-04-19 | `superseded-visual` · v2.1 covers |
+| `v2-reservations-pro.html` | Reservations PRO workflow | 2026-04-19 | feature-ref · v2.1 pending |
+| `v2-secret-reservation.html` | 5 secret-reservation derived states | 2026-04-19 | feature-ref · v2.1 pending |
+| `v2-showcase-profile.html` | Public PRO showcase profile | 2026-04-19 | feature-ref · v2.1 pending |
+| `v2-group-gift.html` | Group-gift detail + chat | 2026-04-19 | feature-ref · v2.1 pending |
+| `v2-santa-campaign.html` | Secret Santa participant + organizer | 2026-04-19 | feature-ref · v2.1 pending |
+| `v2-onboarding.html` | Onboarding entry (4 screens) | 2026-04-19 | `superseded-visual` · v2.1 covers |
 
 ## How to use
 

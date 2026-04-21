@@ -73,6 +73,132 @@ body {
 .wb-btn-pressed:active { transform: scale(var(--pressed-scale, 0.98)); }
 .wb-card-pressed:active { transform: scale(var(--pressed-scale, 0.995)); }
 
+/* ──────────────────────────────────────────────────────────────────────
+   v2.1 — "Modern 2026 refresh" runtime theme/accent system.
+   Variables are scoped to the phone root via .wb-phone[data-theme][data-accent].
+   Source: docs/design-system/mockups/approved/v2.1-refresh-all-screens.html
+   Defaults: data-theme="dark" + data-accent="violet" = free tier.
+   ──────────────────────────────────────────────────────────────────── */
+
+.wb-phone {
+  /* Theme defaults — dark + violet */
+  --wb-bg: #0F0F12;
+  --wb-bg-elev: #15151A;
+  --wb-surface: rgba(255,255,255,0.035);
+  --wb-surface-hover: rgba(255,255,255,0.06);
+  --wb-card: rgba(255,255,255,0.045);
+  --wb-card-strong: rgba(255,255,255,0.07);
+  --wb-nav-bg: rgba(15,15,18,0.72);
+  --wb-border: rgba(255,255,255,0.06);
+  --wb-border-strong: rgba(255,255,255,0.12);
+  --wb-hairline: rgba(255,255,255,0.04);
+
+  /* Accent defaults — violet */
+  --wb-accent: #8B7BFF;
+  --wb-accent-strong: #B4A6FF;
+  --wb-accent-light: #C8BDFF;
+  --wb-accent-deep: #5B48E5;
+  --wb-accent-r: 139; --wb-accent-g: 123; --wb-accent-b: 255;
+
+  --wb-accent-soft: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.14);
+  --wb-accent-soft-strong: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.30);
+  --wb-accent-shadow: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.45);
+  --wb-accent-shadow-soft: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.25);
+
+  /* Semantic (invariant across themes/accents) */
+  --wb-success: #4ADE80;
+  --wb-success-soft: rgba(74,222,128,0.14);
+  --wb-warning: #FBBF24;
+  --wb-warning-soft: rgba(251,191,36,0.14);
+  --wb-danger: #FB7185;
+  --wb-danger-soft: rgba(251,113,133,0.14);
+
+  /* Text */
+  --wb-text: #FFFFFF;
+  --wb-text-secondary: #C7CAD1;
+  --wb-text-muted: #8F94A3;
+  --wb-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+
+  /* Mesh gradient — layered behind phone content */
+  --wb-mesh:
+    radial-gradient(ellipse 80% 60% at 12% 0%, rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.22), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+    radial-gradient(ellipse 100% 70% at 50% 110%, rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.10), transparent 65%);
+}
+
+/* Theme: Black (PRO) */
+.wb-phone[data-theme="black"] {
+  --wb-bg: #000000;
+  --wb-bg-elev: #070709;
+  --wb-surface: rgba(255,255,255,0.04);
+  --wb-surface-hover: rgba(255,255,255,0.07);
+  --wb-card: rgba(255,255,255,0.05);
+  --wb-card-strong: rgba(255,255,255,0.08);
+  --wb-nav-bg: rgba(0,0,0,0.78);
+  --wb-border: rgba(255,255,255,0.07);
+  --wb-border-strong: rgba(255,255,255,0.14);
+  --wb-hairline: rgba(255,255,255,0.05);
+  --wb-mesh:
+    radial-gradient(ellipse 80% 60% at 12% 0%, rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.18), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.06), transparent 55%);
+}
+
+/* Accent: Blue (PRO) */
+.wb-phone[data-accent="blue"] {
+  --wb-accent: #5B8DEF;
+  --wb-accent-strong: #86ABF5;
+  --wb-accent-light: #B5CDF9;
+  --wb-accent-deep: #2F61C8;
+  --wb-accent-r: 91; --wb-accent-g: 141; --wb-accent-b: 239;
+}
+
+/* Accent: Pink (PRO) */
+.wb-phone[data-accent="pink"] {
+  --wb-accent: #F06AB4;
+  --wb-accent-strong: #F892C9;
+  --wb-accent-light: #FCBCDD;
+  --wb-accent-deep: #C53F88;
+  --wb-accent-r: 240; --wb-accent-g: 106; --wb-accent-b: 180;
+}
+
+/* Accent: Green (PRO) */
+.wb-phone[data-accent="green"] {
+  --wb-accent: #34C98A;
+  --wb-accent-strong: #58D9A3;
+  --wb-accent-light: #88E6BC;
+  --wb-accent-deep: #1E9765;
+  --wb-accent-r: 52; --wb-accent-g: 201; --wb-accent-b: 138;
+}
+
+/* Phone frame chrome + mesh backdrop — applied to the phone root itself. */
+.wb-phone {
+  position: relative;
+  background: var(--wb-bg);
+  color: var(--wb-text);
+  font-family: var(--wb-font);
+  isolation: isolate;
+}
+
+.wb-phone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--wb-mesh);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wb-phone > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Fade-in preset for inline-mounted components (wish preview, etc.) */
+@keyframes wbFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

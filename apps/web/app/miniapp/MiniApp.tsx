@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, Chip, CounterBadge, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile } from '@wishlist/ui';
+import { Banner, Button, Card, Chip, CounterBadge, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider } from '@wishlist/ui';
+import { AppearanceSettings } from './screens/AppearanceSettings';
 import { initSentry, captureException } from './sentry';
 
 // ═══════════════════════════════════════════════════════
@@ -15,25 +16,36 @@ type TgUser = { id: number; first_name: string; last_name?: string; username?: s
 // DESIGN SYSTEM (matches prototype exactly)
 // ═══════════════════════════════════════════════════════
 
+/**
+ * Legacy MiniApp color constants — **SHIFTED to v2.1 values (2026-04-21)**.
+ *
+ * Surfaces (`card`/`surface`/`surfaceHover`) stay SOLID hex — not translucent
+ * — to avoid visual breakage across ~500 inline `background: C.card` sites
+ * that don't apply `backdrop-filter`. Glass surfaces live in `@wishlist/ui`
+ * primitives instead (migrate on touch).
+ *
+ * Accent / semantic / text values follow v2.1 palette. See
+ * `packages/ui-tokens/src/colors.ts` for canonical source.
+ */
 const C = {
-  bg: '#1B1B1F',
-  surface: '#26262C',
-  surfaceHover: '#2E2E36',
-  card: '#2F2F38',
-  accent: '#7C6AFF',
-  accentSoft: 'rgba(124,106,255,0.12)',
-  accentGlow: 'rgba(124,106,255,0.25)',
-  green: '#34D399',
-  greenSoft: 'rgba(52,211,153,0.12)',
-  orange: '#FBBF24',
-  orangeSoft: 'rgba(251,191,36,0.12)',
-  red: '#F87171',
-  redSoft: 'rgba(248,113,113,0.12)',
-  text: '#F4F4F6',
-  textSec: '#9CA3AF',
-  textMuted: '#6B7280',
-  border: 'rgba(255,255,255,0.06)',
-  borderLight: 'rgba(255,255,255,0.1)',
+  bg: '#0F0F12',                           // v2.1
+  surface: '#26262C',                      // legacy solid (v2.1 primitives use rgba)
+  surfaceHover: '#2E2E36',                 // legacy solid
+  card: '#2F2F38',                         // legacy solid
+  accent: '#8B7BFF',                       // v2.1 violet
+  accentSoft: 'rgba(139,123,255,0.14)',    // v2.1
+  accentGlow: 'rgba(139,123,255,0.25)',    // v2.1
+  green: '#4ADE80',                        // v2.1
+  greenSoft: 'rgba(74,222,128,0.14)',      // v2.1
+  orange: '#FBBF24',                       // unchanged
+  orangeSoft: 'rgba(251,191,36,0.14)',     // v2.1 opacity
+  red: '#FB7185',                          // v2.1
+  redSoft: 'rgba(251,113,133,0.14)',       // v2.1
+  text: '#FFFFFF',                         // v2.1 pure white
+  textSec: '#C7CAD1',                      // v2.1
+  textMuted: '#8F94A3',                    // v2.1
+  border: 'rgba(255,255,255,0.06)',        // unchanged
+  borderLight: 'rgba(255,255,255,0.1)',    // unchanged
 };
 
 const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
@@ -250,7 +262,8 @@ type UpsellContext =
   | 'curated_selection'
   | 'smart_reservations'
   | 'bot_import'
-  | 'showcase';
+  | 'showcase'
+  | 'appearance'; // v2.1: theme/accent PRO gate
 
 // UpsellSheetState carries optional wishlistId for wishlist-scoped add-on offers
 type UpsellSheetState = { context: UpsellContext; wishlistId?: string } | null;
@@ -1981,6 +1994,17 @@ const getUpsellContent = (locale: Locale): Record<UpsellContext, {
       t('showcase_paywall_pinned', locale),
       t('showcase_paywall_pref', locale),
       t('showcase_paywall_antigift', locale),
+    ],
+  },
+  appearance: {
+    emoji: '🎨',
+    title: 'Персонализация внешнего вида',
+    subtitle: 'PRO открывает OLED-чёрную тему и акцентные цвета: синий, розовый, зелёный.',
+    showTable: false,
+    benefits: [
+      'OLED-чёрная тема (экономит батарею)',
+      'Акценты: синий, розовый, зелёный',
+      'Мгновенное переключение без перезагрузки',
     ],
   },
 });
@@ -3880,7 +3904,9 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
 export default function MiniApp(props: { apiBase: string; botUsername: string; miniappShortName: string }) {
   return (
     <MiniAppErrorBoundary>
-      <MiniAppInner {...props} />
+      <ThemeProvider>
+        <MiniAppInner {...props} />
+      </ThemeProvider>
     </MiniAppErrorBoundary>
   );
 }
@@ -18753,8 +18779,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 )}
               </div>
 
+              {/* v2.1 — Appearance (theme + accent). Russian-first; i18n added later via t() */}
+              <div style={{ marginTop: 22, marginBottom: 4, marginLeft: -16, marginRight: -16 }}>
+                <AppearanceSettings
+                  isPro={planInfo.code === 'PRO'}
+                  onOpenPaywall={() => setUpsellSheet({ context: 'appearance' })}
+                />
+              </div>
+
               {/* General */}
-              <SettingsSection title={t('settings_general', locale)} first>
+              <SettingsSection title={t('settings_general', locale)}>
                 {(() => {
                   const LANG_NATIVE: Record<string, string> = {
                     ru: 'Русский', en: 'English', 'zh-CN': '中文', hi: 'हिन्दी', es: 'Español', ar: 'العربية',

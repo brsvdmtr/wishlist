@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, type ReactNode, type CSSProperties } from 'react';
-import { colors, radius, fontSize, fontWeight, fontFamily } from '@wishlist/ui-tokens';
+import { colors, radius, fontSize, fontWeight, fontFamily, shadows, letterSpacing } from '@wishlist/ui-tokens';
 
 /**
  * @status **canonical** (2026-04-20, absorbed iOS-touch behavior from
@@ -270,7 +270,13 @@ export function Sheet({
       <div
         ref={backdropRef}
         onClick={dismissOnBackdrop ? () => { blurActiveField(); onClose(); } : undefined}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100 }}
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          WebkitBackdropFilter: 'blur(4px)' as never,
+          backdropFilter: 'blur(4px)' as never,
+          zIndex: 100,
+        }}
       />
       <div
         ref={sheetRef}
@@ -281,12 +287,17 @@ export function Sheet({
         }}
         style={{
           position: 'fixed', bottom: 0, left: 0, right: 0,
-          background: colors.surface, borderRadius: '20px 20px 0 0',
+          background: `var(--wb-bg-elev, ${colors.bgElev})`,
+          border: `1px solid var(--wb-border, ${colors.border})`,
+          borderBottom: 'none',
+          borderRadius: `${radius.sheet}px ${radius.sheet}px 0 0`,
           padding: 24, zIndex: 101, maxHeight, overflowY: 'auto',
-          animation: 'slideUp 0.3s ease',
+          animation: 'slideUp 0.32s cubic-bezier(0.25, 0.8, 0.35, 1)',
+          boxShadow: shadows.sheetUp,
           willChange: 'transform',
           overscrollBehavior: 'contain' as never,
           WebkitOverflowScrolling: 'touch' as never,
+          color: `var(--wb-text, ${colors.text})`,
           ...contentStyle,
         }}
       >
@@ -294,20 +305,23 @@ export function Sheet({
           <div
             aria-hidden="true"
             style={{
-              width: 40, height: 4, background: colors.textMuted,
-              borderRadius: radius.full, margin: '0 auto 16px',
-              opacity: 0.3, cursor: 'grab',
+              width: 40, height: 4,
+              background: 'rgba(255,255,255,0.18)',
+              borderRadius: radius.full, margin: '-10px auto 20px',
+              cursor: 'grab',
             }}
           />
         )}
         {title && (
           <div
             style={{
-              fontSize: fontSize.xxl,
-              fontWeight: fontWeight.bold,
+              fontSize: fontSize.sectionLg,
+              fontWeight: fontWeight.strong,
               marginBottom: 16,
               fontFamily: fontFamily.sans,
-              color: colors.text,
+              color: `var(--wb-text, ${colors.text})`,
+              letterSpacing: letterSpacing.display,
+              textAlign: 'center',
             }}
           >
             {title}

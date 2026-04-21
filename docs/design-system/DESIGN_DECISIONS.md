@@ -32,6 +32,89 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-04-21 — v2.1 refresh approved as new visual direction (glass + mesh + theme system)
+
+**Type:** north-star-approval · supersession
+
+**Decision.** A new visual direction — **"modern 2026 refresh"** — is
+approved as the binding visual source of truth for the WishBoard Mini
+App. Codified in a single self-contained mockup with live theme/accent
+switching and 8 screens: `docs/design-system/mockups/approved/v2.1-refresh-all-screens.html`.
+The token language shifts from "solid dark cards" (v2, 2026-04-19) to
+**translucent glass surfaces over a mesh-gradient phone root**, with
+**themeable backgrounds** (Dark / Black) and **themeable accents**
+(Violet / Blue / Pink / Green) — the latter three being PRO features.
+
+**Context / why.** The v2 mockups approved 2026-04-19 successfully
+codified the feature surface (48 screens, 11 mockups) but left the
+visual language at parity with pre-redesign prod (solid `#2F2F38`
+cards over flat `#1B1B1F`). Owner commissioned a fresh visual
+exploration in 2026-04-21 that:
+
+1. Modernizes surfaces to glass (`rgba(255,255,255,0.045)` +
+   `backdrop-filter: blur(14–16px)`) over a mesh-gradient phone root
+   (three layered radials).
+2. Shifts accent from `#7C6AFF` → `#8B7BFF` (slightly brighter), adds
+   `#5B48E5` deep-stop.
+3. Floats the bottom nav (liquid-glass card with underline-glow
+   indicator) instead of edge-docked solid.
+4. Introduces theme + accent as a **monetized customization vector**
+   (PRO unlock: Black theme + Blue/Pink/Green accents).
+5. Adds 3 new screens — Create wish (URL-import-first), Settings
+   (theme+accent picker), Calendar (month view + event cards).
+6. Tightens radii (+2–6 px across card/hero/sheet/button/fab/input)
+   and typography (weight 700 → 650; letter-spacing -0.01 → -0.025
+   for heroes).
+
+**Supersedes.** **All 11 approved v2-\* mockups** (2026-04-19) at the
+**token/visual level**. They remain in `approved/` as reference for
+**feature surface & layout** — the v2.1 refresh does not change what
+screens exist or their information architecture, only how they look.
+Future migrations should consult v2.1 for look-and-feel and the
+original v2-\*.html for content/feature coverage where v2.1 omits the
+screen (reservations, secret-res, group-gift, santa, showcase,
+wish-state-matrix, wishlist-owner — not yet in v2.1).
+
+**Impact.**
+
+- **Tokens** — values in `packages/ui-tokens/src/` require a partial
+  rewrite (Phase 1):
+  - `colors.ts` — new `bg #0F0F12`, translucent `card` / `card-strong`
+    families, accent shift `#7C6AFF` → `#8B7BFF`, new deep `#5B48E5`,
+    R/G/B channels for theme-switchable rgba.
+  - `radius.ts` — rescale (primary `14` → `18`; card `16` → `22`;
+    hero `20` → `26`; sheet `20` → `28`; fab `14` → `20`; input `12` → `16`).
+  - `shadows.ts` — add `mesh`, `accent-glow-layered`, `nav-floating`,
+    `conic-ring`.
+  - `typography.ts` — add `fontWeight.550 / 650`; tighten
+    letter-spacing on hero/display roles.
+  - **NEW file** `theme.ts` — contract `data-theme="dark|black"` ×
+    `data-accent="violet|blue|pink|green"`.
+- **Primitives** — partial updates (Phase 2):
+  - Update `Card`, `Button`, `Sheet`, `Banner` to consume
+    glass/backdrop-filter surfaces.
+  - New primitives (provisional on land): `FloatingNav`, `HeroCard`,
+    `ThemeProvider`, `AccentSwatch`, `StickyCTAFade`.
+- **Screens** — top-down redesign against v2.1 mockup (Phase 3, one
+  screen per wave with pauses for live observation).
+- **Backend (PRO gate)** — Phase 4: add `themePreference` +
+  `accentPreference` to User schema; validation `free → dark+violet`,
+  `PRO → full matrix`. Analytics events `theme_changed` /
+  `accent_changed` for retention signal.
+- **Component registry** — token-family statuses move from `approved`
+  (v2) to `approved-v2.1-pending` (v2.1 target, not yet rewritten)
+  during Phase 1 execution; flip back to `approved` when rewrite lands.
+- **Legacy cleanup** (Phase 5) — after all screens migrate: delete
+  `btnBase/btnPrimary/...` and `C = {...}` in MiniApp.tsx; mark v2-\*
+  mockups as `superseded-visual` in `approved/README.md`.
+
+**Approved by.** Dmitry (2026-04-21, "я хочу видеть этот дизайн в
+точности как в дизайн системе"). Source mockup delivered via
+WishBoard-design skill ZIP; copied to `approved/` as
+`v2.1-refresh-all-screens.html`.
+
+---
+
 ## 2026-04-20 — Button primary/secondary/ghost promoted to `canonical`
 
 **Type:** status-change (documentation-only; no code migrations)

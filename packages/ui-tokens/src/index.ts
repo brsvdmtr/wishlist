@@ -2,8 +2,9 @@
  * @wishlist/ui-tokens — canonical design tokens for WishBoard.
  *
  * Source of truth for ALL visual values. Values aligned with approved
- * v2 North Star mockups (2026-04-19). See
- * `docs/design-system/NORTH_STAR.md` + `docs/design-system/mockups/approved/`.
+ * v2.1 "modern 2026 refresh" mockup (2026-04-21). See
+ * `docs/design-system/mockups/approved/v2.1-refresh-all-screens.html`
+ * and `docs/design-system/DESIGN_DECISIONS.md`.
  *
  * If a raw value isn't here, add it here (with semantic naming) before
  * using it in feature code.
@@ -15,10 +16,12 @@ export {
   fontSize,
   fontWeight,
   lineHeight,
+  letterSpacing,
   textStyles,
   type FontSizeToken,
   type FontWeightToken,
   type TextStyleToken,
+  type LetterSpacingToken,
 } from './typography';
 export { spacing, spacingSemantic, type SpacingToken } from './spacing';
 export { radius, radiusSemantic, type RadiusToken } from './radius';
@@ -48,3 +51,17 @@ export {
 export { gradients, type GradientToken } from './gradients';
 export { safeArea, type SafeAreaToken } from './safeArea';
 export { breakpoints, type Breakpoint } from './breakpoints';
+
+// v2.1 — runtime theme/accent system
+export {
+  themes,
+  accents,
+  themeVars,
+  accentVars,
+  freeThemeAccent,
+  isFreeCombo,
+  themeLabels,
+  accentLabels,
+  type Theme,
+  type Accent,
+} from './theme';

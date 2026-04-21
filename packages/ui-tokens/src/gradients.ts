@@ -1,47 +1,76 @@
 /**
- * Gradient presets — canonical gradients observed in approved v2 mockups.
+ * Gradient presets — WishBoard Mini App.
+ *
+ * Source of truth: `docs/design-system/mockups/approved/v2.1-refresh-all-screens.html`.
+ *
+ * v2.1 gradients are layered and frequently composite 2–3 radial + linear
+ * passes. Accent colors shifted to new violet defaults (#8B7BFF / #B4A6FF /
+ * #5B48E5). The "mesh" gradient is the signature backdrop painted on every
+ * phone root.
  *
  * Diagonal (135deg) = brand accent;
  * horizontal (90deg) = priority scale directional fills;
  * vertical (to top / 180deg) = fade-to-bg masks (sticky CTAs);
- * radial = hero-card depth and accent-glow halos.
+ * radial = hero-card depth + mesh + accent-glow halos.
  */
 import { colors } from './colors';
 
 export const gradients = {
   /* ─── Brand ──────────────────────────────────────────── */
 
-  /** Primary brand CTA — hero buttons, promo banners. */
+  /** Primary brand CTA — hero buttons, primary-gradient variant. */
   accentDiagonal: `linear-gradient(135deg, ${colors.accent} 0%, ${colors.accentStrong} 100%)`,
-  /** Deeper brand blend — pressed/active states. */
+  /** Deeper brand blend — pressed/active button states, CTA variant. */
   accentDeep: `linear-gradient(135deg, ${colors.accent}, ${colors.accentDeep})`,
-  /** Softer accent blend — promotional tiles. */
-  accentSoft: `linear-gradient(135deg, ${colors.accent}, ${colors.accentLight})`,
+  /** Softer accent blend — ambient tiles, thumbnails. */
+  accentSoft: `linear-gradient(135deg, ${colors.accentSoftStrong}, ${colors.accentSoft})`,
 
   /**
-   * **Canonical paywall hero gradient.**
-   * Multi-layer: two radials for depth + diagonal brand.
-   * Source: approved mockup `v2-paywall.html` hero.
-   * Use this exactly — never duplicate by hand.
+   * **Mesh gradient (v2.1 signature).** Painted as `::before` on the phone
+   * root — three layered radials for a chroma-soft backdrop.
+   * Source: approved `v2.1-refresh-all-screens.html` `.wb-phone::before`.
    */
-  paywallHero: `radial-gradient(ellipse at top right, rgba(255,255,255,0.18), transparent 55%), radial-gradient(ellipse at bottom left, rgba(91,75,214,0.4), transparent 55%), linear-gradient(135deg, #7C6AFF 0%, #9B8AFF 55%, #6B5CE7 100%)`,
+  mesh: `radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.22), transparent 55%), radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%), radial-gradient(ellipse 100% 70% at 50% 110%, rgba(139,123,255,0.10), transparent 65%)`,
+
+  /**
+   * Softer mesh variant for Black theme.
+   * Source: `v2.1-refresh-all-screens.html` `.wb-phone[data-theme="black"]`.
+   */
+  meshBlack: `radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.18), transparent 55%), radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.06), transparent 55%)`,
+
+  /**
+   * **Canonical paywall hero gradient (v2.1).**
+   * Layered: white highlight + deep accent burst + diagonal brand base.
+   * Source: `v2.1-refresh-all-screens.html` `.wb-hero` + paywall title.
+   */
+  paywallHero: `radial-gradient(circle at 20% 10%, rgba(255,255,255,0.25), transparent 45%), radial-gradient(circle at 100% 100%, ${colors.accentDeep}, transparent 55%), linear-gradient(135deg, ${colors.accent} 0%, ${colors.accentStrong} 100%)`,
+
+  /**
+   * **Canonical wishlist hero gradient (v2.1).** Same composition as paywall
+   * hero — signals premium depth.
+   */
+  wishlistHero: `radial-gradient(circle at 20% 10%, rgba(255,255,255,0.25), transparent 45%), radial-gradient(circle at 100% 100%, ${colors.accentDeep}, transparent 55%), linear-gradient(135deg, ${colors.accent} 0%, ${colors.accentStrong} 100%)`,
+
+  /**
+   * **Canonical profile hero gradient (v2.1).** Layered ambient drops.
+   * Source: `v2.1-refresh-all-screens.html` `.wb-profile-hero`.
+   */
+  profileHero: `radial-gradient(circle at 50% 120%, ${colors.accentDeep}, transparent 60%), radial-gradient(circle at 100% 0%, ${colors.accentStrong}, transparent 50%), linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))`,
 
   /* ─── Seasonal / sub-product ─────────────────────────── */
 
   /**
    * **Canonical Santa hero gradient.**
-   * Green / red seasonal language for Secret Santa sub-product.
-   * Source: approved mockup `v2-santa-campaign.html` hero.
-   * MUST NOT mix with brand accent — Santa is visually distinct.
+   * Source: approved `v2-santa-campaign.html` hero (v2 mockup still binding).
    */
-  santaHero: `radial-gradient(ellipse at top right, rgba(255,255,255,0.12), transparent 55%), linear-gradient(135deg, #0f5f3c 0%, #1a8552 60%, #d92020 130%)`,
+  santaHero: `radial-gradient(ellipse at top right, rgba(255,255,255,0.12), transparent 55%), linear-gradient(135deg, ${colors.santaGreenDark} 0%, ${colors.santaGreen} 60%, ${colors.santaRed} 130%)`,
 
   /**
-   * **Canonical showcase-profile cover gradient.**
-   * Multi-stop (accent → amber) — premium but different from paywall.
-   * Source: approved mockup `v2-showcase-profile.html` cover.
+   * **Canonical showcase-profile cover gradient (v2).**
+   * Source: approved `v2-showcase-profile.html` cover.
+   * v2.1 refresh pending — reuse until refresh lands.
    */
-  profileCover: `radial-gradient(ellipse at top right, rgba(255,255,255,0.15), transparent 50%), linear-gradient(135deg, #7C6AFF 0%, #A78BFA 50%, #FBBF24 130%)`,
+  profileCover: `radial-gradient(ellipse at top right, rgba(255,255,255,0.15), transparent 50%), linear-gradient(135deg, ${colors.accent} 0%, ${colors.accentLight} 50%, ${colors.warning} 130%)`,
 
   /* ─── Priority scale ─────────────────────────────────── */
 
@@ -49,45 +78,39 @@ export const gradients = {
   priorityMedium: `linear-gradient(90deg, ${colors.priorityMedium}, ${colors.priorityMediumEnd})`,
   priorityHigh: `linear-gradient(90deg, ${colors.priorityHigh}, ${colors.priorityHighEnd})`,
 
-  /* ─── Fade-to-bg masks (sticky CTA regions) ──────────── */
+  /* ─── Fade masks (sticky CTA regions) ──────────── */
 
+  /** @deprecated v2.1 renamed to `fadeFromBg`. Kept for back-compat. */
   fadeToBg: `linear-gradient(to top, ${colors.bg} 65%, transparent)`,
-  fadeFromBg: `linear-gradient(180deg, transparent, ${colors.bg} 25%)`,
+  /** Used behind sticky CTA to blend into bg. */
+  fadeFromBg: `linear-gradient(180deg, transparent, ${colors.bg} 40%)`,
+  /** Tab-active fill (v2.1) — subtle top-highlight glass. */
+  tabActive: 'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))',
+  /** Segmented-control active fill. */
+  segActive: 'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))',
 
-  /* ─── State tints (card backgrounds with modifier) ───── */
-
-  /**
-   * Subtle accent-tinted card — signals "active" / "current" /
-   * "secret-reserved" states. Pair with accent-color border.
-   * Source: wishlist-detail owner current-card; secret-reservation card.
-   */
-  accentStateTint: `linear-gradient(135deg, ${colors.card}, rgba(124,106,255,0.04))`,
+  /* ─── State tints (v2.1 — for translucent card modifiers) ───── */
 
   /**
-   * Subtle success-tinted card — signals "reserved by me (public)" state
-   * in guest view. Pair with success-color border.
-   * Source: wishlist-detail guest / state-matrix.
+   * Accent-tinted card modifier — layers on top of translucent card surface.
+   * Applied via `background: linear-gradient(...), var(--wb-card)`.
    */
-  successStateTint: `linear-gradient(135deg, ${colors.card}, rgba(52,211,153,0.05))`,
-
-  /**
-   * Subtle warning-tinted card — signals "expiring soon" / "item updated"
-   * states. Pair with warning-color border.
-   * Source: reservations-pro / secret-reservation diff card.
-   */
-  warningStateTint: `linear-gradient(135deg, ${colors.card}, rgba(251,191,36,0.05))`,
-
-  /**
-   * Subtle danger-tinted card — signals "conflict" (public reserved by
-   * other after secret). Pair with danger-color border.
-   * Source: secret-reservation conflict card.
-   */
-  dangerStateTint: `linear-gradient(135deg, ${colors.card}, rgba(248,113,113,0.05))`,
+  accentStateTint: `linear-gradient(135deg, ${colors.cardStrong}, ${colors.accentSoft})`,
+  successStateTint: `linear-gradient(135deg, ${colors.card}, rgba(74,222,128,0.09))`,
+  warningStateTint: `linear-gradient(135deg, ${colors.card}, rgba(251,191,36,0.09))`,
+  dangerStateTint: `linear-gradient(135deg, ${colors.card}, rgba(251,113,133,0.09))`,
 
   /* ─── Radial glow (decorative) ───────────────────────── */
 
   accentRadialGlow: `radial-gradient(circle, ${colors.accentGlow} 0%, transparent 70%)`,
-  accentRadialGlowSoft: `radial-gradient(circle, rgba(124,106,255,0.3) 0%, transparent 70%)`,
+  accentRadialGlowSoft: `radial-gradient(circle, ${colors.accentGlowSoft} 0%, transparent 70%)`,
+
+  /* ─── Accent swatches (for Settings theme+accent picker) ───── */
+
+  swatchViolet: `linear-gradient(135deg, #8B7BFF, #5B48E5)`,
+  swatchBlue: `linear-gradient(135deg, #5B8DEF, #2F61C8)`,
+  swatchPink: `linear-gradient(135deg, #F06AB4, #C53F88)`,
+  swatchGreen: `linear-gradient(135deg, #34C98A, #1E9765)`,
 } as const;
 
 export type GradientToken = keyof typeof gradients;

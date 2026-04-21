@@ -17,8 +17,10 @@ export const duration = {
 export const easing = {
   /** Default for nearly all transitions. */
   standard: 'ease',
-  /** Material-motion — reserved for toggle knobs / emphasized motion. */
+  /** Material-motion — v2.1 default for UI state changes. */
   emphasized: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  /** Swift decelerate — v2.1 sheet open/close. */
+  decelerate: 'cubic-bezier(0.25, 0.8, 0.35, 1)',
   /** Linear — for progress bars that shouldn't accelerate. */
   linear: 'linear',
   /** Spring-like — for success pops (approved onboarding success screen). */
@@ -28,9 +30,13 @@ export const easing = {
 /**
  * Canonical transition presets — prefer these over custom CSS strings.
  * `transition.all` covers 90%+ of interactive state changes.
+ *
+ * v2.1 defaults to `emphasized` easing for UI state changes (tab switch,
+ * card press, tile select) for a more modern feel.
  */
 export const transition = {
   all: `all ${duration.fast} ${easing.standard}`,
+  allEmph: `all ${duration.normal} ${easing.emphasized}`,
   allNormal: `all ${duration.normal} ${easing.standard}`,
   opacity: `opacity ${duration.fast} ${easing.standard}`,
   colors: `background ${duration.fast} ${easing.standard}, color ${duration.fast} ${easing.standard}, border-color ${duration.fast} ${easing.standard}`,
@@ -38,6 +44,8 @@ export const transition = {
   boxShadow: `box-shadow ${duration.normal} ${easing.standard}`,
   /** Fast transform — used for pressed-state scale. */
   transformFast: `transform ${duration.fast} ${easing.standard}`,
+  /** Sheet slide — v2.1 sheets use a slightly longer decelerate easing. */
+  sheet: `transform 0.32s ${easing.decelerate}`,
 } as const;
 
 /**

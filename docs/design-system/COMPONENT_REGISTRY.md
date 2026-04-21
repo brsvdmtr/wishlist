@@ -4,7 +4,11 @@ Status of every UI primitive and pattern family. The **status** column is
 the source of truth — a component's existence in code does not make it
 canonical.
 
-Updated **2026-04-19** after North Star v2 mockup approval.
+Updated **2026-04-19** after North Star v2 mockup approval. **v2.1 refresh
+approved 2026-04-21** — see
+[`DESIGN_DECISIONS.md`](./DESIGN_DECISIONS.md#2026-04-21--v21-refresh-approved-as-new-visual-direction-glass--mesh--theme-system).
+Token-family rows and primitive-visual notes below currently describe
+v2 values; rewrites land in Phase 1 and this registry updates then.
 
 ## Status model
 
@@ -239,6 +243,53 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
   - Brand new
   - `avatarGradients` token consumption needs validation (identity
     assignment algorithm still in caller's hands)
+
+### `ThemeProvider` (new, 2026-04-21, v2.1)
+
+- **Status:** `provisional`
+- **Implementation:** [packages/ui/src/ThemeProvider.tsx](../../packages/ui/src/ThemeProvider.tsx)
+- **Approval source:** `v2.1-refresh-all-screens.html` (top-level theme/accent switcher)
+- **API:** `<ThemeProvider isPro={} initial={} onChange={} onUpsell={}>` · `useTheme()` hook
+- **Promotion blockers:** brand new. Needs 3 real adoptions (Settings
+  picker + MiniApp root wrapping + backend persistence).
+
+### `FloatingNav` (new, 2026-04-21, v2.1)
+
+- **Status:** `provisional`
+- **Implementation:** [packages/ui/src/FloatingNav.tsx](../../packages/ui/src/FloatingNav.tsx)
+- **Approval source:** `v2.1-refresh-all-screens.html` (`.wb-nav` liquid-glass)
+- **API:** `items / active / onSelect / style`
+- **Promotion blockers:** brand new. Supersedes the legacy edge-docked
+  nav pattern; Phase 3 Home screen is first adoption.
+
+### `HeroCard` (new, 2026-04-21, v2.1)
+
+- **Status:** `provisional`
+- **Implementation:** [packages/ui/src/HeroCard.tsx](../../packages/ui/src/HeroCard.tsx)
+- **Approval source:** `v2.1-refresh-all-screens.html` wishlist + profile hero bands
+- **API:** `tone (accent | santa) / children / style`
+- **Promotion blockers:** brand new. Absorbs the `.wb-hero` inline
+  composition from the v2.1 mockup — validate via wishlist detail,
+  paywall hero, profile hero.
+
+### `AccentSwatch` (new, 2026-04-21, v2.1)
+
+- **Status:** `provisional`
+- **Implementation:** [packages/ui/src/AccentSwatch.tsx](../../packages/ui/src/AccentSwatch.tsx)
+- **Approval source:** `v2.1-refresh-all-screens.html` Settings theme+accent picker
+- **API:** `swatch (accent|theme) / active / locked / label / onClick / style`
+- **Promotion blockers:** brand new. Only used in Settings — ≥1 adoption
+  is enough; second-tier candidate (cover-color picker in showcase profile).
+
+### `StickyCTAFade` (new, 2026-04-21, v2.1)
+
+- **Status:** `provisional`
+- **Implementation:** [packages/ui/src/StickyCTAFade.tsx](../../packages/ui/src/StickyCTAFade.tsx)
+- **Approval source:** `v2.1-refresh-all-screens.html` (`.wb-cta-bar` on
+  onboarding, paywall, settings)
+- **API:** `children / bottom / paddingX / style`
+- **Promotion blockers:** brand new. Absorbs a 15+-place inline
+  repetition in MiniApp.tsx. Promote after 3 adoptions.
 
 ---
 
