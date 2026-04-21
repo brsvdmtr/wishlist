@@ -21588,9 +21588,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               if (currentWl) { setRenameWlTitle(currentWl.title); setShowRenameWl(true); }
             }}
             style={{
-              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+              color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
             <span style={{ fontSize: 20 }}>✏️</span>
@@ -21603,9 +21606,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               enterItemReorderMode();
             }}
             style={{
-              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+              color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
             <span style={{ fontSize: 20 }}>↕️</span>
@@ -21620,9 +21626,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               setShowCatCreate(true);
             }}
             style={{
-              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+              color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
             <span style={{ fontSize: 20 }}>📂</span>
@@ -21676,9 +21685,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               setShowWlPrivacy(true);
             }}
             style={{
-              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+              color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
             <span style={{ fontSize: 20 }}>🔒</span>
@@ -21695,9 +21707,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               if (currentWl) void openWlDontGiftEdit(currentWl.id);
             }}
             style={{
-              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+              color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
             <span style={{ fontSize: 20 }}>🚫</span>
@@ -21716,9 +21731,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               setSmartResSheetWl(currentWl ?? null);
             }}
             style={{
-              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+              color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
             <span style={{ fontSize: 20 }}>⏰</span>
@@ -21737,9 +21755,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               enterCuratedSelectionMode();
             }}
             style={{
-              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+              color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
             <span style={{ fontSize: 20 }}>📋</span>
@@ -21879,9 +21900,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               setShowCatMenu(null);
             }}
             style={{
-              background: C.surface, border: 'none', borderRadius: 14, padding: '16px 18px',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
               textAlign: 'start', cursor: 'pointer', fontFamily: font,
-              fontSize: 16, color: C.text, display: 'flex', alignItems: 'center', gap: 12,
+              fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em',
+              color: 'var(--wb-text)', display: 'flex', alignItems: 'center', gap: 12,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}
           >
             <span style={{ fontSize: 20 }}>✏️</span>
