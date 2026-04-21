@@ -3846,8 +3846,20 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
   );
 
   const wrap: React.CSSProperties = { padding: '24px 20px 20px', minHeight: 'calc(100vh - 60px)', display: 'flex', flexDirection: 'column' };
-  const heroTitle = (s: string): React.CSSProperties => ({ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font, lineHeight: 1.25, textAlign: s === 'center' ? 'center' : 'left' });
-  const heroBody: React.CSSProperties = { fontSize: 14, color: C.textSec, lineHeight: 1.6, maxWidth: 320, margin: '0 auto 16px', textAlign: 'center' };
+  // v2.1 display-md: 26/700 with -0.035em letter-spacing + 1.05 line-height.
+  const heroTitle = (s: string): React.CSSProperties => ({
+    fontSize: 26, fontWeight: 700,
+    color: 'var(--wb-text)', marginBottom: 10,
+    fontFamily: font, lineHeight: 1.05,
+    letterSpacing: '-0.035em',
+    textAlign: s === 'center' ? 'center' : 'left',
+  });
+  const heroBody: React.CSSProperties = {
+    fontSize: 15, color: 'var(--wb-text-secondary)',
+    lineHeight: 1.5, maxWidth: 320, margin: '0 auto 16px',
+    letterSpacing: '-0.005em',
+    textAlign: 'center',
+  };
 
   if (step === 0) {
     return (
