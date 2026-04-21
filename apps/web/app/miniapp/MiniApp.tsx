@@ -27159,73 +27159,100 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {screen === 'onboarding-entry' && (
         <div data-overlay-scroll style={{
           position: 'fixed', inset: 0, zIndex: 100,
-          background: 'linear-gradient(160deg, #0f0a1e 0%, #0d1628 55%, #091520 100%)',
+          background: 'var(--wb-bg)',
           display: 'flex', flexDirection: 'column', fontFamily: font, overflowY: 'auto',
           WebkitOverflowScrolling: 'touch' as never, overscrollBehavior: 'contain',
+          color: 'var(--wb-text)',
         }}>
-          {/* Skip top-right */}
-          <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1 }}>
+          {/* v2.1 mesh backdrop — layered radials behind the whole onboarding */}
+          <div aria-hidden="true" style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
+            background: 'var(--wb-mesh)',
+          }} />
+
+          {/* Skip top-right (v2.1 surface pill) */}
+          <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 2 }}>
             <button
               onClick={() => void dismissOnboarding().then(() => setScreen('my-wishlists'))}
-              style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 20, padding: '6px 14px', color: 'rgba(255,255,255,0.45)', fontSize: 13, cursor: 'pointer', fontFamily: font }}
+              style={{
+                background: 'var(--wb-surface)',
+                border: '1px solid var(--wb-border)',
+                borderRadius: 100, padding: '7px 14px',
+                color: 'var(--wb-text-secondary)',
+                fontSize: 13, fontWeight: 550, cursor: 'pointer', fontFamily: font,
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}
             >
               {t('onboarding_entry_skip', locale)}
             </button>
           </div>
 
-          {/* Mock wish cards hero */}
-          <div style={{ paddingTop: 52, paddingBottom: 4, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 0 }}>
+          {/* Mock wish cards hero (above mesh) */}
+          <div style={{ paddingTop: 52, paddingBottom: 4, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 0, position: 'relative', zIndex: 1 }}>
             {(locale === 'ru' ? [
-              { emoji: '🎸', title: 'Гитара Fender', price: '45 000 ₽', rotate: -8, ty: 12, accent: '#a78bfa' },
-              { emoji: '👟', title: 'Nike Air Max', price: '12 500 ₽', rotate: 0, ty: 0, accent: '#f472b6' },
-              { emoji: '📷', title: 'Fujifilm X100', price: '110 000 ₽', rotate: 8, ty: 12, accent: '#fb923c' },
+              { emoji: '🎸', title: 'Гитара Fender', price: '45 000 ₽', rotate: -8, ty: 12 },
+              { emoji: '👟', title: 'Nike Air Max', price: '12 500 ₽', rotate: 0, ty: 0 },
+              { emoji: '📷', title: 'Fujifilm X100', price: '110 000 ₽', rotate: 8, ty: 12 },
             ] : [
-              { emoji: '🎧', title: 'AirPods Pro', price: '£249', rotate: -8, ty: 12, accent: '#a78bfa' },
-              { emoji: '👟', title: 'Nike Air Max', price: '£120', rotate: 0, ty: 0, accent: '#f472b6' },
-              { emoji: '📚', title: 'Kindle Paperwhite', price: '£139', rotate: 8, ty: 12, accent: '#fb923c' },
-            ] as { emoji: string; title: string; price: string; rotate: number; ty: number; accent: string }[]).map((card, i) => (
+              { emoji: '🎧', title: 'AirPods Pro', price: '£249', rotate: -8, ty: 12 },
+              { emoji: '👟', title: 'Nike Air Max', price: '£120', rotate: 0, ty: 0 },
+              { emoji: '📚', title: 'Kindle Paperwhite', price: '£139', rotate: 8, ty: 12 },
+            ] as { emoji: string; title: string; price: string; rotate: number; ty: number }[]).map((card, i) => (
               <div key={i} style={{
-                background: 'rgba(255,255,255,0.07)',
-                border: '1px solid rgba(255,255,255,0.13)',
-                borderRadius: 16, padding: '14px 12px', width: 108,
+                background: 'var(--wb-card)',
+                border: '1px solid var(--wb-border)',
+                borderRadius: 18, padding: '14px 12px', width: 108,
                 marginLeft: i > 0 ? -14 : 0,
                 transform: `rotate(${card.rotate}deg) translateY(${card.ty}px)`,
-                boxShadow: i === 1 ? '0 16px 48px rgba(124,106,255,0.35)' : '0 4px 16px rgba(0,0,0,0.5)',
+                boxShadow: i === 1
+                  ? '0 16px 48px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.08)'
+                  : '0 4px 16px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
                 zIndex: i === 1 ? 2 : 1, position: 'relative',
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
               }}>
                 <div style={{ fontSize: 26, marginBottom: 8 }}>{card.emoji}</div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#fff', lineHeight: 1.3, marginBottom: 5 }}>{card.title}</div>
-                <div style={{ fontSize: 11, color: card.accent, fontWeight: 700 }}>{card.price}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-text)', lineHeight: 1.3, marginBottom: 5 }}>{card.title}</div>
+                <div style={{ fontSize: 11, color: 'var(--wb-accent-strong)', fontWeight: 650, fontFeatureSettings: '"tnum"' }}>{card.price}</div>
               </div>
             ))}
           </div>
 
           {/* Headline */}
-          <div style={{ padding: '26px 28px 18px', textAlign: 'center' }}>
-            <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', lineHeight: 1.2, letterSpacing: '-0.02em', marginBottom: 10 }}>
+          <div style={{ padding: '26px 28px 18px', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+            <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--wb-text)', lineHeight: 1.05, letterSpacing: '-0.035em', marginBottom: 10 }}>
               {t('onboarding_entry_title', locale)}
             </div>
-            <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.5)', lineHeight: 1.55 }}>
+            <div style={{ fontSize: 15, color: 'var(--wb-text-secondary)', lineHeight: 1.5, letterSpacing: '-0.005em' }}>
               {t('onboarding_entry_subtitle', locale)}
             </div>
           </div>
 
-          {/* Feature highlights */}
-          <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Feature highlights — v2.1 glass cards */}
+          <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 8, position: 'relative', zIndex: 1 }}>
             {([
               { icon: '✨', title: t('onboarding_feature_any_item', locale), desc: t('onboarding_feature_any_item_desc', locale) },
               { icon: '🔗', title: t('onboarding_feature_no_signup', locale), desc: t('onboarding_feature_no_signup_desc', locale) },
               { icon: '🎁', title: t('onboarding_feature_no_spoilers', locale), desc: t('onboarding_feature_no_spoilers_desc', locale) },
             ] as { icon: string; title: string; desc: string }[]).map((f, i) => (
               <div key={i} style={{
-                display: 'flex', gap: 12, alignItems: 'center',
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 14, padding: '11px 14px',
+                display: 'flex', gap: 14, alignItems: 'center',
+                background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+                borderRadius: 18, padding: '14px 16px',
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
               }}>
-                <div style={{ fontSize: 20, width: 28, textAlign: 'center', flexShrink: 0 }}>{f.icon}</div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 2 }}>{f.title}</div>
-                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.4 }}>{f.desc}</div>
+                <div style={{
+                  width: 42, height: 42, borderRadius: 13,
+                  background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 20, flexShrink: 0,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+                }}>{f.icon}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--wb-text)', marginBottom: 2, letterSpacing: '-0.012em' }}>{f.title}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--wb-text-secondary)', lineHeight: 1.4, letterSpacing: '-0.003em' }}>{f.desc}</div>
                 </div>
               </div>
             ))}
