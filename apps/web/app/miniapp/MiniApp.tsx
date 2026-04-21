@@ -25302,10 +25302,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             </div>
 
-            {/* Organizer progress view (post-draw) — aggregate only, no individual pairs */}
+            {/* v2.1 Organizer progress view (post-draw) — glass card with uppercase micro-label */}
             {isOrg && currentSantaCampaign.ownerProgress && ['ACTIVE', 'COMPLETED'].includes(camp.status) && (
-              <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 12 }}>
+              <div style={{
+                background: 'var(--wb-card)',
+                border: '1px solid var(--wb-border)',
+                borderRadius: 18, padding: 16, marginBottom: 16,
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}>
+                <div style={{
+                  fontSize: 12, fontWeight: 600,
+                  color: 'var(--wb-text-muted)',
+                  marginBottom: 12,
+                  textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                }}>
                   {t('santa_gift_status_title', locale)}
                 </div>
                 {(() => {
@@ -25315,25 +25326,29 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   const allTerminal = total > 0 && p.pending === 0 && p.buying === 0 && p.selectedFromWishlist === 0
                     && p.selectedOutside === 0 && p.declinedToSay === 0 && p.sent === 0;
                   return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {allTerminal && (
-                        <div style={{ fontSize: 14, fontWeight: 700, color: C.green, marginBottom: 4 }}>
-                          {t('santa_gift_all_received', locale)}
+                        <div style={{
+                          fontSize: 14, fontWeight: 700,
+                          color: 'var(--wb-success)',
+                          marginBottom: 4, letterSpacing: '-0.01em',
+                        }}>
+                          ✓ {t('santa_gift_all_received', locale)}
                         </div>
                       )}
                       {[
-                        { key: 'pending', count: p.pending, label: t('santa_gift_progress_pending', locale, { count: p.pending, total }), color: C.textSec },
-                        { key: 'missed', count: p.missedDeadline, label: t('santa_gift_progress_missed_deadline', locale, { count: p.missedDeadline }), color: '#e05' },
-                        { key: 'orphaned', count: p.orphaned ?? 0, label: t('santa_gift_status_orphaned', locale), color: C.textMuted },
-                        { key: 'buying', count: p.buying, label: t('santa_gift_progress_buying', locale, { count: p.buying }), color: C.textSec },
-                        { key: 'wishlist', count: p.selectedFromWishlist, label: t('santa_gift_progress_selected_wishlist', locale, { count: p.selectedFromWishlist }), color: C.accent },
-                        { key: 'outside', count: p.selectedOutside, label: t('santa_gift_progress_selected_outside', locale, { count: p.selectedOutside }), color: C.accent },
-                        { key: 'declined', count: p.declinedToSay, label: t('santa_gift_progress_declined', locale, { count: p.declinedToSay }), color: C.textSec },
-                        { key: 'sent', count: p.sent, label: t('santa_gift_progress_sent', locale, { count: p.sent }), color: C.accent },
-                        { key: 'received', count: p.received, label: t('santa_gift_progress_received', locale, { count: p.received }), color: C.green },
-                        { key: 'noWishlist', count: p.withoutWishlist, label: t('santa_gift_progress_without_wishlist', locale, { count: p.withoutWishlist }), color: C.textMuted },
+                        { key: 'pending', count: p.pending, label: t('santa_gift_progress_pending', locale, { count: p.pending, total }), color: 'var(--wb-text-secondary)' },
+                        { key: 'missed', count: p.missedDeadline, label: t('santa_gift_progress_missed_deadline', locale, { count: p.missedDeadline }), color: 'var(--wb-danger)' },
+                        { key: 'orphaned', count: p.orphaned ?? 0, label: t('santa_gift_status_orphaned', locale), color: 'var(--wb-text-muted)' },
+                        { key: 'buying', count: p.buying, label: t('santa_gift_progress_buying', locale, { count: p.buying }), color: 'var(--wb-text-secondary)' },
+                        { key: 'wishlist', count: p.selectedFromWishlist, label: t('santa_gift_progress_selected_wishlist', locale, { count: p.selectedFromWishlist }), color: 'var(--wb-accent-strong)' },
+                        { key: 'outside', count: p.selectedOutside, label: t('santa_gift_progress_selected_outside', locale, { count: p.selectedOutside }), color: 'var(--wb-accent-strong)' },
+                        { key: 'declined', count: p.declinedToSay, label: t('santa_gift_progress_declined', locale, { count: p.declinedToSay }), color: 'var(--wb-text-secondary)' },
+                        { key: 'sent', count: p.sent, label: t('santa_gift_progress_sent', locale, { count: p.sent }), color: 'var(--wb-accent-strong)' },
+                        { key: 'received', count: p.received, label: t('santa_gift_progress_received', locale, { count: p.received }), color: 'var(--wb-success)' },
+                        { key: 'noWishlist', count: p.withoutWishlist, label: t('santa_gift_progress_without_wishlist', locale, { count: p.withoutWishlist }), color: 'var(--wb-text-muted)' },
                       ].filter(row => row.count > 0).map(row => (
-                        <div key={row.key} style={{ fontSize: 13, color: row.color }}>{row.label}</div>
+                        <div key={row.key} style={{ fontSize: 13, fontWeight: 500, color: row.color, letterSpacing: '-0.005em' }}>{row.label}</div>
                       ))}
                     </div>
                   );
