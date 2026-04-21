@@ -11943,7 +11943,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* spacer for fixed CTA */}
             {!reorderMode && <div style={{ height: 70 }} />}
             {!reorderMode && (
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', pointerEvents: 'none' }}>
+              <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 12px', pointerEvents: 'none' }}>
                 <Button variant="primary-gradient" size="lg" style={{ pointerEvents: 'auto' }} onClick={() => setShowCreateWl(true)}>{t('create_wishlist_btn', locale)}</Button>
               </div>
             )}
@@ -13757,7 +13757,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
 
             {/* Sticky CTA */}
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '14px 20px calc(14px + env(safe-area-inset-bottom))', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 50 }}>
+            <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, padding: '14px 20px 12px', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 50 }}>
               <button
                 disabled={addonCheckoutLoading}
                 onClick={() => void handleBuyAddon('secret_reservation_unlock')}
@@ -20361,7 +20361,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
 
             {/* Sticky CTA */}
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '14px 20px calc(14px + env(safe-area-inset-bottom))', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 50 }}>
+            <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, padding: '14px 20px 12px', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 50 }}>
               <button onClick={buyClick} style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: `0 8px 24px ${C.accentGlow}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 ⭐ {t('gn_upsell_cta', locale, { price: gnAccess.priceXtr })}
               </button>
@@ -20540,7 +20540,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {archived.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('📦', t('gn_archive', locale), archived.length)}{archived.map(card)}</div>}
 
             {/* CTA — fixed at bottom */}
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', pointerEvents: 'none' }}>
+            <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 12px', pointerEvents: 'none' }}>
               <button onClick={() => { setGnFormTitle(''); setGnFormDate(''); setGnFormType('BIRTHDAY'); setGnFormRecurrence('YEARLY'); setGnFormPerson(''); setShowGnCreateOccasion(true); }}
                 style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
                 {isEmpty ? t('gn_empty_cta_custom', locale) : `+ ${t('gn_add_occasion', locale)}`}
@@ -20681,7 +20681,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               ))}
 
               {/* Add idea CTA — fixed at bottom */}
-              <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 0', paddingBottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', pointerEvents: 'none' }}>
+              <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 50, background: `linear-gradient(to top, ${C.bg} 55%, transparent)`, padding: '20px 20px 12px', pointerEvents: 'none' }}>
                 <button onClick={() => { setGnIdeaText(''); setGnIdeaLink(''); setShowGnAddIdea(true); }}
                   style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, pointerEvents: 'auto', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
                   + {t('gn_add_idea', locale)}
@@ -24273,7 +24273,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
 
             {/* Sticky bottom CTA */}
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '14px 20px calc(14px + env(safe-area-inset-bottom))', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 310 }}>
+            <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, padding: '14px 20px 12px', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 310 }}>
               <div style={{ maxWidth: 480, margin: '0 auto' }}>
                 {step === totalSteps ? (
                   <>
@@ -29716,14 +29716,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           Source: docs/design-system/mockups/approved/v2.1-refresh-all-screens.html
           (`.wb-nav` + `.wb-nav-item`) */}
       {(() => {
+        // Per feedback — nav должна "по сути везде оставаться".
+        // Hide only on full-takeover overlays and critical app states.
         const HIDE_ON: Screen[] = [
           'loading', 'error', 'maintenance',
           'onboarding-entry', 'onboarding-demo', 'onboarding-complete',
           'onboarding-try', 'onboarding-success', 'onboarding-recovery',
           'onboarding-manual', 'onboarding-catalog', 'onboarding-create-wishlist',
           'onboarding-share', 'first-share-prompt',
-          'guest-link-expired', 'item-unavailable',
-          'legal', 'legal-doc', // simple full-page readers
         ];
         if (HIDE_ON.includes(screen)) return null;
 
@@ -29765,8 +29765,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         );
       })()}
 
-      {/* ── TOASTS ── */}
-      <div style={{ position: 'fixed', bottom: 24, left: 16, right: 16, zIndex: 200, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
+      {/* ── TOASTS — shifted above FloatingNav ── */}
+      <div style={{ position: 'fixed', bottom: 'calc(100px + env(safe-area-inset-bottom, 0px))', left: 16, right: 16, zIndex: 200, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
         {toasts.map((t) => (
           <div key={t.id} style={{
             background: 'var(--wb-card)', borderRadius: 14, padding: '14px 18px',
