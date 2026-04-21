@@ -11269,8 +11269,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             ];
             return (
               <div style={{
-                display: 'flex', gap: 4, padding: 4, marginBottom: 20,
-                background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+                display: 'flex', gap: 2, padding: 3, marginBottom: 20,
+                background: 'var(--wb-surface)',
+                border: '1px solid var(--wb-border)',
+                borderRadius: 14,
+                WebkitBackdropFilter: 'blur(20px)' as never,
+                backdropFilter: 'blur(20px)' as never,
               }}>
                 {homeTabs.map((seg) => {
                   const isActive = homeTab === seg.tab;
@@ -11285,12 +11289,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       style={{
                         flex: 1, border: 'none', cursor: 'pointer',
                         padding: '9px 10px', fontFamily: font,
-                        borderRadius: 10,
-                        background: isActive ? C.accent : 'transparent',
-                        color: isActive ? '#fff' : C.textMuted,
-                        fontSize: 13, fontWeight: isActive ? 700 : 600,
-                        boxShadow: isActive ? '0 2px 8px rgba(124,106,255,0.3)' : 'none',
-                        transition: 'background 0.18s, color 0.18s, box-shadow 0.18s',
+                        borderRadius: 11,
+                        background: isActive
+                          ? 'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))'
+                          : 'transparent',
+                        color: isActive ? 'var(--wb-text)' : 'var(--wb-text-muted)',
+                        fontSize: 13, fontWeight: 600,
+                        letterSpacing: '-0.005em',
+                        boxShadow: isActive
+                          ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 3px rgba(0,0,0,0.3)'
+                          : 'none',
+                        transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
                         WebkitTapHighlightColor: 'transparent',
                         position: 'relative',
                       }}
@@ -11301,7 +11310,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           count={seg.badge}
                           tone="danger"
                           size="sm"
-                          borderColor={isActive ? C.accent : C.card}
+                          borderColor={isActive ? 'transparent' : C.card}
                           style={{ top: -8, right: -8 }}
                         />
                       )}
@@ -11314,7 +11323,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
           {/* Mine/Subscribed sub-selector — only in Wishlists tab */}
           {homeTab === 'wishlists' && (
-            <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: C.surface, borderRadius: 12, padding: 4 }}>
+            <div style={{
+              display: 'flex', gap: 2, padding: 3, marginBottom: 16,
+              background: 'var(--wb-surface)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 14,
+              WebkitBackdropFilter: 'blur(20px)' as never,
+              backdropFilter: 'blur(20px)' as never,
+            }}>
               {(['mine', 'subscribed'] as const).map((tab) => {
                 const isActive = myWishlistsTab === tab;
                 const totalUnread = subUnreadCount;
@@ -11326,18 +11342,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       if (tab === 'subscribed') void loadSubscriptions();
                     }}
                     style={{
-                      flex: 1, padding: '8px 4px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                      fontFamily: font, fontSize: 14, fontWeight: 600, transition: 'all 0.2s',
-                      background: isActive ? C.accent : 'transparent',
-                      color: isActive ? '#fff' : C.textSec,
+                      flex: 1, padding: '9px 8px', borderRadius: 11, border: 'none', cursor: 'pointer',
+                      fontFamily: font, fontSize: 13, fontWeight: 600,
+                      letterSpacing: '-0.005em',
+                      transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                      background: isActive
+                        ? 'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))'
+                        : 'transparent',
+                      color: isActive ? 'var(--wb-text)' : 'var(--wb-text-muted)',
+                      boxShadow: isActive
+                        ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 3px rgba(0,0,0,0.3)'
+                        : 'none',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                   >
                     {tab === 'mine' ? t('sub_tab_my', locale) : t('sub_tab_subscribed', locale)}
                     {tab === 'subscribed' && totalUnread > 0 && (
                       <span style={{
                         minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
-                        background: isActive ? 'rgba(255,255,255,0.3)' : C.orange,
+                        background: 'var(--wb-warning)',
                         color: '#fff', fontSize: 10, fontWeight: 700,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>{totalUnread}</span>
