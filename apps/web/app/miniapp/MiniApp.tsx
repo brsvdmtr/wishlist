@@ -30381,24 +30381,47 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
   };
 
   const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
-  const C_local = { accent: '#7C6AFF', text: '#F4F4F6', textSec: '#9CA3AF', textMuted: '#6B7280', bg: '#1B1B1F', surface: '#26262C', border: 'rgba(255,255,255,0.06)', borderLight: 'rgba(255,255,255,0.1)', green: '#34D399', greenSoft: 'rgba(52,211,153,0.12)', blue: '#3B82F6', red: '#EF4444', redSoft: 'rgba(239,68,68,0.12)' };
 
   return (
     <div style={{ padding: '16px 20px 120px' }}>
-      <h1 style={{ fontSize: 20, fontWeight: 700, fontFamily: font, color: C_local.text, margin: '8px 0 20px' }}>{t('share_title', locale)}</h1>
+      <h1 style={{
+        fontSize: 26, fontWeight: 700, fontFamily: font,
+        color: 'var(--wb-text)',
+        margin: '8px 0 20px',
+        letterSpacing: '-0.035em', lineHeight: 1.05,
+      }}>{t('share_title', locale)}</h1>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
+        {/* v2.1 Hero card with layered accent gradient */}
         <div style={{
-          background: `linear-gradient(135deg, ${C_local.accent}25, ${C_local.accent}08)`,
-          borderRadius: 20, padding: 28, textAlign: 'center', width: '100%',
-          border: `1px solid ${C_local.accent}18`,
+          background:
+            'radial-gradient(circle at 50% 120%, var(--wb-accent-deep), transparent 60%),' +
+            'radial-gradient(circle at 100% 0%, var(--wb-accent-strong), transparent 50%),' +
+            'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),' +
+            'var(--wb-card-strong)',
+          borderRadius: 22, padding: 28, textAlign: 'center', width: '100%',
+          border: '1px solid var(--wb-border)',
+          boxShadow: '0 20px 50px -20px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.08)',
+          WebkitBackdropFilter: 'blur(20px)' as never,
+          backdropFilter: 'blur(20px)' as never,
+          boxSizing: 'border-box',
         }}>
           <div style={{ margin: '0 auto 14px', width: 'fit-content' }}>
-            <UserAvatar avatarUrl={ownerAvatarUrl} name={ownerName} size={64} accent={C_local.accent} />
+            <UserAvatar avatarUrl={ownerAvatarUrl} name={ownerName} size={72} accent="#8B7BFF" />
           </div>
-          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: font, color: C_local.text }}>{ownerName}</div>
-          <div style={{ fontSize: 14, color: C_local.textSec, marginTop: 4 }}>{wishlist.title}</div>
-          <div style={{ fontSize: 13, color: C_local.textMuted, marginTop: 4 }}>
+          <div style={{
+            fontSize: 22, fontWeight: 700, fontFamily: font,
+            color: 'var(--wb-text)',
+            letterSpacing: '-0.025em',
+          }}>{ownerName}</div>
+          <div style={{
+            fontSize: 14, color: 'var(--wb-text-secondary)',
+            marginTop: 4, letterSpacing: '-0.005em',
+          }}>{wishlist.title}</div>
+          <div style={{
+            fontSize: 12.5, color: 'var(--wb-text-muted)',
+            marginTop: 4, fontFeatureSettings: '"tnum"',
+          }}>
             {itemCount} {pluralize(itemCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}{wishlist.deadline ? ` • ${fmtDeadline(wishlist.deadline)}` : ''}
           </div>
         </div>
@@ -30410,29 +30433,51 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
         ) : (
           <>
             <div style={{
-              background: C_local.bg, borderRadius: 12, padding: '12px 16px',
+              background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 16, padding: '12px 16px',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              width: '100%', border: `1px solid ${C_local.border}`, boxSizing: 'border-box',
+              width: '100%', boxSizing: 'border-box',
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
             }}>
-              <span style={{ fontSize: 13, color: C_local.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+              <span style={{
+                fontSize: 13, color: 'var(--wb-text-muted)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                flex: 1, fontFeatureSettings: '"tnum"',
+              }}>
                 {shareLink}
               </span>
-              <span onClick={copy} style={{ fontSize: 12, color: copied ? C_local.green : C_local.accent, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 10 }}>
+              <span onClick={copy} style={{
+                fontSize: 12,
+                color: copied ? 'var(--wb-success)' : 'var(--wb-accent-strong)',
+                fontWeight: 650, cursor: 'pointer', whiteSpace: 'nowrap',
+                marginLeft: 10, letterSpacing: '-0.005em',
+              }}>
                 {copied ? '✅' : t('copy', locale)}
               </span>
             </div>
 
-            <button onClick={shareToTelegram} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font, transition: 'all 0.15s', width: '100%', background: C_local.blue, color: '#fff' }}>
+            <Button variant="primary-gradient" onClick={shareToTelegram} fullWidth>
               {t('share_tg_btn', locale)}
-            </button>
+            </Button>
 
-            <button onClick={copy} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 24px', borderRadius: 14, border: 'none', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font, transition: 'all 0.15s', width: '100%', background: C_local.accent, color: '#fff' }}>
+            <Button variant="secondary" onClick={copy} fullWidth>
               {t('share_copy_btn', locale)}
-            </button>
+            </Button>
           </>
         )}
 
-        <div style={{ borderRadius: 12, padding: '12px 16px', fontSize: 12, background: C_local.greenSoft, color: C_local.green, width: '100%', lineHeight: 1.5, boxSizing: 'border-box' }}>
+        <div style={{
+          borderRadius: 14, padding: '12px 16px', fontSize: 12,
+          background: 'var(--wb-success-soft)',
+          border: '1px solid rgba(74,222,128,0.28)',
+          color: 'var(--wb-success)',
+          width: '100%', lineHeight: 1.5, boxSizing: 'border-box',
+          fontWeight: 500, letterSpacing: '-0.005em',
+          WebkitBackdropFilter: 'blur(14px)' as never,
+          backdropFilter: 'blur(14px)' as never,
+        }}>
           {t('share_privacy', locale)}
         </div>
       </div>
