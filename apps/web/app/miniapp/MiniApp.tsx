@@ -21589,15 +21589,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setShowLanguageSheet(false);
                 }}
                 style={{
-                  background: isSelected ? C.accentSoft : C.surface,
-                  border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
-                  borderRadius: 14, padding: '14px 18px', textAlign: 'start',
-                  cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
+                  background: isSelected ? 'var(--wb-accent-soft)' : 'var(--wb-card)',
+                  border: isSelected
+                    ? '1.5px solid var(--wb-accent-soft-strong)'
+                    : '1.5px solid var(--wb-border)',
+                  borderRadius: 16, padding: '14px 18px', textAlign: 'start',
+                  cursor: 'pointer', fontFamily: font, fontSize: 15,
+                  fontWeight: isSelected ? 650 : 500,
+                  letterSpacing: '-0.012em',
+                  color: isSelected ? 'var(--wb-accent-strong)' : 'var(--wb-text)',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  WebkitBackdropFilter: 'blur(14px)' as never,
+                  backdropFilter: 'blur(14px)' as never,
+                  transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
                 }}
               >
-                <span style={{ fontWeight: isSelected ? 600 : 400 }}>{label}</span>
-                {isSelected && <span style={{ color: C.accent, fontSize: 18, flexShrink: 0 }}>✓</span>}
+                <span>{label}</span>
+                {isSelected && <span style={{ color: 'var(--wb-accent-strong)', fontSize: 18, flexShrink: 0 }}>✓</span>}
               </button>
             );
           })}
@@ -21617,7 +21625,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setShowProfileVisibilitySheet(false);
                 }}
                 style={{
-                  background: isSelected ? C.accentSoft : C.surface,
+                  background: isSelected ? 'var(--wb-accent-soft)' : 'var(--wb-card)',
                   border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
                   borderRadius: 14, padding: '14px 18px', textAlign: 'start',
                   cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
@@ -21654,7 +21662,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setShowSubscribePolicySheet(false);
                 }}
                 style={{
-                  background: isSelected ? C.accentSoft : C.surface,
+                  background: isSelected ? 'var(--wb-accent-soft)' : 'var(--wb-card)',
                   border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
                   borderRadius: 14, padding: '14px 18px', textAlign: 'start',
                   cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
@@ -21691,7 +21699,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setShowCommentsDefaultSheet(false);
                 }}
                 style={{
-                  background: isSelected ? C.accentSoft : C.surface,
+                  background: isSelected ? 'var(--wb-accent-soft)' : 'var(--wb-card)',
                   border: isSelected ? `1.5px solid ${C.accent}` : '1.5px solid transparent',
                   borderRadius: 14, padding: '14px 18px', textAlign: 'start',
                   cursor: 'pointer', fontFamily: font, fontSize: 15, color: C.text,
@@ -22540,7 +22548,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     onClick={() => !isDisabled && setTransferTargetId(wl.id)}
                     disabled={isDisabled}
                     style={{
-                      background: isSelected ? C.accentSoft : C.surface,
+                      background: isSelected ? 'var(--wb-accent-soft)' : 'var(--wb-card)',
                       border: isSelected ? `2px solid ${C.accent}` : '2px solid transparent',
                       borderRadius: 12, padding: '12px 16px',
                       textAlign: 'start', cursor: isDisabled ? 'not-allowed' : 'pointer', fontFamily: font,
