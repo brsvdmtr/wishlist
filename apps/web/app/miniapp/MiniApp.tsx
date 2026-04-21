@@ -27787,43 +27787,69 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </Chip>
             </div>
 
-            {/* Item card */}
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, background: C.surface, borderRadius: 14, marginBottom: 16 }}>
+            {/* v2.1 Item card — glass surface with v2.1 thumb spec */}
+            <div style={{
+              display: 'flex', gap: 14, alignItems: 'center', padding: 14,
+              background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 18, marginBottom: 16,
+              WebkitBackdropFilter: 'blur(14px)' as never,
+              backdropFilter: 'blur(14px)' as never,
+            }}>
               {gg.item.imageUrl ? (
-                <img src={gg.item.imageUrl} alt="" style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover' }} />
+                <img src={gg.item.imageUrl} alt="" style={{ width: 50, height: 50, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
               ) : (
-                <div style={{ width: 52, height: 52, borderRadius: 12, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🎁</div>
+                <div style={{
+                  width: 50, height: 50, borderRadius: 14,
+                  background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
+                  flexShrink: 0,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+                }}>🎁</div>
               )}
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font }}>{gg.item.title}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--wb-text)', fontFamily: font, letterSpacing: '-0.015em', lineHeight: 1.3 }}>{gg.item.title}</div>
                 {gg.item.price != null && (
-                  <div style={{ fontSize: 14, color: C.accent, fontWeight: 700, marginTop: 2 }}>{gg.item.price.toLocaleString()} {currSym}</div>
+                  <div style={{ fontSize: 13, color: 'var(--wb-text-secondary)', fontWeight: 650, marginTop: 2, fontFeatureSettings: '"tnum"' }}>
+                    {gg.item.price.toLocaleString()} {currSym}
+                  </div>
                 )}
               </div>
             </div>
 
-            {/* Progress block */}
-            <div style={{ background: C.surface, borderRadius: 16, padding: 16, marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                <span style={{ fontSize: 13, color: C.textSec }}>{t('gg_collected', locale)}</span>
-                <span style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: font }}>{fmtAmt(gg.collectedAmount)} / {fmtAmt(gg.targetAmount)}</span>
+            {/* v2.1 Progress block — glass surface + accent-gradient bar with glow */}
+            <div style={{
+              background: 'var(--wb-card)',
+              border: '1px solid var(--wb-border)',
+              borderRadius: 22, padding: 18, marginBottom: 16,
+              WebkitBackdropFilter: 'blur(16px)' as never,
+              backdropFilter: 'blur(16px)' as never,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                <span style={{ fontSize: 13, color: 'var(--wb-text-secondary)', letterSpacing: '-0.005em' }}>{t('gg_collected', locale)}</span>
+                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--wb-text)', fontFamily: font, letterSpacing: '-0.025em', fontFeatureSettings: '"tnum"' }}>{fmtAmt(gg.collectedAmount)} / {fmtAmt(gg.targetAmount)}</span>
               </div>
-              {/* Progress bar */}
-              <div style={{ height: 8, borderRadius: 4, background: C.bg, overflow: 'hidden', marginBottom: 12 }}>
-                <div style={{ width: `${gg.progressPct}%`, height: '100%', borderRadius: 4, background: `linear-gradient(90deg, ${C.accent}, #9F8AFF)`, transition: 'width 0.3s' }} />
+              {/* Progress bar — v2.1 3px track + accent gradient with glow */}
+              <div style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 14 }}>
+                <div style={{
+                  width: `${gg.progressPct}%`, height: '100%', borderRadius: 2,
+                  background: 'linear-gradient(90deg, var(--wb-accent), var(--wb-accent-strong))',
+                  boxShadow: '0 0 12px var(--wb-accent-shadow-soft)',
+                  transition: 'width 0.5s ease',
+                }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.accent }}>{gg.progressPct}%</div>
-                  <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_progress', locale)}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--wb-accent-strong)', letterSpacing: '-0.02em', fontFeatureSettings: '"tnum"' }}>{gg.progressPct}%</div>
+                  <div style={{ fontSize: 11, color: 'var(--wb-text-muted)', marginTop: 2 }}>{t('gg_progress', locale)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{gg.participantCount}</div>
-                  <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_participants', locale)}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--wb-text)', letterSpacing: '-0.02em', fontFeatureSettings: '"tnum"' }}>{gg.participantCount}</div>
+                  <div style={{ fontSize: 11, color: 'var(--wb-text-muted)', marginTop: 2 }}>{t('gg_participants', locale)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.orange }}>{fmtAmt(gg.remaining)}</div>
-                  <div style={{ fontSize: 11, color: C.textMuted }}>{t('gg_remaining', locale)}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--wb-warning)', letterSpacing: '-0.02em', fontFeatureSettings: '"tnum"' }}>{fmtAmt(gg.remaining)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--wb-text-muted)', marginTop: 2 }}>{t('gg_remaining', locale)}</div>
                 </div>
               </div>
             </div>
