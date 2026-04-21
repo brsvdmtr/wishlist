@@ -2051,20 +2051,34 @@ function getProBenefits(locale: Locale): Array<{ icon: string; title: string; su
 
 function ItemThumb({ item }: { item: Item | GuestItem }) {
   const [imgErr, setImgErr] = useState(false);
+  // v2.1: 50×50 r=14 with linear accent-soft gradient (was 52×52 r=12 flat).
+  // Source: docs/design-system/mockups/approved/v2.1-refresh-all-screens.html (.wb-wish-thumb)
+  const baseStyle: React.CSSProperties = {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    flexShrink: 0,
+  };
   if (item.imageUrl && !imgErr) {
     return (
       <img
         src={item.imageUrl}
         alt=""
         onError={() => setImgErr(true)}
-        style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0, background: C.accentSoft }}
+        style={{
+          ...baseStyle,
+          objectFit: 'cover',
+          background: 'var(--wb-accent-soft)',
+        }}
       />
     );
   }
   return (
     <div style={{
-      width: 52, height: 52, borderRadius: 12, background: C.accentSoft,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, flexShrink: 0,
+      ...baseStyle,
+      background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
     }}>
       {getEmoji(item.title)}
     </div>
@@ -2144,57 +2158,82 @@ function WishCardGuest({ item, onTap, onReserve, onUnreserve, myActorHash, local
   const isPurchased = item.status === 'purchased';
   const isReserved = item.status === 'reserved';
   const isReservedByMe = isReserved && !!myActorHash && item.reservedByActorHash === myActorHash;
+  // v2.1 wish-row state tints — reserved-by-me success-tint, purchased dim+strike.
+  // Source: .wb-wish.reserved-by-me / .wb-wish.done in v2.1 mockup.
+  const stateBg = isReservedByMe
+    ? 'linear-gradient(135deg, var(--wb-card), rgba(74,222,128,0.09))'
+    : undefined;
+  const stateBorder = isReservedByMe ? '1px solid rgba(74,222,128,0.28)' : undefined;
   return (
     <Card
       variant="interactive"
       onClick={() => onTap(item)}
       style={{
         display: 'flex', gap: 14, alignItems: 'flex-start',
-        // Match v2-wish-state-matrix .faint-strong = opacity 0.45 (guest purchased).
         opacity: isPurchased ? 0.45 : 1,
+        background: stateBg,
+        border: stateBorder,
         WebkitTapHighlightColor: 'transparent',
       }}
     >
       <ItemThumb item={item} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ fontSize: 15, fontWeight: 600, fontFamily: font, color: C.text, lineHeight: 1.3, paddingRight: 8, textDecoration: isPurchased ? 'line-through' : 'none' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{
+            fontSize: 15,
+            fontWeight: 600,
+            fontFamily: font,
+            color: 'var(--wb-text)',
+            lineHeight: 1.3,
+            letterSpacing: '-0.015em',
+            textDecoration: isPurchased ? 'line-through' : 'none',
+            flex: 1, minWidth: 0,
+          }}>
             {item.title}
           </div>
-          <span style={{
-            flexShrink: 0, width: 32, height: 32, borderRadius: '50%',
-            background: PRIO_BG[item.priority] ?? PRIO_BG[1],
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, lineHeight: 1,
-          }}>{prioEmoji(item.priority)}</span>
+          <Chip tone={item.priority === 3 ? 'danger' : item.priority === 2 ? 'warning' : 'surface'} size="sm">
+            {prioEmoji(item.priority)}
+          </Chip>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-          {item.price != null && <span style={{ fontSize: 14, fontWeight: 700, color: C.accent, fontFamily: font }}>{fmtPrice(item.price, locale, item.currency ?? 'RUB')}</span>}
-          {item.url && <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none' }}><Chip tone="accent">{t('link_label', locale)}</Chip></a>}
-        </div>
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {item.price != null && (
+          <div style={{
+            fontSize: 13,
+            fontWeight: 650,
+            marginTop: 2,
+            color: 'var(--wb-text-secondary)',
+            fontFamily: font,
+            fontFeatureSettings: '"tnum"',
+            textDecoration: isPurchased ? 'line-through' : 'none',
+          }}>
+            {fmtPrice(item.price, locale, item.currency ?? 'RUB')}
+          </div>
+        )}
+        <div style={{
+          marginTop: 8,
+          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+          fontSize: 11, color: 'var(--wb-text-muted)',
+        }}>
+          {item.url && (
+            <a href={item.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ textDecoration: 'none' }}>
+              <Chip tone="accent" size="sm">{t('link_label', locale)}</Chip>
+            </a>
+          )}
           {item.status === 'available' && !secretByMe && (
             <Button variant="primary" size="sm" fullWidth={false} onClick={(e) => { e.stopPropagation(); onReserve(item); }}>{t('reserve_btn', locale)}</Button>
           )}
           {secretByMe && (
-            <Chip tone="accent" size="lg">{t('sr_card_chip_secret', locale)}</Chip>
+            <Chip tone="accent" size="md">{t('sr_card_chip_secret', locale)}</Chip>
           )}
           {isReservedByMe && (
             <>
-              <Chip tone="success" size="lg">
-                {t('reserved_by_me', locale)}
-              </Chip>
-              <button onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ background: 'none', border: 'none', padding: '6px 8px', fontSize: 12, color: C.textMuted, cursor: 'pointer', fontFamily: font }}>{t('cancel', locale)}</button>
+              <Chip tone="success" size="md">{t('reserved_by_me', locale)}</Chip>
+              <button onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ background: 'none', border: 'none', padding: '4px 6px', fontSize: 11, color: 'var(--wb-text-muted)', cursor: 'pointer', fontFamily: font }}>{t('cancel', locale)}</button>
             </>
           )}
           {isReserved && !isReservedByMe && (
-            /* Match mockup: "⏳ уже забронировано" is muted-neutral, not a warning.
-               Intent: out-of-pool for me, not an alert. */
-            <Chip tone="surface" size="lg">
-              {t('already_reserved', locale)}
-            </Chip>
+            <Chip tone="surface" size="md">{t('already_reserved', locale)}</Chip>
           )}
-          {isPurchased && <Chip tone="success" size="lg">{t('status_gifted', locale)}</Chip>}
+          {isPurchased && <Chip tone="success" size="md">{t('status_gifted', locale)}</Chip>}
         </div>
       </div>
     </Card>
