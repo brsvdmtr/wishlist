@@ -7390,7 +7390,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         setArchiveSelectMode(false);
         setArchiveSelected([]);
       } else if (archiveMode === 'global') {
-        setScreen('profile');
+        // v2.1: Archive now entered from Home tab "Архив" (W70) — return
+        // to my-wishlists. Previous entry-point was profile stat row;
+        // that path is rarely used now since profile stats hide when
+        // FloatingNav routes most users through Home tab.
+        setHomeTab('wishlists');
+        setScreen('my-wishlists');
       } else {
         setScreen('wishlist-detail');
       }
@@ -7564,6 +7569,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       ggMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [screen, groupGiftMessages.length]);
+
+  // Scroll-to-top on screen change — fixes bug where entering FAQ / changelog
+  // / other sub-pages inherits the scroll position from the previous screen.
+  // Skipped for group-gift-chat (scrolls to bottom on its own).
+  useEffect(() => {
+    if (screen === 'group-gift-chat') return;
+    if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+  }, [screen]);
 
   // Group Gift chat: poll for new messages every 5s
   useEffect(() => {
@@ -11431,7 +11444,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               view is no longer reachable via UI — can be re-surfaced
               later as a profile quick-action if users miss it. */}
 
-          {/* v2.1 StatRow — 4 tiles above inner tabs (Wishlists tab only) */}
+          {/* v2.1 StatRow — 4 tappable tiles above inner tabs (Wishlists tab only) */}
           {homeTab === 'wishlists' && (() => {
             const totalWishes = wishlists.reduce((n, wl) => n + wl.itemCount, 0);
             const totalReserved = wishlists.reduce((n, wl) => n + wl.reservedCount, 0);
@@ -11441,11 +11454,38 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               const days = (new Date(wl.deadline).getTime() - Date.now()) / 86400000;
               return days > 0 && days <= 14;
             }).length;
+            const comingSoon = (label: string) => pushToast(
+              locale === 'ru' ? `Раздел «${label}» появится совсем скоро` : `"${label}" is coming soon`,
+              'info',
+            );
             const tiles = [
-              { n: totalWishes, l: pluralize(totalWishes, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale), tone: 'neutral' as const },
-              { n: totalReserved, l: t('reserved_label', locale) || 'забронировано', tone: 'accent' as const },
-              { n: totalGifted, l: t('gifted_label', locale) || 'подарено', tone: 'success' as const },
-              { n: expiringCount, l: t('expiring_label', locale) || 'истекает', tone: 'warning' as const },
+              {
+                n: totalWishes,
+                l: pluralize(totalWishes, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale),
+                tone: 'neutral' as const,
+                onClick: () => { setHomeTab('wishes'); void loadAllItems(); },
+              },
+              {
+                n: totalReserved,
+                l: t('reserved_label', locale) || 'забронировано',
+                tone: 'accent' as const,
+                onClick: () => {
+                  setHomeTab('reservations');
+                  if (reservations.length === 0 && santaReservationItems.length === 0) void loadReservations();
+                },
+              },
+              {
+                n: totalGifted,
+                l: t('gifted_label', locale) || 'подарено',
+                tone: 'success' as const,
+                onClick: () => comingSoon('Подарено'),
+              },
+              {
+                n: expiringCount,
+                l: t('expiring_label', locale) || 'истекает',
+                tone: 'warning' as const,
+                onClick: () => comingSoon('Истекает'),
+              },
             ];
             const toneColor = (tone: 'neutral' | 'accent' | 'success' | 'warning') =>
               tone === 'accent' ? 'var(--wb-accent-strong)'
@@ -11455,15 +11495,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             return (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 16 }}>
                 {tiles.map((tile, i) => (
-                  <div key={i} style={{
-                    background: 'var(--wb-card)',
-                    border: '1px solid var(--wb-border)',
-                    borderRadius: 16,
-                    padding: '12px 6px 10px',
-                    textAlign: 'center' as const,
-                    WebkitBackdropFilter: 'blur(16px)' as never,
-                    backdropFilter: 'blur(16px)' as never,
-                  }}>
+                  <button
+                    key={i}
+                    onClick={tile.onClick}
+                    style={{
+                      background: 'var(--wb-card)',
+                      border: '1px solid var(--wb-border)',
+                      borderRadius: 16,
+                      padding: '12px 6px 10px',
+                      textAlign: 'center' as const,
+                      WebkitBackdropFilter: 'blur(16px)' as never,
+                      backdropFilter: 'blur(16px)' as never,
+                      cursor: 'pointer',
+                      fontFamily: font,
+                      transition: 'transform 0.12s ease, background 0.15s ease',
+                      WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
                     <div style={{
                       fontSize: 22, fontWeight: 700,
                       color: toneColor(tile.tone),
@@ -11475,7 +11523,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       marginTop: 4, letterSpacing: '0.1px',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>{tile.l}</div>
-                  </div>
+                  </button>
                 ))}
               </div>
             );
@@ -12269,10 +12317,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     )
                   )}
 
-                  {reservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && secretReservations.length === 0 && (
+                  {(reservationsLoading || santaReservationItemsLoading || secretReservationsLoading) && reservations.length === 0 && santaReservationItems.length === 0 && secretReservations.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-                      <div style={{ fontSize: 32, marginBottom: 12, animation: 'fadeIn 0.3s ease' }}>⏳</div>
-                      <div style={{ fontSize: 14, color: C.textMuted }}>{t('reservations_loading', locale)}</div>
+                      <div style={{
+                        fontSize: 32, marginBottom: 12,
+                        display: 'inline-block',
+                        animation: 'wbSpin 1.2s linear infinite',
+                      }}>⏳</div>
+                      <div style={{ fontSize: 14, color: 'var(--wb-text-secondary)', letterSpacing: '-0.005em' }}>{t('reservations_loading', locale)}</div>
                     </div>
                   )}
                   {!reservationsLoading && !santaReservationItemsLoading && !secretReservationsLoading && reservations.length === 0 && santaReservationItems.length === 0 && secretReservations.length === 0 && (

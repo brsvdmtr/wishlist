@@ -44,7 +44,11 @@ export function AccentSwatch({ swatch, active, locked, label, onClick, style }: 
       aria-pressed={active}
       style={{
         position: 'relative',
+        width: '100%', // required — without it `aspect-ratio` measures
+        // from content width, which varies with label length (Violet: 6
+        // letters → wider square than Blue: 4 letters).
         aspectRatio: '1 / 1',
+        boxSizing: 'border-box',
         borderRadius: 16,
         background,
         border: active ? '2px solid #fff' : '2px solid transparent',

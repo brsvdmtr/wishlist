@@ -47,6 +47,7 @@ body {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 @keyframes skeletonShimmer { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.5; } }
 @keyframes onb-spin { to { transform: rotate(360deg); } }
+@keyframes wbSpin { to { transform: rotate(360deg); } }
 
 /* Approved v2 motion — codified 2026-04-19 */
 @keyframes successPop {
