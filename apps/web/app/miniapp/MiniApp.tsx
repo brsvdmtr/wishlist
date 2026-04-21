@@ -14511,34 +14511,63 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <>
                 <div onClick={() => setShowItemMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
                 <div onClick={(e) => { e.stopPropagation(); setShowItemMenu(false); }} style={{
-                  position: 'absolute', top: 42, right: 0, zIndex: 100,
-                  background: C.card, border: `1px solid ${C.borderLight}`, borderRadius: 14,
-                  padding: '4px 0', minWidth: 190, boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+                  position: 'absolute', top: 48, right: 0, zIndex: 100,
+                  background: 'var(--wb-card-elevated, var(--wb-card))',
+                  border: '1px solid var(--wb-border-strong)',
+                  borderRadius: 16, padding: '4px 0', minWidth: 200,
+                  boxShadow: '0 12px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)',
+                  WebkitBackdropFilter: 'blur(20px) saturate(160%)' as never,
+                  backdropFilter: 'blur(20px) saturate(160%)' as never,
                 }}>
-                  <div onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
+                  <div onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '12px 16px', fontSize: 14.5, fontWeight: 500,
+                    color: 'var(--wb-text)', cursor: 'pointer',
+                    letterSpacing: '-0.012em',
+                  }}>
                     <span style={{ width: 22, textAlign: 'center' }}>↗</span> {t('item_move_short', locale)}
                   </div>
-                  <div onClick={() => { void openPlacementsSheet(viewingItem as Item); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
+                  <div onClick={() => { void openPlacementsSheet(viewingItem as Item); }} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '12px 16px', fontSize: 14.5, fontWeight: 500,
+                    color: 'var(--wb-text)', cursor: 'pointer',
+                    letterSpacing: '-0.012em',
+                  }}>
                     <span style={{ width: 22, textAlign: 'center' }}>🔗</span> {locale === 'ru' ? 'Где размещено' : 'Where placed'}
                     {((viewingItem as Item).placementCount ?? 1) > 1 && (
-                      <span style={{ marginLeft: 'auto', fontSize: 12, color: C.accent, fontWeight: 700 }}>{(viewingItem as Item).placementCount}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--wb-accent-strong)', fontWeight: 700, fontFeatureSettings: '"tnum"' }}>{(viewingItem as Item).placementCount}</span>
                     )}
                   </div>
-                  <div onClick={() => { setCopyingItem(viewingItem as Item); setShowCopyPicker(true); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
+                  <div onClick={() => { setCopyingItem(viewingItem as Item); setShowCopyPicker(true); }} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '12px 16px', fontSize: 14.5, fontWeight: 500,
+                    color: 'var(--wb-text)', cursor: 'pointer',
+                    letterSpacing: '-0.012em',
+                  }}>
                     <span style={{ width: 22, textAlign: 'center' }}>🧬</span> {locale === 'ru' ? 'Создать копию' : 'Create copy'}
                   </div>
                   {hasUserCategories && (
-                    <div onClick={() => { setShowItemMenu(false); setShowCatPicker({ itemIds: [viewingItem!.id] }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.text, cursor: 'pointer' }}>
+                    <div onClick={() => { setShowItemMenu(false); setShowCatPicker({ itemIds: [viewingItem!.id] }); }} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '12px 16px', fontSize: 14.5, fontWeight: 500,
+                      color: 'var(--wb-text)', cursor: 'pointer',
+                      letterSpacing: '-0.012em',
+                    }}>
                       <span style={{ width: 22, textAlign: 'center' }}>📂</span> {t('cat_choose', locale)}
                     </div>
                   )}
-                  <div style={{ height: 1, background: C.border, margin: '2px 0' }} />
+                  <div style={{ height: 1, background: 'var(--wb-hairline)', margin: '2px 0' }} />
                   <div onClick={() => {
                     const item = viewingItem as Item;
                     setViewingItem(null);
                     setScreen(fromDrafts ? 'drafts' : 'wishlist-detail');
                     setDeletingItem(item);
-                  }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', fontSize: 15, color: C.red, cursor: 'pointer' }}>
+                  }} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '12px 16px', fontSize: 14.5, fontWeight: 500,
+                    color: 'var(--wb-danger)', cursor: 'pointer',
+                    letterSpacing: '-0.012em',
+                  }}>
                     <span style={{ width: 22, textAlign: 'center' }}>🗑</span> {t('delete_btn', locale)}
                   </div>
                 </div>
