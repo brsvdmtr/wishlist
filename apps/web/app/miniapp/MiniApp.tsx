@@ -29227,7 +29227,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               };
               return (
               <div style={{ padding: 0 }}>
-                {/* ── Hero (Visual): cover + left-aligned avatar + info ── */}
+                {/* ── v2.1 Hero: cover (when set) + layered accent gradient fallback + 88px avatar ── */}
                 <div style={{ position: 'relative' }}>
                   {hasShowcase && showcase?.coverUrl ? (
                     <div style={{
@@ -29237,36 +29237,48 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     }}>
                       <div style={{
                         position: 'absolute', inset: 0,
-                        background: 'linear-gradient(180deg, rgba(27,27,31,0.18) 0%, rgba(27,27,31,0.72) 70%, rgba(27,27,31,1) 100%)',
+                        background: 'linear-gradient(180deg, rgba(15,15,18,0.18) 0%, rgba(15,15,18,0.72) 70%, var(--wb-bg) 100%)',
                       }} />
                     </div>
                   ) : (
-                    <div style={{ position: 'relative', width: '100%', height: 180, background: 'linear-gradient(135deg, #2a1f5e 0%, #1a1040 40%, #3d2870 100%)' }}>
-                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: `linear-gradient(to top, ${C.bg} 0%, transparent 100%)` }} />
+                    <div style={{
+                      position: 'relative', width: '100%', height: 200,
+                      background:
+                        'radial-gradient(circle at 50% 120%, var(--wb-accent-deep), transparent 60%),' +
+                        'radial-gradient(circle at 100% 0%, var(--wb-accent-strong), transparent 50%),' +
+                        'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),' +
+                        'var(--wb-card-strong)',
+                      boxShadow: '0 20px 50px -20px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.08)',
+                    }}>
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: 'linear-gradient(to top, var(--wb-bg) 0%, transparent 100%)' }} />
                     </div>
                   )}
-                  <div style={{ padding: '0 20px', marginTop: -44, position: 'relative', zIndex: 2 }}>
+                  <div style={{ padding: '0 20px', marginTop: -52, position: 'relative', zIndex: 2 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14 }}>
                       <div style={{
-                        width: 72, height: 72, borderRadius: '50%', overflow: 'hidden',
-                        background: `linear-gradient(135deg, ${C.accent}, #a78bfa)`,
+                        width: 88, height: 88, borderRadius: '50%', overflow: 'hidden',
+                        background: 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        border: `3px solid ${C.bg}`, flexShrink: 0,
+                        border: '3px solid var(--wb-bg)', flexShrink: 0,
+                        boxShadow: '0 12px 32px var(--wb-accent-shadow), inset 0 2px 0 rgba(255,255,255,0.25)',
+                        color: '#fff',
                       }}>
                         {pp.profile.avatarUrl
                           ? <img src={pp.profile.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : <span style={{ fontSize: 32 }}>👤</span>}
+                          : <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.02em' }}>
+                              {(pp.profile.displayName || pp.profile.username || '?')[0]!.toUpperCase()}
+                            </span>}
                       </div>
                       <div style={{ paddingBottom: 4, minWidth: 0 }}>
-                        <div style={{ fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.025em', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{pp.profile.displayName || pp.profile.username || publicProfileUsername}</span>
                           {hasShowcase && <Chip tone="pro" size="sm">PRO</Chip>}
                         </div>
-                        {pp.profile.username && <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>@{pp.profile.username}</div>}
+                        {pp.profile.username && <div style={{ fontSize: 13.5, color: 'var(--wb-text-secondary)', marginTop: 2, fontFeatureSettings: '"tnum"' }}>@{pp.profile.username}</div>}
                       </div>
                     </div>
                     {(showcase?.bio || pp.profile.bio) && (
-                      <div style={{ fontSize: 14, color: C.textSec, marginTop: 12, lineHeight: 1.45 }}>
+                      <div style={{ fontSize: 14, color: 'var(--wb-text-secondary)', marginTop: 12, lineHeight: 1.5, letterSpacing: '-0.005em' }}>
                         {showcase?.bio || pp.profile.bio}
                       </div>
                     )}
@@ -29281,17 +29293,25 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         style={{
                           marginTop: 14,
                           width: '100%',
-                          padding: '11px 16px',
-                          borderRadius: 12,
-                          border: publicProfileSubscribed ? `1px solid ${C.border}` : 'none',
-                          background: publicProfileSubscribed ? C.surface : C.accent,
-                          color: publicProfileSubscribed ? C.green : '#fff',
+                          padding: '13px 16px',
+                          borderRadius: 16,
+                          border: publicProfileSubscribed ? '1px solid var(--wb-border)' : '1px solid var(--wb-accent-soft-strong)',
+                          background: publicProfileSubscribed
+                            ? 'var(--wb-card)'
+                            : 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))',
+                          color: publicProfileSubscribed ? 'var(--wb-success)' : '#fff',
                           fontSize: 14,
-                          fontWeight: 600,
+                          fontWeight: 650,
+                          letterSpacing: '-0.012em',
                           fontFamily: font,
                           cursor: publicProfileSubInFlight ? 'default' : 'pointer',
                           opacity: publicProfileSubInFlight ? 0.6 : 1,
-                          transition: 'all 0.15s ease',
+                          transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                          WebkitBackdropFilter: publicProfileSubscribed ? 'blur(14px)' as never : undefined,
+                          backdropFilter: publicProfileSubscribed ? 'blur(14px)' as never : undefined,
+                          boxShadow: publicProfileSubscribed
+                            ? undefined
+                            : '0 12px 32px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.22)',
                         }}
                       >
                         {publicProfileSubscribed
