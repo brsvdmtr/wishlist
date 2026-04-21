@@ -3232,13 +3232,33 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
             </div>
           )}
 
-          {/* ── Hero (crown + title + tagline) ── */}
+          {/* ── v2.1 Hero — accent-shadow emoji glow + gradient PRO word ── */}
           <Card variant="hero" padding="lg" style={{ textAlign: 'center', margin: '4px 0 18px' }}>
-            <div style={{ fontSize: 48, marginBottom: 10, filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.35))', lineHeight: 1 }}>👑</div>
-            <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', color: '#fff' }}>
-              {t('paywall_hero_title', locale)}
-            </div>
-            <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.45, fontWeight: 500, color: 'rgba(255,255,255,0.92)', whiteSpace: 'pre-line' }}>
+            <div style={{ fontSize: 64, marginBottom: 8, filter: 'drop-shadow(0 16px 32px var(--wb-accent-shadow))', lineHeight: 1 }}>👑</div>
+            {(() => {
+              // v2.1 pattern: wrap "PRO" in a gradient-text span. The translated
+              // string already includes "PRO" — split on it so the rest stays
+              // in the locale's own copy ("WishBoard PRO" / "WishBoard PRO" / etc).
+              const rawTitle = t('paywall_hero_title', locale);
+              const idx = rawTitle.indexOf('PRO');
+              const before = idx >= 0 ? rawTitle.slice(0, idx) : rawTitle;
+              const after = idx >= 0 ? rawTitle.slice(idx + 3) : '';
+              const hasPro = idx >= 0;
+              return (
+                <div style={{ fontSize: 32, fontWeight: 700, lineHeight: 1.05, letterSpacing: '-0.035em', color: '#fff' }}>
+                  {before}
+                  {hasPro && (
+                    <span style={{
+                      background: 'linear-gradient(135deg, #FFFFFF 20%, #C8BDFF 80%)',
+                      WebkitBackgroundClip: 'text', backgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent', color: 'transparent',
+                    }}>PRO</span>
+                  )}
+                  {after}
+                </div>
+              );
+            })()}
+            <div style={{ fontSize: 15, marginTop: 8, lineHeight: 1.45, fontWeight: 500, color: 'rgba(255,255,255,0.92)', whiteSpace: 'pre-line', letterSpacing: '-0.005em' }}>
               {t('paywall_hero_sub', locale)}
             </div>
           </Card>
