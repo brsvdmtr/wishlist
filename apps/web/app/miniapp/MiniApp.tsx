@@ -14486,7 +14486,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           } catch { pushToast(t('title_copy_error', locale), 'error'); }
         };
         return (
-        <div style={{ padding: '0 0 40px' }}>
+        <div style={{ padding: '0 0 calc(110px + env(safe-area-inset-bottom, 0px))' }}>
           {/* v2.1 Hero image — larger fallback emoji + accent-soft gradient */}
           <div style={{ position: 'relative' }}>
             {viewingItem.imageUrl ? (
@@ -14787,7 +14787,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           }
         };
         return (
-        <div style={{ padding: '0 0 40px' }}>
+        <div style={{ padding: '0 0 calc(110px + env(safe-area-inset-bottom, 0px))' }}>
           {/* Hero image */}
           <div style={{ padding: '16px 16px 0' }}>
             {viewingItem.imageUrl ? (
@@ -15106,7 +15106,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           GUEST — ITEM DETAIL (view only)
           ══════════════════════════════════════════════ */}
       {screen === 'guest-item-detail' && viewingItem && (
-        <div style={{ padding: '0 0 40px' }}>
+        <div style={{ padding: '0 0 calc(110px + env(safe-area-inset-bottom, 0px))' }}>
           {/* Hero image */}
           <div style={{ padding: '16px 16px 0' }}>
             {viewingItem.imageUrl ? (
@@ -28043,7 +28043,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
           </div>
 
-          <div style={{ padding: '16px 16px 40px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ padding: '16px 16px calc(110px + env(safe-area-inset-bottom, 0px))', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button
               onClick={() => {
                 setViewingItem(onboardingDemoItem);
@@ -28166,7 +28166,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {screen === 'group-gift-paywall' && viewingItem && (() => {
         const price = ggAccess.priceXtr;
         return (
-          <div style={{ padding: '24px 16px 40px', textAlign: 'center' }}>
+          <div style={{ padding: '24px 16px calc(110px + env(safe-area-inset-bottom, 0px))', textAlign: 'center' }}>
             {/* v2.1 hero emoji plate — glass + layered gradient + accent-glow drop */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -28261,7 +28261,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {screen === 'group-gift-create' && groupGiftCreateItem && (() => {
         const currSym = groupGiftCreateItem.currency === 'USD' ? '$' : groupGiftCreateItem.currency === 'EUR' ? '€' : '₽';
         return (
-          <div style={{ padding: '16px 16px 40px' }}>
+          <div style={{ padding: '16px 16px calc(110px + env(safe-area-inset-bottom, 0px))' }}>
             <div style={{
               fontSize: 26, fontWeight: 700, fontFamily: font,
               color: 'var(--wb-text)', marginBottom: 16,
@@ -28424,7 +28424,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const deadlinePassed = deadlineDate ? deadlineDate < new Date() : false;
 
         return (
-          <div style={{ padding: '16px 16px 40px' }}>
+          <div style={{ padding: '16px 16px calc(110px + env(safe-area-inset-bottom, 0px))' }}>
             {/* Header badges — role + status — canonical Chip primitive. */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <Chip tone={gg.isOrganizer ? 'accent' : 'success'} size="lg">
@@ -28724,7 +28724,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const setJoining = setGgJoining;
 
         return (
-          <div style={{ padding: '24px 16px 40px', textAlign: 'center' }}>
+          <div style={{ padding: '24px 16px calc(110px + env(safe-area-inset-bottom, 0px))', textAlign: 'center' }}>
             <div style={{ fontSize: 52, marginBottom: 14, filter: 'drop-shadow(0 12px 28px var(--wb-accent-shadow-soft))' }}>🎁</div>
             <div style={{
               fontSize: 26, fontWeight: 700, fontFamily: font,
