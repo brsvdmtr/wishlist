@@ -25522,19 +25522,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               );
             })()}
 
-            {/* Giver view (post-draw) — role: giver, no receiverUserId/participantId exposed */}
+            {/* v2.1 Giver view — glass card with uppercase micro-label */}
             {myAssignment && myAssignment.role === 'giver' && ['ACTIVE', 'COMPLETED'].includes(camp.status) && (
-              <div style={{ background: C.card, borderRadius: 14, padding: 16, marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>
+              <div style={{
+                background: 'var(--wb-card)',
+                border: '1px solid var(--wb-border)',
+                borderRadius: 18, padding: 16, marginBottom: 16,
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}>
+                <div style={{
+                  fontSize: 12, fontWeight: 600,
+                  color: 'var(--wb-text-muted)',
+                  marginBottom: 10,
+                  textTransform: 'uppercase' as const, letterSpacing: '0.7px',
+                }}>
                   {t('santa_gift_my_recipient', locale)}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <SantaAvatar alias={myAssignment.receiver.displayName} emoji={myAssignment.receiver.emoji || '🎅'} size={36} hat={santaSeason?.inSeason} />
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                  <SantaAvatar alias={myAssignment.receiver.displayName} emoji={myAssignment.receiver.emoji || '🎅'} size={40} hat={santaSeason?.inSeason} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 15, fontWeight: 650,
+                      color: 'var(--wb-text)',
+                      letterSpacing: '-0.012em',
+                    }}>
                       {renderSantaAlias(myAssignment.receiver.adjectiveKey, myAssignment.receiver.animalKey, locale) || myAssignment.receiver.displayName}
                     </div>
-                    <div style={{ fontSize: 12, color: C.textMuted }}>
+                    <div style={{
+                      fontSize: 12, color: 'var(--wb-text-secondary)',
+                      marginTop: 2, letterSpacing: '-0.005em',
+                    }}>
                       {t(`santa_gift_status_${myAssignment.giftStatus.toLowerCase()}` as never, locale) || myAssignment.giftStatus}
                     </div>
                   </div>
@@ -25557,15 +25575,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   };
 
                   const btnStyle = (accent?: boolean) => ({
-                    background: accent ? C.accent : C.surface,
-                    border: accent ? 'none' : `1px solid ${C.border}`,
-                    borderRadius: 10,
-                    color: accent ? '#fff' : C.text,
+                    background: accent
+                      ? 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))'
+                      : 'var(--wb-surface)',
+                    border: accent ? 'none' : '1px solid var(--wb-border)',
+                    borderRadius: 12,
+                    color: accent ? '#fff' : 'var(--wb-text)',
                     fontSize: 13,
-                    fontWeight: 600,
-                    padding: '8px 14px',
+                    fontWeight: 650,
+                    padding: '9px 14px',
                     cursor: 'pointer',
                     fontFamily: font,
+                    letterSpacing: '-0.005em',
+                    boxShadow: accent
+                      ? '0 6px 16px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.18)'
+                      : undefined,
+                    WebkitBackdropFilter: accent ? undefined : ('blur(14px)' as never),
+                    backdropFilter: accent ? undefined : ('blur(14px)' as never),
                   } as React.CSSProperties);
 
                   // Helper: handle switch-away from wishlist with confirm modal if reservations exist
@@ -25581,13 +25607,25 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   return (
                     <div style={{ marginBottom: 12 }}>
                       {/* Current status label */}
-                      <div style={{ fontSize: 12, color: gs === 'MISSED_DEADLINE' ? '#e05' : C.textMuted, marginBottom: 8 }}>
-                        {t('santa_gift_status_title', locale)}: <b>{t(`santa_gift_status_${gs.toLowerCase()}` as never, locale) || gs}</b>
+                      <div style={{
+                        fontSize: 12, fontWeight: 500,
+                        color: gs === 'MISSED_DEADLINE' ? 'var(--wb-danger)' : 'var(--wb-text-muted)',
+                        marginBottom: 8, letterSpacing: '-0.003em',
+                      }}>
+                        {t('santa_gift_status_title', locale)}: <b style={{ fontWeight: 650 }}>{t(`santa_gift_status_${gs.toLowerCase()}` as never, locale) || gs}</b>
                       </div>
 
                       {/* Reserved items summary badge */}
                       {(myAssignment.reservedItems?.length ?? 0) > 0 && (
-                        <div style={{ fontSize: 12, color: C.accent, background: C.accentSoft, borderRadius: 8, padding: '4px 10px', marginBottom: 8, display: 'inline-block' }}>
+                        <div style={{
+                          fontSize: 12, fontWeight: 600,
+                          color: 'var(--wb-accent-strong)',
+                          background: 'var(--wb-accent-soft)',
+                          border: '1px solid var(--wb-accent-soft-strong)',
+                          borderRadius: 10, padding: '5px 11px',
+                          marginBottom: 10, display: 'inline-block',
+                          letterSpacing: '-0.005em',
+                        }}>
                           {myAssignment.reservedItems.length === 1
                             ? t('santa_wishlist_my_reservations_one', locale).replace('{{title}}', myAssignment.reservedItems[0]?.title ?? '')
                             : t('santa_wishlist_my_reservations_many', locale).replace('{{n}}', String(myAssignment.reservedItems.length))}
@@ -25656,7 +25694,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
                       {/* Sent confirmation state */}
                       {isSent && (
-                        <div style={{ fontSize: 13, color: C.green, fontWeight: 600 }}>
+                        <div style={{
+                          fontSize: 14, color: 'var(--wb-success)',
+                          fontWeight: 650, letterSpacing: '-0.005em',
+                        }}>
                           ✓ {t('santa_campaign_gift_status_sent', locale)}
                         </div>
                       )}
