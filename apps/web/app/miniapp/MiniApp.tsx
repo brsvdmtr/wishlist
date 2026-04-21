@@ -4,6 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMe
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
 import { Banner, Button, Card, Chip, CounterBadge, HeroCard, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider } from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
+import { CalendarScreenV21 } from './screens/CalendarScreenV21';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
 
@@ -647,7 +648,8 @@ type Screen = 'loading' | 'error' | 'maintenance' | 'my-wishlists' | 'wishlist-d
 | 'item-unavailable'
 | 'secret-reservation-detail' | 'secret-reservation-paywall'
 | 'showcase-editor' | 'showcase-preview'
-| 'referral' | 'referral-history';
+| 'referral' | 'referral-history'
+| 'calendar';
 type Toast = { id: string; message: string; kind: 'success' | 'error' | 'info' | 'warning' };
 
 async function computeActorHash(telegramId: number): Promise<string> {
@@ -18933,6 +18935,35 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 />
               </div>
 
+              {/* v2.1 stub — Calendar entry (full UI scaffold, backend pending) */}
+              <div
+                onClick={() => setScreen('calendar')}
+                style={{
+                  margin: '0 -16px 16px',
+                  padding: '14px 16px',
+                  background: 'var(--wb-card)',
+                  border: '1px solid var(--wb-border)',
+                  borderRadius: 18,
+                  display: 'flex', alignItems: 'center', gap: 14,
+                  cursor: 'pointer',
+                  WebkitBackdropFilter: 'blur(14px)' as never,
+                  backdropFilter: 'blur(14px)' as never,
+                }}
+              >
+                <div style={{
+                  width: 42, height: 42, borderRadius: 13,
+                  background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+                  flexShrink: 0,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+                }}>📅</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--wb-text)', letterSpacing: '-0.012em' }}>Календарь событий</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--wb-text-secondary)', marginTop: 2 }}>Дни рождения и дедлайны вишлистов</div>
+                </div>
+                <div style={{ fontSize: 18, color: 'var(--wb-text-muted)' }}>›</div>
+              </div>
+
               {/* General */}
               <SettingsSection title={t('settings_general', locale)}>
                 {(() => {
@@ -27199,6 +27230,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </button>
           </div>
         </div>
+      )}
+
+      {/* ── v2.1 CALENDAR (full UI scaffold; backend pending) ── */}
+      {screen === 'calendar' && (
+        <CalendarScreenV21
+          onBack={() => setScreen('settings')}
+          onComingSoon={(label) => pushToast(label || 'Скоро будет доступно', 'info')}
+        />
       )}
 
       {/* ── ONBOARDING ENTRY SCREEN ── */}
