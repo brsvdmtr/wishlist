@@ -13605,54 +13605,85 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       })()}
 
       {/* ══════════════════════════════════════════════
-          OWNER — WISHLIST DETAIL
+          OWNER — WISHLIST DETAIL (v2.1 HeroCard)
           ══════════════════════════════════════════════ */}
       {screen === 'wishlist-detail' && currentWl && (
         <div style={{ padding: '16px 20px', paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))' }}>
-          {/* ── Wishlist detail header (v2-wishlist-detail-owner.html) ──
-              Left: 48×48 accent-soft emoji thumb + title + deadline subtitle.
-              Right: share / manage action stack. */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-              <div style={{
-                width: 48, height: 48, borderRadius: 12,
-                background: C.accentSoft,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 24, flexShrink: 0,
-              }}>{getEmoji(currentWl.title)}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h1 style={{
-                  fontSize: 22, fontWeight: 800, fontFamily: font, color: C.text, margin: 0,
-                  letterSpacing: '-0.02em', lineHeight: 1.15,
-                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const,
-                  overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>{currentWl.title}</h1>
-                {currentWl.deadline && (
-                  <p style={{ fontSize: 13, color: C.textSec, margin: '2px 0 0' }}>{fmtDeadline(currentWl.deadline)}</p>
-                )}
+          {/* v2.1 Hero — emoji + title + deadline + integrated stat row */}
+          {(() => {
+            const loaded = items.length > 0;
+            const total = loaded ? items.length : currentWl.itemCount;
+            const reserved = loaded
+              ? items.filter((it) => it.status === 'reserved' || it.status === 'purchased').length
+              : currentWl.reservedCount;
+            const purchased = loaded ? items.filter((it) => it.status === 'purchased').length : 0;
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <HeroCard tone="accent">
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                    <div style={{
+                      fontSize: 44, lineHeight: 1, flexShrink: 0,
+                      filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.2))',
+                    }}>
+                      {getEmoji(currentWl.title) ?? '🎁'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <h1 style={{
+                        fontSize: 26, fontWeight: 700, color: '#fff', margin: 0,
+                        letterSpacing: '-0.035em', lineHeight: 1.05,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{currentWl.title}</h1>
+                      {currentWl.deadline && (
+                        <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4, letterSpacing: '-0.005em' }}>
+                          📅 {fmtDeadline(currentWl.deadline)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {total > 0 && (
+                    <div style={{ display: 'flex', gap: 18, marginTop: 18 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em', fontFeatureSettings: '"tnum"' }}>{total}</div>
+                        <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>{t('wl_stat_wishes', locale)}</div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em', fontFeatureSettings: '"tnum"' }}>{reserved}</div>
+                        <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>{t('wl_stat_reserved', locale)}</div>
+                      </div>
+                      {purchased > 0 && (
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em', fontFeatureSettings: '"tnum"' }}>{purchased}</div>
+                          <div style={{ fontSize: 11, opacity: 0.75, marginTop: 2 }}>{t('wl_stat_purchased', locale)}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </HeroCard>
               </div>
-            </div>
-            {/* Right: vertical action stack */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-              <Button
-                variant="primary"
-                size="sm"
-                fullWidth={false}
-                onClick={() => setScreen('share')}
-              >
-                {t('share_btn', locale)}
-              </Button>
-              {/* Manage button — always visible to owner (wishlist-detail is owner-only) */}
-              <button
-                onClick={() => setShowWlManage(true)}
-                style={{ ...btnGhost, padding: '8px 16px', fontSize: 13 }}
-              >
-                {t('wl_manage_btn', locale)}
-              </button>
-            </div>
+            );
+          })()}
+
+          {/* Action row — share + manage (moved out of header) */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <Button
+              variant="primary"
+              size="sm"
+              fullWidth
+              onClick={() => setScreen('share')}
+            >
+              {t('share_btn', locale)}
+            </Button>
+            <Button
+              variant="surface"
+              size="sm"
+              fullWidth
+              onClick={() => setShowWlManage(true)}
+            >
+              {t('wl_manage_btn', locale)}
+            </Button>
           </div>
 
-          {/* ── Meta chips row — visibility / comment policy (v2 mockup) ── */}
+          {/* Meta chips row — visibility / comment policy */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
             <Chip tone="accent" size="md">
               {currentWl.visibility === 'public_profile' ? `🌐 ${t('wl_meta_visibility_public', locale)}`
@@ -13663,29 +13694,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               💬 {currentWl.commentPolicy === 'subscribers' ? t('wl_meta_comments_subs', locale) : t('wl_meta_comments_all', locale)}
             </Chip>
           </div>
-
-          {/* ── Stat tiles row — total / reserved / purchased ──
-              Adopts StatTile primitive (v2-wishlist-detail-owner mockup
-              stat-row). Counts from items list when loaded, fallback to
-              server itemCount/reservedCount before load. */}
-          {(() => {
-            const loaded = items.length > 0;
-            const total = loaded ? items.length : currentWl.itemCount;
-            const reserved = loaded
-              ? items.filter((it) => it.status === 'reserved' || it.status === 'purchased').length
-              : currentWl.reservedCount;
-            const purchased = loaded ? items.filter((it) => it.status === 'purchased').length : 0;
-            if (total === 0) return null;
-            return (
-              <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-                <StatTile n={total} label={t('wl_stat_wishes', locale)} tone="neutral" />
-                <StatTile n={reserved} label={t('wl_stat_reserved', locale)} tone="success" />
-                {purchased > 0 && (
-                  <StatTile n={purchased} label={t('wl_stat_purchased', locale)} tone="accent" />
-                )}
-              </div>
-            );
-          })()}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {currentWl.readOnly && (
