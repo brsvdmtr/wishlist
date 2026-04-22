@@ -74,7 +74,13 @@ app.use(
       // Allow non-browser requests (curl, server-to-server).
       if (!origin) return cb(null, true);
       if (origin === WEB_ORIGIN) return cb(null, true);
-      return cb(new Error('Not allowed by CORS'));
+      // Reject cleanly (no CORS headers) instead of throwing — throwing bubbled
+      // to the express error middleware as `level:50 "unhandled express error"`
+      // which looked like a real crash in log audits. A plain reject gives the
+      // browser the same net effect (blocked request) without the alarm.
+      // Log once per reject so we can actually identify who's probing.
+      logger.warn({ rejectedOrigin: origin }, 'CORS reject');
+      return cb(null, false);
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV', 'X-INTERNAL-KEY'],
