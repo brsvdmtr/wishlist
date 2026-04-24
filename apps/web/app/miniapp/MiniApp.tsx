@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, Chip, CounterBadge, FloatingNav, HeroCard, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, ThemeProvider, useTheme } from '@wishlist/ui';
+import { Banner, Button, Card, Chip, CounterBadge, FloatingNav, HeroCard, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, StickyCTAFade, ThemeProvider, useTheme } from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
 import { CalendarScreenV21 } from './screens/CalendarScreenV21';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
@@ -3330,7 +3330,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
           )}
 
           {/* ── v2.1 Hero — accent-shadow emoji glow + gradient PRO word ── */}
-          <Card variant="hero" padding="lg" style={{ textAlign: 'center', margin: '4px 0 18px' }}>
+          <HeroCard tone="accent" style={{ textAlign: 'center', margin: '4px 0 18px' }}>
             <div style={{ fontSize: 64, marginBottom: 8, filter: 'drop-shadow(0 16px 32px var(--wb-accent-shadow))', lineHeight: 1 }}>👑</div>
             {(() => {
               // v2.1 pattern: wrap "PRO" in a gradient-text span. The translated
@@ -3358,7 +3358,7 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
             <div style={{ fontSize: 15, marginTop: 8, lineHeight: 1.45, fontWeight: 500, color: 'rgba(255,255,255,0.92)', whiteSpace: 'pre-line', letterSpacing: '-0.005em' }}>
               {t('paywall_hero_sub', locale)}
             </div>
-          </Card>
+          </HeroCard>
 
           {/* ── Section 1: What's NEW in PRO ── */}
           {secNew.length > 0 && (
@@ -13916,8 +13916,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               ))}
             </div>
 
-            {/* Sticky CTA */}
-            <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, padding: '14px 20px 12px', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 50 }}>
+            {/* Sticky CTA — StickyCTAFade primitive (v2.1) */}
+            <StickyCTAFade bottom="calc(86px + env(safe-area-inset-bottom, 0px))" style={{ zIndex: 50, position: 'fixed' as const }}>
               <button
                 disabled={addonCheckoutLoading}
                 onClick={() => void handleBuyAddon('secret_reservation_unlock')}
@@ -13940,7 +13940,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               >
                 {t('sr_paywall_later', locale)}
               </button>
-            </div>
+            </StickyCTAFade>
           </div>
         );
       })()}
@@ -20678,15 +20678,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               ))}
             </div>
 
-            {/* Sticky CTA */}
-            <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, padding: '14px 20px 12px', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 50 }}>
-              <button onClick={buyClick} style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: `0 8px 24px ${C.accentGlow}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {/* Sticky CTA — StickyCTAFade primitive (v2.1) */}
+            <StickyCTAFade bottom="calc(86px + env(safe-area-inset-bottom, 0px))" style={{ zIndex: 50, position: 'fixed' as const }}>
+              <Button variant="primary-gradient" size="lg" onClick={buyClick}>
                 ⭐ {t('gn_upsell_cta', locale, { price: gnAccess.priceXtr })}
-              </button>
+              </Button>
               <button onClick={() => setScreen('my-wishlists')} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: font, marginTop: 6 }}>
                 {t('gn_upsell_later', locale)}
               </button>
-            </div>
+            </StickyCTAFade>
           </div>
         );
       })()}
@@ -24670,8 +24670,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ flex: 1 }} />
             </div>
 
-            {/* Sticky bottom CTA */}
-            <div style={{ position: 'fixed', bottom: 'calc(86px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, padding: '14px 20px 12px', background: `linear-gradient(180deg, transparent, ${C.bg} 25%)`, zIndex: 310 }}>
+            {/* Sticky bottom CTA — StickyCTAFade primitive (v2.1) */}
+            <StickyCTAFade bottom="calc(86px + env(safe-area-inset-bottom, 0px))" style={{ zIndex: 310, position: 'fixed' as const }}>
               <div style={{ maxWidth: 480, margin: '0 auto' }}>
                 {step === totalSteps ? (
                   <>
@@ -24715,7 +24715,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </>
                 )}
               </div>
-            </div>
+            </StickyCTAFade>
           </div>
         );
       })()}
