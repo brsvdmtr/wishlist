@@ -3185,16 +3185,16 @@ function CommentsThread({
                 {commentText.length}/300
               </span>
             </div>
-            <button
-              onClick={() => void onSendComment()}
+            <Button
+              variant="primary"
+              fullWidth={false}
+              loading={commentSending}
               disabled={!commentText.trim() || commentSending}
-              style={{
-                ...btnPrimary, width: 36, height: 36, padding: 0, borderRadius: 18,
-                opacity: commentText.trim() ? 1 : 0.35, flexShrink: 0, fontSize: 14,
-              }}
+              onClick={() => void onSendComment()}
+              style={{ width: 36, height: 36, padding: 0, borderRadius: 18, flexShrink: 0, fontSize: 14, minHeight: 0 }}
             >
-              {commentSending ? '…' : '↑'}
-            </button>
+              ↑
+            </Button>
           </div>
         </>
       )}
@@ -3885,9 +3885,9 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
           <div style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.4 }}>{t('smart_res_info', locale)}</div>
         </>
       )}
-      <button onClick={() => void saveSr()} disabled={!dirty || srSaving} style={{
-        ...btnPrimary, opacity: !dirty || srSaving ? 0.5 : 1,
-      }}>{srSaving ? '…' : t('save', locale)}</button>
+      <Button variant="primary" loading={srSaving} disabled={!dirty || srSaving} onClick={() => void saveSr()}>
+        {t('save', locale)}
+      </Button>
     </div>
   );
 }
@@ -16657,17 +16657,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             >
               {t('filter_reset', locale)}
             </button>
-            <button
+            <Button
+              variant="primary"
+              style={{ flex: 2, padding: '13px', fontSize: 14 }}
               onClick={() => {
                 setGuestBudgetMax(draftBudget);
                 setGuestCustomBudget(draftCustomBudget);
                 setGuestPriorityFilter(draftPriorities);
                 setGuestFilterOpen(false);
               }}
-              style={{ ...btnPrimary, flex: 2, padding: '13px', fontSize: 14 }}
             >
               {t('filter_apply', locale)}
-            </button>
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -19946,7 +19947,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>
                 {t('faq_support_cta', locale)}
               </div>
-              <button
+              <Button
+                variant="primary"
+                size="sm"
+                fullWidth={false}
+                style={{ marginTop: 10, padding: '12px 24px', fontSize: 14, minHeight: 0 }}
                 onClick={() => {
                   const supportUrl = 'https://t.me/Wish_Support';
                   try {
@@ -19955,13 +19960,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     window.open(supportUrl, '_blank');
                   }
                 }}
-                style={{
-                  ...btnPrimary, marginTop: 10,
-                  padding: '12px 24px', fontSize: 14,
-                }}
               >
                 {t('faq_support_btn', locale)}
-              </button>
+              </Button>
             </div>
           </div>
         );
@@ -23983,9 +23984,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               })}
             </div>
           </div>
-          <button style={{ ...btnPrimary, opacity: itemTitle.trim() ? 1 : 0.5 }} onClick={() => void handleSaveItem()} disabled={!itemTitle.trim() || loading}>
-            {loading ? '…' : editingItem ? `💾 ${t('save', locale)}` : t('item_add_btn', locale)}
-          </button>
+          <Button variant="primary" loading={loading} disabled={!itemTitle.trim() || loading} onClick={() => void handleSaveItem()}>
+            {editingItem ? `💾 ${t('save', locale)}` : t('item_add_btn', locale)}
+          </Button>
         </div>
         )}
       </BottomSheet>
@@ -23995,9 +23996,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ fontSize: 15, color: C.textSec, lineHeight: 1.5 }}>{deletingItem?.title}</div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button style={{ ...btnGhost, flex: 1 }} onClick={() => setDeletingItem(null)}>{t('cancel', locale)}</button>
-            <button
-              style={{ ...btnPrimary, flex: 2, background: C.red }}
+            <Button variant="ghost" style={{ flex: 1 }} onClick={() => setDeletingItem(null)}>{t('cancel', locale)}</Button>
+            <Button
+              variant="danger-solid"
+              style={{ flex: 2 }}
               onClick={() => {
                 if (deletingItem) {
                   void handleDeleteItem(deletingItem);
@@ -24006,7 +24008,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               }}
             >
               🗑 {t('delete', locale)}
-            </button>
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -24174,14 +24176,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {linkMgmtDetailItem?.type === 'profile' ? t('link_revoke_profile_body', locale) : t('link_revoke_body', locale)}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button style={{ ...btnGhost, flex: 1 }} onClick={() => setLinkMgmtConfirmRevoke(false)}>{t('cancel', locale)}</button>
-            <button
-              style={{ ...btnPrimary, flex: 2, background: C.red, opacity: linkMgmtRevoking ? 0.6 : 1 }}
+            <Button variant="ghost" style={{ flex: 1 }} onClick={() => setLinkMgmtConfirmRevoke(false)}>{t('cancel', locale)}</Button>
+            <Button
+              variant="danger-solid"
+              style={{ flex: 2 }}
+              loading={linkMgmtRevoking}
               disabled={linkMgmtRevoking}
               onClick={() => void revokeLinkMgmtItem()}
             >
               {linkMgmtDetailItem?.type === 'profile' ? t('link_revoke_profile_confirm', locale) : t('link_revoke_confirm', locale)}
-            </button>
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -24362,22 +24366,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               )}
 
               {/* CTAs — Keep Pro first, then Cancel (reversed from before) */}
-              <button
-                style={{ ...btnPrimary, width: '100%', fontSize: 15, padding: '14px 24px' }}
-                onClick={() => setShowCancelSub(false)}
-              >
+              <Button variant="primary-gradient" onClick={() => setShowCancelSub(false)}>
                 {t('cancel_keep', locale)}
-              </button>
-              <button
-                style={{
-                  ...btnGhost, width: '100%', marginTop: 6, fontSize: 14,
-                  color: C.red,
-                }}
-                onClick={() => void handleCancelSub()}
+              </Button>
+              <Button
+                variant="ghost"
+                style={{ marginTop: 6, color: C.red }}
+                loading={cancelSubLoading}
                 disabled={cancelSubLoading}
+                onClick={() => void handleCancelSub()}
               >
-                {cancelSubLoading ? t('cancel_cancelling', locale) : t('cancel_btn', locale)}
-              </button>
+                {t('cancel_btn', locale)}
+              </Button>
             </div>
           );
         })()}
@@ -24417,8 +24417,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               onChange={(e) => setEditProfileBirthday(e.target.value)}
             />
           </div>
-          <button
-            style={{ ...btnPrimary, opacity: editProfileSaving ? 0.5 : 1 }}
+          <Button
+            variant="primary"
+            loading={editProfileSaving}
+            disabled={editProfileSaving}
             onClick={async () => {
               setEditProfileSaving(true);
               try {
@@ -24445,10 +24447,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 setEditProfileSaving(false);
               }
             }}
-            disabled={editProfileSaving}
           >
-            {editProfileSaving ? '\u2026' : t('save', locale)}
-          </button>
+            {t('save', locale)}
+          </Button>
         </div>
       </BottomSheet>
 
@@ -24471,12 +24472,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{ fontSize: 12, color: C.textMuted, marginTop: 10, lineHeight: 1.45, padding: '0 4px' }}>
             {t('report_hint', locale)}
           </div>
-          <button
+          <Button
+            variant="primary"
+            size="md"
+            style={{ marginTop: 20 }}
+            loading={reportSubmitting}
             disabled={reportSubmitting}
-            style={{
-              ...btnPrimary, marginTop: 20, width: '100%', fontSize: 15, padding: '14px 24px',
-              opacity: reportSubmitting ? 0.6 : 1,
-            }}
             onClick={async () => {
               setReportSubmitting(true);
               try {
@@ -24514,14 +24515,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               }
             }}
           >
-            {reportSubmitting ? '...' : t('report_submit', locale)}
-          </button>
-          <button
-            style={{ ...btnGhost, width: '100%', marginTop: 8, fontSize: 14 }}
+            {t('report_submit', locale)}
+          </Button>
+          <Button
+            variant="ghost"
+            style={{ marginTop: 8 }}
             onClick={() => setShowReportProblemSheet(false)}
           >
             {t('cancel', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -24541,8 +24543,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{ fontSize: 14, color: C.textSec, marginTop: 8, lineHeight: 1.5, padding: '0 8px' }}>
             {t('settings_delete_warning', locale)}
           </div>
-          <button
-            style={{ ...btnPrimary, marginTop: 20, width: '100%', background: C.red, fontSize: 15, padding: '14px 24px' }}
+          <Button
+            variant="danger-solid"
+            size="md"
+            style={{ marginTop: 20 }}
             onClick={async () => {
               try {
                 const res = await tgFetch('/tg/me/account', { method: 'DELETE' });
@@ -24557,25 +24561,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             }}
           >
             {t('settings_delete_btn', locale)}
-          </button>
-          <button
-            style={{ ...btnGhost, width: '100%', marginTop: 8, fontSize: 14 }}
+          </Button>
+          <Button
+            variant="ghost"
+            style={{ marginTop: 8 }}
             onClick={() => setShowDeleteAccount(false)}
           >
             {t('cancel', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
       {/* ── Avatar action sheet ── */}
       <BottomSheet isOpen={showAvatarSheet} onClose={() => setShowAvatarSheet(false)} title={t('profile_change_avatar', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <button
+          <Button
+            variant="primary"
             onClick={() => { setShowAvatarSheet(false); setTimeout(() => avatarInputRef.current?.click(), 50); }}
-            style={{ ...btnPrimary, width: '100%', background: C.accent }}
           >
             {t('profile_avatar_upload', locale)}
-          </button>
+          </Button>
           {profileData?.avatarUrl && (
             <button
               onClick={() => void handleAvatarDelete()}
@@ -25025,12 +25030,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 20 }}>
             {t('sr_err_own_item_body', locale)}
           </div>
-          <button
+          <Button
+            variant="primary"
             onClick={() => setSecretErrorKind(null)}
-            style={{ ...btnPrimary, width: '100%' }}
           >
             {t('sr_onb_got_it', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -25052,12 +25057,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 20 }}>
             {t('sr_err_already_public_body', locale)}
           </div>
-          <button
+          <Button
+            variant="primary"
             onClick={() => setSecretErrorKind(null)}
-            style={{ ...btnPrimary, width: '100%' }}
           >
             {t('sr_onb_got_it', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -26085,18 +26090,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 20 }}>
                               {t('santa_wishlist_switch_modal_body', locale)}
                             </div>
-                            <button
+                            <Button
+                              variant="danger-solid"
+                              style={{ marginBottom: 10 }}
                               onClick={async () => {
                                 setSantaSwitchModalOpen(false);
                                 await updateStatus('SELECTED_OUTSIDE');
                               }}
-                              style={{ ...btnPrimary, background: '#e05050', marginBottom: 10 }}
                             >
                               {t('santa_wishlist_switch_confirm', locale)}
-                            </button>
-                            <button onClick={() => setSantaSwitchModalOpen(false)} style={btnSecondary}>
+                            </Button>
+                            <Button variant="secondary" onClick={() => setSantaSwitchModalOpen(false)}>
                               {t('cancel', locale)}
-                            </button>
+                            </Button>
                           </div>
                         </div>
                       )}
@@ -28828,14 +28834,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {'💬 ' + t('gg_write_chat', locale)}
               </button>
               {gg.status === 'OPEN' && (
-                <button onClick={() => {
-                  const link = buildTgDeepLink(`gg_${gg.inviteToken}`) ?? `https://t.me/WishHub_bot?startapp=gg_${gg.inviteToken}`;
-                  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(t('gg_share_text', locale).replace('{{name}}', gg.organizerName))}`;
-                  try { window.Telegram?.WebApp.openTelegramLink(shareUrl); } catch { window.open(shareUrl, '_blank'); }
-                  trackEvent('group_gift_shared', { groupGiftId: gg.id });
-                }} style={{ ...btnPrimary, flex: 1, borderRadius: 14, padding: '14px 0' }}>
+                <Button
+                  variant="primary"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    const link = buildTgDeepLink(`gg_${gg.inviteToken}`) ?? `https://t.me/WishHub_bot?startapp=gg_${gg.inviteToken}`;
+                    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(t('gg_share_text', locale).replace('{{name}}', gg.organizerName))}`;
+                    try { window.Telegram?.WebApp.openTelegramLink(shareUrl); } catch { window.open(shareUrl, '_blank'); }
+                    trackEvent('group_gift_shared', { groupGiftId: gg.id });
+                  }}
+                >
                   {'📤 ' + t('gg_share', locale)}
-                </button>
+                </Button>
               )}
             </div>
 
@@ -28879,20 +28889,25 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* ── Section 3: Complete & Cancel (organizer) ── */}
             {gg.isOrganizer && gg.status === 'OPEN' && (
               <div style={{ marginTop: 24 }}>
-                <button onClick={() => {
-                  if (!confirm(t('gg_complete_confirm', locale))) return;
-                  void (async () => {
-                    try {
-                      const r = await tgFetch('/tg/group-gifts/' + gg.id + '/complete', { method: 'POST' });
-                      if (r.ok) {
-                        setGroupGiftData(prev => prev ? { ...prev, status: 'COMPLETED' } : prev);
-                        pushToast(t('gg_toast_completed', locale), 'success');
-                      }
-                    } catch { pushToast(t('error_generic', locale), 'error'); }
-                  })();
-                }} style={{ ...btnPrimary, width: '100%', borderRadius: 14, background: C.green, padding: '15px 0' }}>
+                <Button
+                  variant="primary"
+                  size="md"
+                  style={{ background: C.green }}
+                  onClick={() => {
+                    if (!confirm(t('gg_complete_confirm', locale))) return;
+                    void (async () => {
+                      try {
+                        const r = await tgFetch('/tg/group-gifts/' + gg.id + '/complete', { method: 'POST' });
+                        if (r.ok) {
+                          setGroupGiftData(prev => prev ? { ...prev, status: 'COMPLETED' } : prev);
+                          pushToast(t('gg_toast_completed', locale), 'success');
+                        }
+                      } catch { pushToast(t('error_generic', locale), 'error'); }
+                    })();
+                  }}
+                >
                   {'✅ ' + t('gg_complete', locale)}
-                </button>
+                </Button>
                 <button onClick={() => {
                   if (!confirm(t('gg_cancel_confirm', locale))) return;
                   void (async () => {
@@ -30008,7 +30023,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ fontSize: 44, marginBottom: 12 }}>✨</div>
                   <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>{t('showcase_published_title', locale)}</div>
                   <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.5, marginBottom: 20 }}>{t('showcase_published_desc', locale)}</div>
-                  <button
+                  <Button
+                    variant="primary-gradient"
+                    style={{ marginBottom: 8 }}
                     onClick={() => {
                       trackEvent('showcase.share_clicked');
                       const username = profileData?.username;
@@ -30020,12 +30037,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       (window as any).Telegram?.WebApp?.openTelegramLink?.(tgShareUrl);
                       setShowcasePublished(false);
                     }}
-                    style={{ ...btnPrimary, background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))`, marginBottom: 8 }}
-                  >{t('showcase_published_share', locale)}</button>
-                  <button
+                  >{t('showcase_published_share', locale)}</Button>
+                  <Button
+                    variant="ghost"
+                    style={{ color: C.textSec }}
                     onClick={() => setShowcasePublished(false)}
-                    style={{ ...btnGhost, width: '100%', color: C.textSec }}
-                  >{t('showcase_published_later', locale)}</button>
+                  >{t('showcase_published_later', locale)}</Button>
                 </div>
               </div>
             )}
