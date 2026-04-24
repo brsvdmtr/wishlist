@@ -22601,13 +22601,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <Button variant="secondary" fullWidth={false} style={{ flex: 1 }} onClick={() => setShowArchiveWlConfirm(false)}>
               {t('wl_cancel', locale)}
             </Button>
-            <button
-              style={{ ...btnPrimary, flex: 1, background: C.orange, opacity: archivingWl ? 0.6 : 1 }}
-              onClick={() => void handleArchiveWishlist()}
+            <Button
+              variant="primary"
+              style={{ flex: 1, background: C.orange, boxShadow: 'none' }}
+              loading={archivingWl}
               disabled={archivingWl}
+              onClick={() => void handleArchiveWishlist()}
             >
-              {archivingWl ? '…' : t('wl_archive_confirm_btn', locale)}
-            </button>
+              {t('wl_archive_confirm_btn', locale)}
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -22666,13 +22668,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             >
               {t('wl_cancel', locale)}
             </button>
-            <button
-              style={{ ...btnPrimary, flex: 1, background: C.red, opacity: deletingWl ? 0.6 : 1 }}
-              onClick={() => void handleDeleteWishlist()}
+            <Button
+              variant="danger-solid"
+              style={{ flex: 1 }}
+              loading={deletingWl}
               disabled={deletingWl}
+              onClick={() => void handleDeleteWishlist()}
             >
-              {deletingWl ? '…' : t('wl_delete_confirm2_btn', locale)}
-            </button>
+              {t('wl_delete_confirm2_btn', locale)}
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -22787,16 +22791,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </p>
             )}
           </div>
-          <button
-            style={{ ...btnPrimary, opacity: (!transferTargetId || transferingItems) ? 0.5 : 1 }}
+          <Button
+            variant="primary"
+            loading={transferingItems}
             disabled={!transferTargetId || transferingItems}
             onClick={() => void handleTransferAndDelete()}
           >
-            {transferingItems ? '…' : t('wl_transfer_btn', locale)}
-          </button>
-          <button onClick={() => setShowTransferPicker(false)} style={{ ...btnGhost }} disabled={transferingItems}>
+            {t('wl_transfer_btn', locale)}
+          </Button>
+          <Button variant="ghost" onClick={() => setShowTransferPicker(false)} disabled={transferingItems}>
             {t('wl_cancel', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
