@@ -12219,12 +12219,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <div style={{ textAlign: 'center', padding: '48px 24px' }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
                   <div style={{ fontSize: 15, color: C.textMuted, marginBottom: 16 }}>{t('guest_filter_empty', locale)}</div>
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    fullWidth={false}
+                    style={{ padding: '10px 24px', fontSize: 14, minHeight: 0 }}
                     onClick={() => setAllItemsPriorityFilter(null)}
-                    style={{ ...btnSecondary, padding: '10px 24px', fontSize: 14 }}
                   >
                     {t('filter_reset', locale)}
-                  </button>
+                  </Button>
                 </div>
               )}
               {/* Item rendering — grouped into "По приоритету" + "Забронированы"
@@ -14255,18 +14258,30 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   padding: '10px 0',
                 }}>
-                  <button onClick={() => { setCuratedSelectionMode(false); setCuratedSelectedIds(new Set()); }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    fullWidth={false}
+                    style={{ padding: '6px 12px', fontSize: 13, minHeight: 0 }}
+                    onClick={() => { setCuratedSelectionMode(false); setCuratedSelectedIds(new Set()); }}
+                  >
                     {t('bulk_cancel', locale)}
-                  </button>
+                  </Button>
                   <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
                     📋 {t('curated_select_title', locale)}
                   </span>
-                  <button onClick={() => {
-                    if (curatedSelectedIds.size === items.length) setCuratedSelectedIds(new Set());
-                    else setCuratedSelectedIds(new Set(items.map(i => i.id)));
-                  }} style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    fullWidth={false}
+                    style={{ padding: '6px 12px', fontSize: 13, minHeight: 0 }}
+                    onClick={() => {
+                      if (curatedSelectedIds.size === items.length) setCuratedSelectedIds(new Set());
+                      else setCuratedSelectedIds(new Set(items.map(i => i.id)));
+                    }}
+                  >
                     {curatedSelectedIds.size === items.length ? t('bulk_cancel', locale) : t('bulk_select_all', locale)}
-                  </button>
+                  </Button>
                 </div>
                 <div style={{ fontSize: 13, color: C.textSec, textAlign: 'center' }}>
                   {t('curated_select_subtitle', locale)}
@@ -15437,41 +15452,45 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           </button>
                         );
                       })()}
-                      <button onClick={() => {
-                        trackEvent('group_gift_cta_clicked', { itemId: viewingItem.id });
-                        // Check entitlement first
-                        void (async () => {
-                          try {
-                            const r = await tgFetch('/tg/items/' + viewingItem.id + '/group-gift', { method: 'GET' });
-                            if (r.ok) {
-                              const d = await r.json() as { hasGroupGift: boolean; groupGift?: GroupGiftData };
-                              if (d.hasGroupGift && d.groupGift?.id) {
-                                setGroupGiftData(d.groupGift as GroupGiftData);
-                                setScreen('group-gift-detail');
-                                return;
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        style={{ borderRadius: 16 }}
+                        onClick={() => {
+                          trackEvent('group_gift_cta_clicked', { itemId: viewingItem.id });
+                          // Check entitlement first
+                          void (async () => {
+                            try {
+                              const r = await tgFetch('/tg/items/' + viewingItem.id + '/group-gift', { method: 'GET' });
+                              if (r.ok) {
+                                const d = await r.json() as { hasGroupGift: boolean; groupGift?: GroupGiftData };
+                                if (d.hasGroupGift && d.groupGift?.id) {
+                                  setGroupGiftData(d.groupGift as GroupGiftData);
+                                  setScreen('group-gift-detail');
+                                  return;
+                                }
                               }
+                            } catch { /* ignore */ }
+                            // No existing group gift — check entitlement
+                            if (ggAccess.unlocked) {
+                              setGroupGiftCreateItemId(viewingItem.id);
+                              setGroupGiftCreateItem({
+                                title: viewingItem.title,
+                                imageUrl: viewingItem.imageUrl ?? null,
+                                price: viewingItem.price ?? null,
+                                currency: (viewingItem as GuestItem).currency ?? 'RUB',
+                              });
+                              setGgTargetAmt(viewingItem.price ? String(viewingItem.price) : '');
+                              setGgDeadline(''); setGgNote(''); setGgMyAmount(''); setGgCreating(false);
+                              setScreen('group-gift-create');
+                            } else {
+                              setScreen('group-gift-paywall');
                             }
-                          } catch { /* ignore */ }
-                          // No existing group gift — check entitlement
-                          if (ggAccess.unlocked) {
-                            setGroupGiftCreateItemId(viewingItem.id);
-                            setGroupGiftCreateItem({
-                              title: viewingItem.title,
-                              imageUrl: viewingItem.imageUrl ?? null,
-                              price: viewingItem.price ?? null,
-                              currency: (viewingItem as GuestItem).currency ?? 'RUB',
-                            });
-                            setGgTargetAmt(viewingItem.price ? String(viewingItem.price) : '');
-                            setGgDeadline(''); setGgNote(''); setGgMyAmount(''); setGgCreating(false);
-                            setScreen('group-gift-create');
-                          } else {
-                            setScreen('group-gift-paywall');
-                          }
-                        })();
-                      }}
-                        style={{ ...btnSecondary, width: '100%', borderRadius: 16, padding: '14px 24px', fontSize: 15 }}>
+                          })();
+                        }}
+                      >
                         {'👥 ' + t('gg_cta', locale)}
-                      </button>
+                      </Button>
                       <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, padding: '0 8px' }}>
                         {t('gg_cta_hint', locale)}
                       </div>
@@ -16376,12 +16395,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {t('guest_filter_empty', locale)}
               </div>
               {guestFiltersActive && (
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  fullWidth={false}
+                  style={{ padding: '10px 20px', fontSize: 14, minHeight: 0, marginTop: 12 }}
                   onClick={() => { setGuestBudgetMax(null); setGuestCustomBudget(''); setGuestPriorityFilter([1, 2, 3]); }}
-                  style={{ ...btnSecondary, width: 'auto', padding: '10px 20px', fontSize: 14, marginTop: 12 }}
                 >
                   {t('guest_filter_reset', locale)}
-                </button>
+                </Button>
               )}
             </div>
           ) : (
@@ -16649,14 +16671,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: 10 }}>
-            <button
+            <Button
+              variant="secondary"
+              style={{ flex: 1, padding: '13px', fontSize: 14 }}
               onClick={() => {
                 setDraftBudget(null); setDraftCustomBudget(''); setDraftPriorities([1, 2, 3]);
               }}
-              style={{ ...btnSecondary, flex: 1, padding: '13px', fontSize: 14 }}
             >
               {t('filter_reset', locale)}
-            </button>
+            </Button>
             <Button
               variant="primary"
               style={{ flex: 2, padding: '13px', fontSize: 14 }}
@@ -22147,12 +22170,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {t('wl_delete_btn', locale)}
           </button>
           {/* Cancel */}
-          <button
-            onClick={() => setShowWlManage(false)}
-            style={{ ...btnGhost, marginTop: 4 }}
-          >
+          <Button variant="ghost" style={{ marginTop: 4 }} onClick={() => setShowWlManage(false)}>
             {t('wl_cancel', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -22667,9 +22687,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <span style={{ fontSize: 20 }}>🗑️</span>
             {t('wl_delete_irreversible', locale)}
           </button>
-          <button onClick={() => setShowDeleteWl1(false)} style={{ ...btnGhost }}>
+          <Button variant="ghost" onClick={() => setShowDeleteWl1(false)}>
             {t('wl_cancel', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -22680,13 +22700,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {t('wl_delete_confirm2_body', locale)}
           </p>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              style={{ ...btnSecondary, flex: 1 }}
-              onClick={() => setShowDeleteWl2(false)}
+            <Button
+              variant="secondary"
+              style={{ flex: 1 }}
               disabled={deletingWl}
+              onClick={() => setShowDeleteWl2(false)}
             >
               {t('wl_cancel', locale)}
-            </button>
+            </Button>
             <Button
               variant="danger-solid"
               style={{ flex: 1 }}
@@ -22744,9 +22765,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <span style={{ fontSize: 20 }}>🗑️</span>
             {t('wl_delete_reserved_force', locale)}
           </button>
-          <button onClick={() => setShowDeleteWlReserved(false)} style={{ ...btnGhost }} disabled={deletingWl || transferingItems}>
+          <Button variant="ghost" disabled={deletingWl || transferingItems} onClick={() => setShowDeleteWlReserved(false)}>
             {t('wl_cancel', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -24582,16 +24603,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {t('profile_avatar_upload', locale)}
           </Button>
           {profileData?.avatarUrl && (
-            <button
+            <Button
+              variant="secondary"
+              style={{ color: C.red, borderColor: C.red + '40' }}
               onClick={() => void handleAvatarDelete()}
-              style={{ ...btnSecondary, width: '100%', color: C.red, borderColor: C.red + '40' }}
             >
               {t('profile_avatar_remove', locale)}
-            </button>
+            </Button>
           )}
-          <button onClick={() => setShowAvatarSheet(false)} style={{ ...btnGhost, width: '100%' }}>
+          <Button variant="ghost" onClick={() => setShowAvatarSheet(false)}>
             {t('cancel', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -24650,12 +24672,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </button>
             );
           })}
-          <button
-            onClick={() => setWishlistPickerSku(null)}
-            style={{ ...btnGhost, marginTop: 4 }}
-          >
+          <Button variant="ghost" style={{ marginTop: 4 }} onClick={() => setWishlistPickerSku(null)}>
             {t('cancel', locale)}
-          </button>
+          </Button>
         </div>
       </BottomSheet>
 
@@ -24939,26 +24958,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setSecretPromoteItem(null)}
+                <Button
+                  variant="secondary"
+                  style={{ flex: 1 }}
                   disabled={secretPromoting}
-                  style={{ ...btnSecondary, flex: 1 }}
+                  onClick={() => setSecretPromoteItem(null)}
                 >
                   {isConflict ? t('sr_promote_conflict_keep', locale) : t('cancel', locale)}
-                </button>
+                </Button>
                 {!isConflict && (
-                  <button
-                    onClick={() => void handleSecretReservationPromote(sr)}
+                  <Button
+                    variant="primary-gradient"
+                    style={{ flex: 2 }}
+                    loading={secretPromoting}
                     disabled={secretPromoting}
-                    style={{
-                      flex: 2, padding: '12px', borderRadius: 12, border: 'none',
-                      background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))`,
-                      color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-                      fontFamily: font, opacity: secretPromoting ? 0.6 : 1,
-                    }}
+                    onClick={() => void handleSecretReservationPromote(sr)}
                   >
-                    {secretPromoting ? '…' : t('sr_promote_cta_confirm', locale)}
-                  </button>
+                    {t('sr_promote_cta_confirm', locale)}
+                  </Button>
                 )}
               </div>
             </div>
@@ -24985,24 +25002,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {t('sr_cancel_confirm_body', locale)}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setSecretCancelItem(null)}
+                <Button
+                  variant="secondary"
+                  style={{ flex: 1 }}
                   disabled={secretCancelling}
-                  style={{ ...btnSecondary, flex: 1 }}
+                  onClick={() => setSecretCancelItem(null)}
                 >
                   {t('cancel', locale)}
-                </button>
-                <button
-                  onClick={() => void handleSecretReservationCancel(sr)}
+                </Button>
+                <Button
+                  variant="danger"
+                  style={{ flex: 2 }}
+                  loading={secretCancelling}
                   disabled={secretCancelling}
-                  style={{
-                    flex: 2, padding: '12px', borderRadius: 12, border: 'none',
-                    background: C.redSoft, color: C.red, fontSize: 14, fontWeight: 700,
-                    cursor: 'pointer', fontFamily: font, opacity: secretCancelling ? 0.6 : 1,
-                  }}
+                  onClick={() => void handleSecretReservationCancel(sr)}
                 >
-                  {secretCancelling ? '…' : t('sr_cancel_confirm_cta', locale)}
-                </button>
+                  {t('sr_cancel_confirm_cta', locale)}
+                </Button>
               </div>
             </div>
           );
@@ -28784,7 +28800,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         } catch { pushToast(t('error_generic', locale), 'error'); }
                       })();
                     }}
-                      style={{ ...btnGhost, padding: '8px 14px', fontSize: 13, color: C.accent }}>
+                      style={{ padding: '8px 14px', fontSize: 13, color: C.accent, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
                       {'✏️ ' + t('gg_edit_amount', locale)}
                     </button>
                   )}
@@ -28819,20 +28835,24 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
             {/* ── Section 1: Primary actions (Chat + Share) ── */}
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-              <button onClick={() => {
-                void (async () => {
-                  try {
-                    const r = await tgFetch('/tg/group-gifts/' + gg.id + '/messages');
-                    if (r.ok) {
-                      const d = await r.json() as { messages: typeof groupGiftMessages };
-                      setGroupGiftMessages(d.messages);
-                    }
-                  } catch { /* ignore */ }
-                  setScreen('group-gift-chat');
-                })();
-              }} style={{ ...btnSecondary, flex: 1, borderRadius: 14, padding: '14px 0' }}>
+              <Button
+                variant="secondary"
+                style={{ flex: 1 }}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const r = await tgFetch('/tg/group-gifts/' + gg.id + '/messages');
+                      if (r.ok) {
+                        const d = await r.json() as { messages: typeof groupGiftMessages };
+                        setGroupGiftMessages(d.messages);
+                      }
+                    } catch { /* ignore */ }
+                    setScreen('group-gift-chat');
+                  })();
+                }}
+              >
                 {'💬 ' + t('gg_write_chat', locale)}
-              </button>
+              </Button>
               {gg.status === 'OPEN' && (
                 <Button
                   variant="primary"
