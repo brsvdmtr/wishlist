@@ -1923,7 +1923,7 @@ function ReferralProfileTileFromConfig({ config, locale, onOpen, trackEvent }: {
           <div style={{
             color: C.accent, fontSize: 13, fontWeight: 600,
             padding: '6px 10px', borderRadius: 10, flexShrink: 0,
-            background: 'rgba(124,106,255,0.12)',
+            background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)',
           }}>
             {t('referral_profile_tile_cta', locale)}
           </div>
@@ -2473,7 +2473,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
           )}
           {isGuest && isReservedByMe && (
             <>
-              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(52,211,153,0.1)' }}>
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(74, 222, 128, 0.1)' }}>
                 {t('reserved_by_me', locale)}
               </span>
               {onUnreserve && <span onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ fontSize: 10, color: '#555', cursor: 'pointer' }}>{t('cancel', locale)}</span>}
@@ -2485,12 +2485,12 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
             </span>
           )}
           {!isGuest && isReserved && (
-            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#a599ff', background: 'rgba(124,106,255,0.1)' }}>
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#a599ff', background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.1)' }}>
               🔒 {t('status_someone_reserved', locale)}
             </span>
           )}
           {isPurchased && (
-            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(52,211,153,0.1)' }}>
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(74, 222, 128, 0.1)' }}>
               🎉 {t('status_gifted', locale)}
             </span>
           )}
@@ -2573,7 +2573,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
           {isPurchased && (
             <div style={{
               position: 'absolute', top: 12, right: 14,
-              background: 'rgba(52,211,153,0.85)', borderRadius: 20, padding: '5px 12px',
+              background: 'rgba(74, 222, 128, 0.85)', borderRadius: 20, padding: '5px 12px',
               fontSize: 12, fontWeight: 600, color: '#fff',
             }}>
               🎉 {t('status_gifted', locale)}
@@ -2606,7 +2606,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
                 display: 'inline-flex', alignItems: 'center', gap: 3,
                 marginLeft: 8, padding: '2px 8px', borderRadius: 8,
                 fontSize: 11, fontWeight: 700, lineHeight: 1.2,
-                color: '#a599ff', background: 'rgba(124,106,255,0.14)',
+                color: '#a599ff', background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.14)',
                 verticalAlign: 'middle', whiteSpace: 'nowrap',
               }}
             >
@@ -2651,7 +2651,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
                 padding: '10px 20px', borderRadius: 12, border: 'none',
                 background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)',
                 color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: font,
-                boxShadow: '0 4px 16px rgba(124,106,255,0.35)',
+                boxShadow: '0 4px 16px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)',
               }}
             >
               {t('reserve_btn', locale)}
@@ -2661,8 +2661,8 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
-              background: 'linear-gradient(135deg, rgba(167,139,250,0.18), rgba(167,139,250,0.08))',
-              color: '#C4A7FF', border: '1px solid rgba(167,139,250,0.25)',
+              background: 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.18), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08))',
+              color: '#C4A7FF', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.25)',
             }}>
               {t('sr_card_chip_secret', locale)}
             </span>
@@ -2672,8 +2672,8 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
-                background: 'linear-gradient(135deg, rgba(52,211,153,0.15), rgba(52,211,153,0.08))',
-                color: '#6ee7b7', border: '1px solid rgba(52,211,153,0.2)',
+                background: 'linear-gradient(135deg, rgba(74, 222, 128, 0.15), rgba(74, 222, 128, 0.08))',
+                color: '#6ee7b7', border: '1px solid rgba(74, 222, 128, 0.2)',
               }}>
                 {t('reserved_by_me', locale)}
               </span>
@@ -2692,8 +2692,8 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
-              background: 'linear-gradient(135deg, rgba(124,106,255,0.15), rgba(124,106,255,0.08))',
-              color: '#a599ff', border: '1px solid rgba(124,106,255,0.2)',
+              background: 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08))',
+              color: '#a599ff', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)',
             }}>
               🔒 {t('status_someone_reserved', locale)}
             </span>
@@ -2701,8 +2701,8 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
           {isPurchased && !hasImg && (
             <span style={{
               padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
-              background: 'linear-gradient(135deg, rgba(52,211,153,0.15), rgba(52,211,153,0.08))',
-              color: '#6ee7b7', border: '1px solid rgba(52,211,153,0.2)',
+              background: 'linear-gradient(135deg, rgba(74, 222, 128, 0.15), rgba(74, 222, 128, 0.08))',
+              color: '#6ee7b7', border: '1px solid rgba(74, 222, 128, 0.2)',
             }}>
               🎉 {t('status_gifted', locale)}
             </span>
@@ -2944,7 +2944,7 @@ function CommentsThread({
           background: C.accent, color: '#fff', border: 'none', borderRadius: 14,
           padding: '15px 18px', marginTop: 20, cursor: 'pointer',
           justifyContent: 'flex-start',
-          boxShadow: '0 2px 12px rgba(124,106,255,0.25)',
+          boxShadow: '0 2px 12px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.25)',
         }}
       >
         <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>💬</span>
@@ -3461,8 +3461,8 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
               onClick={onOpenReferral}
               style={{
                 marginTop: 14, padding: 14, borderRadius: 14,
-                background: 'rgba(124,106,255,0.04)',
-                border: `1px dashed rgba(124,106,255,0.25)`,
+                background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.04)',
+                border: `1px dashed rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.25)`,
                 cursor: 'pointer',
                 display: 'flex', gap: 12, alignItems: 'center', textAlign: 'start',
               }}
@@ -3637,7 +3637,7 @@ class MiniAppErrorBoundary extends React.Component<
           </div>
           <button
             onClick={() => window.location.reload()}
-            style={{ padding: '10px 28px', borderRadius: 10, border: 'none', background: '#A78BFA', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+            style={{ padding: '10px 28px', borderRadius: 10, border: 'none', background: 'var(--wb-accent-strong, #B4A6FF)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
           >
             {isRu ? 'Перезагрузить' : 'Reload'}
           </button>
@@ -3686,7 +3686,7 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
     if (obStep === 0) return (
       <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
         {dots}
-        <div style={{ width: 80, height: 80, borderRadius: 24, background: `linear-gradient(145deg, rgba(52,211,153,0.2), rgba(52,211,153,0.08))`, border: '1px solid rgba(52,211,153,0.2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, margin: '0 auto 16px' }}>✓</div>
+        <div style={{ width: 80, height: 80, borderRadius: 24, background: `linear-gradient(145deg, rgba(74, 222, 128, 0.2), rgba(74, 222, 128, 0.08))`, border: '1px solid rgba(74, 222, 128, 0.2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, margin: '0 auto 16px' }}>✓</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{isRu ? 'Умные брони подключены!' : 'Smart Reservations enabled!'}</div>
         <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>
           {isRu ? <>Теперь бронирования на вишлисте <strong style={{ color: C.text }}>«{wl.title}»</strong> управляются автоматически.</> : <>Reservations on <strong style={{ color: C.text }}>"{wl.title}"</strong> are now managed automatically.</>}
@@ -3745,7 +3745,7 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
         <div style={{ background: C.card, borderRadius: 16, padding: '16px 16px 12px', marginBottom: 16, textAlign: 'start' }}>
           {[
             { color: C.accent, label: isRu ? 'Бронь создана' : 'Reservation created', desc: isRu ? 'Даритель получает подтверждение с датой истечения' : 'Gifter gets confirmation with expiry date', hasLine: true },
-            { color: '#FBBF24', label: isRu ? 'Напоминание' : 'Reminder', desc: isRu ? 'За 24ч до истечения — можно продлить или подтвердить' : '24h before expiry — can extend or confirm', hasLine: true },
+            { color: 'var(--wb-warning, #FBBF24)', label: isRu ? 'Напоминание' : 'Reminder', desc: isRu ? 'За 24ч до истечения — можно продлить или подтвердить' : '24h before expiry — can extend or confirm', hasLine: true },
             { color: C.green, label: isRu ? 'Продлить или отпустить' : 'Extend or release', desc: isRu ? 'Даритель решает сам, а не пропадает молча' : 'Gifter decides, instead of disappearing silently', hasLine: false },
           ].map((ev, i) => (
             <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -3778,12 +3778,12 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
         <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 8, fontFamily: font }}>{isRu ? 'Порядок без усилий' : 'Effortless order'}</div>
         <div style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, marginBottom: 20 }}>{isRu ? 'Если даритель не реагирует — бронь снимается автоматически. Желание возвращается в список.' : 'If the gifter doesn\'t respond — the reservation is auto-released. The wish returns to the list.'}</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <div style={{ flex: 1, background: 'rgba(248,113,113,0.12)', borderRadius: 14, padding: '14px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#F87171', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{isRu ? 'Было' : 'Before'}</div>
+          <div style={{ flex: 1, background: 'rgba(251, 113, 133, 0.12)', borderRadius: 14, padding: '14px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--wb-danger, #FB7185)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{isRu ? 'Было' : 'Before'}</div>
             <div style={{ fontSize: 22, marginBottom: 6 }}>😰</div>
             <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4 }}>{isRu ? 'Бронь зависла, подарок заблокирован' : 'Reservation stuck, gift blocked'}</div>
           </div>
-          <div style={{ flex: 1, background: 'rgba(52,211,153,0.12)', borderRadius: 14, padding: '14px 12px', textAlign: 'center' }}>
+          <div style={{ flex: 1, background: 'rgba(74, 222, 128, 0.12)', borderRadius: 14, padding: '14px 12px', textAlign: 'center' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 }}>{isRu ? 'Стало' : 'After'}</div>
             <div style={{ fontSize: 22, marginBottom: 6 }}>😌</div>
             <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4 }}>{isRu ? 'Бронь снялась сама, желание снова доступно' : 'Reservation auto-released, wish available again'}</div>
@@ -3899,7 +3899,7 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
   };
   const orangeSoft = 'rgba(251,191,36,0.12)';
   const pinkSoft = 'rgba(236,72,153,0.12)';
-  const greenSoft = 'rgba(52,211,153,0.12)';
+  const greenSoft = 'rgba(74, 222, 128, 0.12)';
 
   const dots = (
     <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 20 }}>
@@ -3940,7 +3940,7 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
       <div style={{ ...wrap, animation: 'fadeIn 0.25s ease' }}>
         {dots}
         <div style={{ textAlign: 'center', marginBottom: 18 }}>
-          <div style={{ width: 80, height: 80, borderRadius: 24, background: 'linear-gradient(145deg, rgba(52,211,153,0.2), rgba(52,211,153,0.08))', border: '1px solid rgba(52,211,153,0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, margin: '0 auto 16px', color: '#34D399' }}>✓</div>
+          <div style={{ width: 80, height: 80, borderRadius: 24, background: 'linear-gradient(145deg, rgba(74, 222, 128, 0.2), rgba(74, 222, 128, 0.08))', border: '1px solid rgba(74, 222, 128, 0.25)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, margin: '0 auto 16px', color: 'var(--wb-success, #4ADE80)' }}>✓</div>
           <h2 style={heroTitle('center')}>{t('gn_ob_s1_title', locale)}</h2>
           <p style={heroBody}>{t('gn_ob_s1_body', locale)}</p>
         </div>
@@ -3948,7 +3948,7 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
           <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>{t('gn_ob_s1_checklist', locale)}</div>
           {[t('gn_ob_s1_c1', locale), t('gn_ob_s1_c2', locale), t('gn_ob_s1_c3', locale), t('gn_ob_s1_c4', locale)].map((text, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
-              <span style={{ color: '#34D399', fontSize: 16, flexShrink: 0 }}>✓</span>
+              <span style={{ color: 'var(--wb-success, #4ADE80)', fontSize: 16, flexShrink: 0 }}>✓</span>
               <span style={{ fontSize: 14, color: C.text }}>{text}</span>
             </div>
           ))}
@@ -3969,7 +3969,7 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
         </div>
         <div style={{ background: C.card, borderRadius: 16, padding: 16, marginBottom: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 12, padding: '10px 12px', boxShadow: '0 0 0 3px rgba(124,106,255,0.12)' }}>
+            <div style={{ background: C.surface, border: `1px solid ${C.accent}`, borderRadius: 12, padding: '10px 12px', boxShadow: '0 0 0 3px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)' }}>
               <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>{t('gn_ob_s2_label_who', locale)}</div>
               <div style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{t('gn_ob_s2_demo_person', locale)}</div>
             </div>
@@ -4019,7 +4019,7 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
               <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t('gn_ob_s3_demo_title', locale)}</div>
               <div style={{ fontSize: 11, color: C.textMuted }}>{t('gn_ob_s3_demo_sub', locale)}</div>
             </div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#FBBF24', background: orangeSoft, padding: '3px 7px', borderRadius: 6 }}>{t('gn_ob_s3_demo_chip', locale)}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--wb-warning, #FBBF24)', background: orangeSoft, padding: '3px 7px', borderRadius: 6 }}>{t('gn_ob_s3_demo_chip', locale)}</div>
           </div>
           {[
             { text: t('gn_ob_s3_idea_1', locale), price: t('gn_ob_s3_idea_1_price', locale) },
@@ -4047,9 +4047,9 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
   // step === 3 — final: timeline + CTA
   const tl = [
     { dot: C.accent, label: t('gn_ob_s4_tl1_label', locale), desc: t('gn_ob_s4_tl1_desc', locale), color: C.accent, hasLine: true },
-    { dot: '#FBBF24', label: t('gn_ob_s4_tl2_label', locale), desc: t('gn_ob_s4_tl2_desc', locale), color: '#FBBF24', hasLine: true },
-    { dot: '#F87171', label: t('gn_ob_s4_tl3_label', locale), desc: t('gn_ob_s4_tl3_desc', locale), color: '#F87171', hasLine: true },
-    { dot: '#34D399', label: t('gn_ob_s4_tl4_label', locale), desc: t('gn_ob_s4_tl4_desc', locale), color: '#34D399', hasLine: false },
+    { dot: 'var(--wb-warning, #FBBF24)', label: t('gn_ob_s4_tl2_label', locale), desc: t('gn_ob_s4_tl2_desc', locale), color: 'var(--wb-warning, #FBBF24)', hasLine: true },
+    { dot: 'var(--wb-danger, #FB7185)', label: t('gn_ob_s4_tl3_label', locale), desc: t('gn_ob_s4_tl3_desc', locale), color: 'var(--wb-danger, #FB7185)', hasLine: true },
+    { dot: 'var(--wb-success, #4ADE80)', label: t('gn_ob_s4_tl4_label', locale), desc: t('gn_ob_s4_tl4_desc', locale), color: 'var(--wb-success, #4ADE80)', hasLine: false },
   ];
   return (
     <div style={{ ...wrap, animation: 'fadeIn 0.25s ease' }}>
@@ -10451,11 +10451,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             void updateOnboardingStep('onboarding-catalog', 'catalog');
             setScreen('onboarding-catalog');
           }} style={{
-            background: 'linear-gradient(135deg, rgba(124,106,255,0.18), rgba(168,85,247,0.12))',
-            border: '1.5px solid rgba(124,106,255,0.5)', borderRadius: 18,
+            background: 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.18), rgba(168,85,247,0.12))',
+            border: '1.5px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.5)', borderRadius: 18,
             padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14,
             cursor: 'pointer', textAlign: 'left', fontFamily: font, width: '100%', position: 'relative',
-            boxShadow: '0 4px 20px rgba(124,106,255,0.15)',
+            boxShadow: '0 4px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15)',
           }}>
             {/* Recommended badge */}
             <div style={{
@@ -10464,12 +10464,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px',
               borderRadius: 10, letterSpacing: 0.3,
             }}>{t('onboarding_path_catalog_badge', locale)}</div>
-            <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(124,106,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>🎁</div>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>🎁</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{t('onboarding_path_catalog_title', locale)}</div>
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 3 }}>{t('onboarding_path_catalog_desc', locale)}</div>
             </div>
-            <span style={{ color: '#A78BFA', fontSize: 20 }}>›</span>
+            <span style={{ color: 'var(--wb-accent-strong, #B4A6FF)', fontSize: 20 }}>›</span>
           </button>
 
           {/* ── 2. MANUAL — SECONDARY ── */}
@@ -10482,7 +10482,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             borderRadius: 18, padding: '16px 20px', display: 'flex', alignItems: 'center',
             gap: 14, cursor: 'pointer', textAlign: 'left', fontFamily: font, width: '100%',
           }}>
-            <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(52,211,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>✏️</div>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(74, 222, 128, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>✏️</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{t('onboarding_try_manual_title', locale)}</div>
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 3 }}>{t('onboarding_try_manual_desc', locale)}</div>
@@ -10508,10 +10508,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* URL input */}
               <div style={{
                 background: 'rgba(255,255,255,0.06)',
-                border: `1.5px solid ${onboardingTryError ? 'rgba(248,113,113,0.5)' : 'rgba(124,106,255,0.35)'}`,
+                border: `1.5px solid ${onboardingTryError ? 'rgba(251, 113, 133, 0.5)' : 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)'}`,
                 borderRadius: 14, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10,
               }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(124,106,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🔗</div>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🔗</div>
                 <input
                   value={onboardingTryUrl}
                   onChange={(e) => { setOnboardingTryUrl(e.target.value); setOnboardingTryError(null); }}
@@ -10524,13 +10524,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   onClick={() => { if (onboardingTryUrl.trim()) void tryImportUrl(onboardingTryUrl); }}
                   disabled={onboardingTryLoading || !onboardingTryUrl.trim()}
                   style={{
-                    background: 'rgba(124,106,255,0.2)', border: '1px solid rgba(124,106,255,0.4)', color: '#A78BFA',
+                    background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.4)', color: 'var(--wb-accent-strong, #B4A6FF)',
                     fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontFamily: font,
                     opacity: (onboardingTryLoading || !onboardingTryUrl.trim()) ? 0.5 : 1, whiteSpace: 'nowrap',
                   }}>
                   {onboardingTryLoading ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid rgba(167,139,250,0.3)', borderTopColor: '#A78BFA', borderRadius: '50%', animation: 'onb-spin 0.8s linear infinite' }} />
+                      <span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.3)', borderTopColor: 'var(--wb-accent-strong, #B4A6FF)', borderRadius: '50%', animation: 'onb-spin 0.8s linear infinite' }} />
                     </span>
                   ) : t('onboarding_try_paste_btn', locale)}
                 </button>
@@ -10538,7 +10538,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
               {/* Loading hint */}
               {onboardingTryLoading && (
-                <div style={{ textAlign: 'center', fontSize: 12, color: 'rgba(167,139,250,0.6)', lineHeight: 1.5, animation: 'onb-fade 0.3s ease-in' }}>
+                <div style={{ textAlign: 'center', fontSize: 12, color: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.6)', lineHeight: 1.5, animation: 'onb-fade 0.3s ease-in' }}>
                   {locale === 'ru' ? 'Анализируем ссылку…' : 'Analyzing link…'}
                 </div>
               )}
@@ -10553,7 +10553,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* Error + inline fallback buttons (400 / 429 / network) */}
               {onboardingTryError && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ fontSize: 13, color: '#F87171', textAlign: 'center', lineHeight: 1.4 }}>{onboardingTryError}</div>
+                  <div style={{ fontSize: 13, color: 'var(--wb-danger, #FB7185)', textAlign: 'center', lineHeight: 1.4 }}>{onboardingTryError}</div>
                   <button onClick={() => {
                     trackEvent('onboarding_try_import_fallback_to_manual', { entry: 'inline_error' });
                     setOnboardingShowImportInput(false);
@@ -10588,7 +10588,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         {/* Step indicator dots */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 28 }}>
           {[0,1,2,3,4,5].map(i => (
-            <div key={i} style={{ width: i === 1 ? 24 : 8, height: 8, borderRadius: i === 1 ? 4 : '50%', background: i === 1 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+            <div key={i} style={{ width: i === 1 ? 24 : 8, height: 8, borderRadius: i === 1 ? 4 : '50%', background: i === 1 ? 'var(--wb-accent, #8B7BFF)' : 'rgba(255,255,255,0.15)' }} />
           ))}
         </div>
       </div>
@@ -10626,7 +10626,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {/* Title input */}
           <div style={{
             background: 'rgba(255,255,255,0.06)',
-            border: `1.5px solid ${onboardingManualError ? 'rgba(248,113,113,0.5)' : 'rgba(124,106,255,0.35)'}`,
+            border: `1.5px solid ${onboardingManualError ? 'rgba(251, 113, 133, 0.5)' : 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)'}`,
             borderRadius: 14, padding: '14px 16px',
             display: 'flex', alignItems: 'center',
           }}>
@@ -10658,7 +10658,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
           {/* Error */}
           {onboardingManualError && (
-            <div style={{ fontSize: 13, color: '#F87171', textAlign: 'center', lineHeight: 1.4 }}>{onboardingManualError}</div>
+            <div style={{ fontSize: 13, color: 'var(--wb-danger, #FB7185)', textAlign: 'center', lineHeight: 1.4 }}>{onboardingManualError}</div>
           )}
 
           {/* Submit */}
@@ -10676,7 +10676,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         {/* Step indicator dots */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 28 }}>
           {[0,1,2,3,4,5].map(i => (
-            <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+            <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? 'var(--wb-accent, #8B7BFF)' : 'rgba(255,255,255,0.15)' }} />
           ))}
         </div>
       </div>
@@ -10701,22 +10701,22 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         {item && (
           <div style={{
-            marginTop: 24, background: 'rgba(52,211,153,0.06)', border: '1.5px solid rgba(52,211,153,0.25)',
+            marginTop: 24, background: 'rgba(74, 222, 128, 0.06)', border: '1.5px solid rgba(74, 222, 128, 0.25)',
             borderRadius: 16, padding: 18, display: 'flex', gap: 14, alignItems: 'flex-start',
           }}>
             <div style={{
               width: 64, height: 64, borderRadius: 14,
-              background: item.imageUrl ? undefined : 'linear-gradient(135deg, rgba(124,106,255,0.2), rgba(168,85,247,0.2))',
+              background: item.imageUrl ? undefined : 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2), rgba(168,85,247,0.2))',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0, overflow: 'hidden',
             }}>
               {item.imageUrl ? <img src={item.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ display: 'inline-block', background: 'rgba(52,211,153,0.15)', color: '#34D399', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 8, marginBottom: 6 }}>
+              <div style={{ display: 'inline-block', background: 'rgba(74, 222, 128, 0.15)', color: 'var(--wb-success, #4ADE80)', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 8, marginBottom: 6 }}>
                 ✓ {t('onboarding_success_badge', locale)}
               </div>
               <div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>{item.title}</div>
-              {item.price != null && <div style={{ fontSize: 15, fontWeight: 700, color: '#7C6AFF', marginTop: 3 }}>{item.price} {item.currency ?? ''}</div>}
+              {item.price != null && <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--wb-accent, #8B7BFF)', marginTop: 3 }}>{item.price} {item.currency ?? ''}</div>}
               {item.sourceDomain && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>🔗 {item.sourceDomain}</div>}
             </div>
           </div>
@@ -10734,7 +10734,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
           {[0,1,2,3,4,5].map(i => (
-            <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+            <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? 'var(--wb-accent, #8B7BFF)' : 'rgba(255,255,255,0.15)' }} />
           ))}
         </div>
 
@@ -10855,17 +10855,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setOnboardingCatalogSelected(prev => selected ? prev.filter(k => k !== item.key) : [...prev, item.key]);
                 }}
                   style={{
-                    background: selected ? 'rgba(124,106,255,0.08)' : 'rgba(255,255,255,0.05)',
-                    border: `1.5px solid ${selected ? 'rgba(124,106,255,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                    background: selected ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08)' : 'rgba(255,255,255,0.05)',
+                    border: `1.5px solid ${selected ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.5)' : 'rgba(255,255,255,0.08)'}`,
                     borderRadius: 16, padding: '18px 12px', textAlign: 'center', cursor: 'pointer', fontFamily: font,
                     position: 'relative', transition: 'all 0.2s',
                   }}>
                   {selected && (
-                    <div style={{ position: 'absolute', top: -4, right: -4, width: 22, height: 22, background: '#7C6AFF', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</div>
+                    <div style={{ position: 'absolute', top: -4, right: -4, width: 22, height: 22, background: 'var(--wb-accent, #8B7BFF)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</div>
                   )}
                   <div style={{ fontSize: 32, marginBottom: 8 }}>{item.emoji}</div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{t(item.titleKey, locale)}</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#7C6AFF', marginTop: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--wb-accent, #8B7BFF)', marginTop: 4 }}>
                     {item.currency === 'RUB' ? `${item.amount.toLocaleString('ru-RU')} ₽` : `$${item.amount}`}
                   </div>
                 </button>
@@ -10875,7 +10875,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
           {/* Custom CTA below grid */}
           <button onClick={() => { trackEvent('onboarding_catalog_custom'); void updateOnboardingStep('onboarding-catalog'); setScreen('onboarding-catalog'); }}
-            style={{ background: 'transparent', border: 'none', color: 'rgba(124,106,255,0.7)', fontSize: 13, fontWeight: 500, padding: '16px 0', cursor: 'pointer', fontFamily: font, textAlign: 'center', width: '100%' }}>
+            style={{ background: 'transparent', border: 'none', color: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.7)', fontSize: 13, fontWeight: 500, padding: '16px 0', cursor: 'pointer', fontFamily: font, textAlign: 'center', width: '100%' }}>
             {t('onboarding_catalog_custom_cta', locale)}
           </button>
         </div>
@@ -10883,14 +10883,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         {/* Fixed bottom: counter + dots + CTA */}
         <div style={{ flexShrink: 0, padding: '12px 24px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))', background: 'linear-gradient(0deg, rgba(15,10,30,1) 60%, rgba(15,10,30,0) 100%)' }}>
           {onboardingCatalogSelected.length > 0 && (
-            <div style={{ textAlign: 'center', fontSize: 13, color: '#7C6AFF', fontWeight: 600, marginBottom: 8 }}>
+            <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--wb-accent, #8B7BFF)', fontWeight: 600, marginBottom: 8 }}>
               {t('onboarding_catalog_selected', locale, { count: String(onboardingCatalogSelected.length) })}
             </div>
           )}
 
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
             {[0,1,2,3,4,5].map(i => (
-              <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+              <div key={i} style={{ width: i === 2 ? 24 : 8, height: 8, borderRadius: i === 2 ? 4 : '50%', background: i === 2 ? 'var(--wb-accent, #8B7BFF)' : 'rgba(255,255,255,0.15)' }} />
             ))}
           </div>
 
@@ -10942,8 +10942,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {displayCount > 0 && (
             <div style={{
               textAlign: 'center', marginTop: 16,
-              background: 'rgba(124,106,255,0.1)', border: '1px solid rgba(124,106,255,0.2)',
-              borderRadius: 12, padding: '10px 16px', fontSize: 14, color: '#A78BFA', fontWeight: 600,
+              background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.1)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)',
+              borderRadius: 12, padding: '10px 16px', fontSize: 14, color: 'var(--wb-accent-strong, #B4A6FF)', fontWeight: 600,
             }}>
               {t('onboarding_create_wl_items_ready', locale, { count: String(displayCount) })}
             </div>
@@ -10960,7 +10960,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
               }}
               style={{
-                width: '100%', background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(124,106,255,0.35)',
+                width: '100%', background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)',
                 borderRadius: 14, padding: '16px 18px', color: '#fff', fontSize: 16, fontFamily: font, outline: 'none',
               }}
               maxLength={200}
@@ -10973,7 +10973,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {/* Dot progress */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24, paddingBottom: 8 }}>
             {[0,1,2,3,4,5].map(i => (
-              <div key={i} style={{ width: i === 3 ? 24 : 8, height: 8, borderRadius: i === 3 ? 4 : '50%', background: i === 3 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+              <div key={i} style={{ width: i === 3 ? 24 : 8, height: 8, borderRadius: i === 3 ? 4 : '50%', background: i === 3 ? 'var(--wb-accent, #8B7BFF)' : 'rgba(255,255,255,0.15)' }} />
             ))}
           </div>
         </div>
@@ -11026,19 +11026,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               try { window.Telegram?.WebApp.openTelegramLink(tgShareUrl); } catch { window.open(tgShareUrl, '_blank'); }
             }
           }} style={{
-            background: onboardingCreatedWl ? 'rgba(124,106,255,0.08)' : 'rgba(255,255,255,0.04)',
-            border: onboardingCreatedWl ? '1px solid rgba(124,106,255,0.25)' : '1px solid rgba(255,255,255,0.07)',
+            background: onboardingCreatedWl ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08)' : 'rgba(255,255,255,0.04)',
+            border: onboardingCreatedWl ? '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.25)' : '1px solid rgba(255,255,255,0.07)',
             borderRadius: 16, padding: 18, textAlign: 'left', width: '100%',
             cursor: onboardingCreatedWl ? 'pointer' : 'default', fontFamily: font,
             transition: 'background 0.15s',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(124,106,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📤</div>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📤</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{t('onboarding_share_share_title', locale)}</div>
-              {onboardingCreatedWl && <span style={{ marginLeft: 'auto', color: '#A78BFA', fontSize: 18 }}>›</span>}
+              {onboardingCreatedWl && <span style={{ marginLeft: 'auto', color: 'var(--wb-accent-strong, #B4A6FF)', fontSize: 18 }}>›</span>}
             </div>
             {onboardingCreatedWl && (
-              <div style={{ fontSize: 12, color: 'rgba(124,106,255,0.7)', marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.7)', marginTop: 4 }}>
                 {'\u00AB'}{onboardingCreatedWl.title}{'\u00BB'}
               </div>
             )}
@@ -11050,7 +11050,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {/* Reserve block — informational only */}
           <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 16, padding: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(52,211,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎁</div>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(74, 222, 128, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎁</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{t('onboarding_share_reserve_title', locale)}</div>
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }}>
@@ -11061,7 +11061,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto', paddingTop: 24 }}>
           {[0,1,2,3,4,5].map(i => (
-            <div key={i} style={{ width: i === 4 ? 24 : 8, height: 8, borderRadius: i === 4 ? 4 : '50%', background: i === 4 ? '#7C6AFF' : 'rgba(255,255,255,0.15)' }} />
+            <div key={i} style={{ width: i === 4 ? 24 : 8, height: 8, borderRadius: i === 4 ? 4 : '50%', background: i === 4 ? 'var(--wb-accent, #8B7BFF)' : 'rgba(255,255,255,0.15)' }} />
           ))}
         </div>
 
@@ -11148,13 +11148,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             height: '100vh', flexDirection: 'column',
-            background: 'radial-gradient(ellipse at 50% 40%, rgba(124,106,255,0.08) 0%, transparent 70%)',
+            background: 'radial-gradient(ellipse at 50% 40%, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08) 0%, transparent 70%)',
             position: 'relative', overflow: 'hidden',
           }}>
             {/* Decorative background cards */}
-            <div style={{ position: 'absolute', top: '20%', left: '10%', width: 120, height: 70, borderRadius: 14, background: 'rgba(124,106,255,0.04)', border: '1px solid rgba(124,106,255,0.06)', transform: 'rotate(-12deg)', opacity: 0.6 }} />
+            <div style={{ position: 'absolute', top: '20%', left: '10%', width: 120, height: 70, borderRadius: 14, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.04)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.06)', transform: 'rotate(-12deg)', opacity: 0.6 }} />
             <div style={{ position: 'absolute', top: '25%', right: '8%', width: 100, height: 60, borderRadius: 12, background: 'rgba(251,191,36,0.03)', border: '1px solid rgba(251,191,36,0.05)', transform: 'rotate(8deg)', opacity: 0.5 }} />
-            <div style={{ position: 'absolute', bottom: '22%', left: '15%', width: 90, height: 55, borderRadius: 10, background: 'rgba(52,211,153,0.03)', border: '1px solid rgba(52,211,153,0.05)', transform: 'rotate(-6deg)', opacity: 0.4 }} />
+            <div style={{ position: 'absolute', bottom: '22%', left: '15%', width: 90, height: 55, borderRadius: 10, background: 'rgba(74, 222, 128, 0.03)', border: '1px solid rgba(74, 222, 128, 0.05)', transform: 'rotate(-6deg)', opacity: 0.4 }} />
 
             {/* Gift box with glow + float animation */}
             <div style={{
@@ -11164,7 +11164,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* Glow behind */}
               <div style={{
                 position: 'absolute', inset: -20, borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(124,106,255,0.25) 0%, transparent 70%)',
+                background: 'radial-gradient(circle, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.25) 0%, transparent 70%)',
                 filter: 'blur(20px)',
                 animation: 'splashPulse 2.5s ease-in-out infinite',
               }} />
@@ -11234,10 +11234,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               height: '100vh', flexDirection: 'column', padding: '40px 24px',
-              background: 'radial-gradient(ellipse at 50% 30%, rgba(124,106,255,0.06) 0%, transparent 60%)',
+              background: 'radial-gradient(ellipse at 50% 30%, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.06) 0%, transparent 60%)',
               maxWidth: 440, margin: '0 auto',
             }}>
-              <div style={{ fontSize: 56, marginBottom: 16, filter: 'drop-shadow(0 0 16px rgba(124,106,255,0.3))' }}>🎁</div>
+              <div style={{ fontSize: 56, marginBottom: 16, filter: 'drop-shadow(0 0 16px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.3))' }}>🎁</div>
               <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, fontFamily: font, margin: '0 0 8px', textAlign: 'center' }}>WishBoard</h1>
               <p style={{ fontSize: 14, color: C.textMuted, textAlign: 'center', lineHeight: 1.6, margin: '0 0 24px' }}>
                 {locale === 'ru'
@@ -11264,7 +11264,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     ...btnPrimary, width: '100%', padding: '14px',
                     background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
                     fontSize: 15, fontWeight: 700, borderRadius: 14,
-                    boxShadow: `0 6px 20px rgba(124,106,255,0.35)`,
+                    boxShadow: `0 6px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)`,
                   }}>
                     {t('onboarding_telegram_button', locale)}
                   </button>
@@ -11925,7 +11925,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setScreen('santa-hub');
                 }}
                 style={{
-                  background: `linear-gradient(135deg, rgba(124,106,255,0.15), rgba(124,106,255,0.05))`,
+                  background: `linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.05))`,
                   borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
                   border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.145)`,
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -12447,13 +12447,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     return (
                       <div style={{ marginBottom: 4 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#A78BFA', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--wb-accent-strong, #B4A6FF)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
                             {t('sr_list_section_secret', locale)}
                             <span style={{ fontSize: 10, fontWeight: 500, color: C.textMuted, textTransform: 'none', letterSpacing: 0, marginLeft: 2 }}>
                               {activeCount} {pluralize(activeCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
                             </span>
                             {hasUnseen && (
-                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#A78BFA', boxShadow: '0 0 8px rgba(167,139,250,0.7)', marginLeft: 2 }} />
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--wb-accent-strong, #B4A6FF)', boxShadow: '0 0 8px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.7)', marginLeft: 2 }} />
                             )}
                           </div>
                         </div>
@@ -12475,10 +12475,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 const it = sr.current;
                                 const state = sr.derivedState;
                                 const badge = state === 'ITEM_UPDATED' ? { text: t('sr_badge_updated', locale), bg: 'rgba(96,165,250,0.14)', color: '#60A5FA', border: 'rgba(96,165,250,0.26)' }
-                                  : state === 'PUBLIC_RESERVED_BY_OTHER' ? { text: t('sr_badge_conflict', locale), bg: 'rgba(251,191,36,0.14)', color: '#FBBF24', border: 'rgba(251,191,36,0.26)' }
-                                  : state === 'ITEM_FULFILLED' ? { text: t('sr_badge_fulfilled', locale), bg: 'rgba(52,211,153,0.14)', color: '#34D399', border: 'rgba(52,211,153,0.26)' }
-                                  : state === 'ITEM_UNAVAILABLE' ? { text: t('sr_badge_unavailable', locale), bg: 'rgba(248,113,113,0.14)', color: '#F87171', border: 'rgba(248,113,113,0.26)' }
-                                  : { text: t('sr_badge_active', locale), bg: 'rgba(167,139,250,0.14)', color: '#A78BFA', border: 'rgba(167,139,250,0.26)' };
+                                  : state === 'PUBLIC_RESERVED_BY_OTHER' ? { text: t('sr_badge_conflict', locale), bg: 'rgba(251,191,36,0.14)', color: 'var(--wb-warning, #FBBF24)', border: 'rgba(251,191,36,0.26)' }
+                                  : state === 'ITEM_FULFILLED' ? { text: t('sr_badge_fulfilled', locale), bg: 'rgba(74, 222, 128, 0.14)', color: 'var(--wb-success, #4ADE80)', border: 'rgba(74, 222, 128, 0.26)' }
+                                  : state === 'ITEM_UNAVAILABLE' ? { text: t('sr_badge_unavailable', locale), bg: 'rgba(251, 113, 133, 0.14)', color: 'var(--wb-danger, #FB7185)', border: 'rgba(251, 113, 133, 0.26)' }
+                                  : { text: t('sr_badge_active', locale), bg: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.14)', color: 'var(--wb-accent-strong, #B4A6FF)', border: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.26)' };
                                 return (
                                   <div
                                     key={sr.id}
@@ -12491,7 +12491,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                     }}
                                     style={{
                                       background: C.card,
-                                      border: `1px solid ${state === 'ACTIVE' ? 'rgba(167,139,250,0.22)' : C.border}`,
+                                      border: `1px solid ${state === 'ACTIVE' ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)' : C.border}`,
                                       borderLeft: state === 'ACTIVE' ? '3px solid #A78BFA' : undefined,
                                       borderRadius: 14,
                                       padding: 14,
@@ -12652,7 +12652,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                   }}
                                   style={{
                                     background: C.card, borderRadius: 14, padding: 14,
-                                    border: `1px solid ${item.groupGiftRole ? 'rgba(124,106,255,0.25)' : C.border}`, cursor: 'pointer',
+                                    border: `1px solid ${item.groupGiftRole ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.25)' : C.border}`, cursor: 'pointer',
                                     WebkitTapHighlightColor: 'transparent',
                                   }}
                                 >
@@ -12728,7 +12728,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                     <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }} onClick={(e) => e.stopPropagation()}>
                                       <button onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(item as unknown as GuestItem))} style={{
                                         width: '100%', padding: '8px 0', borderRadius: 10, fontSize: 13, fontWeight: 600,
-                                        background: C.redSoft, color: C.red, border: `1px solid rgba(248,113,113,0.2)`,
+                                        background: C.redSoft, color: C.red, border: `1px solid rgba(251, 113, 133, 0.2)`,
                                         cursor: 'pointer', fontFamily: font,
                                       }}>{t('cancel_reservation', locale)}</button>
                                     </div>
@@ -12746,7 +12746,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     <div onClick={() => setUpsellSheet({ context: 'reservation_pro' })} style={{
                       margin: '8px 0 16px', padding: 16, cursor: 'pointer',
                       background: `linear-gradient(135deg, ${C.accentSoft} 0%, rgba(212,168,83,0.06) 100%)`,
-                      border: `1px solid rgba(124,106,255,0.15)`, borderRadius: 14, textAlign: 'center',
+                      border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15)`, borderRadius: 14, textAlign: 'center',
                     }}>
                       <div style={{ fontSize: 28, marginBottom: 8 }}>✨</div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>{t('res_pro_upsell_title', locale)}</div>
@@ -13202,13 +13202,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ marginBottom: 28 }}>
                 {/* Section header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#A78BFA', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--wb-accent-strong, #B4A6FF)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
                     {t('sr_list_section_secret', locale)}
                     <span style={{ fontSize: 11, fontWeight: 500, color: C.textMuted, textTransform: 'none', letterSpacing: 0, marginLeft: 2 }}>
                       {activeCount} {pluralize(activeCount, t('wishes_one', locale), t('wishes_few', locale), t('wishes_many', locale), locale)}
                     </span>
                     {hasUnseen && (
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#A78BFA', boxShadow: '0 0 8px rgba(167,139,250,0.7)', marginLeft: 2 }} />
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--wb-accent-strong, #B4A6FF)', boxShadow: '0 0 8px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.7)', marginLeft: 2 }} />
                     )}
                   </div>
                 </div>
@@ -13231,10 +13231,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         const it = sr.current;
                         const state = sr.derivedState;
                         const badge = state === 'ITEM_UPDATED' ? { text: t('sr_badge_updated', locale), bg: 'rgba(96,165,250,0.14)', color: '#60A5FA', border: 'rgba(96,165,250,0.26)' }
-                          : state === 'PUBLIC_RESERVED_BY_OTHER' ? { text: t('sr_badge_conflict', locale), bg: 'rgba(251,191,36,0.14)', color: '#FBBF24', border: 'rgba(251,191,36,0.26)' }
-                          : state === 'ITEM_FULFILLED' ? { text: t('sr_badge_fulfilled', locale), bg: 'rgba(52,211,153,0.14)', color: '#34D399', border: 'rgba(52,211,153,0.26)' }
-                          : state === 'ITEM_UNAVAILABLE' ? { text: t('sr_badge_unavailable', locale), bg: 'rgba(248,113,113,0.14)', color: '#F87171', border: 'rgba(248,113,113,0.26)' }
-                          : { text: t('sr_badge_active', locale), bg: 'rgba(167,139,250,0.14)', color: '#A78BFA', border: 'rgba(167,139,250,0.26)' };
+                          : state === 'PUBLIC_RESERVED_BY_OTHER' ? { text: t('sr_badge_conflict', locale), bg: 'rgba(251,191,36,0.14)', color: 'var(--wb-warning, #FBBF24)', border: 'rgba(251,191,36,0.26)' }
+                          : state === 'ITEM_FULFILLED' ? { text: t('sr_badge_fulfilled', locale), bg: 'rgba(74, 222, 128, 0.14)', color: 'var(--wb-success, #4ADE80)', border: 'rgba(74, 222, 128, 0.26)' }
+                          : state === 'ITEM_UNAVAILABLE' ? { text: t('sr_badge_unavailable', locale), bg: 'rgba(251, 113, 133, 0.14)', color: 'var(--wb-danger, #FB7185)', border: 'rgba(251, 113, 133, 0.26)' }
+                          : { text: t('sr_badge_active', locale), bg: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.14)', color: 'var(--wb-accent-strong, #B4A6FF)', border: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.26)' };
                         return (
                           <div
                             key={sr.id}
@@ -13248,7 +13248,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             }}
                             style={{
                               background: C.card,
-                              border: `1px solid ${state === 'ACTIVE' ? 'rgba(167,139,250,0.22)' : C.border}`,
+                              border: `1px solid ${state === 'ACTIVE' ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)' : C.border}`,
                               borderLeft: state === 'ACTIVE' ? '3px solid #A78BFA' : undefined,
                               borderRadius: 16,
                               padding: 14,
@@ -13678,7 +13678,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               }}>
                 <span style={{ fontSize: 16 }}>⚠️</span>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#FBBF24', marginBottom: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--wb-warning, #FBBF24)', marginBottom: 4 }}>
                     {t('sr_state_conflict_title', locale)}
                   </div>
                   <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5 }}>
@@ -13691,12 +13691,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {isFulfilled && (
               <div style={{
                 padding: '12px 14px', borderRadius: 14, marginBottom: 14,
-                background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.22)',
+                background: 'rgba(74, 222, 128, 0.12)', border: '1px solid rgba(74, 222, 128, 0.22)',
                 display: 'flex', gap: 10, alignItems: 'flex-start',
               }}>
                 <span style={{ fontSize: 16 }}>🎉</span>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#34D399', marginBottom: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--wb-success, #4ADE80)', marginBottom: 4 }}>
                     {t('sr_state_fulfilled_title', locale)}
                   </div>
                   <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5 }}>
@@ -13709,12 +13709,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {isUnavailable && (
               <div style={{
                 padding: '12px 14px', borderRadius: 14, marginBottom: 14,
-                background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.26)',
+                background: 'rgba(251, 113, 133, 0.12)', border: '1px solid rgba(251, 113, 133, 0.26)',
                 display: 'flex', gap: 10, alignItems: 'flex-start',
               }}>
                 <span style={{ fontSize: 16 }}>🗑</span>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#F87171', marginBottom: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--wb-danger, #FB7185)', marginBottom: 4 }}>
                     {t('sr_state_unavailable_title', locale)}
                   </div>
                   <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.5 }}>
@@ -13757,9 +13757,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <button
                 onClick={() => setSecretCancelItem(sr)}
                 style={{
-                  width: '100%', padding: '12px 24px', border: '1.5px solid rgba(248,113,113,0.12)', borderRadius: 14,
-                  fontSize: 14, fontWeight: 500, color: '#F87171', cursor: 'pointer',
-                  background: 'rgba(248,113,113,0.12)', fontFamily: 'inherit',
+                  width: '100%', padding: '12px 24px', border: '1.5px solid rgba(251, 113, 133, 0.12)', borderRadius: 14,
+                  fontSize: 14, fontWeight: 500, color: 'var(--wb-danger, #FB7185)', cursor: 'pointer',
+                  background: 'rgba(251, 113, 133, 0.12)', fontFamily: 'inherit',
                 }}
               >
                 {(isFulfilled || isUnavailable)
@@ -13815,11 +13815,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           SECRET RESERVATION PAYWALL
           ══════════════════════════════════════════════ */}
       {screen === 'secret-reservation-paywall' && (() => {
-        const secretColor = '#A78BFA';
-        const secretSoft = 'rgba(167,139,250,0.14)';
-        const secretBorder = 'rgba(167,139,250,0.26)';
+        const secretColor = 'var(--wb-accent-strong, #B4A6FF)';
+        const secretSoft = 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.14)';
+        const secretBorder = 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.26)';
         const blueSoft = 'rgba(96,165,250,0.12)';
-        const greenSoft = 'rgba(52,211,153,0.12)';
+        const greenSoft = 'rgba(74, 222, 128, 0.12)';
         const yellowSoft = 'rgba(251,191,36,0.12)';
         const demoRow = (emoji: string, name: string, sub: string) => (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 12px', marginBottom: 8 }}>
@@ -13845,8 +13845,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               padding: '20px 20px 0',
               textAlign: 'center' as const,
               background:
-                'radial-gradient(circle at 50% 0%, rgba(167,139,250,0.22) 0%, transparent 60%),' +
-                'radial-gradient(circle at 20% 30%, rgba(124,106,255,0.10) 0%, transparent 40%)',
+                'radial-gradient(circle at 50% 0%, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22) 0%, transparent 60%),' +
+                'radial-gradient(circle at 20% 30%, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.10) 0%, transparent 40%)',
             }}>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: secretColor, letterSpacing: '0.05em', textTransform: 'uppercase' as const, marginBottom: 14, padding: '5px 10px', borderRadius: 20, background: secretSoft, border: `1px solid ${secretBorder}` }}>
                 {t('sr_paywall_brand', locale)}
@@ -13876,7 +13876,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {benefit('👻', secretSoft, secretColor, t('sr_paywall_benefit1_title', locale), t('sr_paywall_benefit1_body', locale))}
               {benefit('💾', C.accentSoft, C.accent, t('sr_paywall_benefit2_title', locale), t('sr_paywall_benefit2_body', locale))}
               {benefit('🛎', blueSoft, '#60A5FA', t('sr_paywall_benefit3_title', locale), t('sr_paywall_benefit3_body', locale))}
-              {benefit('🎁', greenSoft, '#34D399', t('sr_paywall_benefit4_title', locale), t('sr_paywall_benefit4_body', locale))}
+              {benefit('🎁', greenSoft, 'var(--wb-success, #4ADE80)', t('sr_paywall_benefit4_title', locale), t('sr_paywall_benefit4_body', locale))}
             </div>
 
             {/* Honest caveat */}
@@ -13889,13 +13889,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
 
             {/* Price block */}
-            <div style={{ margin: '18px 20px 0', padding: 18, borderRadius: 18, background: `linear-gradient(135deg, ${secretSoft} 0%, rgba(167,139,250,0.04) 100%)`, border: `1px solid ${secretBorder}`, position: 'relative' as const, overflow: 'hidden' }}>
+            <div style={{ margin: '18px 20px 0', padding: 18, borderRadius: 18, background: `linear-gradient(135deg, ${secretSoft} 0%, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.04) 100%)`, border: `1px solid ${secretBorder}`, position: 'relative' as const, overflow: 'hidden' }}>
               <div style={{ position: 'absolute' as const, right: -8, top: -20, fontSize: 80, opacity: 0.06, pointerEvents: 'none' as const }}>🔒</div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#34D399', background: greenSoft, padding: '3px 7px', borderRadius: 5, marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: 'var(--wb-success, #4ADE80)', background: greenSoft, padding: '3px 7px', borderRadius: 5, marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
                 {t('sr_paywall_price_ribbon', locale)}
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 32, fontWeight: 800, color: C.text, lineHeight: 1, fontFamily: font }}>{secretAccess.priceXtr}<span style={{ color: '#FBBF24' }}>⭐</span></span>
+                <span style={{ fontSize: 32, fontWeight: 800, color: C.text, lineHeight: 1, fontFamily: font }}>{secretAccess.priceXtr}<span style={{ color: 'var(--wb-warning, #FBBF24)' }}>⭐</span></span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: C.textSec }}>{t('sr_paywall_price_once', locale)}</span>
               </div>
               <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('sr_paywall_price_sub', locale)}</div>
@@ -13936,7 +13936,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <button
                 disabled={addonCheckoutLoading}
                 onClick={() => void handleBuyAddon('secret_reservation_unlock')}
-                style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${secretColor} 0%, #C4A7FF 100%)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgba(167,139,250,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: addonCheckoutLoading ? 0.6 : 1 }}
+                style={{ width: '100%', padding: '16px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${secretColor} 0%, #C4A7FF 100%)`, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 8px 24px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: addonCheckoutLoading ? 0.6 : 1 }}
               >
                 {addonCheckoutLoading ? '…' : t('sr_paywall_cta', locale, { price: secretAccess.priceXtr })}
               </button>
@@ -14266,8 +14266,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   key="dg-banner"
                   style={{
                     padding: 16, borderRadius: 16, marginBottom: 8, cursor: 'pointer',
-                    background: `linear-gradient(135deg, rgba(248,113,113,0.08), rgba(124,106,255,0.08))`,
-                    border: '1px solid rgba(248,113,113,0.15)',
+                    background: `linear-gradient(135deg, rgba(251, 113, 133, 0.08), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08))`,
+                    border: '1px solid rgba(251, 113, 133, 0.15)',
                     transition: 'border-color 0.15s',
                   }}
                   onClick={() => handleDontGiftBannerTap(wl.id)}
@@ -14755,7 +14755,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {isDraftItem ? (
                   <button onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }} style={{
                     ...btnBase, flex: 1, padding: '11px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-                    background: C.surface, color: C.accent, border: `1px solid rgba(124,106,255,0.12)`,
+                    background: C.surface, color: C.accent, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)`,
                   }}>
                     {t('item_move_cta', locale)}
                   </button>
@@ -14766,7 +14766,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     setViewingItem(null); setScreen('wishlist-detail');
                   }} style={{
                     ...btnBase, flex: 1, padding: '11px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-                    background: C.surface, color: C.green, border: `1px solid rgba(52,211,153,0.12)`,
+                    background: C.surface, color: C.green, border: `1px solid rgba(74, 222, 128, 0.12)`,
                   }}>
                     {t('item_detail_gifted', locale)}
                   </button>
@@ -15153,7 +15153,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         {/* Regular: Move to category */}
                         {hasUserCategories && (
                           <button onClick={() => setShowCatPicker({ itemIds: [viewingItem!.id] })} style={{
-                            ...btnBase, flex: 1, background: C.surface, color: '#A78BFA',
+                            ...btnBase, flex: 1, background: C.surface, color: 'var(--wb-accent-strong, #B4A6FF)',
                             border: `1px solid ${C.borderLight}`, borderRadius: 14,
                             padding: '12px 16px', fontSize: 13, fontWeight: 500,
                           }}>
@@ -15223,7 +15223,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* Santa context block */}
             {santaDetailContext && (
               <div style={{
-                background: 'rgba(124,106,255,0.08)', border: '1px solid rgba(124,106,255,0.2)',
+                background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)',
                 borderRadius: 12, padding: '10px 14px', marginBottom: 16,
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
               }}>
@@ -15338,7 +15338,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         }}
                         style={{
                           ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                          border: '1px solid rgba(248,113,113,0.3)', borderRadius: 14,
+                          border: '1px solid rgba(251, 113, 133, 0.3)', borderRadius: 14,
                           padding: '12px 16px', fontSize: 14, fontWeight: 500,
                         }}
                       >
@@ -15392,8 +15392,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             onClick={() => startSecretReservationFlow(viewingItem)}
                             style={{
                               width: '100%', padding: '14px 24px', borderRadius: 16,
-                              border: '1px solid rgba(167,139,250,0.22)',
-                              background: 'rgba(167,139,250,0.12)', color: '#A78BFA',
+                              border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)',
+                              background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)', color: 'var(--wb-accent-strong, #B4A6FF)',
                               fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                             }}
@@ -15455,7 +15455,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <button onClick={() => setPendingUnreserveAction(() => () => handleUnreserve(viewingItem as GuestItem))}
                           style={{
                             ...btnBase, width: '100%', background: C.redSoft, color: C.red,
-                            border: `1px solid rgba(248,113,113,0.3)`, borderRadius: 14,
+                            border: `1px solid rgba(251, 113, 133, 0.3)`, borderRadius: 14,
                             padding: '12px 16px', fontSize: 14, fontWeight: 500,
                           }}>
                           {t('cancel_reservation', locale)}
@@ -15477,8 +15477,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             onClick={() => startSecretReservationFlow(viewingItem)}
                             style={{
                               width: '100%', padding: '14px 24px', borderRadius: 16,
-                              border: '1px solid rgba(167,139,250,0.22)',
-                              background: 'rgba(167,139,250,0.12)', color: '#A78BFA',
+                              border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)',
+                              background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)', color: 'var(--wb-accent-strong, #B4A6FF)',
                               fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                             }}
@@ -15649,7 +15649,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       style={{
                         margin: '0 0 16px', padding: '12px 16px', borderRadius: 12, cursor: 'pointer', textAlign: 'center',
                         background: `linear-gradient(135deg, ${C.accentSoft} 0%, rgba(212,168,83,0.06) 100%)`,
-                        border: `1px solid rgba(124,106,255,0.15)`,
+                        border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15)`,
                       }}
                     >
                       <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t('res_pro_upsell_detail_title', locale)}</div>
@@ -15932,7 +15932,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             const statusText = (days: number) => {
               if (days <= 0) return { text: t('link_status_expires_today', locale), color: C.red };
               if (days === 1) return { text: t('link_status_expires_tomorrow', locale), color: C.red };
-              if (days <= 7) return { text: t('link_status_days_left', locale, { days: String(days) }), color: '#FBBF24' };
+              if (days <= 7) return { text: t('link_status_days_left', locale, { days: String(days) }), color: 'var(--wb-warning, #FBBF24)' };
               return { text: t('link_status_days_left', locale, { days: String(days) }), color: C.textMuted };
             };
 
@@ -15959,7 +15959,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             </div>
                             <div style={{ fontSize: 13, color: C.textMuted, marginTop: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
                               {t('link_type_lite', locale)}
-                              <span style={{ fontSize: 10, fontWeight: 600, color: '#FBBF24', background: 'rgba(251,191,36,0.1)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--wb-warning, #FBBF24)', background: 'rgba(251,191,36,0.1)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.3 }}>
                                 {t('link_badge_temporary', locale)}
                               </span>
                             </div>
@@ -16000,7 +16000,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         background: '#2F2F38', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
                         marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
                       }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(52,211,153,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>👤</div>
+                        <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(74, 222, 128, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>👤</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.username}</div>
                           <div style={{ fontSize: 13, color: C.textMuted, marginTop: 3 }}>{t('link_type_profile', locale)}</div>
@@ -16211,7 +16211,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 style={{
                   background: C.card, borderRadius: 16, padding: '14px 18px',
                   marginBottom: 4, cursor: 'pointer',
-                  border: `1px solid rgba(248,113,113,0.12)`,
+                  border: `1px solid rgba(251, 113, 133, 0.12)`,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -17006,7 +17006,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   >
                     <span style={{ position: 'relative' as const, display: 'inline-flex' }}>
                       ⚙️
-                      {hasNewInSettings && <span aria-hidden="true" style={{ position: 'absolute', top: -1, right: -5, width: 7, height: 7, borderRadius: '50%', background: '#FBBF24' }} />}
+                      {hasNewInSettings && <span aria-hidden="true" style={{ position: 'absolute', top: -1, right: -5, width: 7, height: 7, borderRadius: '50%', background: 'var(--wb-warning, #FBBF24)' }} />}
                     </span>
                     {t('settings_title', locale)}
                   </button>
@@ -17136,7 +17136,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <div style={{
                           color: C.accent, fontSize: 13, fontWeight: 600,
                           padding: '6px 10px', borderRadius: 10, flexShrink: 0,
-                          background: 'rgba(124,106,255,0.12)',
+                          background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)',
                         }}>
                           {state === 'locked' || state === 'expired'
                             ? t('showcase_entry_locked_cta', locale)
@@ -17919,7 +17919,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     };
                     /** "partial" badge for event-based metrics */
                     const PartialBadge = () => (
-                      <span style={{ fontSize: 7, fontWeight: 700, color: '#FBBF24', background: 'rgba(251,191,36,0.12)', borderRadius: 3, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.03em', verticalAlign: 'middle', marginLeft: 4 }}>event</span>
+                      <span style={{ fontSize: 7, fontWeight: 700, color: 'var(--wb-warning, #FBBF24)', background: 'rgba(251,191,36,0.12)', borderRadius: 3, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.03em', verticalAlign: 'middle', marginLeft: 4 }}>event</span>
                     );
                     /** DB truth badge */
                     const DbBadge = () => (
@@ -18059,7 +18059,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                       {([['Начали', v2s], ['Завершили', v2c], ['1й вишлист', v2wl], ['1й item', v2item]] as [string, number][]).map(([label, val]) => (
                                         <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: `1px solid ${C.border}` }}>
                                           <span style={{ fontSize: 11, color: C.textMuted }}>{label}</span>
-                                          <span style={{ fontSize: 12, fontWeight: 700, color: '#7C6AFF', fontVariantNumeric: 'tabular-nums' }}>{val}</span>
+                                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--wb-accent, #8B7BFF)', fontVariantNumeric: 'tabular-nums' }}>{val}</span>
                                         </div>
                                       ))}
                                     </div>
@@ -18151,7 +18151,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                         </SectionCard>
                                       </CollapsibleBlock>
                                     )}
-                                    {anyEventIncomplete && <div style={{ fontSize: 9, color: '#FBBF24', background: 'rgba(251,191,36,0.06)', borderRadius: 8, padding: '4px 8px', marginTop: 4 }}>⚡ Часть событий: неполное покрытие периода</div>}
+                                    {anyEventIncomplete && <div style={{ fontSize: 9, color: 'var(--wb-warning, #FBBF24)', background: 'rgba(251,191,36,0.06)', borderRadius: 8, padding: '4px 8px', marginTop: 4 }}>⚡ Часть событий: неполное покрытие периода</div>}
                                   </>
                                 );
                               })()}
@@ -18214,7 +18214,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                           <ConvPct val={acq.conversions.guestToReserve} isPartial />
                                         </div>
                                       )}
-                                      {guestIncomplete && <div style={{ fontSize: 8, color: '#FBBF24', marginTop: 4 }}>⚡ Гостевые события — неполное покрытие</div>}
+                                      {guestIncomplete && <div style={{ fontSize: 8, color: 'var(--wb-warning, #FBBF24)', marginTop: 4 }}>⚡ Гостевые события — неполное покрытие</div>}
                                     </SectionCard>
                                   </>
                                 );
@@ -18454,7 +18454,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                   ═══════════════════════════════════════════ */}
                               <CollapsibleBlock
                                 title="Retention & Win-back"
-                                color="#34D399"
+                                color="var(--wb-success, #4ADE80)"
                                 open={retentionOpen}
                                 onToggle={async () => {
                                   if (retentionOpen) { setRetentionOpen(false); return; }
@@ -18477,7 +18477,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                         {[7, 30, 90].map(d => (
                                           <button key={d} onClick={() => { setRetentionPeriod(d); void loadRetention(d); }} style={{
                                             fontSize: 11, padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                                            background: retentionPeriod === d ? '#34D399' : C.surface,
+                                            background: retentionPeriod === d ? 'var(--wb-success, #4ADE80)' : C.surface,
                                             color: retentionPeriod === d ? '#000' : C.textMuted, fontWeight: 600, fontFamily: font,
                                           }}>{d} дн.</button>
                                         ))}
@@ -18487,35 +18487,35 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px' }}>
                                           <KpiRow label="Отправлено" value={ov.sent} />
                                           <KpiRow label="Доставлено" value={ov.delivered} />
-                                          <KpiRow label="Возврат 72ч" value={ov.returned72h} color="#FBBF24" hint={ov.returnRate72h} />
-                                          <KpiRow label="Цел. шаг 7д" value={ov.targetCompleted7d} color="#7C6AFF" hint={ov.targetRate7d ?? '—'} />
-                                          <KpiRow label="Промо активировано" value={ov.promoRedeemed} color="#34D399" />
-                                          <KpiRow label="PRO-доступов" value={ov.activeGrants} color="#34D399" />
+                                          <KpiRow label="Возврат 72ч" value={ov.returned72h} color="var(--wb-warning, #FBBF24)" hint={ov.returnRate72h} />
+                                          <KpiRow label="Цел. шаг 7д" value={ov.targetCompleted7d} color="var(--wb-accent, #8B7BFF)" hint={ov.targetRate7d ?? '—'} />
+                                          <KpiRow label="Промо активировано" value={ov.promoRedeemed} color="var(--wb-success, #4ADE80)" />
+                                          <KpiRow label="PRO-доступов" value={ov.activeGrants} color="var(--wb-success, #4ADE80)" />
                                         </div>
                                       </SectionCard>
                                       {/* Segments */}
                                       {(rv.bySegment as any[]).filter((s: any) => s.sent > 0).map((s: any) => (
                                         <SectionCard key={s.segment} style={{ marginBottom: 4 }}>
                                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                                            <span style={{ fontSize: 11, fontWeight: 700, color: '#34D399' }}>{segNames[s.segment] || s.segment}</span>
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--wb-success, #4ADE80)' }}>{segNames[s.segment] || s.segment}</span>
                                             <span style={{ fontSize: 9, color: C.textMuted }}>{s.targetAction || '—'}</span>
                                           </div>
-                                          {s.promoPolicy && <KpiRow label="Промо" value={s.promoPolicy} color="#7C6AFF" />}
+                                          {s.promoPolicy && <KpiRow label="Промо" value={s.promoPolicy} color="var(--wb-accent, #8B7BFF)" />}
                                           <div style={{ display: 'flex', gap: 10 }}>
                                             <div style={{ flex: 1 }}>
                                               <KpiRow label="Отпр." value={s.sent} />
-                                              <KpiRow label="Возвр. 72ч" value={s.returned72h} color="#FBBF24" hint={s.returnRate72h} />
+                                              <KpiRow label="Возвр. 72ч" value={s.returned72h} color="var(--wb-warning, #FBBF24)" hint={s.returnRate72h} />
                                             </div>
                                             <div style={{ flex: 1 }}>
                                               <KpiRow label="Дост." value={s.delivered} />
-                                              <KpiRow label="Цел. 7д" value={s.targetCompleted7d} color="#7C6AFF" hint={s.targetRate7d ?? '—'} />
+                                              <KpiRow label="Цел. 7д" value={s.targetCompleted7d} color="var(--wb-accent, #8B7BFF)" hint={s.targetRate7d ?? '—'} />
                                             </div>
                                           </div>
                                           {(s.promoDelivered > 0 || s.promoRedeemed > 0) && (
                                             <div style={{ marginTop: 3, paddingTop: 3, borderTop: `1px solid ${C.border}` }}>
                                               <KpiRow label="Промо дост." value={s.promoDelivered} />
-                                              <KpiRow label="Промо → цел." value={s.promoTargetCompleted ?? 0} color="#7C6AFF" hint={s.promoTargetRate ?? '—'} />
-                                              <KpiRow label="Промо актив." value={s.promoRedeemed} color="#34D399" />
+                                              <KpiRow label="Промо → цел." value={s.promoTargetCompleted ?? 0} color="var(--wb-accent, #8B7BFF)" hint={s.promoTargetRate ?? '—'} />
+                                              <KpiRow label="Промо актив." value={s.promoRedeemed} color="var(--wb-success, #4ADE80)" />
                                               {s.nonPromoTargetCompleted != null && <KpiRow label="Без промо → цел." value={s.nonPromoTargetCompleted} color={C.textMuted} hint={s.nonPromoTargetRate ?? '—'} />}
                                             </div>
                                           )}
@@ -18529,7 +18529,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                             <div key={`${t.segment}-${t.touchNumber}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', ...(t.disabled ? { opacity: 0.4 } : {}) }}>
                                               <span style={{ fontSize: 10, color: C.textSec }}>{t.segment} · В{t.touchNumber}{t.disabled ? ' 🚫' : ''}</span>
                                               <span style={{ fontSize: 10, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                                                {t.sent}→{t.delivered} · <span style={{ color: '#FBBF24' }}>{t.returnRate72h}</span> · <span style={{ color: '#7C6AFF' }}>{t.targetRate7d}</span>
+                                                {t.sent}→{t.delivered} · <span style={{ color: 'var(--wb-warning, #FBBF24)' }}>{t.returnRate72h}</span> · <span style={{ color: 'var(--wb-accent, #8B7BFF)' }}>{t.targetRate7d}</span>
                                               </span>
                                             </div>
                                           ))}
@@ -19361,8 +19361,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
               {/* ── PROFILE CARD ── */}
               <div style={{
-                background: 'linear-gradient(135deg, rgba(124,106,255,0.08), rgba(124,106,255,0.02))',
-                border: '1px solid rgba(124,106,255,0.15)',
+                background: 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.02))',
+                border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15)',
                 borderRadius: 20, padding: 18, marginTop: 4,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -19389,7 +19389,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     marginTop: 16, paddingTop: 14,
-                    borderTop: '1px solid rgba(124,106,255,0.1)',
+                    borderTop: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.1)',
                   }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                       <span style={{ fontSize: 11, color: C.textMuted, fontWeight: 500 }}>{t('support_id_label', locale)}</span>
@@ -19536,7 +19536,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         cursor: 'pointer', fontFamily: font,
                         background: settingsData.defaultCurrency === c ? C.accent : 'transparent',
                         color: settingsData.defaultCurrency === c ? '#fff' : C.textMuted,
-                        boxShadow: settingsData.defaultCurrency === c ? '0 2px 8px rgba(124,106,255,0.3)' : 'none',
+                        boxShadow: settingsData.defaultCurrency === c ? '0 2px 8px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.3)' : 'none',
                         transition: 'all 0.2s',
                       }}>
                         {c === 'RUB' ? '₽' : '$'}
@@ -19689,7 +19689,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 gap: 5, padding: '12px 6px 10px', borderRadius: 14, cursor: 'pointer',
                                 fontFamily: font,
                                 background: isActive ? C.accentSoft : C.surface,
-                                border: `1px solid ${isActive ? 'rgba(124,106,255,0.35)' : C.borderLight}`,
+                                border: `1px solid ${isActive ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)' : C.borderLight}`,
                                 opacity: needsPro ? 0.5 : 1,
                                 transition: 'all 0.2s',
                               }}
@@ -19821,8 +19821,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
               {/* Danger Zone */}
               <div style={{
-                background: 'rgba(248,113,113,0.06)',
-                border: '1px solid rgba(248,113,113,0.12)',
+                background: 'rgba(251, 113, 133, 0.06)',
+                border: '1px solid rgba(251, 113, 133, 0.12)',
                 borderRadius: 20, padding: '4px 18px', marginTop: 18,
               }}>
                 <div
@@ -20276,7 +20276,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <button
                 disabled={bulkActionLoading}
                 onClick={() => setShowCatPicker({ itemIds: [...bulkSelectedIds] })}
-                style={{ ...btnBase, background: 'rgba(139,92,246,0.12)', color: '#A78BFA', borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
+                style={{ ...btnBase, background: 'rgba(139,92,246,0.12)', color: 'var(--wb-accent-strong, #B4A6FF)', borderRadius: 12, padding: '12px 0', fontSize: 12, fontWeight: 600, border: 'none' }}
               >
                 {t('cat_choose', locale)}
               </button>
@@ -20388,7 +20388,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
 
           {/* Info notices */}
-          <div style={{ borderRadius: 12, padding: '10px 14px', fontSize: 13, background: 'rgba(251,191,36,0.1)', color: '#FBBF24', lineHeight: 1.5 }}>
+          <div style={{ borderRadius: 12, padding: '10px 14px', fontSize: 13, background: 'rgba(251,191,36,0.1)', color: 'var(--wb-warning, #FBBF24)', lineHeight: 1.5 }}>
             ⏱️ {t('curated_ttl_notice', locale)}
           </div>
           <div style={{ borderRadius: 12, padding: '10px 14px', fontSize: 13, background: C.accentSoft, color: C.accent, lineHeight: 1.5 }}>
@@ -20431,7 +20431,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
               <div style={{
                 display: 'inline-block', marginTop: 12, padding: '4px 12px',
-                borderRadius: 8, background: 'rgba(251,191,36,0.1)', color: '#FBBF24',
+                borderRadius: 8, background: 'rgba(251,191,36,0.1)', color: 'var(--wb-warning, #FBBF24)',
                 fontSize: 12, fontWeight: 600,
               }}>
                 ⏱️ {t('curated_ttl_badge', locale)} · {t('curated_public_valid_until', locale, { date: expiryDate })}
@@ -20524,7 +20524,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 14, fontFamily: font, boxSizing: 'border-box' as const }} />
             )}
             {value && <button onClick={() => onChange('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>}
-            {maxLen && <div style={{ fontSize: 10, color: value.length > maxLen * 0.9 ? '#FBBF24' : '#444', textAlign: 'right' as const, marginTop: 2 }}>{value.length} / {maxLen}</div>}
+            {maxLen && <div style={{ fontSize: 10, color: value.length > maxLen * 0.9 ? 'var(--wb-warning, #FBBF24)' : '#444', textAlign: 'right' as const, marginTop: 2 }}>{value.length} / {maxLen}</div>}
           </div>
         );
         return null;
@@ -20534,8 +20534,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {screen === 'gift-notes-paywall' && (() => {
         const orangeSoft = 'rgba(251,191,36,0.12)';
         const pinkSoft = 'rgba(236,72,153,0.12)';
-        const greenSoft = 'rgba(52,211,153,0.12)';
-        const redTxt = '#F87171';
+        const greenSoft = 'rgba(74, 222, 128, 0.12)';
+        const redTxt = 'var(--wb-danger, #FB7185)';
         const ring = (pct: number, color: string) => {
           const offset = 107 - (107 * Math.min(Math.max(pct, 0), 1));
           return (
@@ -20604,11 +20604,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               padding: '20px 20px 0',
               textAlign: 'center' as const,
               background:
-                'radial-gradient(circle at 50% 0%, rgba(124,106,255,0.22) 0%, transparent 60%),' +
+                'radial-gradient(circle at 50% 0%, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22) 0%, transparent 60%),' +
                 'radial-gradient(circle at 20% 30%, rgba(236,72,153,0.10) 0%, transparent 40%),' +
                 'radial-gradient(circle at 80% 20%, rgba(251,191,36,0.08) 0%, transparent 40%)',
             }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: '0.05em', textTransform: 'uppercase' as const, marginBottom: 14, padding: '5px 10px', borderRadius: 20, background: C.accentSoft, border: '1px solid rgba(124,106,255,0.2)' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: '0.05em', textTransform: 'uppercase' as const, marginBottom: 14, padding: '5px 10px', borderRadius: 20, background: C.accentSoft, border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)' }}>
                 📅 {t('gn_brand', locale)}
               </div>
               <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, lineHeight: 1.2, margin: '0 0 8px', fontFamily: font }}>
@@ -20621,14 +20621,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* Demo card stack */}
               <div style={{ background: C.card, border: `1px solid ${C.borderLight}`, borderRadius: 20, padding: 14, textAlign: 'left' as const, boxShadow: '0 8px 32px rgba(0,0,0,0.35)', position: 'relative' as const, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 600, color: C.textMuted, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 12 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34D399', boxShadow: '0 0 8px #34D399', display: 'inline-block', animation: 'gnDotPulse 2s infinite' }} />
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--wb-success, #4ADE80)', boxShadow: '0 0 8px #34D399', display: 'inline-block', animation: 'gnDotPulse 2s infinite' }} />
                   {t('gn_demo_header', locale)}
                 </div>
                 <style>{`@keyframes gnDotPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.15); } }`}</style>
                 <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
-                  {demoCard({ emoji: '🎂', emojiBg: orangeSoft, stripColor: 'linear-gradient(180deg,#FBBF24,#f59e0b)', ringColor: '#FBBF24', ringPct: 0.85, daysN: 3, title: t('gn_demo_title_mom', locale), person: t('gn_demo_person_mom', locale), ideasChip: true })}
+                  {demoCard({ emoji: '🎂', emojiBg: orangeSoft, stripColor: 'linear-gradient(180deg,#FBBF24,#f59e0b)', ringColor: 'var(--wb-warning, #FBBF24)', ringPct: 0.85, daysN: 3, title: t('gn_demo_title_mom', locale), person: t('gn_demo_person_mom', locale), ideasChip: true })}
                   {demoCard({ emoji: '💍', emojiBg: pinkSoft, stripColor: `linear-gradient(180deg,${C.accent},#A78BFA)`, ringColor: C.accent, ringPct: 0.58, daysN: 12, title: t('gn_demo_title_anniv', locale), person: t('gn_demo_person_anniv', locale) })}
-                  {demoCard({ emoji: '🎄', emojiBg: greenSoft, stripColor: 'linear-gradient(180deg,#34D399,#6ee7b7)', ringColor: '#34D399', ringPct: 0.05, daysN: 261, title: t('gn_demo_title_ny', locale), person: t('gn_demo_person_ny', locale) })}
+                  {demoCard({ emoji: '🎄', emojiBg: greenSoft, stripColor: 'linear-gradient(180deg,#34D399,#6ee7b7)', ringColor: 'var(--wb-success, #4ADE80)', ringPct: 0.05, daysN: 261, title: t('gn_demo_title_ny', locale), person: t('gn_demo_person_ny', locale) })}
                 </div>
               </div>
             </div>
@@ -20636,13 +20636,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* Benefits 2x2 */}
             <div style={{ padding: '16px 20px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {benefit('🔔', C.accentSoft, C.accent, t('gn_feat_push_title', locale), t('gn_feat_push_body', locale))}
-              {benefit('💡', orangeSoft, '#FBBF24', t('gn_feat_ideas_title', locale), t('gn_feat_ideas_body', locale))}
+              {benefit('💡', orangeSoft, 'var(--wb-warning, #FBBF24)', t('gn_feat_ideas_title', locale), t('gn_feat_ideas_body', locale))}
               {benefit('🔁', pinkSoft, '#EC4899', t('gn_feat_recurring_title', locale), t('gn_feat_recurring_body', locale))}
-              {benefit('∞', greenSoft, '#34D399', t('gn_feat_unlimited_title', locale), t('gn_feat_unlimited_body', locale))}
+              {benefit('∞', greenSoft, 'var(--wb-success, #4ADE80)', t('gn_feat_unlimited_title', locale), t('gn_feat_unlimited_body', locale))}
             </div>
 
             {/* Social proof */}
-            <div style={{ margin: '14px 20px 0', padding: '12px 14px', borderRadius: 14, background: 'linear-gradient(135deg, rgba(124,106,255,0.08), rgba(236,72,153,0.05))', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ margin: '14px 20px 0', padding: '12px 14px', borderRadius: 14, background: 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08), rgba(236,72,153,0.05))', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ display: 'flex', flexShrink: 0 }}>
                 {[{ bg: orangeSoft, e: '🎂' }, { bg: pinkSoft, e: '💍' }, { bg: greenSoft, e: '🎄' }].map((a, i) => (
                   <div key={i} style={{ width: 28, height: 28, borderRadius: '50%', background: a.bg, border: `2px solid ${C.bg}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, marginLeft: i === 0 ? 0 : -8 }}>{a.e}</div>
@@ -20652,13 +20652,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
 
             {/* Price block */}
-            <div style={{ margin: '18px 20px 0', padding: 18, borderRadius: 18, background: 'linear-gradient(135deg, rgba(124,106,255,0.14) 0%, rgba(124,106,255,0.04) 100%)', border: '1px solid rgba(124,106,255,0.28)', position: 'relative' as const, overflow: 'hidden' }}>
+            <div style={{ margin: '18px 20px 0', padding: 18, borderRadius: 18, background: 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.14) 0%, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.04) 100%)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.28)', position: 'relative' as const, overflow: 'hidden' }}>
               <div style={{ position: 'absolute' as const, right: -8, top: -20, fontSize: 80, opacity: 0.06, pointerEvents: 'none' as const }}>⭐</div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#34D399', background: greenSoft, padding: '3px 7px', borderRadius: 5, marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: 'var(--wb-success, #4ADE80)', background: greenSoft, padding: '3px 7px', borderRadius: 5, marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
                 ★ {t('gn_price_ribbon', locale)}
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 32, fontWeight: 800, color: C.text, lineHeight: 1, fontFamily: font }}>{gnAccess.priceXtr}<span style={{ color: '#FBBF24' }}>⭐</span></span>
+                <span style={{ fontSize: 32, fontWeight: 800, color: C.text, lineHeight: 1, fontFamily: font }}>{gnAccess.priceXtr}<span style={{ color: 'var(--wb-warning, #FBBF24)' }}>⭐</span></span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: C.textSec }}>{t('gn_price_approx', locale)}</span>
               </div>
               <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>{t('gn_price_subtext', locale)}</div>
@@ -20730,7 +20730,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const done = gnOccasions.filter((o: any) => o.status === 'DONE');
         const archived = gnOccasions.filter((o: any) => o.status === 'ARCHIVED');
         const typeEmoji: Record<string, string> = { BIRTHDAY: '🎂', ANNIVERSARY: '💍', HOLIDAY: '🎄', OTHER: '🎁' };
-        const typeBg: Record<string, string> = { BIRTHDAY: 'rgba(251,191,36,0.12)', ANNIVERSARY: 'rgba(236,72,153,0.12)', HOLIDAY: 'rgba(52,211,153,0.12)', OTHER: C.accentSoft };
+        const typeBg: Record<string, string> = { BIRTHDAY: 'rgba(251,191,36,0.12)', ANNIVERSARY: 'rgba(236,72,153,0.12)', HOLIDAY: 'rgba(74, 222, 128, 0.12)', OTHER: C.accentSoft };
         const totalIdeas = gnOccasions.reduce((sum: number, o: any) => sum + (o.ideasCount ?? 0), 0);
 
         const openOccasion = async (o: any) => {
@@ -20764,16 +20764,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ width: 44, height: 44, position: 'relative' as const, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <svg viewBox="0 0 44 44" style={{ position: 'absolute' as const, inset: 0, transform: 'rotate(-90deg)' }}>
                       <circle cx="22" cy="22" r="19" fill="none" stroke={C.surface} strokeWidth="3" />
-                      <circle cx="22" cy="22" r="19" fill="none" stroke={isUrgent ? '#FBBF24' : C.accent} strokeWidth="3" strokeLinecap="round"
+                      <circle cx="22" cy="22" r="19" fill="none" stroke={isUrgent ? 'var(--wb-warning, #FBBF24)' : C.accent} strokeWidth="3" strokeLinecap="round"
                         strokeDasharray="119" strokeDashoffset={Math.max(0, 119 - (119 * Math.min(o.daysUntil, 60) / 60))} />
                     </svg>
                     <div style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', zIndex: 1 }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: isUrgent ? '#FBBF24' : C.accent }}>{o.daysUntil}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: isUrgent ? 'var(--wb-warning, #FBBF24)' : C.accent }}>{o.daysUntil}</span>
                       <span style={{ fontSize: 8, fontWeight: 600, color: C.textMuted, marginTop: -2 }}>{t('gn_days_abbr', locale)}</span>
                     </div>
                   </div>
                 )}
-                {isDone && <span style={{ padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: 'rgba(52,211,153,0.1)', color: '#34D399' }}>✓</span>}
+                {isDone && <span style={{ padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: 'rgba(74, 222, 128, 0.1)', color: 'var(--wb-success, #4ADE80)' }}>✓</span>}
                 {!isDone && o.daysUntil == null && <span style={{ color: C.textMuted, fontSize: 18 }}>›</span>}
               </div>
               {/* Meta chips */}
@@ -20781,8 +20781,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' as const }}>
                   {o.daysUntil != null && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                      background: isUrgent ? 'rgba(251,191,36,0.12)' : o.daysUntil === 0 ? 'rgba(248,113,113,0.12)' : C.surface,
-                      color: isUrgent ? '#FBBF24' : o.daysUntil === 0 ? '#F87171' : C.textSec }}>
+                      background: isUrgent ? 'rgba(251,191,36,0.12)' : o.daysUntil === 0 ? 'rgba(251, 113, 133, 0.12)' : C.surface,
+                      color: isUrgent ? 'var(--wb-warning, #FBBF24)' : o.daysUntil === 0 ? 'var(--wb-danger, #FB7185)' : C.textSec }}>
                       {isUrgent && '🔥 '}{o.daysUntil === 0 ? t('gn_today', locale) : o.daysUntil > 0 ? t('gn_days_left', locale, { n: o.daysUntil }) : t('gn_days_overdue', locale, { n: Math.abs(o.daysUntil) })}
                     </span>
                   )}
@@ -20802,7 +20802,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const isEmpty = !gnLoading && gnOccasions.length === 0;
         const orangeSoft = 'rgba(251,191,36,0.12)';
         const pinkSoft = 'rgba(236,72,153,0.12)';
-        const greenSoft = 'rgba(52,211,153,0.12)';
+        const greenSoft = 'rgba(74, 222, 128, 0.12)';
 
         const templateCard = (p: { emoji: string; emojiBg: string; stripColor: string; title: string; type: 'BIRTHDAY' | 'ANNIVERSARY' | 'HOLIDAY' | 'OTHER'; recurrence: 'YEARLY' | 'NONE' }) => (
           <div
@@ -20867,9 +20867,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             )}
 
             {/* Sections */}
-            {active.length > 0 && <div style={{ marginBottom: 14 }}>{sectionLabel('⚡', t('gn_upcoming', locale), active.length, '#FBBF24')}{active.map(card)}</div>}
+            {active.length > 0 && <div style={{ marginBottom: 14 }}>{sectionLabel('⚡', t('gn_upcoming', locale), active.length, 'var(--wb-warning, #FBBF24)')}{active.map(card)}</div>}
             {noDate.length > 0 && <div style={{ marginBottom: 14, marginTop: active.length > 0 ? 4 : 0 }}>{sectionLabel('📌', t('gn_no_date', locale), noDate.length)}{noDate.map(card)}</div>}
-            {done.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('✓', t('gn_done', locale), done.length, '#34D399')}{done.map(card)}</div>}
+            {done.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('✓', t('gn_done', locale), done.length, 'var(--wb-success, #4ADE80)')}{done.map(card)}</div>}
             {archived.length > 0 && <div style={{ marginBottom: 14, marginTop: 4 }}>{sectionLabel('📦', t('gn_archive', locale), archived.length)}{archived.map(card)}</div>}
 
             {/* v2.1 FAB — + bottom-right above FloatingNav */}
@@ -20899,7 +20899,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         const o = gnViewingOccasion;
         const typeLabel = ({ BIRTHDAY: t('gn_type_birthday', locale), ANNIVERSARY: t('gn_type_anniversary', locale), HOLIDAY: t('gn_type_holiday', locale), OTHER: t('gn_type_other', locale) } as Record<string, string>)[o.type] ?? o.type;
         const typeEmoji: Record<string, string> = { BIRTHDAY: '🎂', ANNIVERSARY: '💍', HOLIDAY: '🎄', OTHER: '🎁' };
-        const typeBg: Record<string, string> = { BIRTHDAY: 'rgba(251,191,36,0.12)', ANNIVERSARY: 'rgba(236,72,153,0.12)', HOLIDAY: 'rgba(52,211,153,0.12)', OTHER: C.accentSoft };
+        const typeBg: Record<string, string> = { BIRTHDAY: 'rgba(251,191,36,0.12)', ANNIVERSARY: 'rgba(236,72,153,0.12)', HOLIDAY: 'rgba(74, 222, 128, 0.12)', OTHER: C.accentSoft };
         const ideas = (o.ideas ?? []) as any[];
         const recurrenceLabel: Record<string, string> = { YEARLY: t('recurrence_yearly_short', locale), MONTHLY: t('recurrence_monthly_short', locale), NONE: t('recurrence_once', locale) };
         const refreshOccasion = async () => { const r = await tgFetch(`/tg/gift-occasions/${o.id}`); if (r.ok) setGnViewingOccasion((await r.json() as any).occasion); };
@@ -20907,7 +20907,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return (
           <div style={{ animation: 'fadeIn 0.3s ease', paddingBottom: 120 }}>
             {/* Hero section */}
-            <div style={{ position: 'relative' as const, padding: '24px 20px 20px', background: 'linear-gradient(160deg, rgba(124,106,255,0.06) 0%, transparent 60%)' }}>
+            <div style={{ position: 'relative' as const, padding: '24px 20px 20px', background: 'linear-gradient(160deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.06) 0%, transparent 60%)' }}>
               <button onClick={() => setScreen('gift-notes')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: C.accent, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font, padding: 0, marginBottom: 16 }}>
                 ← {t('gn_title', locale)}
               </button>
@@ -20916,7 +20916,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   {typeEmoji[o.type] ?? '🎁'}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: o.status === 'DONE' ? '#34D399' : C.text, fontFamily: font }}>{o.title}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: o.status === 'DONE' ? 'var(--wb-success, #4ADE80)' : C.text, fontFamily: font }}>{o.title}</div>
                   <div style={{ fontSize: 13, color: C.textSec, marginTop: 2 }}>{typeLabel}{o.personName ? ` · ${o.personName}` : ''}</div>
                 </div>
               </div>
@@ -20927,7 +20927,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ display: 'flex', gap: 8, margin: '16px 20px 0', padding: 0 }}>
                 {o.daysUntil != null && (
                   <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, textAlign: 'center' as const }}>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: o.daysUntil <= 7 ? '#FBBF24' : C.text, fontFamily: font }}>{o.daysUntil}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: o.daysUntil <= 7 ? 'var(--wb-warning, #FBBF24)' : C.text, fontFamily: font }}>{o.daysUntil}</div>
                     <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{t('gn_days_left_label', locale)}</div>
                   </div>
                 )}
@@ -20944,7 +20944,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
             {o.status === 'DONE' && (
-              <div style={{ margin: '12px 20px 0', padding: '10px 14px', background: 'rgba(52,211,153,0.08)', borderRadius: 12, fontSize: 13, fontWeight: 600, color: '#34D399', textAlign: 'center' as const }}>
+              <div style={{ margin: '12px 20px 0', padding: '10px 14px', background: 'rgba(74, 222, 128, 0.08)', borderRadius: 12, fontSize: 13, fontWeight: 600, color: 'var(--wb-success, #4ADE80)', textAlign: 'center' as const }}>
                 ✓ {t('gn_occasion_completed', locale)}
               </div>
             )}
@@ -20959,7 +20959,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* Action buttons row */}
             <div style={{ padding: '12px 20px 0', display: 'flex', gap: 8 }}>
               <button onClick={() => { setGnEditTitle(o.title); setGnEditPerson(o.personName ?? ''); setGnEditNote(o.note ?? ''); setGnShowEdit(true); setGnShowActions(false); }}
-                style={{ flex: 1, padding: 10, borderRadius: 12, border: `1px solid rgba(124,106,255,0.15)`, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                style={{ flex: 1, padding: 10, borderRadius: 12, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15)`, background: C.accentSoft, color: C.accent, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                 ✏️ {t('gn_edit_occasion', locale)}
               </button>
               <button onClick={() => setGnShowActions(!gnShowActions)}
@@ -20972,7 +20972,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {gnShowActions && (
               <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, margin: '12px 20px 0', overflow: 'hidden' }}>
                 {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/complete`, { method: 'POST' }); pushToast(t('gn_occasion_completed', locale), 'success'); await refreshList(); setScreen('gift-notes'); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left' as const, cursor: 'pointer', fontSize: 14, fontWeight: 500, color: '#34D399', fontFamily: font }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', border: 'none', background: 'none', width: '100%', textAlign: 'left' as const, cursor: 'pointer', fontSize: 14, fontWeight: 500, color: 'var(--wb-success, #4ADE80)', fontFamily: font }}>
                   <span style={{ fontSize: 15, width: 22, textAlign: 'center' as const, flexShrink: 0 }}>✅</span> {t('gn_complete', locale)}
                 </button>}
                 {o.status === 'ACTIVE' && <button onClick={async () => { setGnShowActions(false); await tgFetch(`/tg/gift-occasions/${o.id}/archive`, { method: 'POST' }); pushToast(t('gn_archive_occasion', locale), 'success'); await refreshList(); setScreen('gift-notes'); }}
@@ -21015,9 +21015,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   {idea.price != null && <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginTop: 4 }}>{idea.price.toLocaleString()} {idea.currency ?? '₽'}</div>}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
                     <span style={{ fontSize: 11, color: C.textMuted }}>{new Date(idea.createdAt).toLocaleDateString(toIntlLocale(locale), { day: 'numeric', month: 'short' })}</span>
-                    {idea.status === 'DONE' && <span style={{ fontSize: 11, color: '#34D399', fontWeight: 600 }}>✓ {t('gn_idea_status_selected', locale)}</span>}
+                    {idea.status === 'DONE' && <span style={{ fontSize: 11, color: 'var(--wb-success, #4ADE80)', fontWeight: 600 }}>✓ {t('gn_idea_status_selected', locale)}</span>}
                     {idea.status !== 'DONE' && <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}/complete`, { method: 'POST' }); await refreshOccasion(); pushToast(t('gn_idea_completed', locale), 'success'); }}
-                      style={{ fontSize: 11, fontWeight: 600, color: '#34D399', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✓ {t('gn_complete', locale)}</button>}
+                      style={{ fontSize: 11, fontWeight: 600, color: 'var(--wb-success, #4ADE80)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✓ {t('gn_complete', locale)}</button>}
                     <button onClick={async (e) => { e.stopPropagation(); await tgFetch(`/tg/gift-occasion-ideas/${idea.id}`, { method: 'DELETE' }); await refreshOccasion(); }}
                       style={{ fontSize: 11, fontWeight: 600, color: '#EF4444', background: 'none', border: 'none', cursor: 'pointer', fontFamily: font, padding: 0 }}>✕</button>
                   </div>
@@ -21118,7 +21118,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 { type: 'HOLIDAY' as const, emoji: '🎄', label: t('gn_type_holiday', locale) },
                 { type: 'OTHER' as const, emoji: '🎁', label: t('gn_type_other', locale) },
               ]).map(tp => (
-                <button key={tp.type} onClick={() => setGnFormType(tp.type)} style={{ flex: 1, padding: '10px 4px', borderRadius: 10, border: gnFormType === tp.type ? `1px solid rgba(124,106,255,0.3)` : `1px solid ${C.border}`, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormType === tp.type ? C.accentSoft : C.surface, color: gnFormType === tp.type ? C.accent : C.textMuted, whiteSpace: 'nowrap' as const, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 2 }}>
+                <button key={tp.type} onClick={() => setGnFormType(tp.type)} style={{ flex: 1, padding: '10px 4px', borderRadius: 10, border: gnFormType === tp.type ? `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.3)` : `1px solid ${C.border}`, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormType === tp.type ? C.accentSoft : C.surface, color: gnFormType === tp.type ? C.accent : C.textMuted, whiteSpace: 'nowrap' as const, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 2 }}>
                   <span style={{ fontSize: 16 }}>{tp.emoji}</span>
                   {tp.label}
                 </button>
@@ -21130,7 +21130,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <label style={{ fontSize: 12, color: C.textMuted, marginBottom: 4, display: 'block' }}>{t('gn_form_recurrence', locale)}</label>
               <div style={{ display: 'flex', gap: 6 }}>
                 {(['NONE', 'YEARLY', 'MONTHLY'] as const).map(r => (
-                  <button key={r} onClick={() => setGnFormRecurrence(r)} style={{ flex: 1, padding: '10px 4px', borderRadius: 10, border: gnFormRecurrence === r ? `1px solid rgba(124,106,255,0.3)` : `1px solid ${C.border}`, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormRecurrence === r ? C.accentSoft : C.surface, color: gnFormRecurrence === r ? C.accent : C.textSec, whiteSpace: 'nowrap' as const }}>{({ NONE: t('gn_recurrence_none', locale), YEARLY: t('gn_recurrence_yearly', locale), MONTHLY: t('gn_recurrence_monthly', locale) })[r]}</button>
+                  <button key={r} onClick={() => setGnFormRecurrence(r)} style={{ flex: 1, padding: '10px 4px', borderRadius: 10, border: gnFormRecurrence === r ? `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.3)` : `1px solid ${C.border}`, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: gnFormRecurrence === r ? C.accentSoft : C.surface, color: gnFormRecurrence === r ? C.accent : C.textSec, whiteSpace: 'nowrap' as const }}>{({ NONE: t('gn_recurrence_none', locale), YEARLY: t('gn_recurrence_yearly', locale), MONTHLY: t('gn_recurrence_monthly', locale) })[r]}</button>
                 ))}
               </div>
             </div>
@@ -21272,9 +21272,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{
                 width: 22, height: 22, borderRadius: 6, flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: checked ? 'rgba(124,106,255,0.20)' : 'transparent',
-                border: `1.5px solid ${checked ? '#7C6AFF' : 'rgba(255,255,255,0.18)'}`,
-                color: '#7C6AFF', fontSize: 13, fontWeight: 800,
+                background: checked ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.20)' : 'transparent',
+                border: `1.5px solid ${checked ? 'var(--wb-accent, #8B7BFF)' : 'rgba(255,255,255,0.18)'}`,
+                color: 'var(--wb-accent, #8B7BFF)', fontSize: 13, fontWeight: 800,
                 transition: 'all 0.12s',
               }}>
                 {checked ? '✓' : ''}
@@ -21290,7 +21290,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 }}>
                   <div style={{
                     width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-                    background: placementsForItem.imageUrl ? undefined : 'linear-gradient(135deg, rgba(124,106,255,0.3), rgba(124,106,255,0.1))',
+                    background: placementsForItem.imageUrl ? undefined : 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.3), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.1))',
                     backgroundImage: placementsForItem.imageUrl ? `url(${placementsForItem.imageUrl})` : undefined,
                     backgroundSize: 'cover', backgroundPosition: 'center',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -21398,7 +21398,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {/* Hint */}
                 <div style={{
                   padding: '10px 12px', borderRadius: 10,
-                  background: 'rgba(124,106,255,0.05)', border: '1px solid rgba(124,106,255,0.12)',
+                  background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.05)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)',
                   fontSize: 11, color: C.textSec, lineHeight: 1.5,
                 }}>
                   {locale === 'ru'
@@ -22312,7 +22312,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     padding: '8px 14px', borderRadius: 20,
                     fontSize: 14, fontWeight: 500, fontFamily: font,
                     cursor: 'pointer', transition: 'all 0.15s',
-                    border: isOn ? '1.5px solid rgba(248,113,113,0.3)' : '1.5px solid transparent',
+                    border: isOn ? '1.5px solid rgba(251, 113, 133, 0.3)' : '1.5px solid transparent',
                     background: isOn ? C.redSoft : C.surface,
                     color: isOn ? C.red : C.textSec,
                   }}
@@ -22457,7 +22457,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   onClick={() => setWlDontGiftMode(mode)}
                   style={{
                     padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
-                    background: isSelected ? 'rgba(124,106,255,0.05)' : C.surface,
+                    background: isSelected ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.05)' : C.surface,
                     border: `2px solid ${isSelected ? C.accent : C.border}`,
                     transition: 'all 0.15s', position: 'relative',
                   }}
@@ -22507,7 +22507,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                 padding: '6px 10px', borderRadius: 16,
                                 fontSize: 12, fontWeight: 500, fontFamily: font,
                                 cursor: 'pointer', transition: 'all 0.15s',
-                                border: isOn ? '1.5px solid rgba(248,113,113,0.3)' : '1.5px solid transparent',
+                                border: isOn ? '1.5px solid rgba(251, 113, 133, 0.3)' : '1.5px solid transparent',
                                 background: isOn ? C.redSoft : C.card,
                                 color: isOn ? C.red : C.textSec,
                               }}
@@ -23206,7 +23206,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {guestWl?.smartReservationsEnabled && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                background: 'rgba(124,106,255,0.08)', borderRadius: 10, border: `1px solid rgba(124,106,255,0.15)`,
+                background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08)', borderRadius: 10, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15)`,
               }}>
                 <span style={{ fontSize: 18 }}>⏰</span>
                 <div>
@@ -23243,7 +23243,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {editingItem && (editingItem.placementCount ?? 1) > 1 && (
             <div style={{
               padding: '14px', borderRadius: 14,
-              background: 'rgba(124,106,255,0.08)', border: '1px solid rgba(124,106,255,0.22)',
+              background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)',
               display: 'flex', gap: 12,
             }}>
               <div style={{ fontSize: 20, flexShrink: 0, lineHeight: '24px' }}>🔗</div>
@@ -23290,7 +23290,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     cursor: 'pointer',
                   }}
                 >
-                  <div style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(124,106,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>📋</div>
+                  <div style={{ width: 30, height: 30, borderRadius: 9, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>📋</div>
                   <div style={{ flex: 1, fontSize: 14, color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ownerWl.title}</div>
                   <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, flexShrink: 0 }}>
                     {locale === 'ru' ? 'Добавить в ещё →' : 'Add to more →'}
@@ -23351,8 +23351,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               try {
                 const domain = new URL(itemUrl).hostname.replace(/^www\./, '');
                 return (
-                  <div style={{ marginTop: 8, padding: '10px 14px', borderRadius: 12, background: 'rgba(124,106,255,0.05)', border: '1px solid rgba(124,106,255,0.1)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(124,106,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>🔗</div>
+                  <div style={{ marginTop: 8, padding: '10px 14px', borderRadius: 12, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.05)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.1)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: 6, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>🔗</div>
                     <span style={{ fontSize: 13, color: C.accent, fontWeight: 600 }}>{domain}</span>
                     <span style={{ marginLeft: 'auto', color: C.green, fontSize: 16 }}>✓</span>
                   </div>
@@ -23459,15 +23459,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     });
                   }}
                 />
-                <span style={{ paddingRight: 14, fontSize: 16, color: ({ RUB: '#7C6AFF', USD: '#34D399', EUR: '#60A5FA', GBP: '#FBBF24' } as Record<string, string>)[itemCurrency] ?? '#444', flexShrink: 0, userSelect: 'none', pointerEvents: 'none', opacity: 0.6 }}>
+                <span style={{ paddingRight: 14, fontSize: 16, color: ({ RUB: 'var(--wb-accent, #8B7BFF)', USD: 'var(--wb-success, #4ADE80)', EUR: '#60A5FA', GBP: 'var(--wb-warning, #FBBF24)' } as Record<string, string>)[itemCurrency] ?? '#444', flexShrink: 0, userSelect: 'none', pointerEvents: 'none', opacity: 0.6 }}>
                   {{ RUB: '₽', USD: '$', EUR: '€', GBP: '£' }[itemCurrency]}
                 </span>
               </div>
               {/* Collapsible currency selector — per-currency accent colors */}
               {(() => {
-                const CUR_ACCENT: Record<string, string> = { RUB: '#7C6AFF', USD: '#34D399', EUR: '#60A5FA', GBP: '#FBBF24' };
+                const CUR_ACCENT: Record<string, string> = { RUB: 'var(--wb-accent, #8B7BFF)', USD: 'var(--wb-success, #4ADE80)', EUR: '#60A5FA', GBP: 'var(--wb-warning, #FBBF24)' };
                 const CUR_SYM: Record<string, string> = { RUB: '₽', USD: '$', EUR: '€', GBP: '£' };
-                const accent = CUR_ACCENT[itemCurrency] ?? '#7C6AFF';
+                const accent = CUR_ACCENT[itemCurrency] ?? 'var(--wb-accent, #8B7BFF)';
                 return (
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                 {currencyExpanded ? (
@@ -23480,7 +23480,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         width: 40, height: 40, borderRadius: 12,
                         border: `1.5px solid ${active ? ca + '40' : 'rgba(255,255,255,0.06)'}`,
                         background: active ? ca + '18' : '#1c1c22',
-                        color: active ? ca : '#6B7280',
+                        color: active ? ca : 'var(--wb-text-muted, #8F94A3)',
                         fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: font,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
                         transition: 'all 0.12s',
@@ -23557,9 +23557,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <div style={{
                         width: 22, height: 22, borderRadius: 6, flexShrink: 0,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: 'rgba(124,106,255,0.20)',
+                        background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.20)',
                         border: '1.5px solid #7C6AFF',
-                        color: '#7C6AFF', fontSize: 13, fontWeight: 800,
+                        color: 'var(--wb-accent, #8B7BFF)', fontSize: 13, fontWeight: 800,
                       }}>✓</div>
                       <span style={{ fontSize: 14, fontWeight: 500, color: '#fff', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {currentWl.title}
@@ -23591,9 +23591,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <div style={{
                           width: 22, height: 22, borderRadius: 6, flexShrink: 0,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: checked ? 'rgba(124,106,255,0.20)' : 'transparent',
-                          border: `1.5px solid ${checked ? '#7C6AFF' : 'rgba(255,255,255,0.18)'}`,
-                          color: '#7C6AFF', fontSize: 13, fontWeight: 800,
+                          background: checked ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.20)' : 'transparent',
+                          border: `1.5px solid ${checked ? 'var(--wb-accent, #8B7BFF)' : 'rgba(255,255,255,0.18)'}`,
+                          color: 'var(--wb-accent, #8B7BFF)', fontSize: 13, fontWeight: 800,
                           transition: 'all 0.12s',
                         }}>
                           {checked ? '✓' : ''}
@@ -23608,7 +23608,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {hasMultiSelected && (
                   <div style={{
                     marginTop: 10, padding: '12px 14px', borderRadius: 12,
-                    background: 'rgba(124,106,255,0.08)', border: '1px solid rgba(124,106,255,0.2)',
+                    background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)',
                     display: 'flex', gap: 10,
                   }}>
                     <span style={{ fontSize: 16, flexShrink: 0, lineHeight: '20px' }}>🔗</span>
@@ -23630,8 +23630,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {isFreeAtLimit && (
                   <div style={{
                     marginTop: 10, padding: '14px',
-                    background: 'linear-gradient(135deg, rgba(124,106,255,0.12), rgba(124,106,255,0.03))',
-                    border: '1px solid rgba(124,106,255,0.22)', borderRadius: 12,
+                    background: 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.03))',
+                    border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)', borderRadius: 12,
                   }}>
                     <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: C.text }}>
                       🔒 {locale === 'ru' ? 'Новые wishlist\'ы — в Pro' : 'New wishlists — in Pro'}
@@ -23664,7 +23664,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               fontSize: 17, fontWeight: 800, cursor: 'pointer', fontFamily: font,
               letterSpacing: '-0.01em', transition: 'all 0.15s',
               ...(itemTitle.trim()
-                ? { background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)', color: '#fff', boxShadow: '0 6px 24px rgba(124,106,255,0.35)' }
+                ? { background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)', color: '#fff', boxShadow: '0 6px 24px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)' }
                 : { background: 'var(--wb-card)', color: '#333', boxShadow: 'none' }),
               opacity: (loading || !itemTitle.trim()) ? 0.5 : 1,
             }}
@@ -23948,7 +23948,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           const isWishlist = linkMgmtDetailItem.type === 'wishlist';
           const isProfile = linkMgmtDetailItem.type === 'profile';
           const icon = isSelection ? '📋' : isWishlist ? '🎁' : '👤';
-          const iconBg = isSelection ? 'rgba(96,165,250,0.12)' : isWishlist ? C.accentSoft : 'rgba(52,211,153,0.12)';
+          const iconBg = isSelection ? 'rgba(96,165,250,0.12)' : isWishlist ? C.accentSoft : 'rgba(74, 222, 128, 0.12)';
           const title = isSelection ? (linkMgmtDetailItem.data as LinkMgmtSelection).title
             : isWishlist ? (linkMgmtDetailItem.data as LinkMgmtWishlist).title
             : (linkMgmtDetailItem.data as LinkMgmtProfile).username;
@@ -23975,7 +23975,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                     {typeLabel}
                     {isSelection && (
-                      <span style={{ fontSize: 10, fontWeight: 600, color: '#FBBF24', background: 'rgba(251,191,36,0.1)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--wb-warning, #FBBF24)', background: 'rgba(251,191,36,0.1)', padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase' }}>
                         {t('link_badge_temporary', locale)}
                       </span>
                     )}
@@ -24039,7 +24039,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
                         <span style={{ fontSize: 14, color: C.textMuted }}>{locale === 'ru' ? 'Видимость' : 'Visibility'}</span>
-                        <span style={{ fontSize: 14, color: '#34D399', fontWeight: 500 }}>
+                        <span style={{ fontSize: 14, color: 'var(--wb-success, #4ADE80)', fontWeight: 500 }}>
                           {prof.profileVisibility === 'ALL' ? (locale === 'ru' ? 'Открыт для всех' : 'Public') : prof.profileVisibility === 'LINK_ONLY' ? (locale === 'ru' ? 'По ссылке' : 'Link only') : prof.profileVisibility}
                         </span>
                       </div>
@@ -24056,7 +24056,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               )}
               {/* Info hint for profile */}
               {isProfile && (
-                <div style={{ background: 'rgba(251,191,36,0.1)', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#FBBF24', lineHeight: 1.5 }}>
+                <div style={{ background: 'rgba(251,191,36,0.1)', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: 'var(--wb-warning, #FBBF24)', lineHeight: 1.5 }}>
                   {locale === 'ru' ? 'Закрытие профиля скроет его для всех, кто ещё не подписан. Подписчики сохранят доступ.' : 'Closing your profile will hide it from everyone not subscribed. Subscribers keep access.'}
                 </div>
               )}
@@ -24087,7 +24087,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 )}
                 <button
                   onClick={() => setLinkMgmtConfirmRevoke(true)}
-                  style={{ ...btnBase, width: '100%', padding: '14px 0', borderRadius: 14, fontSize: 15, fontWeight: 600, border: 'none', background: 'rgba(248,113,113,0.1)', color: '#F87171' }}
+                  style={{ ...btnBase, width: '100%', padding: '14px 0', borderRadius: 14, fontSize: 15, fontWeight: 600, border: 'none', background: 'rgba(251, 113, 133, 0.1)', color: 'var(--wb-danger, #FB7185)' }}
                 >
                   {isProfile ? `🔒 ${t('link_action_close_profile', locale)}` : `🚫 ${t('link_action_revoke', locale)}`}
                 </button>
@@ -24588,9 +24588,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           SECRET RESERVATION — ONBOARDING (3 steps)
           ══════════════════════════════════════════════ */}
       {showSecretOnboarding && (() => {
-        const secretColor = '#A78BFA';
-        const secretSoft = 'rgba(167,139,250,0.14)';
-        const secretBorder = 'rgba(167,139,250,0.26)';
+        const secretColor = 'var(--wb-accent-strong, #B4A6FF)';
+        const secretSoft = 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.14)';
+        const secretBorder = 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.26)';
         const step = secretOnboardingStep;
         const totalSteps = 3;
 
@@ -24634,7 +24634,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
         const heroIcon = step === 1 ? '🔒' : step === 2 ? '👻' : '⚠️';
         const heroBg = step === 3 ? 'rgba(251,191,36,0.14)' : secretSoft;
-        const heroColor = step === 3 ? '#FBBF24' : secretColor;
+        const heroColor = step === 3 ? 'var(--wb-warning, #FBBF24)' : secretColor;
         const title = step === 1 ? t('sr_onb_s1_title', locale) : step === 2 ? t('sr_onb_s2_title', locale) : t('sr_onb_s3_head', locale);
         const body = step === 1 ? t('sr_onb_s1_body_v2', locale) : step === 2 ? t('sr_onb_s2_body', locale) : t('sr_onb_s3_body_v2', locale);
 
@@ -24692,7 +24692,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <>
                     <button
                       onClick={() => void closeWith('completed')}
-                      style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${secretColor} 0%, #C4A7FF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 4px 16px rgba(167,139,250,0.32)' }}
+                      style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${secretColor} 0%, #C4A7FF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 4px 16px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.32)' }}
                     >
                       {t('sr_onb_final_cta', locale)}
                     </button>
@@ -24707,7 +24707,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <>
                     <button
                       onClick={goNext}
-                      style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${secretColor} 0%, #C4A7FF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 4px 16px rgba(167,139,250,0.32)' }}
+                      style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${secretColor} 0%, #C4A7FF 100%)`, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: '0 4px 16px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.32)' }}
                     >
                       {t('sr_onb_next', locale)}
                     </button>
@@ -24757,7 +24757,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                 <div style={{
                   width: 36, height: 36, borderRadius: 10,
-                  background: 'rgba(167,139,250,0.14)',
+                  background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.14)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 18, flexShrink: 0,
                 }}>🔒</div>
@@ -24777,15 +24777,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 marginBottom: 14,
               }}>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 12, color: C.textSec }}>
-                  <span style={{ color: '#34D399', flexShrink: 0, fontWeight: 700 }}>✓</span>
+                  <span style={{ color: 'var(--wb-success, #4ADE80)', flexShrink: 0, fontWeight: 700 }}>✓</span>
                   <span>{t('sr_confirm_bullet_yes_1', locale)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 6, fontSize: 12, color: C.textSec }}>
-                  <span style={{ color: '#34D399', flexShrink: 0, fontWeight: 700 }}>✓</span>
+                  <span style={{ color: 'var(--wb-success, #4ADE80)', flexShrink: 0, fontWeight: 700 }}>✓</span>
                   <span>{t('sr_confirm_bullet_yes_2', locale)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, fontSize: 12, color: C.textSec }}>
-                  <span style={{ color: '#FBBF24', flexShrink: 0, fontWeight: 700 }}>!</span>
+                  <span style={{ color: 'var(--wb-warning, #FBBF24)', flexShrink: 0, fontWeight: 700 }}>!</span>
                   <span>{t('sr_confirm_bullet_warn', locale)}</span>
                 </div>
               </div>
@@ -24799,7 +24799,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   background: 'linear-gradient(135deg, #A78BFA 0%, #C4A7FF 100%)',
                   color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer',
                   fontFamily: font, opacity: secretCreating ? 0.6 : 1,
-                  boxShadow: '0 4px 14px rgba(167,139,250,0.32)',
+                  boxShadow: '0 4px 14px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.32)',
                 }}
               >
                 {secretCreating ? '…' : t('sr_confirm_cta', locale)}
@@ -24839,7 +24839,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 background: isConflict ? 'rgba(251,191,36,0.14)' : C.accentSoft,
                 border: `1px solid ${isConflict ? 'rgba(251,191,36,0.26)' : C.border}`,
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 26, margin: '0 auto 12px', color: isConflict ? '#FBBF24' : C.accent,
+                fontSize: 26, margin: '0 auto 12px', color: isConflict ? 'var(--wb-warning, #FBBF24)' : C.accent,
               }}>{isConflict ? '⚠️' : '🎁'}</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 8, fontFamily: font }}>
                 {isConflict ? t('sr_promote_conflict_title', locale) : t('sr_promote_sheet_title', locale)}
@@ -24945,9 +24945,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         <div style={{ textAlign: 'center' as const, padding: '4px 0 0' }}>
           <div style={{
             width: 56, height: 56, borderRadius: 16,
-            background: 'rgba(248,113,113,0.14)', border: '1px solid rgba(248,113,113,0.26)',
+            background: 'rgba(251, 113, 133, 0.14)', border: '1px solid rgba(251, 113, 133, 0.26)',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 26, margin: '0 auto 12px', color: '#F87171',
+            fontSize: 26, margin: '0 auto 12px', color: 'var(--wb-danger, #FB7185)',
           }}>🚫</div>
           <div style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 8, fontFamily: font }}>
             {t('sr_err_own_item_title', locale)}
@@ -28222,10 +28222,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <div style={{ fontSize: 22, fontWeight: 700, color: C.text, textAlign: 'center', marginBottom: 8 }}>{t('onboarding_complete_title', locale)}</div>
               <div style={{ fontSize: 14, color: C.textSec, textAlign: 'center', lineHeight: 1.5, marginBottom: 20 }}>{t('onboarding_complete_subtitle', locale)}</div>
               {/* Real wish card */}
-              <div style={{ width: '100%', background: 'rgba(124,106,255,0.06)', border: '1.5px solid rgba(124,106,255,0.2)', borderRadius: 18, overflow: 'hidden', marginBottom: 24 }}>
+              <div style={{ width: '100%', background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.06)', border: '1.5px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)', borderRadius: 18, overflow: 'hidden', marginBottom: 24 }}>
                 <div style={{ height: 100, background: 'linear-gradient(135deg, #1f1840, #162040)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, position: 'relative' }}>
                   {onboardingTryResult.item.imageUrl ? <img src={onboardingTryResult.item.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📦'}
-                  <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(124,106,255,0.8)', color: '#fff', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 8 }}>✨ {t('onboarding_complete_your_wish', locale)}</div>
+                  <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.8)', color: '#fff', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 8 }}>✨ {t('onboarding_complete_your_wish', locale)}</div>
                 </div>
                 <div style={{ padding: '14px 16px' }}>
                   <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{onboardingTryResult.item.title}</div>
@@ -29305,14 +29305,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 {t(bodyKey, locale)}
               </div>
               <div style={{
-                background: 'linear-gradient(135deg, rgba(124,106,255,0.15), rgba(52,211,153,0.15))',
-                border: '2px dashed rgba(124,106,255,0.4)',
+                background: 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15), rgba(74, 222, 128, 0.15))',
+                border: '2px dashed rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.4)',
                 borderRadius: 14, padding: '14px 20px', marginBottom: 24,
               }}>
                 <div style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
                   {locale === 'ru' ? 'Промокод' : 'Promo code'}
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: '#7C6AFF', letterSpacing: 2 }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--wb-accent, #8B7BFF)', letterSpacing: 2 }}>
                   {pr.promoCode}
                 </div>
                 <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
@@ -29398,7 +29398,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <span style={{
             fontSize: 12, fontWeight: 600,
             padding: '3px 10px', borderRadius: 20,
-            background: filled ? 'rgba(52,211,153,0.12)' : C.surface,
+            background: filled ? 'rgba(74, 222, 128, 0.12)' : C.surface,
             color: filled ? C.green : C.textMuted,
             display: 'inline-flex', alignItems: 'center', gap: 4,
             whiteSpace: 'nowrap',
@@ -30163,8 +30163,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           <span key={`p-${key}`} style={{
                             display: 'inline-flex', alignItems: 'center', gap: 4,
                             padding: '6px 12px', borderRadius: 20, fontSize: 13,
-                            background: 'rgba(248,113,113,0.12)', color: C.red,
-                            border: '1px solid rgba(248,113,113,0.15)',
+                            background: 'rgba(251, 113, 133, 0.12)', color: C.red,
+                            border: '1px solid rgba(251, 113, 133, 0.15)',
                           }}>
                             <span>{DONT_GIFT_PRESET_EMOJIS[key] || '🚫'}</span>
                             {t(`dont_gift_preset_${key}` as any, locale)}
@@ -30174,8 +30174,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           <span key={`c-${i}`} style={{
                             display: 'inline-flex', alignItems: 'center',
                             padding: '6px 12px', borderRadius: 20, fontSize: 13,
-                            background: 'rgba(248,113,113,0.12)', color: C.red,
-                            border: '1px solid rgba(248,113,113,0.15)',
+                            background: 'rgba(251, 113, 133, 0.12)', color: C.red,
+                            border: '1px solid rgba(251, 113, 133, 0.15)',
                           }}>{item}</span>
                         ))}
                       </div>
@@ -30483,8 +30483,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           <span key={`p-${key}`} style={{
                             display: 'inline-flex', alignItems: 'center', gap: 4,
                             padding: '6px 12px', borderRadius: 20, fontSize: 13,
-                            background: 'rgba(248,113,113,0.12)', color: C.red,
-                            border: '1px solid rgba(248,113,113,0.15)',
+                            background: 'rgba(251, 113, 133, 0.12)', color: C.red,
+                            border: '1px solid rgba(251, 113, 133, 0.15)',
                           }}>
                             <span>{DONT_GIFT_PRESET_EMOJIS[key] || '🚫'}</span>
                             {t(`dont_gift_preset_${key}` as any, locale)}
@@ -30494,8 +30494,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           <span key={`c-${i}`} style={{
                             display: 'inline-flex', alignItems: 'center',
                             padding: '6px 12px', borderRadius: 20, fontSize: 13,
-                            background: 'rgba(248,113,113,0.12)', color: C.red,
-                            border: '1px solid rgba(248,113,113,0.15)',
+                            background: 'rgba(251, 113, 133, 0.12)', color: C.red,
+                            border: '1px solid rgba(251, 113, 133, 0.15)',
                           }}>{item}</span>
                         ))}
                       </div>
@@ -30723,7 +30723,7 @@ function ReadySharePromptSheet({ data, locale, tgUser, tgFetch, buildTgDeepLink,
   };
 
   const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
-  const C_rsp = { accent: '#7C6AFF', text: '#F4F4F6', textSec: '#9CA3AF', textMuted: '#6B7280', bg: '#1B1B1F', surface: '#26262C', border: 'rgba(255,255,255,0.08)', accentSoft: 'rgba(124,106,255,0.12)' };
+  const C_rsp = { accent: 'var(--wb-accent, #8B7BFF)', text: 'var(--wb-text, #FFFFFF)', textSec: 'var(--wb-text-secondary, #C7CAD1)', textMuted: 'var(--wb-text-muted, #8F94A3)', bg: '#1B1B1F', surface: '#26262C', border: 'rgba(255,255,255,0.08)', accentSoft: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)' };
 
   return (
     <>
@@ -30860,7 +30860,7 @@ function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, build
   };
 
   const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
-  const C_fsp = { accent: '#7C6AFF', text: '#F4F4F6', textSec: '#9CA3AF', textMuted: '#6B7280', bg: '#1B1B1F', surface: '#26262C', border: 'rgba(255,255,255,0.06)', accentSoft: 'rgba(124,106,255,0.12)', green: '#34D399' };
+  const C_fsp = { accent: 'var(--wb-accent, #8B7BFF)', text: 'var(--wb-text, #FFFFFF)', textSec: 'var(--wb-text-secondary, #C7CAD1)', textMuted: 'var(--wb-text-muted, #8F94A3)', bg: '#1B1B1F', surface: '#26262C', border: 'rgba(255,255,255,0.06)', accentSoft: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.12)', green: 'var(--wb-success, #4ADE80)' };
 
   return (
     <div style={{
