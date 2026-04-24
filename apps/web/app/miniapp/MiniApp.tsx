@@ -2474,7 +2474,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
           )}
           {isGuest && isReservedByMe && (
             <>
-              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(74, 222, 128, 0.1)' }}>
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: 'var(--wb-success, #6ee7b7)', background: 'rgba(74,222,128,0.1)' }}>
                 {t('reserved_by_me', locale)}
               </span>
               {onUnreserve && <span onClick={(e) => { e.stopPropagation(); onUnreserve(item); }} style={{ fontSize: 10, color: '#555', cursor: 'pointer' }}>{t('cancel', locale)}</span>}
@@ -2486,12 +2486,12 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
             </span>
           )}
           {!isGuest && isReserved && (
-            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#a599ff', background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.1)' }}>
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: 'var(--wb-accent-light, #a599ff)', background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.1)' }}>
               🔒 {t('status_someone_reserved', locale)}
             </span>
           )}
           {isPurchased && (
-            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#6ee7b7', background: 'rgba(74, 222, 128, 0.1)' }}>
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: 'var(--wb-success, #6ee7b7)', background: 'rgba(74,222,128,0.1)' }}>
               🎉 {t('status_gifted', locale)}
             </span>
           )}
@@ -2607,7 +2607,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
                 display: 'inline-flex', alignItems: 'center', gap: 3,
                 marginLeft: 8, padding: '2px 8px', borderRadius: 8,
                 fontSize: 11, fontWeight: 700, lineHeight: 1.2,
-                color: '#a599ff', background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.14)',
+                color: 'var(--wb-accent-light, #a599ff)', background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.14)',
                 verticalAlign: 'middle', whiteSpace: 'nowrap',
               }}
             >
@@ -2674,7 +2674,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
                 background: 'linear-gradient(135deg, rgba(74, 222, 128, 0.15), rgba(74, 222, 128, 0.08))',
-                color: '#6ee7b7', border: '1px solid rgba(74, 222, 128, 0.2)',
+                color: 'var(--wb-success, #6ee7b7)', border: '1px solid rgba(74,222,128,0.2)',
               }}>
                 {t('reserved_by_me', locale)}
               </span>
@@ -2694,7 +2694,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
               display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
               background: 'linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.15), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.08))',
-              color: '#a599ff', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)',
+              color: 'var(--wb-accent-light, #a599ff)', border: '1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.2)',
             }}>
               🔒 {t('status_someone_reserved', locale)}
             </span>
@@ -2703,7 +2703,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
             <span style={{
               padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
               background: 'linear-gradient(135deg, rgba(74, 222, 128, 0.15), rgba(74, 222, 128, 0.08))',
-              color: '#6ee7b7', border: '1px solid rgba(74, 222, 128, 0.2)',
+              color: 'var(--wb-success, #6ee7b7)', border: '1px solid rgba(74,222,128,0.2)',
             }}>
               🎉 {t('status_gifted', locale)}
             </span>
@@ -12493,7 +12493,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                     style={{
                                       background: C.card,
                                       border: `1px solid ${state === 'ACTIVE' ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)' : C.border}`,
-                                      borderLeft: state === 'ACTIVE' ? '3px solid #A78BFA' : undefined,
+                                      borderLeft: state === 'ACTIVE' ? '3px solid var(--wb-accent-strong, #A78BFA)' : undefined,
                                       borderRadius: 14,
                                       padding: 14,
                                       cursor: 'pointer',
@@ -13250,7 +13250,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             style={{
                               background: C.card,
                               border: `1px solid ${state === 'ACTIVE' ? 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.22)' : C.border}`,
-                              borderLeft: state === 'ACTIVE' ? '3px solid #A78BFA' : undefined,
+                              borderLeft: state === 'ACTIVE' ? '3px solid var(--wb-accent-strong, #A78BFA)' : undefined,
                               borderRadius: 16,
                               padding: 14,
                               cursor: 'pointer',
@@ -20607,8 +20607,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <style>{`@keyframes gnDotPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.15); } }`}</style>
                 <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
                   {demoCard({ emoji: '🎂', emojiBg: orangeSoft, stripColor: 'linear-gradient(180deg,var(--wb-warning, #FBBF24),#f59e0b)', ringColor: 'var(--wb-warning, #FBBF24)', ringPct: 0.85, daysN: 3, title: t('gn_demo_title_mom', locale), person: t('gn_demo_person_mom', locale), ideasChip: true })}
-                  {demoCard({ emoji: '💍', emojiBg: pinkSoft, stripColor: `linear-gradient(180deg,${C.accent},#A78BFA)`, ringColor: C.accent, ringPct: 0.58, daysN: 12, title: t('gn_demo_title_anniv', locale), person: t('gn_demo_person_anniv', locale) })}
-                  {demoCard({ emoji: '🎄', emojiBg: greenSoft, stripColor: 'linear-gradient(180deg,#34D399,#6ee7b7)', ringColor: 'var(--wb-success, #4ADE80)', ringPct: 0.05, daysN: 261, title: t('gn_demo_title_ny', locale), person: t('gn_demo_person_ny', locale) })}
+                  {demoCard({ emoji: '💍', emojiBg: pinkSoft, stripColor: `linear-gradient(180deg,${C.accent},var(--wb-accent-strong, #A78BFA))`, ringColor: C.accent, ringPct: 0.58, daysN: 12, title: t('gn_demo_title_anniv', locale), person: t('gn_demo_person_anniv', locale) })}
+                  {demoCard({ emoji: '🎄', emojiBg: greenSoft, stripColor: 'linear-gradient(180deg, var(--wb-success, #34D399), var(--wb-success, #6ee7b7))', ringColor: 'var(--wb-success, #4ADE80)', ringPct: 0.05, daysN: 261, title: t('gn_demo_title_ny', locale), person: t('gn_demo_person_ny', locale) })}
                 </div>
               </div>
             </div>
@@ -20827,7 +20827,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
                     {templateCard({ emoji: '🎂', emojiBg: orangeSoft, stripColor: 'linear-gradient(180deg,var(--wb-warning, #FBBF24),#f59e0b)', title: t('gn_empty_template_bday', locale), type: 'BIRTHDAY', recurrence: 'YEARLY' })}
                     {templateCard({ emoji: '💍', emojiBg: pinkSoft, stripColor: 'linear-gradient(180deg,#EC4899,#f472b6)', title: t('gn_empty_template_anniv', locale), type: 'ANNIVERSARY', recurrence: 'YEARLY' })}
-                    {templateCard({ emoji: '🎄', emojiBg: greenSoft, stripColor: 'linear-gradient(180deg,#34D399,#6ee7b7)', title: t('gn_empty_template_holiday', locale), type: 'HOLIDAY', recurrence: 'YEARLY' })}
+                    {templateCard({ emoji: '🎄', emojiBg: greenSoft, stripColor: 'linear-gradient(180deg, var(--wb-success, #34D399), var(--wb-success, #6ee7b7))', title: t('gn_empty_template_holiday', locale), type: 'HOLIDAY', recurrence: 'YEARLY' })}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 'auto' }}>
@@ -24776,7 +24776,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 disabled={secretCreating}
                 style={{
                   width: '100%', padding: '14px', borderRadius: 14, border: 'none',
-                  background: 'linear-gradient(135deg, #A78BFA 0%, #C4A7FF 100%)',
+                  background: 'linear-gradient(135deg, var(--wb-accent-strong, #A78BFA) 0%, var(--wb-accent-light, #C4A7FF) 100%)',
                   color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer',
                   fontFamily: font, opacity: secretCreating ? 0.6 : 1,
                   boxShadow: '0 4px 14px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.32)',
@@ -29445,8 +29445,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     <div style={{
                       height: '100%', width: `${progressPct}%`, borderRadius: 6,
                       background: filledSections === totalSections
-                        ? `linear-gradient(90deg, ${C.green}, #6ee7b7)`
-                        : `linear-gradient(90deg, ${C.accent}, #a78bfa)`,
+                        ? `linear-gradient(90deg, ${C.green}, var(--wb-success, #6ee7b7))`
+                        : `linear-gradient(90deg, ${C.accent}, var(--wb-accent-strong, #a78bfa))`,
                       transition: 'width 0.4s ease',
                     }} />
                   </div>
@@ -29998,7 +29998,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14 }}>
                       <div style={{
                         width: 72, height: 72, borderRadius: '50%', overflow: 'hidden',
-                        background: `linear-gradient(135deg, ${C.accent}, #a78bfa)`,
+                        background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-strong, #a78bfa))`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         border: `3px solid ${C.bg}`, flexShrink: 0,
                       }}>
@@ -30011,7 +30011,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{dg?.displayName || dg?.username || ''}</span>
                           <span style={{
                             display: 'inline-flex', alignItems: 'center',
-                            background: `linear-gradient(135deg, ${C.accent} 0%, #a78bfa 100%)`,
+                            background: `linear-gradient(135deg, ${C.accent} 0%, var(--wb-accent-strong, #a78bfa) 100%)`,
                             color: '#fff', fontSize: 10, fontWeight: 700,
                             padding: '2px 8px', borderRadius: 10, letterSpacing: '0.04em',
                           }}>PRO</span>
