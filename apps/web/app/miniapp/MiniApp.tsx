@@ -12931,7 +12931,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           ══════════════════════════════════════════════ */}
       {screen === 'drafts' && (
         <div style={{ padding: '16px 20px 120px' }}>
-          {/* Header */}
+          {/* Header — page title + action button. Page title stays as <h1>;
+              action buttons use <Button variant="ghost" size="sm"> primitives. */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
               <div>
@@ -12945,25 +12946,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 </p>
               </div>
               {draftsItems.length > 0 && !draftsSelectMode && (
-                <button
-                  style={{ ...btnGhost, padding: '8px 14px', fontSize: 13, flexShrink: 0, marginTop: 2 }}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  fullWidth={false}
+                  style={{ padding: '8px 14px', fontSize: 13, flexShrink: 0, marginTop: 2, minHeight: 0 }}
                   onClick={() => { setDraftsSelectMode(true); setDraftsSelected([]); }}
                 >
                   {t('drafts_select', locale)}
-                </button>
+                </Button>
               )}
               {draftsSelectMode && (
-                <button
-                  style={{ ...btnGhost, padding: '8px 14px', fontSize: 13, flexShrink: 0, marginTop: 2, color: C.textMuted }}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  fullWidth={false}
+                  style={{ padding: '8px 14px', fontSize: 13, flexShrink: 0, marginTop: 2, minHeight: 0, color: C.textMuted }}
                   onClick={() => { setDraftsSelectMode(false); setDraftsSelected([]); }}
                 >
                   {t('drafts_cancel_select', locale)}
-                </button>
+                </Button>
               )}
             </div>
           </div>
 
-          {/* Bulk action bar — visible in select mode */}
+          {/* Bulk action bar — visible in select mode. Buttons are <Button> primitives. */}
           {draftsSelectMode && (
             <div style={{
               position: 'sticky', top: 0, zIndex: 10,
@@ -12971,8 +12978,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               padding: '10px 0', marginBottom: 16,
               display: 'flex', gap: 8, alignItems: 'center',
             }}>
-              <button
-                style={{ ...btnGhost, padding: '8px 12px', fontSize: 13, flex: 1 }}
+              <Button
+                variant="ghost"
+                size="sm"
+                style={{ padding: '8px 12px', fontSize: 13, flex: 1, minHeight: 0 }}
                 onClick={() => {
                   if (draftsSelected.length === draftsItems.length) {
                     setDraftsSelected([]);
@@ -12982,27 +12991,27 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 }}
               >
                 {draftsSelected.length === draftsItems.length ? t('drafts_deselect_all', locale) : t('drafts_select_all', locale)}
-              </button>
-              <button
-                style={{
-                  ...btnPrimary, padding: '8px 14px', fontSize: 13,
-                  opacity: draftsSelected.length > 0 && !draftsBulkLoading ? 1 : 0.4,
-                }}
+              </Button>
+              <Button
+                variant="primary-gradient"
+                size="sm"
+                fullWidth={false}
+                style={{ padding: '8px 14px', fontSize: 13, minHeight: 0 }}
                 disabled={draftsSelected.length === 0 || draftsBulkLoading}
                 onClick={() => setShowBulkMovePicker(true)}
               >
                 📁 {t('drafts_move', locale)}
-              </button>
-              <button
-                style={{
-                  ...btnGhost, padding: '8px 14px', fontSize: 13, color: C.red,
-                  opacity: draftsSelected.length > 0 && !draftsBulkLoading ? 1 : 0.4,
-                }}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                fullWidth={false}
+                style={{ padding: '8px 14px', fontSize: 13, minHeight: 0, color: C.red }}
                 disabled={draftsSelected.length === 0 || draftsBulkLoading}
                 onClick={() => setShowBulkDeleteConfirm(true)}
               >
                 🗑
-              </button>
+              </Button>
             </div>
           )}
 
@@ -13028,12 +13037,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </span>
                 )}
               </div>
-              <button
-                style={{
-                  ...btnPrimary,
-                  width: 48, minWidth: 48, padding: 0,
-                  opacity: importUrl.trim() && !importLoading ? 1 : 0.5,
-                }}
+              <Button
+                variant="primary-gradient"
+                fullWidth={false}
+                style={{ width: 48, minWidth: 48, padding: 0 }}
                 onClick={() => {
                   if (planInfo.code === 'FREE') { showUpsell('url_import'); return; }
                   void handleImportUrl();
@@ -13041,25 +13048,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 disabled={!importUrl.trim() || importLoading}
               >
                 {importLoading ? '…' : '📥'}
-              </button>
+              </Button>
             </div>
           )}
 
-          {/* Draft items list */}
+          {/* Draft items list — <Card variant="interactive"> tiles with selection state. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {draftsItems.map((item, i) => {
               const isSelected = draftsSelected.includes(item.id);
               return (
-                <div
+                <Card
                   key={item.id}
+                  variant="interactive"
+                  padding="md"
                   style={{
-                    background: draftsSelectMode && isSelected ? C.accentSoft : C.card,
-                    borderRadius: 16, padding: 16,
-                    border: draftsSelectMode && isSelected ? `1.5px solid ${C.accent}` : `1px solid ${C.border}`,
+                    borderRadius: 16,
+                    background: draftsSelectMode && isSelected ? C.accentSoft : undefined,
+                    border: draftsSelectMode && isSelected ? `1.5px solid ${C.accent}` : undefined,
                     animation: `fadeIn 0.3s ease ${i * 0.06}s both`,
                     cursor: draftsSelectMode ? 'pointer' : 'default',
                     WebkitTapHighlightColor: 'transparent',
-                    transition: 'background 0.15s, border-color 0.15s',
                   }}
                   onClick={draftsSelectMode ? () => {
                     setDraftsSelected(prev =>
@@ -13105,23 +13113,31 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     </div>
                   </div>
 
-                  {/* Action buttons — hidden in select mode */}
+                  {/* Action buttons — hidden in select mode. <Button> primitives. */}
                   {!draftsSelectMode && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                      <button
-                        style={{ ...btnSecondary, flex: 1, padding: '10px 0', fontSize: 13 }}
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        style={{ flex: 1, padding: '10px 0', fontSize: 13, minHeight: 0 }}
                         onClick={() => { setMovingItem(item); setShowMovePicker(true); }}
                       >
                         📁 {t('drafts_move', locale)}
-                      </button>
-                      <button
-                        style={{ ...btnGhost, padding: '10px 12px', fontSize: 13, color: C.textMuted }}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        fullWidth={false}
+                        style={{ padding: '10px 12px', fontSize: 13, minHeight: 0, color: C.textMuted }}
                         onClick={() => handleArchiveDraft(item)}
                       >
                         📦 {t('drafts_archive', locale)}
-                      </button>
-                      <button
-                        style={{ ...btnGhost, padding: '10px 12px', fontSize: 13 }}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        fullWidth={false}
+                        style={{ padding: '10px 12px', fontSize: 13, minHeight: 0 }}
                         onClick={() => {
                           setViewingItem(item);
                           setFromDrafts(true);
@@ -13129,10 +13145,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         }}
                       >
                         {t('drafts_open', locale)}
-                      </button>
+                      </Button>
                     </div>
                   )}
-                </div>
+                </Card>
               );
             })}
           </div>
