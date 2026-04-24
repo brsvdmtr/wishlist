@@ -29887,10 +29887,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </button>
                 </div>
 
-                {/* ── Preview + Save buttons ── */}
+                {/* ── Preview + Save buttons — <Button> primitives ── */}
                 <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
                     onClick={() => {
                       trackEvent('showcase.preview_opened');
                       // Reset scroll BEFORE setScreen so there's no visible jump
@@ -29900,32 +29900,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       setScreen('showcase-preview');
                     }}
                     disabled={!hasAnyContent}
-                    style={{
-                      ...btnSecondary,
-                      background: hasAnyContent ? C.accentSoft : C.surface,
-                      color: hasAnyContent ? C.accent : C.textMuted,
-                      cursor: hasAnyContent ? 'pointer' : 'default',
-                    }}
                   >
                     {t('showcase_editor_preview_cta', locale)}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="primary-gradient"
+                    loading={showcaseSaving}
+                    disabled={showcaseSaving || !hasAnyContent}
                     onClick={async () => {
                       await saveShowcase({ enabled: true }, { publish: !sc.enabled });
                     }}
-                    disabled={showcaseSaving || !hasAnyContent}
-                    style={{
-                      ...btnPrimary,
-                      background: hasAnyContent ? `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))` : C.surface,
-                      color: hasAnyContent ? '#fff' : C.textMuted,
-                      opacity: showcaseSaving ? 0.7 : 1,
-                      boxShadow: hasAnyContent ? `0 6px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)` : 'none',
-                    }}
                   >
-                    {showcaseSaving
-                      ? t('showcase_editor_saving', locale)
-                      : t('showcase_editor_save', locale)}
-                  </button>
+                    {t('showcase_editor_save', locale)}
+                  </Button>
                 </div>
               </div>
             )}
@@ -29946,21 +29933,23 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{t('showcase_cover_remove_title', locale)}</div>
                   <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5, marginBottom: 18 }}>{t('showcase_cover_remove_desc', locale)}</div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button
+                    <Button
+                      variant="secondary"
+                      style={{ flex: 1 }}
                       onClick={() => setShowcaseCoverRemoveConfirm(false)}
-                      style={{ flex: 1, padding: '12px 14px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: C.surface, color: C.text, border: `1px solid ${C.border}` }}
                     >
                       {t('cancel', locale)}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="danger-solid"
+                      style={{ flex: 1 }}
                       onClick={async () => {
                         setShowcaseCoverRemoveConfirm(false);
                         await removeShowcaseCover();
                       }}
-                      style={{ flex: 1, padding: '12px 14px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font, background: C.red, color: '#fff', border: 'none' }}
                     >
                       {t('showcase_cover_remove_confirm', locale)}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
