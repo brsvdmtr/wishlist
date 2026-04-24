@@ -11261,14 +11261,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {/* CTA */}
               {tgDeepLink && (
                 <a href={tgDeepLink} style={{ textDecoration: 'none', width: '100%', marginTop: 20 }}>
-                  <button style={{
-                    ...btnPrimary, width: '100%', padding: '14px',
-                    background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))`,
-                    fontSize: 15, fontWeight: 700, borderRadius: 14,
-                    boxShadow: `0 6px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)`,
-                  }}>
+                  <Button variant="primary-gradient" size="md">
                     {t('onboarding_telegram_button', locale)}
-                  </button>
+                  </Button>
                 </a>
               )}
 
@@ -11312,12 +11307,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               ? 'Этот вишлист был удалён или ссылка больше не работает.'
               : 'This wishlist has been deleted or the link no longer works.'}
           </div>
-          <button
-            style={{ ...btnPrimary, marginTop: 8, width: 220 }}
+          <Button
+            variant="primary"
+            fullWidth={false}
+            style={{ marginTop: 8, width: 220 }}
             onClick={() => { setScreen('my-wishlists'); }}
           >
             {locale === 'ru' ? 'Мои вишлисты' : 'My wishlists'}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -11333,8 +11330,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{ fontSize: 15, color: C.textSec, textAlign: 'center', lineHeight: 1.5, fontFamily: font }}>
             {t('item_unavailable_subtitle', locale)}
           </div>
-          <button
-            style={{ ...btnPrimary, marginTop: 8, width: 220 }}
+          <Button
+            variant="primary"
+            fullWidth={false}
+            style={{ marginTop: 8, width: 220 }}
             onClick={() => {
               replyEntryRef.current = null;
               setItemUnavailableReason('not_found');
@@ -11342,7 +11341,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             }}
           >
             {t('go_home_btn', locale)}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -11359,12 +11358,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, marginTop: 4 }}>
             {t('maintenance_notify_hint', locale)}
           </div>
-          <button
-            style={{ ...btnPrimary, marginTop: 8, width: 200 }}
+          <Button
+            variant="primary"
+            fullWidth={false}
+            style={{ marginTop: 8, width: 200 }}
             onClick={() => { setScreen('loading'); window.location.reload(); }}
           >
             {t('maintenance_retry', locale)}
-          </button>
+          </Button>
         </div>
       )}
 
