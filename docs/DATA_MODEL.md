@@ -1,6 +1,6 @@
 # Data Model — Wishlist Telegram Mini App
 
-_Last updated: 2026-04-17_
+_Last updated: 2026-04-24_
 
 > **67 models, 35 enums** (PostgreSQL 16, managed by Prisma ORM)
 
@@ -397,8 +397,10 @@ A registered user, identified primarily by their Telegram account.
 | `createdAt`      | DateTime  | Yes      | now     |                                                                    |
 | `updatedAt`      | DateTime  | Yes      | auto    |                                                                    |
 
-| `santaTestMode`  | Boolean   | Yes      | `false` | When `true`, bypasses Santa season restrictions for testing          |
-| `welcomeSent`    | Boolean   | Yes      | `true`  | Tracks whether the welcome /start message was delivered              |
+| `santaTestMode`      | Boolean   | Yes      | `false`    | When `true`, bypasses Santa season restrictions for testing          |
+| `welcomeSent`        | Boolean   | Yes      | `true`     | Tracks whether the welcome /start message was delivered              |
+| `themePreference`    | String    | Yes      | `"dark"`   | v2.1 appearance: `"dark"` \| `"black"`. PRO unlocks `"black"`; FREE is always `"dark"` |
+| `accentPreference`   | String    | Yes      | `"violet"` | v2.1 appearance: `"violet"` \| `"blue"` \| `"pink"` \| `"green"`. PRO unlocks non-violet accents |
 
 **Relations:**
 - `wishlists[]` → `Wishlist` (owned wishlists)

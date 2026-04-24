@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-04-24 — Weekly Documentation Update
+
+**6 docs updated** to reflect ~111 commits (April 17–24):
+
+- **CURRENT_PRODUCT_STATE.md** — screen count 58→59 (calendar), yearly PRO plan, v2.1 UI refresh, FloatingNav, appearance customisation, updated feature flags
+- **DATA_MODEL.md** — added `themePreference` and `accentPreference` fields on `User` model
+- **API_REFERENCE.md** — updated `GET /tg/me/plan` response (`proYearlyPriceStars`, `appearance`, `billingPeriod`); updated `POST /tg/billing/pro/checkout` for monthly/yearly param; updated `PATCH /tg/me/settings` for appearance
+- **MONETIZATION.md** — added yearly PRO plan (800 XTR one-time), updated Plans table, added env vars, updated checkout flow, added PRO renewal reminders section
+- **FRONTEND_MAP.md** — screen count 58→59, added `calendar` screen, updated `Screen` type union, updated `C` color values to v2.1 palette, added FloatingNav and appearance theme docs, added `UpsellContext 'appearance'`
+- **CHANGELOG_DOCS.md** — this entry
+
+**Key shipped features:**
+
+- **v2.1 UI Refresh** — 80 wave items (W1–W80) complete; glass morphism, mesh gradients, accent glow across all screens
+- **FloatingNav** — persistent bottom nav globally replaces outer home tab bar (W47/W69)
+- **Yearly PRO Plan** — 800 XTR one-time; monthly/yearly paywall toggle; renewal reminder DMs at 7d and 1d before expiry
+- **Appearance Customisation** (PRO) — theme dark/black + accent violet/blue/pink/green; stored server-side on `User`
+- **Calendar Screen** — new UI scaffold (W30), backend stub pending
+- **Billing resilience** — `createTgInvoiceLink` retry wrapper; 503 on TG API timeout instead of 500
+
+---
+
 ## 2026-04-17 — Weekly Documentation Update
 
 **7 docs updated** to reflect changes from ~50 commits (April 10–17):

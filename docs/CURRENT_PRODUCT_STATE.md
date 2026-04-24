@@ -2,7 +2,7 @@
 
 Production feature inventory for the Wishlist Telegram Mini App.
 
-**Last updated:** 2026-04-17
+**Last updated:** 2026-04-24
 
 ---
 
@@ -22,8 +22,8 @@ Production feature inventory for the Wishlist Telegram Mini App.
 
 ## Monetization
 
-- **PRO subscription**: 100 XTR/month
-- **14 add-on SKUs** (including Gift Notes at 19 XTR, reservation_pro_unlock at 50 XTR, group_gift_unlock at 79 XTR, secret_reservation_unlock at 24 XTR, smart_reservations_unlock at 39 XTR)
+- **PRO subscription**: 100 XTR/month (auto-renewing) **or** 800 XTR/year (one-time, ~33% savings)
+- **14 add-on SKUs** (including Gift Notes at 19 XTR, reservation_pro_unlock at 50 XTR, group_gift_unlock at 79 XTR, secret_reservation_unlock at 24 XTR, smart_reservations_unlock at 15 XTR)
 
 ### Plan Limits
 
@@ -41,7 +41,7 @@ See also: `docs/MONETIZATION.md`
 ## Scale
 
 - **67 Prisma models**, **35 enums**
-- **58 screens** in the Mini App
+- **59 screens** in the Mini App
 - **14 add-on SKUs**
 
 ## Lifecycle & Retention
@@ -55,9 +55,10 @@ See also: `docs/MONETIZATION.md`
 
 | Flag                      | Status                    |
 |---------------------------|---------------------------|
+| v2.1 UI refresh           | Rolled out (100%) — all 80 wave items shipped (W1–W80) |
 | Card redesign             | Rolled out (100%)         |
 | Item detail redesign      | Rolled out (100%)         |
-| Profile redesign          | Canary (single Telegram ID) |
+| Profile redesign          | Rolled out (100%)         |
 | Onboarding v2             | Default                   |
 | Onboarding v1             | Deprecated                |
 | Referral Program          | Disabled (enabled=false, flag-controlled) |
@@ -74,6 +75,11 @@ See also: `docs/MONETIZATION.md`
 
 ## Recently Shipped
 
+- **v2.1 UI Refresh** — Complete visual redesign across all screens (80 wave items). Glass morphism, mesh gradients, accent glow, liquid-glass header/input bars, v2.1 display typography (26/700/−0.035em). All primitives from `@wishlist/ui` adopted (Button, Card, Chip, Banner, SectionHeader, ListRow, StatTile, FloatingNav, HeroCard)
+- **FloatingNav** — Persistent Instagram-like bottom navigation bar globally replacing the outer home tab bar. Tabs: Home / Archive / Profile / Reservations
+- **Yearly PRO Plan** — 800 XTR one-time purchase extends PRO by 365 days (~33% savings vs monthly). Monthly/yearly toggle on paywall. Bot sends DM renewal reminders at 7 days and 1 day before expiry
+- **Appearance Customisation** (PRO) — Theme (dark/black) and accent colour (violet/blue/pink/green). Persisted on `User.themePreference` / `User.accentPreference`. Served in `GET /tg/me/plan` as `appearance`. FREE locked to dark+violet
+- **Calendar Screen** — New UI scaffold (W30). Backend not yet connected
 - **Showcase** — PRO premium public profile page with cover photo, bio, pinned wishlists, preferences (clothing/shoe/ring sizes, body measurements, brand preferences). New screens: showcase-editor, showcase-preview
 - **Profile Subscriptions** — Follow other users' public profiles/showcases (PRO)
 - **Curated Selections ("часть вишлиста")** — Share a selected subset of wish items via a temporary link (PRO). Guests can subscribe to curated selections

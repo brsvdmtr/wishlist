@@ -1,17 +1,21 @@
 # MONETIZATION
 
 > Source of truth for plans, limits, entitlements, billing flow, and paywall content.
-> Last updated: 2026-04-17 · Branch: main
+> Last updated: 2026-04-24 · Branch: main
 
 ---
 
 ## 1. Plans
 
-| | **FREE** | **PRO** |
-|---|---|---|
-| **Code** | `FREE` | `PRO` |
-| **Price** | — | 100 Telegram Stars / month |
-| **Renewal** | — | Auto-renew (soft cancel: access until period end) |
+| | **FREE** | **PRO Monthly** | **PRO Yearly** |
+|---|---|---|---|
+| **Code** | `FREE` | `PRO` | `PRO` |
+| **Price** | — | 100 Telegram Stars / month | 800 Telegram Stars (one-time) |
+| **Renewal** | — | Auto-renew (soft cancel: access until period end) | No auto-renewal; manual renewal required |
+| **Duration** | — | 30 days per period | 365 days (one-time payment) |
+| **Savings** | — | — | ~33% vs 12 monthly payments |
+
+**Yearly plan** is a non-recurring Telegram Stars invoice. When paid, the bot extends `Subscription.currentPeriodEnd` by `PRO_YEARLY_EXTEND_SECONDS` (default: 31 536 000 = 365 days). Yearly subscriptions and monthly ones with `cancelAtPeriodEnd=true` receive bot renewal reminder DMs at 7 days and 1 day before expiry.
 
 All limits and feature flags are defined in a single constant in `apps/api/src/index.ts`:
 
@@ -151,21 +155,28 @@ hasSmartReservations[wId]   = UserAddOn(addonType='smart_reservations_unlock' AN
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PRO_PRICE_XTR` | `100` | Stars price per period |
-| `PRO_SUBSCRIPTION_PERIOD` | `2592000` | Subscription length in seconds (30 days) |
+| `PRO_PRICE_XTR` | `100` | Stars price per monthly period |
+| `PRO_SUBSCRIPTION_PERIOD` | `2592000` | Monthly subscription length in seconds (30 days) |
 | `PRO_PLAN_CODE` | `PRO` | Plan code string |
+| `PRO_YEARLY_PRICE_XTR` | `800` | Stars price for yearly one-time purchase |
+| `PRO_YEARLY_EXTEND_SECONDS` | `31536000` | Seconds added to `currentPeriodEnd` on yearly purchase (365 days) |
 
 ### Checkout Flow
 
 ```
-User taps "Подключить Pro"
-  → POST /tg/billing/pro/checkout
-  → Creates Telegram Stars invoice link
-  → Returns { invoiceLink }
+User selects monthly or yearly plan in paywall
+  → POST /tg/billing/pro/checkout { plan: 'monthly' | 'yearly' }
+  → createTgInvoiceLink() — wraps TG API call with 1 retry on network failure
+      ok=true  → url returned
+      ok=false, retryable  → 503 telegram_unavailable (client should show retry toast)
+      ok=false, !retryable → 502 (Telegram rejected payload)
+  → Returns { invoiceUrl, checkoutSessionId, plan }
   → Frontend opens invoice via Telegram.WebApp.openInvoice()
   → User pays in Telegram
   → Telegram sends pre_checkout_query → bot answers ok
   → Telegram sends successful_payment → bot creates/extends Subscription
+      monthly: sets currentPeriodEnd = now + PRO_SUBSCRIPTION_PERIOD
+      yearly:  extends currentPeriodEnd by PRO_YEARLY_EXTEND_SECONDS; billingPeriod='yearly'
   → Frontend polls POST /tg/billing/pro/sync to confirm
   → Returns updated plan + subscription
 ```
@@ -189,6 +200,17 @@ User taps "Подключить Pro"
 | `ACTIVE` | `true` | Access until period end, then FREE |
 | `CANCELLED` | — | Was cancelled; if `currentPeriodEnd > now` still PRO |
 | `EXPIRED` | — | Past period end; marked EXPIRED by hourly job |
+
+### PRO Renewal Reminders
+
+Hourly cron job sends bot DM reminders to users whose PRO is expiring soon. Only fires for yearly subscriptions and monthly ones with `cancelAtPeriodEnd=true` (auto-renewing monthly subscribers receive no reminder — Telegram charges automatically).
+
+| Milestone | Window | i18n Key |
+|-----------|--------|----------|
+| 7 days before expiry | 6–8 days before `currentPeriodEnd` | `bot_pro_renewal_7d` |
+| 1 day before expiry | 12–36 hours before `currentPeriodEnd` | `bot_pro_renewal_1d` |
+
+Idempotency: synthetic `PaymentEvent.telegramPaymentChargeId = "reminder:{milestone}:{subId}:{periodEndISO}"` prevents duplicate sends.
 
 ### Anti-Churn Cancel Flow
 

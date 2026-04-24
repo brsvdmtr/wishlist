@@ -222,7 +222,7 @@ Access controlled by `hasReservationPro()` — currently limited to focus-group 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
 | GET | `/tg/me/settings` | Auth user | All settings. Includes `languageMode`, `manualLanguage`, `effectiveLanguage`, `supportId`. FREE users: all notifications normalized to ON |
-| PATCH | `/tg/me/settings` | Auth user | Update settings. `languageMode` (auto/manual), `manualLanguage` (ru/en/zh-CN/hi/es/ar). PRO-gated: all notification preferences, `commentsEnabled`, `newWishlistPosition=top`, `cardDisplayMode` non-auto |
+| PATCH | `/tg/me/settings` | Auth user | Update settings. `languageMode` (auto/manual), `manualLanguage` (ru/en/zh-CN/hi/es/ar). PRO-gated: all notification preferences, `commentsEnabled`, `newWishlistPosition=top`, `cardDisplayMode` non-auto. **v2.1:** `appearance.theme` (`"dark"|"black"`) and `appearance.accent` (`"violet"|"blue"|"pink"|"green"`) — PRO-gated; FREE values silently normalised to `dark`+`violet`. Stored on `User.themePreference` / `User.accentPreference` |
 | DELETE | `/tg/me/account` | Auth user | Permanently delete account. Blocks if user owns active Santa campaigns |
 
 ### Don't Gift Preferences (PRO-gated save)
@@ -238,8 +238,8 @@ Allows users to specify items they don't want to receive as gifts. Visible on pu
 
 | Method | Path | Who | Description |
 |--------|------|-----|-------------|
-| GET | `/tg/me/plan` | Auth user | Current plan, subscription, usage, add-ons, credits, SKU catalog. Includes `proSource`, `promoPro`, `reservationPro` (boolean — Reservation PRO access flag) |
-| POST | `/tg/billing/pro/checkout` | Auth user | Create Telegram Stars invoice link (100 XTR/month). Returns `{ alreadySubscribed }` if active PRO. Creates `invoice_created` payment event |
+| GET | `/tg/me/plan` | Auth user | Current plan, subscription, usage, add-ons, credits, SKU catalog. Includes `proSource`, `promoPro`, `reservationPro`, `proYearlyPriceStars` (800), `appearance: { theme, accent }` (v2.1). Subscription includes `billingPeriod` (`"monthly"` \| `"yearly"` \| `null`) |
+| POST | `/tg/billing/pro/checkout` | Auth user | Create Telegram Stars invoice link. Body: `{ plan?: 'monthly' | 'yearly' }` (defaults to `monthly` for back-compat). Monthly: 100 XTR recurring. Yearly: 800 XTR one-time. Returns `{ invoiceUrl, checkoutSessionId, plan }`. 503 if Telegram API is unreachable (client should show retry toast) |
 | POST | `/tg/billing/pro/sync` | Auth user | Re-query subscription state after payment. Does NOT activate (bot does). Returns `{ plan, subscription }` |
 | GET | `/tg/billing/history` | Auth user | Last 20 payment events |
 | POST | `/tg/billing/subscription/cancel` | Auth user (PRO) | Soft-cancel: `cancelAtPeriodEnd=true`. PRO continues until period end. 404 if no active subscription |

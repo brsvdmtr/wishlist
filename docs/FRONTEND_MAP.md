@@ -1,6 +1,6 @@
 # FRONTEND_MAP.md — Frontend Architecture
 
-> Date: 2026-04-17. Verified from source code.
+> Date: 2026-04-24. Verified from source code.
 
 ---
 
@@ -18,7 +18,7 @@ apps/web/
     miniapp/
       layout.tsx                 - Mini App layout (viewport meta, Telegram script)
       page.tsx                   - Mini App page entry (renders <MiniApp />)
-      MiniApp.tsx                - THE ENTIRE MINI APP (~16,663 lines, single component)
+      MiniApp.tsx                - THE ENTIRE MINI APP (~30,000+ lines, single component)
       TelegramWebApp.tsx         - Telegram WebApp type declarations / helper
     admin/
       page.tsx                   - Admin: wishlist list
@@ -39,9 +39,9 @@ packages/shared/src/
 
 ## 2. Screen State Machine
 
-`MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook. There is no routing library. ~300 `useState` calls and 240+ in the main component.
+`MiniApp.tsx` manages navigation exclusively through a `useState<Screen>` hook. There is no routing library.
 
-### Screen Type Union (58 screens)
+### Screen Type Union (59 screens)
 
 ```typescript
 type Screen =
@@ -80,7 +80,9 @@ type Screen =
   // Utility (3)
   | 'item-unavailable' | 'first-share-prompt' | 'link-management'
   // Settings extras (4)
-  | 'faq' | 'changelog' | 'legal' | 'legal-doc';
+  | 'faq' | 'changelog' | 'legal' | 'legal-doc'
+  // Calendar (1) — UI scaffold only; backend not yet connected
+  | 'calendar';
 ```
 
 Navigation is done by calling `setScreen(...)` together with supporting state (`setSelectedWishlist(...)`, `setSelectedItem(...)`, etc.). There are no URL changes.
@@ -94,7 +96,7 @@ Navigation is done by calling `setScreen(...)` together with supporting state (`
 | 1 | `loading` | Spinner while Telegram initData is validated and initial data is fetched |
 | 2 | `error` | Error state with retry button; shown when init fetch fails |
 | 3 | `maintenance` | Shown when API responds 503 with `code: 'MAINTENANCE'` |
-| 4 | `my-wishlists` | Home: 3-tab segmented nav (My Wishlists / All Wishes / My Reservations) |
+| 4 | `my-wishlists` | Home: v2.1 IA — StatRow (4 tiles) + inner tabs (Wishlists / Wishes / Reservations / Архив). FloatingNav replaces the outer 3-tab bar (W69) |
 | 5 | `wishlist-detail` | Items list for a specific wishlist (owner view). Filter/sort, item counter, privacy settings, share button, add item, drag-to-reorder within priority group |
 | 6 | `item-detail` | Full item edit/view for owner: title, description, price, priority, currency, URL, photo. Complete/delete. Comments thread. Hint button (PRO). Move to another wishlist |
 
@@ -238,6 +240,12 @@ Additional screens accessible from the settings area.
 |---|--------|-------------|
 | 58 | `onboarding-manual` | Manual item creation in onboarding |
 
+#### Calendar (1)
+
+| # | Screen | Description |
+|---|--------|-------------|
+| 59 | `calendar` | Calendar view scaffold (v2.1 UI-only; backend API not yet connected as of 2026-04-24) |
+
 ---
 
 ## 3. Home Tabs
@@ -263,38 +271,58 @@ The `wishlists` tab also shows:
 
 ## 4. Design System
 
-All colors are defined in the `C` constant at the top of `MiniApp.tsx`.
+> **v2.1 refresh shipped 2026-04-21 (W22–W80, 80 total wave items).** All screens updated to glass + mesh + accent-gradient styling. The `C` constant values below reflect the v2.1 palette.
 
-### Colors
+All legacy colors are defined in the `C` constant at the top of `MiniApp.tsx`. New primitives from `@wishlist/ui` use CSS custom properties (`var(--wb-*)`) defined in `packages/ui-tokens`.
+
+### Colors (v2.1 values)
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `C.bg` | `#1B1B1F` | Page background |
+| `C.bg` | `#0F0F12` | Page background (darker than v1) |
 | `C.surface` | `#26262C` | Cards, bottom sheets |
 | `C.surfaceHover` | `#2E2E36` | Hover / press states |
 | `C.card` | `#2F2F38` | Item cards |
-| `C.accent` | `#7C6AFF` | Primary purple: buttons, active states |
-| `C.accentSoft` | `rgba(124,106,255,0.12)` | Secondary button backgrounds |
-| `C.accentGlow` | `rgba(124,106,255,0.25)` | Glow effects |
-| `C.green` | `#34D399` | Success, available status |
-| `C.greenSoft` | `rgba(52,211,153,0.12)` | Green tinted backgrounds |
+| `C.accent` | `#8B7BFF` | Primary violet: buttons, active states (v2.1) |
+| `C.accentSoft` | `rgba(139,123,255,0.14)` | Secondary button backgrounds |
+| `C.accentGlow` | `rgba(139,123,255,0.25)` | Glow effects |
+| `C.green` | `#4ADE80` | Success, available status (v2.1) |
+| `C.greenSoft` | `rgba(74,222,128,0.14)` | Green tinted backgrounds |
 | `C.orange` | `#FBBF24` | Warning, medium priority |
-| `C.orangeSoft` | `rgba(251,191,36,0.12)` | Orange tinted backgrounds |
-| `C.red` | `#F87171` | Error, destructive, deleted |
-| `C.redSoft` | `rgba(248,113,113,0.12)` | Red tinted backgrounds |
-| `C.text` | `#F4F4F6` | Primary text |
-| `C.textSec` | `#9CA3AF` | Secondary text |
-| `C.textMuted` | `#6B7280` | Muted / placeholder text |
+| `C.orangeSoft` | `rgba(251,191,36,0.14)` | Orange tinted backgrounds |
+| `C.red` | `#FB7185` | Error, destructive, deleted (v2.1) |
+| `C.redSoft` | `rgba(251,113,133,0.14)` | Red tinted backgrounds |
+| `C.text` | `#FFFFFF` | Primary text (pure white in v2.1) |
+| `C.textSec` | `#C7CAD1` | Secondary text (v2.1) |
+| `C.textMuted` | `#8F94A3` | Muted / placeholder text (v2.1) |
 | `C.border` | `rgba(255,255,255,0.06)` | Subtle borders |
 | `C.borderLight` | `rgba(255,255,255,0.1)` | Input borders |
 
+### v2.1 Appearance Themes (PRO-gated)
+
+The v2.1 refresh introduced runtime theme + accent customisation, stored in `User.themePreference` / `User.accentPreference` and served in `GET /tg/me/plan` as `appearance`.
+
+| Theme | Value | Notes |
+|-------|-------|-------|
+| Dark | `"dark"` | Default; available to all users |
+| Black | `"black"` | PRO only |
+
+| Accent | Value | Notes |
+|--------|-------|-------|
+| Violet | `"violet"` | Default; available to all users |
+| Blue | `"blue"` | PRO only |
+| Pink | `"pink"` | PRO only |
+| Green | `"green"` | PRO only |
+
+On PRO → FREE downgrade, the server normalises both to `dark` + `violet`.
+
 ### Priority Colors
 
-| Level | num | Emoji | Color | Background |
-|-------|-----|-------|-------|-----------|
-| LOW | 1 | -- | `#6B7FD4` | `rgba(107,127,212,0.13)` |
-| MEDIUM | 2 | -- | `#E8930A` | `rgba(232,147,10,0.13)` |
-| HIGH | 3 | -- | `#F04E6E` | `rgba(240,78,110,0.13)` |
+| Level | num | Color | Background |
+|-------|-----|-------|-----------|
+| LOW | 1 | `#6B7FD4` | `rgba(107,127,212,0.13)` |
+| MEDIUM | 2 | `#E8930A` | `rgba(232,147,10,0.13)` |
+| HIGH | 3 | `#F04E6E` | `rgba(240,78,110,0.13)` |
 
 ### Typography
 
@@ -302,29 +330,36 @@ All colors are defined in the `C` constant at the top of `MiniApp.tsx`.
 const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
 ```
 
-### Button Styles (inline CSSProperties)
+v2.1 display titles: `fontSize: 26`, `fontWeight: 700`, `letterSpacing: '-0.035em'`, `lineHeight: 1.05`.
+
+### Button Styles (inline CSSProperties — v2.1)
 
 | Const | Background | Text color | Width | Usage |
 |-------|-----------|------------|-------|-------|
-| `btnPrimary` | `C.accent` | `#fff` | 100% | Primary actions |
-| `btnSecondary` | `C.accentSoft` | `C.accent` | 100% | Secondary / ghost accent |
+| `btnPrimary` | accent→accentDeep gradient + inset glow | `#fff` | 100% | Primary actions |
+| `btnSecondary` | `C.accentSoft` + accentSoft border | `C.accent` | 100% | Secondary / ghost accent |
 | `btnGhost` | transparent | `C.textSec` | auto | Subtle actions |
-| `inputStyle` | `C.surface` | `C.text` | 100% | Text inputs and textareas |
+| `inputStyle` | `C.surface` (glass) | `C.text` | 100% | Text inputs and textareas |
 
-All buttons: `borderRadius: 14`, `fontSize: 15`, `fontWeight: 600`, `padding: '14px 24px'`.
+Buttons: `borderRadius: 16` (v2.1, was 12), `fontSize: 15`, `fontWeight: 600`, `padding: '14px 24px'`.
+
+### FloatingNav
+
+`FloatingNav` (from `@wishlist/ui`) was adopted globally in W47. It provides an Instagram-like persistent bottom navigation bar across all main screens. Replaces the outer 3-tab segmented control that was previously shown only on the home screen (W69). Navigation tabs: Home (🏠), Archive (📦), Profile (👤), Reservations (🎁).
 
 ---
 
 ## 5. PRO Upsell System
 
-### UpsellContext type (8 trigger points)
+### UpsellContext type (9 trigger points)
 
 ```typescript
 type UpsellContext =
   | 'comments' | 'url_import' | 'hints'
   | 'wishlist_limit' | 'item_limit' | 'participant_limit'
   | 'subscription_limit' | 'sort_recommended'
-  | 'reservation_pro';
+  | 'reservation_pro'
+  | 'appearance'; // v2.1: triggers when FREE user taps a locked theme or accent
 ```
 
 Each context can trigger either a PRO upgrade sheet or an add-on purchase offer (when available).
