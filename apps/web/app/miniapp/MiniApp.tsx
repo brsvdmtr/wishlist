@@ -16680,40 +16680,49 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     <p style={{ fontSize: 11, color: C.orange, margin: '6px 0 0' }}>{t('archive_retention', locale)}</p>
                   )}
                 </div>
-                {/* Right header actions */}
+                {/* Right header actions — <Button> primitives */}
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginTop: 2 }}>
                   {displayItems.length > 0 && !archiveSelectMode && (
                     <>
                       {/* Trash icon → enter select mode */}
-                      <button
-                        style={{ background: 'none', border: 'none', padding: '6px 8px', cursor: 'pointer', color: C.textMuted, borderRadius: 8 }}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        fullWidth={false}
+                        style={{ padding: '6px 8px', fontSize: 14, minHeight: 0, color: C.textMuted }}
                         onClick={() => { setArchiveSelectMode(true); setArchiveSelected([]); }}
                         title={t('archive_purge_btn', locale)}
                       >
                         🗑
-                      </button>
+                      </Button>
                       {/* Select button */}
-                      <button
-                        style={{ ...btnGhost, padding: '6px 12px', fontSize: 13 }}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        fullWidth={false}
+                        style={{ padding: '6px 12px', fontSize: 13, minHeight: 0 }}
                         onClick={() => { setArchiveSelectMode(true); setArchiveSelected([]); }}
                       >
                         {t('archive_select', locale)}
-                      </button>
+                      </Button>
                     </>
                   )}
                   {archiveSelectMode && (
-                    <button
-                      style={{ ...btnGhost, padding: '6px 12px', fontSize: 13, color: C.textMuted }}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      fullWidth={false}
+                      style={{ padding: '6px 12px', fontSize: 13, minHeight: 0, color: C.textMuted }}
                       onClick={() => { setArchiveSelectMode(false); setArchiveSelected([]); }}
                     >
                       {t('archive_cancel_select', locale)}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* ── Sticky action bar in select mode ── */}
+            {/* ── Sticky action bar in select mode — all buttons are <Button> primitives ── */}
             {archiveSelectMode && (
               <div style={{
                 position: 'sticky', top: 0, zIndex: 10,
@@ -16722,8 +16731,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 display: 'flex', gap: 8, alignItems: 'center',
               }}>
                 {/* Select all / Deselect all */}
-                <button
-                  style={{ ...btnGhost, padding: '8px 12px', fontSize: 13, flex: 1 }}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  style={{ padding: '8px 12px', fontSize: 13, flex: 1, minHeight: 0 }}
                   onClick={() => {
                     if (archiveSelected.length === displayItems.length) {
                       setArchiveSelected([]);
@@ -16733,41 +16744,42 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   }}
                 >
                   {archiveSelected.length === displayItems.length ? t('archive_deselect_all', locale) : t('archive_select_all', locale)}
-                </button>
+                </Button>
                 {/* Restore */}
-                <button
-                  style={{
-                    ...btnPrimary, padding: '8px 12px', fontSize: 13,
-                    opacity: archiveSelected.length > 0 && !archiveBulkLoading ? 1 : 0.4,
-                  }}
+                <Button
+                  variant="primary-gradient"
+                  size="sm"
+                  fullWidth={false}
+                  style={{ padding: '8px 12px', fontSize: 13, minHeight: 0 }}
                   disabled={archiveSelected.length === 0 || archiveBulkLoading}
                   onClick={() => void handleBulkRestore()}
                 >
                   {archiveBulkLoading ? '…' : t('archive_bulk_restore_btn', locale)}
-                </button>
+                </Button>
                 {/* Hard delete */}
-                <button
-                  style={{
-                    ...btnGhost, padding: '8px 12px', fontSize: 13, color: C.red,
-                    opacity: archiveSelected.length > 0 && !archiveBulkLoading ? 1 : 0.4,
-                  }}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  fullWidth={false}
+                  style={{ padding: '8px 12px', fontSize: 13, minHeight: 0, color: C.red }}
                   disabled={archiveSelected.length === 0 || archiveBulkLoading}
                   onClick={() => setShowArchiveBulkDeleteConfirm(true)}
                 >
                   🗑
-                </button>
+                </Button>
                 {/* Purge entire archive (only in global mode) */}
                 {archiveMode === 'global' && displayItems.length > 0 && (
-                  <button
-                    style={{
-                      ...btnGhost, padding: '8px 10px', fontSize: 12, color: C.textMuted,
-                    }}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    fullWidth={false}
+                    style={{ padding: '8px 10px', fontSize: 12, minHeight: 0, color: C.textMuted }}
                     disabled={archiveBulkLoading}
                     onClick={() => { setArchivePurgeStep(1); setShowArchivePurgeConfirm(true); }}
                     title={t('archive_purge_btn', locale)}
                   >
                     ☠️
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -16781,7 +16793,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             )}
 
-            {/* ── Item list ── */}
+            {/* ── Item list — <Card variant="interactive"> tiles with selection state ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {displayItems.map((item, i) => {
                 const isSelected = archiveSelected.includes(item.id);
@@ -16795,16 +16807,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       );
                     } : undefined}
                   >
-                    <div style={{
-                      background: archiveSelectMode && isSelected ? C.accentSoft : C.card,
-                      borderRadius: 14, padding: 16,
-                      display: 'flex', gap: 14, alignItems: 'flex-start',
-                      border: archiveSelectMode && isSelected ? `1.5px solid ${C.accent}` : `1px solid ${C.border}`,
-                      opacity: archiveSelectMode ? 1 : 0.7,
-                      cursor: archiveSelectMode ? 'pointer' : 'default',
-                      WebkitTapHighlightColor: 'transparent',
-                      transition: 'background 0.15s, border-color 0.15s',
-                    }}>
+                    <Card
+                      variant="interactive"
+                      padding="md"
+                      style={{
+                        borderRadius: 14,
+                        display: 'flex', gap: 14, alignItems: 'flex-start',
+                        background: archiveSelectMode && isSelected ? C.accentSoft : undefined,
+                        border: archiveSelectMode && isSelected ? `1.5px solid ${C.accent}` : undefined,
+                        opacity: archiveSelectMode ? 1 : 0.7,
+                        cursor: archiveSelectMode ? 'pointer' : 'default',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}>
                       {/* Checkbox in select mode */}
                       {archiveSelectMode && (
                         <div style={{
@@ -16842,11 +16856,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         {/* Restore button — hidden in select mode */}
                         {!archiveSelectMode && (
                           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                            <button onClick={() => void handleRestoreItem(item)} style={{ ...btnGhost, fontSize: 12, padding: '6px 10px', color: C.accent }}>{t('archive_restore', locale)}</button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              fullWidth={false}
+                              onClick={() => void handleRestoreItem(item)}
+                              style={{ fontSize: 12, padding: '6px 10px', minHeight: 0, color: C.accent }}
+                            >
+                              {t('archive_restore', locale)}
+                            </Button>
                           </div>
                         )}
                       </div>
-                    </div>
+                    </Card>
                   </div>
                 );
               })}
