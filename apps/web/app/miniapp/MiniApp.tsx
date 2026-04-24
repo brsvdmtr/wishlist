@@ -17236,12 +17236,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                   : t('pro_forever', locale)}
                               </span>
                             </div>
-                            <button
-                              style={{ ...btnPrimary, width: '100%', marginTop: 8, background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))`, fontSize: 14, padding: '12px 0' }}
+                            <Button
+                              variant="primary-gradient"
+                              size="md"
+                              style={{ marginTop: 8 }}
                               onClick={() => showUpsell('wishlist_limit')}
                             >
                               {t('promo_keep_pro', locale)}
-                            </button>
+                            </Button>
                           </div>
                         )}
                         {/* Input + button — always visible, vertical layout for mobile */}
@@ -17265,12 +17267,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               }
                             }}
                           />
-                          <button
+                          <Button
                             id="promo-activate-btn"
-                            style={{
-                              ...btnPrimary, width: '100%', padding: '12px 0', fontSize: 15, fontWeight: 600,
-                              borderRadius: 12,
-                            }}
+                            variant="primary"
+                            size="md"
                             onClick={async () => {
                               const input = document.getElementById('promo-input') as HTMLInputElement | null;
                               if (!input?.value?.trim()) return;
@@ -17309,7 +17309,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             }}
                           >
                             {t('promo_activate', locale)}
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -17371,12 +17371,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>Stars</span>
                         <span style={{ fontSize: 13, color: C.textSec }}> {t('upsell_per_month', locale)}</span>
                       </div>
-                      <button
-                        style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))` }}
+                      <Button
+                        variant="primary-gradient"
                         onClick={() => showUpsell('wishlist_limit')}
                       >
                         {t('connect_pro', locale)}
-                      </button>
+                      </Button>
                       <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8, textAlign: 'center' }}>
                         {t('upsell_auto_renew', locale)}
                       </div>
@@ -17441,7 +17441,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                       <div style={{ fontSize: 12, fontWeight: 700, color: C.textSec, whiteSpace: 'nowrap' }}>
                                         {sku.price} ⭐
                                       </div>
-                                      <button
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        fullWidth={false}
+                                        loading={addonCheckoutLoading}
+                                        disabled={isLoading}
                                         onClick={() => {
                                           const needsTarget = sku.code === 'extra_items_5' || sku.code === 'extra_items_15';
                                           if (needsTarget) {
@@ -17454,21 +17459,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                             void handleBuyAddon(sku.code, undefined);
                                           }
                                         }}
-                                        disabled={isLoading}
-                                        style={{
-                                          background: isLoading ? C.surface : C.accentSoft,
-                                          color: C.accent,
-                                          border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)`,
-                                          borderRadius: 8, padding: '5px 12px',
-                                          fontSize: 13, fontWeight: 700,
-                                          cursor: isLoading ? 'default' : 'pointer',
-                                          fontFamily: font, whiteSpace: 'nowrap',
-                                          opacity: isLoading ? 0.5 : 1,
-                                          transition: 'opacity 0.15s',
-                                        }}
+                                        style={{ borderRadius: 8, padding: '5px 12px', fontSize: 13, fontWeight: 700, minHeight: 0, whiteSpace: 'nowrap' }}
                                       >
-                                        {addonCheckoutLoading ? '…' : t('addon_cta_buy', locale)}
-                                      </button>
+                                        {t('addon_cta_buy', locale)}
+                                      </Button>
                                     </>
                                   )}
                                 </div>
@@ -17579,12 +17573,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               : t('pro_forever', locale)}
                           </span>
                         </div>
-                        <button
-                          style={{ ...btnPrimary, width: '100%', marginTop: 10, background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))`, fontSize: 14, padding: '12px 0' }}
+                        <Button
+                          variant="primary-gradient"
+                          size="md"
+                          style={{ marginTop: 10 }}
                           onClick={() => showUpsell('wishlist_limit')}
                         >
                           {t('promo_keep_pro', locale)}
-                        </button>
+                        </Button>
                       </div>
                     )}
 
@@ -17598,21 +17594,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   {/* Plan action buttons */}
                   <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {subscription && !subscription.cancelAtPeriodEnd && subscription.status !== 'CANCELLED' && (
-                      <button
-                        style={{ ...btnSecondary, width: '100%', fontSize: 14 }}
-                        onClick={() => setShowCancelSub(true)}
-                      >
+                      <Button variant="secondary" onClick={() => setShowCancelSub(true)}>
                         {t('settings_cancel_renewal', locale)}
-                      </button>
+                      </Button>
                     )}
                     {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
-                      <button
-                        style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))` }}
-                        onClick={() => void handleReactivateSub()}
+                      <Button
+                        variant="primary-gradient"
+                        loading={cancelSubLoading}
                         disabled={cancelSubLoading}
+                        onClick={() => void handleReactivateSub()}
                       >
-                        {cancelSubLoading ? t('settings_resuming', locale) : t('settings_resume_sub', locale)}
-                      </button>
+                        {t('settings_resume_sub', locale)}
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -17643,9 +17637,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           }
                         }}
                       />
-                      <button
+                      <Button
                         id="promo-activate-btn-pro"
-                        style={{ ...btnPrimary, width: '100%', padding: '12px 0', fontSize: 15, fontWeight: 600, borderRadius: 12 }}
+                        variant="primary"
+                        size="md"
                         onClick={async () => {
                           const input = document.getElementById('promo-input-pro') as HTMLInputElement | null;
                           if (!input?.value?.trim()) return;
@@ -17677,7 +17672,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         }}
                       >
                         {t('promo_activate', locale)}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
