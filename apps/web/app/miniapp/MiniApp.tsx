@@ -109,7 +109,7 @@ const PRIO_COLOR: Record<number, string> = { 1: '#6B7FD4', 2: '#E8930A', 3: '#F0
 const PRIO_BG:    Record<number, string> = { 1: 'rgba(107,127,212,0.13)', 2: 'rgba(232,147,10,0.13)', 3: 'rgba(240,78,110,0.13)' };
 const PRIO_GRADIENT: Record<number, string> = {
   1: 'linear-gradient(90deg, #6B7FD4, #818cf8)',
-  2: 'linear-gradient(90deg, #E8930A, #fbbf24)',
+  2: 'linear-gradient(90deg, #E8930A, var(--wb-warning, #FBBF24))',
   3: 'linear-gradient(90deg, #F04E6E, #ff6b9d)',
 };
 const PRIO_GLOW: Record<number, string> = {
@@ -2481,7 +2481,7 @@ function WishCardCompact({ item, onTap, locale, sourceLabel, isGuest, onReserve,
             </>
           )}
           {isGuest && isReserved && !isReservedByMe && (
-            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: '#fbbf24', background: 'rgba(251,191,36,0.1)' }}>
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 6, fontWeight: 600, color: 'var(--wb-warning, #FBBF24)', background: 'rgba(251,191,36,0.1)' }}>
               ⏳ {t('already_reserved', locale)}
             </span>
           )}
@@ -2684,7 +2684,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
           {isGuest && isReserved && !isReservedByMe && (
             <span style={{
               padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 600,
-              background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.15)',
+              background: 'rgba(251,191,36,0.1)', color: 'var(--wb-warning, #FBBF24)', border: '1px solid rgba(251,191,36,0.15)',
             }}>
               ⏳ {t('already_reserved', locale)}
             </span>
@@ -4013,7 +4013,7 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
           <p style={heroBody}>{t('gn_ob_s3_body', locale)}</p>
         </div>
         <div style={{ background: C.card, borderRadius: 14, padding: 14, marginBottom: 12, position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: 'linear-gradient(180deg, #FBBF24, #f59e0b)' }} />
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: 'linear-gradient(180deg, var(--wb-warning, #FBBF24), #f59e0b)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, background: orangeSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎂</div>
             <div style={{ flex: 1 }}>
@@ -13747,7 +13747,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   style={{
                     width: '100%', padding: '14px 24px', border: 'none', borderRadius: 14,
                     fontSize: 15, fontWeight: 600, color: '#fff', cursor: 'pointer',
-                    background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, fontFamily: 'inherit',
+                    background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))`, fontFamily: 'inherit',
                   }}
                 >
                   🎁 {t('sr_cta_promote', locale)}
@@ -14749,7 +14749,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setScreen(isDraftItem ? 'drafts' : 'wishlist-detail');
                 }} style={{
                   ...btnBase, flex: 1, padding: '11px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-                  background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, color: '#fff', border: 'none',
+                  background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))`, color: '#fff', border: 'none',
                 }}>
                   {t('edit_btn', locale)}
                 </button>
@@ -15879,18 +15879,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   ℹ️ {t('curated_public_info', locale)}
                 </div>
                 {!sel.isOwner && !sel.isSubscribed && (
-                  <div style={{
-                    marginTop: 10, borderRadius: 14, padding: '12px 16px',
-                    fontSize: 13, fontWeight: 500,
-                    background: 'var(--wb-warning-soft)',
-                    border: '1px solid rgba(251,191,36,0.28)',
-                    color: 'var(--wb-warning)',
-                    lineHeight: 1.5, letterSpacing: '-0.005em',
-                    WebkitBackdropFilter: 'blur(14px)' as never,
-                    backdropFilter: 'blur(14px)' as never,
-                  }}>
-                    💡 {t('curated_ttl_subscribe_hint', locale)}
-                  </div>
+                  <Banner tone="warning" icon="💡" style={{ marginTop: 10 }}>
+                    {t('curated_ttl_subscribe_hint', locale)}
+                  </Banner>
                 )}
               </>
             );
@@ -17193,7 +17184,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               </span>
                             </div>
                             <button
-                              style={{ ...btnPrimary, width: '100%', marginTop: 8, background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, fontSize: 14, padding: '12px 0' }}
+                              style={{ ...btnPrimary, width: '100%', marginTop: 8, background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))`, fontSize: 14, padding: '12px 0' }}
                               onClick={() => showUpsell('wishlist_limit')}
                             >
                               {t('promo_keep_pro', locale)}
@@ -17328,7 +17319,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <span style={{ fontSize: 13, color: C.textSec }}> {t('upsell_per_month', locale)}</span>
                       </div>
                       <button
-                        style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)` }}
+                        style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))` }}
                         onClick={() => showUpsell('wishlist_limit')}
                       >
                         {t('connect_pro', locale)}
@@ -17536,7 +17527,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           </span>
                         </div>
                         <button
-                          style={{ ...btnPrimary, width: '100%', marginTop: 10, background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`, fontSize: 14, padding: '12px 0' }}
+                          style={{ ...btnPrimary, width: '100%', marginTop: 10, background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))`, fontSize: 14, padding: '12px 0' }}
                           onClick={() => showUpsell('wishlist_limit')}
                         >
                           {t('promo_keep_pro', locale)}
@@ -17563,7 +17554,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     )}
                     {subscription && (subscription.cancelAtPeriodEnd || subscription.status === 'CANCELLED') && (
                       <button
-                        style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)` }}
+                        style={{ ...btnPrimary, width: '100%', background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))` }}
                         onClick={() => void handleReactivateSub()}
                         disabled={cancelSubLoading}
                       >
@@ -19816,28 +19807,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <SettingsActionRow icon={'\u{1F4C4}'} label={t('settings_legal', locale)} onClick={() => { setLegalDocId(null); setScreen('legal'); }} />
               </SettingsSection>
 
-              {/* Danger Zone */}
+              {/* Danger Zone — reuses SettingsActionRow with danger color */}
               <div style={{
-                background: 'rgba(251, 113, 133, 0.06)',
-                border: '1px solid rgba(251, 113, 133, 0.12)',
+                background: 'var(--wb-danger-soft, rgba(251,113,133,0.06))',
+                border: '1px solid rgba(251,113,133,0.12)',
                 borderRadius: 20, padding: '4px 18px', marginTop: 18,
               }}>
-                <div
+                <SettingsActionRow
+                  icon={'\u{1F5D1}'}
+                  label={t('settings_delete_account', locale)}
+                  color={C.red}
                   onClick={() => setShowDeleteAccount(true)}
-                  onPointerDown={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; }}
-                  onPointerUp={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-                  onPointerLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-                  style={{ display: 'flex', alignItems: 'center', padding: '14px 0', gap: 12, cursor: 'pointer', transition: 'opacity 0.12s' }}
-                >
-                  <div style={{
-                    width: 28, height: 28, borderRadius: '50%',
-                    background: C.redSoft,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 14, flexShrink: 0,
-                  }}>{'\u{1F5D1}'}</div>
-                  <span style={{ fontSize: 15, fontWeight: 500, color: C.red, flex: 1 }}>{t('settings_delete_account', locale)}</span>
-                  <span style={{ fontSize: 14, color: C.red, fontWeight: 300 }}>{'\u203A'}</span>
-                </div>
+                />
               </div>
             </div>
           )}
@@ -20623,7 +20604,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 </div>
                 <style>{`@keyframes gnDotPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.15); } }`}</style>
                 <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
-                  {demoCard({ emoji: '🎂', emojiBg: orangeSoft, stripColor: 'linear-gradient(180deg,#FBBF24,#f59e0b)', ringColor: 'var(--wb-warning, #FBBF24)', ringPct: 0.85, daysN: 3, title: t('gn_demo_title_mom', locale), person: t('gn_demo_person_mom', locale), ideasChip: true })}
+                  {demoCard({ emoji: '🎂', emojiBg: orangeSoft, stripColor: 'linear-gradient(180deg,var(--wb-warning, #FBBF24),#f59e0b)', ringColor: 'var(--wb-warning, #FBBF24)', ringPct: 0.85, daysN: 3, title: t('gn_demo_title_mom', locale), person: t('gn_demo_person_mom', locale), ideasChip: true })}
                   {demoCard({ emoji: '💍', emojiBg: pinkSoft, stripColor: `linear-gradient(180deg,${C.accent},#A78BFA)`, ringColor: C.accent, ringPct: 0.58, daysN: 12, title: t('gn_demo_title_anniv', locale), person: t('gn_demo_person_anniv', locale) })}
                   {demoCard({ emoji: '🎄', emojiBg: greenSoft, stripColor: 'linear-gradient(180deg,#34D399,#6ee7b7)', ringColor: 'var(--wb-success, #4ADE80)', ringPct: 0.05, daysN: 261, title: t('gn_demo_title_ny', locale), person: t('gn_demo_person_ny', locale) })}
                 </div>
@@ -20740,7 +20721,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           const isSoon = o.status === 'ACTIVE' && o.daysUntil != null && o.daysUntil > 7;
           const isDone = o.status === 'DONE';
           const isArchived = o.status === 'ARCHIVED';
-          const stripColor = isUrgent ? 'linear-gradient(180deg, #FBBF24, #f59e0b)' : isSoon ? `linear-gradient(180deg, ${C.accent}, #a78bfa)` : isDone ? 'linear-gradient(180deg, #34D399, #6ee7b7)' : 'transparent';
+          const stripColor = isUrgent ? 'linear-gradient(180deg, var(--wb-warning, #FBBF24), #f59e0b)' : isSoon ? `linear-gradient(180deg, ${C.accent}, #a78bfa)` : isDone ? 'linear-gradient(180deg, #34D399, #6ee7b7)' : 'transparent';
           return (
             <div key={o.id} onClick={() => openOccasion(o)}
               style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', position: 'relative' as const, overflow: 'hidden', opacity: isArchived ? 0.5 : 1, animation: `fadeIn 0.3s ease ${0.05 + i * 0.04}s both`, transition: 'border-color 0.15s' }}>
@@ -20842,7 +20823,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     💡 {t('gn_inspiration_header', locale)}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
-                    {templateCard({ emoji: '🎂', emojiBg: orangeSoft, stripColor: 'linear-gradient(180deg,#FBBF24,#f59e0b)', title: t('gn_empty_template_bday', locale), type: 'BIRTHDAY', recurrence: 'YEARLY' })}
+                    {templateCard({ emoji: '🎂', emojiBg: orangeSoft, stripColor: 'linear-gradient(180deg,var(--wb-warning, #FBBF24),#f59e0b)', title: t('gn_empty_template_bday', locale), type: 'BIRTHDAY', recurrence: 'YEARLY' })}
                     {templateCard({ emoji: '💍', emojiBg: pinkSoft, stripColor: 'linear-gradient(180deg,#EC4899,#f472b6)', title: t('gn_empty_template_anniv', locale), type: 'ANNIVERSARY', recurrence: 'YEARLY' })}
                     {templateCard({ emoji: '🎄', emojiBg: greenSoft, stripColor: 'linear-gradient(180deg,#34D399,#6ee7b7)', title: t('gn_empty_template_holiday', locale), type: 'HOLIDAY', recurrence: 'YEARLY' })}
                   </div>
@@ -24874,7 +24855,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     disabled={secretPromoting}
                     style={{
                       flex: 2, padding: '12px', borderRadius: 12, border: 'none',
-                      background: `linear-gradient(135deg, ${C.accent}, #6B5CE7)`,
+                      background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #6B5CE7))`,
                       color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
                       fontFamily: font, opacity: secretPromoting ? 0.6 : 1,
                     }}
@@ -28958,20 +28939,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             </div>
 
-            {/* Deadline banner */}
+            {/* Deadline banner — Banner primitive with warning tone */}
             {deadlineDate && daysLeft != null && daysLeft > 0 && (
-              <div style={{
-                padding: '10px 14px', borderRadius: 14, marginBottom: 14,
-                background: 'var(--wb-warning-soft)',
-                border: '1px solid rgba(251,191,36,0.28)',
-                color: 'var(--wb-warning)',
-                fontSize: 13, fontWeight: 650,
-                letterSpacing: '-0.005em',
-                WebkitBackdropFilter: 'blur(14px)' as never,
-                backdropFilter: 'blur(14px)' as never,
-              }}>
-                ⏰ {t('gg_join_deadline', locale).replace('{{date}}', deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)).replace('{{days}}', String(daysLeft))}
-              </div>
+              <Banner tone="warning" icon="⏰" style={{ marginBottom: 14 }}>
+                {t('gg_join_deadline', locale).replace('{{date}}', deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)).replace('{{days}}', String(daysLeft))}
+              </Banner>
             )}
 
             {/* Organizer note */}
@@ -29151,7 +29123,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   }}>{m.text}</div>
                 ) : (
                   <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: m.isSelf ? 'flex-end' : 'flex-start', flexDirection: m.isSelf ? 'row-reverse' : 'row' }}>
-                    {!m.isSelf && <UserAvatar avatarUrl={m.senderAvatarUrl} name={m.senderName} size={28} accent="#8B7BFF" />}
+                    {!m.isSelf && <UserAvatar avatarUrl={m.senderAvatarUrl} name={m.senderName} size={28} accent="var(--wb-accent, #8B7BFF)" />}
                     <div style={{
                       maxWidth: '75%', padding: '9px 13px', borderRadius: 16,
                       background: m.isSelf
@@ -31042,7 +31014,7 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
           boxSizing: 'border-box',
         }}>
           <div style={{ margin: '0 auto 14px', width: 'fit-content' }}>
-            <UserAvatar avatarUrl={ownerAvatarUrl} name={ownerName} size={72} accent="#8B7BFF" />
+            <UserAvatar avatarUrl={ownerAvatarUrl} name={ownerName} size={72} accent="var(--wb-accent, #8B7BFF)" />
           </div>
           <div style={{
             fontSize: 22, fontWeight: 700, fontFamily: font,
@@ -31103,18 +31075,9 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
           </>
         )}
 
-        <div style={{
-          borderRadius: 14, padding: '12px 16px', fontSize: 12,
-          background: 'var(--wb-success-soft)',
-          border: '1px solid rgba(74,222,128,0.28)',
-          color: 'var(--wb-success)',
-          width: '100%', lineHeight: 1.5, boxSizing: 'border-box',
-          fontWeight: 500, letterSpacing: '-0.005em',
-          WebkitBackdropFilter: 'blur(14px)' as never,
-          backdropFilter: 'blur(14px)' as never,
-        }}>
+        <Banner tone="success" style={{ width: '100%', boxSizing: 'border-box' }}>
           {t('share_privacy', locale)}
-        </div>
+        </Banner>
       </div>
     </div>
   );
