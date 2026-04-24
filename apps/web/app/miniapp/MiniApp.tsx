@@ -12919,9 +12919,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   )}
                 </div>
               </div>
-              <button style={{ ...btnPrimary, opacity: wlTitle.trim() ? 1 : 0.5 }} onClick={() => void handleCreateWishlist()} disabled={!wlTitle.trim() || loading}>
-                {loading ? '…' : t('wishlist_create_btn', locale)}
-              </button>
+              <Button variant="primary" loading={loading} onClick={() => void handleCreateWishlist()} disabled={!wlTitle.trim() || loading}>
+                {t('wishlist_create_btn', locale)}
+              </Button>
             </div>
           </BottomSheet>
         </div>
@@ -14105,16 +14105,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {itemReorderMode && (
               <>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-                  <button
-                    style={{ ...btnPrimary, flex: 1, opacity: itemReorderSaving ? 0.6 : 1 }}
+                  <Button
+                    variant="primary"
+                    style={{ flex: 1 }}
+                    loading={itemReorderSaving}
                     onClick={() => void handleSaveItemReorder()}
                     disabled={itemReorderSaving}
                   >
-                    {itemReorderSaving ? '…' : t('wl_reorder_save', locale)}
-                  </button>
-                  <button style={{ ...btnGhost, flex: 1 }} onClick={cancelItemReorderMode}>
+                    {t('wl_reorder_save', locale)}
+                  </Button>
+                  <Button variant="ghost" style={{ flex: 1 }} onClick={cancelItemReorderMode}>
                     {t('wl_reorder_cancel', locale)}
-                  </button>
+                  </Button>
                 </div>
                 <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', marginBottom: 8, lineHeight: 1.4 }}>
                   {t('item_reorder_hint', locale)}
@@ -14176,16 +14178,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {catReorderMode && (
               <>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-                  <button
-                    style={{ ...btnPrimary, flex: 1, opacity: catReorderSaving ? 0.6 : 1 }}
+                  <Button
+                    variant="primary"
+                    style={{ flex: 1 }}
+                    loading={catReorderSaving}
                     onClick={() => void handleSaveCatReorder()}
                     disabled={catReorderSaving}
                   >
-                    {catReorderSaving ? '…' : t('cat_reorder_save', locale)}
-                  </button>
-                  <button style={{ ...btnGhost, flex: 1 }} onClick={cancelCatReorderMode}>
+                    {t('cat_reorder_save', locale)}
+                  </Button>
+                  <Button variant="ghost" style={{ flex: 1 }} onClick={cancelCatReorderMode}>
                     {t('wl_reorder_cancel', locale)}
-                  </button>
+                  </Button>
                 </div>
                 {catReorderList.map((cat, idx) => {
                   const isDragging = catReorderDragIdx === idx;
@@ -15121,20 +15125,25 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               return (
                 <div style={{ marginTop: 24, marginBottom: 32 }}>
                   {isDraftItem ? (
-                    <button
+                    <Button
+                      variant="primary"
+                      size="lg"
                       onClick={() => { setMovingItem(viewingItem as Item); setShowMovePicker(true); }}
-                      style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}
                     >
                       {t('item_move_cta', locale)}
-                    </button>
+                    </Button>
                   ) : (
-                    <button onClick={() => {
-                      setPendingEditItem(viewingItem as Item);
-                      setViewingItem(null);
-                      setScreen('wishlist-detail');
-                    }} style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      onClick={() => {
+                        setPendingEditItem(viewingItem as Item);
+                        setViewingItem(null);
+                        setScreen('wishlist-detail');
+                      }}
+                    >
                       {t('edit_btn', locale)}
-                    </button>
+                    </Button>
                   )}
                   <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
                     {isDraftItem ? (
@@ -15380,15 +15389,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         </span>
                       )}
                       {(rState === 'available' || rState === 'reserved-by-me') && !isReadOnly && (
-                        <button
+                        <Button
+                          variant="primary"
+                          size="lg"
+                          loading={isReserving}
                           disabled={isReserving}
                           onClick={() => rState === 'reserved-by-me'
                             ? void handleSantaReceiverUnreserve(viewingItem.id)
                             : void handleSantaReceiverReserve(viewingItem.id)}
-                          style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16, opacity: isReserving ? 0.6 : 1 }}
                         >
-                          {isReserving ? '…' : rState === 'reserved-by-me' ? t('cancel_reservation', locale) : t('reserve_btn', locale)}
-                        </button>
+                          {rState === 'reserved-by-me' ? t('cancel_reservation', locale) : t('reserve_btn', locale)}
+                        </Button>
                       )}
                     </>
                   );
@@ -15397,10 +15408,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <>
                   {viewingItem.status === 'available' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-                      <button onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }}
-                        style={{ ...btnPrimary, width: '100%', borderRadius: 16, padding: '16px 24px', fontSize: 16 }}>
+                      <Button
+                        variant="primary"
+                        size="lg"
+                        onClick={() => { setReservingItem(viewingItem as GuestItem); setGuestName(tgUser?.first_name ?? ''); }}
+                      >
                         {t('reserve_btn', locale)}
-                      </button>
+                      </Button>
                       {/* 🔒 Secret reservation CTA — directly under the primary "Reserve" for a cleaner stack */}
                       {(() => {
                         const existing = secretReservations.find((r) => r.itemId === viewingItem.id);
