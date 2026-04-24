@@ -21098,12 +21098,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </div>
                   <div style={{ fontSize: 10, color: C.textMuted, textAlign: 'right' as const, marginTop: 2 }}>{gnEditNote.length} / 300</div>
                 </div>
-                <button disabled={!gnEditTitle.trim()} onClick={async () => {
-                  await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'PATCH', body: JSON.stringify({ title: gnEditTitle.trim(), personName: gnEditPerson.trim() || null, note: gnEditNote.trim() || null }) });
-                  setGnShowEdit(false);
-                  pushToast(t('gn_occasion_updated', locale), 'success');
-                  await refreshOccasion();
-                }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnEditTitle.trim() ? `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)` : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: gnEditTitle.trim() ? `0 4px 16px ${C.accentGlow}` : 'none' }}>{t('save', locale)}</button>
+                <Button
+                  variant="primary-gradient"
+                  disabled={!gnEditTitle.trim()}
+                  onClick={async () => {
+                    await tgFetch(`/tg/gift-occasions/${o.id}`, { method: 'PATCH', body: JSON.stringify({ title: gnEditTitle.trim(), personName: gnEditPerson.trim() || null, note: gnEditNote.trim() || null }) });
+                    setGnShowEdit(false);
+                    pushToast(t('gn_occasion_updated', locale), 'success');
+                    await refreshOccasion();
+                  }}
+                >
+                  {t('save', locale)}
+                </Button>
               </div>
             </BottomSheet>
           </div>
@@ -21163,14 +21169,21 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             </div>
           )}
-          <button disabled={!gnFormTitle.trim()} onClick={async () => {
-            const r = await tgFetch('/tg/gift-occasions', { method: 'POST', body: JSON.stringify({ title: gnFormTitle.trim(), eventDate: gnFormDate || undefined, type: gnFormType, recurrence: gnFormDate ? gnFormRecurrence : 'NONE', personName: gnFormPerson.trim() || undefined }) });
-            if (r.ok) {
-              setShowGnCreateOccasion(false);
-              pushToast(t('gn_add_occasion', locale), 'success');
-              try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
-            } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
-          }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnFormTitle.trim() ? `linear-gradient(135deg, ${C.accent} 0%, #9B8AFF 100%)` : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font, boxShadow: gnFormTitle.trim() ? `0 4px 16px ${C.accentGlow}` : 'none', marginTop: 4 }}>{t('gn_add_occasion', locale)}</button>
+          <Button
+            variant="primary-gradient"
+            disabled={!gnFormTitle.trim()}
+            style={{ marginTop: 4 }}
+            onClick={async () => {
+              const r = await tgFetch('/tg/gift-occasions', { method: 'POST', body: JSON.stringify({ title: gnFormTitle.trim(), eventDate: gnFormDate || undefined, type: gnFormType, recurrence: gnFormDate ? gnFormRecurrence : 'NONE', personName: gnFormPerson.trim() || undefined }) });
+              if (r.ok) {
+                setShowGnCreateOccasion(false);
+                pushToast(t('gn_add_occasion', locale), 'success');
+                try { const or = await tgFetch('/tg/gift-occasions'); if (or.ok) setGnOccasions((await or.json() as any).occasions); } catch {}
+              } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
+            }}
+          >
+            {t('gn_add_occasion', locale)}
+          </Button>
         </div>
       </BottomSheet>
 
@@ -21192,16 +21205,22 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {gnIdeaLink && <button onClick={() => setGnIdeaLink('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>}
             </div>
           </div>
-          <button disabled={!gnIdeaText.trim()} onClick={async () => {
-            if (!gnViewingOccasion) return;
-            const r = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}/ideas`, { method: 'POST', body: JSON.stringify({ text: gnIdeaText.trim(), link: gnIdeaLink.trim() || undefined }) });
-            if (r.ok) {
-              setShowGnAddIdea(false);
-              pushToast(t('gn_idea_saved', locale), 'success');
-              const or = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}`);
-              if (or.ok) setGnViewingOccasion((await or.json() as any).occasion);
-            } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
-          }} style={{ padding: '14px', borderRadius: 14, border: 'none', background: gnIdeaText.trim() ? C.accent : '#333', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: font }}>{t('gn_add_idea', locale)}</button>
+          <Button
+            variant="primary-gradient"
+            disabled={!gnIdeaText.trim()}
+            onClick={async () => {
+              if (!gnViewingOccasion) return;
+              const r = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}/ideas`, { method: 'POST', body: JSON.stringify({ text: gnIdeaText.trim(), link: gnIdeaLink.trim() || undefined }) });
+              if (r.ok) {
+                setShowGnAddIdea(false);
+                pushToast(t('gn_idea_saved', locale), 'success');
+                const or = await tgFetch(`/tg/gift-occasions/${gnViewingOccasion.id}`);
+                if (or.ok) setGnViewingOccasion((await or.json() as any).occasion);
+              } else { const err = await r.json().catch(() => ({})) as { error?: string }; pushToast(err.error || 'Error', 'error'); }
+            }}
+          >
+            {t('gn_add_idea', locale)}
+          </Button>
         </div>
       </BottomSheet>
 
