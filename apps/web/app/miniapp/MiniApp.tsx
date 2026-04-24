@@ -15940,7 +15940,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       const st = statusText(days);
                       return (
                         <div key={sel.id} onClick={() => setLinkMgmtDetailItem({ type: 'selection', data: sel })} style={{
-                          background: '#2F2F38', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
+                          background: 'var(--wb-card-strong, #2F2F38)', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
                           marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
                         }}>
                           <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(96,165,250,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>📋</div>
@@ -15973,7 +15973,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     </div>
                     {wishlists.map(wl => (
                       <div key={wl.id} onClick={() => setLinkMgmtDetailItem({ type: 'wishlist', data: wl })} style={{
-                        background: '#2F2F38', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
+                        background: 'var(--wb-card-strong, #2F2F38)', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
                         marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
                       }}>
                         <div style={{ width: 40, height: 40, borderRadius: 12, background: C.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎁</div>
@@ -15989,7 +15989,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     ))}
                     {profile && (
                       <div onClick={() => setLinkMgmtDetailItem({ type: 'profile', data: profile })} style={{
-                        background: '#2F2F38', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
+                        background: 'var(--wb-card-strong, #2F2F38)', borderRadius: 16, padding: 16, border: `1px solid ${C.border}`,
                         marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
                       }}>
                         <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(74, 222, 128, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>👤</div>
