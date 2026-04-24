@@ -19807,9 +19807,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <SettingsActionRow icon={'\u{1F4C4}'} label={t('settings_legal', locale)} onClick={() => { setLegalDocId(null); setScreen('legal'); }} />
               </SettingsSection>
 
-              {/* Danger Zone — reuses SettingsActionRow with danger color */}
+              {/* Danger Zone — reuses SettingsActionRow with danger color.
+                  Background keeps explicit 0.06 alpha (subtler than `--wb-danger-soft`'s 0.14)
+                  — this container is a passive "zone" marker, not an inline alert. */}
               <div style={{
-                background: 'var(--wb-danger-soft, rgba(251,113,133,0.06))',
+                background: 'rgba(251,113,133,0.06)',
                 border: '1px solid rgba(251,113,133,0.12)',
                 borderRadius: 20, padding: '4px 18px', marginTop: 18,
               }}>
@@ -28939,9 +28941,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               </div>
             </div>
 
-            {/* Deadline banner — Banner primitive with warning tone */}
+            {/* Deadline banner — Banner primitive with warning tone.
+                fontWeight inherits via outer style (deadline CTA needs emphasis). */}
             {deadlineDate && daysLeft != null && daysLeft > 0 && (
-              <Banner tone="warning" icon="⏰" style={{ marginBottom: 14 }}>
+              <Banner tone="warning" icon="⏰" style={{ marginBottom: 14, fontWeight: 650 }}>
                 {t('gg_join_deadline', locale).replace('{{date}}', deadlineDate.toLocaleDateString(locale === 'ru' ? 'ru-RU' : undefined)).replace('{{days}}', String(daysLeft))}
               </Banner>
             )}
@@ -31075,7 +31078,10 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
           </>
         )}
 
-        <Banner tone="success" style={{ width: '100%', boxSizing: 'border-box' }}>
+        {/* Privacy footer note — Banner with success tone.
+            Smaller fontSize + lighter weight preserved: this is a reassuring
+            footnote, not an alert. Overrides Banner's default 14/normal. */}
+        <Banner tone="success" style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, fontWeight: 500 }}>
           {t('share_privacy', locale)}
         </Banner>
       </div>
