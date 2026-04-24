@@ -1855,12 +1855,13 @@ function renderSantaAlias(adjectiveKey: string, animalKey: string, locale: strin
 // buttons, list items). DO NOT override height/padding via `style`.
 // Use ProBadge wherever you need to tag something as PRO.
 function ProBadge({ style }: { style?: React.CSSProperties } = {}) {
+  // v2.1 — uses accent CSS vars so badge adapts to theme×accent switch.
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       height: 20, minHeight: 20, padding: '0 8px',
       borderRadius: 5,
-      background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)',
+      background: 'linear-gradient(135deg, var(--wb-accent, #7C6AFF), var(--wb-accent-strong, #A78BFA))',
       color: '#fff',
       fontSize: 10, fontWeight: 700, letterSpacing: 0.5, lineHeight: 1,
       whiteSpace: 'nowrap', flexShrink: 0,
@@ -1908,7 +1909,7 @@ function ReferralProfileTileFromConfig({ config, locale, onOpen, trackEvent }: {
         <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <div style={{
             width: 44, height: 44, borderRadius: 12,
-            background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+            background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 22, flexShrink: 0,
           }}>🎁</div>
@@ -2649,7 +2650,7 @@ function WishCardShowcase({ item, onTap, locale, sourceLabel, isGuest, onReserve
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '10px 20px', borderRadius: 12, border: 'none',
-                background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)',
+                background: 'linear-gradient(135deg, var(--wb-accent, #7C6AFF), var(--wb-accent-deep, #5B4BD6))',
                 color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: font,
                 boxShadow: '0 4px 16px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)',
               }}
@@ -10460,7 +10461,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* Recommended badge */}
             <div style={{
               position: 'absolute', top: -10, right: 14,
-              background: 'linear-gradient(135deg, #7c6aff, #a855f7)',
+              background: 'linear-gradient(135deg, var(--wb-accent, #7c6aff), var(--wb-accent-strong, #a855f7))',
               color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px',
               borderRadius: 10, letterSpacing: 0.3,
             }}>{t('onboarding_path_catalog_badge', locale)}</div>
@@ -11262,7 +11263,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <a href={tgDeepLink} style={{ textDecoration: 'none', width: '100%', marginTop: 20 }}>
                   <button style={{
                     ...btnPrimary, width: '100%', padding: '14px',
-                    background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+                    background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))`,
                     fontSize: 15, fontWeight: 700, borderRadius: 14,
                     boxShadow: `0 6px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)`,
                   }}>
@@ -11885,7 +11886,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
                   <div style={{
                     width: 40, height: 40, borderRadius: 12,
-                    background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+                    background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 20, flexShrink: 0, color: '#fff',
                   }}>🎁</div>
@@ -15400,7 +15401,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           >
                             {label}
                             {!existing && !secretAccess.unlocked && planInfo.code === 'FREE' && (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)', padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5, marginLeft: 4 }}>PRO</span>
+                              <ProBadge style={{ marginLeft: 4, padding: '2px 7px', height: 'auto', minHeight: 0 }} />
                             )}
                           </button>
                         );
@@ -15485,7 +15486,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           >
                             {label}
                             {!existing && !secretAccess.unlocked && planInfo.code === 'FREE' && (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: 'linear-gradient(135deg, #7C6AFF, #A78BFA)', padding: '2px 7px', borderRadius: 5, letterSpacing: 0.5, marginLeft: 4 }}>PRO</span>
+                              <ProBadge style={{ marginLeft: 4, padding: '2px 7px', height: 'auto', minHeight: 0 }} />
                             )}
                           </button>
                         );
@@ -16938,18 +16939,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   )}
                 </div>
 
-                {/* PRO pill */}
+                {/* PRO pill — Chip primitive, `pro` tone is canonical gradient pill */}
                 {planInfo.code === 'PRO' && (
                   <div style={{ marginBottom: 10 }}>
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      background: `linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.157), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063))`,
-                      border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.208)`, padding: '4px 14px', borderRadius: 20,
-                      fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: '0.05em',
-                    }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent, boxShadow: `0 0 6px ${C.accent}` }} />
+                    <Chip
+                      tone="pro"
+                      size="sm"
+                      icon={<span style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,0.95)', boxShadow: '0 0 6px rgba(255,255,255,0.6)' }} />}
+                    >
                       PRO
-                    </span>
+                    </Chip>
                   </div>
                 )}
 
@@ -16992,25 +16991,30 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   </div>
                 )}
 
-                {/* Action buttons — settings first, share second */}
+                {/* Action buttons — Button primitives, settings first / share second.
+                    `surface` = glass-secondary per v2.1; `primary-gradient` = brand CTA. */}
                 <div style={{ display: 'flex', gap: 8, marginTop: 16, marginBottom: 8 }}>
-                  <button
+                  <Button
+                    variant="surface"
+                    size="md"
                     onClick={() => { setSettingsOriginScreen(screen); loadSettings(); setScreen('settings'); }}
-                    style={{
-                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      padding: '12px 0', borderRadius: 14, fontSize: 14, fontWeight: 600,
-                      cursor: 'pointer', fontFamily: font,
-                      background: 'rgba(255,255,255,0.05)', color: C.textSec,
-                      border: '1px solid rgba(255,255,255,0.08)',
-                    }}
+                    leftIcon={
+                      <span style={{ position: 'relative', display: 'inline-flex' }}>
+                        ⚙️
+                        {hasNewInSettings && (
+                          <span
+                            aria-hidden="true"
+                            style={{ position: 'absolute', top: -1, right: -5, width: 7, height: 7, borderRadius: '50%', background: 'var(--wb-warning, #FBBF24)' }}
+                          />
+                        )}
+                      </span>
+                    }
                   >
-                    <span style={{ position: 'relative' as const, display: 'inline-flex' }}>
-                      ⚙️
-                      {hasNewInSettings && <span aria-hidden="true" style={{ position: 'absolute', top: -1, right: -5, width: 7, height: 7, borderRadius: '50%', background: 'var(--wb-warning, #FBBF24)' }} />}
-                    </span>
                     {t('settings_title', locale)}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="primary-gradient"
+                    size="md"
                     onClick={() => {
                       if (!profileData?.username) {
                         pushToast(t('share_profile_need_username', locale), 'info');
@@ -17027,16 +17031,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       const tgShareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(shareText)}`;
                       (window as any).Telegram?.WebApp?.openTelegramLink?.(tgShareUrl);
                     }}
-                    style={{
-                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      padding: '12px 0', borderRadius: 14, fontSize: 14, fontWeight: 600,
-                      cursor: 'pointer', fontFamily: font, border: 'none',
-                      background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
-                      color: '#fff', boxShadow: `0 4px 16px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.302)`,
-                    }}
                   >
                     {t('share_profile_btn_full', locale)}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -17106,7 +17103,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                         <div style={{
                           width: 44, height: 44, borderRadius: 12,
-                          background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
+                          background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: 22, flexShrink: 0,
                         }}>✨</div>
@@ -18802,7 +18799,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               disabled={!referralMe.link}
               style={{
                 width: '100%', padding: '14px 20px', marginBottom: 8, borderRadius: 14,
-                background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, color: '#fff',
+                background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))`, color: '#fff',
                 fontSize: 15, fontWeight: 700, border: 'none', cursor: referralMe.link ? 'pointer' : 'default',
                 fontFamily: font, opacity: referralMe.link ? 1 : 0.5,
                 boxShadow: `0 4px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)`,
@@ -23558,7 +23555,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         width: 22, height: 22, borderRadius: 6, flexShrink: 0,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         background: 'rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.20)',
-                        border: '1.5px solid #7C6AFF',
+                        border: '1.5px solid var(--wb-accent, #7C6AFF)',
                         color: 'var(--wb-accent, #8B7BFF)', fontSize: 13, fontWeight: 800,
                       }}>✓</div>
                       <span style={{ fontSize: 14, fontWeight: 500, color: '#fff', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -23664,7 +23661,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               fontSize: 17, fontWeight: 800, cursor: 'pointer', fontFamily: font,
               letterSpacing: '-0.01em', transition: 'all 0.15s',
               ...(itemTitle.trim()
-                ? { background: 'linear-gradient(135deg, #7C6AFF, #5B4BD6)', color: '#fff', boxShadow: '0 6px 24px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)' }
+                ? { background: 'linear-gradient(135deg, var(--wb-accent, #7C6AFF), var(--wb-accent-deep, #5B4BD6))', color: '#fff', boxShadow: '0 6px 24px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.35)' }
                 : { background: 'var(--wb-card)', color: '#333', boxShadow: 'none' }),
               opacity: (loading || !itemTitle.trim()) ? 0.5 : 1,
             }}
@@ -24153,7 +24150,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               }}
               style={{
                 width: '100%', padding: '14px 20px', borderRadius: 14,
-                background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, color: '#fff',
+                background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))`, color: '#fff',
                 fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: font,
                 boxShadow: `0 4px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)`,
               }}>
@@ -29888,7 +29885,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     disabled={showcaseSaving || !hasAnyContent}
                     style={{
                       ...btnPrimary,
-                      background: hasAnyContent ? `linear-gradient(135deg, ${C.accent}, #5B4BD6)` : C.surface,
+                      background: hasAnyContent ? `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))` : C.surface,
                       color: hasAnyContent ? '#fff' : C.textMuted,
                       opacity: showcaseSaving ? 0.7 : 1,
                       boxShadow: hasAnyContent ? `0 6px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)` : 'none',
@@ -29966,7 +29963,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       (window as any).Telegram?.WebApp?.openTelegramLink?.(tgShareUrl);
                       setShowcasePublished(false);
                     }}
-                    style={{ ...btnPrimary, background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, marginBottom: 8 }}
+                    style={{ ...btnPrimary, background: `linear-gradient(135deg, ${C.accent}, var(--wb-accent-deep, #5B4BD6))`, marginBottom: 8 }}
                   >{t('showcase_published_share', locale)}</button>
                   <button
                     onClick={() => setShowcasePublished(false)}
