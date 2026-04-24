@@ -25259,8 +25259,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 ))}
               </div>
             </div>
-            <button
+            <Button
+              variant="primary-gradient"
+              size="lg"
               disabled={!santaCreateTitle.trim() || santaCreateLoading}
+              loading={santaCreateLoading}
               onClick={async () => {
                 if (!santaCreateTitle.trim()) return;
                 setSantaCreateLoading(true);
@@ -25290,15 +25293,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   setSantaCreateLoading(false);
                 }
               }}
-              style={{
-                background: !santaCreateTitle.trim() || santaCreateLoading ? C.textMuted : C.accent,
-                border: 'none', borderRadius: 14, color: '#fff', fontSize: 15, fontWeight: 700,
-                padding: '14px 0', cursor: !santaCreateTitle.trim() || santaCreateLoading ? 'not-allowed' : 'pointer',
-                fontFamily: font, width: '100%',
-              }}
             >
               {santaCreateLoading ? t('loading', locale) : t('santa_create_submit', locale)}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -26892,12 +26889,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 📊 {t('santa_polls_title', locale)}
               </h1>
               {isOwner && (
-                <button
+                <Button
+                  variant="primary-gradient"
+                  size="sm"
+                  fullWidth={false}
+                  style={{ padding: '8px 14px', fontSize: 13, minHeight: 0 }}
                   onClick={() => setSantaPollCreateOpen(true)}
-                  style={{ background: C.accent, border: 'none', borderRadius: 12, padding: '8px 14px', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: font }}
                 >
                   {t('santa_polls_new', locale)}
-                </button>
+                </Button>
               )}
             </div>
 
@@ -26918,12 +26918,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {santaPolls.map(poll => {
                 const totalVotes = poll.results.reduce((s, r) => s + r.count, 0);
                 return (
-                  <div key={poll.id} style={{ background: C.card, borderRadius: 16, padding: '16px', border: `1px solid ${C.border}` }}>
+                  <Card key={poll.id} variant="default" padding="md" style={{ borderRadius: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
                       <div style={{ fontSize: 15, fontWeight: 700, color: C.text, flex: 1 }}>{poll.question}</div>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8, background: poll.isOpen ? `rgba(74, 222, 128, 0.125)` : `rgba(199, 202, 209, 0.082)`, color: poll.isOpen ? C.green : C.textSec, whiteSpace: 'nowrap' }}>
+                      <Chip tone={poll.isOpen ? 'success' : 'surface'} size="sm">
                         {poll.isOpen ? t('santa_polls_active', locale) : t('santa_polls_closed', locale)}
-                      </span>
+                      </Chip>
                     </div>
 
                     {/* Options */}
@@ -26966,15 +26966,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         {poll.isAnonymous && <span style={{ marginLeft: 6 }}>· {t('santa_polls_voters_hidden', locale)}</span>}
                       </span>
                       {isOwner && poll.isOpen && (
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          fullWidth={false}
                           onClick={() => void closePoll(poll.id)}
-                          style={{ background: 'none', border: `1px solid rgba(251, 113, 133, 0.251)`, borderRadius: 8, padding: '4px 10px', color: C.red, fontSize: 12, cursor: 'pointer', fontFamily: font }}
+                          style={{ padding: '4px 10px', fontSize: 12, minHeight: 0, color: C.red, border: '1px solid rgba(251,113,133,0.25)' }}
                         >
                           {t('santa_polls_close', locale)}
-                        </button>
+                        </Button>
                       )}
                     </div>
-                  </div>
+                  </Card>
                 );
               })}
             </div>
