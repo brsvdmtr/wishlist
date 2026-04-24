@@ -30,25 +30,40 @@ type TgUser = { id: number; first_name: string; last_name?: string; username?: s
  * Accent / semantic / text values follow v2.1 palette. See
  * `packages/ui-tokens/src/colors.ts` for canonical source.
  */
+/**
+ * v2.1 — `C` values are CSS custom properties consumed by ThemeProvider.
+ *
+ * ThemeProvider (wrapping root) injects `--wb-*` on `.wb-phone[data-theme][data-accent]`.
+ * Switching theme/accent at runtime propagates to every consumer without
+ * re-rendering React — the styles just re-read the vars.
+ *
+ * Fallback values after the CSS var (`var(--wb-bg, #0F0F12)`) are used
+ * when the provider isn't mounted (tests, SSR pre-hydrate, legacy
+ * surfaces). Keep them in sync with the `dark + violet` free default.
+ *
+ * Accent-as-composable: for hex-alpha patterns (`rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.125)`) use one
+ * of the pre-computed rgba vars (`accentSoft`, `accentGlow`) or the RGB
+ * triplet vars (`--wb-accent-r/g/b`) with `rgb(... / 0.X)`.
+ */
 const C = {
-  bg: '#0F0F12',                           // v2.1
-  surface: '#26262C',                      // legacy solid (v2.1 primitives use rgba)
-  surfaceHover: '#2E2E36',                 // legacy solid
-  card: '#2F2F38',                         // legacy solid
-  accent: '#8B7BFF',                       // v2.1 violet
-  accentSoft: 'rgba(139,123,255,0.14)',    // v2.1
-  accentGlow: 'rgba(139,123,255,0.25)',    // v2.1
-  green: '#4ADE80',                        // v2.1
-  greenSoft: 'rgba(74,222,128,0.14)',      // v2.1
-  orange: '#FBBF24',                       // unchanged
-  orangeSoft: 'rgba(251,191,36,0.14)',     // v2.1 opacity
-  red: '#FB7185',                          // v2.1
-  redSoft: 'rgba(251,113,133,0.14)',       // v2.1
-  text: '#FFFFFF',                         // v2.1 pure white
-  textSec: '#C7CAD1',                      // v2.1
-  textMuted: '#8F94A3',                    // v2.1
-  border: 'rgba(255,255,255,0.06)',        // unchanged
-  borderLight: 'rgba(255,255,255,0.1)',    // unchanged
+  bg:           'var(--wb-bg, #0F0F12)',
+  surface:      'var(--wb-surface, rgba(255,255,255,0.035))',
+  surfaceHover: 'var(--wb-surface-hover, rgba(255,255,255,0.06))',
+  card:         'var(--wb-card, rgba(255,255,255,0.045))',
+  accent:       'var(--wb-accent, #8B7BFF)',
+  accentSoft:   'var(--wb-accent-soft, rgba(139,123,255,0.14))',
+  accentGlow:   'var(--wb-accent-shadow-soft, rgba(139,123,255,0.25))',
+  green:        'var(--wb-success, #4ADE80)',
+  greenSoft:    'var(--wb-success-soft, rgba(74,222,128,0.14))',
+  orange:       'var(--wb-warning, #FBBF24)',
+  orangeSoft:   'var(--wb-warning-soft, rgba(251,191,36,0.14))',
+  red:          'var(--wb-danger, #FB7185)',
+  redSoft:      'var(--wb-danger-soft, rgba(251,113,133,0.14))',
+  text:         'var(--wb-text, #FFFFFF)',
+  textSec:      'var(--wb-text-secondary, #C7CAD1)',
+  textMuted:    'var(--wb-text-muted, #8F94A3)',
+  border:       'var(--wb-border, rgba(255,255,255,0.06))',
+  borderLight:  'var(--wb-border-strong, rgba(255,255,255,0.12))',
 };
 
 const font = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif";
@@ -1886,8 +1901,8 @@ function ReferralProfileTileFromConfig({ config, locale, onOpen, trackEvent }: {
         style={{
           position: 'relative', cursor: 'pointer',
           borderRadius: 18,
-          background: `linear-gradient(135deg, ${C.accent}22, ${C.accent}08)`,
-          border: `1px solid ${C.accent}40`,
+          background: `linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.133), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.031))`,
+          border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)`,
           padding: 16, overflow: 'hidden',
         }}>
         <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -3655,7 +3670,7 @@ function SmartResSettingsContent({ wl, locale, onSave, onClose, doFetch }: { wl:
     const dots = (
       <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 20 }}>
         {[0, 1, 2, 3].map(i => (
-          <div key={i} style={{ width: 20, height: 4, borderRadius: 2, background: i === obStep ? C.accent : i < obStep ? `${C.accent}66` : C.surfaceHover }} />
+          <div key={i} style={{ width: 20, height: 4, borderRadius: 2, background: i === obStep ? C.accent : i < obStep ? `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.4)` : C.surfaceHover }} />
         ))}
       </div>
     );
@@ -3889,7 +3904,7 @@ function GiftNotesOnboardingContent({ locale, onFinishSkip, onFinishCreate }: { 
   const dots = (
     <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 20 }}>
       {[0, 1, 2, 3].map(i => (
-        <div key={i} style={{ width: 20, height: 4, borderRadius: 2, background: i === step ? C.accent : i < step ? `${C.accent}66` : C.surfaceHover }} />
+        <div key={i} style={{ width: 20, height: 4, borderRadius: 2, background: i === step ? C.accent : i < step ? `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.4)` : C.surfaceHover }} />
       ))}
     </div>
   );
@@ -11490,8 +11505,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     display: 'inline-block', marginTop: 6,
                     fontSize: 10, fontWeight: 800, letterSpacing: 0.6, padding: '3px 8px',
                     borderRadius: 6,
-                    background: `linear-gradient(135deg, ${C.accent}20, ${C.accent}12)`,
-                    border: `1px solid ${C.accent}30`,
+                    background: `linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.125), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.071))`,
+                    border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)`,
                     color: C.accent,
                   }}>PRO</span>
                 )}
@@ -11826,9 +11841,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           } : { display: 'flex', flexDirection: 'column' as const, gap: 12 }}>
             {draftsCount > 0 && (
               <div onClick={() => { void loadDrafts(); setScreen('drafts'); }} style={{
-                background: `linear-gradient(135deg, ${C.orange}20, ${C.orange}08)`,
+                background: `linear-gradient(135deg, rgba(251, 191, 36, 0.125), rgba(251, 191, 36, 0.031))`,
                 borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
-                border: `1px solid ${C.orange}25`,
+                border: `1px solid rgba(251, 191, 36, 0.145)`,
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 animation: 'fadeIn 0.3s ease',
               }}>
@@ -11860,8 +11875,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '14px 16px',
                 borderRadius: 14,
-                background: `linear-gradient(135deg, ${C.accent}22, ${C.accent}08)`,
-                border: `1px solid ${C.accent}2a`,
+                background: `linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.133), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.031))`,
+                border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.165)`,
                 animation: 'fadeIn 0.3s ease',
                 cursor: 'pointer',
               }}>
@@ -11912,7 +11927,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 style={{
                   background: `linear-gradient(135deg, rgba(124,106,255,0.15), rgba(124,106,255,0.05))`,
                   borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
-                  border: `1px solid ${C.accent}25`,
+                  border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.145)`,
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   animation: 'fadeIn 0.3s ease',
                 }}
@@ -14761,7 +14776,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
             {/* Status badge */}
             {viewingItem.status === 'reserved' && (
-              <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10, background: `${C.accent}12`, border: `1px solid ${C.accent}18` }}>
+              <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10, background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.071)`, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.094)` }}>
                 <span style={{ fontSize: 18 }}>✨</span>
                 <span style={{ fontSize: 14, fontWeight: 600, color: C.accent }}>{t('status_someone_reserved', locale)}</span>
               </div>
@@ -14806,7 +14821,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             ) : (
               <div onClick={() => showUpsell('comments')} style={{
                 marginTop: 24, padding: 20, background: C.surface, borderRadius: 20,
-                cursor: 'pointer', border: `1px solid ${C.accent}15`,
+                cursor: 'pointer', border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.082)`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <span style={{ fontSize: 20 }}>💬</span>
@@ -14821,7 +14836,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {/* Hint button */}
             {viewingItem.status === 'available' && (
               <div onClick={() => !hintLoading && handleHintTap(viewingItem as Item)} style={{
-                marginTop: 16, padding: '12px 14px', background: `${C.accent}08`, border: `1px solid ${C.accent}12`,
+                marginTop: 16, padding: '12px 14px', background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.031)`, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.071)`,
                 borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: hintLoading ? 'wait' : 'pointer',
                 opacity: hintLoading ? 0.6 : 1,
               }}>
@@ -15023,7 +15038,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 onClick={() => showUpsell('comments')}
                 style={{
                   marginTop: 24, padding: 20, background: C.surface, borderRadius: 20,
-                  cursor: 'pointer', border: `1px solid ${C.accent}15`,
+                  cursor: 'pointer', border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.082)`,
                   transition: 'border-color 0.2s',
                 }}
               >
@@ -15048,7 +15063,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 style={{
                   marginTop: 16, padding: 16, background: C.surface, borderRadius: 16,
                   display: 'flex', alignItems: 'center', gap: 12, cursor: hintLoading ? 'wait' : 'pointer',
-                  border: `1px solid ${C.accent}10`, opacity: hintLoading ? 0.6 : 1,
+                  border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, opacity: hintLoading ? 0.6 : 1,
                   transition: 'opacity 0.15s',
                 }}
               >
@@ -15068,7 +15083,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 style={{
                   marginTop: 16, padding: 16, background: C.surface, borderRadius: 16,
                   display: 'flex', alignItems: 'center', gap: 12, opacity: 0.5,
-                  border: `1px solid ${C.accent}10`,
+                  border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`,
                 }}
               >
                 <span style={{ fontSize: 22 }}>💡</span>
@@ -16928,8 +16943,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ marginBottom: 10 }}>
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 5,
-                      background: `linear-gradient(135deg, ${C.accent}28, ${C.accent}10)`,
-                      border: `1px solid ${C.accent}35`, padding: '4px 14px', borderRadius: 20,
+                      background: `linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.157), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063))`,
+                      border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.208)`, padding: '4px 14px', borderRadius: 20,
                       fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: '0.05em',
                     }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent, boxShadow: `0 0 6px ${C.accent}` }} />
@@ -17017,7 +17032,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       padding: '12px 0', borderRadius: 14, fontSize: 14, fontWeight: 600,
                       cursor: 'pointer', fontFamily: font, border: 'none',
                       background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`,
-                      color: '#fff', boxShadow: `0 4px 16px ${C.accent}4D`,
+                      color: '#fff', boxShadow: `0 4px 16px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.302)`,
                     }}
                   >
                     {t('share_profile_btn_full', locale)}
@@ -17073,9 +17088,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         position: 'relative', cursor: 'pointer',
                         borderRadius: 18,
                         background: state === 'full'
-                          ? `linear-gradient(135deg, ${C.accent}22, ${C.accent}08)`
+                          ? `linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.133), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.031))`
                           : C.card,
-                        border: `1px solid ${state === 'full' ? `${C.accent}40` : C.border}`,
+                        border: `1px solid ${state === 'full' ? `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)` : C.border}`,
                         padding: 16, overflow: 'hidden',
                       }}
                     >
@@ -17171,7 +17186,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           <div style={{ marginBottom: 12 }}>
                             <div style={{
                               display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
-                              background: `${C.green}12`, borderRadius: 12, border: `1px solid ${C.green}25`,
+                              background: `rgba(74, 222, 128, 0.071)`, borderRadius: 12, border: `1px solid rgba(74, 222, 128, 0.145)`,
                             }}>
                               <span style={{ fontSize: 16 }}>✅</span>
                               <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
@@ -17265,9 +17280,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       {t('settings_pro_unlock_title', locale)}
                     </div>
                     <div style={{
-                      background: `linear-gradient(145deg, ${C.card}, ${C.accent}08)`,
+                      background: `linear-gradient(145deg, ${C.card}, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.031))`,
                       borderRadius: 16, padding: 16,
-                      border: `1px solid ${C.accent}25`,
+                      border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.145)`,
                     }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                         {getProBenefits(locale).map((b, i, arr) => {
@@ -17279,7 +17294,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                   fontSize: 11, fontWeight: 700, color: C.accent,
                                   textTransform: 'uppercase', letterSpacing: 0.4,
                                   paddingTop: 8, marginBottom: -2,
-                                  borderTop: `1px solid ${C.accent}20`,
+                                  borderTop: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.125)`,
                                 }}>
                                   {t('plan_pro_res_section', locale)}
                                 </div>
@@ -17309,7 +17324,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           );
                         })}
                       </div>
-                      <div style={{ paddingTop: 14, borderTop: `1px solid ${C.accent}20`, marginBottom: 14 }}>
+                      <div style={{ paddingTop: 14, borderTop: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.125)`, marginBottom: 14 }}>
                         <span style={{ fontSize: 22, fontWeight: 800, color: C.text }}>100</span>
                         {' '}
                         <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>Stars</span>
@@ -17402,7 +17417,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                         style={{
                                           background: isLoading ? C.surface : C.accentSoft,
                                           color: C.accent,
-                                          border: `1px solid ${C.accent}40`,
+                                          border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)`,
                                           borderRadius: 8, padding: '5px 12px',
                                           fontSize: 13, fontWeight: 700,
                                           cursor: isLoading ? 'default' : 'pointer',
@@ -17431,16 +17446,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     {t('profile_plan_title', locale)}
                   </div>
                   <div style={{
-                    background: `linear-gradient(145deg, ${C.card}, ${C.accent}08)`,
+                    background: `linear-gradient(145deg, ${C.card}, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.031))`,
                     borderRadius: 16, padding: 20,
-                    border: `1px solid ${C.accent}25`,
+                    border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.145)`,
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                       <span style={{ fontSize: 15, fontWeight: 600, color: C.textSec, fontFamily: font }}>{t('settings_plan', locale)}</span>
                       <span style={{
                         fontSize: 12, fontWeight: 800, letterSpacing: 0.5, padding: '4px 10px', borderRadius: 6,
-                        background: `linear-gradient(135deg, ${C.accent}22, ${C.accent}12)`,
-                        border: `1px solid ${C.accent}30`, color: C.accent,
+                        background: `linear-gradient(135deg, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.133), rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.071))`,
+                        border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)`, color: C.accent,
                       }}>PRO</span>
                     </div>
 
@@ -17514,7 +17529,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
                         <div style={{
                           display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
-                          background: `${C.green}12`, borderRadius: 10, border: `1px solid ${C.green}25`,
+                          background: `rgba(74, 222, 128, 0.071)`, borderRadius: 10, border: `1px solid rgba(74, 222, 128, 0.145)`,
                         }}>
                           <span style={{ fontSize: 15 }}>🎁</span>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.green, lineHeight: 1.3 }}>
@@ -18700,7 +18715,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               padding: hasInvited ? '18px 16px 16px' : '28px 20px 24px',
               marginBottom: 14,
               borderRadius: 20,
-              background: `radial-gradient(circle at 50% 0%, ${C.accent}22 0%, transparent 60%), ${C.card}`,
+              background: `radial-gradient(circle at 50% 0%, rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.133) 0%, transparent 60%), ${C.card}`,
               border: `1px solid ${C.border}`,
               overflow: 'hidden',
             }}>
@@ -18790,7 +18805,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, color: '#fff',
                 fontSize: 15, fontWeight: 700, border: 'none', cursor: referralMe.link ? 'pointer' : 'default',
                 fontFamily: font, opacity: referralMe.link ? 1 : 0.5,
-                boxShadow: `0 4px 20px ${C.accent}30`,
+                boxShadow: `0 4px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)`,
               }}>
               {t('referral_share_tg_btn', locale)}
             </button>
@@ -18845,7 +18860,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 style={{
                   width: '100%', padding: '12px 16px', marginBottom: 16, borderRadius: 12,
                   background: 'transparent', color: C.accent, fontSize: 14, fontWeight: 600,
-                  border: `1px solid ${C.accent}40`, cursor: 'pointer', fontFamily: font,
+                  border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)`, cursor: 'pointer', fontFamily: font,
                 }}>
                 {t('referral_history_full_btn', locale)} →
               </button>
@@ -21171,7 +21186,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           {/* Orange-accent header block — always shown to stress copy-is-independent */}
           <div style={{
             padding: '12px 14px', borderRadius: 12, marginBottom: 4,
-            background: C.orangeSoft, border: `1px solid ${C.orange}33`,
+            background: C.orangeSoft, border: `1px solid rgba(251, 191, 36, 0.2)`,
             display: 'flex', gap: 10,
           }}>
             <span style={{ fontSize: 18, flexShrink: 0, lineHeight: '22px' }}>🧬</span>
@@ -22261,7 +22276,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {catOnboardingHint && (
         <div style={{
           position: 'fixed', top: 80, left: 20, right: 20, zIndex: 200,
-          background: C.card, border: `1px solid ${C.accent}30`,
+          background: C.card, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)`,
           borderRadius: 14, padding: '14px 18px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
           animation: 'fadeIn 0.3s ease',
@@ -24114,9 +24129,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             style={{
               background: C.card, borderRadius: 24, padding: '28px 24px',
               maxWidth: 360, width: '100%', textAlign: 'center',
-              border: `1px solid ${C.accent}40`,
+              border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)`,
               animation: 'fadeIn 0.3s ease',
-              boxShadow: `0 20px 60px rgba(0,0,0,0.5), 0 0 80px ${C.accent}30`,
+              boxShadow: `0 20px 60px rgba(0,0,0,0.5), 0 0 80px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)`,
             }}>
             <div style={{ fontSize: 56, marginBottom: 14, lineHeight: 1 }}>🎁</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: C.text, marginBottom: 10, lineHeight: 1.2, letterSpacing: '-0.01em' }}>
@@ -24140,7 +24155,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 width: '100%', padding: '14px 20px', borderRadius: 14,
                 background: `linear-gradient(135deg, ${C.accent}, #5B4BD6)`, color: '#fff',
                 fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: font,
-                boxShadow: `0 4px 20px ${C.accent}40`,
+                boxShadow: `0 4px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)`,
               }}>
               {t('referral_celebration_cta', locale)}
             </button>
@@ -25216,7 +25231,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     onClick={() => setSantaCreateCurrency(cur)}
                     style={{
                       flex: 1, padding: '10px 0', borderRadius: 12, border: `2px solid ${santaCreateCurrency === cur ? C.accent : C.border}`,
-                      background: santaCreateCurrency === cur ? `${C.accent}20` : C.card,
+                      background: santaCreateCurrency === cur ? `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.125)` : C.card,
                       color: santaCreateCurrency === cur ? C.accent : C.textMuted,
                       fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: font,
                     }}
@@ -26227,7 +26242,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
                       {/* Reveal result — alias-only, forever */}
                       {santaInboundStatus.canReveal && santaReveal?.revealed && santaReveal.giver && (
-                        <div style={{ marginTop: 12, background: `${C.accent}12`, borderRadius: 12, padding: 14, border: `1px solid ${C.accent}30` }}>
+                        <div style={{ marginTop: 12, background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.071)`, borderRadius: 12, padding: 14, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)` }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 10 }}>
                             🎅 {t('santa_revealed_title', locale)}
                           </div>
@@ -26280,7 +26295,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
                   {/* Only render the hint card when there's an active PENDING hint */}
                   {santaHintInbound?.hasPendingHint && santaHintInbound.hint && (
-                    <div style={{ background: `${C.accent}15`, borderRadius: 14, padding: 16, marginBottom: 16, border: `1px solid ${C.accent}30` }}>
+                    <div style={{ background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.082)`, borderRadius: 14, padding: 16, marginBottom: 16, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)` }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 }}>
                         💡 {t('santa_hint_inbound_title', locale)}
                       </div>
@@ -26345,7 +26360,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               const myParticipant = participants.find(p => p.isMe);
               if (!myParticipant || isOwner) return null;
               return (
-                <div style={{ background: `${C.accent}10`, borderRadius: 14, padding: 16, marginBottom: 16, border: `1px solid ${C.accent}30` }}>
+                <div style={{ background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, borderRadius: 14, padding: 16, marginBottom: 16, border: `1px solid rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.188)` }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 8 }}>
                     🎅 {t('santa_reveal_title', locale)}
                   </div>
@@ -26416,7 +26431,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     setScreen('santa-hub');
                   }
                 }}
-                style={{ background: 'none', border: `1px solid ${C.red}40`, borderRadius: 12, color: C.red, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginTop: 8 }}
+                style={{ background: 'none', border: `1px solid rgba(251, 113, 133, 0.251)`, borderRadius: 12, color: C.red, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginTop: 8 }}
               >
                 {t('santa_leave_btn', locale)}
               </button>
@@ -26429,7 +26444,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               return (
                 <button
                   onClick={() => setSantaExitRequestSheetOpen(true)}
-                  style={{ background: 'none', border: `1px solid ${C.red}40`, borderRadius: 12, color: C.red, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginTop: 8 }}
+                  style={{ background: 'none', border: `1px solid rgba(251, 113, 133, 0.251)`, borderRadius: 12, color: C.red, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginTop: 8 }}
                 >
                   {t('santa_exit_request_submit', locale)}
                 </button>
@@ -26497,7 +26512,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     pushToast(t('done', locale), 'success');
                   }
                 }}
-                style={{ background: 'none', border: `1px solid ${C.red}40`, borderRadius: 12, color: C.red, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginTop: 8 }}
+                style={{ background: 'none', border: `1px solid rgba(251, 113, 133, 0.251)`, borderRadius: 12, color: C.red, fontSize: 13, fontWeight: 600, padding: '10px 0', cursor: 'pointer', fontFamily: font, width: '100%', marginTop: 8 }}
               >
                 {t('santa_campaign_cancel_btn', locale)}
               </button>
@@ -26701,7 +26716,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           );
                         }}
                         style={{
-                          background: selected ? `${C.accent}20` : C.surface,
+                          background: selected ? `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.125)` : C.surface,
                           border: `1.5px solid ${selected ? C.accent : C.border}`,
                           borderRadius: 12, padding: '10px 14px', cursor: maxReached ? 'not-allowed' : 'pointer',
                           textAlign: 'start', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -26888,7 +26903,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div key={poll.id} style={{ background: C.card, borderRadius: 16, padding: '16px', border: `1px solid ${C.border}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
                       <div style={{ fontSize: 15, fontWeight: 700, color: C.text, flex: 1 }}>{poll.question}</div>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8, background: poll.isOpen ? `${C.green}20` : `${C.textSec}15`, color: poll.isOpen ? C.green : C.textSec, whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8, background: poll.isOpen ? `rgba(74, 222, 128, 0.125)` : `rgba(199, 202, 209, 0.082)`, color: poll.isOpen ? C.green : C.textSec, whiteSpace: 'nowrap' }}>
                         {poll.isOpen ? t('santa_polls_active', locale) : t('santa_polls_closed', locale)}
                       </span>
                     </div>
@@ -26906,7 +26921,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                               style={{ cursor: poll.isOpen && poll.myVote === null ? 'pointer' : 'default', borderRadius: 10, border: `1px solid ${isMyVote ? C.accent : C.border}`, padding: '8px 12px', position: 'relative', overflow: 'hidden', background: C.bg }}
                             >
                               {/* Progress bar */}
-                              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: isMyVote ? `${C.accent}20` : `${C.textSec}10`, borderRadius: 10 }} />
+                              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: isMyVote ? `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.125)` : `rgba(199, 202, 209, 0.063)`, borderRadius: 10 }} />
                               <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   {isMyVote && <span style={{ color: C.accent, fontSize: 14 }}>✓</span>}
@@ -26935,7 +26950,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       {isOwner && poll.isOpen && (
                         <button
                           onClick={() => void closePoll(poll.id)}
-                          style={{ background: 'none', border: `1px solid ${C.red}40`, borderRadius: 8, padding: '4px 10px', color: C.red, fontSize: 12, cursor: 'pointer', fontFamily: font }}
+                          style={{ background: 'none', border: `1px solid rgba(251, 113, 133, 0.251)`, borderRadius: 8, padding: '4px 10px', color: C.red, fontSize: 12, cursor: 'pointer', fontFamily: font }}
                         >
                           {t('santa_polls_close', locale)}
                         </button>
@@ -26955,7 +26970,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   onChange={e => setSantaPollCreateQuestion(e.target.value)}
                   placeholder={t('santa_polls_question_placeholder', locale)}
                   maxLength={300}
-                  style={{ width: '100%', background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', background: `rgba(199, 202, 209, 0.063)`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box' }}
                 />
 
                 <div style={{ marginTop: 16, marginBottom: 6, fontSize: 13, color: C.textSec }}>Варианты ответов</div>
@@ -26966,7 +26981,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       onChange={e => { const arr = [...santaPollCreateOptions]; arr[idx] = e.target.value; setSantaPollCreateOptions(arr); }}
                       placeholder={t('santa_polls_option_placeholder', locale, { n: String(idx + 1) })}
                       maxLength={100}
-                      style={{ flex: 1, background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none' }}
+                      style={{ flex: 1, background: `rgba(199, 202, 209, 0.063)`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none' }}
                     />
                     {santaPollCreateOptions.length > 2 && (
                       <button onClick={() => setSantaPollCreateOptions(prev => prev.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer', fontSize: 18, padding: '0 4px' }}>×</button>
@@ -27331,7 +27346,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 if (msg.messageType === 'SYSTEM') {
                   return (
                     <div key={msg.id} style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
-                      <div style={{ background: `${C.textSec}20`, borderRadius: 12, padding: '4px 12px', fontSize: 12, color: C.textSec, textAlign: 'center', maxWidth: '80%' }}>
+                      <div style={{ background: `rgba(199, 202, 209, 0.125)`, borderRadius: 12, padding: '4px 12px', fontSize: 12, color: C.textSec, textAlign: 'center', maxWidth: '80%' }}>
                         {renderSystemMsg(msg)}
                       </div>
                     </div>
@@ -27368,7 +27383,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
             {/* Read-only notice */}
             {isReadOnly && (
-              <div style={{ background: `${C.textSec}15`, padding: '8px 16px', textAlign: 'center', fontSize: 12, color: C.textSec, flexShrink: 0 }}>
+              <div style={{ background: `rgba(199, 202, 209, 0.082)`, padding: '8px 16px', textAlign: 'center', fontSize: 12, color: C.textSec, flexShrink: 0 }}>
                 {camp.status === 'COMPLETED' ? t('santa_chat_read_only_completed', locale) : t('santa_chat_read_only_cancelled', locale)}
               </div>
             )}
@@ -27382,7 +27397,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }}
                   placeholder={t('santa_chat_input_placeholder', locale)}
                   maxLength={1000}
-                  style={{ flex: 1, background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 20, padding: '8px 14px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none' }}
+                  style={{ flex: 1, background: `rgba(199, 202, 209, 0.063)`, border: `1px solid ${C.border}`, borderRadius: 20, padding: '8px 14px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none' }}
                 />
                 <button
                   onClick={() => void sendMessage()}
@@ -27546,7 +27561,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       {t('santa_excl_add_pair', locale)}
                     </button>
                   ) : (
-                    <div style={{ background: `${C.accent}10`, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 4 }}>
+                    <div style={{ background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 4 }}>
                       🔒 {t('santa_excl_pro_hint', locale)}
                     </div>
                   )}
@@ -27623,7 +27638,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     </button>
                   ) : (
                     santaExclGroups.length === 0 && (
-                      <div style={{ background: `${C.accent}10`, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 4 }}>
+                      <div style={{ background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.063)`, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.accent, marginTop: 4 }}>
                         🔒 {t('santa_excl_pro_hint', locale)}
                       </div>
                     )
@@ -27639,7 +27654,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <select
                   value={santaExclPairA}
                   onChange={e => setSantaExclPairA(e.target.value)}
-                  style={{ width: '100%', background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
+                  style={{ width: '100%', background: `rgba(199, 202, 209, 0.063)`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 12 }}
                 >
                   <option value="">—</option>
                   {joinedParticipants.map(p => (
@@ -27651,7 +27666,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <select
                   value={santaExclPairB}
                   onChange={e => setSantaExclPairB(e.target.value)}
-                  style={{ width: '100%', background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}
+                  style={{ width: '100%', background: `rgba(199, 202, 209, 0.063)`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}
                 >
                   <option value="">—</option>
                   {joinedParticipants.filter(p => p.userId !== santaExclPairA).map(p => (
@@ -27687,7 +27702,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   onChange={e => setSantaExclGroupLabel(e.target.value)}
                   placeholder={t('santa_excl_group_label_placeholder', locale)}
                   maxLength={80}
-                  style={{ width: '100%', background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}
+                  style={{ width: '100%', background: `rgba(199, 202, 209, 0.063)`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}
                 />
                 <button
                   onClick={() => void createGroup()}
@@ -27716,7 +27731,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <select
                           value={santaExclAddMemberUserId}
                           onChange={e => setSantaExclAddMemberUserId(e.target.value)}
-                          style={{ width: '100%', background: `${C.textSec}10`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}
+                          style={{ width: '100%', background: `rgba(199, 202, 209, 0.063)`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, color: C.text, fontFamily: font, outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}
                         >
                           <option value="">—</option>
                           {available.map(p => (
@@ -27860,7 +27875,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{pAlias}</span>
                           {p.role === 'ADMIN' && (
-                            <span style={{ fontSize: 10, fontWeight: 700, color: C.accent, background: `${C.accent}15`, padding: '1px 5px', borderRadius: 5 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: C.accent, background: `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.082)`, padding: '1px 5px', borderRadius: 5 }}>
                               {t('santa_role_admin', locale)}
                             </span>
                           )}
@@ -29591,8 +29606,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                             style={{
                               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                               padding: 14, borderRadius: 12, cursor: 'pointer',
-                              background: isPinned ? `${C.accent}14` : C.surface,
-                              border: `1px solid ${isPinned ? `${C.accent}55` : C.border}`,
+                              background: isPinned ? `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.078)` : C.surface,
+                              border: `1px solid ${isPinned ? `rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.333)` : C.border}`,
                             }}
                           >
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -29876,7 +29891,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       background: hasAnyContent ? `linear-gradient(135deg, ${C.accent}, #5B4BD6)` : C.surface,
                       color: hasAnyContent ? '#fff' : C.textMuted,
                       opacity: showcaseSaving ? 0.7 : 1,
-                      boxShadow: hasAnyContent ? `0 6px 20px ${C.accent}40` : 'none',
+                      boxShadow: hasAnyContent ? `0 6px 20px rgb(var(--wb-accent-r, 139) var(--wb-accent-g, 123) var(--wb-accent-b, 255) / 0.251)` : 'none',
                     }}
                   >
                     {showcaseSaving
