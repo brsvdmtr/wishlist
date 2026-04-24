@@ -22172,16 +22172,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             }}
           />
           <div style={{ display: 'flex', gap: 10 }}>
-            <button style={{ ...btnGhost, flex: 1 }} onClick={() => setShowCatCreate(false)}>
+            <Button variant="ghost" style={{ flex: 1 }} onClick={() => setShowCatCreate(false)}>
               {t('wl_cancel', locale)}
-            </button>
-            <button
-              style={{ ...btnPrimary, flex: 1, opacity: catCreateLoading || !catCreateName.trim() ? 0.5 : 1 }}
-              onClick={() => void handleCatCreate()}
+            </Button>
+            <Button
+              variant="primary"
+              style={{ flex: 1 }}
+              loading={catCreateLoading}
               disabled={catCreateLoading || !catCreateName.trim()}
+              onClick={() => void handleCatCreate()}
             >
-              {catCreateLoading ? '…' : t('cat_create', locale)}
-            </button>
+              {t('cat_create', locale)}
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -22203,16 +22205,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             }}
           />
           <div style={{ display: 'flex', gap: 10 }}>
-            <button style={{ ...btnGhost, flex: 1 }} onClick={() => setShowCatRename(null)}>
+            <Button variant="ghost" style={{ flex: 1 }} onClick={() => setShowCatRename(null)}>
               {t('wl_cancel', locale)}
-            </button>
-            <button
-              style={{ ...btnPrimary, flex: 1, opacity: catRenameLoading || !catRenameName.trim() ? 0.5 : 1 }}
-              onClick={() => void handleCatRename()}
+            </Button>
+            <Button
+              variant="primary"
+              style={{ flex: 1 }}
+              loading={catRenameLoading}
               disabled={catRenameLoading || !catRenameName.trim()}
+              onClick={() => void handleCatRename()}
             >
-              {catRenameLoading ? '…' : t('cat_rename', locale)}
-            </button>
+              {t('cat_rename', locale)}
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -22935,13 +22939,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 </div>
               </div>
 
-              <button
-                style={{ ...btnPrimary, opacity: privacySaving ? 0.6 : 1 }}
+              <Button
+                variant="primary"
+                loading={privacySaving}
                 disabled={privacySaving}
                 onClick={() => void handleSaveWlPrivacy(privacyDraftVisibility, privacyDraftAllowSubs, privacyDraftCommentPolicy)}
               >
-                {privacySaving ? '…' : t('save', locale)}
-              </button>
+                {t('save', locale)}
+              </Button>
             </div>
           );
         })()}
@@ -22954,15 +22959,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             {t('unreserve_confirm_body', locale)}
           </p>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              style={{ ...btnSecondary, flex: 1 }}
+            <Button
+              variant="secondary"
+              style={{ flex: 1 }}
               onClick={() => setPendingUnreserveAction(null)}
               disabled={unreservingConfirm}
             >
               {t('cancel', locale)}
-            </button>
-            <button
-              style={{ ...btnPrimary, flex: 1, background: C.red, opacity: unreservingConfirm ? 0.6 : 1 }}
+            </Button>
+            <Button
+              variant="danger-solid"
+              style={{ flex: 1 }}
+              loading={unreservingConfirm}
               disabled={unreservingConfirm}
               onClick={async () => {
                 if (!pendingUnreserveAction || unreservingConfirm) return;
@@ -22975,8 +22983,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 }
               }}
             >
-              {unreservingConfirm ? '…' : t('unreserve_confirm_btn', locale)}
-            </button>
+              {t('unreserve_confirm_btn', locale)}
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -22999,9 +23007,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               }}>{tpl}</button>
             ))}
           </div>
-          <button onClick={handleResNoteSave} disabled={resNoteSaving} style={{ ...btnPrimary, opacity: resNoteSaving ? 0.6 : 1 }}>
-            {resNoteSaving ? '…' : t('res_note_save', locale)}
-          </button>
+          <Button variant="primary" loading={resNoteSaving} disabled={resNoteSaving} onClick={handleResNoteSave}>
+            {t('res_note_save', locale)}
+          </Button>
         </div>
       </BottomSheet>
 
@@ -23088,23 +23096,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     )}
                   </div>
                 )}
-                <button onClick={() => {
-                  if (!resReminderSheetItem || !hasSelection) return;
-                  const now2 = new Date();
-                  const allDates: Date[] = [];
-                  if (resReminderSelected.has('custom') && resReminderCustomDate) {
-                    allDates.push(new Date(resReminderCustomDate + 'T10:00:00'));
-                  } else {
-                    if (resReminderSelected.has('3d')) allDates.push(new Date(now2.getTime() + 3 * 86400000));
-                    if (resReminderSelected.has('1w')) allDates.push(new Date(now2.getTime() + 7 * 86400000));
-                    if (resReminderSelected.has('eom')) allDates.push(new Date(now2.getFullYear(), now2.getMonth() + 1, 0, 10, 0));
-                  }
-                  if (allDates.length > 0) handleResReminderSet(resReminderSheetItem.id, allDates);
-                }} disabled={resReminderSaving || !hasSelection} style={{
-                  ...btnPrimary, opacity: (resReminderSaving || !hasSelection) ? 0.6 : 1,
-                }}>
-                  {resReminderSaving ? '…' : t('res_reminder_set_btn', locale)}
-                </button>
+                <Button
+                  variant="primary"
+                  loading={resReminderSaving}
+                  disabled={resReminderSaving || !hasSelection}
+                  onClick={() => {
+                    if (!resReminderSheetItem || !hasSelection) return;
+                    const now2 = new Date();
+                    const allDates: Date[] = [];
+                    if (resReminderSelected.has('custom') && resReminderCustomDate) {
+                      allDates.push(new Date(resReminderCustomDate + 'T10:00:00'));
+                    } else {
+                      if (resReminderSelected.has('3d')) allDates.push(new Date(now2.getTime() + 3 * 86400000));
+                      if (resReminderSelected.has('1w')) allDates.push(new Date(now2.getTime() + 7 * 86400000));
+                      if (resReminderSelected.has('eom')) allDates.push(new Date(now2.getFullYear(), now2.getMonth() + 1, 0, 10, 0));
+                    }
+                    if (allDates.length > 0) handleResReminderSet(resReminderSheetItem.id, allDates);
+                  }}
+                >
+                  {t('res_reminder_set_btn', locale)}
+                </Button>
               </>
             );
           })()}
@@ -23123,12 +23134,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button variant="secondary" fullWidth={false} style={{ flex: 1 }} onClick={() => setResPurchasedConfirmItem(null)}>{t('cancel', locale)}</Button>
-            <button onClick={handleResPurchasedToggle} disabled={resPurchasedLoading} style={{
-              ...btnPrimary, flex: 2, opacity: resPurchasedLoading ? 0.6 : 1,
-              ...(resPurchasedConfirmItem?.meta?.purchased ? { background: C.redSoft, color: C.red } : {}),
-            }}>
-              {resPurchasedLoading ? '…' : (resPurchasedConfirmItem?.meta?.purchased ? t('res_unpurchase_confirm_yes', locale) : t('res_purchased_confirm_yes', locale))}
-            </button>
+            <Button
+              variant={resPurchasedConfirmItem?.meta?.purchased ? 'danger' : 'primary'}
+              style={{ flex: 2 }}
+              loading={resPurchasedLoading}
+              disabled={resPurchasedLoading}
+              onClick={handleResPurchasedToggle}
+            >
+              {resPurchasedConfirmItem?.meta?.purchased ? t('res_unpurchase_confirm_yes', locale) : t('res_purchased_confirm_yes', locale)}
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -23187,8 +23201,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
           )}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { setResSort('date'); setResStatusFilter('all'); setResOwnerFilter(null); }} style={{ ...btnSecondary, flex: 1 }}>{t('res_filter_reset', locale)}</button>
-            <button onClick={() => setResFilterSheetOpen(false)} style={{ ...btnPrimary, flex: 2 }}>{t('res_filter_apply', locale)}</button>
+            <Button variant="secondary" style={{ flex: 1 }} onClick={() => { setResSort('date'); setResStatusFilter('all'); setResOwnerFilter(null); }}>{t('res_filter_reset', locale)}</Button>
+            <Button variant="primary" style={{ flex: 2 }} onClick={() => setResFilterSheetOpen(false)}>{t('res_filter_apply', locale)}</Button>
           </div>
         </div>
       </BottomSheet>
@@ -23208,15 +23222,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textAlign: 'right' }}>{renameWlTitle.length}/80</div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              style={{ ...btnSecondary, flex: 1 }}
-              onClick={() => setShowRenameWl(false)}
-            >{t('cancel', locale)}</button>
-            <button
-              style={{ ...btnPrimary, flex: 1, opacity: renameWlTitle.trim() && renameWlTitle.trim() !== currentWl?.title ? 1 : 0.5 }}
-              onClick={() => void handleRenameWishlist()}
+            <Button variant="secondary" style={{ flex: 1 }} onClick={() => setShowRenameWl(false)}>{t('cancel', locale)}</Button>
+            <Button
+              variant="primary"
+              style={{ flex: 1 }}
+              loading={renameSaving}
               disabled={!renameWlTitle.trim() || renameWlTitle.trim() === currentWl?.title || renameSaving}
-            >{renameSaving ? '…' : t('save', locale)}</button>
+              onClick={() => void handleRenameWishlist()}
+            >
+              {t('save', locale)}
+            </Button>
           </div>
         </div>
       </BottomSheet>
@@ -23236,13 +23251,14 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               {descriptionText.length}/500
             </div>
           </div>
-          <button
-            style={{ ...btnPrimary, opacity: loading ? 0.5 : 1 }}
-            onClick={() => void handleSaveDescription()}
+          <Button
+            variant="primary"
+            loading={loading}
             disabled={loading}
+            onClick={() => void handleSaveDescription()}
           >
-            {loading ? '…' : `💾 ${t('save', locale)}`}
-          </button>
+            💾 {t('save', locale)}
+          </Button>
         </div>
       </BottomSheet>
       <BottomSheet isOpen={!!reservingItem} onClose={() => setReservingItem(null)} title={t('reserve_title', locale)}>
@@ -23275,14 +23291,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             </div>
             <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: t('reserve_privacy', locale) }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <button style={{ ...btnGhost, flex: 1, width: '100%' }} onClick={() => setReservingItem(null)}>{t('cancel', locale)}</button>
-              <button
-                style={{ ...btnPrimary, flex: 2, opacity: guestName.trim() ? 1 : 0.5 }}
-                onClick={() => void handleReserve()}
+              <Button variant="ghost" style={{ flex: 1 }} onClick={() => setReservingItem(null)}>{t('cancel', locale)}</Button>
+              <Button
+                variant="primary"
+                style={{ flex: 2 }}
+                loading={loading}
                 disabled={!guestName.trim() || loading}
+                onClick={() => void handleReserve()}
               >
-                {loading ? '…' : t('reserve_btn', locale)}
-              </button>
+                {t('reserve_btn', locale)}
+              </Button>
             </div>
           </div>
         )}
