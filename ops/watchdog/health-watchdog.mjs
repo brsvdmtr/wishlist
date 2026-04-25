@@ -53,13 +53,20 @@ if (!BASE_URL) {
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
-/** @returns {{ wasDown: boolean, downSince: string | null, consecutiveHealthyChecks: number }} */
+/** @returns {{ wasDown: boolean, downSince: string | null, consecutiveHealthyChecks: number, botWasStale: boolean, botStaleSince: string | null }} */
 function loadState() {
   try {
     const raw = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    return { wasDown: false, downSince: null, consecutiveHealthyChecks: 0, ...raw };
+    return {
+      wasDown: false, downSince: null, consecutiveHealthyChecks: 0,
+      botWasStale: false, botStaleSince: null,
+      ...raw,
+    };
   } catch {
-    return { wasDown: false, downSince: null, consecutiveHealthyChecks: 0 };
+    return {
+      wasDown: false, downSince: null, consecutiveHealthyChecks: 0,
+      botWasStale: false, botStaleSince: null,
+    };
   }
 }
 
@@ -164,6 +171,36 @@ async function callInternalApi(path, method = 'POST') {
     return { ok: res.ok, status: res.status, body };
   } catch (err) {
     return { ok: false, status: 0, body: {}, error: String(err) };
+  }
+}
+
+/**
+ * Check bot ServiceHeartbeat freshness via direct DB read. Bot writes its
+ * heartbeat every 60s; if it's been quiet > 5 minutes the bot process is
+ * almost certainly dead/wedged. Detects silent bot death that the
+ * /api/health/deep probe can't see (API can be healthy with a dead bot).
+ *
+ * @returns {Promise<{ updatedAt: Date | null, ageSec: number | null, stale: boolean, error: string | null }>}
+ */
+async function checkBotHeartbeat() {
+  const STALE_THRESHOLD_SEC = 5 * 60; // 5 minutes
+  try {
+    const result = await runSql(
+      `SELECT EXTRACT(EPOCH FROM (NOW() - "updatedAt"))::int as age_sec, "updatedAt"::text as updated_at FROM "ServiceHeartbeat" WHERE "serviceName" = 'bot' LIMIT 1`,
+    );
+    if (!result) return { updatedAt: null, ageSec: null, stale: false, error: 'sql_failed' };
+    if (result === '') return { updatedAt: null, ageSec: null, stale: true, error: 'no_row' };
+    const [ageStr, updatedAtStr] = result.split('|');
+    const ageSec = Number(ageStr);
+    if (!Number.isFinite(ageSec)) return { updatedAt: null, ageSec: null, stale: false, error: 'parse_failed' };
+    return {
+      updatedAt: updatedAtStr ? new Date(updatedAtStr) : null,
+      ageSec,
+      stale: ageSec > STALE_THRESHOLD_SEC,
+      error: null,
+    };
+  } catch (err) {
+    return { updatedAt: null, ageSec: null, stale: false, error: String(err) };
   }
 }
 
@@ -302,5 +339,45 @@ if (isDown) {
     }
 
     console.log('[watchdog] all healthy');
+  }
+}
+
+// ─── Bot heartbeat check ─────────────────────────────────────────────────────
+// Runs independently of the API/web isDown check above. Bot can die silently
+// while the API stays healthy (separate container, separate process).
+// Reuses the same dedup pattern: one alert on first stale, one on recovery.
+
+const heartbeat = await checkBotHeartbeat();
+console.log(`[watchdog] bot heartbeat: ageSec=${heartbeat.ageSec} stale=${heartbeat.stale} error=${heartbeat.error ?? 'none'}`);
+
+if (heartbeat.error && heartbeat.error !== 'no_row') {
+  // SQL probe failure — don't alert, but log. Could be transient docker exec hiccup.
+  console.error('[watchdog] bot heartbeat probe error, skipping alert dedup');
+} else if (heartbeat.stale) {
+  if (!state.botWasStale) {
+    state.botWasStale = true;
+    state.botStaleSince = now;
+    saveState(state);
+    if (!MAINTENANCE) {
+      const ageMin = heartbeat.ageSec ? Math.round(heartbeat.ageSec / 60) : 'unknown';
+      const detail = heartbeat.error === 'no_row'
+        ? 'no row in ServiceHeartbeat — bot has never started'
+        : `last heartbeat ${ageMin} min ago (${heartbeat.updatedAt?.toISOString() ?? 'n/a'})`;
+      await sendAlert(`🟠 <b>Bot heartbeat STALE</b> at ${now}\n\n${detail}\n\nBot likely dead/wedged — API healthy but no DM delivery.`);
+      console.log('[watchdog] alert sent: BOT STALE');
+    }
+  } else {
+    console.log('[watchdog] bot still stale (alert already sent)');
+  }
+} else {
+  if (state.botWasStale) {
+    const staleSince = state.botStaleSince ?? 'unknown';
+    state.botWasStale = false;
+    state.botStaleSince = null;
+    saveState(state);
+    if (!MAINTENANCE) {
+      await sendAlert(`🟢 <b>Bot heartbeat RECOVERED</b> at ${now}\n(was stale since ${staleSince})`);
+      console.log('[watchdog] alert sent: BOT RECOVERED');
+    }
   }
 }

@@ -1648,13 +1648,31 @@ if (!token) {
   }
 
   // Retry helper for Telegram API calls — exponential backoff on transient errors.
-  async function retryTgApi<T>(label: string, fn: () => Promise<T>, maxAttempts = 3): Promise<T | undefined> {
+  // `bestEffort: true` downgrades final-failure log level from error→info, used
+  // for cosmetic startup calls (setMyCommands/setMyDescription) where a TG-side
+  // timeout doesn't impact users — they'd just see the previous-set value.
+  // Without this, every container restart during an IPv4 RKN block produces
+  // 4-12 `level:50 "telegram API call failed"` lines that look like real fails
+  // in `grep -E "level":50` log audits.
+  async function retryTgApi<T>(
+    label: string,
+    fn: () => Promise<T>,
+    opts: { maxAttempts?: number; bestEffort?: boolean } | number = {},
+  ): Promise<T | undefined> {
+    // Backwards-compat: a numeric arg is the legacy maxAttempts param.
+    const { maxAttempts = 3, bestEffort = false } = typeof opts === 'number'
+      ? { maxAttempts: opts, bestEffort: false }
+      : opts;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await fn();
       } catch (err: unknown) {
         if (!isTransientError(err) || attempt === maxAttempts) {
-          logger.error({ err, label, attempt }, 'telegram API call failed');
+          if (bestEffort && isTransientError(err)) {
+            logger.info({ err: err instanceof Error ? err.message : String(err), label, attempt }, 'telegram API call failed (best-effort, ignored)');
+          } else {
+            logger.error({ err, label, attempt }, 'telegram API call failed');
+          }
           return undefined;
         }
         const delay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
@@ -1665,13 +1683,15 @@ if (!token) {
     return undefined;
   }
 
-  // Set bot commands for default (English) and Russian locales
+  // Set bot commands for default (English) and Russian locales.
+  // bestEffort: cosmetic startup config — a transient timeout shouldn't fail-loud.
   void retryTgApi('setMyCommands:en', () =>
     bot.telegram.setMyCommands([
       { command: 'start', description: t('bot_cmd_start', 'en') },
       { command: 'support', description: t('bot_cmd_support', 'en') },
       { command: 'paysupport', description: t('bot_cmd_paysupport', 'en') },
     ]),
+    { bestEffort: true },
   );
 
   void retryTgApi('setMyCommands:ru', () =>
@@ -1683,6 +1703,7 @@ if (!token) {
       ],
       { language_code: 'ru' },
     ),
+    { bestEffort: true },
   );
 
   // Set bot description for all supported locales (shown in "What can this bot do?").
@@ -1701,6 +1722,7 @@ if (!token) {
         description: t('bot_description', locale),
         ...(tgCode ? { language_code: tgCode } : {}),
       } as Parameters<typeof bot.telegram.callApi>[1]),
+      { bestEffort: true },
     );
   }
 

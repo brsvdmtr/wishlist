@@ -3535,7 +3535,20 @@ tgRouter.use((req, res, next) => {
       // (no init data) to verify the route is reachable, and would otherwise
       // dominate error:* metrics (~200/day on /tg/bootstrap).
       if (req.headers['x-watchdog'] === '1') return;
+
       const route = req.route?.path ? (req.baseUrl + req.route.path) : req.path;
+
+      // Skip known-noise legitimate rejections so error:* events stay
+      // signal-only and any future "error rate spike" alarm doesn't false-fire:
+      //   • 429 on /telemetry — rate limiter doing its job (5 batches/min
+      //     × 20 events = 100 events/min, exceeded only on rapid back-button
+      //     mashing or spam clicks). Not a code bug.
+      //   • 403 on item comments for guest viewers — third_party role doesn't
+      //     have access by design (comments are private to owner+reserver).
+      //     Frontend swallows the 403 and renders an empty comment list.
+      if (status === 429 && route === '/tg/telemetry') return;
+      if (status === 403 && route === '/tg/items/:id/comments') return;
+
       const method = req.method;
       const userId = req.tgUser?.id != null ? String(req.tgUser.id) : null;
       prisma.analyticsEvent.create({
@@ -16552,6 +16565,11 @@ const LIFECYCLE_PROMO_CODE = 'WISHPRO';
 const LIFECYCLE_PROMO_COOLDOWN_DAYS = 60; // max 1 promo offer per 60 days
 const LIFECYCLE_MSG_COOLDOWN_HOURS = 72; // min 72h between messages
 const LIFECYCLE_MAX_MARKETING_45D = 5; // max 5 marketing touches in 45 days
+// Dead-air alarm: if N cycles in a row produce 0 sends despite a non-empty
+// candidate pool, log a structured warn so the daily cron monitor catches it.
+// 24 cycles ≈ 24 h. Plateau is normal; total silence on a non-empty pool is not.
+const LIFECYCLE_DEAD_AIR_THRESHOLD = 24;
+let lifecycleDeadCycles = 0;
 
 /**
  * Outcome classification for a lifecycle DM send attempt.
@@ -16941,6 +16959,26 @@ setInterval(async () => {
     }
 
     logger.info({ candidatesFound: candidates.length, touchesSent, touchesFailed, durationMs: Date.now() - cycleStart }, 'lifecycle_cycle_completed');
+
+    // Dead-air alarm: if N cycles in a row find candidates but send nothing,
+    // something is silently broken (cooldown logic stuck, all candidates
+    // hitting MAX_WAVES, segment classifier returning null for everyone, etc).
+    // Plateau is normal — alarm only on prolonged silence with non-empty pool.
+    // Counter lives in module scope so it survives across cycles in one process.
+    const sentThisCycle = touchesSent > 0 || touchesFailed > 0;
+    if (candidates.length > 0 && !sentThisCycle) {
+      lifecycleDeadCycles++;
+      if (lifecycleDeadCycles === LIFECYCLE_DEAD_AIR_THRESHOLD || lifecycleDeadCycles % LIFECYCLE_DEAD_AIR_THRESHOLD === 0) {
+        // Fire on threshold and every Nth multiple after, so daily monitor
+        // catches it but we don't spam logs once per cycle.
+        logger.warn(
+          { deadCycles: lifecycleDeadCycles, candidatesFound: candidates.length, threshold: LIFECYCLE_DEAD_AIR_THRESHOLD },
+          'lifecycle_dead_air',
+        );
+      }
+    } else {
+      lifecycleDeadCycles = 0;
+    }
   } catch (err) {
     logger.error({ err, touchesSent, touchesFailed, durationMs: Date.now() - cycleStart }, 'lifecycle scheduler error');
   }
