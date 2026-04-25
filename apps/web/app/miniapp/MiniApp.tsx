@@ -3,7 +3,19 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Fragment, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { t, detectLocale, normalizeLocale, isRTL, resolveEffectiveLocale, pluralize, type Locale, type OnboardingVariant, type OnboardingMeta, type CatalogTemplate, getOnboardingMeta, getCatalogForSegment, resolveMarketSegment as resolveMarketSegmentShared } from '@wishlist/shared';
-import { Banner, Button, Card, Chip, CounterBadge, FloatingNav, HeroCard, ListRow, LockedTile, SectionHeader, Sheet as BottomSheet, StatTile, StickyCTAFade, ThemeProvider, useTheme } from '@wishlist/ui';
+import {
+  Banner, Button, Card, Chip, CounterBadge, FloatingNav, HeroCard, ListRow, LockedTile,
+  PageTitle, PickerRow, SectionHeader,
+  // Settings primitives — aliased to leave the `Settings*` names free for
+  // local boolean-API wrappers inside the Settings-screen IIFE.
+  SettingsActionRow as DSSettingsActionRow,
+  SettingsRow as DSSettingsRow,
+  SettingsSection as DSSettingsSection,
+  SettingsToggle as DSSettingsToggle,
+  SettingsDivider,
+  Sheet as BottomSheet, StatTile, StickyCTAFade, TabBar, TextField,
+  ThemeProvider, useTheme,
+} from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
 import { CalendarScreenV21 } from './screens/CalendarScreenV21';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
@@ -12940,7 +12952,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
               <div>
-                <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: 0 }}>📥 {t('drafts_title', locale)}</h1>
+                <PageTitle marginTop={0} marginBottom={0}>📥 {t('drafts_title', locale)}</PageTitle>
                 <p style={{ fontSize: 13, color: C.textMuted, margin: '4px 0 0' }}>
                   {draftsSelectMode
                     ? t('drafts_selected_n', locale, { n: draftsSelected.length })
@@ -19210,170 +19222,56 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           SETTINGS
           ══════════════════════════════════════════════ */}
       {screen === 'settings' && (() => {
-        const SDivider = () => (
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', marginLeft: 40 }} />
+        // ── Settings primitives ─────────────────────────────────────────────
+        // The local `SettingsSection/Row/Toggle/ActionRow` closures were
+        // extracted to `@wishlist/ui` (`SettingsList.tsx`). The legacy
+        // call-sites in this screen pass `proBadge: boolean` / `newBadge: boolean`
+        // — but the canonical primitives expect `ReactNode`. The bridge
+        // closures below translate the boolean API → ReactNode + thread
+        // santa-tint + localize the "coming soon" label, keeping JSX unchanged.
+        const SDivider = SettingsDivider;
+        const settingsNewBadgeNode = (
+          <span style={{
+            fontSize: 9, fontWeight: 700, color: '#fff',
+            background: 'linear-gradient(135deg, var(--wb-success), #10B981)',
+            padding: '2px 6px', borderRadius: 4,
+            textTransform: 'uppercase' as const, letterSpacing: 0.5,
+          }}>NEW</span>
         );
-
-        // v2.1: uppercase micro-label + glass container + backdrop-filter
         const SettingsSection = ({ title, children, first }: { title: string; children: React.ReactNode; first?: boolean }) => (
-          <div>
-            <div style={{
-              fontSize: 12, fontWeight: 600,
-              color: 'var(--wb-text-muted)',
-              marginBottom: 10, marginTop: first ? 4 : 22,
-              textTransform: 'uppercase' as const, letterSpacing: '0.7px',
-              paddingLeft: 4,
-            }}>{title}</div>
-            <div style={{
-              background: santaSeason?.inSeason
-                ? `linear-gradient(to bottom, rgba(160,210,240,.09) 0%, transparent 10px), var(--wb-card)`
-                : 'var(--wb-card)',
-              border: '1px solid var(--wb-border)',
-              borderRadius: 20, padding: '4px 18px',
-              WebkitBackdropFilter: 'blur(16px)' as never,
-              backdropFilter: 'blur(16px)' as never,
-              ...(santaSeason?.inSeason ? { borderTop: '1px solid rgba(180,220,245,.18)' } : {}),
-            }}>{children}</div>
-          </div>
+          <DSSettingsSection title={title} first={first} santaTint={!!santaSeason?.inSeason}>
+            {children}
+          </DSSettingsSection>
         );
-
-        // v2.1 SettingsRow — emoji-ic in rounded-square gradient thumb
         const SettingsRow = ({ icon, label, value, hint, onClick, proBadge, disabled, valueSmall, newBadge }: {
-          icon?: string; label: string; value: string; hint?: string; onClick?: () => void; proBadge?: boolean; disabled?: boolean; valueSmall?: boolean; newBadge?: boolean;
+          icon?: string; label: string; value?: string; hint?: string; onClick?: () => void; proBadge?: boolean; disabled?: boolean; valueSmall?: boolean; newBadge?: boolean;
         }) => (
-          <div onClick={disabled ? undefined : onClick} style={{
-            display: 'flex', alignItems: 'center', padding: '14px 0', gap: 14,
-            cursor: onClick && !disabled ? 'pointer' : 'default',
-            transition: 'opacity 0.15s',
-          }}>
-            {icon && (
-              <div style={{
-                width: 36, height: 36, borderRadius: 12,
-                background: disabled
-                  ? 'var(--wb-surface)'
-                  : 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 16, flexShrink: 0, opacity: disabled ? 0.4 : 1,
-                boxShadow: disabled ? undefined : 'inset 0 1px 0 rgba(255,255,255,0.06)',
-              }}>{icon}</div>
-            )}
-            <div style={{ flex: 1, minWidth: 0, opacity: disabled ? 0.4 : 1 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  fontSize: 15, fontWeight: 600,
-                  color: 'var(--wb-text)',
-                  lineHeight: 1.3, letterSpacing: '-0.012em',
-                }}>{label}</span>
-                {proBadge && <ProBadge />}
-                {newBadge && <span style={{
-                  fontSize: 9, fontWeight: 700, color: '#fff',
-                  background: 'linear-gradient(135deg, var(--wb-success), #10B981)',
-                  padding: '2px 6px', borderRadius: 4,
-                  textTransform: 'uppercase' as const, letterSpacing: 0.5,
-                }}>NEW</span>}
-              </div>
-              {hint && <div style={{
-                fontSize: 12.5, color: 'var(--wb-text-secondary)',
-                marginTop: 2, letterSpacing: '-0.003em',
-              }}>{hint}</div>}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, maxWidth: '45%' }}>
-              {disabled ? (
-                <span style={{ fontSize: 12, color: 'var(--wb-text-muted)', fontWeight: 500 }}>{t('settings_coming_soon', locale)}</span>
-              ) : (
-                <>
-                  {value && <span style={{
-                    fontSize: valueSmall ? 12 : 14,
-                    color: 'var(--wb-text-secondary)',
-                    textAlign: 'right' as const, lineHeight: 1.3,
-                    letterSpacing: '-0.005em',
-                  }}>{value}</span>}
-                  {onClick && <span style={{
-                    fontSize: 18, color: 'var(--wb-text-muted)',
-                    fontWeight: 300,
-                  }}>{'›'}</span>}
-                </>
-              )}
-            </div>
-          </div>
+          <DSSettingsRow
+            icon={icon}
+            label={label}
+            value={value}
+            hint={hint}
+            onClick={onClick}
+            disabled={disabled}
+            valueSmall={valueSmall}
+            comingSoonLabel={t('settings_coming_soon', locale)}
+            proBadge={proBadge ? <ProBadge /> : undefined}
+            newBadge={newBadge ? settingsNewBadgeNode : undefined}
+          />
         );
-
-        // v2.1 SettingsToggle — matches `.wb-toggle` spec with accent glow when on
         const SettingsToggle = ({ icon, label, value, disabled, proBadge, onChange }: {
           icon?: string; label: string; value: boolean; disabled?: boolean; proBadge?: boolean; onChange: (v: boolean) => void;
         }) => (
-          <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', gap: 14 }}>
-            {icon && (
-              <div style={{
-                width: 36, height: 36, borderRadius: 12,
-                background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 16, flexShrink: 0,
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
-              }}>{icon}</div>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-              <span style={{
-                fontSize: 15, fontWeight: 600,
-                color: disabled ? 'var(--wb-text-muted)' : 'var(--wb-text)',
-                lineHeight: 1.3, letterSpacing: '-0.012em',
-              }}>{label}</span>
-              {proBadge && <ProBadge />}
-            </div>
-            <button
-              onClick={() => onChange(!value)}
-              disabled={disabled && !proBadge}
-              style={{
-                width: 46, height: 28, borderRadius: 100,
-                border: value ? 'none' : '1px solid var(--wb-border)',
-                cursor: disabled ? 'default' : 'pointer',
-                background: value
-                  ? 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep))'
-                  : 'rgba(255,255,255,0.08)',
-                position: 'relative',
-                transition: 'all 0.2s ease',
-                flexShrink: 0,
-                boxShadow: value && !disabled
-                  ? '0 0 16px var(--wb-accent-shadow-soft)'
-                  : 'none',
-                opacity: disabled ? 0.6 : 1,
-              }}
-            >
-              <div style={{
-                width: 22, height: 22, borderRadius: '50%',
-                background: '#fff',
-                position: 'absolute', top: 2,
-                left: value ? 22 : 2,
-                transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.35), 0 0 0 0.5px rgba(0,0,0,0.05)',
-              }} />
-            </button>
-          </div>
+          <DSSettingsToggle
+            icon={icon}
+            label={label}
+            value={value}
+            disabled={disabled}
+            onChange={onChange}
+            proBadge={proBadge ? <ProBadge /> : undefined}
+          />
         );
-
-        const SettingsActionRow = ({ icon, label, color, onClick, dot }: { icon?: string; label: string; color?: string; onClick: () => void; dot?: boolean }) => (
-          <div
-            onClick={onClick}
-            onPointerDown={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.45'; }}
-            onPointerUp={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-            onPointerLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-            style={{ display: 'flex', alignItems: 'center', padding: '14px 0', gap: 12, cursor: 'pointer', transition: 'opacity 0.12s' }}
-          >
-            {icon && (
-              <div style={{
-                width: 28, height: 28, borderRadius: '50%',
-                background: color === C.red ? C.redSoft : C.accentSoft,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, flexShrink: 0,
-              }}>{icon}</div>
-            )}
-            <span style={{ fontSize: 15, fontWeight: 500, color: color || C.text, flex: 1 }}>{label}</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent, flexShrink: 0 }} />}
-              <span style={{ fontSize: 14, color: color || C.textMuted, fontWeight: 300 }}>{'\u203A'}</span>
-            </div>
-          </div>
-        );
+        const SettingsActionRow = DSSettingsActionRow;
 
         return (
         <div style={{ padding: '16px 20px 120px', animation: 'fadeIn 0.3s ease' }}>
@@ -25410,7 +25308,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         return (
           <div style={{ padding: '16px 20px 120px' }}>
             <div style={{ marginBottom: 20 }}>
-              <h1 style={{ fontSize: 26, fontWeight: 700, fontFamily: font, color: 'var(--wb-text)', letterSpacing: '-0.035em', lineHeight: 1.05, margin: '8px 0 4px' }}>{camp.title}</h1>
+              <PageTitle marginTop={8} marginBottom={4}>{camp.title}</PageTitle>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <Chip
                   tone={camp.status === 'ACTIVE' ? 'success' : camp.status === 'CANCELLED' ? 'danger' : 'accent'}

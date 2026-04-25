@@ -32,6 +32,55 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-04-25 — Wave 4 completion: extraction primitives
+
+**Type:** primitive-change
+
+**Decision.** Five new primitives extracted from `apps/web/app/miniapp/MiniApp.tsx`
+into `packages/ui/`, all `provisional`:
+
+- `TextField` — replaces `inputStyle` constant (~28 sheet duplications)
+- `PageTitle` — replaces 22 identical `<h1 fontSize:26 letterSpacing:-0.035em>`
+- `PickerRow` — replaces 5 picker bottom-sheet `<button>` rows that were
+  hand-rolled "list-tile-styled-as-button" patterns
+- `TabBar` — replaces home-tab + reservations-tab segmented-control duplicates
+- `SettingsList` family (`SettingsSection`, `SettingsRow`, `SettingsToggle`,
+  `SettingsActionRow`, `SettingsDivider`) — extracted from previously
+  feature-local closures inside the Settings screen IIFE
+
+**Context / why.** Audit during Wave 4 (per-screen primitive adoption) found
+these patterns dominated the remaining hand-rolled debt. Promoting them to
+`packages/ui` unblocks per-screen migrations across multiple consumers.
+
+`SettingsList` deserves a primitive (rather than reusing `<ListRow>`) because
+its rows are tighter (no per-row border, 14×0 padding-Y, live inside an
+outer `SettingsSection` card). Different semantic role.
+
+**Supersedes.** The local closures `SettingsSection / SettingsRow /
+SettingsToggle / SettingsActionRow / SDivider` previously defined inside
+`{screen === 'settings'}` IIFE in `MiniApp.tsx`. The Settings screen now uses
+the canonical primitives behind a thin bridge that translates the legacy
+`proBadge: boolean` call-site API to the new `proBadge: ReactNode`.
+
+**Impact.**
+- Component registry: 5 new primitive entries appended
+- Migration work needed: 28 inputStyle sites + 22 h1 sites + 5 picker rows + 2
+  tab-bars remain pending — primitives created but adoption is per-screen
+  follow-up. See migration playbook for shape mapping.
+- Breaking changes for consumers: none (Settings bridge keeps existing JSX
+  call-site API unchanged in `MiniApp.tsx`).
+
+**Promotion to canonical.** All five blocked on live adoption count:
+- `TextField` / `PageTitle` — promote after 5 live adoptions each
+- `PickerRow` — promote after 3 picker-sheet adoptions
+- `TabBar` — promote after 2 adoptions (home-tab + reservations-tab)
+- `SettingsList` — promote after a second screen adopts it (validates that
+  the shape generalises beyond Settings)
+
+**Approved by.** Dmitry.
+
+---
+
 ## 2026-04-21 — v2.1 refresh shipped (Phases 0-4) · 12 waves over one session
 
 **Type:** status-change (rollout summary)

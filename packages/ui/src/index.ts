@@ -40,3 +40,23 @@ export { FloatingNav, type FloatingNavProps, type FloatingNavItem } from './Floa
 export { HeroCard, type HeroCardProps, type HeroCardTone } from './HeroCard';
 export { AccentSwatch, type AccentSwatchProps, type SwatchKind } from './AccentSwatch';
 export { StickyCTAFade, type StickyCTAFadeProps } from './StickyCTAFade';
+
+// Wave 4 extraction primitives (2026-04-25, `provisional`) — extracted from
+// `apps/web/app/miniapp/MiniApp.tsx` after the Wave-4 per-screen primitive
+// adoption sweep identified them as systemic gaps. See
+// `DESIGN_DECISIONS.md#2026-04-25--wave-4-completion-extraction-primitives`.
+export { TextField, type TextFieldProps } from './TextField';
+export { PageTitle, type PageTitleProps } from './PageTitle';
+export { PickerRow, type PickerRowProps } from './PickerRow';
+export { TabBar, type TabBarProps, type TabBarItem } from './TabBar';
+export {
+  SettingsSection,
+  SettingsRow,
+  SettingsToggle,
+  SettingsActionRow,
+  SettingsDivider,
+  type SettingsSectionProps,
+  type SettingsRowProps,
+  type SettingsToggleProps,
+  type SettingsActionRowProps,
+} from './SettingsList';

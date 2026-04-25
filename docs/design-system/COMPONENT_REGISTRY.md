@@ -291,6 +291,81 @@ Visual source of truth: [`./mockups/approved/`](./mockups/approved).
 - **Promotion blockers:** brand new. Absorbs a 15+-place inline
   repetition in MiniApp.tsx. Promote after 3 adoptions.
 
+### `TextField` (new, 2026-04-25, v2.1 / Wave 4)
+
+- **Status:** `provisional`
+- **Implementation:** [packages/ui/src/TextField.tsx](../../packages/ui/src/TextField.tsx)
+- **Approval source:** `v2.1-refresh-all-screens.html` (`.wb-input`)
+- **API:** `multiline?` (input vs textarea) `/ label / hint / counter
+  / wrapperStyle / style + all native input/textarea attributes`. iOS
+  caret-displacement workaround codified (explicit `lineHeight: 22px`).
+- **Promotion blockers:** Replaces the local `inputStyle` constant
+  duplicated across ~28 sheets in `MiniApp.tsx`. Promote after first
+  adoption sweep (5+ live call-sites).
+
+### `PageTitle` (new, 2026-04-25, v2.1 / Wave 4)
+
+- **Status:** `provisional`
+- **Implementation:** [packages/ui/src/PageTitle.tsx](../../packages/ui/src/PageTitle.tsx)
+- **Approval source:** `v2.1-refresh-all-screens.html` (`.wb-h1`)
+- **API:** `children / icon / action / subtitle / marginTop /
+  marginBottom / style`
+- **Promotion blockers:** Distinct shape from `<SectionHeader>` — page
+  title is `fontSize: 26 / letterSpacing: -0.035em / lineHeight: 1.05`,
+  whereas `SectionHeader` is `fontSize.xxl` for mid-page section breaks.
+  Replaces the 22 identical `<h1 style={{...}}>` blocks across screens.
+  Promote after 5 live adoptions.
+
+### `PickerRow` (new, 2026-04-25, v2.1 / Wave 4)
+
+- **Status:** `provisional`
+- **Implementation:** [packages/ui/src/PickerRow.tsx](../../packages/ui/src/PickerRow.tsx)
+- **Approval source:** Bottom-sheet picker conventions (transfer / copy /
+  wishlist / wlPicker) — codified from 5 identical
+  `<button style={{ ...btnGhost, background: C.surface, border: ...,
+  textAlign: 'start' }}>` patterns.
+- **API:** `leading / title / subtitle / trailing / hideChevron /
+  selected / disabled / + native button attrs`
+- **Difference from `<ListRow>`:** Renders as `<button>` (full-row tappable +
+  keyboard-focusable + disabled-aware), tighter density (radius 12,
+  padding 14×16) tuned for sheet-content; no state-tint matrix.
+- **Promotion blockers:** Promote after 3 picker-sheet adoptions.
+
+### `TabBar` (new, 2026-04-25, v2.1 / Wave 4)
+
+- **Status:** `provisional`
+- **Implementation:** [packages/ui/src/TabBar.tsx](../../packages/ui/src/TabBar.tsx)
+- **Approval source:** Home-tab + reservations-tab inline patterns —
+  codified after 2+ identical screen-segmented-control duplicates.
+- **API:** `items: TabBarItem<ID>[] / active / onSelect / size?: 'sm' | 'lg' /
+  style`. Generic `<ID>` for exhaustive type-checking.
+- **Promotion blockers:** Promote after 2 live adoptions (home-tab swap +
+  reservations-tab swap).
+
+### `SettingsList` family (new, 2026-04-25, v2.1 / Wave 4)
+
+- **Status:** `provisional`
+- **Implementation:** [packages/ui/src/SettingsList.tsx](../../packages/ui/src/SettingsList.tsx)
+  exporting `SettingsSection`, `SettingsRow`, `SettingsToggle`,
+  `SettingsActionRow`, `SettingsDivider`.
+- **Approval source:** `v2.1-refresh-all-screens.html` (Settings group).
+  Extracted from previously-feature-local closures inside the Settings
+  screen of `MiniApp.tsx`.
+- **API:** `SettingsSection { title / first? / santaTint? / children }`,
+  `SettingsRow { icon / label / value / hint / onClick / proBadge:
+  ReactNode / newBadge: ReactNode / disabled / valueSmall /
+  comingSoonLabel }`, `SettingsToggle { icon / label / value / onChange /
+  disabled / proBadge: ReactNode }`, `SettingsActionRow { icon / label /
+  color / onClick / dot }`.
+- **Difference from `<ListRow>`:** Tighter row (no per-row border, 14×0
+  padding-Y, lives inside `SettingsSection`'s outer card). Different
+  semantic role from canonical `ListRow` which is a standalone tile.
+- **Adoption:** Settings screen migrated 2026-04-25 (in-screen IIFE
+  bridge keeps boolean `proBadge`/`newBadge` API at call-sites).
+- **Promotion blockers:** Live in 1 screen so far. Promote after a
+  second adoption (e.g. notification-preferences sub-screen) validates
+  the shape generalises.
+
 ---
 
 ## Pattern families (not yet extracted)
