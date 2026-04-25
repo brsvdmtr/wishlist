@@ -4062,7 +4062,7 @@ tgRouter.get(
       where: { ownerId: user.id, type: 'REGULAR', archivedAt: null },
       orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],  // position first, then createdAt for readOnly calculation
       select: {
-        id: true, slug: true, title: true, description: true, deadline: true,
+        id: true, slug: true, title: true, emoji: true, description: true, deadline: true,
         visibility: true, allowSubscriptions: true, commentPolicy: true,
         shareToken: true, dontGiftMode: true,
         smartReservationsEnabled: true, smartResTtlHours: true, smartResAllowExtend: true, smartResMaxExtensions: true,
@@ -4113,6 +4113,7 @@ tgRouter.get(
           id: wl.id,
           slug: wl.slug,
           title: wl.title,
+          emoji: wl.emoji ?? null,
           description: wl.description,
           deadline: wl.deadline?.toISOString() ?? null,
           itemCount: active.length,
@@ -5588,6 +5589,9 @@ tgRouter.patch(
     const parsed = z
       .object({
         title: z.string().min(1).max(200).optional(),
+        // Single-grapheme emoji override for the wishlist hero. `null` clears
+        // back to the auto-pick. Empty string also coerced to clear.
+        emoji: z.string().max(8).nullable().optional(),
         deadline: z.string().datetime().nullable().optional(),
         visibility: z.enum(['LINK_ONLY', 'PUBLIC_PROFILE', 'PRIVATE']).optional(),
         allowSubscriptions: z.enum(['ALL', 'NOBODY']).optional(),
@@ -5640,6 +5644,9 @@ tgRouter.patch(
       where: { id },
       data: {
         ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
+        ...(parsed.data.emoji !== undefined
+          ? { emoji: parsed.data.emoji && parsed.data.emoji.trim() ? parsed.data.emoji.trim() : null }
+          : {}),
         ...(parsed.data.deadline !== undefined
           ? { deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null }
           : {}),
@@ -5653,7 +5660,7 @@ tgRouter.patch(
         ...(parsed.data.smartResMaxExtensions !== undefined ? { smartResMaxExtensions: parsed.data.smartResMaxExtensions } : {}),
       },
       select: {
-        id: true, slug: true, title: true, description: true, deadline: true,
+        id: true, slug: true, title: true, emoji: true, description: true, deadline: true,
         visibility: true, allowSubscriptions: true, commentPolicy: true, dontGiftMode: true,
         smartReservationsEnabled: true, smartResTtlHours: true, smartResAllowExtend: true, smartResMaxExtensions: true,
       },
@@ -5677,6 +5684,7 @@ tgRouter.patch(
     return res.json({
       wishlist: {
         ...updated,
+        emoji: updated.emoji ?? null,
         deadline: updated.deadline?.toISOString() ?? null,
         visibility: (updated.visibility as string).toLowerCase(),
         allowSubscriptions: (updated.allowSubscriptions as string).toLowerCase(),

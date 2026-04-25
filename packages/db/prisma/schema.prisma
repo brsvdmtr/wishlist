@@ -215,6 +215,9 @@ model Wishlist {
   shareOpenCount     Int                @default(0) // incremented on each GET /public/share/:token call
   ownerId            String
   title              String
+  /// Optional user-chosen emoji shown next to the title in the hero card.
+  /// When null, the UI falls back to a hash-derived auto-pick from title.
+  emoji              String?
   description        String?
   deadline           DateTime?
   archivedAt         DateTime?

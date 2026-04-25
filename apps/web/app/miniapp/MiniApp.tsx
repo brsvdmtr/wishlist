@@ -212,6 +212,9 @@ type Wishlist = {
   id: string;
   slug: string;
   title: string;
+  /** Optional user-chosen emoji shown next to the title. When null, the UI
+   *  falls back to a hash-derived auto-pick from `title` via `getEmoji()`. */
+  emoji?: string | null;
   description: string | null;
   deadline: string | null;
   itemCount: number;
@@ -750,6 +753,18 @@ const inputStyle: React.CSSProperties = {
 // ═══════════════════════════════════════════════════════
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    id: '2026-04-25',
+    date: '25.04.2026',
+    items: [
+      { ru: '✨ WishBot 2.0 — большое обновление: переосмыслили дизайн, переработали навигацию, ускорили всё подряд', en: '✨ WishBot 2.0 — a major refresh: redesigned, renavigated, sped up everything' },
+      { ru: '🌈 Темы и акценты — выбери цвет интерфейса под настроение в «Профиль → Внешний вид» (PRO)', en: '🌈 Themes and accents — pick the colour that fits your mood in Profile → Appearance (PRO)' },
+      { ru: '🪟 Глянцевые карточки и плавающее меню снизу — всё как в свежих iOS-приложениях', en: '🪟 Glass cards and a floating bottom nav — looks like the freshest iOS apps' },
+      { ru: '🎯 Новые шрифты, скругления и тени — никаких резких углов, всё дышит', en: '🎯 New typography, radii and shadows — no sharp edges, everything breathes' },
+      { ru: '😎 Свой эмодзи рядом с названием вишлиста — теперь можно поставить любой', en: '😎 Custom emoji next to the wishlist title — pick whichever fits' },
+      { ru: '🚀 Куча мелочей: быстрее открывается, меньше ошибок, чище интерфейс', en: '🚀 Many small wins: faster open, fewer errors, cleaner interface' },
+    ],
+  },
   {
     id: '2026-04-16',
     date: '16.04.2026',
@@ -3250,13 +3265,15 @@ function getAddonOffers(locale: Locale): Record<string, { title: string; tag: st
 // PRO UPSELL SHEET (context-aware)
 // ═══════════════════════════════════════════════════════
 
-function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, availableSkus, cappedAddonCodes, locale, referralConfig, onOpenReferral, onReferralImpression }: {
+function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon, addonCheckoutLoading, addonLoadingSku, availableSkus, cappedAddonCodes, locale, referralConfig, onOpenReferral, onReferralImpression }: {
   state: UpsellSheetState;
   onClose: () => void;
   onUpgrade: (plan: 'monthly' | 'yearly') => void;
   checkoutLoading: boolean;
   onBuyAddon: (skuCode: string, targetId?: string) => void;
   addonCheckoutLoading: boolean;
+  /** SKU code currently being checked out (so per-row spinners only animate the active row). */
+  addonLoadingSku: string | null;
   availableSkus: SkuInfo[];
   cappedAddonCodes: string[];
   locale: Locale;
@@ -3543,7 +3560,8 @@ function ProUpsellSheet({ state, onClose, onUpgrade, checkoutLoading, onBuyAddon
                                 variant="secondary" size="sm" fullWidth={false}
                                 onClick={() => onBuyAddon(sku.code, state?.wishlistId)}
                                 disabled={isLoading}
-                                loading={addonCheckoutLoading}
+                                // Only THIS row's button animates while THIS sku checks out.
+                                loading={addonLoadingSku === sku.code}
                               >
                                 {t('addon_cta_buy', locale)}
                               </Button>
@@ -4174,6 +4192,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [upsellSheet, setUpsellSheet] = useState<UpsellSheetState>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [addonCheckoutLoading, setAddonCheckoutLoading] = useState(false);
+  // Tracks which SKU is currently loading so per-row Buy buttons only animate
+  // their own row instead of all add-on buttons going into the loading state.
+  const [addonLoadingSku, setAddonLoadingSku] = useState<string | null>(null);
   // Wishlist picker for item-scoped SKUs when user has multiple wishlists
   const [wishlistPickerSku, setWishlistPickerSku] = useState<string | null>(null);
   // Account-scoped SKUs that hit their global purchase cap this session
@@ -4779,6 +4800,9 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Rename wishlist
   const [showRenameWl, setShowRenameWl] = useState(false);
   const [renameWlTitle, setRenameWlTitle] = useState('');
+  // Optional override emoji for the wishlist hero. Empty string = clear back
+  // to the hash-auto-pick from the title.
+  const [renameWlEmoji, setRenameWlEmoji] = useState<string>('');
   const [renameSaving, setRenameSaving] = useState(false);
   const [showWlManage, setShowWlManage] = useState(false);
   const [showArchiveWlConfirm, setShowArchiveWlConfirm] = useState(false);
@@ -6946,10 +6970,16 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleBuyAddon = useCallback(async (skuCode: string, targetId?: string) => {
     trackEvent('addon_cta_clicked', { sku: skuCode });
     setAddonCheckoutLoading(true);
+    setAddonLoadingSku(skuCode);
     try {
+      // 15 s timeout: addon checkout calls Telegram's createInvoiceLink server-side,
+      // which on prod can take 6-9 s due to IPv6 SNAT routing (RKN-blocks IPv4).
+      // The default 5 s tgFetch timeout caused phantom "не удалось начать оформление"
+      // toasts even when the backend eventually succeeded.
       const res = await tgFetch('/tg/billing/addon/checkout', {
         method: 'POST',
         body: JSON.stringify({ skuCode, targetId }),
+        timeoutMs: 15000,
       });
       if (res.status === 409) {
         let errCode = 'cap_reached';
@@ -6979,12 +7009,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setGlobalCappedSkus(prev => prev.includes(skuCode) ? prev : [...prev, skuCode]);
           pushToast(t('addon_cap_reached', locale), 'info');
         }
-        setAddonCheckoutLoading(false);
+        setAddonCheckoutLoading(false); setAddonLoadingSku(null);
         return;
       }
       if (!res.ok) {
         pushToast(t('addon_checkout_error', locale), 'error');
-        setAddonCheckoutLoading(false);
+        setAddonCheckoutLoading(false); setAddonLoadingSku(null);
         return;
       }
       const resData = await res.json() as { invoiceUrl?: string; alreadyUnlocked?: boolean };
@@ -7002,18 +7032,18 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setSecretAccess(prev => ({ ...prev, unlocked: true, unlockType: prev.unlockType ?? 'ONE_TIME' }));
           pushToast(t('addon_already_unlocked', locale), 'success');
         }
-        setAddonCheckoutLoading(false);
+        setAddonCheckoutLoading(false); setAddonLoadingSku(null);
         return;
       }
       if (!resData.invoiceUrl) {
         pushToast(t('addon_checkout_error', locale), 'error');
-        setAddonCheckoutLoading(false);
+        setAddonCheckoutLoading(false); setAddonLoadingSku(null);
         return;
       }
       const tg = tgRef.current?.WebApp;
       if (!tg?.openInvoice) {
         pushToast(t('toast_update_telegram', locale), 'error');
-        setAddonCheckoutLoading(false);
+        setAddonCheckoutLoading(false); setAddonLoadingSku(null);
         return;
       }
       tg.HapticFeedback?.impactOccurred?.('medium');
@@ -7097,11 +7127,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           pushToast(t('toast_payment_failed', locale), 'error');
           trackEvent('addon_checkout_failed', { sku: skuCode });
         }
-        setAddonCheckoutLoading(false);
+        setAddonCheckoutLoading(false); setAddonLoadingSku(null);
       });
     } catch {
       pushToast(t('addon_checkout_error', locale), 'error');
-      setAddonCheckoutLoading(false);
+      setAddonCheckoutLoading(false); setAddonLoadingSku(null);
     }
   }, [tgFetch, pushToast, trackEvent, loadWishlists, locale, wishlistCappedSkus, wishlists]);
 
@@ -9269,18 +9299,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleRenameWishlist = async () => {
     if (!currentWl) return;
     const trimmed = renameWlTitle.trim();
-    if (!trimmed || trimmed === currentWl.title) return;
+    const trimmedEmoji = renameWlEmoji.trim();
+    const titleChanged = trimmed && trimmed !== currentWl.title;
+    const emojiChanged = trimmedEmoji !== (currentWl.emoji ?? '');
+    if (!titleChanged && !emojiChanged) return;
+    if (!trimmed) return;
     setRenameSaving(true);
     try {
+      const body: Record<string, unknown> = {};
+      if (titleChanged) body.title = trimmed;
+      if (emojiChanged) body.emoji = trimmedEmoji || null;
       const res = await tgFetch(`/tg/wishlists/${currentWl.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ title: trimmed }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
-      const json = await res.json() as { wishlist: { title: string } };
+      const json = await res.json() as { wishlist: { title: string; emoji: string | null } };
       const newTitle = json.wishlist.title;
-      setCurrentWl((prev) => prev ? { ...prev, title: newTitle } : prev);
-      setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, title: newTitle } : wl));
+      const newEmoji = json.wishlist.emoji;
+      setCurrentWl((prev) => prev ? { ...prev, title: newTitle, emoji: newEmoji } : prev);
+      setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, title: newTitle, emoji: newEmoji } : wl));
       setShowRenameWl(false);
       pushToast(t('rename_success', locale), 'success');
     } finally {
@@ -12068,7 +12106,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               return (
                 <WishlistCardV21
                   key={wl.id}
-                  emoji={getEmoji(wl.title) ?? '🎁'}
+                  emoji={(wl.emoji && wl.emoji.trim()) || (getEmoji(wl.title) ?? '🎁')}
                   title={wl.title}
                   subtitle={t('wishlist_count', locale, { count: wl.itemCount, reserved: wl.reservedCount })}
                   progress={wl.itemCount > 0 ? pct : undefined}
@@ -14014,7 +14052,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       fontSize: 44, lineHeight: 1, flexShrink: 0,
                       filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.2))',
                     }}>
-                      {getEmoji(currentWl.title) ?? '🎁'}
+                      {(currentWl.emoji && currentWl.emoji.trim()) || (getEmoji(currentWl.title) ?? '🎁')}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <h1 style={{
@@ -17481,7 +17519,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                                         variant="secondary"
                                         size="sm"
                                         fullWidth={false}
-                                        loading={addonCheckoutLoading}
+                                        // Only THIS row animates while THIS sku checks out.
+                                        loading={addonLoadingSku === sku.code}
                                         disabled={isLoading}
                                         onClick={() => {
                                           const needsTarget = sku.code === 'extra_items_5' || sku.code === 'extra_items_15';
@@ -21425,7 +21464,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 onClick={() => setLastPlacementWarnItem(null)}
                 style={{
                   padding: '12px 16px', borderRadius: 12, border: `1px solid ${C.borderLight}`,
-                  background: 'transparent', color: C.textSec, fontSize: 14, fontWeight: 600,
+                  // Opaque surface to hide the underlying placements-sheet
+                  // content. Transparent bg here was bleeding through
+                  // ("Где размещено" label was visible inside the button).
+                  background: C.surface, color: C.text, fontSize: 14, fontWeight: 600,
                   cursor: 'pointer', fontFamily: font,
                 }}
               >
@@ -21832,7 +21874,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           <button
             onClick={() => {
               setShowWlManage(false);
-              if (currentWl) { setRenameWlTitle(currentWl.title); setShowRenameWl(true); }
+              if (currentWl) { setRenameWlTitle(currentWl.title); setRenameWlEmoji(currentWl.emoji ?? ''); setShowRenameWl(true); }
             }}
             style={{
               background: 'var(--wb-card)', border: '1px solid var(--wb-border)', borderRadius: 16, padding: '16px 18px',
@@ -22698,7 +22740,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 18 }}>{getEmoji(wl.title)}</span>
+                      <span style={{ fontSize: 18 }}>{(wl.emoji && wl.emoji.trim()) || getEmoji(wl.title)}</span>
                       <div>
                         <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>{wl.title}</div>
                         <div style={{ fontSize: 12, color: C.textMuted }}>
@@ -23129,16 +23171,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
       <BottomSheet isOpen={showRenameWl} onClose={() => setShowRenameWl(false)} title={t('rename_title', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Emoji + Name on the same row — single graphical anchor for the
+              wishlist hero. Empty emoji input clears the override and falls
+              back to the auto-pick from the title. */}
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('wishlist_name', locale)}</label>
-            <input
-              style={inputStyle}
-              value={renameWlTitle}
-              onChange={(e) => setRenameWlTitle(e.target.value.slice(0, 80))}
-              autoFocus
-              placeholder={t('rename_placeholder', locale)}
-              maxLength={80}
-            />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+              <input
+                style={{ ...inputStyle, width: 64, padding: '14px 0', textAlign: 'center', fontSize: 24, flexShrink: 0 }}
+                value={renameWlEmoji || (currentWl ? getEmoji(currentWl.title) : '')}
+                onChange={(e) => {
+                  // Cap at first grapheme (`Array.from` splits surrogate pairs correctly).
+                  const arr = Array.from(e.target.value);
+                  setRenameWlEmoji(arr.slice(0, 2).join(''));
+                }}
+                onFocus={(e) => e.target.select()}
+                aria-label="emoji"
+              />
+              <input
+                style={{ ...inputStyle, flex: 1 }}
+                value={renameWlTitle}
+                onChange={(e) => setRenameWlTitle(e.target.value.slice(0, 80))}
+                autoFocus
+                placeholder={t('rename_placeholder', locale)}
+                maxLength={80}
+              />
+            </div>
             <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textAlign: 'right' }}>{renameWlTitle.length}/80</div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -23147,7 +23205,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               variant="primary"
               style={{ flex: 1 }}
               loading={renameSaving}
-              disabled={!renameWlTitle.trim() || renameWlTitle.trim() === currentWl?.title || renameSaving}
+              disabled={
+                !renameWlTitle.trim() ||
+                renameSaving ||
+                (renameWlTitle.trim() === currentWl?.title && renameWlEmoji.trim() === (currentWl?.emoji ?? ''))
+              }
               onClick={() => void handleRenameWishlist()}
             >
               {t('save', locale)}
@@ -24170,6 +24232,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         checkoutLoading={checkoutLoading}
         onBuyAddon={handleBuyAddon}
         addonCheckoutLoading={addonCheckoutLoading}
+        addonLoadingSku={addonLoadingSku}
         availableSkus={availableSkus}
         cappedAddonCodes={cappedAddonCodes}
         locale={locale}
@@ -30569,23 +30632,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         ];
         if (HIDE_ON.includes(screen)) return null;
 
+        // Hide nav when iOS keyboard is open. Otherwise the `position: fixed`
+        // nav floats up to the visual-viewport bottom (which is now just
+        // above the keyboard), covering input fields the user is editing
+        // (e.g. the promo-code input on the Profile screen).
+        if (keyboardOpen) return null;
+
         // Derive active nav from (screen, homeTab).
-        let activeNav: 'home' | 'friends' | 'reservations' | 'me' = 'home';
+        let activeNav: 'home' | 'reservations' | 'me' = 'home';
         if (screen === 'my-reservations' || (screen === 'my-wishlists' && homeTab === 'reservations')) {
           activeNav = 'reservations';
         } else if (screen === 'profile' || screen === 'settings' || screen === 'public-profile' || screen === 'showcase-editor' || screen === 'showcase-preview') {
           activeNav = 'me';
         }
 
-        // Locale-aware labels (i18n dictionary has no nav_* keys yet; inline switch is simplest).
+        // Locale-aware labels. `friends` removed temporarily — see WishBot 2.0
+        // changelog (2026-04-25) — bringing it back as a top-level destination
+        // is gated on the friends-list redesign. `me` renamed to "Профиль" /
+        // "Profile" / etc. for clarity over the prior single-glyph "Я".
         const navLabels = (() => {
           switch (locale) {
-            case 'en':    return { home: 'Home',     friends: 'Friends', reservations: 'Bookings', me: 'Me',   friendsSoon: 'Friends — coming soon' };
-            case 'zh-CN': return { home: '主页',     friends: '好友',    reservations: '预订',     me: '我',   friendsSoon: '好友 — 即将推出' };
-            case 'hi':    return { home: 'होम',     friends: 'दोस्त',   reservations: 'बुकिंग',   me: 'मैं',  friendsSoon: 'दोस्त — जल्द ही' };
-            case 'es':    return { home: 'Inicio',   friends: 'Amigos',  reservations: 'Reservas', me: 'Yo',   friendsSoon: 'Amigos — próximamente' };
-            case 'ar':    return { home: 'الرئيسية', friends: 'الأصدقاء', reservations: 'الحجوزات', me: 'أنا', friendsSoon: 'الأصدقاء — قريباً' };
-            default:      return { home: 'Главная',  friends: 'Друзья',  reservations: 'Брони',    me: 'Я',    friendsSoon: 'Друзья — скоро будет доступно' };
+            case 'en':    return { home: 'Home',     reservations: 'Bookings', me: 'Profile' };
+            case 'zh-CN': return { home: '主页',     reservations: '预订',     me: '个人资料' };
+            case 'hi':    return { home: 'होम',     reservations: 'बुकिंग',   me: 'प्रोफ़ाइल' };
+            case 'es':    return { home: 'Inicio',   reservations: 'Reservas', me: 'Perfil' };
+            case 'ar':    return { home: 'الرئيسية', reservations: 'الحجوزات', me: 'الملف الشخصي' };
+            default:      return { home: 'Главная',  reservations: 'Брони',    me: 'Профиль' };
           }
         })();
 
@@ -30610,13 +30682,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 void loadProfile();
                 void loadShowcase();
                 setScreen('profile');
-              } else if (id === 'friends') {
-                pushToast(navLabels.friendsSoon, 'info');
               }
             }}
             items={[
               { id: 'home', icon: '🏠', label: navLabels.home },
-              { id: 'friends', icon: '👥', label: navLabels.friends },
               { id: 'reservations', icon: '🎁', label: navLabels.reservations },
               { id: 'me', icon: '👤', label: navLabels.me },
             ]}
