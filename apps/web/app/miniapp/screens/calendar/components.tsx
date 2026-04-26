@@ -480,11 +480,14 @@ export function RepeatChips<T extends string>({ value, options, onChange }: {
 
 // ─── Sticky CTA at bottom ──────────────────────────────────────────────────
 
+// Bottom padding clears the floating bottom-nav (sits ~14px from edge, ~52px tall) +
+// the safe-area inset on devices with home-indicator. Otherwise the CTA gets hidden
+// behind the tab bar.
 export function CtaBar({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
       position: 'sticky', bottom: 0, left: 0, right: 0,
-      padding: `16px 16px calc(16px + env(safe-area-inset-bottom))`,
+      padding: `16px 16px calc(96px + env(safe-area-inset-bottom))`,
       background: 'linear-gradient(180deg, transparent, var(--wb-bg) 30%)',
       display: 'flex', flexDirection: 'column', gap: 6,
       pointerEvents: 'none',

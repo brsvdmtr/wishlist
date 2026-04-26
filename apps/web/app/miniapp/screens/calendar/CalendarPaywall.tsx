@@ -62,10 +62,10 @@ function Locked({ locale, priceXtr, onUnlock, onBack }: { locale: Locale; priceX
         </div>
       </div>
 
-      {/* Lock overlay */}
+      {/* Lock overlay — bottom padding clears the floating bottom-nav (~80px tall, 14px from edge) */}
       <div style={{
         position: 'fixed', left: 0, right: 0, bottom: 0,
-        padding: '0 22px calc(40px + env(safe-area-inset-bottom))',
+        padding: '0 22px calc(110px + env(safe-area-inset-bottom))',
         background: 'linear-gradient(180deg, rgba(8,8,11,0) 0%, rgba(8,8,11,0.55) 30%, rgba(8,8,11,0.96) 75%)',
         zIndex: 6, pointerEvents: 'none',
       }}>
@@ -264,14 +264,27 @@ export function CalendarOnboarding({ locale, onSkip, onCreateFirst }: { locale: 
         ) : undefined}
       />
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px 28px 40px' }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+      {/* Bottom padding clears the floating bottom-nav (sits ~14–80px from edge). */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px 28px calc(110px + env(safe-area-inset-bottom))' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: 220 }}>
           <div style={{
-            width: 280, height: 280, borderRadius: '50%',
+            width: 220, height: 220, borderRadius: '50%',
             background: 'radial-gradient(circle, var(--wb-accent-shadow) 0%, transparent 70%)',
             position: 'absolute', filter: 'blur(20px)',
           }} />
-          <div style={{ fontSize: 128, position: 'relative', filter: 'drop-shadow(0 20px 40px var(--wb-accent-shadow))' }}>
+          {/* Designed glyph: gradient-tinted rounded-square container with emoji inside.
+              Native emoji at 96px on Telegram WebView (esp. 🔔/💡) renders blocky;
+              wrapping it in a 140px container with a colored fill masks the upscale. */}
+          <div style={{
+            position: 'relative',
+            width: 140, height: 140, borderRadius: 36,
+            background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+            border: '1px solid var(--wb-accent-soft-strong)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 80, lineHeight: 1,
+            boxShadow: '0 24px 60px var(--wb-accent-shadow), inset 0 2px 0 rgba(255,255,255,0.18)',
+            WebkitBackdropFilter: 'blur(20px)' as never, backdropFilter: 'blur(20px)' as never,
+          }}>
             {data.e}
           </div>
         </div>
