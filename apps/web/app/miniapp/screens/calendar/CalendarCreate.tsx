@@ -188,7 +188,7 @@ function Step2Details({ draft, onChange, locale }: { draft: DraftState; onChange
       <CalInput value={draft.title} onChange={v => onChange({ title: v })} placeholder={ct('cal_create_what', locale)} maxLength={150} />
 
       <FormLabel>{ct('cal_field_emoji', locale)}</FormLabel>
-      <EmojiPicker value={draft.emoji} options={EMOJI_BY_TYPE[draft.type]} onChange={(e) => onChange({ emoji: e })} />
+      <EmojiPicker value={draft.emoji} options={EMOJI_BY_TYPE[draft.type]} onChange={(e) => onChange({ emoji: e })} locale={locale} />
 
       <FormLabel>{ct('cal_field_date', locale)}</FormLabel>
       <div style={{ margin: '0 16px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>

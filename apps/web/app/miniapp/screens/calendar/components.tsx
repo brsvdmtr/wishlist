@@ -10,9 +10,54 @@
  * we route through `gradients.eventBdayHero` etc.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { gradients } from '@wishlist/ui-tokens';
+import type { Locale } from '@wishlist/shared';
 import type { EventTheme } from './types';
+import { ct } from './i18n';
+
+/**
+ * Detect whether the on-screen keyboard is currently open (iOS / Android).
+ * Used by `CtaBar` to shrink its bottom-padding so the action button doesn't
+ * float in dead space above the keyboard. The 96px tab-bar clearance is also
+ * unnecessary in this state — the floating bottom-nav auto-hides when a
+ * field is focused (see `MiniApp.tsx` ~line 30923).
+ */
+function useIsKeyboardOpen(): boolean {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const recompute = () => setOpen(window.innerHeight - vv.height > 150);
+    recompute();
+    vv.addEventListener('resize', recompute);
+    return () => vv.removeEventListener('resize', recompute);
+  }, []);
+  return open;
+}
+
+/**
+ * Extract the FIRST emoji grapheme from arbitrary user input. Handles
+ * skin-tone modifiers, ZWJ sequences (👨‍👩‍👧), regional-indicator pairs (🇷🇺),
+ * variation selectors (✈️). Returns null when the input contains no emoji.
+ *
+ * Mirrors the helper in `MiniApp.tsx` used by the wishlist emoji picker.
+ */
+function extractFirstEmoji(input: string): string | null {
+  if (!input) return null;
+  const isEmoji = (s: string): boolean =>
+    /\p{Extended_Pictographic}|\p{Regional_Indicator}{2}/u.test(s);
+  try {
+    const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    for (const { segment } of seg.segment(input)) {
+      if (isEmoji(segment)) return segment;
+    }
+    return null;
+  } catch {
+    for (const cp of input) if (isEmoji(cp)) return cp;
+    return null;
+  }
+}
 
 // ─── Month grid cell math ─────────────────────────────────────────────────
 
@@ -424,14 +469,85 @@ export function CalInput(props: {
   );
 }
 
-export function EmojiPicker({ value, options, onChange }: { value: string | null; options: string[]; onChange: (next: string) => void }) {
+export function EmojiPicker({ value, options, onChange, locale }: {
+  value: string | null;
+  options: string[];
+  onChange: (next: string) => void;
+  /** Optional — labels the "custom" cell + hint. Defaults to RU. */
+  locale?: Locale;
+}) {
+  const loc = locale ?? 'ru';
+  const [customMode, setCustomMode] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  // Render input field in custom-mode. iOS WKWebView won't summon the
+  // emoji keyboard for off-screen / opacity:0 inputs even from a gesture
+  // handler, so the input is rendered visibly + autoFocus.
+  if (customMode) {
+    return (
+      <div style={{ margin: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontSize: 12.5, color: 'var(--wb-text-secondary)', lineHeight: 1.45, textAlign: 'center', padding: '2px 4px' }}>
+          {ct('cal_emoji_custom_hint', loc)}
+        </div>
+        <input
+          type="text"
+          inputMode="text"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          autoFocus
+          placeholder={ct('cal_emoji_custom_placeholder', loc)}
+          value={draft}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (!raw) { setDraft(''); return; }
+            const first = extractFirstEmoji(raw);
+            if (first) {
+              onChange(first);
+              setDraft('');
+              setCustomMode(false);
+              return;
+            }
+            // Non-emoji input — silently clear so the user can retry without
+            // having to delete characters themselves.
+            setDraft('');
+          }}
+          style={{
+            width: '100%', padding: '14px 16px', borderRadius: 14,
+            background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+            color: 'var(--wb-text)', fontSize: 28, fontFamily: 'inherit',
+            textAlign: 'center', outline: 'none',
+            WebkitBackdropFilter: 'blur(10px)' as never, backdropFilter: 'blur(10px)' as never,
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => { setCustomMode(false); setDraft(''); }}
+          style={{
+            background: 'none', border: 'none', padding: '6px 0',
+            color: 'var(--wb-text-muted)', fontSize: 13, fontFamily: 'inherit',
+            cursor: 'pointer', alignSelf: 'center',
+          }}
+        >{ct('cal_emoji_back_to_palette', loc)}</button>
+      </div>
+    );
+  }
+
+  // Show the current value as the first cell when it's not in the preset
+  // palette (e.g. user picked a custom emoji previously) so it stays
+  // visibly selected.
+  const customCell = value && !options.includes(value) ? value : null;
+  const cells = customCell ? [customCell, ...options] : options;
+
   return (
     <div style={{ display: 'flex', gap: 6, margin: '0 16px 14px', flexWrap: 'wrap' }}>
-      {options.map(e => {
+      {cells.map(e => {
         const active = e === value;
         return (
           <button
             key={e}
+            type="button"
             onClick={() => onChange(e)}
             style={{
               width: 44, height: 44, borderRadius: 13,
@@ -445,6 +561,20 @@ export function EmojiPicker({ value, options, onChange }: { value: string | null
           >{e}</button>
         );
       })}
+      <button
+        type="button"
+        onClick={() => setCustomMode(true)}
+        aria-label={ct('cal_emoji_custom', loc)}
+        style={{
+          width: 44, height: 44, borderRadius: 13,
+          background: 'var(--wb-card-strong)',
+          border: '1px dashed var(--wb-accent-soft-strong)',
+          color: 'var(--wb-accent-strong)',
+          fontSize: 10.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+          letterSpacing: '-0.005em', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          WebkitBackdropFilter: 'blur(10px)' as never, backdropFilter: 'blur(10px)' as never,
+        }}
+      >{ct('cal_emoji_custom', loc)} ✎</button>
     </div>
   );
 }
@@ -482,12 +612,17 @@ export function RepeatChips<T extends string>({ value, options, onChange }: {
 
 // Bottom padding clears the floating bottom-nav (sits ~14px from edge, ~52px tall) +
 // the safe-area inset on devices with home-indicator. Otherwise the CTA gets hidden
-// behind the tab bar.
+// behind the tab bar. When the keyboard is open the floating nav is auto-hidden
+// (see MiniApp `keyboardOpen` gate ~line 30923) so we collapse the clearance — the
+// 96px gap was leaving a visible dead-zone between the button and the keyboard.
 export function CtaBar({ children }: { children: React.ReactNode }) {
+  const kbOpen = useIsKeyboardOpen();
   return (
     <div style={{
       position: 'sticky', bottom: 0, left: 0, right: 0,
-      padding: `16px 16px calc(96px + env(safe-area-inset-bottom))`,
+      padding: kbOpen
+        ? `12px 16px calc(env(safe-area-inset-bottom) + 12px)`
+        : `16px 16px calc(96px + env(safe-area-inset-bottom))`,
       background: 'linear-gradient(180deg, transparent, var(--wb-bg) 30%)',
       display: 'flex', flexDirection: 'column', gap: 6,
       pointerEvents: 'none',

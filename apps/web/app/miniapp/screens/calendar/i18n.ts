@@ -181,6 +181,21 @@ const D: Record<string, StringMap> = {
   // ─── Form fields ───
   cal_field_name: { ru: 'Название', en: 'Name', 'zh-CN': '名称', hi: 'नाम', es: 'Nombre', ar: 'الاسم' },
   cal_field_emoji: { ru: 'Иконка', en: 'Icon', 'zh-CN': '图标', hi: 'आइकन', es: 'Icono', ar: 'الأيقونة' },
+  cal_emoji_custom: { ru: 'Свой', en: 'Custom', 'zh-CN': '自定义', hi: 'अपना', es: 'Propio', ar: 'مخصص' },
+  cal_emoji_custom_hint: {
+    ru: 'Открой клавиатуру смайликов и выбери любой 👇',
+    en: 'Open your emoji keyboard and pick any 👇',
+    'zh-CN': '打开表情键盘并选择任意一个 👇',
+    hi: 'अपना इमोजी कीबोर्ड खोलें और कोई भी चुनें 👇',
+    es: 'Abre tu teclado de emojis y elige cualquiera 👇',
+    ar: 'افتح لوحة الإيموجي واختر أي رمز 👇',
+  },
+  cal_emoji_custom_placeholder: {
+    ru: 'Любой смайлик…', en: 'Any emoji…', 'zh-CN': '任意表情…', hi: 'कोई भी इमोजी…', es: 'Cualquier emoji…', ar: 'أي إيموجي…',
+  },
+  cal_emoji_back_to_palette: {
+    ru: '← Назад к выбору', en: '← Back to palette', 'zh-CN': '← 返回选择', hi: '← पैलेट पर वापस', es: '← Volver a la paleta', ar: '← العودة إلى اللوحة',
+  },
   cal_field_date: { ru: 'Дата', en: 'Date', 'zh-CN': '日期', hi: 'तारीख', es: 'Fecha', ar: 'التاريخ' },
   cal_field_repeat: { ru: 'Повторение', en: 'Repeat', 'zh-CN': '重复', hi: 'दोहराव', es: 'Repetir', ar: 'التكرار' },
   cal_field_who: { ru: 'Кого поздравляем', en: 'Who to congratulate', 'zh-CN': '祝贺谁', hi: 'किसे बधाई', es: '¿A quién felicitar?', ar: 'من نهنئ' },
