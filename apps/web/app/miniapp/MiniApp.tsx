@@ -21482,12 +21482,25 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       {lastPlacementWarnItem && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 300,
-          background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          // Stronger backdrop dim — was 0.6, bumped to 0.78 to suppress
+          // backdrop-filter ghosting from the underlying placements sheet.
+          background: 'rgba(0,0,0,0.78)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: 16,
+          // Belt-and-braces: a tiny blur on the overlay itself further
+          // detaches the dialog from the still-visible sheet content.
+          WebkitBackdropFilter: 'blur(4px)' as never,
+          backdropFilter: 'blur(4px)' as never,
         }} onClick={() => setLastPlacementWarnItem(null)}>
           <div onClick={(e) => e.stopPropagation()} style={{
-            background: C.card, borderRadius: 18, padding: 20, maxWidth: 340, width: '100%',
-            border: `1px solid ${C.borderLight}`, boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
+            // OPAQUE solid bg — `C.card` (= rgba(255,255,255,0.045)) was
+            // 4.5%-opaque so all underlying placements-sheet text bled
+            // through. Use the elevated solid `--wb-bg-elev` token instead
+            // so the dialog properly hides what's behind it.
+            background: 'var(--wb-bg-elev, #15151A)',
+            borderRadius: 18, padding: 20, maxWidth: 340, width: '100%',
+            border: `1px solid ${C.borderLight}`,
+            boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
           }}>
             <div style={{
               width: 48, height: 48, borderRadius: 12, background: C.redSoft,
@@ -21522,11 +21535,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
               <button
                 onClick={() => setLastPlacementWarnItem(null)}
                 style={{
-                  padding: '12px 16px', borderRadius: 12, border: `1px solid ${C.borderLight}`,
-                  // Opaque surface to hide the underlying placements-sheet
-                  // content. Transparent bg here was bleeding through
-                  // ("Где размещено" label was visible inside the button).
-                  background: C.surface, color: C.text, fontSize: 14, fontWeight: 600,
+                  padding: '12px 16px', borderRadius: 12,
+                  border: `1px solid ${C.borderLight}`,
+                  // Opaque solid (was `C.surface` which is also translucent
+                  // at 3.5% — bled through to the placements-sheet rows).
+                  background: 'var(--wb-bg-elev, #15151A)',
+                  color: C.text, fontSize: 14, fontWeight: 600,
                   cursor: 'pointer', fontFamily: font,
                 }}
               >
