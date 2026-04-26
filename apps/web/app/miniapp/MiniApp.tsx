@@ -4805,6 +4805,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const [renameWlEmoji, setRenameWlEmoji] = useState<string>('');
   // Emoji-picker BottomSheet (opens from the rename sheet).
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  // When `true`, the picker renders an autofocused visible <input> instead of
+  // the curated palette — needed because iOS WKWebView refuses to summon the
+  // emoji keyboard for off-screen / `opacity: 0` inputs even via a user-gesture
+  // `focus()` call. The input must be physically rendered + visible.
+  const [emojiCustomMode, setEmojiCustomMode] = useState(false);
+  const emojiCustomInputRef = useRef<HTMLInputElement | null>(null);
   const [renameSaving, setRenameSaving] = useState(false);
   const [showWlManage, setShowWlManage] = useState(false);
   const [showArchiveWlConfirm, setShowArchiveWlConfirm] = useState(false);
@@ -23251,12 +23257,61 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           palette. */}
       <BottomSheet
         isOpen={showEmojiPicker}
-        onClose={() => setShowEmojiPicker(false)}
+        onClose={() => { setShowEmojiPicker(false); setEmojiCustomMode(false); }}
         title={locale === 'ru' ? 'Выбери смайлик' : 'Pick an emoji'}
       >
         {(() => {
           const PALETTE = ['🎁','🎂','🎄','💝','⭐','🦊','🐻','🍕','🎮','📚','🎧','🎨','🏠','✈️','⚽','🍰','💄','👟','📷','🎵'];
           const current = (renameWlEmoji && renameWlEmoji.trim()) || (currentWl ? getEmoji(currentWl.title) : '');
+          // Custom-mode: render a properly-visible <input> autofocused so the
+          // device shows its native emoji keyboard. Earlier off-screen-input
+          // approach didn't work on iOS WKWebView — Telegram's WebView refuses
+          // to summon the keyboard for `opacity: 0` / `left: -9999px` inputs
+          // even when `focus()` is called from a user-gesture handler.
+          if (emojiCustomMode) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{
+                  fontSize: 13, color: 'var(--wb-text-secondary)', lineHeight: 1.5,
+                  textAlign: 'center', padding: '4px 8px',
+                }}>
+                  {locale === 'ru'
+                    ? 'Открой клавиатуру смайликов на твоём устройстве и выбери любой 👇'
+                    : 'Open your device\'s emoji keyboard and pick any 👇'}
+                </div>
+                <input
+                  ref={emojiCustomInputRef}
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  autoFocus
+                  placeholder={locale === 'ru' ? 'Любой смайлик…' : 'Any emoji…'}
+                  defaultValue={renameWlEmoji}
+                  onChange={(e) => {
+                    // Cap at first grapheme (`Array.from` splits surrogate pairs correctly).
+                    const val = Array.from(e.target.value).slice(0, 2).join('');
+                    if (val) {
+                      setRenameWlEmoji(val);
+                      setShowEmojiPicker(false);
+                      setEmojiCustomMode(false);
+                    }
+                  }}
+                  style={{
+                    ...inputStyle,
+                    fontSize: 32, padding: '16px 16px',
+                    textAlign: 'center', letterSpacing: 0,
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  onClick={() => setEmojiCustomMode(false)}
+                  style={{ color: 'var(--wb-text-muted)' }}
+                >
+                  ← {locale === 'ru' ? 'Назад к палитре' : 'Back to palette'}
+                </Button>
+              </div>
+            );
+          }
           return (
             <div>
               <div style={{
@@ -23293,16 +23348,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     </button>
                   );
                 })}
-                {/* "Свой" cell — opens the hidden native input below. */}
+                {/* "Свой" cell — switches to custom-mode (renders a visible
+                    autofocused input that summons the device emoji keyboard).
+                    We CANNOT focus a hidden input here because iOS WKWebView
+                    refuses to keyboard for `opacity: 0` / off-screen elements. */}
                 <button
                   type="button"
-                  onClick={() => {
-                    const el = document.getElementById('emoji-custom-input') as HTMLInputElement | null;
-                    if (el) {
-                      el.value = '';
-                      el.focus();
-                    }
-                  }}
+                  onClick={() => setEmojiCustomMode(true)}
                   style={{
                     aspectRatio: '1',
                     borderRadius: 10,
@@ -23318,27 +23370,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   {locale === 'ru' ? 'Свой ✎' : 'Custom ✎'}
                 </button>
               </div>
-              {/* Off-screen native input. Triggers iOS emoji keyboard so the
-                  user can pick anything outside the curated palette. The
-                  rendered control is invisible but keyboard-focusable. */}
-              <input
-                id="emoji-custom-input"
-                type="text"
-                inputMode="text"
-                autoComplete="off"
-                onChange={(e) => {
-                  const val = Array.from(e.target.value).slice(0, 2).join('');
-                  if (val) {
-                    setRenameWlEmoji(val);
-                    setShowEmojiPicker(false);
-                  }
-                }}
-                style={{
-                  position: 'absolute', left: '-9999px', top: '-9999px',
-                  width: 1, height: 1, opacity: 0, pointerEvents: 'none',
-                }}
-                aria-hidden="true"
-              />
               <Button
                 variant="ghost"
                 onClick={() => {
