@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SettingsActionRow icons — DRAFT mockup</title>
+  <style>
+    :root {
+      --wb-bg: #0F0F12; --wb-bg-elev: #15151A;
+      --wb-surface: rgba(255,255,255,0.035);
+      --wb-card: rgba(255,255,255,0.045); --wb-card-strong: rgba(255,255,255,0.07);
+      --wb-border: rgba(255,255,255,0.06); --wb-border-strong: rgba(255,255,255,0.12);
+      --wb-accent: #8B7BFF; --wb-accent-strong: #B4A6FF; --wb-accent-deep: #5B48E5;
+      --wb-accent-r: 139; --wb-accent-g: 123; --wb-accent-b: 255;
+      --wb-accent-soft: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.14);
+      --wb-accent-soft-strong: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.30);
+      --wb-text: #FFFFFF; --wb-text-secondary: #C7CAD1; --wb-text-muted: #8F94A3;
+      --wb-success: #4ADE80; --wb-success-soft: rgba(74,222,128,0.14);
+      --wb-warning: #FBBF24; --wb-warning-soft: rgba(251,191,36,0.14);
+      --wb-danger: #FB7185; --wb-danger-soft: rgba(251,113,133,0.14);
+      --wb-danger-soft-strong: rgba(251,113,133,0.30);
+      --wb-success-soft-strong: rgba(74,222,128,0.30);
+      --wb-warning-soft-strong: rgba(251,191,36,0.30);
+    }
+    * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+    body {
+      background: linear-gradient(180deg, #1a1a22, #0a0a0e); margin: 0; padding: 40px 20px;
+      font-family: -apple-system, 'SF Pro Display', 'Inter', sans-serif;
+      color: var(--wb-text); min-height: 100vh;
+    }
+    .wrap { max-width: 1280px; margin: 0 auto; }
+    h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.025em; margin: 0 0 8px; }
+    .lead { color: var(--wb-text-secondary); margin: 0 0 32px; font-size: 14px; line-height: 1.5; max-width: 680px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .col {
+      background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 22px; padding: 24px;
+    }
+    .col h2 { font-size: 18px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.015em; }
+    .col h2 .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+      background: var(--wb-accent-soft); color: var(--wb-accent-strong); margin-left: 8px;
+      vertical-align: middle; text-transform: uppercase; letter-spacing: 0.05em; }
+    .col h2 .badge.warn { background: var(--wb-warning-soft); color: var(--wb-warning); }
+    .col p.desc { font-size: 13px; color: var(--wb-text-secondary); margin: 0 0 18px; line-height: 1.5; }
+
+    .phone {
+      width: 320px; margin: 0 auto;
+      background: var(--wb-bg); border-radius: 28px;
+      border: 1px solid rgba(255,255,255,0.04);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      padding: 16px 20px; min-height: 380px;
+    }
+
+    .group-label {
+      font-size: 12px; font-weight: 600; color: var(--wb-text-muted);
+      margin: 22px 0 10px 4px;
+      text-transform: uppercase; letter-spacing: 0.7px;
+    }
+    .section {
+      background: var(--wb-card);
+      border: 1px solid var(--wb-border);
+      border-radius: 20px;
+      padding: 4px 18px;
+      backdrop-filter: blur(16px);
+    }
+
+    /* Current SettingsRow (the GOOD one — for reference) */
+    .row {
+      display: flex; align-items: center; padding: 14px 0; gap: 14px;
+    }
+    .row .thumb {
+      width: 36px; height: 36px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    .row .label-stack { flex: 1; min-width: 0; }
+    .row .label-stack .lbl { font-size: 15px; font-weight: 600; color: var(--wb-text); line-height: 1.3; letter-spacing: -0.012em; }
+    .row .label-stack .hint { font-size: 12.5px; color: var(--wb-text-secondary); margin-top: 2px; }
+    .row .value { font-size: 14px; color: var(--wb-text-secondary); }
+    .row .chev { font-size: 18px; color: var(--wb-text-muted); font-weight: 300; }
+    .row .divider { height: 1px; background: rgba(255,255,255,0.04); margin-left: 40px; }
+
+    /* CURRENT BAD SettingsActionRow — small round circles */
+    .row-bad { display: flex; align-items: center; padding: 14px 0; gap: 12px; }
+    .row-bad .thumb-bad {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--wb-accent-soft);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+    .row-bad .thumb-bad.danger { background: var(--wb-danger-soft); }
+    .row-bad .lbl { flex: 1; font-size: 15px; font-weight: 500; color: var(--wb-text); }
+    .row-bad .lbl.danger { color: var(--wb-danger); }
+    .row-bad .chev { font-size: 14px; color: var(--wb-text-muted); font-weight: 300; }
+    .row-bad .chev.danger { color: var(--wb-danger); }
+
+    /* PROPOSED SettingsActionRow — match SettingsRow thumb shape (36×36 rounded square + gradient) */
+    .row-good { display: flex; align-items: center; padding: 14px 0; gap: 14px; }
+    .row-good .thumb-good {
+      width: 36px; height: 36px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    /* Danger variant: gradient with danger-soft instead of accent-soft */
+    .row-good .thumb-good.danger {
+      background: linear-gradient(135deg, var(--wb-danger-soft-strong), var(--wb-danger-soft));
+    }
+    .row-good .thumb-good.success {
+      background: linear-gradient(135deg, var(--wb-success-soft-strong), var(--wb-success-soft));
+    }
+    .row-good .lbl { flex: 1; font-size: 15px; font-weight: 600; color: var(--wb-text); line-height: 1.3; letter-spacing: -0.012em; }
+    .row-good .lbl.danger { color: var(--wb-danger); }
+    .row-good .chev { font-size: 18px; color: var(--wb-text-muted); font-weight: 300; }
+    .row-good .chev.danger { color: var(--wb-danger); }
+    .row-good .divider { height: 1px; background: rgba(255,255,255,0.04); margin-left: 40px; }
+
+    /* Danger zone container (wraps the danger ActionRow) */
+    .danger-zone {
+      background: rgba(251,113,133,0.06);
+      border: 1px solid rgba(251,113,133,0.12);
+      border-radius: 20px; padding: 4px 18px; margin-top: 18px;
+    }
+
+    .pros { font-size: 12px; color: var(--wb-text-muted); margin: 16px 0 0; line-height: 1.6; }
+    .pros strong { color: var(--wb-success); }
+
+    .anchor {
+      display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px;
+      background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 12px;
+      font-size: 13px; color: var(--wb-text-secondary); margin-bottom: 24px;
+    }
+    .anchor .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--wb-warning);
+      box-shadow: 0 0 8px var(--wb-warning); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="anchor"><span class="dot"></span> Status: DRAFT — awaiting approval</div>
+    <h1>Settings ActionRow icons — proposed mockup</h1>
+    <p class="lead">
+      <strong>Проблема:</strong> в Settings есть две примитивы строк:
+      <code>&lt;SettingsRow&gt;</code> (36×36 rounded-square thumb с accent-gradient + inset highlight)
+      и <code>&lt;SettingsActionRow&gt;</code> (28×28 round circle + flat tint).
+      На скриншоте видно — первые группы (Дизайн, Уведомления и т.д.) рендерятся
+      крупными квадратными иконками, а нижние («Что нового», «Сообщить о проблеме»,
+      «Удалить аккаунт») — маленькими кругляшками. Несогласованно.
+      <br><br>
+      <strong>Решение:</strong> унифицировать <code>SettingsActionRow</code> к тому же thumb-стилю,
+      что и <code>SettingsRow</code> — 36×36 rounded-square + tone-aware gradient. Danger-вариант
+      использует danger-gradient вместо flat redSoft.
+    </p>
+
+    <div class="grid">
+      <!-- BEFORE -->
+      <div class="col">
+        <h2>Сейчас <span class="badge warn">bad</span></h2>
+        <p class="desc">
+          Маленькие 28×28 круги с flat-fill — теряются между крупными квадратами SettingsRow.
+        </p>
+
+        <div class="phone">
+          <div class="group-label">Внешний вид</div>
+          <div class="section">
+            <div class="row">
+              <div class="thumb">🎨</div>
+              <div class="label-stack">
+                <div class="lbl">Тема</div>
+                <div class="hint">Тёмная — Фиолетовый</div>
+              </div>
+              <div class="chev">›</div>
+            </div>
+          </div>
+
+          <div class="group-label">Поддержка и сервис</div>
+          <div class="section">
+            <div class="row-bad">
+              <div class="thumb-bad">📋</div>
+              <div class="lbl">Что нового</div>
+              <div class="chev">›</div>
+            </div>
+            <div class="divider"></div>
+            <div class="row-bad">
+              <div class="thumb-bad">🛠</div>
+              <div class="lbl">Сообщить о проблеме</div>
+              <div class="chev">›</div>
+            </div>
+            <div class="divider"></div>
+            <div class="row-bad">
+              <div class="thumb-bad">💬</div>
+              <div class="lbl">Связаться с поддержкой</div>
+              <div class="chev">›</div>
+            </div>
+            <div class="divider"></div>
+            <div class="row-bad">
+              <div class="thumb-bad">❓</div>
+              <div class="lbl">Частые вопросы</div>
+              <div class="chev">›</div>
+            </div>
+          </div>
+
+          <div class="danger-zone">
+            <div class="row-bad">
+              <div class="thumb-bad danger">🗑</div>
+              <div class="lbl danger">Удалить аккаунт</div>
+              <div class="chev danger">›</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="pros" style="color: var(--wb-warning)">
+          <strong style="color: var(--wb-warning)">−</strong> 28×28 round circles vs 36×36 squares — visual mismatch.<br>
+          <strong style="color: var(--wb-warning)">−</strong> Flat fill вместо gradient — менее «глянцевый», бьёт с v2.1 spec.<br>
+          <strong style="color: var(--wb-warning)">−</strong> Иконки выглядят меньше / дешевле остальных.
+        </p>
+      </div>
+
+      <!-- AFTER -->
+      <div class="col">
+        <h2>Мокап <span class="badge">proposed</span></h2>
+        <p class="desc">
+          Same shape как <code>SettingsRow</code> — 36×36 rounded-square с gradient тинтом.
+          Danger-вариант — danger-gradient для красных rows. Один visual language всюду.
+        </p>
+
+        <div class="phone">
+          <div class="group-label">Внешний вид</div>
+          <div class="section">
+            <div class="row">
+              <div class="thumb">🎨</div>
+              <div class="label-stack">
+                <div class="lbl">Тема</div>
+                <div class="hint">Тёмная — Фиолетовый</div>
+              </div>
+              <div class="chev">›</div>
+            </div>
+          </div>
+
+          <div class="group-label">Поддержка и сервис</div>
+          <div class="section">
+            <div class="row-good">
+              <div class="thumb-good">📋</div>
+              <div class="lbl">Что нового</div>
+              <div class="chev">›</div>
+            </div>
+            <div class="divider"></div>
+            <div class="row-good">
+              <div class="thumb-good">🛠</div>
+              <div class="lbl">Сообщить о проблеме</div>
+              <div class="chev">›</div>
+            </div>
+            <div class="divider"></div>
+            <div class="row-good">
+              <div class="thumb-good">💬</div>
+              <div class="lbl">Связаться с поддержкой</div>
+              <div class="chev">›</div>
+            </div>
+            <div class="divider"></div>
+            <div class="row-good">
+              <div class="thumb-good">❓</div>
+              <div class="lbl">Частые вопросы</div>
+              <div class="chev">›</div>
+            </div>
+          </div>
+
+          <div class="danger-zone">
+            <div class="row-good">
+              <div class="thumb-good danger">🗑</div>
+              <div class="lbl danger">Удалить аккаунт</div>
+              <div class="chev danger">›</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="pros">
+          <strong>+</strong> Единый visual language во всех Settings.<br>
+          <strong>+</strong> 36×36 — лучше тап-таргет, более «весомые» иконки.<br>
+          <strong>+</strong> Gradient + inset-highlight — соответствует v2.1 ДС glassy thumb spec.<br>
+          <strong>+</strong> Danger-вариант явно выделяется через danger-gradient (не теряется как сейчас).<br>
+          <strong>+</strong> Реализация — изменить только <code>SettingsActionRow.tsx</code> в <code>@wishlist/ui</code>.
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

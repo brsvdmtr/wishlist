@@ -32,6 +32,56 @@ was wrong, add a new superseding entry.
 
 ---
 
+## 2026-04-26 — Wishlist emoji picker (Variant A) + SettingsActionRow thumb unification
+
+**Type:** approval + primitive-change
+
+**Decision.** Two related WishBot 2.0 polish items approved and shipped:
+
+1. **Wishlist emoji picker — Variant A.** Tap on a 48-px-square "cover" trigger
+   (rounded-square thumb with current emoji + headline + "›" chevron) opens a
+   BottomSheet with a curated 21-emoji palette (`🎁 🎂 🎄 💝 ⭐ 🦊 🐻 🍕 🎮 📚
+   🎧 🎨 🏠 ✈️ ⚽ 🍰 💄 👟 📷 🎵`) + a "Свой ✎" cell that focuses a hidden
+   off-screen `<input>` to summon the iOS emoji keyboard for arbitrary
+   choices. Includes a "Сбросить (авто)" ghost button to clear the override
+   back to the hash-derived default.
+
+   Approved mockup: [`mockups/approved/wishlist-emoji-picker.html`](./mockups/approved/wishlist-emoji-picker.html).
+
+2. **SettingsActionRow thumb unified with SettingsRow.** Replaces the prior
+   28×28 round circle + flat-fill tint with the same 36×36 rounded-square
+   thumb + tone-aware gradient + inset highlight as `<SettingsRow>`. Adds
+   explicit `tone: 'accent' | 'success' | 'warning' | 'danger'` prop, with a
+   backwards-compat heuristic: existing call-sites that pass
+   `color={C.red}` / `color={'var(--wb-danger, ...)'}` auto-promote to
+   `tone='danger'`. Chevron grows from 14 → 18 to match the heavier thumb.
+
+   Approved mockup: [`mockups/approved/settings-action-row-icons.html`](./mockups/approved/settings-action-row-icons.html).
+
+**Context / why.** Both surfaced from prod feedback on WishBot 2.0:
+- Emoji-edit affordance was unclear — 64-px input next to the title looked
+  like a duplicate field; iOS auto-fill chips overlapped the emoji glyph.
+- ActionRow icons in Settings ("Что нового", "Удалить аккаунт", etc.)
+  visually clashed with SettingsRow icons — small flat circles vs large
+  glassy squares in the same screen.
+
+**Supersedes.**
+- The inline 64-px emoji input previously living above the title in the
+  rename-wishlist sheet.
+- The 28×28 round-circle thumb in `SettingsActionRow`.
+
+**Impact.**
+- Component registry: `SettingsActionRow` API gains `tone` prop, thumb
+  shape changed (still `provisional`).
+- Mockups: 2 files moved `proposed/` → `approved/`.
+- Migration: zero-breaking for existing ActionRow call-sites — boolean-driven
+  legacy `color` prop auto-translates to `tone='danger'`.
+- Wishlist emoji picker: standalone primitive flow, no API breakage.
+
+**Approved by.** Dmitry.
+
+---
+
 ## 2026-04-25 — Wave 4 completion: extraction primitives
 
 **Type:** primitive-change

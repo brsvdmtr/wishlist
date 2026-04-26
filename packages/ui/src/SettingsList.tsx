@@ -269,28 +269,43 @@ export function SettingsToggle({ icon, label, value, onChange, disabled, proBadg
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SettingsActionRow — circular icon + label + chevron, full row clickable
+// SettingsActionRow — leading thumb + label + chevron, full row clickable
+//
+// 2026-04-26: thumb shape unified with `<SettingsRow>` — 36×36 rounded square
+// with a tone-aware gradient + inset highlight, replacing the previous
+// 28×28 round circle + flat tint. Source: approved mockup
+// `mockups/approved/settings-action-row-icons.html`.
 // ─────────────────────────────────────────────────────────────────────────────
+
+export type SettingsActionRowTone = 'accent' | 'success' | 'warning' | 'danger';
 
 export interface SettingsActionRowProps {
   icon?: ReactNode;
   label: ReactNode;
-  /** Override label color; icon-circle bg becomes danger-soft when this is the
-   *  danger color. Default uses text + accent-soft thumb. */
+  /** Override label color; passing `var(--wb-danger, ...)` also auto-promotes
+   *  the thumb tone to `danger`. Default uses text + accent thumb. */
   color?: string;
+  /** Explicit thumb tone. Falls back to a `color`-based heuristic for
+   *  backwards-compat with call-sites that only pass `color`. */
+  tone?: SettingsActionRowTone;
   onClick: () => void;
   /** Renders an accent dot before the chevron. */
   dot?: boolean;
 }
 
-export function SettingsActionRow({ icon, label, color, onClick, dot }: SettingsActionRowProps) {
-  // Detect danger color via CSS-var match. The MiniApp passes `C.red`
-  // (= `var(--wb-danger, ...)`) so the substring check is intentional and
-  // robust across theme switching.
-  const isDanger = typeof color === 'string' && color.includes('--wb-danger');
-  const iconBg = isDanger
-    ? `var(--wb-danger-soft, ${colors.dangerSoft})`
-    : `var(--wb-accent-soft, ${colors.accentSoft})`;
+const actionRowToneGradient: Record<SettingsActionRowTone, string> = {
+  accent:  `linear-gradient(135deg, var(--wb-accent-soft-strong, ${colors.accentSoftStrong}), var(--wb-accent-soft, ${colors.accentSoft}))`,
+  success: `linear-gradient(135deg, rgba(74,222,128,0.30), var(--wb-success-soft, ${colors.successSoft}))`,
+  warning: `linear-gradient(135deg, rgba(251,191,36,0.30), var(--wb-warning-soft, ${colors.warningSoft}))`,
+  danger:  `linear-gradient(135deg, rgba(251,113,133,0.30), var(--wb-danger-soft, ${colors.dangerSoft}))`,
+};
+
+export function SettingsActionRow({ icon, label, color, tone, onClick, dot }: SettingsActionRowProps) {
+  // Detect danger via the legacy `color` prop (substring match against the
+  // CSS-var name) so existing call-sites that only pass `color={C.red}`
+  // automatically promote the thumb tone too.
+  const resolvedTone: SettingsActionRowTone = tone
+    ?? (typeof color === 'string' && color.includes('--wb-danger') ? 'danger' : 'accent');
   const labelColor = color || `var(--wb-text, ${colors.text})`;
   const chevronColor = color || `var(--wb-text-muted, ${colors.textMuted})`;
   return (
@@ -303,29 +318,32 @@ export function SettingsActionRow({ icon, label, color, onClick, dot }: Settings
         display: 'flex',
         alignItems: 'center',
         padding: '14px 0',
-        gap: 12,
+        gap: 14,
         cursor: 'pointer',
         transition: 'opacity 0.12s',
       }}
     >
       {icon && (
         <div style={{
-          width: 28, height: 28, borderRadius: '50%',
-          background: iconBg,
+          width: 36, height: 36, borderRadius: 12,
+          background: actionRowToneGradient[resolvedTone],
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 14,
+          fontSize: 16,
           flexShrink: 0,
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
         }}>
           {icon}
         </div>
       )}
       <span style={{
         fontSize: fontSize.lg,
-        fontWeight: fontWeight.medium,
+        fontWeight: fontWeight.semibold,
         color: labelColor,
         flex: 1,
+        letterSpacing: '-0.012em',
+        lineHeight: 1.3,
       }}>
         {label}
       </span>
@@ -338,7 +356,7 @@ export function SettingsActionRow({ icon, label, color, onClick, dot }: Settings
           }} />
         )}
         <span style={{
-          fontSize: fontSize.base,
+          fontSize: 18,
           color: chevronColor,
           fontWeight: 300,
         }}>

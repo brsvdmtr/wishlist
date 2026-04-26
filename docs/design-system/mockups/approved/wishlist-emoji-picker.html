@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Wishlist Emoji Picker — DRAFT mockups</title>
+  <style>
+    /* v2.1 tokens — inline because VS Code Launch Preview can't load external <link> via file:// */
+    :root {
+      --wb-bg: #0F0F12; --wb-bg-elev: #15151A;
+      --wb-surface: rgba(255,255,255,0.035); --wb-surface-hover: rgba(255,255,255,0.06);
+      --wb-card: rgba(255,255,255,0.045); --wb-card-strong: rgba(255,255,255,0.07);
+      --wb-border: rgba(255,255,255,0.06); --wb-border-strong: rgba(255,255,255,0.12);
+      --wb-accent: #8B7BFF; --wb-accent-strong: #B4A6FF; --wb-accent-deep: #5B48E5;
+      --wb-accent-r: 139; --wb-accent-g: 123; --wb-accent-b: 255;
+      --wb-accent-soft: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.14);
+      --wb-accent-soft-strong: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.30);
+      --wb-accent-shadow: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.45);
+      --wb-accent-shadow-soft: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.25);
+      --wb-text: #FFFFFF; --wb-text-secondary: #C7CAD1; --wb-text-muted: #8F94A3;
+      --wb-success: #4ADE80; --wb-success-soft: rgba(74,222,128,0.14);
+      --wb-warning: #FBBF24; --wb-warning-soft: rgba(251,191,36,0.14);
+      --wb-danger: #FB7185; --wb-danger-soft: rgba(251,113,133,0.14);
+    }
+    * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+    body {
+      background: linear-gradient(180deg, #1a1a22, #0a0a0e); margin: 0; padding: 40px 20px;
+      font-family: -apple-system, 'SF Pro Display', 'Inter', sans-serif;
+      color: var(--wb-text); min-height: 100vh;
+    }
+    .wrap { max-width: 1280px; margin: 0 auto; }
+    h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.025em; margin: 0 0 8px; }
+    .lead { color: var(--wb-text-secondary); margin: 0 0 32px; font-size: 14px; line-height: 1.5; max-width: 680px; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .opt {
+      background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 22px; padding: 24px;
+    }
+    .opt h2 { font-size: 18px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.015em; }
+    .opt h2 .badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+      background: var(--wb-accent-soft); color: var(--wb-accent-strong); margin-left: 8px;
+      vertical-align: middle; text-transform: uppercase; letter-spacing: 0.05em; }
+    .opt h2 .badge.warn { background: var(--wb-warning-soft); color: var(--wb-warning); }
+    .opt p.desc { font-size: 13px; color: var(--wb-text-secondary); margin: 0 0 18px; line-height: 1.5; }
+    .opt .pros, .opt .cons { font-size: 12px; color: var(--wb-text-muted); margin: 12px 0 0; line-height: 1.6; }
+    .opt .pros strong { color: var(--wb-success); }
+    .opt .cons strong { color: var(--wb-warning); }
+
+    /* Phone frame */
+    .phone {
+      width: 320px; margin: 0 auto; padding: 16px 20px;
+      background: var(--wb-bg); border-radius: 28px;
+      border: 1px solid rgba(255,255,255,0.04);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      min-height: 380px;
+    }
+    .sheet-title { font-size: 17px; font-weight: 700; letter-spacing: -0.015em; text-align: center; margin: 8px 0 18px; }
+    .label { font-size: 13px; color: var(--wb-text-secondary); margin-bottom: 6px; }
+
+    /* Inputs (matching .wb-input) */
+    .input {
+      width: 100%; padding: 14px 16px; border-radius: 16;
+      border: 1px solid var(--wb-border);
+      background: var(--wb-card); color: var(--wb-text);
+      font-size: 16px; font-weight: 500; line-height: 22px;
+      letter-spacing: -0.012em; outline: none; box-sizing: border-box;
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-radius: 16px;
+    }
+
+    /* CTAs */
+    .btn { padding: 14px 24px; border-radius: 16px; border: none; font-size: 15px;
+      font-weight: 650; letter-spacing: -0.015em; cursor: pointer; font-family: inherit; flex: 1; }
+    .btn.primary { background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep));
+      color: #fff; box-shadow: 0 12px 32px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.22); }
+    .btn.secondary { background: var(--wb-accent-soft); color: var(--wb-accent-strong);
+      border: 1px solid var(--wb-accent-soft-strong); }
+
+    /* Option A: bottom-sheet picker */
+    .emoji-tile-trigger {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--wb-card); border: 1px solid var(--wb-border);
+      border-radius: 16px; padding: 14px 16px;
+      cursor: pointer;
+      backdrop-filter: blur(14px);
+    }
+    .emoji-tile-trigger .preview {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft));
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 30px; line-height: 1; flex-shrink: 0;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    .emoji-tile-trigger .meta { flex: 1; min-width: 0; }
+    .emoji-tile-trigger .meta .head { font-size: 14px; font-weight: 600; }
+    .emoji-tile-trigger .meta .sub { font-size: 12px; color: var(--wb-text-muted); margin-top: 2px; }
+    .chev { color: var(--wb-text-muted); font-size: 18px; font-weight: 300; }
+
+    /* Sheet for option A */
+    .sheet-overlay {
+      margin-top: 12px; background: var(--wb-bg-elev); border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.05); padding: 18px;
+    }
+    .sheet-overlay h3 { font-size: 15px; font-weight: 700; margin: 0 0 12px; text-align: center; }
+    .emoji-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .emoji-cell {
+      aspect-ratio: 1; border-radius: 10px; background: var(--wb-surface);
+      border: 1px solid transparent;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 22px; cursor: pointer; transition: all 0.15s;
+    }
+    .emoji-cell.selected {
+      background: var(--wb-accent-soft);
+      border-color: var(--wb-accent);
+      box-shadow: 0 0 0 1px var(--wb-accent-soft) inset;
+    }
+    .emoji-cell.more {
+      font-size: 11px; font-weight: 600; color: var(--wb-text-muted);
+      background: var(--wb-card-strong);
+    }
+
+    /* Option B: inline expand */
+    .emoji-row {
+      display: flex; gap: 8px; align-items: stretch;
+    }
+    .emoji-row .pick {
+      width: 60px; height: 60px; border-radius: 16px;
+      background: linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft));
+      border: 1px solid var(--wb-border);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 30px; cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+      position: relative;
+    }
+    .emoji-row .pick::after {
+      content: '✎'; position: absolute; bottom: -2px; right: -2px;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: var(--wb-accent); color: #fff;
+      font-size: 10px; display: flex; align-items: center; justify-content: center;
+      border: 2px solid var(--wb-bg);
+      box-shadow: 0 0 8px var(--wb-accent-shadow-soft);
+    }
+    .emoji-row .name {
+      flex: 1; height: 60px;
+      background: var(--wb-card); border: 1px solid var(--wb-border);
+      border-radius: 16px; padding: 0 16px; color: var(--wb-text);
+      font-size: 16px; font-weight: 500; display: flex; align-items: center;
+    }
+
+    /* Option B expanded panel */
+    .quick-tray {
+      margin-top: 8px;
+      background: var(--wb-card-strong); border: 1px solid var(--wb-border);
+      border-radius: 14px; padding: 10px;
+      display: flex; gap: 6px; overflow-x: auto;
+    }
+    .quick-cell {
+      flex-shrink: 0;
+      width: 40px; height: 40px; border-radius: 10px;
+      background: var(--wb-surface);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 22px; cursor: pointer;
+    }
+    .quick-cell.selected {
+      background: var(--wb-accent-soft); box-shadow: 0 0 0 1.5px var(--wb-accent) inset;
+    }
+    .quick-cell.more {
+      font-size: 11px; font-weight: 600; color: var(--wb-accent);
+      background: var(--wb-accent-soft);
+    }
+
+    .row { display: flex; gap: 10px; margin-top: 18px; }
+
+    .vs {
+      margin: 32px 0 16px; padding: 12px 18px;
+      background: var(--wb-warning-soft); border-radius: 12px; border: 1px solid rgba(251,191,36,0.30);
+      font-size: 13px; color: var(--wb-warning);
+    }
+    .vs strong { color: var(--wb-text); display: block; margin-bottom: 4px; }
+
+    .anchor {
+      display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px;
+      background: var(--wb-card); border: 1px solid var(--wb-border); border-radius: 12px;
+      font-size: 13px; color: var(--wb-text-secondary); margin-bottom: 24px;
+    }
+    .anchor .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--wb-warning);
+      box-shadow: 0 0 8px var(--wb-warning); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="anchor"><span class="dot"></span> Status: DRAFT — awaiting approval</div>
+    <h1>Wishlist emoji picker — proposed mockups</h1>
+    <p class="lead">
+      Текущая реализация: 64px-инпут со смайликом перед названием.
+      Проблемы: непонятно что туда тапать, iOS клавиатура показывает strange auto-fill,
+      смайлик визуально сливается с polygonal-input, нет четкого affordance "это можно изменить".
+      <br><br>
+      Ниже два варианта по новой v2.1 ДС. Оба используют примитивы из <code>@wishlist/ui</code> —
+      <code>BottomSheet</code>, <code>TextField</code>, <code>Card</code>. Без iOS-keyboard-emoji
+      пинов и без скрытых affordances.
+    </p>
+
+    <div class="grid">
+      <!-- Option A -->
+      <div class="opt">
+        <h2>Вариант A — отдельный picker-sheet <span class="badge">recommended</span></h2>
+        <p class="desc">
+          Тап на «обложку» (большая 48×48 плитка с текущим смайлом) открывает
+          BottomSheet с курированной палитрой 21 смайлика +
+          кнопка «Свой» открывает нативный emoji-input. Название редактируется отдельно
+          в стандартном <code>TextField</code>. Чистое разделение задач.
+        </p>
+
+        <div class="phone">
+          <div class="sheet-title">Переименовать вишлист</div>
+
+          <div class="label">Обложка</div>
+          <div class="emoji-tile-trigger">
+            <div class="preview">🦊</div>
+            <div class="meta">
+              <div class="head">Сменить смайлик</div>
+              <div class="sub">Появится в шапке вишлиста и в списке</div>
+            </div>
+            <div class="chev">›</div>
+          </div>
+
+          <div style="margin-top:14px"></div>
+          <div class="label">Название</div>
+          <input class="input" value="Лисий вишлист" />
+
+          <div class="row">
+            <button class="btn secondary">Отмена</button>
+            <button class="btn primary">Сохранить</button>
+          </div>
+        </div>
+
+        <!-- Sheet preview -->
+        <div class="phone" style="margin-top: 12px;">
+          <div class="sheet-overlay">
+            <h3>Выбери смайлик</h3>
+            <div class="emoji-grid">
+              <div class="emoji-cell">🎁</div>
+              <div class="emoji-cell">🎂</div>
+              <div class="emoji-cell">🎄</div>
+              <div class="emoji-cell">💝</div>
+              <div class="emoji-cell">⭐</div>
+              <div class="emoji-cell selected">🦊</div>
+              <div class="emoji-cell">🐻</div>
+              <div class="emoji-cell">🍕</div>
+              <div class="emoji-cell">🎮</div>
+              <div class="emoji-cell">📚</div>
+              <div class="emoji-cell">🎧</div>
+              <div class="emoji-cell">🎨</div>
+              <div class="emoji-cell">🏠</div>
+              <div class="emoji-cell">✈️</div>
+              <div class="emoji-cell">⚽</div>
+              <div class="emoji-cell">🍰</div>
+              <div class="emoji-cell">💄</div>
+              <div class="emoji-cell">👟</div>
+              <div class="emoji-cell">📷</div>
+              <div class="emoji-cell">🎵</div>
+              <div class="emoji-cell more">Свой ✎</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="pros">
+          <strong>+</strong> Чистый affordance — большая обложка явно «трогается».<br>
+          <strong>+</strong> Нативная iOS клавиатура не вмешивается.<br>
+          <strong>+</strong> Курированная палитра — выбор за 1 тап в 95% случаев.<br>
+          <strong>+</strong> «Свой» сохраняет гибкость для нестандартных смайлов.
+        </p>
+        <p class="cons">
+          <strong>−</strong> Дополнительный экран — лишний тап для смены.<br>
+          <strong>−</strong> Curated палитра требует поддержки набора (~21 смайлик).
+        </p>
+      </div>
+
+      <!-- Option B -->
+      <div class="opt">
+        <h2>Вариант B — inline expand-tray</h2>
+        <p class="desc">
+          60×60 «обложка» с маленьким значком ✎ снизу-справа (явный edit-affordance).
+          Тап сразу разворачивает горизонтальную ленту с быстрыми смайлами + «Еще» —
+          без отдельного экрана. Название и обложка — в одной зоне.
+        </p>
+
+        <div class="phone">
+          <div class="sheet-title">Переименовать вишлист</div>
+
+          <div class="label">Обложка и название</div>
+          <div class="emoji-row">
+            <div class="pick">🦊</div>
+            <div class="name">Лисий вишлист</div>
+          </div>
+
+          <!-- expanded tray -->
+          <div class="quick-tray">
+            <div class="quick-cell">🎁</div>
+            <div class="quick-cell">🎂</div>
+            <div class="quick-cell">🎄</div>
+            <div class="quick-cell selected">🦊</div>
+            <div class="quick-cell">🐻</div>
+            <div class="quick-cell">⭐</div>
+            <div class="quick-cell">🎮</div>
+            <div class="quick-cell">📚</div>
+            <div class="quick-cell more">Еще</div>
+          </div>
+
+          <div class="row">
+            <button class="btn secondary">Отмена</button>
+            <button class="btn primary">Сохранить</button>
+          </div>
+        </div>
+
+        <p class="pros">
+          <strong>+</strong> Один экран — никуда уходить не надо.<br>
+          <strong>+</strong> Маленький ✎ значок — нет двойного тапа.<br>
+          <strong>+</strong> Быстрая смена смайлика горизонтальной лентой.
+        </p>
+        <p class="cons">
+          <strong>−</strong> Лента горизонтального скролла на маленьком экране — менее удобна.<br>
+          <strong>−</strong> Чуть теснее визуально (3 элемента в одной строке).<br>
+          <strong>−</strong> «Еще» нужен для нативного emoji-picker — лишняя ступень.
+        </p>
+      </div>
+    </div>
+
+    <div class="vs">
+      <strong>Моя рекомендация — Вариант A</strong>
+      Sheet-picker даёт лучший visual hierarchy, использует canonical BottomSheet primitive,
+      убирает iOS-emoji-keyboard pain, и курированная палитра решает 95% кейсов одним тапом.
+      Вариант B компактнее, но горизонтальный scroll на 320px ширине — не лучший UX.
+    </div>
+  </div>
+</body>
+</html>

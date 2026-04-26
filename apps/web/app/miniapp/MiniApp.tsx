@@ -4803,6 +4803,8 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // Optional override emoji for the wishlist hero. Empty string = clear back
   // to the hash-auto-pick from the title.
   const [renameWlEmoji, setRenameWlEmoji] = useState<string>('');
+  // Emoji-picker BottomSheet (opens from the rename sheet).
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [renameSaving, setRenameSaving] = useState(false);
   const [showWlManage, setShowWlManage] = useState(false);
   const [showArchiveWlConfirm, setShowArchiveWlConfirm] = useState(false);
@@ -23171,32 +23173,55 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
       <BottomSheet isOpen={showRenameWl} onClose={() => setShowRenameWl(false)} title={t('rename_title', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Emoji + Name on the same row — single graphical anchor for the
-              wishlist hero. Empty emoji input clears the override and falls
-              back to the auto-pick from the title. */}
+          {/* Cover trigger — tap opens an emoji-picker bottom-sheet with
+              a curated palette + "Свой" fallback to a hidden native input.
+              Source: mockups/approved/wishlist-emoji-picker.html (Variant A) */}
+          <div>
+            <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>
+              {locale === 'ru' ? 'Обложка' : 'Cover'}
+            </label>
+            <div
+              onClick={() => setShowEmojiPicker(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                background: 'var(--wb-card)', border: `1px solid var(--wb-border)`,
+                borderRadius: 16, padding: '14px 16px',
+                cursor: 'pointer',
+                WebkitBackdropFilter: 'blur(14px)' as never,
+                backdropFilter: 'blur(14px)' as never,
+              }}
+            >
+              <div style={{
+                width: 48, height: 48, borderRadius: 14,
+                background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 30, lineHeight: 1, flexShrink: 0,
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+              }}>
+                {(renameWlEmoji && renameWlEmoji.trim()) || (currentWl ? getEmoji(currentWl.title) : '🎁')}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                  {locale === 'ru' ? 'Сменить смайлик' : 'Change emoji'}
+                </div>
+                <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                  {locale === 'ru' ? 'Появится в шапке вишлиста и в списке' : 'Shown in the wishlist hero and list'}
+                </div>
+              </div>
+              <span style={{ color: C.textMuted, fontSize: 18, fontWeight: 300 }}>›</span>
+            </div>
+          </div>
+
           <div>
             <label style={{ display: 'block', fontSize: 13, color: C.textSec, marginBottom: 6 }}>{t('wishlist_name', locale)}</label>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-              <input
-                style={{ ...inputStyle, width: 64, padding: '14px 0', textAlign: 'center', fontSize: 24, flexShrink: 0 }}
-                value={renameWlEmoji || (currentWl ? getEmoji(currentWl.title) : '')}
-                onChange={(e) => {
-                  // Cap at first grapheme (`Array.from` splits surrogate pairs correctly).
-                  const arr = Array.from(e.target.value);
-                  setRenameWlEmoji(arr.slice(0, 2).join(''));
-                }}
-                onFocus={(e) => e.target.select()}
-                aria-label="emoji"
-              />
-              <input
-                style={{ ...inputStyle, flex: 1 }}
-                value={renameWlTitle}
-                onChange={(e) => setRenameWlTitle(e.target.value.slice(0, 80))}
-                autoFocus
-                placeholder={t('rename_placeholder', locale)}
-                maxLength={80}
-              />
-            </div>
+            <input
+              style={inputStyle}
+              value={renameWlTitle}
+              onChange={(e) => setRenameWlTitle(e.target.value.slice(0, 80))}
+              autoFocus
+              placeholder={t('rename_placeholder', locale)}
+              maxLength={80}
+            />
             <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, textAlign: 'right' }}>{renameWlTitle.length}/80</div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -23217,6 +23242,118 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           </div>
         </div>
       </BottomSheet>
+
+      {/* Wishlist emoji picker — Variant A from
+          mockups/approved/wishlist-emoji-picker.html. Curated 21-tile palette
+          + "Свой" cell that opens a hidden native input for arbitrary emoji.
+          The hidden input is keyboard-only — no visual artifact, just lets
+          iOS show its emoji keyboard so the user can pick anything not in the
+          palette. */}
+      <BottomSheet
+        isOpen={showEmojiPicker}
+        onClose={() => setShowEmojiPicker(false)}
+        title={locale === 'ru' ? 'Выбери смайлик' : 'Pick an emoji'}
+      >
+        {(() => {
+          const PALETTE = ['🎁','🎂','🎄','💝','⭐','🦊','🐻','🍕','🎮','📚','🎧','🎨','🏠','✈️','⚽','🍰','💄','👟','📷','🎵'];
+          const current = (renameWlEmoji && renameWlEmoji.trim()) || (currentWl ? getEmoji(currentWl.title) : '');
+          return (
+            <div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, 1fr)',
+                gap: 6,
+                marginBottom: 10,
+              }}>
+                {PALETTE.map((e) => {
+                  const isSelected = e === current;
+                  return (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => {
+                        setRenameWlEmoji(e);
+                        setShowEmojiPicker(false);
+                      }}
+                      style={{
+                        aspectRatio: '1',
+                        borderRadius: 10,
+                        border: `1px solid ${isSelected ? 'var(--wb-accent)' : 'transparent'}`,
+                        background: isSelected ? 'var(--wb-accent-soft)' : 'var(--wb-surface)',
+                        boxShadow: isSelected
+                          ? '0 0 0 1px var(--wb-accent-soft) inset'
+                          : 'none',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 22, lineHeight: 1, cursor: 'pointer',
+                        fontFamily: font, padding: 0,
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {e}
+                    </button>
+                  );
+                })}
+                {/* "Свой" cell — opens the hidden native input below. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('emoji-custom-input') as HTMLInputElement | null;
+                    if (el) {
+                      el.value = '';
+                      el.focus();
+                    }
+                  }}
+                  style={{
+                    aspectRatio: '1',
+                    borderRadius: 10,
+                    border: '1px dashed var(--wb-accent-soft-strong)',
+                    background: 'var(--wb-card-strong)',
+                    color: 'var(--wb-accent-strong)',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    fontFamily: font, padding: 0,
+                    letterSpacing: '-0.005em',
+                  }}
+                >
+                  {locale === 'ru' ? 'Свой ✎' : 'Custom ✎'}
+                </button>
+              </div>
+              {/* Off-screen native input. Triggers iOS emoji keyboard so the
+                  user can pick anything outside the curated palette. The
+                  rendered control is invisible but keyboard-focusable. */}
+              <input
+                id="emoji-custom-input"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                onChange={(e) => {
+                  const val = Array.from(e.target.value).slice(0, 2).join('');
+                  if (val) {
+                    setRenameWlEmoji(val);
+                    setShowEmojiPicker(false);
+                  }
+                }}
+                style={{
+                  position: 'absolute', left: '-9999px', top: '-9999px',
+                  width: 1, height: 1, opacity: 0, pointerEvents: 'none',
+                }}
+                aria-hidden="true"
+              />
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setRenameWlEmoji('');
+                  setShowEmojiPicker(false);
+                }}
+                style={{ marginTop: 4, color: 'var(--wb-text-muted)' }}
+              >
+                {locale === 'ru' ? 'Сбросить (авто)' : 'Reset (auto)'}
+              </Button>
+            </div>
+          );
+        })()}
+      </BottomSheet>
+
       <BottomSheet isOpen={editingDescription} onClose={() => setEditingDescription(false)} title={t('description_title', locale)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>

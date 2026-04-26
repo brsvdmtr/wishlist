@@ -59,4 +59,5 @@ export {
   type SettingsRowProps,
   type SettingsToggleProps,
   type SettingsActionRowProps,
+  type SettingsActionRowTone,
 } from './SettingsList';
