@@ -5590,8 +5590,14 @@ tgRouter.patch(
       .object({
         title: z.string().min(1).max(200).optional(),
         // Single-grapheme emoji override for the wishlist hero. `null` clears
-        // back to the auto-pick. Empty string also coerced to clear.
-        emoji: z.string().max(8).nullable().optional(),
+        // back to the auto-pick. Server-side guard: reject anything that
+        // doesn't contain at least one Extended_Pictographic codepoint or a
+        // regional-indicator pair (flags). The frontend already strips
+        // letters/digits but the API stays defensive.
+        emoji: z.string().max(16).nullable().optional().refine(
+          (v) => v == null || v === '' || /\p{Extended_Pictographic}|\p{Regional_Indicator}{2}/u.test(v),
+          { message: 'emoji must contain a pictographic codepoint or flag' },
+        ),
         deadline: z.string().datetime().nullable().optional(),
         visibility: z.enum(['LINK_ONLY', 'PUBLIC_PROFILE', 'PRIVATE']).optional(),
         allowSubscriptions: z.enum(['ALL', 'NOBODY']).optional(),
@@ -5645,7 +5651,25 @@ tgRouter.patch(
       data: {
         ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
         ...(parsed.data.emoji !== undefined
-          ? { emoji: parsed.data.emoji && parsed.data.emoji.trim() ? parsed.data.emoji.trim() : null }
+          ? {
+              emoji: (() => {
+                const raw = parsed.data.emoji?.trim();
+                if (!raw) return null;
+                // Use Intl.Segmenter to extract the first grapheme cluster
+                // (handles ZWJ sequences, skin-tone modifiers, flag pairs).
+                // Persist only that single grapheme even if the client somehow
+                // sent multiple emoji concatenated.
+                try {
+                  const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+                  for (const { segment } of seg.segment(raw)) {
+                    if (/\p{Extended_Pictographic}|\p{Regional_Indicator}{2}/u.test(segment)) {
+                      return segment;
+                    }
+                  }
+                } catch { /* fallback below */ }
+                return raw;
+              })(),
+            }
           : {}),
         ...(parsed.data.deadline !== undefined
           ? { deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : null }

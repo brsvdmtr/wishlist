@@ -86,6 +86,49 @@ function getEmoji(s: string) {
   return EMOJIS[Math.abs(code) % EMOJIS.length];
 }
 
+/**
+ * Extract the FIRST emoji from arbitrary user input as a single grapheme
+ * cluster. Returns null when the input contains no emoji.
+ *
+ * Handles all emoji oddities correctly:
+ *   - Skin-tone modifiers (👋🏽 = base + modifier, 2 codepoints, 1 grapheme)
+ *   - ZWJ sequences (👨‍👩‍👧 = 5 codepoints joined, 1 grapheme)
+ *   - Regional-indicator pairs / flags (🇷🇺 = 2 codepoints, 1 grapheme)
+ *   - Variation selectors (✈️ = ✈ + U+FE0F, 1 grapheme)
+ *
+ * Used by the wishlist emoji picker — strips letters/digits/punctuation so
+ * the user can't break the wishlist hero by pasting "Hello".
+ */
+function extractFirstEmoji(input: string): string | null {
+  if (!input) return null;
+  // `Intl.Segmenter` is supported in iOS Safari 14.1+, Chrome 87+, modern
+  // Telegram WebView. We always run inside a Telegram client so it's safe
+  // to assume availability; the `try/catch` is just a paranoid fallback.
+  let segments: Iterable<{ segment: string }> | null = null;
+  try {
+    const seg = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    segments = seg.segment(input);
+  } catch { /* old runtime: fall through */ }
+
+  // Emoji-detection regex. `\p{Extended_Pictographic}` matches the full
+  // pictographic set; `\p{Regional_Indicator}{2}` covers flags. Any
+  // intermediate ZWJ/variation-selector chars are part of the same grapheme.
+  const isEmoji = (s: string): boolean => /\p{Extended_Pictographic}|\p{Regional_Indicator}{2}/u.test(s);
+
+  if (segments) {
+    for (const { segment } of segments) {
+      if (isEmoji(segment)) return segment;
+    }
+    return null;
+  }
+
+  // Fallback: scan codepoints, return the first one that's a pictographic.
+  for (const cp of input) {
+    if (isEmoji(cp)) return cp;
+  }
+  return null;
+}
+
 const GUEST_BUDGET_PRESETS = [3000, 5000, 10000, 25000] as const;
 
 const getGuestBudgetPresets = (locale: Locale) => [
@@ -4810,6 +4853,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // emoji keyboard for off-screen / `opacity: 0` inputs even via a user-gesture
   // `focus()` call. The input must be physically rendered + visible.
   const [emojiCustomMode, setEmojiCustomMode] = useState(false);
+  // Controlled draft for the custom-mode input. Always reset to '' so we can
+  // wipe invalid input (letters, multi-emoji etc.) and not keep a broken value
+  // in the field after the toast fires.
+  const [emojiCustomDraft, setEmojiCustomDraft] = useState('');
   const emojiCustomInputRef = useRef<HTMLInputElement | null>(null);
   const [renameSaving, setRenameSaving] = useState(false);
   const [showWlManage, setShowWlManage] = useState(false);
@@ -9308,15 +9355,19 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (!currentWl) return;
     const trimmed = renameWlTitle.trim();
     const trimmedEmoji = renameWlEmoji.trim();
+    // Defensive — only persist a valid single-emoji grapheme (or clear with
+    // null). If somehow the state holds garbage (e.g. stale value from before
+    // validation hardening), strip it before sending. Empty string → null.
+    const safeEmoji = trimmedEmoji ? extractFirstEmoji(trimmedEmoji) : null;
     const titleChanged = trimmed && trimmed !== currentWl.title;
-    const emojiChanged = trimmedEmoji !== (currentWl.emoji ?? '');
+    const emojiChanged = (safeEmoji ?? '') !== (currentWl.emoji ?? '');
     if (!titleChanged && !emojiChanged) return;
     if (!trimmed) return;
     setRenameSaving(true);
     try {
       const body: Record<string, unknown> = {};
       if (titleChanged) body.title = trimmed;
-      if (emojiChanged) body.emoji = trimmedEmoji || null;
+      if (emojiChanged) body.emoji = safeEmoji ?? null;
       const res = await tgFetch(`/tg/wishlists/${currentWl.id}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
@@ -23257,7 +23308,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           palette. */}
       <BottomSheet
         isOpen={showEmojiPicker}
-        onClose={() => { setShowEmojiPicker(false); setEmojiCustomMode(false); }}
+        onClose={() => { setShowEmojiPicker(false); setEmojiCustomMode(false); setEmojiCustomDraft(''); }}
         title={locale === 'ru' ? 'Выбери смайлик' : 'Pick an emoji'}
       >
         {(() => {
@@ -23284,17 +23335,37 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   type="text"
                   inputMode="text"
                   autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   autoFocus
                   placeholder={locale === 'ru' ? 'Любой смайлик…' : 'Any emoji…'}
-                  defaultValue={renameWlEmoji}
+                  // Controlled — always reset to '' so we can wipe invalid input.
+                  value={emojiCustomDraft}
                   onChange={(e) => {
-                    // Cap at first grapheme (`Array.from` splits surrogate pairs correctly).
-                    const val = Array.from(e.target.value).slice(0, 2).join('');
-                    if (val) {
-                      setRenameWlEmoji(val);
+                    const raw = e.target.value;
+                    if (!raw) { setEmojiCustomDraft(''); return; }
+                    // 1. extract single emoji grapheme (handles ZWJ, skin-tone, flags)
+                    const first = extractFirstEmoji(raw);
+                    if (first) {
+                      // Even if user typed "🦊hello" or "🦊🐻", we save only 🦊.
+                      setRenameWlEmoji(first);
+                      setEmojiCustomDraft('');
                       setShowEmojiPicker(false);
                       setEmojiCustomMode(false);
+                      return;
                     }
+                    // 2. non-empty input but no emoji found — letters / digits /
+                    //    punctuation. Reject, toast, keep previous override
+                    //    (`renameWlEmoji` untouched), clear the draft so the
+                    //    user can try again without manually deleting.
+                    pushToast(
+                      locale === 'ru'
+                        ? 'Сюда можно ставить только смайлики'
+                        : 'Only emojis are allowed here',
+                      'error',
+                    );
+                    setEmojiCustomDraft('');
                   }}
                   style={{
                     ...inputStyle,
@@ -23304,7 +23375,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 />
                 <Button
                   variant="ghost"
-                  onClick={() => setEmojiCustomMode(false)}
+                  onClick={() => { setEmojiCustomMode(false); setEmojiCustomDraft(''); }}
                   style={{ color: 'var(--wb-text-muted)' }}
                 >
                   ← {locale === 'ru' ? 'Назад к палитре' : 'Back to palette'}
