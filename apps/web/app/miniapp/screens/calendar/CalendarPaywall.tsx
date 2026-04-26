@@ -11,7 +11,7 @@
 import React, { useState } from 'react';
 import type { Locale } from '@wishlist/shared';
 import { gradients } from '@wishlist/ui-tokens';
-import { CalHeader, CalIconButton, CtaBar } from './components';
+import { CalHeader, CtaBar } from './components';
 import { ct } from './i18n';
 
 // ════════════════════════════════════════════════════════════════════════
@@ -33,10 +33,10 @@ export function CalendarPaywall({
 }) {
   if (variant === 'full') return <PaywallFull locale={locale} priceXtr={priceXtr} onUnlock={onUnlock} onClose={onClose} loading={loading} />;
   if (variant === 'sheet') return <PaywallSheet locale={locale} priceXtr={priceXtr} onUnlock={onUnlock} onClose={onClose} onOpenFull={onOpenFull} loading={loading} />;
-  return <Locked locale={locale} priceXtr={priceXtr} onUnlock={onOpenSheet} onBack={onBack} />;
+  return <Locked locale={locale} priceXtr={priceXtr} onUnlock={onOpenSheet} onOpenFull={onOpenFull} onBack={onBack} />;
 }
 
-function Locked({ locale, priceXtr, onUnlock, onBack }: { locale: Locale; priceXtr: number; onUnlock: () => void; onBack: () => void }) {
+function Locked({ locale, priceXtr, onUnlock, onOpenFull, onBack }: { locale: Locale; priceXtr: number; onUnlock: () => void; onOpenFull: () => void; onBack: () => void }) {
   return (
     <div style={{ minHeight: '100%', color: 'var(--wb-text)', position: 'relative' }}>
       <CalHeader title={ct('cal_title', locale)} onBack={onBack} />
@@ -77,7 +77,7 @@ function Locked({ locale, priceXtr, onUnlock, onBack }: { locale: Locale; priceX
           boxShadow: '0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08)',
           position: 'relative', overflow: 'hidden',
         }}>
-          <div aria-hidden="true" style={{ position: 'absolute', top: '-40%', right: '-30%', width: 240, height: 240, background: gradients.accentRadialGlow, filter: 'blur(8px)' }} />
+          <div aria-hidden="true" style={{ position: 'absolute', top: '-40%', right: '-30%', width: 240, height: 240, background: gradients.accentRadialGlow }} />
 
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 100,
@@ -105,6 +105,7 @@ function Locked({ locale, priceXtr, onUnlock, onBack }: { locale: Locale; priceX
           </div>
 
           <button onClick={onUnlock} style={primaryBtnStyle}>{ct('cal_paywall_unlock', locale)}</button>
+          <button onClick={onOpenFull} style={{ ...ghostBtnStyle, marginTop: 4, position: 'relative' }}>{ct('cal_paywall_demo_first', locale)}</button>
         </div>
       </div>
     </div>
@@ -161,8 +162,8 @@ function PaywallSheet({ locale, priceXtr, onUnlock, onClose, onOpenFull, loading
 
 function PaywallFull({ locale, priceXtr, onUnlock, onClose, loading }: { locale: Locale; priceXtr: number; onUnlock: () => void; onClose: () => void; loading: boolean }) {
   return (
-    <div style={{ minHeight: '100%', color: 'var(--wb-text)', paddingBottom: 'calc(180px + env(safe-area-inset-bottom))' }}>
-      <CalHeader rightSlot={<CalIconButton onClick={onClose} label="Close">✕</CalIconButton>} />
+    <div style={{ minHeight: '100%', color: 'var(--wb-text)' }}>
+      <CalHeader onBack={onClose} />
 
       {/* Hero */}
       <div style={{
@@ -172,7 +173,7 @@ function PaywallFull({ locale, priceXtr, onUnlock, onClose, loading }: { locale:
         color: '#fff',
         boxShadow: '0 20px 60px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.22)',
       }}>
-        <div aria-hidden="true" style={{ position: 'absolute', top: '-30%', right: '-20%', width: 280, height: 280, background: 'radial-gradient(circle, rgba(255,255,255,0.22), transparent 65%)', filter: 'blur(10px)' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', top: '-30%', right: '-20%', width: 280, height: 280, background: 'radial-gradient(circle, rgba(255,255,255,0.22), transparent 65%)' }} />
 
         <div style={{
           position: 'relative', zIndex: 1, width: 64, height: 64, borderRadius: 20,
