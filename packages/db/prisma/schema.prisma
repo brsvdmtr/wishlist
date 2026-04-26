@@ -187,6 +187,9 @@ model User {
   lifecycleTouches               LifecycleTouch[]
   giftOccasions                  GiftOccasion[]                 @relation("GiftOccasionsOwner")
   giftOccasionIdeas              GiftOccasionIdea[]             @relation("GiftOccasionIdeasOwner")
+  giftOccasionReminders          GiftOccasionReminder[]         @relation("GiftOccasionRemindersOwner")
+  linkedGiftOccasions            GiftOccasion[]                 @relation("GiftOccasionsLinkedUser")
+  calendarInbox                  CalendarInboxEntry[]           @relation("CalendarInboxOwner")
   maintenanceExposures           MaintenanceExposure[]
   groupGiftsOrganized            GroupGift[]                    @relation("GroupGiftOrganizer")
   groupGiftParticipations        GroupGiftParticipant[]         @relation("GroupGiftParticipations")
@@ -250,6 +253,7 @@ model Wishlist {
   wishlistSubscriptions WishlistSubscription[]
   santaParticipants     SantaParticipant[]      @relation("SantaLinkedWishlists")
   curatedSelections     CuratedSelection[]
+  linkedGiftOccasions   GiftOccasion[]          @relation("GiftOccasionsLinkedWishlist")
 
   @@index([ownerId])
   @@index([ownerId, position])
@@ -976,6 +980,7 @@ model SantaCampaign {
   hintRequests    SantaHintRequest[]
   exclusionGroups SantaExclusionGroup[]
   exitRequests    SantaExitRequest[]
+  linkedGiftOccasions GiftOccasion[]    @relation("GiftOccasionsLinkedSanta")
 
   @@index([ownerId])
   @@index([inviteToken])
@@ -1403,16 +1408,52 @@ model GiftOccasion {
   recurrence  String    @default("NONE") // NONE, YEARLY, MONTHLY
   note        String?
   status      String    @default("ACTIVE") // ACTIVE, DONE, ARCHIVED
+
+  // ─── v2.1 Events Calendar enrichment ───
+  emoji          String?
+  eventTime      String? // "HH:mm" 24h
+  location       String?
+  budgetMin      Int?
+  budgetMax      Int?
+  budgetCurrency String?
+
+  // Source / provenance — drives import dedup + UI labels
+  source     String  @default("USER") // USER | IMPORTED_FRIEND | IMPORTED_HOLIDAY
+  holidayKey String? // when source=IMPORTED_HOLIDAY, FK-by-key into Holiday.key
+  country    String? // ISO 3166-1 alpha-2 for imported holidays
+
+  // Soft links — all SetNull-on-delete to keep occasions standalone
+  linkedUserId     String?
+  linkedWishlistId String?
+  linkedSantaId    String?
+
+  // Year-Recap tracking — filled when user marks event DONE
+  actualGiftText     String?
+  actualGiftAmount   Int?
+  actualGiftCurrency String?
+  thankYouNote       String?
+  thankYouAt         DateTime?
+
   archivedAt  DateTime?
   completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  owner User               @relation("GiftOccasionsOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  ideas GiftOccasionIdea[]
+  owner          User                   @relation("GiftOccasionsOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  linkedUser     User?                  @relation("GiftOccasionsLinkedUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
+  linkedWishlist Wishlist?              @relation("GiftOccasionsLinkedWishlist", fields: [linkedWishlistId], references: [id], onDelete: SetNull)
+  linkedSanta    SantaCampaign?         @relation("GiftOccasionsLinkedSanta", fields: [linkedSantaId], references: [id], onDelete: SetNull)
+  ideas          GiftOccasionIdea[]
+  reminders      GiftOccasionReminder[]
+  inboxEntries   CalendarInboxEntry[]
 
   @@index([ownerUserId])
   @@index([ownerUserId, status])
+  @@index([ownerUserId, eventDate])
+  @@index([linkedUserId])
+  @@index([linkedWishlistId])
+  @@index([linkedSantaId])
+  @@unique([ownerUserId, holidayKey])
 }
 
 model GiftOccasionIdea {
@@ -1436,6 +1477,86 @@ model GiftOccasionIdea {
   @@index([occasionId])
   @@index([ownerUserId])
   @@index([occasionId, status])
+}
+
+// ═══════════════════════════════════════════
+// Events Calendar v2.1 — Reminders / Holidays / Inbox
+// ═══════════════════════════════════════════
+
+model GiftOccasionReminder {
+  id          String @id @default(cuid())
+  occasionId  String
+  ownerUserId String
+
+  offsetDays Int
+  timeOfDay  String  @default("10:00")
+  enabled    Boolean @default(true)
+
+  scheduledFor DateTime?
+  sentAt       DateTime?
+  delivered    Boolean   @default(false)
+
+  episodeKey String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  occasion GiftOccasion @relation(fields: [occasionId], references: [id], onDelete: Cascade)
+  owner    User         @relation("GiftOccasionRemindersOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@index([occasionId])
+  @@index([ownerUserId])
+  @@index([scheduledFor, sentAt, enabled])
+}
+
+model Holiday {
+  id String @id @default(cuid())
+
+  country String
+  month   Int
+  day     Int
+
+  key String @unique
+
+  emoji    String
+  category String @default("NATIONAL")
+
+  nameRu   String?
+  nameEn   String?
+  nameZhCn String?
+  nameHi   String?
+  nameEs   String?
+  nameAr   String?
+
+  ordinal Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([country])
+  @@index([country, month, day])
+}
+
+model CalendarInboxEntry {
+  id          String  @id @default(cuid())
+  ownerUserId String
+  occasionId  String?
+
+  type  String
+  emoji String
+  title String
+  body  String?
+
+  readAt     DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  owner    User          @relation("CalendarInboxOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  occasion GiftOccasion? @relation(fields: [occasionId], references: [id], onDelete: SetNull)
+
+  @@index([ownerUserId, readAt])
+  @@index([ownerUserId, createdAt])
+  @@index([occasionId])
 }
 
 // ─── Reservation Pro: private notes, purchased flag, reminders, history ──────

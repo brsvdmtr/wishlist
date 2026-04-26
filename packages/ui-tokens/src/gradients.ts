@@ -111,6 +111,24 @@ export const gradients = {
   swatchBlue: `linear-gradient(135deg, #5B8DEF, #2F61C8)`,
   swatchPink: `linear-gradient(135deg, #F06AB4, #C53F88)`,
   swatchGreen: `linear-gradient(135deg, #34C98A, #1E9765)`,
+
+  /* ─── Events Calendar — event-type theme gradients (v2.1) ────── */
+
+  /** Birthday hero — pink, with white radial highlight. */
+  eventBdayHero: `radial-gradient(circle at 100% 0%, rgba(255,255,255,0.18), transparent 50%), linear-gradient(135deg, #F06AB4 0%, #C53F88 100%)`,
+  /** Birthday tile — solid pink linear (small date tiles). */
+  eventBdayTile: `linear-gradient(135deg, #F06AB4, #C53F88)`,
+  /** Anniversary hero — amber. */
+  eventAnniversaryHero: `radial-gradient(circle at 100% 0%, rgba(255,255,255,0.18), transparent 50%), linear-gradient(135deg, #FBBF24 0%, #D97706 100%)`,
+  eventAnniversaryTile: `linear-gradient(135deg, #FBBF24, #D97706)`,
+  /** Holiday hero — green. */
+  eventHolidayHero: `radial-gradient(circle at 100% 0%, rgba(255,255,255,0.18), transparent 50%), linear-gradient(135deg, #34C98A 0%, #1E9765 100%)`,
+  eventHolidayTile: `linear-gradient(135deg, #34C98A, #1E9765)`,
+  /** Today / brand-accent (own / custom). */
+  eventTodayHero: `radial-gradient(circle at 100% 0%, rgba(255,255,255,0.18), transparent 50%), linear-gradient(135deg, ${colors.accent} 0%, ${colors.accentDeep} 100%)`,
+  eventTodayTile: `linear-gradient(135deg, ${colors.accent}, ${colors.accentDeep})`,
+  /** Year-Recap signature gradient. */
+  recapHero: `radial-gradient(circle at 30% 100%, rgba(240,106,180,0.45), transparent 50%), radial-gradient(circle at 80% 0%, rgba(139,123,255,0.55), transparent 55%), linear-gradient(135deg, #2A1F4A, #4A2A5C)`,
 } as const;
 
 export type GradientToken = keyof typeof gradients;

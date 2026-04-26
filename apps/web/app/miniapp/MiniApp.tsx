@@ -17,7 +17,7 @@ import {
   ThemeProvider, useTheme,
 } from '@wishlist/ui';
 import { AppearanceSettings } from './screens/AppearanceSettings';
-import { CalendarScreenV21 } from './screens/CalendarScreenV21';
+import { CalendarRoot } from './screens/calendar/CalendarRoot';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
 
@@ -28345,11 +28345,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         </div>
       )}
 
-      {/* ── v2.1 CALENDAR (full UI scaffold; backend pending) ── */}
+      {/* ── v2.1 Events Calendar — full feature, gated by gnAccess.unlocked ── */}
       {screen === 'calendar' && (
-        <CalendarScreenV21
+        <CalendarRoot
+          tgFetch={tgFetch}
+          locale={locale}
+          entitlement={gnAccess}
+          onEntitlementMaybeChanged={async () => {
+            try {
+              const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
+              if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
+            } catch { /* ignore */ }
+          }}
           onBack={() => setScreen('settings')}
-          onComingSoon={(label) => pushToast(label || 'Скоро будет доступно', 'info')}
+          onShowToast={(text, kind = 'info') => pushToast(text, kind)}
         />
       )}
 
