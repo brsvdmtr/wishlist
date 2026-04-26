@@ -10,8 +10,9 @@
  * we route through `gradients.eventBdayHero` etc.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { gradients } from '@wishlist/ui-tokens';
+import { Sheet } from '@wishlist/ui';
 import type { Locale } from '@wishlist/shared';
 import type { EventTheme } from './types';
 import { ct } from './i18n';
@@ -631,6 +632,125 @@ export function CtaBar({ children }: { children: React.ReactNode }) {
         {children}
       </div>
     </div>
+  );
+}
+
+// ─── Date pickers (day/month/year bottom sheets) ──────────────────────────
+//
+// Replace the cycle-on-tap DateCells with proper sheets — tapping any of
+// the day / month / year tiles opens a grid picker. Day-grid clamps to
+// `max` (days in current month). Year-grid auto-centers the selected year.
+
+function tileStyle(active: boolean, dim?: boolean): React.CSSProperties {
+  return {
+    padding: '12px 6px', borderRadius: 12,
+    background: active
+      ? 'linear-gradient(180deg, var(--wb-accent-soft), var(--wb-card))'
+      : 'var(--wb-card)',
+    border: active
+      ? '1px solid var(--wb-accent-soft-strong)'
+      : '1px solid var(--wb-border)',
+    color: active ? 'var(--wb-text)' : (dim ? 'var(--wb-text-muted)' : 'var(--wb-text)'),
+    fontSize: 15, fontWeight: active ? 700 : 600, fontFeatureSettings: '"tnum"',
+    fontFamily: 'inherit', cursor: 'pointer',
+    boxShadow: active ? '0 0 0 3px var(--wb-accent-soft)' : 'none',
+    transition: 'all .12s ease',
+    minHeight: 44,
+  };
+}
+
+export function DayPickerSheet({ open, onClose, value, max, onPick, locale }: {
+  open: boolean;
+  onClose: () => void;
+  value: number;
+  max: number;
+  onPick: (day: number) => void;
+  locale: Locale;
+}) {
+  return (
+    <Sheet open={open} onClose={onClose} title={ct('cal_pick_day', locale)}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+        {Array.from({ length: max }, (_, i) => i + 1).map(d => (
+          <button
+            key={d}
+            type="button"
+            onClick={() => onPick(d)}
+            style={tileStyle(d === value)}
+          >{d}</button>
+        ))}
+      </div>
+    </Sheet>
+  );
+}
+
+export function MonthPickerSheet({ open, onClose, value, onPick, locale }: {
+  open: boolean;
+  onClose: () => void;
+  value: number;
+  onPick: (monthIdx: number) => void;
+  locale: Locale;
+}) {
+  return (
+    <Sheet open={open} onClose={onClose} title={ct('cal_pick_month', locale)}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+        {Array.from({ length: 12 }, (_, i) => i).map(m => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => onPick(m)}
+            style={{ ...tileStyle(m === value), padding: '14px 4px', fontSize: 14 }}
+          >{monthLabelLong(m, locale)}</button>
+        ))}
+      </div>
+    </Sheet>
+  );
+}
+
+export function YearPickerSheet({ open, onClose, value, onPick, locale }: {
+  open: boolean;
+  onClose: () => void;
+  value: number;
+  onPick: (year: number) => void;
+  locale: Locale;
+}) {
+  // Range: 1920 .. (current year + 5). Birthdays/anniversaries dominate
+  // usage so the lower bound matters less than the upper. End +5 lets
+  // people set an event "in the future" without feeling capped.
+  const endYear = new Date().getUTCFullYear() + 5;
+  const startYear = 1920;
+  const years = useMemo(
+    () => Array.from({ length: endYear - startYear + 1 }, (_, i) => endYear - i),
+    [endYear, startYear],
+  );
+  const activeRef = useRef<HTMLButtonElement>(null);
+  // When the sheet opens, scroll the selected year into view (centred).
+  useEffect(() => {
+    if (!open) return;
+    const el = activeRef.current;
+    if (!el) return;
+    // requestAnimationFrame so the sheet is laid out before we scroll.
+    const f = requestAnimationFrame(() => {
+      el.scrollIntoView({ block: 'center', behavior: 'auto' });
+    });
+    return () => cancelAnimationFrame(f);
+  }, [open, value]);
+  return (
+    <Sheet open={open} onClose={onClose} title={ct('cal_pick_year', locale)}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+        {years.map(y => {
+          const active = y === value;
+          return (
+            <button
+              key={y}
+              ref={active ? activeRef : null}
+              type="button"
+              onClick={() => onPick(y)}
+              style={tileStyle(active)}
+            >{y}</button>
+          );
+        })}
+      </div>
+    </Sheet>
   );
 }
 

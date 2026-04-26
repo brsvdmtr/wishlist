@@ -19,6 +19,7 @@ import { defaultEmojiForType } from './types';
 import {
   CalHeader, FormLabel, CalInput, EmojiPicker, RepeatChips, InfoGroup, InfoRow,
   SectionH, ReminderRow, CtaBar, monthLabelLong,
+  DayPickerSheet, MonthPickerSheet, YearPickerSheet,
 } from './components';
 import { ct } from './i18n';
 
@@ -182,6 +183,10 @@ function Step1Type({ draft, onChange, locale }: { draft: DraftState; onChange: (
 
 function Step2Details({ draft, onChange, locale }: { draft: DraftState; onChange: (p: Partial<DraftState>) => void; locale: Locale }) {
   const today = new Date();
+  const [picker, setPicker] = useState<'day' | 'month' | 'year' | null>(null);
+  const year = draft.year ?? today.getUTCFullYear();
+  // Days in the currently-picked month (handles leap years for February).
+  const daysInMonth = new Date(Date.UTC(year, draft.month + 1, 0)).getUTCDate();
   return (
     <>
       <FormLabel>{ct('cal_field_name', locale)}</FormLabel>
@@ -192,13 +197,48 @@ function Step2Details({ draft, onChange, locale }: { draft: DraftState; onChange
 
       <FormLabel>{ct('cal_field_date', locale)}</FormLabel>
       <div style={{ margin: '0 16px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-        <DateCell label="день" value={String(draft.day)}
-          onClick={() => onChange({ day: ((draft.day) % 31) + 1 })} />
-        <DateCell label="месяц" value={monthLabelLong(draft.month, locale)} highlighted
-          onClick={() => onChange({ month: (draft.month + 1) % 12 })} />
-        <DateCell label="год" value={String(draft.year ?? today.getUTCFullYear())}
-          onClick={() => onChange({ year: (draft.year ?? today.getUTCFullYear()) === 1900 ? today.getUTCFullYear() : ((draft.year ?? today.getUTCFullYear()) - 1) })} />
+        <DateCell label={ct('cal_pick_day', locale)} value={String(draft.day)}
+          onClick={() => setPicker('day')} />
+        <DateCell label={ct('cal_pick_month', locale)} value={monthLabelLong(draft.month, locale)} highlighted
+          onClick={() => setPicker('month')} />
+        <DateCell label={ct('cal_pick_year', locale)} value={String(year)}
+          onClick={() => setPicker('year')} />
       </div>
+
+      <DayPickerSheet
+        open={picker === 'day'}
+        onClose={() => setPicker(null)}
+        value={draft.day}
+        max={daysInMonth}
+        onPick={(d) => { onChange({ day: d }); setPicker(null); }}
+        locale={locale}
+      />
+      <MonthPickerSheet
+        open={picker === 'month'}
+        onClose={() => setPicker(null)}
+        value={draft.month}
+        onPick={(m) => {
+          // Clamp the day to the new month's length (e.g. 31 → 30 when
+          // switching from January to April), so the date doesn't silently
+          // overflow into the next month at submit time.
+          const dim = new Date(Date.UTC(year, m + 1, 0)).getUTCDate();
+          onChange({ month: m, day: Math.min(draft.day, dim) });
+          setPicker(null);
+        }}
+        locale={locale}
+      />
+      <YearPickerSheet
+        open={picker === 'year'}
+        onClose={() => setPicker(null)}
+        value={year}
+        onPick={(y) => {
+          // Clamp Feb 29 → Feb 28 when switching to a non-leap year.
+          const dim = new Date(Date.UTC(y, draft.month + 1, 0)).getUTCDate();
+          onChange({ year: y, day: Math.min(draft.day, dim) });
+          setPicker(null);
+        }}
+        locale={locale}
+      />
 
       <FormLabel>{ct('cal_field_repeat', locale)}</FormLabel>
       <RepeatChips<EventRecurrence>
