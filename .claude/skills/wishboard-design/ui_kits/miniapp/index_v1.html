@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>WishBoard · Mini App UI Kit</title>
+  <style>
+/*
+ * WishBoard Mini App — themeable UI kit stylesheet.
+ * Theme = dark (default) | black (PRO).
+ * Accent = violet (default/free) | blue | pink | green (PRO).
+ * Scoped via [data-theme] + [data-accent] on the phone; each phone can theme itself.
+ */
+
+.wb-phone {
+  /* surfaces — dark (default) */
+  --wb-bg: #1B1B1F;
+  --wb-surface: #26262C;
+  --wb-surface-hover: #2E2E36;
+  --wb-card: #2F2F38;
+  --wb-card-elevated: #33333D;
+  --wb-nav-bg: rgba(27,27,31,0.95);
+  --wb-border: rgba(255,255,255,0.06);
+  --wb-border-light: rgba(255,255,255,0.10);
+
+  /* accent — violet (default) */
+  --wb-accent: #7C6AFF;
+  --wb-accent-strong: #9B8AFF;
+  --wb-accent-light: #A78BFA;
+  --wb-accent-deep: #6B5CE7;
+  --wb-accent-r: 124; --wb-accent-g: 106; --wb-accent-b: 255;
+
+  --wb-accent-soft: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.12);
+  --wb-accent-soft-strong: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.25);
+  --wb-accent-shadow: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.4);
+  --wb-accent-shadow-soft: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.3);
+
+  --wb-success: #34D399;
+  --wb-success-soft: rgba(52,211,153,0.12);
+  --wb-warning: #FBBF24;
+  --wb-warning-soft: rgba(251,191,36,0.12);
+  --wb-danger: #F87171;
+  --wb-danger-soft: rgba(248,113,113,0.12);
+  --wb-text: #F4F4F6;
+  --wb-text-secondary: #9CA3AF;
+  --wb-text-muted: #6B7280;
+  --wb-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Inter', sans-serif;
+}
+
+/* ─── Theme: pure black (PRO) ─── */
+.wb-phone[data-theme="black"] {
+  --wb-bg: #000000;
+  --wb-surface: #0E0E10;
+  --wb-surface-hover: #18181B;
+  --wb-card: #111114;
+  --wb-card-elevated: #18181B;
+  --wb-nav-bg: rgba(0,0,0,0.95);
+  --wb-border: rgba(255,255,255,0.08);
+  --wb-border-light: rgba(255,255,255,0.12);
+}
+
+/* ─── Accents (PRO) ─── */
+.wb-phone[data-accent="blue"]    { --wb-accent:#3B82F6; --wb-accent-strong:#60A5FA; --wb-accent-light:#93C5FD; --wb-accent-deep:#2563EB; --wb-accent-r:59; --wb-accent-g:130; --wb-accent-b:246; }
+.wb-phone[data-accent="pink"]    { --wb-accent:#EC4899; --wb-accent-strong:#F472B6; --wb-accent-light:#F9A8D4; --wb-accent-deep:#DB2777; --wb-accent-r:236; --wb-accent-g:72; --wb-accent-b:153; }
+.wb-phone[data-accent="green"]   { --wb-accent:#0F9D58; --wb-accent-strong:#2EB872; --wb-accent-light:#5FD19A; --wb-accent-deep:#0B7B44; --wb-accent-r:15; --wb-accent-g:157; --wb-accent-b:88; }
+
+.wb-app *, .wb-app *::before, .wb-app *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+.wb-app { font-family: var(--wb-font); color: var(--wb-text); line-height: 1.4; letter-spacing: -0.005em; }
+
+.wb-phone {
+  width: 375px; min-height: 812px;
+  background: var(--wb-bg); border-radius: 44px;
+  position: relative; overflow: hidden;
+  box-shadow: 0 40px 80px rgba(0,0,0,0.6), 0 0 0 10px #1a1a1c, 0 0 0 12px #0a0a0b;
+  flex-shrink: 0;
+  transition: background 0.25s ease;
+}
+.wb-status { height:48px; padding:16px 24px 0; display:flex; justify-content:space-between; align-items:flex-start; font-size:14px; font-weight:600; color:var(--wb-text); }
+.wb-status-icons { display:flex; gap:6px; align-items:center; font-size:13px }
+
+.wb-hdr { height:52px; padding:6px 12px; display:flex; align-items:center; gap:8px; }
+.wb-hdr-btn { width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.04); border:1px solid var(--wb-border); display:flex; align-items:center; justify-content:center; color:var(--wb-text); font-size:18px; cursor:pointer; flex-shrink:0; }
+.wb-hdr-btn:active { background:var(--wb-surface-hover); transform:scale(0.95); }
+.wb-hdr-title { flex:1; text-align:center; font-size:15px; font-weight:700; letter-spacing:-0.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--wb-text); }
+.wb-hdr-sub { font-size:11px; color:var(--wb-text-secondary); font-weight:500; margin-top:2px }
+
+.wb-tabs { display:flex; gap:4px; padding:4px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:12px; margin:0 16px 16px; }
+.wb-tab { flex:1; padding:9px 12px; border-radius:10px; text-align:center; font-size:13px; font-weight:600; color:var(--wb-text-muted); cursor:pointer; transition:all 0.15s ease; position:relative; }
+.wb-tab.active { background:var(--wb-accent); color:#fff; box-shadow:0 2px 8px var(--wb-accent-shadow-soft); }
+.wb-tab .wb-tab-badge { position:absolute; top:-4px; right:6px; min-width:20px; height:20px; padding:0 5px; border-radius:50%; background:var(--wb-danger); color:#fff; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; border:2px solid var(--wb-card); }
+
+.wb-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:0 16px 16px; }
+.wb-stat { background:var(--wb-card); border:1px solid var(--wb-border); border-radius:12px; padding:10px 6px; text-align:center; }
+.wb-stat-n { font-size:20px; font-weight:800; letter-spacing:-0.01em; line-height:1.1; color:var(--wb-text); }
+.wb-stat-l { font-size:10px; color:var(--wb-text-muted); margin-top:2px; letter-spacing:0.2px; }
+.wb-stat.accent { border-color:var(--wb-accent-soft-strong); background: linear-gradient(135deg, var(--wb-card), var(--wb-accent-soft)); }
+.wb-stat.accent .wb-stat-n { color:var(--wb-accent); }
+.wb-stat.success { border-color: rgba(52,211,153,0.25); background: linear-gradient(135deg, var(--wb-card), rgba(52,211,153,0.04)); }
+.wb-stat.success .wb-stat-n { color:var(--wb-success); }
+.wb-stat.warning { border-color: rgba(251,191,36,0.25); background: linear-gradient(135deg, var(--wb-card), rgba(251,191,36,0.04)); }
+.wb-stat.warning .wb-stat-n { color:var(--wb-warning); }
+
+.wb-section-hdr { display:flex; align-items:center; justify-content:space-between; padding:0 20px; margin-bottom:10px; }
+.wb-section-hdr h2 { margin:0; font-size:13px; font-weight:700; color:var(--wb-text-muted); text-transform:uppercase; letter-spacing:0.8px; }
+.wb-section-hdr .wb-link { font-size:13px; color:var(--wb-accent-light); font-weight:600; cursor:pointer; }
+
+.wb-wl-card { background:var(--wb-card); border:1px solid var(--wb-border); border-radius:16px; padding:16px; margin:0 16px 10px; cursor:pointer; transition:all 0.15s ease; }
+.wb-wl-card:active { background:var(--wb-card-elevated); }
+.wb-wl-card.highlight { background: linear-gradient(135deg, var(--wb-card), var(--wb-accent-soft)); border-color:var(--wb-accent-soft-strong); }
+.wb-wl-card-top { display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
+.wb-wl-emoji { width:52px; height:52px; border-radius:14px; background:var(--wb-accent-soft); display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0; }
+.wb-wl-meta { flex:1; min-width:0; }
+.wb-wl-title { font-size:16px; font-weight:700; letter-spacing:-0.01em; color:var(--wb-text); }
+.wb-wl-sub { font-size:12px; color:var(--wb-text-secondary); margin-top:2px; }
+.wb-wl-progress { height:4px; background:rgba(255,255,255,0.05); border-radius:2px; overflow:hidden; }
+.wb-wl-progress > div { height:100%; background: linear-gradient(90deg, var(--wb-accent), var(--wb-accent-strong)); border-radius:2px; }
+.wb-wl-foot { display:flex; align-items:center; justify-content:space-between; margin-top:10px; }
+.wb-wl-foot-txt { font-size:11px; color:var(--wb-text-muted); }
+
+.wb-stack { display:flex; align-items:center; }
+.wb-av { border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; flex-shrink:0; width:28px; height:28px; font-size:11px; border:2px solid var(--wb-card); }
+.wb-av:not(:first-child) { margin-left:-6px; }
+.wb-av.g1 { background: linear-gradient(135deg,#7C6AFF,#A78BFA); }
+.wb-av.g2 { background: linear-gradient(135deg,#fbbf24,#f59e0b); }
+.wb-av.g3 { background: linear-gradient(135deg,#34d399,#10b981); }
+.wb-av.g4 { background: linear-gradient(135deg,#f472b6,#ec4899); }
+.wb-av.g5 { background: linear-gradient(135deg,#60a5fa,#3b82f6); }
+.wb-av.plus { background:var(--wb-surface); color:var(--wb-text-muted); }
+
+.wb-wish { display:flex; gap:12px; align-items:flex-start; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:14px; padding:12px; margin:0 16px 8px; cursor:pointer; }
+.wb-wish:active { background:var(--wb-card-elevated); }
+.wb-wish-thumb { width:52px; height:52px; border-radius:12px; background:var(--wb-accent-soft); display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
+.wb-wish-body { flex:1; min-width:0; }
+.wb-wish-t { font-size:14px; font-weight:600; letter-spacing:-0.01em; line-height:1.3; color:var(--wb-text); }
+.wb-wish-price { font-size:13px; font-weight:700; margin-top:4px; color:var(--wb-text); }
+.wb-wish-meta { display:flex; gap:6px; align-items:center; margin-top:6px; font-size:11px; color:var(--wb-text-muted); }
+.wb-wish-trail { font-size:20px; color:var(--wb-text-muted); align-self:center; flex-shrink:0; }
+.wb-wish.reserved-by-me { background: linear-gradient(135deg, var(--wb-card), rgba(52,211,153,0.05)); border-color: rgba(52,211,153,0.25); }
+.wb-wish.reserved-by-me .wb-wish-thumb { background: var(--wb-success-soft); }
+.wb-wish.done { opacity:0.45; }
+.wb-wish.done .wb-wish-t { text-decoration:line-through; color:var(--wb-text-muted); }
+
+.wb-chip { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:6px; font-size:10px; font-weight:700; white-space:nowrap; line-height:1.5; }
+.wb-chip.accent { background:var(--wb-accent-soft); color:var(--wb-accent); }
+.wb-chip.success { background:var(--wb-success-soft); color:var(--wb-success); }
+.wb-chip.warning { background:var(--wb-warning-soft); color:var(--wb-warning); }
+.wb-chip.danger  { background:var(--wb-danger-soft);  color:var(--wb-danger); }
+.wb-chip.pro { background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-strong)); color:#fff; border-radius:100px; padding:3px 8px; letter-spacing:0.3px; }
+.wb-chip.prio3 { background: rgba(240,78,110,0.15); color:#F04E6E; }
+.wb-chip.prio2 { background: rgba(232,147,10,0.15); color:#E8930A; }
+
+.wb-fab { position:absolute; right:20px; bottom:100px; width:56px; height:56px; border-radius:50%; background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-strong)); color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:300; box-shadow: 0 8px 24px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.2); cursor:pointer; z-index:5; border:none; }
+.wb-fab:active { transform:scale(0.92); }
+
+.wb-nav { position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:space-around; padding:8px 12px 20px; background:var(--wb-nav-bg); backdrop-filter:blur(20px); border-top:1px solid var(--wb-border); }
+.wb-nav-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 4px; color:var(--wb-text-muted); font-size:10px; font-weight:600; cursor:pointer; }
+.wb-nav-item.active { color:var(--wb-accent); }
+.wb-nav-item .wb-nav-ic { font-size:20px; }
+
+.wb-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:14px 24px; border-radius:14px; border:none; font-family:inherit; font-size:15px; font-weight:700; letter-spacing:-0.01em; cursor:pointer; min-height:44px; width:100%; transition:all 0.12s ease; }
+.wb-btn:active { transform:scale(0.98); }
+.wb-btn.primary { background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-strong)); color:#fff; box-shadow: 0 8px 24px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.2); }
+.wb-btn.secondary { background:var(--wb-accent-soft); color:var(--wb-accent); }
+.wb-btn.surface { background:var(--wb-card); color:var(--wb-text); border:1px solid var(--wb-border); }
+.wb-btn.ghost { background:transparent; color:var(--wb-text-muted); }
+
+.wb-scroll { overflow-y:auto; scrollbar-width:none; padding-bottom:110px; height: calc(812px - 48px - 52px); }
+.wb-scroll::-webkit-scrollbar { display:none; }
+
+.wb-hero { margin:8px 16px 16px; padding:20px; background: linear-gradient(135deg, var(--wb-accent) 0%, var(--wb-accent-strong) 55%, var(--wb-accent-deep) 100%); border-radius:20px; color:#fff; position:relative; overflow:hidden; box-shadow: 0 8px 24px var(--wb-accent-shadow); }
+.wb-hero::before { content:''; position:absolute; top:-50%; right:-30%; width:240px; height:240px; background: radial-gradient(circle, rgba(255,255,255,0.15), transparent 70%); pointer-events:none; }
+.wb-hero-top { display:flex; gap:12px; align-items:flex-start; position:relative; z-index:1; }
+.wb-hero-emoji { font-size:44px; }
+.wb-hero-title { font-size:22px; font-weight:800; letter-spacing:-0.02em; }
+.wb-hero-sub { font-size:13px; opacity:0.85; margin-top:4px; }
+.wb-hero-stats { display:flex; gap:14px; margin-top:16px; position:relative; z-index:1; }
+.wb-hero-stat { flex:1 }
+.wb-hero-stat-n { font-size:22px; font-weight:800; letter-spacing:-0.01em; }
+.wb-hero-stat-l { font-size:11px; opacity:0.75; margin-top:2px; }
+
+.wb-banner { display:flex; gap:10px; margin:0 16px 14px; padding:12px 14px; border-radius:14px; font-size:13px; line-height:1.5; align-items:flex-start; }
+.wb-banner-ic { flex-shrink:0; font-size:16px; margin-top:1px; }
+.wb-banner.info { background:var(--wb-accent-soft); color:var(--wb-accent); border:1px solid var(--wb-accent-soft-strong); }
+.wb-banner.success { background:var(--wb-success-soft); color:var(--wb-success); border:1px solid rgba(52,211,153,0.2); }
+
+.wb-onb { height: calc(812px - 48px); display:flex; flex-direction:column; padding:32px 24px 40px; }
+.wb-onb-visual { flex:1; display:flex; align-items:center; justify-content:center; position:relative; }
+.wb-onb-glow { width:240px; height:240px; border-radius:50%; background: radial-gradient(circle, var(--wb-accent-shadow) 0%, transparent 70%); position:absolute; }
+.wb-onb-emoji { font-size:120px; position:relative; filter: drop-shadow(0 16px 32px var(--wb-accent-shadow)); }
+.wb-onb h1 { font-size:26px; font-weight:800; letter-spacing:-0.02em; margin:0 0 12px; text-align:center; color:var(--wb-text); }
+.wb-onb p { font-size:15px; color:var(--wb-text-secondary); margin:0 0 28px; text-align:center; line-height:1.5; }
+.wb-onb-dots { display:flex; gap:6px; justify-content:center; margin-bottom:24px; }
+.wb-onb-dots span { width:6px; height:6px; border-radius:50%; background:var(--wb-text-muted); opacity:0.3; }
+.wb-onb-dots span.active { background:var(--wb-accent); opacity:1; width:20px; border-radius:3px; }
+
+.wb-paywall-title { font-size:26px; font-weight:800; letter-spacing:-0.02em; text-align:center; margin:12px 16px 8px; color:var(--wb-text); }
+.wb-paywall-title .wb-gradient-text { background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-strong)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+.wb-paywall-sub { font-size:14px; color:var(--wb-text-secondary); text-align:center; margin:0 24px 24px; line-height:1.5; }
+.wb-feat { display:flex; align-items:center; gap:14px; padding:14px 16px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:14px; margin:0 16px 8px; }
+.wb-feat-ic { width:40px; height:40px; border-radius:10px; background:var(--wb-accent-soft); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.wb-feat-t { font-size:14px; font-weight:600; color:var(--wb-text); }
+.wb-feat-s { font-size:12px; color:var(--wb-text-secondary); margin-top:2px; }
+
+.wb-sheet-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.6); z-index:10; opacity:0; pointer-events:none; transition:opacity 0.2s; }
+.wb-sheet-backdrop.open { opacity:1; pointer-events:auto; }
+.wb-sheet { position:absolute; left:0; right:0; bottom:0; background:var(--wb-surface); border-radius:20px 20px 0 0; padding:24px; z-index:11; transform:translateY(100%); transition:transform 0.25s cubic-bezier(0.4,0,0.2,1); }
+.wb-sheet.open { transform:translateY(0); }
+.wb-sheet-handle { width:36px; height:4px; background:rgba(255,255,255,0.15); border-radius:2px; margin:-12px auto 18px; }
+.wb-sheet-title { font-size:17px; font-weight:700; text-align:center; letter-spacing:-0.01em; margin-bottom:6px; color:var(--wb-text); }
+.wb-sheet-sub { font-size:13px; color:var(--wb-text-secondary); text-align:center; margin-bottom:18px; line-height:1.5; }
+
+/* ─── Settings-specific ─── */
+.wb-set-group { margin:0 16px 18px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:14px; overflow:hidden; }
+.wb-set-row { display:flex; align-items:center; gap:14px; padding:14px 16px; border-top:1px solid var(--wb-border); cursor:pointer; }
+.wb-set-row:first-child { border-top:none; }
+.wb-set-row:active { background:var(--wb-card-elevated); }
+.wb-set-row-ic { width:36px; height:36px; border-radius:10px; background:var(--wb-accent-soft); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.wb-set-row-body { flex:1; min-width:0 }
+.wb-set-row-t { font-size:15px; font-weight:600; color:var(--wb-text); display:flex; align-items:center; gap:8px; }
+.wb-set-row-s { font-size:12px; color:var(--wb-text-secondary); margin-top:2px; }
+.wb-set-row-trail { font-size:20px; color:var(--wb-text-muted); }
+.wb-toggle { width:44px; height:26px; border-radius:100px; background:var(--wb-surface); border:1px solid var(--wb-border-light); position:relative; flex-shrink:0; transition:all 0.2s ease; }
+.wb-toggle::after { content:''; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%; background:#fff; transition:all 0.2s cubic-bezier(0.4,0,0.2,1); box-shadow:0 1px 3px rgba(0,0,0,0.3); }
+.wb-toggle.on { background:var(--wb-accent); border-color:var(--wb-accent); }
+.wb-toggle.on::after { left:21px; }
+.wb-toggle.locked { opacity:0.5 }
+
+.wb-accent-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:16px; }
+.wb-accent-swatch { position:relative; aspect-ratio:1/1; border-radius:14px; display:flex; align-items:flex-end; justify-content:space-between; padding:10px; cursor:pointer; border:2px solid transparent; transition:all 0.15s ease; overflow:hidden; }
+.wb-accent-swatch .wb-accent-swatch-name { color:#fff; font-size:11px; font-weight:700; letter-spacing:0.2px; }
+.wb-accent-swatch.active { border-color:#fff; box-shadow:0 0 0 3px rgba(255,255,255,0.15); }
+.wb-accent-swatch:active { transform:scale(0.96); }
+.wb-accent-swatch.locked::after { content:'🔒'; position:absolute; top:6px; right:8px; font-size:12px; }
+.wb-accent-swatch.locked { opacity:0.55 }
+
+.wb-theme-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:16px; }
+.wb-theme-card { background:var(--wb-surface); border:2px solid var(--wb-border); border-radius:14px; padding:0; cursor:pointer; overflow:hidden; transition:all 0.15s ease; position:relative; }
+.wb-theme-card.active { border-color:var(--wb-accent); box-shadow:0 0 0 3px var(--wb-accent-soft); }
+.wb-theme-card:active { transform:scale(0.98); }
+.wb-theme-preview { height:80px; display:flex; align-items:flex-end; padding:8px; gap:4px; }
+.wb-theme-preview.dark { background:#1B1B1F; }
+.wb-theme-preview.black { background:#000000; }
+.wb-theme-preview-card { height:36px; flex:1; border-radius:8px; background:rgba(255,255,255,0.08); }
+.wb-theme-preview.black .wb-theme-preview-card { background:rgba(255,255,255,0.06); }
+.wb-theme-info { padding:10px 12px; display:flex; align-items:center; justify-content:space-between; }
+.wb-theme-info-t { font-size:13px; font-weight:700; color:var(--wb-text); }
+.wb-theme-info-s { font-size:11px; color:var(--wb-text-muted); margin-top:1px; }
+.wb-theme-info-lock { font-size:14px; }
+
+/* Page chrome */
+body { margin:0; background:#0c0c0e; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif; color:#F4F4F6; padding:40px 20px }
+h1 { text-align:center; font-size:22px; letter-spacing:-0.02em; font-weight:800; margin:0 0 6px }
+.sub { text-align:center; color:#9CA3AF; font-size:14px; margin:0 0 32px }
+.phones { display:flex; flex-wrap:wrap; gap:40px 32px; justify-content:center; align-items:flex-start }
+.phone-wrap { display:flex; flex-direction:column; align-items:center; gap:10px }
+.phone-label { font-size:11px; color:#9CA3AF; font-weight:600; letter-spacing:0.3px }
+.nav-links { display:flex; gap:8px; justify-content:center; margin-bottom:20px; flex-wrap:wrap }
+.nav-links button { background:#26262C; color:#F4F4F6; border:1px solid rgba(255,255,255,0.06); padding:8px 14px; border-radius:10px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer }
+.nav-links button.on { background:#7C6AFF; border-color:#7C6AFF }
+.global-controls { display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap:wrap; margin-bottom:28px; font-size:12px; color:#9CA3AF }
+.global-controls label { display:flex; align-items:center; gap:6px; background:#26262C; border:1px solid rgba(255,255,255,0.06); padding:6px 12px; border-radius:100px; cursor:pointer; user-select:none }
+.global-controls input { accent-color:#7C6AFF }
+  </style>
+</head>
+<body>
+  <h1>WishBoard · Mini App UI kit</h1>
+  <p class="sub">Interactive recreation of the key screens. Theme &amp; accent per‑phone, controllable via the in‑app Settings screen (or the global toggles below).</p>
+
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel">
+  /* ═══════════ PRIMITIVES ═══════════ */
+  const { useState, createContext, useContext } = React;
+
+  const ThemeCtx = createContext({ theme: 'dark', accent: 'violet', isPro: false, setTheme:()=>{}, setAccent:()=>{}, setIsPro:()=>{} });
+
+  function Phone({ children, label }) {
+    const { theme, accent } = useContext(ThemeCtx);
+    return (
+      <div className="wb-phone wb-app" data-theme={theme} data-accent={accent}>
+        {label && <div style={{position:'absolute',top:14,left:'50%',transform:'translateX(-50%)',background:'rgba(0,0,0,0.7)',color:'#fff',fontSize:10,padding:'4px 10px',borderRadius:100,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',zIndex:20,backdropFilter:'blur(8px)'}}>{label}</div>}
+        <StatusBar />
+        {children}
+      </div>
+    );
+  }
+  function StatusBar() {
+    return <div className="wb-status"><div>9:41</div><div className="wb-status-icons"><span>•••</span><span>5G</span><span style={{marginLeft:4}}>◼</span></div></div>;
+  }
+  function Header({ left, title, subtitle, right }) {
+    return (
+      <div className="wb-hdr">
+        {left || <div style={{width:40}} />}
+        <div style={{flex:1,textAlign:'center',overflow:'hidden'}}>
+          <div className="wb-hdr-title">{title}</div>
+          {subtitle && <div className="wb-hdr-sub">{subtitle}</div>}
+        </div>
+        {right || <div style={{width:40}} />}
+      </div>
+    );
+  }
+  function HeaderBtn({ icon, onClick }) { return <button className="wb-hdr-btn" onClick={onClick}>{icon}</button>; }
+
+  function Tabs({ items, active, onSelect }) {
+    return (<div className="wb-tabs">{items.map(it => (
+      <div key={it.id} className={`wb-tab ${active === it.id ? 'active' : ''}`} onClick={() => onSelect(it.id)}>
+        {it.label}{it.badge && <span className="wb-tab-badge">{it.badge}</span>}
+      </div>
+    ))}</div>);
+  }
+  function StatRow({ stats }) {
+    return (<div className="wb-stats">{stats.map((s, i) => (
+      <div key={i} className={`wb-stat ${s.tone || ''}`}>
+        <div className="wb-stat-n">{s.n}</div><div className="wb-stat-l">{s.l}</div>
+      </div>
+    ))}</div>);
+  }
+  function SectionHeader({ title, action }) {
+    return (<div className="wb-section-hdr"><h2>{title}</h2>{action && <span className="wb-link" onClick={action.onClick}>{action.label}</span>}</div>);
+  }
+  function Chip({ tone = 'accent', children }) { return <span className={`wb-chip ${tone}`}>{children}</span>; }
+  function Button({ variant = 'primary', children, onClick, style }) { return <button className={`wb-btn ${variant}`} onClick={onClick} style={style}>{children}</button>; }
+  function AvatarStack({ people = [], extra = 0 }) {
+    const grads = ['g1','g2','g3','g4','g5'];
+    return (<div className="wb-stack">
+      {people.map((p, i) => <div key={i} className={`wb-av ${grads[i % grads.length]}`}>{p}</div>)}
+      {extra > 0 && <div className="wb-av plus">+{extra}</div>}
+    </div>);
+  }
+  function Banner({ tone = 'info', icon, children }) {
+    return <div className={`wb-banner ${tone}`}><div className="wb-banner-ic">{icon}</div><div style={{flex:1}}>{children}</div></div>;
+  }
+  function BottomNav({ active, onSelect }) {
+    const items = [
+      { id:'home', ic:'🏠', label:'Главная' },
+      { id:'friends', ic:'👥', label:'Друзья' },
+      { id:'reservations', ic:'🎁', label:'Брони' },
+      { id:'me', ic:'👤', label:'Я' },
+    ];
+    return (<div className="wb-nav">{items.map(it => (
+      <div key={it.id} className={`wb-nav-item ${active === it.id ? 'active' : ''}`} onClick={() => onSelect(it.id)}>
+        <div className="wb-nav-ic">{it.ic}</div><div>{it.label}</div>
+      </div>
+    ))}</div>);
+  }
+  function Fab({ onClick, icon = '+' }) { return <button className="wb-fab" onClick={onClick}>{icon}</button>; }
+  function Sheet({ open, onClose, title, subtitle, children }) {
+    return (<>
+      <div className={`wb-sheet-backdrop ${open ? 'open' : ''}`} onClick={onClose} />
+      <div className={`wb-sheet ${open ? 'open' : ''}`}>
+        <div className="wb-sheet-handle" />
+        {title && <div className="wb-sheet-title">{title}</div>}
+        {subtitle && <div className="wb-sheet-sub">{subtitle}</div>}
+        {children}
+      </div>
+    </>);
+  }
+  </script>
+
+  <script type="text/babel">
+  /* ═══════════ HOME ═══════════ */
+  function WishlistCard({ wl, onOpen, highlight }) {
+    const { emoji, title, count, reserved, participants, progress, chip } = wl;
+    return (
+      <div className={`wb-wl-card ${highlight ? 'highlight' : ''}`} onClick={() => onOpen(wl)}>
+        <div className="wb-wl-card-top">
+          <div className="wb-wl-emoji">{emoji}</div>
+          <div className="wb-wl-meta">
+            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+              <div className="wb-wl-title">{title}</div>
+              {chip && <Chip tone={chip.tone}>{chip.label}</Chip>}
+            </div>
+            <div className="wb-wl-sub">{count} желаний · {reserved} забронировано</div>
+          </div>
+        </div>
+        <div className="wb-wl-progress"><div style={{width:`${progress}%`}} /></div>
+        <div className="wb-wl-foot">
+          <AvatarStack people={participants.names} extra={participants.extra} />
+          <div className="wb-wl-foot-txt">до др · 14 дней</div>
+        </div>
+      </div>
+    );
+  }
+
+  function HomeScreen({ onOpenWishlist, onCreate, navActive, onNav, onOpenSettings }) {
+    const [tab, setTab] = React.useState('mine');
+    const wishlists = [
+      { id:1, emoji:'🎂', title:'На день рождения', count:12, reserved:4, progress:33, chip:{ tone:'accent', label:'14 дней' }, participants:{ names:['М','Д','А'], extra:4 } },
+      { id:2, emoji:'🎄', title:'Новый год 2026', count:8, reserved:2, progress:25, participants:{ names:['С','К'], extra:0 } },
+      { id:3, emoji:'💍', title:'Свадебный', count:24, reserved:18, progress:75, chip:{ tone:'success', label:'75%' }, participants:{ names:['А','Б','В'], extra:12 } },
+    ];
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="🔍" />} title="Мои вишлисты" subtitle="3 активных" right={<HeaderBtn icon="⚙" onClick={onOpenSettings} />} />
+        <div className="wb-scroll">
+          <StatRow stats={[
+            { n:44, l:'желаний' },
+            { n:24, l:'забронировано', tone:'accent' },
+            { n:8, l:'подарено', tone:'success' },
+            { n:1, l:'истекает', tone:'warning' },
+          ]} />
+          <Tabs active={tab} onSelect={setTab} items={[
+            { id:'mine', label:'Мои' },
+            { id:'sub', label:'Подписки', badge:2 },
+            { id:'archive', label:'Архив' },
+          ]} />
+          <SectionHeader title="Активные" action={{ label:'Сортировать', onClick:()=>{} }} />
+          {wishlists.map((wl, i) => <WishlistCard key={wl.id} wl={wl} onOpen={onOpenWishlist} highlight={i === 0} />)}
+          <SectionHeader title="Подарки друзьям" />
+          <div style={{margin:'0 16px', padding:'14px 16px', background:'var(--wb-card)', border:'1px solid var(--wb-border)', borderRadius:14, display:'flex', alignItems:'center', gap:12}}>
+            <div style={{width:40,height:40,borderRadius:12,background:'var(--wb-accent-soft)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>🎁</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--wb-text)'}}>5 активных броней</div>
+              <div style={{fontSize:12,color:'var(--wb-text-secondary)',marginTop:2}}>Марина, Денис и ещё трое</div>
+            </div>
+            <div style={{fontSize:20,color:'var(--wb-text-muted)'}}>›</div>
+          </div>
+        </div>
+        <Fab onClick={onCreate} />
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  /* ═══════════ WISHLIST DETAIL (guest) ═══════════ */
+  function WishRow({ wish, onTap }) {
+    const { emoji, title, price, priority, meta, state, chips = [] } = wish;
+    return (
+      <div className={`wb-wish ${state || ''}`} onClick={() => onTap(wish)}>
+        <div className="wb-wish-thumb">{emoji}</div>
+        <div className="wb-wish-body">
+          <div className="wb-wish-t">{title}</div>
+          {price && <div className="wb-wish-price">{price}</div>}
+          <div className="wb-wish-meta">
+            {priority && <Chip tone={`prio${priority}`}>• {priority === 3 ? 'Высокий' : priority === 2 ? 'Средний' : 'Низкий'}</Chip>}
+            {chips.map((c, i) => <Chip key={i} tone={c.tone}>{c.label}</Chip>)}
+            {meta && <span>· {meta}</span>}
+          </div>
+        </div>
+        <div className="wb-wish-trail">›</div>
+      </div>
+    );
+  }
+
+  function WishlistDetailScreen({ onBack, navActive, onNav }) {
+    const [sheet, setSheet] = React.useState(null);
+    const wishes = [
+      { id:1, emoji:'🎧', title:'AirPods Pro 2 (2024)', price:'24 990 ₽', priority:3, meta:'ozon.ru' },
+      { id:2, emoji:'🧸', title:'Лабубу — коллекционная фигурка', price:'2 890 ₽', priority:2, state:'reserved-by-me', chips:[{ tone:'success', label:'🤫 Твоя бронь' }] },
+      { id:3, emoji:'📚', title:'Atomic Habits — J. Clear (RU)', price:'790 ₽', priority:1, meta:'вайлдберриз', chips:[{ tone:'warning', label:'+15%' }] },
+      { id:4, emoji:'☕', title:'Delonghi Dedica EC685', price:'39 990 ₽', state:'done', meta:'подарено 3 янв' },
+      { id:5, emoji:'👟', title:'New Balance 530 White', price:'12 490 ₽', priority:2 },
+    ];
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Вишлист Марины" subtitle="5 желаний · до др 14 дней" right={<HeaderBtn icon="⋯" />} />
+        <div className="wb-scroll">
+          <div className="wb-hero">
+            <div className="wb-hero-top">
+              <div className="wb-hero-emoji">🎂</div>
+              <div style={{flex:1}}>
+                <div className="wb-hero-title">День рождения</div>
+                <div className="wb-hero-sub">Марина · 4 мая · сюрприз ON</div>
+              </div>
+            </div>
+            <div className="wb-hero-stats">
+              <div className="wb-hero-stat"><div className="wb-hero-stat-n">5</div><div className="wb-hero-stat-l">желаний</div></div>
+              <div className="wb-hero-stat"><div className="wb-hero-stat-n">2</div><div className="wb-hero-stat-l">забронировано</div></div>
+              <div className="wb-hero-stat"><div className="wb-hero-stat-n"><AvatarStack people={['А','Д','К']} extra={1} /></div><div className="wb-hero-stat-l" style={{marginTop:6}}>участников</div></div>
+            </div>
+          </div>
+          <Banner tone="info" icon="💡"><b>Режим сюрприза включён.</b> Марина не увидит, кто забронировал — пока ты сам не снимешь бронь.</Banner>
+          <div style={{padding:'0 20px 10px',fontSize:13,fontWeight:700,color:'var(--wb-text-muted)',textTransform:'uppercase',letterSpacing:0.8}}>Желания</div>
+          {wishes.map(w => <WishRow key={w.id} wish={w} onTap={(w) => w.state !== 'done' && !w.state && setSheet(w)} />)}
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+        <Sheet open={!!sheet} onClose={() => setSheet(null)} title={`🎁 Забронировать «${sheet?.title.split('—')[0].trim() || ''}»?`} subtitle="Марина не увидит, кто забронировал. Снять бронь можно в любой момент из вкладки «Брони».">
+          <Button variant="primary" onClick={() => setSheet(null)}>Забронировать тайно</Button>
+          <Button variant="ghost" onClick={() => setSheet(null)} style={{marginTop:8}}>Отмена</Button>
+        </Sheet>
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  /* ═══════════ PAYWALL ═══════════ */
+  function Feat({ icon, title, sub }) {
+    return (<div className="wb-feat"><div className="wb-feat-ic">{icon}</div><div style={{flex:1}}><div className="wb-feat-t">{title}</div><div className="wb-feat-s">{sub}</div></div></div>);
+  }
+  function PaywallScreen({ onBack, onSubscribe, navActive, onNav }) {
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="×" onClick={onBack} />} title="" right={<HeaderBtn icon="?" />} />
+        <div className="wb-scroll">
+          <div style={{padding:'12px 24px 0',textAlign:'center'}}>
+            <div style={{fontSize:72,lineHeight:1,marginBottom:8,filter:'drop-shadow(0 12px 24px var(--wb-accent-shadow))'}}>⭐</div>
+          </div>
+          <div className="wb-paywall-title">WishBoard <span className="wb-gradient-text">PRO</span></div>
+          <div className="wb-paywall-sub">Больше вишлистов, импорт по ссылке, намёки, комментарии — <b style={{color:'var(--wb-text)'}}>и персонализация темы</b>.</div>
+          <Feat icon="🎨" title="Чёрная тема &amp; акцентные цвета" sub="OLED-чёрный + синий, розовый или зелёный акцент" />
+          <Feat icon="🔗" title="Импорт по ссылке" sub="Ozon, Wildberries, Яндекс Маркет, Lamoda…" />
+          <Feat icon="💬" title="Комментарии к желаниям" sub="Обсуждайте детали с дарителями" />
+          <Feat icon="💡" title="Намёки без слов" sub="Подскажи, на что лучше делать ставку" />
+          <Feat icon="📦" title="Больше и выше лимиты" sub="До 10 вишлистов · 70 желаний · 5 подписок" />
+          <div style={{padding:'20px 16px 0'}}>
+            <Button variant="primary" onClick={onSubscribe}>Оформить за 100 ⭐ / мес</Button>
+            <div style={{textAlign:'center',fontSize:12,color:'var(--wb-text-muted)',marginTop:10,lineHeight:1.5}}>
+              Оплата через Telegram Stars · отмена в любой момент<br/>
+              Промокод <b style={{color:'var(--wb-accent-light)'}}>WISHPRO</b> — 30 дней бесплатно
+            </div>
+          </div>
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  /* ═══════════ ONBOARDING ═══════════ */
+  function OnboardingScreen({ onNext, onSkip, step = 0 }) {
+    const slides = [
+      { emoji:'🎁', title:'Никаких двойных подарков', body:'Друзья видят, что можно подарить — без спойлеров для именинника. Бронирование в режиме сюрприза включено по умолчанию.' },
+      { emoji:'🔗', title:'Вставь ссылку — всё само', body:'Ozon, WB, Маркет, Lamoda, Goldapple. Фото, цена, название подтянутся автоматически. (PRO)' },
+      { emoji:'🎄', title:'Secret Santa за минуту', body:'Анонимный жребий прямо в Telegram — пригласи всех одной кнопкой.' },
+    ];
+    const s = slides[step];
+    return (
+      <Phone>
+        <div style={{padding:'8px 16px',textAlign:'right'}}>
+          <span style={{fontSize:14,color:'var(--wb-text-muted)',fontWeight:600,cursor:'pointer'}} onClick={onSkip}>Пропустить</span>
+        </div>
+        <div className="wb-onb">
+          <div className="wb-onb-visual"><div className="wb-onb-glow" /><div className="wb-onb-emoji">{s.emoji}</div></div>
+          <h1>{s.title}</h1>
+          <p>{s.body}</p>
+          <div className="wb-onb-dots">{slides.map((_, i) => <span key={i} className={i === step ? 'active' : ''} />)}</div>
+          <Button variant="primary" onClick={onNext}>{step === slides.length - 1 ? 'Создать вишлист' : 'Дальше'}</Button>
+        </div>
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  /* ═══════════ SETTINGS ═══════════ */
+  const ACCENTS = [
+    { id:'violet', name:'Фиолетовый', color:'#7C6AFF', grad:'linear-gradient(135deg,#7C6AFF,#9B8AFF)', pro:false },
+    { id:'blue',   name:'Синий',      color:'#3B82F6', grad:'linear-gradient(135deg,#3B82F6,#60A5FA)', pro:true },
+    { id:'pink',   name:'Розовый',    color:'#EC4899', grad:'linear-gradient(135deg,#EC4899,#F472B6)', pro:true },
+    { id:'green',  name:'Зелёный',    color:'#0F9D58', grad:'linear-gradient(135deg,#0F9D58,#2EB872)', pro:true },
+  ];
+
+  function SettingsScreen({ onBack, onOpenPaywall, navActive, onNav }) {
+    const { theme, accent, isPro, setTheme, setAccent, setIsPro } = React.useContext(ThemeCtx);
+
+    const handleAccent = (a) => {
+      if (a.pro && !isPro) { onOpenPaywall(); return; }
+      setAccent(a.id);
+    };
+    const handleTheme = (t) => {
+      if (t === 'black' && !isPro) { onOpenPaywall(); return; }
+      setTheme(t);
+    };
+
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Настройки" right={<div style={{width:40}} />} />
+        <div className="wb-scroll">
+
+          {/* PRO status row */}
+          <div style={{margin:'0 16px 18px',padding:'14px 16px',borderRadius:14, background: isPro ? 'linear-gradient(135deg, var(--wb-accent), var(--wb-accent-strong))' : 'var(--wb-card)', border: isPro ? 'none' : '1px solid var(--wb-border)', display:'flex', alignItems:'center', gap:12, color: isPro ? '#fff' : 'var(--wb-text)', boxShadow: isPro ? '0 8px 24px var(--wb-accent-shadow)' : 'none'}}>
+            <div style={{fontSize:28}}>{isPro ? '⭐' : '🎁'}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:15,fontWeight:700}}>{isPro ? 'WishBoard PRO активен' : 'Бесплатный план'}</div>
+              <div style={{fontSize:12,opacity: isPro ? 0.85 : 0.6,marginTop:2}}>{isPro ? 'Продление 14 мая · 100 ⭐' : 'Оформи PRO — и выбирай тему и акцент'}</div>
+            </div>
+            <button onClick={() => setIsPro(!isPro)} style={{background:'rgba(255,255,255,0.15)',color:'inherit',border:'1px solid rgba(255,255,255,0.2)',padding:'6px 10px',borderRadius:8,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',letterSpacing:0.3}}>
+              {isPro ? 'DEMO: OFF' : 'DEMO: ON'}
+            </button>
+          </div>
+
+          {/* Accent color picker */}
+          <div className="wb-section-hdr"><h2>Акцентный цвет</h2>{!isPro && <span style={{fontSize:11,color:'var(--wb-text-muted)',fontWeight:600}}>🔒 PRO</span>}</div>
+          <div className="wb-set-group" style={{padding:0}}>
+            <div className="wb-accent-grid">
+              {ACCENTS.map(a => {
+                const locked = a.pro && !isPro;
+                return (
+                  <div
+                    key={a.id}
+                    className={`wb-accent-swatch ${accent === a.id ? 'active' : ''} ${locked ? 'locked' : ''}`}
+                    style={{background:a.grad}}
+                    onClick={() => handleAccent(a)}
+                  >
+                    <span className="wb-accent-swatch-name">{a.name}</span>
+                    {accent === a.id && <span style={{color:'#fff',fontSize:14,fontWeight:800}}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Theme picker */}
+          <div className="wb-section-hdr"><h2>Фон приложения</h2>{!isPro && <span style={{fontSize:11,color:'var(--wb-text-muted)',fontWeight:600}}>🔒 PRO для «Чёрного»</span>}</div>
+          <div className="wb-set-group" style={{padding:0}}>
+            <div className="wb-theme-grid">
+              <div className={`wb-theme-card ${theme === 'dark' ? 'active' : ''}`} onClick={() => handleTheme('dark')}>
+                <div className="wb-theme-preview dark"><div className="wb-theme-preview-card" /><div className="wb-theme-preview-card" /></div>
+                <div className="wb-theme-info">
+                  <div><div className="wb-theme-info-t">Тёмный</div><div className="wb-theme-info-s">По умолчанию</div></div>
+                  {theme === 'dark' && <div style={{color:'var(--wb-accent)',fontWeight:800}}>✓</div>}
+                </div>
+              </div>
+              <div className={`wb-theme-card ${theme === 'black' ? 'active' : ''}`} onClick={() => handleTheme('black')}>
+                <div className="wb-theme-preview black"><div className="wb-theme-preview-card" /><div className="wb-theme-preview-card" /></div>
+                <div className="wb-theme-info">
+                  <div><div className="wb-theme-info-t">Чёрный</div><div className="wb-theme-info-s">OLED‑экономия</div></div>
+                  {theme === 'black' ? <div style={{color:'var(--wb-accent)',fontWeight:800}}>✓</div> : !isPro && <div className="wb-theme-info-lock">🔒</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Other mock settings */}
+          <div className="wb-section-hdr"><h2>Приложение</h2></div>
+          <div className="wb-set-group">
+            <div className="wb-set-row">
+              <div className="wb-set-row-ic">💡</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Режим сюрприза</div>
+                <div className="wb-set-row-s">Скрывать брони от владельца</div>
+              </div>
+              <div className="wb-toggle on" />
+            </div>
+            <div className="wb-set-row">
+              <div className="wb-set-row-ic">🔔</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Уведомления</div>
+                <div className="wb-set-row-s">О новых бронях и намёках</div>
+              </div>
+              <div className="wb-toggle on" />
+            </div>
+            <div className="wb-set-row">
+              <div className="wb-set-row-ic">🌍</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Язык</div>
+                <div className="wb-set-row-s">Русский</div>
+              </div>
+              <div className="wb-set-row-trail">›</div>
+            </div>
+          </div>
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  /* ═══════════ APP (shell) ═══════════ */
+  const STORAGE_KEY = 'wb-uikit-state-v2';
+
+  function App() {
+    const initial = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })();
+    const [screen, setScreen] = React.useState(initial.screen || 'all');
+    const [nav, setNav] = React.useState('home');
+    const [onbStep, setOnbStep] = React.useState(0);
+    const [theme, setTheme] = React.useState(initial.theme || 'dark');
+    const [accent, setAccent] = React.useState(initial.accent || 'violet');
+    const [isPro, setIsPro] = React.useState(initial.isPro ?? false);
+
+    React.useEffect(() => {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ screen, theme, accent, isPro })); } catch {}
+    }, [screen, theme, accent, isPro]);
+
+    const ctx = { theme, accent, isPro, setTheme, setAccent, setIsPro };
+
+    const buttons = [
+      { id:'all', label:'All screens' },
+      { id:'onboarding', label:'Onboarding' },
+      { id:'home', label:'Home' },
+      { id:'detail', label:'Wishlist · Guest' },
+      { id:'paywall', label:'Paywall' },
+      { id:'settings', label:'Settings' },
+    ];
+
+    const show = (id) => screen === 'all' || screen === id;
+
+    return (
+      <ThemeCtx.Provider value={ctx}>
+        <div className="nav-links">
+          {buttons.map(b => (
+            <button key={b.id} className={screen === b.id ? 'on' : ''} onClick={() => setScreen(b.id)}>{b.label}</button>
+          ))}
+        </div>
+
+        <div className="global-controls">
+          <label><input type="checkbox" checked={isPro} onChange={(e) => setIsPro(e.target.checked)} /> PRO demo</label>
+          <label>Тема&nbsp;
+            <select value={theme} onChange={(e) => setTheme(e.target.value)} style={{background:'transparent',color:'#F4F4F6',border:'none',fontSize:12,fontWeight:600,outline:'none'}}>
+              <option value="dark">Dark (default)</option>
+              <option value="black" disabled={!isPro}>Black (PRO)</option>
+            </select>
+          </label>
+          <label>Акцент&nbsp;
+            <select value={accent} onChange={(e) => setAccent(e.target.value)} style={{background:'transparent',color:'#F4F4F6',border:'none',fontSize:12,fontWeight:600,outline:'none'}}>
+              <option value="violet">Violet (free)</option>
+              <option value="blue" disabled={!isPro}>Blue (PRO)</option>
+              <option value="pink" disabled={!isPro}>Pink (PRO)</option>
+              <option value="green" disabled={!isPro}>Green (PRO)</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="phones">
+          {show('onboarding') && (
+            <div className="phone-wrap">
+              <OnboardingScreen step={onbStep} onNext={() => setOnbStep(s => (s + 1) % 3)} onSkip={() => setScreen('home')} />
+              <div className="phone-label">Onboarding · шаг {onbStep + 1}/3</div>
+            </div>
+          )}
+          {show('home') && (
+            <div className="phone-wrap">
+              <HomeScreen navActive={nav} onNav={(id) => { setNav(id); if (id === 'reservations') setScreen('detail'); }} onOpenWishlist={() => setScreen('detail')} onCreate={() => setScreen('paywall')} onOpenSettings={() => setScreen('settings')} />
+              <div className="phone-label">Home · Мои вишлисты</div>
+            </div>
+          )}
+          {show('detail') && (
+            <div className="phone-wrap">
+              <WishlistDetailScreen navActive={nav} onNav={setNav} onBack={() => setScreen('home')} />
+              <div className="phone-label">Wishlist · Guest (surprise)</div>
+            </div>
+          )}
+          {show('paywall') && (
+            <div className="phone-wrap">
+              <PaywallScreen navActive={nav} onNav={setNav} onBack={() => setScreen('home')} onSubscribe={() => { setIsPro(true); setScreen('settings'); }} />
+              <div className="phone-label">Paywall · PRO</div>
+            </div>
+          )}
+          {show('settings') && (
+            <div className="phone-wrap">
+              <SettingsScreen navActive={nav} onNav={setNav} onBack={() => setScreen('home')} onOpenPaywall={() => setScreen('paywall')} />
+              <div className="phone-label">Settings · theme + accent</div>
+            </div>
+          )}
+        </div>
+      </ThemeCtx.Provider>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

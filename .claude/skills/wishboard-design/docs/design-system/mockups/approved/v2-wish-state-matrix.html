@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WishBoard — Wish state matrix (North Star v2)</title>
+<style>
+:root{--bg:#1B1B1F;--surface:#26262C;--surface-hover:#2E2E36;--card:#2F2F38;--card-elevated:#33333D;--accent:#7C6AFF;--accent-soft:rgba(124,106,255,0.12);--accent-glow:rgba(124,106,255,0.25);--accent-strong:#9B8AFF;--accent-light:#A78BFA;--accent-deep:#5B4BD6;--accent-tint:#C4A7FF;--success:#34D399;--success-soft:rgba(52,211,153,0.12);--warning:#FBBF24;--warning-soft:rgba(251,191,36,0.12);--danger:#F87171;--danger-soft:rgba(248,113,113,0.12);--prio-1:#6B7FD4;--prio-1-soft:rgba(107,127,212,0.15);--prio-2:#E8930A;--prio-2-soft:rgba(232,147,10,0.15);--prio-3:#F04E6E;--prio-3-soft:rgba(240,78,110,0.15);--text:#F4F4F6;--text-secondary:#9CA3AF;--text-muted:#6B7280;--border:rgba(255,255,255,0.06);--border-light:rgba(255,255,255,0.10);--backdrop:rgba(0,0,0,0.6);--gradient-accent:linear-gradient(135deg,#7C6AFF 0%,#9B8AFF 100%);--gradient-accent-deep:linear-gradient(135deg,#7C6AFF 0%,#9B8AFF 55%,#6B5CE7 100%);--gradient-priority-1:linear-gradient(90deg,#6B7FD4,#818cf8);--gradient-priority-2:linear-gradient(90deg,#E8930A,#fbbf24);--gradient-priority-3:linear-gradient(90deg,#F04E6E,#ff6b9d);--gradient-fade-bg:linear-gradient(to top,#1B1B1F 65%,transparent);--r-xs:4px;--r-sm:6px;--r-md:10px;--r-lg:12px;--r-xl:14px;--r-xxl:16px;--r-xxxl:20px;--r-pill:100px;--sh-subtle:0 1px 3px rgba(0,0,0,0.20);--sh-elevated:0 2px 12px rgba(0,0,0,0.18);--sh-deep:0 8px 24px rgba(0,0,0,0.35);--sh-deep-max:0 8px 40px rgba(0,0,0,0.40);--sh-overlay:0 12px 40px rgba(0,0,0,0.60);--sh-glow-soft:0 4px 20px rgba(124,106,255,0.15);--sh-glow-med:0 4px 16px rgba(124,106,255,0.25);--sh-glow-strong:0 4px 16px rgba(124,106,255,0.35);--sh-glow-cta:0 8px 24px rgba(124,106,255,0.40);--font-sans:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-sans);background:#0c0c0e;color:var(--text);min-height:100vh;padding:40px 20px;line-height:1.4}
+.page-title{text-align:center;color:var(--text);font-size:20px;font-weight:700;margin:0 auto 8px;letter-spacing:-0.01em}
+.page-subtitle{text-align:center;color:var(--text-secondary);font-size:14px;margin:0 auto 32px;max-width:720px}
+.phones{display:flex;flex-wrap:wrap;gap:32px;justify-content:center;align-items:flex-start}
+.phone-with-note{display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;justify-content:center;margin:0 auto;max-width:1300px}
+.phone{width:375px;min-height:812px;background:var(--bg);border-radius:44px;position:relative;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.6),0 0 0 10px #1a1a1c,0 0 0 12px #0a0a0b;flex-shrink:0}
+.phone.short{min-height:640px}
+.phone.tall{min-height:900px}
+.status-bar{height:48px;padding:16px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;font-size:14px;font-weight:600}
+.phone-label{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-size:10px;padding:4px 10px;border-radius:var(--r-pill);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;z-index:10;backdrop-filter:blur(8px);white-space:nowrap}
+.side-note{max-width:340px;color:var(--text-secondary);font-size:13px;line-height:1.6}
+.side-note .tag{display:inline-block;font-size:10px;padding:3px 8px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-light);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px}
+.side-note h3{color:var(--text);font-size:16px;margin:0 0 12px;letter-spacing:-0.01em}
+.side-note h4{color:var(--accent-light);font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700}
+.side-note p{margin:0 0 10px}
+.side-note ul{margin:0 0 14px;padding-left:18px}
+.side-note li{margin-bottom:4px}
+.side-note b{color:var(--text);font-weight:600}
+.side-note code{font-size:11px;background:var(--surface);padding:1px 5px;border-radius:var(--r-xs);color:var(--accent-light)}
+.screen-header{height:52px;padding:6px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hdr-btn{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.04);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text);font-size:18px;cursor:pointer;flex-shrink:0}
+.hdr-title{flex:1;text-align:center;font-size:15px;font-weight:700;color:var(--text);letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hdr-title.small{color:var(--text-secondary);font-weight:600;font-size:14px}
+.btn{border:none;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:transform 0.15s ease;letter-spacing:-0.01em;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:var(--r-xl);min-height:44px}
+.btn:active{transform:scale(0.98)}
+.btn.full{width:100%}
+.btn.lg{min-height:52px;font-size:16px;padding:16px 24px}
+.btn.sm{min-height:36px;font-size:13px;padding:8px 16px}
+.btn.primary{background:var(--accent);color:#fff;box-shadow:var(--sh-elevated)}
+.btn.primary-gradient{background:var(--gradient-accent);color:#fff;box-shadow:var(--sh-glow-cta),inset 0 1px 0 rgba(255,255,255,0.2)}
+.btn.secondary{background:var(--accent-soft);color:var(--accent)}
+.btn.ghost{background:transparent;color:var(--text-muted);box-shadow:none}
+.btn.danger{background:var(--danger-soft);color:var(--danger)}
+.btn.surface{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:var(--r-sm);font-size:11px;font-weight:700;white-space:nowrap}
+.chip.lg{padding:5px 10px;border-radius:var(--r-pill);font-size:12px}
+.chip.accent{background:var(--accent-soft);color:var(--accent)}
+.chip.success{background:var(--success-soft);color:var(--success)}
+.chip.warning{background:var(--warning-soft);color:var(--warning)}
+.chip.danger{background:var(--danger-soft);color:var(--danger)}
+.chip.surface{background:var(--surface);color:var(--text-secondary)}
+.chip.prio-1{background:var(--prio-1-soft);color:var(--prio-1)}
+.chip.prio-2{background:var(--prio-2-soft);color:var(--prio-2)}
+.chip.prio-3{background:var(--prio-3-soft);color:var(--prio-3)}
+.chip.new{background:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(124,106,255,0.3)}
+.chip.pro{background:var(--gradient-accent);color:#fff;box-shadow:0 2px 8px rgba(124,106,255,0.25);padding:5px 10px;border-radius:var(--r-pill);font-size:11px;letter-spacing:0.3px}
+.state-legend{background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px;margin:8px 0 14px;color:var(--text);font-size:12px;line-height:1.5}
+.state-legend .lg-row{display:flex;gap:10px;align-items:flex-start;padding:4px 0}
+.state-legend .swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0;margin-top:3px}
+</style>
+<style>
+  body {
+    padding: 40px 32px;
+  }
+  .grid-wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .group {
+    margin-bottom: 56px;
+  }
+  .group-header {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .group-header h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .group-header .hint {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+  }
+  .cell {
+    background: var(--bg);
+    border-radius: var(--r-xxl);
+    padding: 18px;
+    border: 1px solid var(--border);
+  }
+  .cell-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent-light);
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .cell-note {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-top: 10px;
+  }
+
+  /* ─── Wish item card (universal) ─── */
+  .w {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 12px;
+    display: flex;
+    gap: 12px;
+    position: relative;
+  }
+  .w-thumb {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .w-thumb .prio-dot {
+    position: absolute;
+    top: -2px; right: -2px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--card);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    border: 2px solid var(--card);
+  }
+  .w-body { flex: 1; min-width: 0; }
+  .w-title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .w-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .w-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .w-price {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .w-trailing {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+    align-self: flex-start;
+  }
+  .w-trailing button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px;
+  }
+
+  /* state variants */
+  .w.faint { opacity: 0.55; }
+  .w.faint-strong { opacity: 0.45; }
+  .w.strike .w-title { text-decoration: line-through; color: var(--text-muted); }
+
+  .w.reserved-public-by-me {
+    background: linear-gradient(135deg, var(--card), rgba(52,211,153,0.05));
+    border-color: rgba(52,211,153,0.25);
+  }
+  .w.reserved-secret-by-me {
+    background: linear-gradient(135deg, var(--card), rgba(124,106,255,0.06));
+    border-color: rgba(124,106,255,0.3);
+  }
+  .w.smart-active {
+    border-color: rgba(52,211,153,0.2);
+  }
+  .w.smart-expiring {
+    border-color: rgba(251,191,36,0.35);
+    background: linear-gradient(135deg, var(--card), rgba(251,191,36,0.04));
+  }
+  .w.group-gift {
+    border-color: rgba(240,78,110,0.25);
+  }
+  .w.santa {
+    border-color: rgba(107,127,212,0.3);
+    background: linear-gradient(135deg, var(--card), rgba(107,127,212,0.04));
+  }
+  .w.shared {
+    border-color: rgba(124,106,255,0.2);
+  }
+  .w.diff-warning {
+    border-color: rgba(251,191,36,0.4);
+    background: linear-gradient(135deg, var(--card), rgba(251,191,36,0.06));
+  }
+  .w.conflict {
+    border-color: rgba(248,113,113,0.35);
+    background: linear-gradient(135deg, var(--card), rgba(248,113,113,0.05));
+  }
+
+  .ttl-bar {
+    height: 3px;
+    background: rgba(52,211,153,0.15);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .ttl-fill {
+    height: 100%;
+    background: var(--success);
+    border-radius: 2px;
+  }
+  .ttl-fill.low { background: var(--warning); }
+
+  .reserve-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 7px 10px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(124,106,255,0.2);
+  }
+  .reserve-btn.secret { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Wish state matrix · North Star v2</h1>
+<p class="page-subtitle">Principle #5 — «state is unmistakable». Каждая комбинация (status × perspective × modifier) должна читаться с одного взгляда.<br>
+Карточка одна — модификатор меняет tint + chip-set. 15 реальных состояний, сгруппированы по perspective.</p>
+
+<div class="grid-wrap">
+
+<!-- ═══════════════ OWNER PERSPECTIVE ═══════════════ -->
+<div class="group">
+  <div class="group-header">
+    <h2>Owner view (владелец своего желания)</h2>
+    <span class="hint">«что с моим желанием сейчас»</span>
+  </div>
+
+  <div class="grid">
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--card); border: 1px solid var(--border); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Available
+      </div>
+      <div class="w">
+        <div class="w-thumb">🎧<div class="prio-dot">😍</div></div>
+        <div class="w-body">
+          <div class="w-title">AirPods Pro 2 USB-C</div>
+          <div class="w-desc">В белом, с USB-C</div>
+          <div class="w-row"><span class="w-price">24 990 ₽</span></div>
+        </div>
+        <div class="w-trailing"><button>⋯</button></div>
+      </div>
+      <div class="cell-note">Базовое состояние — нет чипа состояния, только priority-dot.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--success); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Reserved (public) — кто-то забронировал
+      </div>
+      <div class="w">
+        <div class="w-thumb">📚<div class="prio-dot">😊</div></div>
+        <div class="w-body">
+          <div class="w-title">«Четвёртое крыло»</div>
+          <div class="w-row">
+            <span class="w-price">1 890 ₽</span>
+            <span class="chip success" style="font-size: 10px;">✓ забронировано</span>
+          </div>
+        </div>
+        <div class="w-trailing"><button>⋯</button></div>
+      </div>
+      <div class="cell-note">Владелец видит <b>что</b> забронировано, но не <b>кем</b> — сюрприз сохраняется.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--success); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Purchased
+      </div>
+      <div class="w faint">
+        <div class="w-thumb">☕<div class="prio-dot">😊</div></div>
+        <div class="w-body">
+          <div class="w-title">Кофемашина DeLonghi</div>
+          <div class="w-row">
+            <span class="w-price">45 000 ₽</span>
+            <span class="chip success" style="font-size: 10px;">💳 куплено</span>
+          </div>
+        </div>
+        <div class="w-trailing"><button>⋯</button></div>
+      </div>
+      <div class="cell-note">Opacity 0.55 + «💳 куплено». Soft-terminal — ещё можно archive/restore.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--accent); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Completed
+      </div>
+      <div class="w faint strike">
+        <div class="w-thumb">🎨<div class="prio-dot">🙂</div></div>
+        <div class="w-body">
+          <div class="w-title">Акварельный набор</div>
+          <div class="w-row">
+            <span class="chip accent" style="font-size: 10px;">🎉 завершено</span>
+          </div>
+        </div>
+        <div class="w-trailing"><button>⋯</button></div>
+      </div>
+      <div class="cell-note">Strike-through + accent-chip. Переходит в архив.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--accent); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Shared (multi-placement)
+      </div>
+      <div class="w shared">
+        <div class="w-thumb">🎧<div class="prio-dot">😍</div></div>
+        <div class="w-body">
+          <div class="w-title">AirPods Pro 2 USB-C</div>
+          <div class="w-desc">В белом, с USB-C</div>
+          <div class="w-row">
+            <span class="w-price">24 990 ₽</span>
+            <span class="chip accent" style="font-size: 10px;">🔗 в 2 вишлистах</span>
+          </div>
+        </div>
+        <div class="w-trailing"><button>⋯</button></div>
+      </div>
+      <div class="cell-note">Тап по chip → список вишлистов куда вшит. Правка — sync во все.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--text-muted); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Deleted (soft) — в архиве
+      </div>
+      <div class="w faint-strong strike">
+        <div class="w-thumb" style="filter: grayscale(1);">🎮<div class="prio-dot">🙂</div></div>
+        <div class="w-body">
+          <div class="w-title">Nintendo Switch OLED</div>
+          <div class="w-row">
+            <span class="chip surface" style="font-size: 10px; color: var(--text-muted);">🗑 удалено</span>
+          </div>
+        </div>
+        <div class="w-trailing"><button>↶</button></div>
+      </div>
+      <div class="cell-note">Grayscale thumb + strike. Trailing — undo-иконка (восстановить).</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ GUEST PERSPECTIVE ═══════════════ -->
+<div class="group">
+  <div class="group-header">
+    <h2>Guest view (гость по share-ссылке)</h2>
+    <span class="hint">«что я могу подарить и что уже забронировано»</span>
+  </div>
+
+  <div class="grid">
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--card); border: 1px solid var(--border); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Available — две CTA (public + secret PRO)
+      </div>
+      <div class="w">
+        <div class="w-thumb">🕯<div class="prio-dot">🙂</div></div>
+        <div class="w-body">
+          <div class="w-title">Свечи Diptyque</div>
+          <div class="w-row">
+            <span class="w-price">8 400 ₽</span>
+          </div>
+          <div class="w-row" style="margin-top: 8px;">
+            <button class="reserve-btn">✓ Забронировать</button>
+            <button class="reserve-btn secret">🔒 Тайно</button>
+          </div>
+        </div>
+      </div>
+      <div class="cell-note">Две равнозначные CTA рядом. Secret — soft accent (PRO). Public — flat accent.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--success); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Reserved by me — public
+      </div>
+      <div class="w reserved-public-by-me">
+        <div class="w-thumb">📚<div class="prio-dot">😊</div></div>
+        <div class="w-body">
+          <div class="w-title">«Четвёртое крыло»</div>
+          <div class="w-row">
+            <span class="w-price">1 890 ₽</span>
+            <span class="chip success" style="font-size: 10px;">✓ вы забронировали</span>
+            <span class="chip surface" style="font-size: 10px;">через 5 дней</span>
+          </div>
+        </div>
+        <div class="w-trailing"><button>⋯</button></div>
+      </div>
+      <div class="cell-note">Green-tint background + «вы забронировали» + TTL countdown.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--accent); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Reserved by me — secret (PRO)
+      </div>
+      <div class="w reserved-secret-by-me">
+        <div class="w-thumb" style="background: rgba(124,106,255,0.15);">💄<div class="prio-dot">😊</div></div>
+        <div class="w-body">
+          <div class="w-title">Chanel Chance 100ml</div>
+          <div class="w-row">
+            <span class="w-price">9 800 ₽</span>
+            <span class="chip accent" style="font-size: 10px;">🔒 тайная бронь</span>
+          </div>
+          <div style="font-size: 11px; color: var(--accent); margin-top: 6px;">👁‍🗨 Анна не знает</div>
+        </div>
+        <div class="w-trailing"><button style="color: var(--accent);">⋯</button></div>
+      </div>
+      <div class="cell-note">Accent-tint background + 🔒 chip + «владелец не знает» — визуальная уникальность фичи.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--surface); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Reserved by someone else (имя скрыто)
+      </div>
+      <div class="w faint">
+        <div class="w-thumb">☕<div class="prio-dot">😊</div></div>
+        <div class="w-body">
+          <div class="w-title">Кофемашина DeLonghi</div>
+          <div class="w-row">
+            <span class="w-price">45 000 ₽</span>
+            <span class="chip surface" style="font-size: 10px;">⏳ уже забронировано</span>
+          </div>
+        </div>
+      </div>
+      <div class="cell-note">Opacity 0.55. Имя того кто забронировал — скрыто. Privacy by default.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--text-muted); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Purchased — out of gift pool
+      </div>
+      <div class="w faint-strong strike">
+        <div class="w-thumb">🎮<div class="prio-dot">🙂</div></div>
+        <div class="w-body">
+          <div class="w-title">Nintendo Switch OLED</div>
+          <div class="w-row">
+            <span class="chip surface" style="font-size: 10px;">💳 уже куплено</span>
+          </div>
+        </div>
+      </div>
+      <div class="cell-note">Показывается, но выбит из pool подарков. Нельзя забронировать повторно.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ MODIFIERS (stack on top of any state) ═══════════════ -->
+<div class="group">
+  <div class="group-header">
+    <h2>Modifiers — надстраиваются над любым state</h2>
+    <span class="hint">«TTL / группой / Санта — особый контекст»</span>
+  </div>
+
+  <div class="grid">
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--success); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Smart reservation — active TTL
+      </div>
+      <div class="w smart-active">
+        <div class="w-thumb">🎧<div class="prio-dot">😍</div></div>
+        <div class="w-body">
+          <div class="w-title">AirPods Pro 2 USB-C</div>
+          <div class="w-row">
+            <span class="chip success" style="font-size: 10px;">⏱ через 5 дней</span>
+            <span class="chip accent" style="font-size: 10px;">📝 заметка</span>
+          </div>
+          <div class="ttl-bar"><div class="ttl-fill" style="width: 72%;"></div></div>
+        </div>
+        <div class="w-trailing"><button>⋯</button></div>
+      </div>
+      <div class="cell-note">Прогресс-бар показывает сколько TTL осталось. Зелёный = спокойно.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--warning); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Smart reservation — expiring soon
+      </div>
+      <div class="w smart-expiring">
+        <div class="w-thumb warm">🕯<div class="prio-dot">🙂</div></div>
+        <div class="w-body">
+          <div class="w-title">Свечи Diptyque</div>
+          <div class="w-row">
+            <span class="chip warning" style="font-size: 10px;">⚠️ истекает через 6ч</span>
+            <span class="chip accent" style="font-size: 10px;">+ Продлить</span>
+          </div>
+          <div class="ttl-bar"><div class="ttl-fill low" style="width: 18%;"></div></div>
+        </div>
+        <div class="w-trailing"><button>⋯</button></div>
+      </div>
+      <div class="cell-note">Амбер border + warning-chip + кнопка «+ Продлить». Прогресс-бар оранжевый.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--prio-3); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Group gift (collaborative)
+      </div>
+      <div class="w group-gift">
+        <div class="w-thumb" style="background: rgba(240,78,110,0.12);">💍<div class="prio-dot">😍</div></div>
+        <div class="w-body">
+          <div class="w-title">iPad Pro 13"</div>
+          <div class="w-row">
+            <span class="w-price">129 990 ₽</span>
+            <span class="chip" style="background: rgba(240,78,110,0.12); color: var(--prio-3); font-size: 10px;">👥 3/5</span>
+            <span class="chip surface" style="font-size: 10px;">организатор</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Собрали 78 000 ₽ из 129 990 ₽</div>
+        </div>
+        <div class="w-trailing"><button>⋯</button></div>
+      </div>
+      <div class="cell-note">Rose-pink border + участников count + прогресс средств внизу текстом.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--prio-1); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Santa reservation (anonymous)
+      </div>
+      <div class="w santa">
+        <div class="w-thumb" style="background: rgba(107,127,212,0.15);">🎁<div class="prio-dot">😍</div></div>
+        <div class="w-body">
+          <div class="w-title">Настольная игра Wingspan</div>
+          <div class="w-row">
+            <span class="w-price">5 490 ₽</span>
+            <span class="chip" style="background: rgba(107,127,212,0.15); color: var(--prio-1); font-size: 10px;">🦌 Храбрый лось</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Тайный Санта · Семья 2026</div>
+        </div>
+      </div>
+      <div class="cell-note">Blue-tint border + animal-alias (не real имя). Контекст кампании внизу.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--warning); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Secret reservation — ITEM_UPDATED
+      </div>
+      <div class="w diff-warning">
+        <div class="w-thumb" style="background: rgba(124,106,255,0.15);">📚<div class="prio-dot">😊</div></div>
+        <div class="w-body">
+          <div class="w-title">«Четвёртое крыло»</div>
+          <div class="w-row">
+            <span class="chip accent" style="font-size: 10px;">🔒 тайная</span>
+            <span class="chip warning" style="font-size: 10px;">⚠️ владелец изменил</span>
+          </div>
+          <div style="font-size: 11px; color: var(--warning); margin-top: 6px;">Цена: 1 890 ₽ → <b>2 450 ₽</b></div>
+        </div>
+        <div class="w-trailing"><button>👁</button></div>
+      </div>
+      <div class="cell-note">Derived state: владелец поправил цену/фото/описание. Показываем diff.</div>
+    </div>
+
+    <div class="cell">
+      <div class="cell-label">
+        <span class="swatch" style="background: var(--danger); width: 10px; height: 10px; border-radius: 2px;"></span>
+        Secret reservation — PUBLIC_RESERVED_BY_OTHER
+      </div>
+      <div class="w conflict">
+        <div class="w-thumb">🎧<div class="prio-dot">😍</div></div>
+        <div class="w-body">
+          <div class="w-title">AirPods Pro 2</div>
+          <div class="w-row">
+            <span class="chip accent" style="font-size: 10px;">🔒 была тайная</span>
+            <span class="chip danger" style="font-size: 10px;">⚡ кто-то публично забронировал</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Превратить свою в публичную, чтобы закрепить?</div>
+        </div>
+        <div class="w-trailing">
+          <button style="color: var(--accent); font-size: 12px; font-weight: 700;">→Promote</button>
+        </div>
+      </div>
+      <div class="cell-note">Конфликт: pre-empt публично. Promote-button прямо в trailing — 1 tap fix.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ Bottom summary note ═══ -->
+<div style="max-width: 900px; margin: 40px auto 0;">
+  <div class="side-note" style="max-width: none;">
+    <span class="tag">State matrix — summary</span>
+    <h3>15 состояний — один card skeleton</h3>
+    <p>Все карточки шарят один скелет: <code>thumb + prio-dot + title + desc + price/meta-row + trailing</code>. Состояние меняет:</p>
+    <ul>
+      <li><b>background tint</b> — едва заметный диагональный gradient в tone-color (success-soft / accent-soft / warning-soft)</li>
+      <li><b>border color</b> — tone-color с opacity 0.2-0.35</li>
+      <li><b>chip-set</b> в meta-row — состояние сообщает себя текстом + иконкой</li>
+      <li><b>opacity</b> — 0.55 для «не для тебя», 0.45 для «уже неактуально»</li>
+      <li><b>strike-through</b> — для completed/deleted</li>
+      <li><b>progress-bar</b> — для TTL (зелёный / оранжевый для expiring)</li>
+    </ul>
+
+    <h4>Правила</h4>
+    <ul>
+      <li><b>Один tone на state</b>: success=reserved-by-me, accent=secret, warning=expiring, danger=conflict, muted=purchased/deleted</li>
+      <li><b>Privacy by default</b>: guest не видит имени reserver'а. Owner видит что забронировано но не кем.</li>
+      <li><b>Derived states видимы</b>: secret с ITEM_UPDATED / PUBLIC_RESERVED_BY_OTHER имеют свой уникальный визуал</li>
+      <li><b>Action inline</b>: conflict предлагает «Promote» прямо в карточке, expiring — «Продлить»</li>
+    </ul>
+
+    <h4>Что лучше current prod</h4>
+    <ul>
+      <li>В current prod reserved/purchased/secret рендерятся через разные conditionals — каждая карточка чуть своего вида</li>
+      <li>Secret reservation сейчас имеет свой отдельный экран; здесь — unified card в потоке</li>
+      <li>Diff (ITEM_UPDATED) показан inline, не в отдельной модалке</li>
+      <li>TTL progress-bar — цветной signal вместо просто text-count</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>

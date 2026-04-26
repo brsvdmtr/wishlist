@@ -1,0 +1,2399 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>WishBoard · Mini App UI Kit (v2 · 2026)</title>
+  <style>
+/*
+ * WishBoard Mini App — modern 2026 refresh.
+ * Softer glass surfaces, mesh-gradient hero, liquid-glass nav,
+ * chroma-shift accents, tighter rhythm, thinner hairlines.
+ */
+
+.wb-phone {
+  /* surfaces — dark (default) */
+  --wb-bg: #0F0F12;
+  --wb-bg-elev: #15151A;
+  --wb-surface: rgba(255,255,255,0.035);
+  --wb-surface-hover: rgba(255,255,255,0.06);
+  --wb-card: rgba(255,255,255,0.045);
+  --wb-card-strong: rgba(255,255,255,0.07);
+  --wb-nav-bg: rgba(15,15,18,0.72);
+  --wb-border: rgba(255,255,255,0.06);
+  --wb-border-strong: rgba(255,255,255,0.12);
+  --wb-hairline: rgba(255,255,255,0.04);
+
+  /* accent — violet (default) */
+  --wb-accent: #8B7BFF;
+  --wb-accent-strong: #B4A6FF;
+  --wb-accent-light: #C8BDFF;
+  --wb-accent-deep: #5B48E5;
+  --wb-accent-r: 139; --wb-accent-g: 123; --wb-accent-b: 255;
+
+  --wb-accent-soft: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.14);
+  --wb-accent-soft-strong: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.30);
+  --wb-accent-shadow: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.45);
+  --wb-accent-shadow-soft: rgba(var(--wb-accent-r), var(--wb-accent-g), var(--wb-accent-b), 0.25);
+
+  --wb-success: #4ADE80;
+  --wb-success-soft: rgba(74,222,128,0.14);
+  --wb-warning: #FBBF24;
+  --wb-warning-soft: rgba(251,191,36,0.14);
+  --wb-danger: #FB7185;
+  --wb-danger-soft: rgba(251,113,133,0.14);
+
+  --wb-text: #FFFFFF;
+  --wb-text-secondary: #C7CAD1;
+  --wb-text-muted: #8F94A3;
+  --wb-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+
+  /* chroma mesh — layered behind the phone content */
+  --wb-mesh:
+    radial-gradient(ellipse 80% 60% at 12% 0%, rgba(var(--wb-accent-r),var(--wb-accent-g),var(--wb-accent-b),0.22), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+    radial-gradient(ellipse 100% 70% at 50% 110%, rgba(var(--wb-accent-r),var(--wb-accent-g),var(--wb-accent-b),0.10), transparent 65%);
+}
+
+.wb-phone[data-theme="black"] {
+  --wb-bg: #000;
+  --wb-bg-elev: #070709;
+  --wb-surface: rgba(255,255,255,0.04);
+  --wb-surface-hover: rgba(255,255,255,0.07);
+  --wb-card: rgba(255,255,255,0.05);
+  --wb-card-strong: rgba(255,255,255,0.08);
+  --wb-nav-bg: rgba(0,0,0,0.78);
+  --wb-border: rgba(255,255,255,0.07);
+  --wb-border-strong: rgba(255,255,255,0.14);
+  --wb-hairline: rgba(255,255,255,0.05);
+  --wb-mesh:
+    radial-gradient(ellipse 80% 60% at 12% 0%, rgba(var(--wb-accent-r),var(--wb-accent-g),var(--wb-accent-b),0.18), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.06), transparent 55%);
+}
+
+.wb-phone[data-accent="blue"]  { --wb-accent:#5B8DEF; --wb-accent-strong:#86ABF5; --wb-accent-light:#B5CDF9; --wb-accent-deep:#2F61C8; --wb-accent-r:91; --wb-accent-g:141; --wb-accent-b:239; }
+.wb-phone[data-accent="pink"]  { --wb-accent:#F06AB4; --wb-accent-strong:#F892C9; --wb-accent-light:#FCBCDD; --wb-accent-deep:#C53F88; --wb-accent-r:240; --wb-accent-g:106; --wb-accent-b:180; }
+.wb-phone[data-accent="green"] { --wb-accent:#34C98A; --wb-accent-strong:#58D9A3; --wb-accent-light:#88E6BC; --wb-accent-deep:#1E9765; --wb-accent-r:52; --wb-accent-g:201; --wb-accent-b:138; }
+
+.wb-app *, .wb-app *::before, .wb-app *::after { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+.wb-app { font-family:var(--wb-font); color:var(--wb-text); line-height:1.35; letter-spacing:-0.011em; }
+
+.wb-phone {
+  width:375px; min-height:812px;
+  background:var(--wb-bg); border-radius:52px;
+  position:relative; overflow:hidden;
+  box-shadow: 0 60px 120px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06), 0 0 0 10px #111114, 0 0 0 11px #000;
+  flex-shrink:0;
+  isolation:isolate;
+}
+.wb-phone::before { content:''; position:absolute; inset:0; background:var(--wb-mesh); pointer-events:none; z-index:0; }
+.wb-phone > * { position:relative; z-index:1; }
+
+.wb-status { height:52px; padding:18px 28px 0; display:flex; justify-content:space-between; align-items:flex-start; font-size:15px; font-weight:600; }
+.wb-status-icons { display:flex; gap:6px; align-items:center; font-size:13px }
+
+.wb-hdr { height:56px; padding:8px 14px; display:flex; align-items:center; gap:8px; }
+.wb-hdr-btn { width:40px; height:40px; border-radius:14px; background:var(--wb-surface); border:1px solid var(--wb-border); backdrop-filter:blur(20px) saturate(140%); display:flex; align-items:center; justify-content:center; color:var(--wb-text); font-size:17px; cursor:pointer; flex-shrink:0; transition:all .15s ease; }
+.wb-hdr-btn:active { background:var(--wb-surface-hover); transform:scale(.94); }
+.wb-hdr-title { flex:1; text-align:center; font-size:16px; font-weight:650; letter-spacing:-0.018em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--wb-text); }
+.wb-hdr-sub { font-size:11px; color:var(--wb-text-muted); font-weight:500; margin-top:1px; letter-spacing:0 }
+
+.wb-tabs { display:flex; gap:2px; padding:3px; background:var(--wb-surface); border:1px solid var(--wb-border); border-radius:14px; margin:0 16px 14px; backdrop-filter:blur(20px); }
+.wb-tab { flex:1; padding:9px 10px; border-radius:11px; text-align:center; font-size:13px; font-weight:600; color:var(--wb-text-muted); cursor:pointer; transition:all .18s cubic-bezier(.4,0,.2,1); position:relative; letter-spacing:-0.005em; }
+.wb-tab.active { background:linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05)); color:var(--wb-text); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 3px rgba(0,0,0,0.3); }
+.wb-tab .wb-tab-badge { position:absolute; top:3px; right:6px; width:16px; height:16px; border-radius:50%; background:var(--wb-accent); color:#fff; font-size:9px; font-weight:700; display:flex; align-items:center; justify-content:center; line-height:1 }
+
+.wb-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:0 16px 18px; }
+.wb-stat { background:var(--wb-card); border:1px solid var(--wb-border); border-radius:16px; padding:12px 6px 10px; text-align:center; backdrop-filter:blur(16px); }
+.wb-stat-n { font-size:22px; font-weight:700; letter-spacing:-0.03em; line-height:1; color:var(--wb-text); font-feature-settings:'tnum'; }
+.wb-stat-l { font-size:10px; color:var(--wb-text-muted); margin-top:4px; letter-spacing:0.1px; }
+.wb-stat.accent  .wb-stat-n { color:var(--wb-accent-strong); }
+.wb-stat.success .wb-stat-n { color:var(--wb-success); }
+.wb-stat.warning .wb-stat-n { color:var(--wb-warning); }
+
+.wb-section-hdr { display:flex; align-items:baseline; justify-content:space-between; padding:0 20px; margin-bottom:10px; }
+.wb-section-hdr h2 { margin:0; font-size:12px; font-weight:600; color:var(--wb-text-muted); text-transform:uppercase; letter-spacing:0.7px; }
+.wb-section-hdr .wb-link { font-size:13px; color:var(--wb-accent-strong); font-weight:550; cursor:pointer; }
+
+.wb-wl-card { background:var(--wb-card); border:1px solid var(--wb-border); border-radius:22px; padding:18px; margin:0 16px 10px; cursor:pointer; transition:all .2s cubic-bezier(.4,0,.2,1); backdrop-filter:blur(16px); position:relative; overflow:hidden; }
+.wb-wl-card:active { transform:scale(.99); background:var(--wb-card-strong); }
+.wb-wl-card.highlight { background:linear-gradient(135deg, var(--wb-card-strong), var(--wb-accent-soft)); border-color:var(--wb-accent-soft-strong); }
+.wb-wl-card.highlight::before { content:''; position:absolute; top:-40%; right:-20%; width:180px; height:180px; background:radial-gradient(circle, var(--wb-accent-soft-strong), transparent 65%); pointer-events:none; }
+.wb-wl-card-top { display:flex; align-items:flex-start; gap:14px; margin-bottom:14px; position:relative; }
+.wb-wl-emoji { width:54px; height:54px; border-radius:18px; background:linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft)); display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08); }
+.wb-wl-meta { flex:1; min-width:0; }
+.wb-wl-title { font-size:17px; font-weight:650; letter-spacing:-0.02em; color:var(--wb-text); }
+.wb-wl-sub { font-size:13px; color:var(--wb-text-secondary); margin-top:3px; letter-spacing:-0.005em }
+.wb-wl-progress { height:3px; background:rgba(255,255,255,0.06); border-radius:2px; overflow:hidden; }
+.wb-wl-progress > div { height:100%; background:linear-gradient(90deg, var(--wb-accent), var(--wb-accent-strong)); border-radius:2px; box-shadow: 0 0 12px var(--wb-accent-shadow-soft); }
+.wb-wl-foot { display:flex; align-items:center; justify-content:space-between; margin-top:12px; }
+.wb-wl-foot-txt { font-size:12px; color:var(--wb-text-muted); font-feature-settings:'tnum'; }
+
+.wb-stack { display:flex; align-items:center; }
+.wb-av { border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:650; flex-shrink:0; width:28px; height:28px; font-size:11px; border:2px solid var(--wb-bg); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+.wb-av:not(:first-child) { margin-left:-8px; }
+.wb-av.g1 { background:linear-gradient(135deg,#8B7BFF,#B4A6FF); }
+.wb-av.g2 { background:linear-gradient(135deg,#FBBF24,#F59E0B); }
+.wb-av.g3 { background:linear-gradient(135deg,#4ADE80,#10B981); }
+.wb-av.g4 { background:linear-gradient(135deg,#F892C9,#F06AB4); }
+.wb-av.g5 { background:linear-gradient(135deg,#86ABF5,#5B8DEF); }
+.wb-av.plus { background:var(--wb-surface); color:var(--wb-text-secondary); }
+
+.wb-wish { display:flex; gap:14px; align-items:center; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:18px; padding:12px 14px 12px 12px; margin:0 16px 8px; cursor:pointer; transition:all .15s ease; backdrop-filter:blur(14px); }
+.wb-wish:active { background:var(--wb-card-strong); transform:scale(.995); }
+.wb-wish-thumb { width:50px; height:50px; border-radius:14px; background:linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft)); display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
+.wb-wish-body { flex:1; min-width:0; }
+.wb-wish-t { font-size:15px; font-weight:600; letter-spacing:-0.015em; line-height:1.3; color:var(--wb-text); }
+.wb-wish-price { font-size:13px; font-weight:650; margin-top:2px; color:var(--wb-text-secondary); font-feature-settings:'tnum'; }
+.wb-wish-meta { display:flex; gap:6px; align-items:center; margin-top:6px; font-size:11px; color:var(--wb-text-muted); flex-wrap:wrap }
+.wb-wish-trail { font-size:18px; color:var(--wb-text-muted); flex-shrink:0; }
+.wb-wish.reserved-by-me { background:linear-gradient(135deg, var(--wb-card), rgba(74,222,128,0.09)); border-color:rgba(74,222,128,0.28); }
+.wb-wish.reserved-by-me .wb-wish-thumb { background:linear-gradient(135deg, rgba(74,222,128,0.28), rgba(74,222,128,0.10)); }
+.wb-wish.done { opacity:.45; }
+.wb-wish.done .wb-wish-t { text-decoration:line-through; color:var(--wb-text-muted); }
+
+.wb-chip { display:inline-flex; align-items:center; gap:3px; padding:3px 8px; border-radius:7px; font-size:10px; font-weight:650; white-space:nowrap; line-height:1.4; letter-spacing:0.1px; }
+.wb-chip.accent { background:var(--wb-accent-soft); color:var(--wb-accent-strong); }
+.wb-chip.success { background:var(--wb-success-soft); color:var(--wb-success); }
+.wb-chip.warning { background:var(--wb-warning-soft); color:var(--wb-warning); }
+.wb-chip.danger  { background:var(--wb-danger-soft);  color:var(--wb-danger); }
+.wb-chip.pro { background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color:#fff; border-radius:100px; padding:3px 9px; letter-spacing:0.4px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); }
+.wb-chip.prio3 { background: rgba(251,113,133,0.18); color:#FB7185; }
+.wb-chip.prio2 { background: rgba(251,191,36,0.18); color:#FBBF24; }
+
+.wb-fab { position:absolute; right:20px; bottom:96px; width:58px; height:58px; border-radius:20px; background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color:#fff; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:300; box-shadow: 0 14px 40px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.24), 0 1px 2px rgba(0,0,0,0.3); cursor:pointer; z-index:5; border:none; transition:transform .15s ease; }
+.wb-fab:active { transform:scale(.92); }
+
+.wb-nav { position:absolute; left:10px; right:10px; bottom:14px; display:flex; justify-content:space-around; padding:8px 6px 8px; background:var(--wb-nav-bg); backdrop-filter:blur(28px) saturate(180%); border:1px solid var(--wb-border); border-radius:26px; box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08); }
+.wb-nav-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 4px; color:var(--wb-text-muted); font-size:10px; font-weight:550; cursor:pointer; position:relative; transition:color .2s ease; letter-spacing:0 }
+.wb-nav-item .wb-nav-ic { font-size:20px; line-height:1; position:relative }
+.wb-nav-badge { position:absolute; top:-4px; right:-8px; min-width:16px; height:16px; padding:0 4px; background:var(--wb-danger); color:#fff; border-radius:10px; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; border:2px solid var(--wb-nav-bg); }
+.wb-nav-item.active { color:var(--wb-accent-strong); }
+.wb-nav-item.active::after { content:''; position:absolute; bottom:-3px; left:50%; transform:translateX(-50%); width:14px; height:3px; background:var(--wb-accent); border-radius:100px; box-shadow: 0 0 8px var(--wb-accent-shadow); }
+
+.wb-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:15px 22px; border-radius:18px; border:none; font-family:inherit; font-size:15px; font-weight:650; letter-spacing:-0.015em; cursor:pointer; min-height:52px; width:100%; transition:all .15s cubic-bezier(.4,0,.2,1); }
+.wb-btn:active { transform:scale(.98); }
+.wb-btn.primary { background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color:#fff; box-shadow: 0 12px 32px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.22); }
+.wb-btn.secondary { background:var(--wb-accent-soft); color:var(--wb-accent-strong); border:1px solid var(--wb-accent-soft-strong); }
+.wb-btn.surface { background:var(--wb-card-strong); color:var(--wb-text); border:1px solid var(--wb-border-strong); backdrop-filter:blur(14px); }
+.wb-btn.ghost { background:transparent; color:var(--wb-text-secondary); }
+
+.wb-scroll { overflow-y:auto; scrollbar-width:none; padding-bottom:120px; height:calc(812px - 52px - 56px); }
+.wb-scroll::-webkit-scrollbar { display:none; }
+
+.wb-hero { margin:4px 16px 16px; padding:22px; border-radius:26px; color:#fff; position:relative; overflow:hidden;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(255,255,255,0.25), transparent 45%),
+    radial-gradient(circle at 100% 100%, var(--wb-accent-deep), transparent 55%),
+    linear-gradient(135deg, var(--wb-accent) 0%, var(--wb-accent-strong) 100%);
+  box-shadow: 0 20px 50px -12px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.24); }
+.wb-hero::before { content:''; position:absolute; top:-30%; right:-10%; width:260px; height:260px; background: radial-gradient(circle, rgba(255,255,255,0.22), transparent 70%); pointer-events:none; filter: blur(8px); }
+.wb-hero-top { display:flex; gap:14px; align-items:flex-start; position:relative; z-index:1; }
+.wb-hero-emoji { font-size:44px; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.2)); }
+.wb-hero-title { font-size:26px; font-weight:700; letter-spacing:-0.035em; line-height:1.05 }
+.wb-hero-sub { font-size:13px; opacity:0.85; margin-top:4px; letter-spacing:-0.005em }
+.wb-hero-stats { display:flex; gap:18px; margin-top:18px; position:relative; z-index:1; }
+.wb-hero-stat { flex:1 }
+.wb-hero-stat-n { font-size:24px; font-weight:700; letter-spacing:-0.03em; font-feature-settings:'tnum' }
+.wb-hero-stat-l { font-size:11px; opacity:0.75; margin-top:2px; }
+
+.wb-banner { display:flex; gap:11px; margin:0 16px 12px; padding:13px 15px; border-radius:16px; font-size:13px; line-height:1.5; align-items:flex-start; color:var(--wb-text); backdrop-filter:blur(14px); }
+.wb-banner-ic { flex-shrink:0; font-size:17px; margin-top:1px; }
+.wb-banner.info { background:var(--wb-accent-soft); border:1px solid var(--wb-accent-soft-strong); }
+.wb-banner.success { background:var(--wb-success-soft); border:1px solid rgba(74,222,128,0.28); }
+
+.wb-onb { height:calc(812px - 52px); display:flex; flex-direction:column; padding:24px 28px 40px; }
+.wb-onb-visual { flex:1; display:flex; align-items:center; justify-content:center; position:relative; }
+.wb-onb-glow { width:280px; height:280px; border-radius:50%;
+  background: radial-gradient(circle, var(--wb-accent-shadow) 0%, transparent 70%);
+  position:absolute; filter: blur(20px); }
+.wb-onb-glow::after { content:''; position:absolute; inset:40px; border-radius:50%;
+  background: radial-gradient(circle, var(--wb-accent-strong) 0%, transparent 65%); opacity:.4; filter: blur(30px); }
+.wb-onb-emoji { font-size:128px; position:relative; filter: drop-shadow(0 20px 40px var(--wb-accent-shadow)); }
+.wb-onb h1 { font-size:30px; font-weight:700; letter-spacing:-0.035em; margin:0 0 10px; text-align:center; color:var(--wb-text); line-height:1.08; text-wrap:pretty; }
+.wb-onb p { font-size:15px; color:var(--wb-text-secondary); margin:0 0 28px; text-align:center; line-height:1.5; letter-spacing:-0.005em; text-wrap:pretty; }
+.wb-onb-dots { display:flex; gap:5px; justify-content:center; margin-bottom:20px; }
+.wb-onb-dots span { width:6px; height:6px; border-radius:50%; background:var(--wb-text-muted); opacity:.25; transition:all .25s ease; }
+.wb-onb-dots span.active { background:var(--wb-accent); opacity:1; width:22px; border-radius:3px; }
+
+.wb-paywall-title { font-size:32px; font-weight:700; letter-spacing:-0.035em; text-align:center; margin:14px 16px 6px; color:var(--wb-text); line-height:1.05 }
+.wb-paywall-title .wb-gradient-text { background:linear-gradient(135deg, var(--wb-accent) 20%, var(--wb-accent-strong) 80%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+.wb-paywall-sub { font-size:15px; color:var(--wb-text-secondary); text-align:center; margin:0 24px 22px; line-height:1.45; letter-spacing:-0.005em; text-wrap:pretty; }
+.wb-feat { display:flex; align-items:center; gap:14px; padding:14px 16px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:18px; margin:0 16px 8px; backdrop-filter:blur(14px); }
+.wb-feat-ic { width:42px; height:42px; border-radius:13px; background:linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft)); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08) }
+.wb-feat-t { font-size:15px; font-weight:600; color:var(--wb-text); letter-spacing:-0.012em }
+.wb-feat-s { font-size:12.5px; color:var(--wb-text-secondary); margin-top:2px; letter-spacing:-0.003em }
+
+.wb-sheet-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:10; opacity:0; pointer-events:none; transition:opacity .25s; }
+.wb-sheet-backdrop.open { opacity:1; pointer-events:auto; }
+.wb-sheet { position:absolute; left:0; right:0; bottom:0; background:var(--wb-bg-elev); border:1px solid var(--wb-border); border-bottom:none; border-radius:28px 28px 0 0; padding:24px; z-index:11; transform:translateY(100%); transition:transform .32s cubic-bezier(.25,.8,.35,1); box-shadow: 0 -20px 60px rgba(0,0,0,0.5); }
+.wb-sheet.open { transform:translateY(0); }
+.wb-sheet-handle { width:40px; height:4px; background:rgba(255,255,255,0.18); border-radius:2px; margin:-10px auto 20px; }
+.wb-sheet-title { font-size:19px; font-weight:650; text-align:center; letter-spacing:-0.025em; margin-bottom:8px; color:var(--wb-text); text-wrap:pretty; }
+.wb-sheet-sub { font-size:13.5px; color:var(--wb-text-secondary); text-align:center; margin-bottom:20px; line-height:1.5; text-wrap:pretty; }
+
+/* ─── Settings ─── */
+.wb-set-group { margin:0 16px 16px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:20px; overflow:hidden; backdrop-filter:blur(16px); }
+.wb-set-row { display:flex; align-items:center; gap:14px; padding:14px 16px; border-top:1px solid var(--wb-hairline); cursor:pointer; }
+.wb-set-row:first-child { border-top:none; }
+.wb-set-row:active { background:var(--wb-surface-hover); }
+.wb-set-row-ic { width:38px; height:38px; border-radius:12px; background:linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft)); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.wb-set-row-body { flex:1; min-width:0 }
+.wb-set-row-t { font-size:15px; font-weight:600; color:var(--wb-text); display:flex; align-items:center; gap:8px; letter-spacing:-0.012em }
+.wb-set-row-s { font-size:12.5px; color:var(--wb-text-secondary); margin-top:2px; }
+.wb-set-row-trail { font-size:20px; color:var(--wb-text-muted); }
+.wb-toggle { width:46px; height:28px; border-radius:100px; background:rgba(255,255,255,0.08); border:1px solid var(--wb-border); position:relative; flex-shrink:0; transition:all .2s ease; }
+.wb-toggle::after { content:''; position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%; background:#fff; transition:all .25s cubic-bezier(.4,0,.2,1); box-shadow: 0 1px 3px rgba(0,0,0,0.35), 0 0 0 0.5px rgba(0,0,0,0.05); }
+.wb-toggle.on { background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); border-color:transparent; box-shadow: 0 0 16px var(--wb-accent-shadow-soft) }
+.wb-toggle.on::after { left:22px; }
+
+.wb-accent-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:14px; }
+.wb-accent-swatch { position:relative; aspect-ratio:1/1; border-radius:16px; display:flex; align-items:flex-end; justify-content:space-between; padding:10px; cursor:pointer; border:2px solid transparent; transition:all .2s cubic-bezier(.4,0,.2,1); overflow:hidden; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 4px 12px rgba(0,0,0,0.3); }
+.wb-accent-swatch::before { content:''; position:absolute; inset:0; background:radial-gradient(circle at 30% 20%, rgba(255,255,255,0.25), transparent 55%); pointer-events:none }
+.wb-accent-swatch .wb-accent-swatch-name { color:#fff; font-size:11px; font-weight:650; letter-spacing:0.2px; position:relative; text-shadow: 0 1px 2px rgba(0,0,0,0.3) }
+.wb-accent-swatch.active { border-color:#fff; box-shadow: 0 0 0 3px rgba(255,255,255,0.18), inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 20px rgba(0,0,0,0.35); transform:scale(1.02); }
+.wb-accent-swatch:active { transform:scale(.96); }
+.wb-accent-swatch.locked::after { content:'🔒'; position:absolute; top:7px; right:8px; font-size:12px; z-index:1 }
+.wb-accent-swatch.locked { opacity:.6 }
+
+.wb-theme-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:14px; }
+.wb-theme-card { background:var(--wb-surface); border:2px solid var(--wb-border); border-radius:18px; padding:0; cursor:pointer; overflow:hidden; transition:all .2s ease; position:relative; }
+.wb-theme-card.active { border-color:var(--wb-accent); box-shadow: 0 0 0 3px var(--wb-accent-soft); }
+.wb-theme-card:active { transform:scale(.98); }
+.wb-theme-preview { height:84px; display:flex; align-items:flex-end; padding:10px; gap:4px; position:relative; }
+.wb-theme-preview.dark { background:#0F0F12; }
+.wb-theme-preview.dark::before { content:''; position:absolute; inset:0; background:var(--wb-mesh); opacity:.7 }
+.wb-theme-preview.black { background:#000; }
+.wb-theme-preview-card { height:36px; flex:1; border-radius:10px; background:rgba(255,255,255,0.08); position:relative; backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.06) }
+.wb-theme-preview.black .wb-theme-preview-card { background:rgba(255,255,255,0.05); }
+.wb-theme-info { padding:11px 13px; display:flex; align-items:center; justify-content:space-between; }
+.wb-theme-info-t { font-size:14px; font-weight:650; color:var(--wb-text); letter-spacing:-0.012em }
+.wb-theme-info-s { font-size:11.5px; color:var(--wb-text-muted); margin-top:1px; }
+.wb-theme-info-lock { font-size:14px; }
+
+/* ─── Create wish form ─── */
+.wb-form-label { font-size:11px; font-weight:600; color:var(--wb-text-muted); text-transform:uppercase; letter-spacing:0.7px; margin:0 20px 8px; }
+.wb-input-wrap { margin:0 16px 14px; position:relative; }
+.wb-input { width:100%; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:16px; padding:14px 16px; font-family:inherit; font-size:15px; font-weight:500; color:var(--wb-text); outline:none; transition:all .18s ease; letter-spacing:-0.012em; backdrop-filter:blur(14px); }
+.wb-input::placeholder { color:var(--wb-text-muted); font-weight:450 }
+.wb-input:focus { border-color:var(--wb-accent); box-shadow: 0 0 0 4px var(--wb-accent-soft); background:var(--wb-card-strong); }
+.wb-input.url { padding-right:80px; font-feature-settings:'tnum' }
+.wb-input-action { position:absolute; right:8px; top:50%; transform:translateY(-50%); background:var(--wb-accent-soft); color:var(--wb-accent-strong); border:1px solid var(--wb-accent-soft-strong); border-radius:11px; padding:8px 12px; font-family:inherit; font-size:12px; font-weight:650; cursor:pointer; letter-spacing:0; }
+.wb-input-action:active { transform:translateY(-50%) scale(.96) }
+.wb-textarea { min-height:72px; resize:none; line-height:1.45; font-weight:500 }
+
+.wb-preview { margin:4px 16px 18px; padding:14px; background:linear-gradient(135deg, var(--wb-card-strong), var(--wb-accent-soft)); border:1px solid var(--wb-accent-soft-strong); border-radius:20px; display:flex; gap:14px; align-items:center; backdrop-filter:blur(14px); position:relative; overflow:hidden; animation:wbFadeIn .32s cubic-bezier(.4,0,.2,1); }
+.wb-preview::before { content:''; position:absolute; top:-40%; right:-20%; width:200px; height:200px; background:radial-gradient(circle, var(--wb-accent-soft-strong), transparent 70%); pointer-events:none; }
+@keyframes wbFadeIn { from { opacity:0; transform:translateY(-4px) } to { opacity:1; transform:translateY(0) } }
+.wb-preview-thumb { width:72px; height:72px; border-radius:16px; background:linear-gradient(135deg,#1a1a22,#0f0f14); display:flex; align-items:center; justify-content:center; font-size:36px; flex-shrink:0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.3); position:relative; z-index:1 }
+.wb-preview-body { flex:1; min-width:0; position:relative; z-index:1 }
+.wb-preview-store { display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:700; color:var(--wb-accent-strong); background:var(--wb-accent-soft); padding:3px 8px; border-radius:6px; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:5px }
+.wb-preview-t { font-size:14.5px; font-weight:600; color:var(--wb-text); letter-spacing:-0.012em; line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical }
+.wb-preview-p { font-size:14px; font-weight:700; color:var(--wb-text); margin-top:4px; font-feature-settings:'tnum' }
+.wb-preview-old { font-size:12px; color:var(--wb-text-muted); text-decoration:line-through; margin-left:6px; font-weight:500 }
+
+.wb-prio-row { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:0 16px 14px; }
+.wb-prio { padding:12px 8px; border-radius:14px; background:var(--wb-card); border:1px solid var(--wb-border); text-align:center; cursor:pointer; transition:all .15s ease; backdrop-filter:blur(10px) }
+.wb-prio:active { transform:scale(.97) }
+.wb-prio-ic { font-size:22px; line-height:1; margin-bottom:4px }
+.wb-prio-lbl { font-size:11.5px; font-weight:600; color:var(--wb-text-secondary); letter-spacing:-0.005em }
+.wb-prio.active.p1 { background:rgba(143,148,163,0.12); border-color:rgba(143,148,163,0.35); }
+.wb-prio.active.p2 { background:rgba(251,191,36,0.14); border-color:rgba(251,191,36,0.4); }
+.wb-prio.active.p2 .wb-prio-lbl { color:var(--wb-warning) }
+.wb-prio.active.p3 { background:rgba(251,113,133,0.14); border-color:rgba(251,113,133,0.4); }
+.wb-prio.active.p3 .wb-prio-lbl { color:var(--wb-danger) }
+
+.wb-wishlist-pick { margin:0 16px 14px; padding:14px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:16px; display:flex; align-items:center; gap:12px; cursor:pointer; backdrop-filter:blur(14px); }
+.wb-wishlist-pick:active { background:var(--wb-card-strong) }
+.wb-wishlist-pick-ic { width:42px; height:42px; border-radius:13px; background:linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft)); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0 }
+.wb-wishlist-pick-body { flex:1; min-width:0 }
+.wb-wishlist-pick-label { font-size:11px; font-weight:600; color:var(--wb-text-muted); text-transform:uppercase; letter-spacing:0.5px }
+.wb-wishlist-pick-name { font-size:15px; font-weight:600; color:var(--wb-text); letter-spacing:-0.012em; margin-top:2px }
+.wb-wishlist-pick-trail { font-size:18px; color:var(--wb-text-muted) }
+
+.wb-cta-bar { position:absolute; left:0; right:0; bottom:0; padding:16px 16px calc(16px + env(safe-area-inset-bottom)); background:linear-gradient(180deg, transparent, var(--wb-bg) 40%); pointer-events:none }
+.wb-cta-bar > * { pointer-events:auto }
+.wb-segmented { display:flex; gap:6px; margin:0 16px 14px; }
+.wb-seg { flex:1; padding:10px 12px; border-radius:12px; background:var(--wb-card); border:1px solid var(--wb-border); text-align:center; font-size:12.5px; font-weight:600; color:var(--wb-text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; backdrop-filter:blur(10px); transition:all .15s ease }
+.wb-seg.active { background:linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04)); color:var(--wb-text); border-color:var(--wb-border-strong); box-shadow: inset 0 1px 0 rgba(255,255,255,0.1) }
+.wb-seg-ic { font-size:14px }
+
+/* ─── Profile ─── */
+.wb-profile-hero { margin:8px 16px 18px; padding:24px 20px 22px; border-radius:28px; position:relative; overflow:hidden; text-align:center;
+  background:
+    radial-gradient(circle at 50% 120%, var(--wb-accent-deep), transparent 60%),
+    radial-gradient(circle at 100% 0%, var(--wb-accent-strong), transparent 50%),
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+    var(--wb-card-strong);
+  border:1px solid var(--wb-border);
+  box-shadow: 0 20px 50px -20px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.08);
+  backdrop-filter:blur(20px);
+}
+.wb-profile-hero::before { content:''; position:absolute; inset:-1px; border-radius:inherit;
+  background: conic-gradient(from 140deg at 50% 50%, transparent 0deg, var(--wb-accent-soft-strong) 80deg, transparent 160deg);
+  opacity:.35; pointer-events:none; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite:exclude; padding:1px;
+}
+.wb-avatar-xl { width:88px; height:88px; border-radius:50%; background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); display:flex; align-items:center; justify-content:center; color:#fff; font-size:36px; font-weight:700; margin:0 auto 12px; position:relative; box-shadow: 0 12px 32px var(--wb-accent-shadow), inset 0 2px 0 rgba(255,255,255,0.25); letter-spacing:-0.02em }
+.wb-avatar-xl::after { content:''; position:absolute; inset:-3px; border-radius:50%; border:2px solid rgba(255,255,255,0.12); }
+.wb-profile-name { font-size:22px; font-weight:700; letter-spacing:-0.025em; color:var(--wb-text); margin-bottom:2px; display:inline-flex; align-items:center; gap:8px; justify-content:center; flex-wrap:wrap }
+.wb-profile-handle { font-size:13.5px; color:var(--wb-text-secondary); font-weight:500; font-feature-settings:'tnum'; letter-spacing:-0.005em; }
+.wb-profile-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:18px; position:relative }
+.wb-profile-stat { text-align:center }
+.wb-profile-stat-n { font-size:22px; font-weight:700; letter-spacing:-0.02em; color:var(--wb-text); font-feature-settings:'tnum' }
+.wb-profile-stat-l { font-size:11px; color:var(--wb-text-secondary); margin-top:3px; letter-spacing:0.1px }
+.wb-profile-divider { width:1px; background:linear-gradient(180deg, transparent, var(--wb-border-strong), transparent); }
+
+.wb-quick-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:0 16px 18px; }
+.wb-quick { background:var(--wb-card); border:1px solid var(--wb-border); border-radius:16px; padding:12px 6px; text-align:center; cursor:pointer; backdrop-filter:blur(14px); transition:all .15s ease }
+.wb-quick:active { transform:scale(.96); background:var(--wb-card-strong) }
+.wb-quick-ic { font-size:22px; line-height:1; margin-bottom:6px; }
+.wb-quick-lbl { font-size:11px; font-weight:600; color:var(--wb-text-secondary); letter-spacing:-0.005em; line-height:1.2 }
+
+/* ─── Calendar ─── */
+.wb-cal-header { display:flex; align-items:center; justify-content:space-between; padding:0 20px 12px; }
+.wb-cal-title { font-size:22px; font-weight:700; letter-spacing:-0.025em; color:var(--wb-text); }
+.wb-cal-nav { display:flex; gap:6px; }
+.wb-cal-nav-btn { width:34px; height:34px; border-radius:12px; background:var(--wb-surface); border:1px solid var(--wb-border); color:var(--wb-text-secondary); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:15px; backdrop-filter:blur(12px); }
+.wb-cal-nav-btn:active { transform:scale(.92) }
+.wb-cal-weekdays { display:grid; grid-template-columns:repeat(7,1fr); padding:0 12px 6px; }
+.wb-cal-wd { text-align:center; font-size:10px; font-weight:600; color:var(--wb-text-muted); text-transform:uppercase; letter-spacing:0.6px; padding:4px 0 }
+.wb-cal-wd.we { color:var(--wb-text-muted); opacity:.55 }
+.wb-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); padding:0 12px 14px; gap:2px }
+.wb-cal-cell { aspect-ratio:1/1; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:12px; font-size:13px; font-weight:550; color:var(--wb-text-secondary); cursor:pointer; transition:all .15s ease; font-feature-settings:'tnum' }
+.wb-cal-cell.out { color:var(--wb-text-muted); opacity:.3 }
+.wb-cal-cell.today { background:var(--wb-surface); color:var(--wb-text); border:1px solid var(--wb-border-strong) }
+.wb-cal-cell.event { color:var(--wb-text); font-weight:650 }
+.wb-cal-cell.event::before { content:''; position:absolute; inset:0; border-radius:12px; background:var(--wb-accent-soft); border:1px solid var(--wb-accent-soft-strong); z-index:-1 }
+.wb-cal-cell.event.bday::before { background:rgba(240,106,180,0.15); border-color:rgba(240,106,180,0.4) }
+.wb-cal-cell.event.ny::before { background:rgba(74,222,128,0.15); border-color:rgba(74,222,128,0.4) }
+.wb-cal-cell.event.wed::before { background:rgba(251,191,36,0.14); border-color:rgba(251,191,36,0.4) }
+.wb-cal-cell.selected::before { content:''; position:absolute; inset:0; border-radius:12px; background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); z-index:-1; box-shadow: 0 6px 16px var(--wb-accent-shadow) }
+.wb-cal-cell.selected { color:#fff }
+.wb-cal-emoji { font-size:10px; line-height:1; margin-top:1px }
+
+.wb-event-card { display:flex; gap:14px; align-items:center; margin:0 16px 10px; padding:14px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:18px; cursor:pointer; backdrop-filter:blur(14px); position:relative; overflow:hidden }
+.wb-event-card:active { background:var(--wb-card-strong) }
+.wb-event-date { width:54px; height:54px; border-radius:14px; background:linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); border:1px solid var(--wb-border); display:flex; flex-direction:column; align-items:center; justify-content:center; flex-shrink:0; position:relative }
+.wb-event-date.accent { background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); border-color:transparent; color:#fff; box-shadow: 0 6px 18px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.22) }
+.wb-event-date.pink { background:linear-gradient(135deg, #F06AB4, #C53F88); border-color:transparent; color:#fff; box-shadow: 0 6px 18px rgba(240,106,180,0.35), inset 0 1px 0 rgba(255,255,255,0.22) }
+.wb-event-date.green { background:linear-gradient(135deg, #34C98A, #1E9765); border-color:transparent; color:#fff; box-shadow: 0 6px 18px rgba(52,201,138,0.3), inset 0 1px 0 rgba(255,255,255,0.22) }
+.wb-event-date.warn { background:linear-gradient(135deg, #FBBF24, #D97706); border-color:transparent; color:#fff }
+.wb-event-date-d { font-size:22px; font-weight:750; line-height:1; letter-spacing:-0.025em; font-feature-settings:'tnum' }
+.wb-event-date-m { font-size:9px; font-weight:700; opacity:.85; margin-top:2px; text-transform:uppercase; letter-spacing:0.5px }
+.wb-event-body { flex:1; min-width:0 }
+.wb-event-t { font-size:15px; font-weight:650; color:var(--wb-text); letter-spacing:-0.012em; line-height:1.25 }
+.wb-event-s { font-size:12.5px; color:var(--wb-text-secondary); margin-top:3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap }
+.wb-event-countdown { font-size:11px; font-weight:700; color:var(--wb-accent-strong); background:var(--wb-accent-soft); padding:2px 7px; border-radius:6px; letter-spacing:0.1px }
+.wb-event-ic { font-size:20px; margin-right:2px }
+.wb-event-trail { font-size:18px; color:var(--wb-text-muted); }
+
+/* ─── Profile v2 ─── */
+.wb-profile-cover { position:relative; margin:0 16px 0; height:120px; border-radius:24px 24px 0 0; overflow:hidden;
+  background: radial-gradient(circle at 30% 30%, var(--wb-accent), transparent 55%),
+              radial-gradient(circle at 85% 70%, var(--wb-accent-deep), transparent 60%),
+              linear-gradient(135deg, #2A1F5E, #1A0F4A);
+}
+.wb-profile-cover::after { content:''; position:absolute; inset:0;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(255,255,255,0.08) 1px, transparent 2px),
+    radial-gradient(circle at 70% 60%, rgba(255,255,255,0.06) 1.5px, transparent 3px),
+    radial-gradient(circle at 45% 80%, rgba(255,255,255,0.05) 1px, transparent 2px);
+  background-size: 120px 120px, 180px 180px, 90px 90px;
+  mix-blend-mode: screen;
+}
+.wb-profile-cover-edit { position:absolute; top:10px; right:10px; width:32px; height:32px; border-radius:10px; background:rgba(0,0,0,0.35); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.14); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; cursor:pointer; z-index:2 }
+.wb-profile-card { margin:-46px 16px 16px; padding:52px 18px 18px; border-radius:24px; background:var(--wb-card-strong); border:1px solid var(--wb-border); backdrop-filter:blur(18px); position:relative; text-align:center; box-shadow: 0 16px 40px rgba(0,0,0,0.22); }
+.wb-profile-card .wb-avatar-xl { position:absolute; top:-44px; left:50%; transform:translateX(-50%); width:88px; height:88px; font-size:36px; margin:0; border:4px solid var(--wb-bg); }
+.wb-profile-card-name { font-size:22px; font-weight:700; letter-spacing:-0.025em; color:var(--wb-text); display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap }
+.wb-profile-card-handle { font-size:13px; color:var(--wb-text-secondary); font-weight:500; font-feature-settings:'tnum'; margin-top:2px; letter-spacing:-0.005em }
+.wb-profile-card-bio { font-size:13px; color:var(--wb-text-secondary); line-height:1.45; margin:10px 4px 0; letter-spacing:-0.005em; text-wrap:pretty }
+.wb-profile-meta { display:flex; justify-content:center; gap:14px; margin-top:12px; flex-wrap:wrap }
+.wb-profile-meta-item { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--wb-text-muted); font-weight:500 }
+.wb-profile-meta-ic { font-size:13px; opacity:.8 }
+.wb-profile-actions { display:flex; gap:8px; margin-top:16px; }
+.wb-profile-action { flex:1; padding:11px 12px; border-radius:13px; background:var(--wb-surface); border:1px solid var(--wb-border); color:var(--wb-text); font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; letter-spacing:-0.01em; backdrop-filter:blur(12px) }
+.wb-profile-action.primary { background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); border-color:transparent; color:#fff; box-shadow: 0 8px 24px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.22) }
+.wb-profile-action:active { transform:scale(.97) }
+
+.wb-profile-stats2 { display:grid; grid-template-columns:repeat(4,1fr); margin:0 16px 16px; padding:14px 8px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:20px; backdrop-filter:blur(14px) }
+.wb-profile-stat2 { text-align:center; position:relative }
+.wb-profile-stat2 + .wb-profile-stat2::before { content:''; position:absolute; left:0; top:15%; bottom:15%; width:1px; background:var(--wb-divider) }
+.wb-profile-stat2-n { font-size:19px; font-weight:700; letter-spacing:-0.02em; color:var(--wb-text); font-feature-settings:'tnum' }
+.wb-profile-stat2-l { font-size:10.5px; color:var(--wb-text-muted); margin-top:3px; letter-spacing:0.1px }
+
+.wb-profile-tabs { display:flex; gap:4px; padding:4px; margin:0 16px 14px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:14px; backdrop-filter:blur(12px) }
+.wb-profile-tab { flex:1; padding:9px 10px; border-radius:10px; text-align:center; font-size:12.5px; font-weight:600; color:var(--wb-text-muted); cursor:pointer; transition:all .18s ease; letter-spacing:-0.005em }
+.wb-profile-tab.active { background:var(--wb-surface); color:var(--wb-text); box-shadow: 0 2px 6px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.1); border:1px solid var(--wb-border-strong) }
+
+.wb-friend-row { display:flex; align-items:center; gap:12px; padding:10px 16px; cursor:pointer }
+.wb-friend-row:active { background:rgba(255,255,255,0.03) }
+.wb-friend-av { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:15px; letter-spacing:-0.01em; box-shadow: inset 0 1px 0 rgba(255,255,255,0.22); flex-shrink:0 }
+.wb-friend-t { font-size:14.5px; font-weight:600; color:var(--wb-text); letter-spacing:-0.01em }
+.wb-friend-s { font-size:12px; color:var(--wb-text-muted); margin-top:2px }
+
+/* ─── Settings v2 ─── */
+.wb-set-account { margin:4px 16px 18px; padding:14px; border-radius:22px; background:var(--wb-card-strong); border:1px solid var(--wb-border); display:flex; align-items:center; gap:13px; backdrop-filter:blur(18px); position:relative; overflow:hidden }
+.wb-set-account::before { content:''; position:absolute; top:-40%; right:-10%; width:180px; height:180px;
+  background: radial-gradient(circle, var(--wb-accent-soft-strong), transparent 70%); pointer-events:none }
+.wb-set-account-av { width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color:#fff; font-weight:700; font-size:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow: 0 6px 18px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.28) }
+.wb-set-account-body { flex:1; min-width:0; position:relative }
+.wb-set-account-name { font-size:16px; font-weight:650; color:var(--wb-text); letter-spacing:-0.015em; display:flex; align-items:center; gap:6px; flex-wrap:wrap }
+.wb-set-account-sub { font-size:12.5px; color:var(--wb-text-muted); margin-top:2px }
+.wb-set-account-go { font-size:18px; color:var(--wb-text-muted); padding:0 6px; position:relative }
+
+.wb-pro-card { margin:0 16px 18px; padding:16px 18px; border-radius:22px; color:#fff; position:relative; overflow:hidden;
+  background: linear-gradient(135deg, #8B7BFF, #5B48E5 55%, #8A5CF6);
+  box-shadow: 0 14px 40px rgba(91,72,229,0.35), inset 0 1px 0 rgba(255,255,255,0.28); }
+.wb-pro-card::before { content:''; position:absolute; inset:-1px; border-radius:inherit; padding:1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.45), rgba(255,255,255,0) 40%);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite:exclude; pointer-events:none }
+.wb-pro-card::after { content:''; position:absolute; top:-60%; right:-20%; width:260px; height:260px;
+  background: radial-gradient(circle, rgba(255,255,255,0.3), transparent 60%); pointer-events:none }
+.wb-pro-card-top { display:flex; align-items:center; justify-content:space-between; position:relative }
+.wb-pro-card-title { font-size:13px; font-weight:700; letter-spacing:0.6px; text-transform:uppercase; opacity:.85; display:flex; align-items:center; gap:6px }
+.wb-pro-card-active { font-size:11px; font-weight:700; padding:3px 8px; background:rgba(255,255,255,0.22); border-radius:7px; letter-spacing:0.3px; backdrop-filter:blur(6px) }
+.wb-pro-card-price { font-size:26px; font-weight:700; letter-spacing:-0.025em; margin-top:10px; font-feature-settings:'tnum' }
+.wb-pro-card-price-sub { font-size:12px; opacity:.85; margin-top:2px }
+.wb-pro-card-features { margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; position:relative }
+.wb-pro-card-feat { font-size:11.5px; padding:5px 10px; background:rgba(255,255,255,0.18); border-radius:8px; display:flex; align-items:center; gap:4px; backdrop-filter:blur(6px); font-weight:600 }
+
+.wb-set-group-title { font-size:11px; font-weight:700; color:var(--wb-text-muted); text-transform:uppercase; letter-spacing:0.8px; margin:4px 22px 8px; }
+
+.wb-set-row.clickable { cursor:pointer }
+.wb-set-row.clickable:active { background:rgba(255,255,255,0.025) }
+.wb-set-row-val { font-size:13px; color:var(--wb-text-secondary); font-weight:500; letter-spacing:-0.005em }
+.wb-set-row-badge { font-size:10.5px; font-weight:700; padding:3px 7px; border-radius:6px; letter-spacing:0.3px }
+.wb-set-row-badge.new { background:var(--wb-accent-soft); color:var(--wb-accent-strong); border:1px solid var(--wb-accent-soft-strong) }
+.wb-set-row-badge.warn { background:rgba(251,191,36,0.14); color:#FBBF24; border:1px solid rgba(251,191,36,0.32) }
+
+.wb-set-footer { text-align:center; padding:18px 16px 24px; }
+.wb-set-footer-logo { font-size:22px; margin-bottom:6px }
+.wb-set-footer-v { font-size:11px; color:var(--wb-text-muted); font-weight:500; font-feature-settings:'tnum'; letter-spacing:0.1px }
+.wb-set-footer-links { display:flex; justify-content:center; gap:4px; margin-top:8px; font-size:11.5px; color:var(--wb-text-secondary); font-weight:500 }
+.wb-set-footer-links a { color:var(--wb-text-secondary); text-decoration:none; padding:2px 8px; border-radius:6px }
+.wb-set-footer-links a:active { background:var(--wb-surface) }
+.wb-set-footer-sep { color:var(--wb-text-muted); opacity:.4 }
+
+.wb-danger-row .wb-set-row-ic { background:rgba(251,113,133,0.12); border-color:rgba(251,113,133,0.32); color:var(--wb-danger) }
+.wb-danger-row .wb-set-row-t { color:var(--wb-danger) }
+
+/* ─── Calendar v2 ─── */
+.wb-cal-view-toggle { display:flex; gap:4px; padding:3px; margin:0 16px 14px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:12px; backdrop-filter:blur(12px) }
+.wb-cal-view-opt { flex:1; padding:8px 10px; border-radius:9px; text-align:center; font-size:12.5px; font-weight:600; color:var(--wb-text-muted); cursor:pointer; letter-spacing:-0.005em }
+.wb-cal-view-opt.active { background:var(--wb-surface); color:var(--wb-text); box-shadow: 0 2px 6px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08); border:1px solid var(--wb-border-strong) }
+
+.wb-cal-filters { display:flex; gap:6px; padding:0 16px 14px; flex-wrap:wrap }
+.wb-cal-filter { display:flex; align-items:center; gap:5px; padding:6px 10px; background:var(--wb-surface); border:1px solid var(--wb-border); border-radius:100px; font-size:12px; font-weight:600; color:var(--wb-text-secondary); cursor:pointer; letter-spacing:-0.005em; backdrop-filter:blur(10px) }
+.wb-cal-filter.on { color:var(--wb-text); border-color:var(--wb-border-strong); background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08) }
+.wb-cal-filter-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0 }
+
+.wb-cal-today-card { margin:0 16px 14px; padding:14px 16px; border-radius:20px; position:relative; overflow:hidden; color:#fff;
+  background: linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep));
+  box-shadow: 0 12px 30px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.22); }
+.wb-cal-today-card::before { content:''; position:absolute; top:-50%; right:-10%; width:220px; height:220px;
+  background: radial-gradient(circle, rgba(255,255,255,0.28), transparent 70%); pointer-events:none }
+.wb-cal-today-label { font-size:11px; font-weight:700; letter-spacing:0.8px; text-transform:uppercase; opacity:.85; position:relative }
+.wb-cal-today-t { font-size:17px; font-weight:700; letter-spacing:-0.02em; margin-top:3px; display:flex; align-items:center; gap:8px; position:relative; text-wrap:balance }
+.wb-cal-today-s { font-size:12.5px; opacity:.85; margin-top:3px; position:relative }
+
+.wb-cal-agenda-date { display:flex; align-items:center; gap:10px; padding:10px 20px 6px; }
+.wb-cal-agenda-date-d { font-size:22px; font-weight:750; letter-spacing:-0.025em; color:var(--wb-text); font-feature-settings:'tnum' }
+.wb-cal-agenda-date-m { font-size:12px; color:var(--wb-text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.3px; padding-bottom:3px }
+.wb-cal-agenda-date-line { flex:1; height:1px; background:linear-gradient(90deg, var(--wb-divider), transparent) }
+
+/* ─── Reservations ─── */
+.wb-res-tabs { display:flex; gap:4px; padding:4px; margin:0 16px 14px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:14px; backdrop-filter:blur(12px) }
+.wb-res-tab { flex:1; padding:9px 10px; border-radius:10px; text-align:center; font-size:12.5px; font-weight:600; color:var(--wb-text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px }
+.wb-res-tab.active { background:var(--wb-surface); color:var(--wb-text); box-shadow: 0 2px 6px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08); border:1px solid var(--wb-border-strong) }
+.wb-res-tab-count { font-size:10px; font-weight:700; padding:2px 6px; background:rgba(255,255,255,0.08); border-radius:5px; font-feature-settings:'tnum' }
+.wb-res-tab.active .wb-res-tab-count { background:var(--wb-accent-soft); color:var(--wb-accent-strong) }
+
+.wb-res-card { margin:0 16px 10px; padding:14px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:20px; backdrop-filter:blur(14px); cursor:pointer; position:relative }
+.wb-res-card.urgent { border-color:rgba(251,191,36,0.4); background:linear-gradient(135deg, rgba(251,191,36,0.05), var(--wb-card)) }
+.wb-res-card:active { background:var(--wb-card-strong) }
+.wb-res-card-top { display:flex; gap:12px; align-items:flex-start }
+.wb-res-card-thumb { width:64px; height:64px; border-radius:16px; background:linear-gradient(135deg,#1a1a22,#0f0f14); display:flex; align-items:center; justify-content:center; font-size:30px; flex-shrink:0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.25) }
+.wb-res-card-body { flex:1; min-width:0 }
+.wb-res-card-for { font-size:11px; color:var(--wb-text-muted); font-weight:600; letter-spacing:0.2px; display:flex; align-items:center; gap:6px }
+.wb-res-card-for-av { width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:9px }
+.wb-res-card-t { font-size:14.5px; font-weight:650; color:var(--wb-text); letter-spacing:-0.012em; line-height:1.3; margin-top:3px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical }
+.wb-res-card-meta { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; font-size:12px; color:var(--wb-text-secondary); align-items:center }
+.wb-res-card-price { font-weight:700; color:var(--wb-text); font-feature-settings:'tnum' }
+.wb-res-card-foot { display:flex; gap:8px; margin-top:12px; padding-top:12px; border-top:1px solid var(--wb-divider); align-items:center }
+.wb-res-card-deadline { flex:1; font-size:11.5px; color:var(--wb-text-muted); display:flex; align-items:center; gap:5px; font-weight:500 }
+.wb-res-card-deadline.urgent { color:var(--wb-warning); font-weight:650 }
+.wb-res-card-btn { font-family:inherit; font-size:11.5px; font-weight:650; padding:7px 12px; border-radius:10px; background:var(--wb-surface); border:1px solid var(--wb-border); color:var(--wb-text); cursor:pointer; letter-spacing:-0.005em }
+.wb-res-card-btn.primary { background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); border-color:transparent; color:#fff; box-shadow: 0 4px 10px var(--wb-accent-shadow-soft) }
+.wb-res-card-btn:active { transform:scale(.96) }
+
+/* ─── Notifications ─── */
+.wb-notif-group-date { font-size:11px; font-weight:700; color:var(--wb-text-muted); text-transform:uppercase; letter-spacing:0.8px; padding:10px 20px 6px }
+.wb-notif { display:flex; gap:12px; padding:12px 16px; cursor:pointer; position:relative }
+.wb-notif.unread { background:linear-gradient(90deg, var(--wb-accent-soft), transparent 50%) }
+.wb-notif:active { background:rgba(255,255,255,0.03) }
+.wb-notif.unread::before { content:''; position:absolute; left:8px; top:50%; transform:translateY(-50%); width:6px; height:6px; border-radius:50%; background:var(--wb-accent) }
+.wb-notif-ic { width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; border:1px solid }
+.wb-notif-ic.accent { background:var(--wb-accent-soft); border-color:var(--wb-accent-soft-strong); color:var(--wb-accent-strong) }
+.wb-notif-ic.pink { background:rgba(240,106,180,0.14); border-color:rgba(240,106,180,0.32) }
+.wb-notif-ic.green { background:rgba(74,222,128,0.12); border-color:rgba(74,222,128,0.3) }
+.wb-notif-ic.warn { background:rgba(251,191,36,0.14); border-color:rgba(251,191,36,0.32) }
+.wb-notif-body { flex:1; min-width:0 }
+.wb-notif-t { font-size:13.5px; color:var(--wb-text); letter-spacing:-0.005em; line-height:1.35 }
+.wb-notif-t b { font-weight:650 }
+.wb-notif-s { font-size:11.5px; color:var(--wb-text-muted); margin-top:3px }
+.wb-notif-time { font-size:11px; color:var(--wb-text-muted); flex-shrink:0; padding-top:2px; font-feature-settings:'tnum' }
+
+/* ─── Secret Santa ─── */
+.wb-santa-hero { margin:4px 16px 18px; padding:22px 20px; border-radius:24px; position:relative; overflow:hidden; text-align:center; color:#fff;
+  background: radial-gradient(circle at 30% 20%, #E85D5D, transparent 60%),
+              radial-gradient(circle at 80% 80%, #1A9755, transparent 60%),
+              linear-gradient(135deg, #7A1A1A, #0F4A2A);
+  box-shadow: 0 14px 40px rgba(191,26,26,0.25), inset 0 1px 0 rgba(255,255,255,0.18) }
+.wb-santa-hero::before { content:''; position:absolute; inset:0;
+  background-image: radial-gradient(circle at 20% 30%, rgba(255,255,255,0.25) 1px, transparent 2px),
+                    radial-gradient(circle at 60% 70%, rgba(255,255,255,0.18) 1.5px, transparent 3px),
+                    radial-gradient(circle at 85% 25%, rgba(255,255,255,0.2) 1px, transparent 2px);
+  background-size: 90px 90px, 140px 140px, 70px 70px; mix-blend-mode:screen; pointer-events:none }
+.wb-santa-emoji { font-size:46px; line-height:1; margin-bottom:8px; filter:drop-shadow(0 4px 12px rgba(0,0,0,0.3)); position:relative }
+.wb-santa-title { font-size:22px; font-weight:750; letter-spacing:-0.025em; position:relative; text-wrap:balance }
+.wb-santa-sub { font-size:13px; opacity:.85; margin-top:4px; position:relative; letter-spacing:-0.005em }
+.wb-santa-countdown { display:inline-flex; gap:6px; margin-top:14px; position:relative }
+.wb-santa-countdown-cell { padding:8px 12px; border-radius:12px; background:rgba(255,255,255,0.14); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.18); min-width:56px }
+.wb-santa-countdown-n { font-size:20px; font-weight:700; line-height:1; font-feature-settings:'tnum'; letter-spacing:-0.02em }
+.wb-santa-countdown-l { font-size:9.5px; font-weight:600; opacity:.8; letter-spacing:0.3px; text-transform:uppercase; margin-top:3px }
+
+.wb-santa-room { margin:0 16px 10px; padding:14px 14px 12px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:20px; backdrop-filter:blur(14px); cursor:pointer }
+.wb-santa-room.assigned { border-color:var(--wb-accent-soft-strong); background:linear-gradient(135deg, var(--wb-accent-soft), var(--wb-card)) }
+.wb-santa-room-top { display:flex; gap:10px; align-items:center }
+.wb-santa-room-ic { width:44px; height:44px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; background:linear-gradient(135deg, rgba(232,93,93,0.2), rgba(26,151,85,0.18)); border:1px solid rgba(255,255,255,0.08) }
+.wb-santa-room-body { flex:1; min-width:0 }
+.wb-santa-room-t { font-size:15px; font-weight:650; color:var(--wb-text); letter-spacing:-0.012em }
+.wb-santa-room-s { font-size:12px; color:var(--wb-text-muted); margin-top:2px; display:flex; gap:6px; flex-wrap:wrap; align-items:center }
+.wb-santa-room-reveal { margin-top:10px; padding:10px 12px; border-radius:14px; background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color:#fff; display:flex; align-items:center; gap:10px; box-shadow: 0 6px 16px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.22) }
+.wb-santa-room-reveal-t { font-size:11px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; opacity:.85 }
+.wb-santa-room-reveal-n { font-size:15px; font-weight:700; letter-spacing:-0.015em; margin-top:1px }
+.wb-santa-room-reveal-btn { padding:7px 12px; border-radius:10px; background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.22); color:#fff; font-family:inherit; font-size:12px; font-weight:650; cursor:pointer; backdrop-filter:blur(6px) }
+
+/* ─── Add Event form ─── */
+.wb-emoji-picker { display:flex; gap:6px; margin:0 16px 14px; flex-wrap:wrap }
+.wb-emoji-opt { width:44px; height:44px; border-radius:13px; background:var(--wb-card); border:1px solid var(--wb-border); display:flex; align-items:center; justify-content:center; font-size:22px; cursor:pointer; backdrop-filter:blur(10px); transition:all .15s ease }
+.wb-emoji-opt.active { background:linear-gradient(135deg, var(--wb-accent-soft), var(--wb-card-strong)); border-color:var(--wb-accent-soft-strong); box-shadow: 0 0 0 3px var(--wb-accent-soft) }
+.wb-emoji-opt:active { transform:scale(.94) }
+
+.wb-date-picker { margin:0 16px 14px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px }
+.wb-date-cell { padding:12px 8px; border-radius:14px; background:var(--wb-card); border:1px solid var(--wb-border); text-align:center; cursor:pointer; backdrop-filter:blur(10px) }
+.wb-date-cell-l { font-size:10.5px; color:var(--wb-text-muted); font-weight:600; letter-spacing:0.3px; text-transform:uppercase }
+.wb-date-cell-v { font-size:17px; font-weight:700; color:var(--wb-text); letter-spacing:-0.02em; margin-top:4px; font-feature-settings:'tnum' }
+
+.wb-repeat-row { display:flex; gap:6px; margin:0 16px 14px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none }
+.wb-repeat-row::-webkit-scrollbar { display:none }
+.wb-repeat { padding:8px 14px; border-radius:100px; background:var(--wb-card); border:1px solid var(--wb-border); font-size:12.5px; font-weight:600; color:var(--wb-text-secondary); cursor:pointer; white-space:nowrap; backdrop-filter:blur(10px); flex-shrink:0 }
+.wb-repeat.active { background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)); border-color:var(--wb-border-strong); color:var(--wb-text) }
+
+/* ─── Friend profile (view) ─── */
+.wb-friend-hero { margin:6px 16px 16px; padding:20px 18px; border-radius:24px; background:var(--wb-card-strong); border:1px solid var(--wb-border); backdrop-filter:blur(18px); display:flex; align-items:center; gap:14px; position:relative; overflow:hidden }
+.wb-friend-hero::before { content:''; position:absolute; top:-30%; right:-10%; width:200px; height:200px;
+  background: radial-gradient(circle, var(--wb-accent-soft-strong), transparent 70%); opacity:.5 }
+.wb-friend-hero-av { width:72px; height:72px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:30px; font-weight:700; color:#fff; letter-spacing:-0.02em; flex-shrink:0; box-shadow: 0 8px 22px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.25); background:linear-gradient(135deg, #F06AB4, #C53F88); position:relative }
+.wb-friend-hero-body { flex:1; min-width:0; position:relative }
+.wb-friend-hero-name { font-size:19px; font-weight:700; letter-spacing:-0.02em; color:var(--wb-text); display:flex; align-items:center; gap:7px; flex-wrap:wrap }
+.wb-friend-hero-handle { font-size:12.5px; color:var(--wb-text-secondary); font-weight:500; margin-top:1px }
+.wb-friend-hero-event { display:inline-flex; align-items:center; gap:5px; margin-top:6px; font-size:11px; font-weight:700; color:#E85D5D; background:rgba(232,93,93,0.12); padding:3px 8px; border-radius:7px; letter-spacing:0.2px; border:1px solid rgba(232,93,93,0.25) }
+
+/* ─── Search ─── */
+.wb-search-bar { margin:8px 16px 16px; display:flex; align-items:center; gap:10px; padding:0 14px; height:44px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:14px; backdrop-filter:blur(14px) }
+.wb-search-ic { font-size:15px; color:var(--wb-text-muted) }
+.wb-search-input { flex:1; background:transparent; border:none; outline:none; font-family:inherit; font-size:15px; font-weight:500; color:var(--wb-text); letter-spacing:-0.01em }
+.wb-search-input::placeholder { color:var(--wb-text-muted); font-weight:450 }
+.wb-search-clear { font-size:14px; color:var(--wb-text-muted); cursor:pointer; padding:0 4px }
+
+.wb-discover-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 16px 16px }
+.wb-discover-card { padding:14px; border-radius:18px; background:var(--wb-card); border:1px solid var(--wb-border); backdrop-filter:blur(12px); cursor:pointer; position:relative; overflow:hidden; min-height:110px; display:flex; flex-direction:column; justify-content:space-between }
+.wb-discover-card::before { content:''; position:absolute; top:-30%; right:-30%; width:140px; height:140px; opacity:.5 }
+.wb-discover-card.c1::before { background: radial-gradient(circle, rgba(240,106,180,0.35), transparent 60%) }
+.wb-discover-card.c2::before { background: radial-gradient(circle, var(--wb-accent-soft-strong), transparent 60%) }
+.wb-discover-card.c3::before { background: radial-gradient(circle, rgba(74,222,128,0.28), transparent 60%) }
+.wb-discover-card.c4::before { background: radial-gradient(circle, rgba(251,191,36,0.32), transparent 60%) }
+.wb-discover-emoji { font-size:26px; line-height:1; position:relative }
+.wb-discover-title { font-size:14px; font-weight:650; color:var(--wb-text); letter-spacing:-0.012em; margin-top:8px; position:relative; line-height:1.3 }
+.wb-discover-sub { font-size:11.5px; color:var(--wb-text-muted); margin-top:3px; position:relative }
+
+.wb-recent-chip { padding:6px 12px; border-radius:100px; background:var(--wb-surface); border:1px solid var(--wb-border); font-size:12px; font-weight:600; color:var(--wb-text-secondary); cursor:pointer; display:inline-flex; align-items:center; gap:5px; letter-spacing:-0.005em }
+.wb-recent-wrap { display:flex; gap:6px; padding:0 16px 18px; flex-wrap:wrap }
+
+/* Page chrome */
+body { margin:0; background:#08080B; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Inter','Segoe UI',sans-serif; color:#F4F4F6; padding:48px 20px;
+  background-image: radial-gradient(ellipse 1000px 600px at 50% -10%, rgba(139,123,255,0.10), transparent 60%);
+}
+h1 { text-align:center; font-size:26px; letter-spacing:-0.035em; font-weight:700; margin:0 0 6px }
+.sub { text-align:center; color:#9CA3AF; font-size:14px; margin:0 0 28px; letter-spacing:-0.005em }
+.phones { display:flex; flex-wrap:wrap; gap:44px 34px; justify-content:center; align-items:flex-start }
+.phone-wrap { display:flex; flex-direction:column; align-items:center; gap:12px }
+.phone-label { font-size:11px; color:#8F94A3; font-weight:550; letter-spacing:0.3px }
+.nav-links { display:flex; gap:6px; justify-content:center; margin-bottom:16px; flex-wrap:wrap }
+.nav-links button { background:rgba(255,255,255,0.04); color:#F4F4F6; border:1px solid rgba(255,255,255,0.08); padding:8px 14px; border-radius:12px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; letter-spacing:-0.005em; backdrop-filter:blur(10px) }
+.nav-links button.on { background:linear-gradient(135deg,#8B7BFF,#5B48E5); border-color:transparent; box-shadow:0 6px 20px rgba(139,123,255,0.35) }
+.global-controls { display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap; margin-bottom:28px; font-size:12px; color:#C7CAD1 }
+.global-controls label { display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); padding:7px 12px; border-radius:100px; cursor:pointer; user-select:none; backdrop-filter:blur(10px) }
+.global-controls input { accent-color:#8B7BFF }
+  </style>
+  <link rel="stylesheet" href="extras.css">
+</head>
+<body>
+  <h1>WishBoard · Mini App UI kit</h1>
+  <p class="sub">Modern refresh · 2026 · glass surfaces, mesh gradients, liquid nav</p>
+
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel">
+  const { useState, createContext, useContext } = React;
+  const ThemeCtx = createContext({ theme:'dark', accent:'violet', isPro:false, setTheme:()=>{}, setAccent:()=>{}, setIsPro:()=>{} });
+
+  function Phone({ children }) {
+    const { theme, accent } = useContext(ThemeCtx);
+    return (
+      <div className="wb-phone wb-app" data-theme={theme} data-accent={accent}>
+        <StatusBar />
+        {children}
+      </div>
+    );
+  }
+  function StatusBar() {
+    return <div className="wb-status"><div>9:41</div><div className="wb-status-icons"><span>•••</span><span>5G</span><span style={{marginLeft:4}}>◼</span></div></div>;
+  }
+  function Header({ left, title, subtitle, right }) {
+    return (
+      <div className="wb-hdr">
+        {left || <div style={{width:40}} />}
+        <div style={{flex:1,textAlign:'center',overflow:'hidden'}}>
+          <div className="wb-hdr-title">{title}</div>
+          {subtitle && <div className="wb-hdr-sub">{subtitle}</div>}
+        </div>
+        {right || <div style={{width:40}} />}
+      </div>
+    );
+  }
+  function HeaderBtn({ icon, onClick }) { return <button className="wb-hdr-btn" onClick={onClick}>{icon}</button>; }
+  function Tabs({ items, active, onSelect }) {
+    return (<div className="wb-tabs">{items.map(it => (
+      <div key={it.id} className={`wb-tab ${active === it.id ? 'active' : ''}`} onClick={() => onSelect(it.id)}>
+        {it.label}{it.badge && <span className="wb-tab-badge">{it.badge}</span>}
+      </div>
+    ))}</div>);
+  }
+  function StatRow({ stats }) {
+    return (<div className="wb-stats">{stats.map((s, i) => (
+      <div key={i} className={`wb-stat ${s.tone || ''}`}><div className="wb-stat-n">{s.n}</div><div className="wb-stat-l">{s.l}</div></div>
+    ))}</div>);
+  }
+  function SectionHeader({ title, action }) {
+    return (<div className="wb-section-hdr"><h2>{title}</h2>{action && <span className="wb-link" onClick={action.onClick}>{action.label}</span>}</div>);
+  }
+  function Chip({ tone = 'accent', children }) { return <span className={`wb-chip ${tone}`}>{children}</span>; }
+  function Button({ variant = 'primary', children, onClick, style }) { return <button className={`wb-btn ${variant}`} onClick={onClick} style={style}>{children}</button>; }
+  function AvatarStack({ people = [], extra = 0 }) {
+    const grads = ['g1','g2','g3','g4','g5'];
+    return (<div className="wb-stack">
+      {people.map((p, i) => <div key={i} className={`wb-av ${grads[i % grads.length]}`}>{p}</div>)}
+      {extra > 0 && <div className="wb-av plus">+{extra}</div>}
+    </div>);
+  }
+  function Banner({ tone = 'info', icon, children }) {
+    return <div className={`wb-banner ${tone}`}><div className="wb-banner-ic">{icon}</div><div style={{flex:1}}>{children}</div></div>;
+  }
+  function BottomNav({ active, onSelect }) {
+    const items = [
+      { id:'home',         ic:'🎯', label:'Вишлисты' },
+      { id:'events',       ic:'📅', label:'События' },
+      { id:'reservations', ic:'🎁', label:'Брони', badge: 2 },
+      { id:'me',           ic:'👤', label:'Я' },
+    ];
+    return (<div className="wb-nav">{items.map(it => (
+      <div key={it.id} className={`wb-nav-item ${active === it.id ? 'active' : ''}`} onClick={() => onSelect(it.id)}>
+        <div className="wb-nav-ic">{it.ic}{it.badge && <span className="wb-nav-badge">{it.badge}</span>}</div><div>{it.label}</div>
+      </div>
+    ))}</div>);
+  }
+  function Fab({ onClick, icon = '+' }) { return <button className="wb-fab" onClick={onClick}>{icon}</button>; }
+  function Sheet({ open, onClose, title, subtitle, children }) {
+    return (<>
+      <div className={`wb-sheet-backdrop ${open ? 'open' : ''}`} onClick={onClose} />
+      <div className={`wb-sheet ${open ? 'open' : ''}`}>
+        <div className="wb-sheet-handle" />
+        {title && <div className="wb-sheet-title">{title}</div>}
+        {subtitle && <div className="wb-sheet-sub">{subtitle}</div>}
+        {children}
+      </div>
+    </>);
+  }
+  </script>
+
+  <script type="text/babel">
+  function WishlistCard({ wl, onOpen, highlight }) {
+    const { emoji, title, count, reserved, participants, progress, chip } = wl;
+    return (
+      <div className={`wb-wl-card ${highlight ? 'highlight' : ''}`} onClick={() => onOpen(wl)}>
+        <div className="wb-wl-card-top">
+          <div className="wb-wl-emoji">{emoji}</div>
+          <div className="wb-wl-meta">
+            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+              <div className="wb-wl-title">{title}</div>
+              {chip && <Chip tone={chip.tone}>{chip.label}</Chip>}
+            </div>
+            <div className="wb-wl-sub">{count} желаний · {reserved} забронировано</div>
+          </div>
+        </div>
+        <div className="wb-wl-progress"><div style={{width:`${progress}%`}} /></div>
+        <div className="wb-wl-foot">
+          <AvatarStack people={participants.names} extra={participants.extra} />
+          <div className="wb-wl-foot-txt">до др · 14 дней</div>
+        </div>
+      </div>
+    );
+  }
+  function HomeScreen({ onOpenWishlist, onCreate, navActive, onNav, onOpenSettings }) {
+    const [tab, setTab] = React.useState('mine');
+    const wishlists = [
+      { id:1, emoji:'🎂', title:'На день рождения', count:12, reserved:4, progress:33, chip:{ tone:'accent', label:'14 дней' }, participants:{ names:['М','Д','А'], extra:4 } },
+      { id:2, emoji:'🎄', title:'Новый год 2026', count:8, reserved:2, progress:25, participants:{ names:['С','К'], extra:0 } },
+      { id:3, emoji:'💍', title:'Свадебный', count:24, reserved:18, progress:75, chip:{ tone:'success', label:'75%' }, participants:{ names:['А','Б','В'], extra:12 } },
+    ];
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="🔍" />} title="Мои вишлисты" subtitle="3 активных" right={<HeaderBtn icon="⚙" onClick={onOpenSettings} />} />
+        <div className="wb-scroll">
+          <StatRow stats={[
+            { n:44, l:'желаний' },
+            { n:24, l:'забронировано', tone:'accent' },
+            { n:8, l:'подарено', tone:'success' },
+            { n:1, l:'истекает', tone:'warning' },
+          ]} />
+          <Tabs active={tab} onSelect={setTab} items={[
+            { id:'mine', label:'Мои' },
+            { id:'sub', label:'Подписки', badge:2 },
+            { id:'archive', label:'Архив' },
+          ]} />
+          <SectionHeader title="Активные" action={{ label:'Сортировать', onClick:()=>{} }} />
+          {wishlists.map((wl, i) => <WishlistCard key={wl.id} wl={wl} onOpen={onOpenWishlist} highlight={i === 0} />)}
+          <SectionHeader title="Подарки друзьям" />
+          <div style={{margin:'0 16px', padding:'14px 16px', background:'var(--wb-card)', border:'1px solid var(--wb-border)', borderRadius:18, display:'flex', alignItems:'center', gap:12, backdropFilter:'blur(14px)'}}>
+            <div style={{width:40,height:40,borderRadius:13,background:'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>🎁</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14.5,fontWeight:600,color:'var(--wb-text)',letterSpacing:'-0.01em'}}>5 активных броней</div>
+              <div style={{fontSize:12.5,color:'var(--wb-text-secondary)',marginTop:2}}>Марина, Денис и ещё трое</div>
+            </div>
+            <div style={{fontSize:18,color:'var(--wb-text-muted)'}}>›</div>
+          </div>
+        </div>
+        <Fab onClick={onCreate} />
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  function WishRow({ wish, onTap }) {
+    const { emoji, title, price, priority, meta, state, chips = [] } = wish;
+    return (
+      <div className={`wb-wish ${state || ''}`} onClick={() => onTap(wish)}>
+        <div className="wb-wish-thumb">{emoji}</div>
+        <div className="wb-wish-body">
+          <div className="wb-wish-t">{title}</div>
+          {price && <div className="wb-wish-price">{price}</div>}
+          <div className="wb-wish-meta">
+            {priority && <Chip tone={`prio${priority}`}>• {priority === 3 ? 'Высокий' : priority === 2 ? 'Средний' : 'Низкий'}</Chip>}
+            {chips.map((c, i) => <Chip key={i} tone={c.tone}>{c.label}</Chip>)}
+            {meta && <span>· {meta}</span>}
+          </div>
+        </div>
+        <div className="wb-wish-trail">›</div>
+      </div>
+    );
+  }
+  function WishlistDetailScreen({ onBack, navActive, onNav }) {
+    const [sheet, setSheet] = React.useState(null);
+    const wishes = [
+      { id:1, emoji:'🎧', title:'AirPods Pro 2 (2024)', price:'24 990 ₽', priority:3, meta:'ozon.ru' },
+      { id:2, emoji:'🧸', title:'Лабубу — коллекционная фигурка', price:'2 890 ₽', priority:2, state:'reserved-by-me', chips:[{ tone:'success', label:'🤫 Твоя бронь' }] },
+      { id:3, emoji:'📚', title:'Atomic Habits — J. Clear (RU)', price:'790 ₽', priority:1, meta:'вайлдберриз', chips:[{ tone:'warning', label:'+15%' }] },
+      { id:4, emoji:'☕', title:'Delonghi Dedica EC685', price:'39 990 ₽', state:'done', meta:'подарено 3 янв' },
+      { id:5, emoji:'👟', title:'New Balance 530 White', price:'12 490 ₽', priority:2 },
+    ];
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Вишлист Марины" subtitle="5 желаний · до др 14 дней" right={<HeaderBtn icon="⋯" />} />
+        <div className="wb-scroll">
+          <div className="wb-hero">
+            <div className="wb-hero-top">
+              <div className="wb-hero-emoji">🎂</div>
+              <div style={{flex:1}}>
+                <div className="wb-hero-title">День рождения</div>
+                <div className="wb-hero-sub">Марина · 4 мая · сюрприз ON</div>
+              </div>
+            </div>
+            <div className="wb-hero-stats">
+              <div className="wb-hero-stat"><div className="wb-hero-stat-n">5</div><div className="wb-hero-stat-l">желаний</div></div>
+              <div className="wb-hero-stat"><div className="wb-hero-stat-n">2</div><div className="wb-hero-stat-l">забронировано</div></div>
+              <div className="wb-hero-stat"><div className="wb-hero-stat-n"><AvatarStack people={['А','Д','К']} extra={1} /></div><div className="wb-hero-stat-l" style={{marginTop:6}}>участников</div></div>
+            </div>
+          </div>
+          <Banner tone="info" icon="💡"><b>Режим сюрприза включён.</b> Марина не увидит, кто забронировал — пока ты сам не снимешь бронь.</Banner>
+          <div style={{padding:'0 20px 10px',fontSize:12,fontWeight:600,color:'var(--wb-text-muted)',textTransform:'uppercase',letterSpacing:0.7}}>Желания</div>
+          {wishes.map(w => <WishRow key={w.id} wish={w} onTap={(w) => w.state !== 'done' && !w.state && setSheet(w)} />)}
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+        <Sheet open={!!sheet} onClose={() => setSheet(null)} title={`🎁 Забронировать «${sheet?.title.split('—')[0].trim() || ''}»?`} subtitle="Марина не увидит, кто забронировал. Снять бронь можно в любой момент из вкладки «Брони».">
+          <Button variant="primary" onClick={() => setSheet(null)}>Забронировать тайно</Button>
+          <Button variant="ghost" onClick={() => setSheet(null)} style={{marginTop:8}}>Отмена</Button>
+        </Sheet>
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  function Feat({ icon, title, sub }) {
+    return (<div className="wb-feat"><div className="wb-feat-ic">{icon}</div><div style={{flex:1}}><div className="wb-feat-t">{title}</div><div className="wb-feat-s">{sub}</div></div></div>);
+  }
+  function PaywallScreen({ onBack, onSubscribe, navActive, onNav }) {
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="×" onClick={onBack} />} title="" right={<HeaderBtn icon="?" />} />
+        <div className="wb-scroll">
+          <div style={{padding:'12px 24px 0',textAlign:'center'}}>
+            <div style={{fontSize:80,lineHeight:1,marginBottom:6,filter:'drop-shadow(0 16px 32px var(--wb-accent-shadow))'}}>⭐</div>
+          </div>
+          <div className="wb-paywall-title">WishBoard <span className="wb-gradient-text">PRO</span></div>
+          <div className="wb-paywall-sub">Больше вишлистов, импорт по ссылке, намёки, комментарии — <b style={{color:'var(--wb-text)'}}>и персонализация темы</b>.</div>
+          <Feat icon="🎨" title="Чёрная тема и акцентные цвета" sub="OLED-чёрный + синий, розовый или зелёный акцент" />
+          <Feat icon="🔗" title="Импорт по ссылке" sub="Ozon, Wildberries, Яндекс Маркет, Lamoda…" />
+          <Feat icon="💬" title="Комментарии к желаниям" sub="Обсуждайте детали с дарителями" />
+          <Feat icon="💡" title="Намёки без слов" sub="Подскажи, на что лучше делать ставку" />
+          <Feat icon="📦" title="Больше и выше лимиты" sub="До 10 вишлистов · 70 желаний · 5 подписок" />
+          <div style={{padding:'20px 16px 0'}}>
+            <Button variant="primary" onClick={onSubscribe}>Оформить за 100 ⭐ / мес</Button>
+            <div style={{textAlign:'center',fontSize:12,color:'var(--wb-text-muted)',marginTop:12,lineHeight:1.5}}>
+              Оплата через Telegram Stars · отмена в любой момент<br/>
+              Промокод <b style={{color:'var(--wb-accent-strong)'}}>WISHPRO</b> — 30 дней бесплатно
+            </div>
+          </div>
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  function OnboardingScreen({ onNext, onSkip, step = 0 }) {
+    const slides = [
+      { emoji:'🎁', title:'Никаких двойных подарков', body:'Друзья видят, что можно подарить — без спойлеров для именинника. Бронирование в режиме сюрприза включено по умолчанию.' },
+      { emoji:'🔗', title:'Вставь ссылку — всё само', body:'Ozon, WB, Маркет, Lamoda, Goldapple. Фото, цена, название подтянутся автоматически. (PRO)' },
+      { emoji:'🎄', title:'Secret Santa за минуту', body:'Анонимный жребий прямо в Telegram — пригласи всех одной кнопкой.' },
+    ];
+    const s = slides[step];
+    return (
+      <Phone>
+        <div style={{padding:'10px 20px',textAlign:'right'}}>
+          <span style={{fontSize:14,color:'var(--wb-text-secondary)',fontWeight:550,cursor:'pointer'}} onClick={onSkip}>Пропустить</span>
+        </div>
+        <div className="wb-onb">
+          <div className="wb-onb-visual"><div className="wb-onb-glow" /><div className="wb-onb-emoji">{s.emoji}</div></div>
+          <h1>{s.title}</h1>
+          <p>{s.body}</p>
+          <div className="wb-onb-dots">{slides.map((_, i) => <span key={i} className={i === step ? 'active' : ''} />)}</div>
+          <Button variant="primary" onClick={onNext}>{step === slides.length - 1 ? 'Создать вишлист' : 'Дальше'}</Button>
+        </div>
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  const ACCENTS = [
+    { id:'violet', name:'Violet',  color:'#8B7BFF', grad:'linear-gradient(135deg,#8B7BFF,#5B48E5)', pro:false },
+    { id:'blue',   name:'Blue',    color:'#5B8DEF', grad:'linear-gradient(135deg,#5B8DEF,#2F61C8)', pro:true },
+    { id:'pink',   name:'Pink',    color:'#F06AB4', grad:'linear-gradient(135deg,#F06AB4,#C53F88)', pro:true },
+    { id:'green',  name:'Green',   color:'#34C98A', grad:'linear-gradient(135deg,#34C98A,#1E9765)', pro:true },
+  ];
+  function SettingsScreen({ onBack, onOpenPaywall, onOpenProfile, onOpenAppearance, navActive, onNav }) {
+    const { isPro, setIsPro } = React.useContext(ThemeCtx);
+    const [surprise, setSurprise] = React.useState(true);
+    const [notif, setNotif] = React.useState(true);
+    const [quiet, setQuiet] = React.useState(false);
+    const [analytics, setAnalytics] = React.useState(false);
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Настройки" right={<HeaderBtn icon="🔍" />} />
+        <div className="wb-scroll">
+
+          <div className="wb-set-account" onClick={onOpenProfile}>
+            <div className="wb-set-account-av">А</div>
+            <div className="wb-set-account-body">
+              <div className="wb-set-account-name">Аня Смирнова {isPro && <span className="wb-badge wb-badge-pro" style={{padding:'2px 7px',fontSize:9}}>✦ PRO</span>}</div>
+              <div className="wb-set-account-sub">@anyasmirnova · Telegram</div>
+            </div>
+            <div className="wb-set-account-go">›</div>
+          </div>
+
+          <div className="wb-pro-card" onClick={!isPro ? onOpenPaywall : undefined} style={!isPro ? {cursor:'pointer'} : {}}>
+            <div className="wb-pro-card-top">
+              <div className="wb-pro-card-title">✦ WishBoard PRO</div>
+              {isPro ? <div className="wb-pro-card-active">Активна</div> : <div className="wb-pro-card-active" style={{background:'rgba(255,255,255,0.3)'}}>Попробовать</div>}
+            </div>
+            {isPro
+              ? (<><div className="wb-pro-card-price" style={{fontSize:17,marginTop:8}}>Продление 14 мая · 100 ⭐</div><div className="wb-pro-card-price-sub">Отменить можно в любой момент</div></>)
+              : (<><div className="wb-pro-card-price">100 ⭐ <span style={{fontSize:13,fontWeight:500,opacity:.8}}>/ мес</span></div><div className="wb-pro-card-price-sub">Первые 7 дней — бесплатно</div></>)}
+            <div className="wb-pro-card-features">
+              <div className="wb-pro-card-feat">🎨 Темы</div>
+              <div className="wb-pro-card-feat">📎 Импорт</div>
+              <div className="wb-pro-card-feat">∞ Вишлистов</div>
+              <div className="wb-pro-card-feat">🎅 Санта</div>
+            </div>
+            <button onClick={(e) => { e.stopPropagation(); setIsPro(!isPro); }} style={{position:'absolute',top:10,right:10,background:'rgba(0,0,0,0.25)',color:'#fff',border:'1px solid rgba(255,255,255,0.22)',padding:'4px 8px',borderRadius:8,fontSize:10,fontWeight:650,cursor:'pointer',fontFamily:'inherit',letterSpacing:0.3,backdropFilter:'blur(8px)',zIndex:3}}>{isPro ? 'DEMO: OFF' : 'DEMO: ON'}</button>
+          </div>
+
+          <div className="wb-set-group-title">Внешний вид</div>
+          <div className="wb-set-group">
+            <div className="wb-set-row clickable" onClick={onOpenAppearance}>
+              <div className="wb-set-row-ic">🎨</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Тема и акцент</div>
+                <div className="wb-set-row-s">Violet · Тёмная</div>
+              </div>
+              <div className="wb-set-row-trail">›</div>
+            </div>
+            <div className="wb-set-row clickable">
+              <div className="wb-set-row-ic">🖼</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Обложка профиля <span className="wb-set-row-badge new">NEW</span></div>
+                <div className="wb-set-row-s">Градиенты и фото</div>
+              </div>
+              <div className="wb-set-row-trail">›</div>
+            </div>
+            <div className="wb-set-row clickable">
+              <div className="wb-set-row-ic">🔤</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Размер шрифта</div>
+                <div className="wb-set-row-s">Как в системе</div>
+              </div>
+              <div className="wb-set-row-val">Авто</div>
+              <div className="wb-set-row-trail" style={{marginLeft:6}}>›</div>
+            </div>
+          </div>
+
+          <div className="wb-set-group-title">Приватность</div>
+          <div className="wb-set-group">
+            <div className="wb-set-row">
+              <div className="wb-set-row-ic">🤫</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Режим сюрприза</div>
+                <div className="wb-set-row-s">Скрывать брони от владельца</div>
+              </div>
+              <div className={`wb-toggle ${surprise ? 'on' : ''}`} onClick={() => setSurprise(!surprise)} />
+            </div>
+            <div className="wb-set-row clickable">
+              <div className="wb-set-row-ic">👁</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Кто видит мой профиль</div>
+                <div className="wb-set-row-s">Друзья и их друзья</div>
+              </div>
+              <div className="wb-set-row-trail">›</div>
+            </div>
+            <div className="wb-set-row clickable">
+              <div className="wb-set-row-ic">🔗</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Публичные ссылки</div>
+                <div className="wb-set-row-s">Управлять и отозвать</div>
+              </div>
+              <div className="wb-set-row-val">3</div>
+              <div className="wb-set-row-trail" style={{marginLeft:6}}>›</div>
+            </div>
+            <div className="wb-set-row clickable">
+              <div className="wb-set-row-ic">🚫</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Заблокированные</div>
+                <div className="wb-set-row-s">Скрыты в поиске и приглашениях</div>
+              </div>
+              <div className="wb-set-row-val">2</div>
+              <div className="wb-set-row-trail" style={{marginLeft:6}}>›</div>
+            </div>
+          </div>
+
+          <div className="wb-set-group-title">Уведомления</div>
+          <div className="wb-set-group">
+            <div className="wb-set-row">
+              <div className="wb-set-row-ic">🔔</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Push‑уведомления</div>
+                <div className="wb-set-row-s">Брони, намёки, события</div>
+              </div>
+              <div className={`wb-toggle ${notif ? 'on' : ''}`} onClick={() => setNotif(!notif)} />
+            </div>
+            <div className="wb-set-row">
+              <div className="wb-set-row-ic">🌙</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Тихий режим</div>
+                <div className="wb-set-row-s">22:00 — 08:00</div>
+              </div>
+              <div className={`wb-toggle ${quiet ? 'on' : ''}`} onClick={() => setQuiet(!quiet)} />
+            </div>
+            <div className="wb-set-row clickable">
+              <div className="wb-set-row-ic">📅</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Напоминания о событиях</div>
+                <div className="wb-set-row-s">За 7 дней, за 1 день</div>
+              </div>
+              <div className="wb-set-row-trail">›</div>
+            </div>
+          </div>
+
+          <div className="wb-set-group-title">События и календарь</div>
+          <div className="wb-set-group">
+            <div className="wb-set-row clickable">
+              <div className="wb-set-row-ic">📆</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Моя дата рождения</div>
+                <div className="wb-set-row-s">12 декабря · видна друзьям</div>
+              </div>
+              <div className="wb-set-row-trail">›</div>
+            </div>
+            <div className="wb-set-row clickable">
+              <div className="wb-set-row-ic">🔄</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Синхронизация календаря</div>
+                <div className="wb-set-row-s">Apple · подключено</div>
+              </div>
+              <div className="wb-set-row-val">Вкл</div>
+              <div className="wb-set-row-trail" style={{marginLeft:6}}>›</div>
+            </div>
+          </div>
+
+          <div className="wb-set-group-title">Данные и сервис</div>
+          <div className="wb-set-group">
+            <div className="wb-set-row clickable">
+              <div className="wb-set-row-ic">🌍</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Язык</div>
+                <div className="wb-set-row-s">Русский · валюта ₽</div>
+              </div>
+              <div className="wb-set-row-trail">›</div>
+            </div>
+            <div className="wb-set-row">
+              <div className="wb-set-row-ic">📊</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Аналитика</div>
+                <div className="wb-set-row-s">Помогать улучшать WishBoard</div>
+              </div>
+              <div className={`wb-toggle ${analytics ? 'on' : ''}`} onClick={() => setAnalytics(!analytics)} />
+            </div>
+            <div className="wb-set-row clickable">
+              <div className="wb-set-row-ic">⬇</div>
+              <div className="wb-set-row-body">
+                <div className="wb-set-row-t">Экспорт данных</div>
+                <div className="wb-set-row-s">Скачать JSON · все вишлисты</div>
+              </div>
+              <div className="wb-set-row-trail">›</div>
+            </div>
+          </div>
+
+          <div className="wb-set-group-title">Поддержка</div>
+          <div className="wb-set-group">
+            <div className="wb-set-row clickable"><div className="wb-set-row-ic">💬</div><div className="wb-set-row-body"><div className="wb-set-row-t">Задать вопрос</div><div className="wb-set-row-s">@wishboard_help</div></div><div className="wb-set-row-trail">›</div></div>
+            <div className="wb-set-row clickable"><div className="wb-set-row-ic">📖</div><div className="wb-set-row-body"><div className="wb-set-row-t">Справка и гайды</div></div><div className="wb-set-row-trail">›</div></div>
+            <div className="wb-set-row clickable"><div className="wb-set-row-ic">⭐</div><div className="wb-set-row-body"><div className="wb-set-row-t">Оценить WishBoard</div><div className="wb-set-row-s">Помогает нам расти</div></div><div className="wb-set-row-trail">›</div></div>
+          </div>
+
+          <div className="wb-set-group-title">Аккаунт</div>
+          <div className="wb-set-group">
+            <div className="wb-set-row clickable wb-danger-row">
+              <div className="wb-set-row-ic">↩</div>
+              <div className="wb-set-row-body"><div className="wb-set-row-t">Выйти из аккаунта</div></div>
+              <div className="wb-set-row-trail">›</div>
+            </div>
+            <div className="wb-set-row clickable wb-danger-row">
+              <div className="wb-set-row-ic">🗑</div>
+              <div className="wb-set-row-body"><div className="wb-set-row-t">Удалить аккаунт</div><div className="wb-set-row-s">Безвозвратно · 30 дней на отмену</div></div>
+              <div className="wb-set-row-trail">›</div>
+            </div>
+          </div>
+
+          <div className="wb-set-footer">
+            <div className="wb-set-footer-logo">🎁</div>
+            <div className="wb-set-footer-v">WishBoard · v2.4.0 (build 1182)</div>
+            <div className="wb-set-footer-links">
+              <a>Условия</a><span className="wb-set-footer-sep">·</span><a>Приватность</a><span className="wb-set-footer-sep">·</span><a>Лицензии</a>
+            </div>
+          </div>
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+
+  function AppearanceScreen({ onBack, onOpenPaywall, navActive, onNav }) {
+    const { theme, accent, isPro, setTheme, setAccent } = React.useContext(ThemeCtx);
+    const handleAccent = (a) => { if (a.pro && !isPro) { onOpenPaywall(); return; } setAccent(a.id); };
+    const handleTheme = (t) => { if (t === 'black' && !isPro) { onOpenPaywall(); return; } setTheme(t); };
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Тема и акцент" />
+        <div className="wb-scroll">
+          <div className="wb-section-hdr"><h2>Акцентный цвет</h2>{!isPro && <span style={{fontSize:11,color:'var(--wb-text-muted)',fontWeight:600}}>🔒 PRO</span>}</div>
+          <div className="wb-set-group" style={{padding:0}}>
+            <div className="wb-accent-grid">
+              {ACCENTS.map(a => {
+                const locked = a.pro && !isPro;
+                return (
+                  <div key={a.id} className={`wb-accent-swatch ${accent === a.id ? 'active' : ''} ${locked ? 'locked' : ''}`} style={{background:a.grad}} onClick={() => handleAccent(a)}>
+                    <span className="wb-accent-swatch-name">{a.name}</span>
+                    {accent === a.id && <span style={{color:'#fff',fontSize:14,fontWeight:800,position:'relative',textShadow:'0 1px 2px rgba(0,0,0,0.3)'}}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="wb-section-hdr"><h2>Фон приложения</h2>{!isPro && <span style={{fontSize:11,color:'var(--wb-text-muted)',fontWeight:600}}>🔒 PRO для «Чёрного»</span>}</div>
+          <div className="wb-set-group" style={{padding:0}}>
+            <div className="wb-theme-grid">
+              <div className={`wb-theme-card ${theme === 'dark' ? 'active' : ''}`} onClick={() => handleTheme('dark')}>
+                <div className="wb-theme-preview dark"><div className="wb-theme-preview-card" /><div className="wb-theme-preview-card" /></div>
+                <div className="wb-theme-info"><div><div className="wb-theme-info-t">Тёмный</div><div className="wb-theme-info-s">По умолчанию</div></div>{theme === 'dark' && <div style={{color:'var(--wb-accent-strong)',fontWeight:800}}>✓</div>}</div>
+              </div>
+              <div className={`wb-theme-card ${theme === 'black' ? 'active' : ''}`} onClick={() => handleTheme('black')}>
+                <div className="wb-theme-preview black"><div className="wb-theme-preview-card" /><div className="wb-theme-preview-card" /></div>
+                <div className="wb-theme-info"><div><div className="wb-theme-info-t">Чёрный</div><div className="wb-theme-info-s">OLED‑экономия</div></div>{theme === 'black' ? <div style={{color:'var(--wb-accent-strong)',fontWeight:800}}>✓</div> : !isPro && <div className="wb-theme-info-lock">🔒</div>}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  /* ═══════════ CREATE WISH ═══════════ */
+  function CreateWishScreen({ onBack, onSave }) {
+    const [url, setUrl] = React.useState('');
+    const [imported, setImported] = React.useState(null);
+    const [title, setTitle] = React.useState('');
+    const [price, setPrice] = React.useState('');
+    const [note, setNote] = React.useState('');
+    const [prio, setPrio] = React.useState(2);
+    const [visibility, setVisibility] = React.useState('public');
+
+    const doImport = () => {
+      // mock: pretend to pull from ozon
+      setImported({
+        store:'ozon', storeIcon:'📦',
+        emoji:'🎧',
+        title:'AirPods Pro 2 · USB‑C (2024)',
+        price:'24 990 ₽', oldPrice:'28 990 ₽'
+      });
+      setTitle('AirPods Pro 2 · USB‑C (2024)');
+      setPrice('24 990 ₽');
+    };
+
+    const prios = [
+      { v:1, ic:'🤍', lbl:'Было бы неплохо' },
+      { v:2, ic:'✨', lbl:'Хочу' },
+      { v:3, ic:'🔥', lbl:'Очень хочу' },
+    ];
+
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Новое желание" right={<span style={{fontSize:14,color:title ? 'var(--wb-accent-strong)' : 'var(--wb-text-muted)',fontWeight:650,padding:'0 12px',cursor:title ? 'pointer' : 'default'}} onClick={() => title && onSave()}>Готово</span>} />
+        <div className="wb-scroll" style={{paddingBottom:40}}>
+
+          <div className="wb-wishlist-pick">
+            <div className="wb-wishlist-pick-ic">🎂</div>
+            <div className="wb-wishlist-pick-body">
+              <div className="wb-wishlist-pick-label">Вишлист</div>
+              <div className="wb-wishlist-pick-name">На день рождения</div>
+            </div>
+            <div className="wb-wishlist-pick-trail">›</div>
+          </div>
+
+          <div className="wb-form-label">Ссылка на магазин <span style={{color:'var(--wb-accent-strong)',textTransform:'none',letterSpacing:0,fontSize:10}}>· PRO</span></div>
+          <div className="wb-input-wrap">
+            <input className="wb-input url" placeholder="ozon.ru / wildberries / market" value={url} onChange={e => setUrl(e.target.value)} />
+            <button className="wb-input-action" onClick={doImport}>Вставить</button>
+          </div>
+
+          {imported && (
+            <div className="wb-preview">
+              <div className="wb-preview-thumb">{imported.emoji}</div>
+              <div className="wb-preview-body">
+                <div className="wb-preview-store">{imported.storeIcon} {imported.store}</div>
+                <div className="wb-preview-t">{imported.title}</div>
+                <div><span className="wb-preview-p">{imported.price}</span><span className="wb-preview-old">{imported.oldPrice}</span></div>
+              </div>
+            </div>
+          )}
+
+          <div className="wb-form-label">Название</div>
+          <div className="wb-input-wrap"><input className="wb-input" placeholder="Что ты хочешь в подарок?" value={title} onChange={e => setTitle(e.target.value)} /></div>
+
+          <div className="wb-form-label">Цена</div>
+          <div className="wb-input-wrap"><input className="wb-input" placeholder="необязательно" value={price} onChange={e => setPrice(e.target.value)} /></div>
+
+          <div className="wb-form-label">Приоритет</div>
+          <div className="wb-prio-row">
+            {prios.map(p => (
+              <div key={p.v} className={`wb-prio ${prio === p.v ? `active p${p.v}` : `p${p.v}`}`} onClick={() => setPrio(p.v)}>
+                <div className="wb-prio-ic">{p.ic}</div>
+                <div className="wb-prio-lbl">{p.lbl}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="wb-form-label">Комментарий</div>
+          <div className="wb-input-wrap"><textarea className="wb-input wb-textarea" placeholder="Размер, цвет, модель — подсказка для дарителей" value={note} onChange={e => setNote(e.target.value)} /></div>
+
+          <div className="wb-form-label">Видимость</div>
+          <div className="wb-segmented">
+            <div className={`wb-seg ${visibility === 'public' ? 'active' : ''}`} onClick={() => setVisibility('public')}><span className="wb-seg-ic">👁</span>Открыто</div>
+            <div className={`wb-seg ${visibility === 'surprise' ? 'active' : ''}`} onClick={() => setVisibility('surprise')}><span className="wb-seg-ic">🤫</span>Сюрприз</div>
+            <div className={`wb-seg ${visibility === 'private' ? 'active' : ''}`} onClick={() => setVisibility('private')}><span className="wb-seg-ic">🔒</span>Личное</div>
+          </div>
+
+          <div style={{height:120}} />
+        </div>
+        <div className="wb-cta-bar">
+          <Button variant="primary" onClick={onSave}>{imported ? 'Добавить желание' : title ? 'Добавить желание' : 'Заполни название'}</Button>
+        </div>
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  /* ═══════════ PROFILE v2 ═══════════ */
+  function ProfileScreen({ navActive, onNav, onOpenSettings, onOpenFriend, onOpenSanta }) {
+    const [tab, setTab] = React.useState('wishlists');
+    const { isPro } = React.useContext(ThemeCtx);
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="↗" />} title="" right={<><HeaderBtn icon="🔔" /><HeaderBtn icon="⚙" onClick={onOpenSettings} /></>} />
+        <div className="wb-scroll">
+          <div className="wb-profile-cover">
+            <button className="wb-profile-cover-edit">✎</button>
+          </div>
+          <div className="wb-profile-card">
+            <div className="wb-avatar-xl">А</div>
+            <div className="wb-profile-card-name">Аня Смирнова {isPro && <span className="wb-badge wb-badge-pro" style={{padding:'3px 8px',fontSize:10}}>✦ PRO</span>}</div>
+            <div className="wb-profile-card-handle">@anyasmirnova</div>
+            <div className="wb-profile-card-bio">Дизайнер · коллекционирую книги и керамику. Люблю неожиданные подарки, не люблю «на всякий случай».</div>
+            <div className="wb-profile-meta">
+              <div className="wb-profile-meta-item"><span className="wb-profile-meta-ic">🎂</span>12 декабря</div>
+              <div className="wb-profile-meta-item"><span className="wb-profile-meta-ic">📍</span>Москва</div>
+              <div className="wb-profile-meta-item"><span className="wb-profile-meta-ic">🔗</span>anya.design</div>
+            </div>
+            <div className="wb-profile-actions">
+              <button className="wb-profile-action primary">✎ Редактировать</button>
+              <button className="wb-profile-action">↗ Поделиться</button>
+            </div>
+          </div>
+
+          <div className="wb-profile-stats2">
+            <div className="wb-profile-stat2"><div className="wb-profile-stat2-n">12</div><div className="wb-profile-stat2-l">вишлистов</div></div>
+            <div className="wb-profile-stat2"><div className="wb-profile-stat2-n">148</div><div className="wb-profile-stat2-l">желаний</div></div>
+            <div className="wb-profile-stat2"><div className="wb-profile-stat2-n">27</div><div className="wb-profile-stat2-l">подписок</div></div>
+            <div className="wb-profile-stat2"><div className="wb-profile-stat2-n">34</div><div className="wb-profile-stat2-l">подарено</div></div>
+          </div>
+
+          <div className="wb-profile-tabs">
+            <div className={`wb-profile-tab ${tab === 'wishlists' ? 'active' : ''}`} onClick={() => setTab('wishlists')}>Вишлисты</div>
+            <div className={`wb-profile-tab ${tab === 'friends' ? 'active' : ''}`} onClick={() => setTab('friends')}>Подписки</div>
+            <div className={`wb-profile-tab ${tab === 'gifts' ? 'active' : ''}`} onClick={() => setTab('gifts')}>Подарил</div>
+          </div>
+
+          {tab === 'wishlists' && (<>
+            <div style={{margin:'0 16px 10px',padding:'14px',background:'var(--wb-card)',border:'1px solid var(--wb-border)',borderRadius:18,display:'flex',alignItems:'center',gap:12,backdropFilter:'blur(14px)',cursor:'pointer'}}>
+              <div style={{width:42,height:42,borderRadius:13,background:'linear-gradient(135deg,#F06AB4,#C53F88)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,boxShadow:'0 4px 12px rgba(240,106,180,0.25),inset 0 1px 0 rgba(255,255,255,0.25)'}}>🎂</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14.5,fontWeight:650,color:'var(--wb-text)',letterSpacing:'-0.01em'}}>На день рождения</div>
+                <div style={{fontSize:12,color:'var(--wb-text-muted)',marginTop:2}}>12 желаний · до 12 декабря</div>
+              </div>
+              <span className="wb-badge wb-badge-soft" style={{padding:'3px 8px',fontSize:10}}>Публичный</span>
+            </div>
+            <div style={{margin:'0 16px 10px',padding:'14px',background:'var(--wb-card)',border:'1px solid var(--wb-border)',borderRadius:18,display:'flex',alignItems:'center',gap:12,backdropFilter:'blur(14px)',cursor:'pointer'}}>
+              <div style={{width:42,height:42,borderRadius:13,background:'linear-gradient(135deg,#34C98A,#1E9765)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,boxShadow:'0 4px 12px rgba(52,201,138,0.25),inset 0 1px 0 rgba(255,255,255,0.25)'}}>🎄</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14.5,fontWeight:650,color:'var(--wb-text)',letterSpacing:'-0.01em'}}>Новый год 2026</div>
+                <div style={{fontSize:12,color:'var(--wb-text-muted)',marginTop:2}}>8 желаний · до 31 декабря</div>
+              </div>
+              <span className="wb-badge wb-badge-soft" style={{padding:'3px 8px',fontSize:10}}>Только друзья</span>
+            </div>
+            <div style={{margin:'0 16px 10px',padding:'14px',background:'var(--wb-card)',border:'1px solid var(--wb-border)',borderRadius:18,display:'flex',alignItems:'center',gap:12,backdropFilter:'blur(14px)',cursor:'pointer'}}>
+              <div style={{width:42,height:42,borderRadius:13,background:'linear-gradient(135deg,#8B7BFF,#5B48E5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,boxShadow:'0 4px 12px var(--wb-accent-shadow-soft),inset 0 1px 0 rgba(255,255,255,0.25)'}}>✈</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14.5,fontWeight:650,color:'var(--wb-text)',letterSpacing:'-0.01em'}}>Мечты на 2027</div>
+                <div style={{fontSize:12,color:'var(--wb-text-muted)',marginTop:2}}>6 желаний · без срока</div>
+              </div>
+              <span style={{fontSize:10.5,fontWeight:700,padding:'3px 8px',borderRadius:6,background:'rgba(143,148,163,0.12)',color:'var(--wb-text-muted)',border:'1px solid rgba(143,148,163,0.22)'}}>Личный</span>
+            </div>
+            <div style={{margin:'14px 16px 4px',padding:'14px',border:'1.5px dashed var(--wb-border-strong)',borderRadius:18,textAlign:'center',color:'var(--wb-text-muted)',fontSize:13,fontWeight:600,cursor:'pointer',letterSpacing:'-0.005em'}}>+ Создать вишлист</div>
+          </>)}
+
+          {tab === 'friends' && (<>
+            <div className="wb-friend-row" onClick={onOpenFriend}>
+              <div className="wb-friend-av" style={{background:'linear-gradient(135deg,#F06AB4,#C53F88)'}}>К</div>
+              <div style={{flex:1,minWidth:0}}><div className="wb-friend-t">Катя Орлова</div><div className="wb-friend-s">@katya · 3 активных вишлиста</div></div>
+              <span className="wb-badge" style={{padding:'3px 7px',fontSize:10,background:'rgba(232,93,93,0.12)',color:'#E85D5D',border:'1px solid rgba(232,93,93,0.25)'}}>🎂 2дн</span>
+            </div>
+            <div className="wb-friend-row" onClick={onOpenFriend}>
+              <div className="wb-friend-av" style={{background:'linear-gradient(135deg,#34C98A,#1E9765)'}}>М</div>
+              <div style={{flex:1,minWidth:0}}><div className="wb-friend-t">Миша Петров</div><div className="wb-friend-s">@mishka · 1 вишлист</div></div>
+            </div>
+            <div className="wb-friend-row" onClick={onOpenFriend}>
+              <div className="wb-friend-av" style={{background:'linear-gradient(135deg,#FBBF24,#D97706)'}}>Д</div>
+              <div style={{flex:1,minWidth:0}}><div className="wb-friend-t">Денис Коваль</div><div className="wb-friend-s">@denis_k · 2 вишлиста</div></div>
+            </div>
+            <div className="wb-friend-row" onClick={onOpenFriend}>
+              <div className="wb-friend-av" style={{background:'linear-gradient(135deg,#8B7BFF,#5B48E5)'}}>С</div>
+              <div style={{flex:1,minWidth:0}}><div className="wb-friend-t">Саша Лис</div><div className="wb-friend-s">@sashalis · нет вишлистов</div></div>
+            </div>
+          </>)}
+
+          {tab === 'gifts' && (<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,padding:'0 16px 16px'}}>
+            {[
+              { e:'🎧', t:'AirPods Pro', p:'Миша · дек 25' },
+              { e:'📚', t:'Sapiens', p:'Катя · окт 25' },
+              { e:'🌿', t:'Monstera', p:'Лена · сен 25' },
+              { e:'🎨', t:'Набор кистей', p:'Ира · июл 25' },
+              { e:'🍷', t:'Винный набор', p:'Артём · май 25' },
+              { e:'☕', t:'Hario V60', p:'Миша · мар 25' },
+            ].map((g, i) => (
+              <div key={i} style={{background:'var(--wb-card)',border:'1px solid var(--wb-border)',borderRadius:14,overflow:'hidden',cursor:'pointer',backdropFilter:'blur(12px)'}}>
+                <div style={{aspectRatio:'1/1',background:'linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:34}}>{g.e}</div>
+                <div style={{padding:'8px 9px 10px'}}>
+                  <div style={{fontSize:11.5,fontWeight:650,color:'var(--wb-text)',letterSpacing:'-0.005em',lineHeight:1.25,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.t}</div>
+                  <div style={{fontSize:10.5,color:'var(--wb-text-muted)',marginTop:2}}>{g.p}</div>
+                </div>
+              </div>
+            ))}
+          </div>)}
+
+          <div style={{height:20}} />
+          <Banner tone="accent" icon="🎅"><b>Тайный Санта — до 1 декабря.</b> Создай комнату с друзьями. <span onClick={onOpenSanta} style={{color:'var(--wb-accent-strong)',fontWeight:700,cursor:'pointer'}}>Открыть →</span></Banner>
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+
+  /* ═══════════ FRIEND VIEW ═══════════ */
+  function FriendProfileScreen({ onBack, navActive, onNav, onOpenWishlist }) {
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Профиль" right={<HeaderBtn icon="⋯" />} />
+        <div className="wb-scroll">
+          <div className="wb-friend-hero">
+            <div className="wb-friend-hero-av">К</div>
+            <div className="wb-friend-hero-body">
+              <div className="wb-friend-hero-name">Катя Орлова</div>
+              <div className="wb-friend-hero-handle">@katya · Москва</div>
+              <div className="wb-friend-hero-event">🎂 День рождения через 2 дня</div>
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,margin:'0 16px 16px'}}>
+            <button className="wb-profile-action primary">💬 Написать</button>
+            <button className="wb-profile-action">🤫 Сюрприз‑режим</button>
+          </div>
+          <div className="wb-section-hdr"><h2>Вишлисты</h2><span className="wb-link">3 →</span></div>
+          <div onClick={onOpenWishlist} style={{margin:'0 16px 10px',padding:'14px',background:'var(--wb-card)',border:'1px solid var(--wb-border)',borderRadius:18,display:'flex',alignItems:'center',gap:12,backdropFilter:'blur(14px)',cursor:'pointer'}}>
+            <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#F06AB4,#C53F88)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,boxShadow:'0 4px 12px rgba(240,106,180,0.25),inset 0 1px 0 rgba(255,255,255,0.22)'}}>🎂</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:15,fontWeight:650,color:'var(--wb-text)',letterSpacing:'-0.012em'}}>День рождения Кати</div>
+              <div style={{fontSize:12,color:'var(--wb-text-muted)',marginTop:2}}>9 желаний · 3 свободно</div>
+            </div>
+            <Chip tone="warning">Скоро</Chip>
+          </div>
+          <div style={{margin:'0 16px 10px',padding:'14px',background:'var(--wb-card)',border:'1px solid var(--wb-border)',borderRadius:18,display:'flex',alignItems:'center',gap:12,backdropFilter:'blur(14px)',cursor:'pointer'}}>
+            <div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#34C98A,#1E9765)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,boxShadow:'0 4px 12px rgba(52,201,138,0.25),inset 0 1px 0 rgba(255,255,255,0.22)'}}>🎄</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:15,fontWeight:650,color:'var(--wb-text)',letterSpacing:'-0.012em'}}>Новый год</div>
+              <div style={{fontSize:12,color:'var(--wb-text-muted)',marginTop:2}}>6 желаний · 6 свободно</div>
+            </div>
+          </div>
+          <div className="wb-section-hdr"><h2>Общие друзья · 4</h2></div>
+          <div style={{padding:'0 16px 16px'}}><AvatarStack people={['М','Д','С','И']} extra={0} /></div>
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  /* ═══════════ CALENDAR v2 ═══════════ */
+  function CalendarScreen({ navActive, onNav, onOpenEvent, onAddEvent }) {
+    const [selected, setSelected] = React.useState(19);
+    const [view, setView] = React.useState('month');
+    const [filter, setFilter] = React.useState({ bday:true, holiday:true, custom:true });
+    const weekdays = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+    const days = [
+      { d:30, out:true }, { d:1 },
+      { d:2 }, { d:3 }, { d:4 }, { d:5, we:true }, { d:6, we:true },
+      { d:7 }, { d:8 }, { d:9 }, { d:10, event:'accent', emoji:'🎂' }, { d:11 }, { d:12, we:true }, { d:13, we:true },
+      { d:14 }, { d:15 }, { d:16, event:'wed', emoji:'💍' }, { d:17 }, { d:18 }, { d:19, we:true, today:true }, { d:20, we:true },
+      { d:21 }, { d:22, event:'bday', emoji:'🎉' }, { d:23 }, { d:24 }, { d:25 }, { d:26, we:true }, { d:27, we:true },
+      { d:28 }, { d:29 }, { d:30 }, { d:31, event:'ny', emoji:'🎄' }, { d:1, out:true }, { d:2, out:true, we:true }, { d:3, out:true, we:true },
+    ];
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="🔍" />} title="" right={<><HeaderBtn icon="📥" /><HeaderBtn icon="+" onClick={onAddEvent} /></>} />
+        <div className="wb-scroll">
+          <div className="wb-cal-header">
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--wb-text-muted)',letterSpacing:'0.8px',textTransform:'uppercase'}}>2026</div>
+              <div className="wb-cal-title">Декабрь</div>
+            </div>
+            <div className="wb-cal-nav">
+              <button className="wb-cal-nav-btn">‹</button>
+              <button className="wb-cal-nav-btn" style={{padding:'0 12px',width:'auto',fontSize:12,fontWeight:600,color:'var(--wb-text)'}}>Сегодня</button>
+              <button className="wb-cal-nav-btn">›</button>
+            </div>
+          </div>
+
+          <div className="wb-cal-view-toggle">
+            <div className={`wb-cal-view-opt ${view === 'month' ? 'active' : ''}`} onClick={() => setView('month')}>Месяц</div>
+            <div className={`wb-cal-view-opt ${view === 'week' ? 'active' : ''}`} onClick={() => setView('week')}>Неделя</div>
+            <div className={`wb-cal-view-opt ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>Список</div>
+          </div>
+
+          <div className="wb-cal-filters">
+            <div className={`wb-cal-filter ${filter.bday ? 'on' : ''}`} onClick={() => setFilter(f => ({ ...f, bday:!f.bday }))}><span className="wb-cal-filter-dot" style={{background:'#F06AB4'}} />Дни рождения</div>
+            <div className={`wb-cal-filter ${filter.holiday ? 'on' : ''}`} onClick={() => setFilter(f => ({ ...f, holiday:!f.holiday }))}><span className="wb-cal-filter-dot" style={{background:'#34C98A'}} />Праздники</div>
+            <div className={`wb-cal-filter ${filter.custom ? 'on' : ''}`} onClick={() => setFilter(f => ({ ...f, custom:!f.custom }))}><span className="wb-cal-filter-dot" style={{background:'var(--wb-accent)'}} />Свои</div>
+          </div>
+
+          <div className="wb-cal-today-card" onClick={onOpenEvent}>
+            <div className="wb-cal-today-label">Сегодня · 19 декабря</div>
+            <div className="wb-cal-today-t">🎂 До др Миши — 3 дня</div>
+            <div className="wb-cal-today-s">3 идеи в вишлисте · Марина уже выбрала наушники</div>
+          </div>
+
+          {view === 'month' && (<>
+            <div className="wb-cal-weekdays">
+              {weekdays.map((w, i) => <div key={w} className={`wb-cal-wd${i >= 5 ? ' we' : ''}`}>{w}</div>)}
+            </div>
+            <div className="wb-cal-grid">
+              {days.map((c, i) => {
+                const cls = ['wb-cal-cell'];
+                if (c.out) cls.push('out');
+                if (c.today) cls.push('today');
+                if (c.event) cls.push('event', c.event);
+                if (!c.out && c.d === selected) cls.push('selected');
+                return (
+                  <div key={i} className={cls.join(' ')} onClick={() => !c.out && setSelected(c.d)}>
+                    <span>{c.d}</span>
+                    {c.emoji && <span className="wb-cal-emoji">{c.emoji}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </>)}
+
+          <div className="wb-cal-agenda-date"><div className="wb-cal-agenda-date-d">22</div><div className="wb-cal-agenda-date-m">дек · пн</div><div className="wb-cal-agenda-date-line" /></div>
+          <div className="wb-event-card" onClick={onOpenEvent}>
+            <div className="wb-event-date pink"><div className="wb-event-date-d">22</div><div className="wb-event-date-m">дек</div></div>
+            <div className="wb-event-body">
+              <div className="wb-event-t"><span className="wb-event-ic">🎉</span>Ноа — 1 годик</div>
+              <div className="wb-event-s"><span>Семейный праздник · 12:00</span></div>
+            </div>
+            <div className="wb-event-trail">›</div>
+          </div>
+
+          <div className="wb-cal-agenda-date"><div className="wb-cal-agenda-date-d">16</div><div className="wb-cal-agenda-date-m">дек · вт</div><div className="wb-cal-agenda-date-line" /></div>
+          <div className="wb-event-card">
+            <div className="wb-event-date warn"><div className="wb-event-date-d">16</div><div className="wb-event-date-m">дек</div></div>
+            <div className="wb-event-body">
+              <div className="wb-event-t"><span className="wb-event-ic">💍</span>Годовщина свадьбы</div>
+              <div className="wb-event-s"><span>8 лет вместе · повтор ежегодно</span></div>
+            </div>
+            <div className="wb-event-trail">›</div>
+          </div>
+
+          <div className="wb-cal-agenda-date"><div className="wb-cal-agenda-date-d">31</div><div className="wb-cal-agenda-date-m">дек · чт</div><div className="wb-cal-agenda-date-line" /></div>
+          <div className="wb-event-card">
+            <div className="wb-event-date green"><div className="wb-event-date-d">31</div><div className="wb-event-date-m">дек</div></div>
+            <div className="wb-event-body">
+              <div className="wb-event-t"><span className="wb-event-ic">🎄</span>Новый год</div>
+              <div className="wb-event-s"><span className="wb-event-countdown">через 12 дней</span><span>Тайный Санта · 6 участников</span></div>
+            </div>
+            <div className="wb-event-trail">›</div>
+          </div>
+
+          <div style={{margin:'8px 16px 4px',padding:'14px',border:'1.5px dashed var(--wb-border-strong)',borderRadius:18,textAlign:'center',color:'var(--wb-text-muted)',fontSize:13,fontWeight:600,cursor:'pointer'}} onClick={onAddEvent}>+ Добавить событие</div>
+          <div style={{height:18}} />
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+
+  /* ═══════════ ADD EVENT ═══════════ */
+  function AddEventScreen({ onBack, onSave }) {
+    const [emoji, setEmoji] = React.useState('🎂');
+    const [title, setTitle] = React.useState('');
+    const [repeat, setRepeat] = React.useState('yearly');
+    const [notify, setNotify] = React.useState(true);
+    const [link, setLink] = React.useState(true);
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Новое событие" right={<span style={{fontSize:14,color:title ? 'var(--wb-accent-strong)' : 'var(--wb-text-muted)',fontWeight:650,padding:'0 12px',cursor:title ? 'pointer' : 'default'}} onClick={() => title && onSave()}>Готово</span>} />
+        <div className="wb-scroll" style={{paddingBottom:40}}>
+          <div className="wb-form-label">Иконка</div>
+          <div className="wb-emoji-picker">
+            {['🎂','🎉','💍','🎄','🎓','👶','✈','🏠','💼'].map(e => (
+              <div key={e} className={`wb-emoji-opt ${emoji === e ? 'active' : ''}`} onClick={() => setEmoji(e)}>{e}</div>
+            ))}
+          </div>
+
+          <div className="wb-form-label">Название</div>
+          <div className="wb-input-wrap"><input className="wb-input" placeholder="Др Миши, Годовщина…" value={title} onChange={e => setTitle(e.target.value)} /></div>
+
+          <div className="wb-form-label">Кого поздравляем</div>
+          <div className="wb-wishlist-pick">
+            <div className="wb-wishlist-pick-ic">👤</div>
+            <div className="wb-wishlist-pick-body">
+              <div className="wb-wishlist-pick-label">Друг</div>
+              <div className="wb-wishlist-pick-name">Миша Петров</div>
+            </div>
+            <div className="wb-wishlist-pick-trail">›</div>
+          </div>
+
+          <div className="wb-form-label">Дата</div>
+          <div className="wb-date-picker">
+            <div className="wb-date-cell"><div className="wb-date-cell-l">День</div><div className="wb-date-cell-v">22</div></div>
+            <div className="wb-date-cell"><div className="wb-date-cell-l">Месяц</div><div className="wb-date-cell-v">Дек</div></div>
+            <div className="wb-date-cell"><div className="wb-date-cell-l">Год</div><div className="wb-date-cell-v">—</div></div>
+          </div>
+
+          <div className="wb-form-label">Повтор</div>
+          <div className="wb-repeat-row">
+            {[
+              { id:'none', l:'Не повторять' },
+              { id:'yearly', l:'Каждый год' },
+              { id:'monthly', l:'Каждый месяц' },
+              { id:'weekly', l:'Каждую неделю' },
+            ].map(r => (
+              <div key={r.id} className={`wb-repeat ${repeat === r.id ? 'active' : ''}`} onClick={() => setRepeat(r.id)}>{r.l}</div>
+            ))}
+          </div>
+
+          <div className="wb-form-label">Привязать вишлист</div>
+          <div className="wb-wishlist-pick">
+            <div className="wb-wishlist-pick-ic" style={{background:'linear-gradient(135deg,#F06AB4,#C53F88)'}}>🎂</div>
+            <div className="wb-wishlist-pick-body">
+              <div className="wb-wishlist-pick-label">Вишлист</div>
+              <div className="wb-wishlist-pick-name">Др Миши — идеи</div>
+            </div>
+            <div className="wb-wishlist-pick-trail">›</div>
+          </div>
+
+          <div className="wb-set-group" style={{margin:'4px 16px 14px'}}>
+            <div className="wb-set-row"><div className="wb-set-row-ic">🔔</div><div className="wb-set-row-body"><div className="wb-set-row-t">Напомнить</div><div className="wb-set-row-s">За 7 дней, за 1 день</div></div><div className={`wb-toggle ${notify ? 'on' : ''}`} onClick={() => setNotify(!notify)} /></div>
+            <div className="wb-set-row"><div className="wb-set-row-ic">📤</div><div className="wb-set-row-body"><div className="wb-set-row-t">Делиться с друзьями</div><div className="wb-set-row-s">Появится в их календаре</div></div><div className={`wb-toggle ${link ? 'on' : ''}`} onClick={() => setLink(!link)} /></div>
+          </div>
+
+          <div style={{height:100}} />
+        </div>
+        <div className="wb-cta-bar">
+          <Button variant="primary" onClick={onSave}>{title ? 'Добавить событие' : 'Заполни название'}</Button>
+        </div>
+      </Phone>
+    );
+  }
+
+  /* ═══════════ RESERVATIONS ═══════════ */
+  function ReservationsScreen({ navActive, onNav }) {
+    const [tab, setTab] = React.useState('active');
+    return (
+      <Phone>
+        <Header title="Мои брони" subtitle="Подарки, которые ты выбрал" right={<HeaderBtn icon="🔍" />} />
+        <div className="wb-scroll">
+          <div className="wb-res-tabs">
+            <div className={`wb-res-tab ${tab === 'active' ? 'active' : ''}`} onClick={() => setTab('active')}>Активные<span className="wb-res-tab-count">5</span></div>
+            <div className={`wb-res-tab ${tab === 'given' ? 'active' : ''}`} onClick={() => setTab('given')}>Подарено<span className="wb-res-tab-count">34</span></div>
+            <div className={`wb-res-tab ${tab === 'cancelled' ? 'active' : ''}`} onClick={() => setTab('cancelled')}>Отмена</div>
+          </div>
+
+          {tab === 'active' && (<>
+            <div className="wb-res-card urgent">
+              <div className="wb-res-card-top">
+                <div className="wb-res-card-thumb">🎧</div>
+                <div className="wb-res-card-body">
+                  <div className="wb-res-card-for"><div className="wb-res-card-for-av" style={{background:'linear-gradient(135deg,#F06AB4,#C53F88)'}}>К</div>Для Кати · др 22 дек</div>
+                  <div className="wb-res-card-t">AirPods Pro 2 · USB‑C (2024)</div>
+                  <div className="wb-res-card-meta"><span className="wb-res-card-price">24 990 ₽</span><span>· ozon</span><Chip tone="prio3">• Очень хочет</Chip></div>
+                </div>
+              </div>
+              <div className="wb-res-card-foot">
+                <div className="wb-res-card-deadline urgent">⏰ Купить до 20 дек · 1 день</div>
+                <button className="wb-res-card-btn">Открыть</button>
+                <button className="wb-res-card-btn primary">Купил ✓</button>
+              </div>
+            </div>
+
+            <div className="wb-res-card">
+              <div className="wb-res-card-top">
+                <div className="wb-res-card-thumb">📚</div>
+                <div className="wb-res-card-body">
+                  <div className="wb-res-card-for"><div className="wb-res-card-for-av" style={{background:'linear-gradient(135deg,#34C98A,#1E9765)'}}>М</div>Для Миши · др 10 дек</div>
+                  <div className="wb-res-card-t">Sapiens · краткая история</div>
+                  <div className="wb-res-card-meta"><span className="wb-res-card-price">890 ₽</span><span>· лабиринт</span></div>
+                </div>
+              </div>
+              <div className="wb-res-card-foot">
+                <div className="wb-res-card-deadline">🗓 К 10 декабря</div>
+                <button className="wb-res-card-btn">Открыть</button>
+                <button className="wb-res-card-btn primary">Купил ✓</button>
+              </div>
+            </div>
+
+            <div className="wb-res-card">
+              <div className="wb-res-card-top">
+                <div className="wb-res-card-thumb">🌿</div>
+                <div className="wb-res-card-body">
+                  <div className="wb-res-card-for"><div className="wb-res-card-for-av" style={{background:'linear-gradient(135deg,#FBBF24,#D97706)'}}>Л</div>Для Лены · новоселье</div>
+                  <div className="wb-res-card-t">Monstera deliciosa · крупная</div>
+                  <div className="wb-res-card-meta"><span className="wb-res-card-price">4 200 ₽</span><span>· planty</span></div>
+                </div>
+              </div>
+              <div className="wb-res-card-foot">
+                <div className="wb-res-card-deadline">🗓 К 5 января</div>
+                <button className="wb-res-card-btn">Открыть</button>
+                <button className="wb-res-card-btn primary">Купил ✓</button>
+              </div>
+            </div>
+
+            <div style={{margin:'12px 16px 4px',padding:'14px',background:'var(--wb-card)',border:'1px solid var(--wb-border)',borderRadius:18,display:'flex',alignItems:'center',gap:10,backdropFilter:'blur(14px)'}}>
+              <div style={{fontSize:20}}>💡</div>
+              <div style={{flex:1,fontSize:12.5,color:'var(--wb-text-secondary)',lineHeight:1.4,letterSpacing:'-0.005em'}}>Совет: отметь «Купил», когда завершишь покупку — подарок пропадёт из списков друзей в режиме сюрприза.</div>
+            </div>
+          </>)}
+          <div style={{height:18}} />
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+
+  /* ═══════════ NOTIFICATIONS ═══════════ */
+  function NotificationsScreen({ onBack, navActive, onNav }) {
+    const N = ({ unread, ic, tone, title, sub, time }) => (
+      <div className={`wb-notif ${unread ? 'unread' : ''}`}>
+        <div className={`wb-notif-ic ${tone}`}>{ic}</div>
+        <div className="wb-notif-body">
+          <div className="wb-notif-t">{title}</div>
+          <div className="wb-notif-s">{sub}</div>
+        </div>
+        <div className="wb-notif-time">{time}</div>
+      </div>
+    );
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Уведомления" right={<HeaderBtn icon="⚙" />} />
+        <div className="wb-scroll">
+          <div className="wb-notif-group-date">Сегодня</div>
+          <N unread ic="🎁" tone="accent" title={<><b>Миша</b> забронировал AirPods Pro 2</>} sub="в вишлисте «На день рождения»" time="2 ч" />
+          <N unread ic="💬" tone="pink" title={<><b>Катя</b> оставила намёк</>} sub="«Только не размер S, всё остальное ок!»" time="5 ч" />
+          <N unread ic="🎂" tone="warn" title={<>День рождения <b>Миши</b> через 3 дня</>} sub="Не забудь выбрать подарок" time="9 ч" />
+          <div className="wb-notif-group-date">Вчера</div>
+          <N ic="👋" tone="pink" title={<><b>Денис</b> подписался на тебя</>} sub="Принять во взаимные?" time="вчера" />
+          <N ic="🎅" tone="green" title={<>Жеребьёвка Тайного Санты</>} sub="Комната «Семья» · твой подопечный готов" time="вчера" />
+          <N ic="✨" tone="accent" title={<>Новая идея от <b>Саши</b></>} sub="Добавил «Sony WH‑1000XM5» в твои сохранённые" time="вчера" />
+          <div className="wb-notif-group-date">На этой неделе</div>
+          <N ic="🔥" tone="warn" title={<>Скидка на желание «Fujifilm X100V»</>} sub="−15% на yandex.market · до 3 дней" time="пн" />
+          <N ic="👥" tone="accent" title={<><b>3 новых</b> подписчика</>} sub="Лена, Артём и ещё один" time="вс" />
+          <div style={{height:18}} />
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+
+  /* ═══════════ SECRET SANTA ═══════════ */
+  function SantaScreen({ onBack, navActive, onNav }) {
+    const [revealed, setRevealed] = React.useState(false);
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Тайный Санта" right={<HeaderBtn icon="+" />} />
+        <div className="wb-scroll">
+          <div className="wb-santa-hero">
+            <div className="wb-santa-emoji">🎅</div>
+            <div className="wb-santa-title">До жеребьёвки осталось</div>
+            <div className="wb-santa-sub">1 декабря в 20:00 — WishBoard выберет пары</div>
+            <div className="wb-santa-countdown">
+              <div className="wb-santa-countdown-cell"><div className="wb-santa-countdown-n">12</div><div className="wb-santa-countdown-l">дней</div></div>
+              <div className="wb-santa-countdown-cell"><div className="wb-santa-countdown-n">06</div><div className="wb-santa-countdown-l">часов</div></div>
+              <div className="wb-santa-countdown-cell"><div className="wb-santa-countdown-n">48</div><div className="wb-santa-countdown-l">мин</div></div>
+            </div>
+          </div>
+
+          <div className="wb-section-hdr"><h2>Мои комнаты</h2><span className="wb-link">+ Создать</span></div>
+
+          <div className="wb-santa-room assigned">
+            <div className="wb-santa-room-top">
+              <div className="wb-santa-room-ic">👨‍👩‍👧</div>
+              <div className="wb-santa-room-body">
+                <div className="wb-santa-room-t">Семья</div>
+                <div className="wb-santa-room-s"><span>6 участников</span>·<span>бюджет 3 000 ₽</span>·<Chip tone="success">Жеребьёвка прошла</Chip></div>
+              </div>
+            </div>
+            <div className="wb-santa-room-reveal">
+              <div style={{fontSize:28}}>{revealed ? '🎁' : '❓'}</div>
+              <div style={{flex:1}}>
+                <div className="wb-santa-room-reveal-t">Твой подопечный</div>
+                <div className="wb-santa-room-reveal-n">{revealed ? 'Миша Петров' : '• • • • • • •'}</div>
+              </div>
+              <button className="wb-santa-room-reveal-btn" onClick={() => setRevealed(!revealed)}>{revealed ? 'Скрыть' : 'Узнать'}</button>
+            </div>
+          </div>
+
+          <div className="wb-santa-room">
+            <div className="wb-santa-room-top">
+              <div className="wb-santa-room-ic" style={{background:'linear-gradient(135deg,rgba(139,123,255,0.22),rgba(91,72,229,0.18))'}}>💼</div>
+              <div className="wb-santa-room-body">
+                <div className="wb-santa-room-t">Офис — инженеры</div>
+                <div className="wb-santa-room-s"><span>14 участников</span>·<span>бюджет 1 500 ₽</span>·<Chip tone="warning">Ждём ещё 2</Chip></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="wb-santa-room">
+            <div className="wb-santa-room-top">
+              <div className="wb-santa-room-ic" style={{background:'linear-gradient(135deg,rgba(240,106,180,0.22),rgba(197,63,136,0.18))'}}>🎓</div>
+              <div className="wb-santa-room-body">
+                <div className="wb-santa-room-t">Универ · поток</div>
+                <div className="wb-santa-room-s"><span>9 участников</span>·<span>без бюджета</span>·<Chip tone="neutral">Набираем</Chip></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="wb-section-hdr"><h2>Как это работает</h2></div>
+          <div style={{margin:'0 16px 14px',padding:'14px',background:'var(--wb-card)',border:'1px solid var(--wb-border)',borderRadius:18,backdropFilter:'blur(14px)'}}>
+            <div style={{display:'flex',gap:12,alignItems:'flex-start',marginBottom:10}}>
+              <div style={{width:26,height:26,borderRadius:9,background:'var(--wb-accent-soft)',color:'var(--wb-accent-strong)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,flexShrink:0,border:'1px solid var(--wb-accent-soft-strong)'}}>1</div>
+              <div style={{fontSize:13,color:'var(--wb-text-secondary)',lineHeight:1.45}}><b style={{color:'var(--wb-text)'}}>Создай комнату</b>, пригласи друзей и задай бюджет.</div>
+            </div>
+            <div style={{display:'flex',gap:12,alignItems:'flex-start',marginBottom:10}}>
+              <div style={{width:26,height:26,borderRadius:9,background:'var(--wb-accent-soft)',color:'var(--wb-accent-strong)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,flexShrink:0,border:'1px solid var(--wb-accent-soft-strong)'}}>2</div>
+              <div style={{fontSize:13,color:'var(--wb-text-secondary)',lineHeight:1.45}}><b style={{color:'var(--wb-text)'}}>WishBoard жеребит пары</b> — тайно, без повторов и возвратных пар.</div>
+            </div>
+            <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
+              <div style={{width:26,height:26,borderRadius:9,background:'var(--wb-accent-soft)',color:'var(--wb-accent-strong)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,flexShrink:0,border:'1px solid var(--wb-accent-soft-strong)'}}>3</div>
+              <div style={{fontSize:13,color:'var(--wb-text-secondary)',lineHeight:1.45}}><b style={{color:'var(--wb-text)'}}>Смотришь вишлист подопечного</b> и выбираешь подарок — анонимно.</div>
+            </div>
+          </div>
+          <div style={{height:18}} />
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+
+  /* ═══════════ SEARCH / DISCOVER ═══════════ */
+  function SearchScreen({ onBack, navActive, onNav }) {
+    const [q, setQ] = React.useState('');
+    return (
+      <Phone>
+        <Header left={<HeaderBtn icon="←" onClick={onBack} />} title="Поиск" />
+        <div className="wb-scroll">
+          <div className="wb-search-bar">
+            <span className="wb-search-ic">🔍</span>
+            <input className="wb-search-input" placeholder="Желание, друг или магазин" value={q} onChange={e => setQ(e.target.value)} autoFocus />
+            {q && <span className="wb-search-clear" onClick={() => setQ('')}>✕</span>}
+          </div>
+
+          <div className="wb-set-group-title">Недавнее</div>
+          <div className="wb-recent-wrap">
+            <span className="wb-recent-chip">🕐 AirPods</span>
+            <span className="wb-recent-chip">🕐 Монстера</span>
+            <span className="wb-recent-chip">🕐 @mishka</span>
+            <span className="wb-recent-chip">🕐 книги</span>
+          </div>
+
+          <div className="wb-set-group-title">Идеи и подборки</div>
+          <div className="wb-discover-grid">
+            <div className="wb-discover-card c1"><div className="wb-discover-emoji">🎂</div><div><div className="wb-discover-title">Для именинника</div><div className="wb-discover-sub">48 идей</div></div></div>
+            <div className="wb-discover-card c2"><div className="wb-discover-emoji">🎄</div><div><div className="wb-discover-title">Новогодние</div><div className="wb-discover-sub">62 идеи</div></div></div>
+            <div className="wb-discover-card c3"><div className="wb-discover-emoji">🏠</div><div><div className="wb-discover-title">На новоселье</div><div className="wb-discover-sub">24 идеи</div></div></div>
+            <div className="wb-discover-card c4"><div className="wb-discover-emoji">💝</div><div><div className="wb-discover-title">Романтика</div><div className="wb-discover-sub">31 идея</div></div></div>
+            <div className="wb-discover-card c2"><div className="wb-discover-emoji">👶</div><div><div className="wb-discover-title">Родителям</div><div className="wb-discover-sub">19 идей</div></div></div>
+            <div className="wb-discover-card c1"><div className="wb-discover-emoji">✨</div><div><div className="wb-discover-title">До 1000 ₽</div><div className="wb-discover-sub">55 идей</div></div></div>
+          </div>
+
+          <div className="wb-section-hdr"><h2>Популярное у друзей</h2></div>
+          <div className="wb-friend-row">
+            <div style={{width:42,height:42,borderRadius:13,background:'linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,border:'1px solid var(--wb-border)'}}>🎧</div>
+            <div style={{flex:1,minWidth:0}}><div className="wb-friend-t">Sony WH‑1000XM5</div><div className="wb-friend-s">12 друзей хотят · от 38 500 ₽</div></div>
+            <span className="wb-badge wb-badge-soft" style={{padding:'3px 8px',fontSize:10}}>Топ</span>
+          </div>
+          <div className="wb-friend-row">
+            <div style={{width:42,height:42,borderRadius:13,background:'linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,border:'1px solid var(--wb-border)'}}>📖</div>
+            <div style={{flex:1,minWidth:0}}><div className="wb-friend-t">Atomic Habits</div><div className="wb-friend-s">8 друзей хотят · от 720 ₽</div></div>
+          </div>
+          <div style={{height:18}} />
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel">
+  
+  function TopBar({ title, sub, onBack, right }) {
+    return (
+      <Header
+        left={onBack ? <HeaderBtn icon="‹" onClick={onBack} /> : null}
+        title={title}
+        subtitle={sub}
+        right={typeof right === 'string' ? <HeaderBtn icon={right} /> : right}
+      />
+    );
+  }
+  function BottomNavShim({ active, onNav }) {
+    return <BottomNav active={active} onSelect={onNav} />;
+  }
+
+  /* ═══════════ WISHLIST OWNER DETAIL ═══════════ */
+  function WishlistOwnerScreen({ onBack, navActive, onNav, onOpenCreate }) {
+    return (
+      <Phone>
+        <StatusBar />
+        <TopBar title="Мои вишлисты" onBack={onBack} right="⋯" />
+        <div className="wb-scroll">
+          <div className="wb-wl-detail-hdr">
+            <div className="wb-wl-title-row">
+              <div className="wb-wl-emoji-lg">🎂</div>
+              <div className="wb-wl-title-text">
+                <h1>День рождения</h1>
+                <div className="sub">28 апреля · через 3 дня</div>
+              </div>
+            </div>
+            <div className="wb-wl-meta-chips">
+              <span className="wb-chip accent">🔗 По ссылке</span>
+              <span className="wb-chip surface">💬 Все</span>
+              <span className="wb-chip surface">🚫 3 не дарить</span>
+            </div>
+            <div className="wb-stats" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
+              <div className="wb-stat"><div className="wb-stat-n">12</div><div className="wb-stat-l">желаний</div></div>
+              <div className="wb-stat"><div className="wb-stat-n" style={{color:'var(--wb-success)'}}>4</div><div className="wb-stat-l">забронировано</div></div>
+              <div className="wb-stat"><div className="wb-stat-n" style={{color:'var(--wb-accent-light)'}}>2</div><div className="wb-stat-l">куплено</div></div>
+            </div>
+            <div className="wb-settings-row">
+              <div className="s-label">⏱ Smart reservation</div>
+              <div className="s-value">48 часов ›</div>
+            </div>
+          </div>
+
+          <div className="wb-cat-header">
+            <span>›</span><span className="cat-name">Техника</span><span className="cat-count">3</span>
+          </div>
+          <div className="wb-item shared">
+            <div className="wb-t-thumb">🎧<div className="wb-prio-dot">😍</div></div>
+            <div className="wb-t-body">
+              <div className="wb-t-title">AirPods Pro 2 (USB-C)</div>
+              <div className="wb-t-desc">В белом, с USB-C чехлом</div>
+              <div className="wb-t-row">
+                <span className="wb-t-price">24 990 ₽</span>
+                <span className="wb-chip accent" style={{fontSize:10}}>🔗 в 2 вишлистах</span>
+              </div>
+            </div>
+            <div className="wb-t-trailing">
+              <button className="wb-menu-btn">⋯</button>
+              <span className="wb-chip success" style={{fontSize:10}}>✓ бронь</span>
+            </div>
+          </div>
+          <div className="wb-item">
+            <div className="wb-t-thumb">☕<div className="wb-prio-dot">😊</div></div>
+            <div className="wb-t-body">
+              <div className="wb-t-title">Кофемашина DeLonghi</div>
+              <div className="wb-t-desc">ECAM 22.110.B или похожая</div>
+              <div className="wb-t-row"><span className="wb-t-price">45 000 ₽</span></div>
+            </div>
+            <div className="wb-t-trailing"><button className="wb-menu-btn">⋯</button></div>
+          </div>
+          <div className="wb-item">
+            <div className="wb-t-thumb">🎮<div className="wb-prio-dot">🙂</div></div>
+            <div className="wb-t-body">
+              <div className="wb-t-title">Nintendo Switch OLED</div>
+              <div className="wb-t-desc">Neon, не белый</div>
+              <div className="wb-t-row"><span className="wb-t-price">27 900 ₽</span></div>
+            </div>
+            <div className="wb-t-trailing"><button className="wb-menu-btn">⋯</button></div>
+          </div>
+
+          <div className="wb-cat-header">
+            <span>›</span><span className="cat-name">Книги</span><span className="cat-count">2</span>
+          </div>
+          <div className="wb-item">
+            <div className="wb-t-thumb">📚<div className="wb-prio-dot">😊</div></div>
+            <div className="wb-t-body">
+              <div className="wb-t-title">«Четвёртое крыло»</div>
+              <div className="wb-t-desc">В твёрдом переплёте</div>
+              <div className="wb-t-row"><span className="wb-t-price">1 890 ₽</span></div>
+            </div>
+            <div className="wb-t-trailing">
+              <button className="wb-menu-btn">⋯</button>
+              <span className="wb-chip success" style={{fontSize:10}}>✓ бронь</span>
+            </div>
+          </div>
+
+          <div className="wb-cat-header">
+            <span>›</span><span className="cat-name">Прочее</span><span className="cat-count">0</span>
+          </div>
+          <div className="wb-empty-cat-add">
+            <div className="wb-plus-thumb">+</div>
+            <div>Добавить желание в «Прочее»</div>
+          </div>
+
+          <div style={{padding:'12px 20px 4px', fontSize:13, color:'var(--wb-accent-light)', fontWeight:600}}>
+            ⚙️ Управление категориями
+          </div>
+        </div>
+        <div className="wb-cta-bar">
+          <button className="wb-btn primary" onClick={onOpenCreate}>+ Добавить желание</button>
+        </div>
+        <BottomNav active={navActive} onSelect={onNav} />
+      </Phone>
+    );
+  }
+
+  /* ═══════════ GROUP GIFT DETAIL ═══════════ */
+  function GroupGiftScreen({ onBack, navActive, onNav, onOpenChat }) {
+    return (
+      <Phone>
+        <StatusBar />
+        <TopBar title="👥 Общий подарок" onBack={onBack} right="⋯" />
+        <div className="wb-scroll">
+          <div className="wb-gg-hero">
+            <div style={{display:'flex', gap:14, alignItems:'flex-start'}}>
+              <div className="wb-gg-wish-thumb">💍</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11, fontWeight:700, color:'var(--wb-accent-light)', letterSpacing:0.4, textTransform:'uppercase'}}>для Марии · ДР 12 мая</div>
+                <div style={{fontSize:18, fontWeight:800, letterSpacing:'-0.01em', margin:'4px 0'}}>Pandora Rose браслет</div>
+                <div style={{fontSize:12, color:'var(--wb-text-secondary)'}}>18 900 ₽ · 4 участника</div>
+              </div>
+            </div>
+            <div style={{display:'flex', justifyContent:'space-between', marginTop:14, fontSize:12}}>
+              <span style={{fontWeight:700}}>12 600 ₽ собрано</span>
+              <span style={{color:'var(--wb-text-muted)'}}>67%</span>
+            </div>
+            <div className="wb-gg-progress-bar"><div className="wb-gg-progress-fill" style={{width:'67%'}} /></div>
+          </div>
+
+          <div className="wb-gg-pinned">
+            <div style={{fontSize:16}}>📌</div>
+            <div>
+              <div style={{fontWeight:700, marginBottom:2}}>Оля (организатор)</div>
+              Скидываем по 4 725 ₽ · Т-Банк 5432… · комм «Pandora Мария»
+            </div>
+          </div>
+
+          <div className="wb-section-hdr"><h2>Участники</h2></div>
+          <div className="wb-gg-participant">
+            <div className="wb-av g1" style={{width:36, height:36, fontSize:14}}>О</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13, fontWeight:600}}>Оля <span className="wb-chip accent" style={{fontSize:9, marginLeft:4}}>ОРГ</span></div>
+              <div style={{fontSize:11, color:'var(--wb-text-muted)'}}>4 725 ₽ внесено</div>
+            </div>
+            <span className="wb-chip success" style={{fontSize:10}}>✓ оплачено</span>
+          </div>
+          <div className="wb-gg-participant">
+            <div className="wb-av g2" style={{width:36, height:36, fontSize:14}}>Д</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13, fontWeight:600}}>Дима</div>
+              <div style={{fontSize:11, color:'var(--wb-text-muted)'}}>4 725 ₽ внесено</div>
+            </div>
+            <span className="wb-chip success" style={{fontSize:10}}>✓ оплачено</span>
+          </div>
+          <div className="wb-gg-participant">
+            <div className="wb-av g3" style={{width:36, height:36, fontSize:14}}>Т</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13, fontWeight:600}}>Ты</div>
+              <div style={{fontSize:11, color:'var(--wb-text-muted)'}}>не внесено</div>
+            </div>
+            <span className="wb-chip surface" style={{fontSize:10}}>· ожидаем</span>
+          </div>
+          <div className="wb-gg-participant">
+            <div className="wb-av g4" style={{width:36, height:36, fontSize:14}}>А</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13, fontWeight:600}}>Анна</div>
+              <div style={{fontSize:11, color:'var(--wb-text-muted)'}}>не внесено</div>
+            </div>
+            <span className="wb-chip surface" style={{fontSize:10}}>· ожидаем</span>
+          </div>
+          <div style={{padding:'12px 20px', fontSize:13, color:'var(--wb-accent-light)', fontWeight:600, cursor:'pointer'}} onClick={onOpenChat}>
+            💬 Обсудить в чате · 8 сообщений
+          </div>
+        </div>
+        <div className="wb-cta-bar">
+          <button className="wb-btn primary">💳 Внести свою долю · 4 725 ₽</button>
+        </div>
+      </Phone>
+    );
+  }
+
+  /* ═══════════ SHOWCASE PROFILE ═══════════ */
+  function ShowcaseProfileScreen({ onBack }) {
+    return (
+      <Phone>
+        <StatusBar />
+        <div className="wb-showcase-cover" />
+        <div className="wb-showcase-av">М</div>
+        <div className="wb-showcase-meta">
+          <span className="wb-pro-badge">✨ PRO Showcase</span>
+          <h1 style={{marginTop:8}}>Мария Соколова</h1>
+          <div className="handle">@maria.sokolova · 1.2K подписчиков</div>
+        </div>
+        <div className="wb-showcase-bio">
+          Fashion-редактор, пишу для Vogue Russia. Коллекционирую ароматы и книги о живописи.
+        </div>
+        <div className="wb-showcase-stats">
+          <div className="wb-stat"><div className="wb-stat-n">8</div><div className="wb-stat-l">вишлистов</div></div>
+          <div className="wb-stat"><div className="wb-stat-n">64</div><div className="wb-stat-l">желаний</div></div>
+          <div className="wb-stat"><div className="wb-stat-n">1.2K</div><div className="wb-stat-l">фолловеров</div></div>
+        </div>
+        <div className="wb-scroll" style={{height:'auto', flex:1, paddingTop:0}}>
+          <div className="wb-section-hdr"><h2>Публичные подборки</h2></div>
+          <div className="wb-wl-card">
+            <div className="wb-wl-card-top">
+              <div className="wb-wl-emoji">🎂</div>
+              <div className="wb-wl-meta">
+                <div className="wb-wl-title">ДР · 12 мая 🎉</div>
+                <div className="wb-wl-sub">14 желаний · публичный</div>
+              </div>
+              <span className="wb-chip surface">→</span>
+            </div>
+          </div>
+          <div className="wb-wl-card">
+            <div className="wb-wl-card-top">
+              <div className="wb-wl-emoji">📚</div>
+              <div className="wb-wl-meta">
+                <div className="wb-wl-title">Art & Design книги</div>
+                <div className="wb-wl-sub">22 желания · публичный</div>
+              </div>
+              <span className="wb-chip surface">→</span>
+            </div>
+          </div>
+          <div className="wb-wl-card">
+            <div className="wb-wl-card-top">
+              <div className="wb-wl-emoji">🌸</div>
+              <div className="wb-wl-meta">
+                <div className="wb-wl-title">Ароматы · вечер</div>
+                <div className="wb-wl-sub">9 желаний · публичный</div>
+              </div>
+              <span className="wb-chip surface">→</span>
+            </div>
+          </div>
+        </div>
+        <div className="wb-cta-bar">
+          <button className="wb-btn primary">+ Подписаться</button>
+          <button className="wb-btn secondary" onClick={onBack}>Закрыть</button>
+        </div>
+      </Phone>
+    );
+  }
+
+  /* ═══════════ SECRET RESERVATIONS ═══════════ */
+  function SecretReservationsScreen({ onBack, navActive, onNav }) {
+    return (
+      <Phone>
+        <StatusBar />
+        <TopBar title="🔒 Тайные брони" sub="только для тебя" onBack={onBack} />
+        <div className="wb-scroll">
+          <div className="wb-banner info" style={{margin:'0 16px 14px'}}>
+            <div className="wb-banner-ic">✨</div>
+            <div>
+              <b>PRO-фича.</b> Ты бронируешь анонимно — владелец вишлиста не видит что и кем занято.
+            </div>
+          </div>
+
+          <div className="wb-section-hdr"><h2>5 активных броней</h2></div>
+
+          <div className="wb-sr-card active">
+            <div className="wb-sr-strip" />
+            <div className="wb-sr-top">
+              <div className="wb-sr-thumb" style={{background:'rgba(124,106,255,0.15)'}}>💄</div>
+              <div style={{flex:1, minWidth:0}}>
+                <div className="wb-t-title">Chanel Chance 100 ml</div>
+                <div style={{fontSize:11, color:'var(--wb-text-muted)', marginTop:2}}>Анна · добавлено 12 апр</div>
+                <div style={{display:'flex', gap:6, marginTop:6, flexWrap:'wrap'}}>
+                  <span className="wb-chip success" style={{fontSize:10}}>✓ ACTIVE</span>
+                  <span className="wb-chip surface" style={{fontSize:10}}>9 800 ₽</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="wb-sr-card updated">
+            <div className="wb-sr-strip" />
+            <div className="wb-sr-top">
+              <div className="wb-sr-thumb">📚</div>
+              <div style={{flex:1, minWidth:0}}>
+                <div className="wb-t-title">«Четвёртое крыло»</div>
+                <div style={{fontSize:11, color:'var(--wb-text-muted)', marginTop:2}}>Анна · ты забронировал 8 апр</div>
+                <div style={{display:'flex', gap:6, marginTop:6, flexWrap:'wrap'}}>
+                  <span className="wb-chip warning" style={{fontSize:10}}>⚠️ ITEM_UPDATED</span>
+                  <span className="wb-chip surface" style={{fontSize:10}}>2 ч назад</span>
+                </div>
+              </div>
+            </div>
+            <div className="wb-sr-diff">
+              <span>Цена:</span>
+              <span className="old">1 890 ₽</span>
+              <span>→</span>
+              <span className="new">2 450 ₽</span>
+            </div>
+            <div className="wb-sr-actions">
+              <button className="wb-btn secondary" style={{padding:'8px 12px', fontSize:12, minHeight:36}}>Сравнить</button>
+              <button className="wb-btn primary" style={{padding:'8px 12px', fontSize:12, minHeight:36}}>Принять</button>
+            </div>
+          </div>
+
+          <div className="wb-sr-card conflict">
+            <div className="wb-sr-strip" />
+            <div className="wb-sr-top">
+              <div className="wb-sr-thumb">🎧</div>
+              <div style={{flex:1, minWidth:0}}>
+                <div className="wb-t-title">AirPods Pro 2 USB-C</div>
+                <div style={{fontSize:11, color:'var(--wb-text-muted)', marginTop:2}}>Анна · ты забронировал 5 апр</div>
+                <div style={{display:'flex', gap:6, marginTop:6, flexWrap:'wrap'}}>
+                  <span className="wb-chip danger" style={{fontSize:10}}>⚡ ПУБЛИЧНО ЗАНЯЛИ</span>
+                </div>
+              </div>
+            </div>
+            <div className="wb-sr-actions">
+              <button className="wb-btn secondary" style={{padding:'8px 12px', fontSize:12, minHeight:36}}>Отказаться</button>
+              <button className="wb-btn primary" style={{padding:'8px 12px', fontSize:12, minHeight:36}}>→ Публично</button>
+            </div>
+          </div>
+
+          <div className="wb-sr-card fulfilled">
+            <div className="wb-sr-strip" />
+            <div className="wb-sr-top">
+              <div className="wb-sr-thumb">🕯</div>
+              <div style={{flex:1, minWidth:0}}>
+                <div className="wb-t-title" style={{textDecoration:'line-through'}}>Diptyque Baies</div>
+                <div style={{fontSize:11, color:'var(--wb-text-muted)', marginTop:2}}>владелец отметил купленым</div>
+                <div style={{display:'flex', gap:6, marginTop:6, flexWrap:'wrap'}}>
+                  <span className="wb-chip success" style={{fontSize:10}}>💳 ITEM_FULFILLED</span>
+                  <span className="wb-chip surface" style={{fontSize:10}}>авто-возврат</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="wb-sr-card unavailable">
+            <div className="wb-sr-strip" />
+            <div className="wb-sr-top">
+              <div className="wb-sr-thumb" style={{filter:'grayscale(1)'}}>🎮</div>
+              <div style={{flex:1, minWidth:0}}>
+                <div className="wb-t-title" style={{color:'var(--wb-text-muted)'}}>Nintendo Switch OLED</div>
+                <div style={{fontSize:11, color:'var(--wb-text-muted)', marginTop:2}}>Саша · владелец удалил</div>
+                <div style={{display:'flex', gap:6, marginTop:6, flexWrap:'wrap'}}>
+                  <span className="wb-chip surface" style={{fontSize:10, color:'var(--wb-text-muted)'}}>🗑 ITEM_UNAVAILABLE</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <BottomNav active={navActive || 'reservations'} onSelect={onNav} />
+      </Phone>
+    );
+  }
+
+  /* ═══════════ WISH STATE MATRIX ═══════════ */
+  function WishStateMatrixScreen({ onBack }) {
+    const states = [
+      { ic:'🎁', tone:'', label:'AVAILABLE', title:'Ещё не занято' },
+      { ic:'🎁', tone:'accent', label:'RESERVED · you', title:'Ты забронировал' },
+      { ic:'🎁', tone:'success', label:'RESERVED · other', title:'Друг забронировал' },
+      { ic:'🔒', tone:'accent', label:'SECRET · you', title:'Тайная бронь (твоя)' },
+      { ic:'✓',  tone:'success', label:'FULFILLED', title:'Куплено владельцем' },
+      { ic:'🚫', tone:'muted',   label:'UNAVAILABLE', title:'Удалено владельцем' },
+      { ic:'⚠️', tone:'warning', label:'UPDATED',  title:'Владелец правил' },
+      { ic:'⚡', tone:'danger',  label:'CONFLICT', title:'Публично заняли секретку' },
+      { ic:'👥', tone:'accent',  label:'GROUP GIFT', title:'Общий подарок · в сборе' },
+      { ic:'💳', tone:'success', label:'PAID',     title:'Внёс долю' },
+      { ic:'👑', tone:'accent',  label:'PRIORITY', title:'😍 обязательно' },
+      { ic:'🌱', tone:'muted',   label:'LOW PRIO', title:'🙂 если не сложно' },
+      { ic:'🔗', tone:'accent',  label:'SHARED',   title:'В 2+ вишлистах' },
+      { ic:'🚫', tone:'danger',  label:'DON\u2019T GIFT', title:'Нельзя дарить' },
+      { ic:'⏱', tone:'warning', label:'EXPIRING', title:'Smart reservation 48ч' },
+    ];
+    const toneColor = { accent:'var(--wb-accent-light)', success:'var(--wb-success)', warning:'var(--wb-warning)', danger:'var(--wb-danger)', muted:'var(--wb-text-muted)' };
+    return (
+      <Phone>
+        <StatusBar />
+        <TopBar title="Матрица состояний" sub="все 15 состояний wish-карточки" onBack={onBack} />
+        <div className="wb-scroll">
+          <div className="wb-banner info" style={{margin:'0 16px 14px'}}>
+            <div className="wb-banner-ic">📖</div>
+            <div>Справочник: как выглядит wish-карточка в каждом из состояний. Для дев-ревью.</div>
+          </div>
+          <div className="wb-matrix-grid">
+            {states.map((s, i) => (
+              <div key={i} className="wb-matrix-cell">
+                <div className="m-thumb">{s.ic}</div>
+                <div className="m-label" style={{color: toneColor[s.tone] || 'var(--wb-text-muted)'}}>{s.label}</div>
+                <div className="m-title">{s.title}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Phone>
+    );
+  }
+  </script>
+
+  <script type="text/babel" src="extras.jsx"></script>
+
+  <script type="text/babel">
+  const STORAGE_KEY = 'wb-uikit-state-v3';
+  function App() {
+    const initial = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })();
+    const [screen, setScreen] = React.useState(initial.screen || 'all');
+    const [nav, setNav] = React.useState('home');
+    const [onbStep, setOnbStep] = React.useState(0);
+    const [theme, setTheme] = React.useState(initial.theme || 'dark');
+    const [accent, setAccent] = React.useState(initial.accent || 'violet');
+    const [isPro, setIsPro] = React.useState(initial.isPro ?? false);
+    React.useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ screen, theme, accent, isPro })); } catch {} }, [screen, theme, accent, isPro]);
+    const ctx = { theme, accent, isPro, setTheme, setAccent, setIsPro };
+    const buttons = [
+      { id:'all', label:'All screens' },
+      { id:'onboarding', label:'Onboarding' },
+      { id:'home', label:'Home' },
+      { id:'detail', label:'Wishlist · Guest' },
+      { id:'create', label:'Create wish' },
+      { id:'profile', label:'Профиль' },
+      { id:'friend', label:'Профиль друга' },
+      { id:'calendar', label:'Календарь' },
+      { id:'addevent', label:'+ Событие' },
+      { id:'reservations', label:'Брони' },
+      { id:'notifications', label:'Уведомления' },
+      { id:'santa', label:'Тайный Санта' },
+      { id:'search', label:'Поиск' },
+      { id:'settings', label:'Settings' },
+      { id:'appearance', label:'Тема' },
+      { id:'owner', label:'Wishlist · Owner' },
+      { id:'groupgift', label:'Group gift' },
+      { id:'showcase', label:'Showcase PRO' },
+      { id:'secret', label:'Тайные брони' },
+      { id:'matrix', label:'State matrix' },
+      { id:'paywall', label:'Paywall' },
+      { id:'itemOwner', label:'Item · Owner' },
+      { id:'itemGuest', label:'Item · Guest' },
+      { id:'giftNotes', label:'Gift notes' },
+      { id:'giftNotesOnb', label:'Gift notes · onb' },
+      { id:'giftNotesPw', label:'Gift notes · paywall' },
+      { id:'giftNotesOcc', label:'Gift notes · случай' },
+      { id:'santaCreate', label:'Санта · создать' },
+      { id:'santaJoin', label:'Санта · вступить' },
+      { id:'santaReceiver', label:'Санта · получатель' },
+      { id:'santaChat', label:'Санта · чат' },
+      { id:'santaPolls', label:'Санта · опросы' },
+      { id:'santaExcl', label:'Санта · пары' },
+      { id:'santaOrg', label:'Санта · орг' },
+      { id:'ggPaywall', label:'Group gift · paywall' },
+      { id:'ggCreate', label:'Group gift · создать' },
+      { id:'ggJoin', label:'Group gift · вступить' },
+      { id:'ggChat', label:'Group gift · чат' },
+      { id:'showcaseEdit', label:'Showcase · editor' },
+      { id:'drafts', label:'Черновики' },
+      { id:'archive', label:'Архив' },
+      { id:'myRes', label:'Мои брони' },
+      { id:'share', label:'Поделиться' },
+      { id:'links', label:'Ссылки · mgmt' },
+      { id:'curated', label:'Подборка' },
+      { id:'secretPw', label:'Тайные брони · pw' },
+      { id:'faq', label:'FAQ' },
+      { id:'changelog', label:'Changelog' },
+      { id:'legal', label:'Правовое' },
+      { id:'legalDoc', label:'Соглашение' },
+      { id:'referral', label:'Рефералы' },
+      { id:'firstShare', label:'Первый share' },
+    ];
+    const show = (id) => screen === 'all' || screen === id;
+    return (
+      <ThemeCtx.Provider value={ctx}>
+        <div className="nav-links">{buttons.map(b => (<button key={b.id} className={screen === b.id ? 'on' : ''} onClick={() => setScreen(b.id)}>{b.label}</button>))}</div>
+        <div className="global-controls">
+          <label><input type="checkbox" checked={isPro} onChange={(e) => setIsPro(e.target.checked)} /> PRO demo</label>
+          <label>Тема&nbsp;<select value={theme} onChange={(e) => setTheme(e.target.value)} style={{background:'transparent',color:'#F4F4F6',border:'none',fontSize:12,fontWeight:600,outline:'none'}}><option value="dark">Dark (default)</option><option value="black" disabled={!isPro}>Black (PRO)</option></select></label>
+          <label>Акцент&nbsp;<select value={accent} onChange={(e) => setAccent(e.target.value)} style={{background:'transparent',color:'#F4F4F6',border:'none',fontSize:12,fontWeight:600,outline:'none'}}><option value="violet">Violet (free)</option><option value="blue" disabled={!isPro}>Blue (PRO)</option><option value="pink" disabled={!isPro}>Pink (PRO)</option><option value="green" disabled={!isPro}>Green (PRO)</option></select></label>
+        </div>
+        <div className="phones">
+          {show('onboarding') && (<div className="phone-wrap"><OnboardingScreen step={onbStep} onNext={() => setOnbStep(s => (s + 1) % 3)} onSkip={() => setScreen('home')} /><div className="phone-label">Onboarding · шаг {onbStep + 1}/3</div></div>)}
+          {show('home') && (<div className="phone-wrap"><HomeScreen navActive={nav} onNav={(id) => { setNav(id); if (id === 'events') setScreen('calendar'); else if (id === 'reservations') setScreen('reservations'); else if (id === 'me') setScreen('profile'); }} onOpenWishlist={() => setScreen('detail')} onCreate={() => setScreen('create')} onOpenSettings={() => setScreen('settings')} /><div className="phone-label">Home · Мои вишлисты</div></div>)}
+          {show('detail') && (<div className="phone-wrap"><WishlistDetailScreen navActive={nav} onNav={setNav} onBack={() => setScreen('home')} /><div className="phone-label">Wishlist · Guest (surprise)</div></div>)}
+          {show('create') && (<div className="phone-wrap"><CreateWishScreen onBack={() => setScreen('home')} onSave={() => setScreen('home')} /><div className="phone-label">Create wish · импорт</div></div>)}
+          {show('profile') && (<div className="phone-wrap"><ProfileScreen navActive="me" onNav={(id) => { setNav(id); if (id === 'home') setScreen('home'); else if (id === 'events') setScreen('calendar'); else if (id === 'reservations') setScreen('reservations'); }} onOpenSettings={() => setScreen('settings')} onOpenFriend={() => setScreen('friend')} onOpenSanta={() => setScreen('santa')} /><div className="phone-label">Профиль клиента · v2</div></div>)}
+          {show('friend') && (<div className="phone-wrap"><FriendProfileScreen navActive="me" onNav={setNav} onBack={() => setScreen('profile')} onOpenWishlist={() => setScreen('detail')} /><div className="phone-label">Профиль друга · гость</div></div>)}
+          {show('calendar') && (<div className="phone-wrap"><CalendarScreen navActive="events" onNav={(id) => { setNav(id); if (id === 'home') setScreen('home'); else if (id === 'reservations') setScreen('reservations'); else if (id === 'me') setScreen('profile'); }} onOpenEvent={() => {}} onAddEvent={() => setScreen('addevent')} /><div className="phone-label">Календарь событий · v2</div></div>)}
+          {show('addevent') && (<div className="phone-wrap"><AddEventScreen onBack={() => setScreen('calendar')} onSave={() => setScreen('calendar')} /><div className="phone-label">Новое событие</div></div>)}
+          {show('reservations') && (<div className="phone-wrap"><ReservationsScreen navActive="reservations" onNav={(id) => { setNav(id); if (id === 'home') setScreen('home'); else if (id === 'events') setScreen('calendar'); else if (id === 'me') setScreen('profile'); }} /><div className="phone-label">Брони · подарки друзьям</div></div>)}
+          {show('notifications') && (<div className="phone-wrap"><NotificationsScreen navActive="me" onNav={setNav} onBack={() => setScreen('profile')} /><div className="phone-label">Уведомления</div></div>)}
+          {show('santa') && (<div className="phone-wrap"><SantaScreen navActive="me" onNav={setNav} onBack={() => setScreen('profile')} /><div className="phone-label">Тайный Санта · комнаты</div></div>)}
+          {show('search') && (<div className="phone-wrap"><SearchScreen navActive="home" onNav={setNav} onBack={() => setScreen('home')} /><div className="phone-label">Поиск и подборки</div></div>)}
+          {show('settings') && (<div className="phone-wrap"><SettingsScreen navActive="me" onNav={setNav} onBack={() => setScreen('profile')} onOpenProfile={() => setScreen('profile')} onOpenPaywall={() => setScreen('paywall')} onOpenAppearance={() => setScreen('appearance')} /><div className="phone-label">Настройки · v2</div></div>)}
+          {show('appearance') && (<div className="phone-wrap"><AppearanceScreen navActive="me" onNav={setNav} onBack={() => setScreen('settings')} onOpenPaywall={() => setScreen('paywall')} /><div className="phone-label">Тема и акцент</div></div>)}
+          {show('paywall') && (<div className="phone-wrap"><PaywallScreen navActive={nav} onNav={setNav} onBack={() => setScreen('settings')} onSubscribe={() => { setIsPro(true); setScreen('settings'); }} /><div className="phone-label">Paywall · PRO</div></div>)}
+          {show('owner') && (<div className="phone-wrap"><WishlistOwnerScreen navActive="home" onNav={setNav} onBack={() => setScreen('home')} onOpenCreate={() => setScreen('create')} /><div className="phone-label">Wishlist · owner view</div></div>)}
+          {show('groupgift') && (<div className="phone-wrap"><GroupGiftScreen navActive="events" onNav={setNav} onBack={() => setScreen('home')} onOpenChat={() => {}} /><div className="phone-label">Group gift · detail + чат</div></div>)}
+          {show('showcase') && (<div className="phone-wrap"><ShowcaseProfileScreen onBack={() => setScreen('profile')} /><div className="phone-label">Showcase · публичный PRO-профиль</div></div>)}
+          {show('secret') && (<div className="phone-wrap"><SecretReservationsScreen navActive="reservations" onNav={setNav} onBack={() => setScreen('reservations')} /><div className="phone-label">Тайные брони · 5 states</div></div>)}
+          {show('matrix') && (<div className="phone-wrap"><WishStateMatrixScreen onBack={() => setScreen('home')} /><div className="phone-label">Матрица состояний · dev ref</div></div>)}
+          {show('itemOwner') && (<div className="phone-wrap"><ItemDetailScreen mode="owner" onBack={() => setScreen('owner')} /><div className="phone-label">Item detail · owner</div></div>)}
+          {show('itemGuest') && (<div className="phone-wrap"><ItemDetailScreen mode="guest" onBack={() => setScreen('detail')} /><div className="phone-label">Item detail · guest</div></div>)}
+          {show('giftNotes') && (<div className="phone-wrap"><GiftNotesScreen variant="main" onBack={() => setScreen('profile')} /><div className="phone-label">Gift notes · список</div></div>)}
+          {show('giftNotesOnb') && (<div className="phone-wrap"><GiftNotesScreen variant="onboarding" onBack={() => setScreen('profile')} /><div className="phone-label">Gift notes · first-run</div></div>)}
+          {show('giftNotesPw') && (<div className="phone-wrap"><GiftNotesScreen variant="paywall" onBack={() => setScreen('giftNotes')} /><div className="phone-label">Gift notes · PRO paywall</div></div>)}
+          {show('giftNotesOcc') && (<div className="phone-wrap"><GiftNotesScreen variant="occasion" onBack={() => setScreen('giftNotes')} /><div className="phone-label">Gift notes · событие</div></div>)}
+          {show('santaCreate') && (<div className="phone-wrap"><SantaFlowScreen variant="create" onBack={() => setScreen('santa')} /><div className="phone-label">Santa · создать кампанию</div></div>)}
+          {show('santaJoin') && (<div className="phone-wrap"><SantaFlowScreen variant="join" onBack={() => setScreen('santa')} /><div className="phone-label">Santa · присоединиться</div></div>)}
+          {show('santaReceiver') && (<div className="phone-wrap"><SantaFlowScreen variant="receiver" onBack={() => setScreen('santa')} /><div className="phone-label">Santa · кого дарю</div></div>)}
+          {show('santaChat') && (<div className="phone-wrap"><SantaFlowScreen variant="chat" onBack={() => setScreen('santa')} /><div className="phone-label">Santa · чат</div></div>)}
+          {show('santaPolls') && (<div className="phone-wrap"><SantaFlowScreen variant="polls" onBack={() => setScreen('santa')} /><div className="phone-label">Santa · опросы</div></div>)}
+          {show('santaExcl') && (<div className="phone-wrap"><SantaFlowScreen variant="exclusions" onBack={() => setScreen('santa')} /><div className="phone-label">Santa · пары-исключения</div></div>)}
+          {show('santaOrg') && (<div className="phone-wrap"><SantaFlowScreen variant="organizer" onBack={() => setScreen('santa')} /><div className="phone-label">Santa · организатор</div></div>)}
+          {show('ggPaywall') && (<div className="phone-wrap"><GGFlowScreen variant="paywall" onBack={() => setScreen('groupgift')} /><div className="phone-label">Group gift · paywall</div></div>)}
+          {show('ggCreate') && (<div className="phone-wrap"><GGFlowScreen variant="create" onBack={() => setScreen('groupgift')} /><div className="phone-label">Group gift · создать</div></div>)}
+          {show('ggJoin') && (<div className="phone-wrap"><GGFlowScreen variant="join" onBack={() => setScreen('groupgift')} /><div className="phone-label">Group gift · вступить</div></div>)}
+          {show('ggChat') && (<div className="phone-wrap"><GGFlowScreen variant="chat" onBack={() => setScreen('groupgift')} /><div className="phone-label">Group gift · чат</div></div>)}
+          {show('showcaseEdit') && (<div className="phone-wrap"><ShowcaseEditorScreen onBack={() => setScreen('showcase')} /><div className="phone-label">Showcase · editor</div></div>)}
+          {show('drafts') && (<div className="phone-wrap"><EdgeScreen variant="drafts" onBack={() => setScreen('home')} /><div className="phone-label">Черновики</div></div>)}
+          {show('archive') && (<div className="phone-wrap"><EdgeScreen variant="archive" onBack={() => setScreen('settings')} /><div className="phone-label">Архив</div></div>)}
+          {show('myRes') && (<div className="phone-wrap"><EdgeScreen variant="myReservations" onBack={() => setScreen('reservations')} /><div className="phone-label">Мои брони</div></div>)}
+          {show('share') && (<div className="phone-wrap"><EdgeScreen variant="share" onBack={() => setScreen('owner')} /><div className="phone-label">Поделиться вишлистом</div></div>)}
+          {show('links') && (<div className="phone-wrap"><EdgeScreen variant="linkManagement" onBack={() => setScreen('settings')} /><div className="phone-label">Ссылки и доступы</div></div>)}
+          {show('curated') && (<div className="phone-wrap"><EdgeScreen variant="curated" onBack={() => setScreen('search')} /><div className="phone-label">Подборка от редакции</div></div>)}
+          {show('secretPw') && (<div className="phone-wrap"><EdgeScreen variant="secretPaywall" onBack={() => setScreen('secret')} /><div className="phone-label">Тайные брони · paywall</div></div>)}
+          {show('faq') && (<div className="phone-wrap"><StaticScreen variant="faq" onBack={() => setScreen('settings')} /><div className="phone-label">FAQ</div></div>)}
+          {show('changelog') && (<div className="phone-wrap"><StaticScreen variant="changelog" onBack={() => setScreen('settings')} /><div className="phone-label">Changelog</div></div>)}
+          {show('legal') && (<div className="phone-wrap"><StaticScreen variant="legal" onBack={() => setScreen('settings')} /><div className="phone-label">Правовое</div></div>)}
+          {show('legalDoc') && (<div className="phone-wrap"><StaticScreen variant="legalDoc" onBack={() => setScreen('legal')} /><div className="phone-label">Соглашение · текст</div></div>)}
+          {show('referral') && (<div className="phone-wrap"><StaticScreen variant="referral" onBack={() => setScreen('settings')} /><div className="phone-label">Рефералы</div></div>)}
+          {show('firstShare') && (<div className="phone-wrap"><StaticScreen variant="firstShare" onBack={() => setScreen('home')} /><div className="phone-label">First-share модалка</div></div>)}
+        </div>
+      </ThemeCtx.Provider>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

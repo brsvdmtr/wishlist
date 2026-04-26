@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:20px;background:var(--wb-bg);font-family:var(--wb-font-sans);color:var(--wb-text)}
+.wrap{max-width:420px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.field{display:flex;flex-direction:column;gap:6px}
+.lab{font-size:12px;color:#C7CAD1;font-weight:600}
+.inp{background:#2F2F38;border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:13px 14px;color:#F4F4F6;font-size:16px;font-family:inherit;line-height:22px;outline:none}
+.inp::placeholder{color:#9CA3AF}
+.inp.focus{border-color:#7C6AFF;box-shadow:0 0 0 3px rgba(124,106,255,0.12)}
+.inp.err{border-color:#F87171}
+.err-t{color:#F87171;font-size:12px;font-weight:600}
+.seg{display:flex;background:#2F2F38;border-radius:12px;padding:4px;border:1px solid rgba(255,255,255,0.10)}
+.seg > div{flex:1;text-align:center;padding:9px;font-size:13px;font-weight:600;color:#C7CAD1;border-radius:10px;cursor:pointer}
+.seg > div.on{background:#7C6AFF;color:#fff}
+.toggle{width:44px;height:26px;background:#7C6AFF;border-radius:9999px;position:relative;flex-shrink:0}
+.toggle::after{content:'';position:absolute;top:3px;left:21px;width:20px;height:20px;background:#fff;border-radius:50%;transition:all .2s cubic-bezier(0.4,0,0.2,1)}
+.toggle.off{background:#3A3A44;border:1px solid rgba(255,255,255,0.12)}
+.toggle.off::after{left:3px}
+.trow{display:flex;align-items:center;justify-content:space-between;padding:14px;background:#2F2F38;border-radius:12px;border:1px solid rgba(255,255,255,0.10)}
+.trow-t{font-size:15px;font-weight:600;color:#F4F4F6}
+.trow-s{font-size:12px;color:#C7CAD1;margin-top:2px}
+</style></head><body class="wb-dark">
+<div class="wrap">
+<div class="field"><div class="lab">Название вишлиста</div><input class="inp" value="На день рождения"></div>
+<div class="field"><div class="lab">Ссылка на товар</div><input class="inp focus" value="https://ozon.ru/product/..."></div>
+<div class="field"><div class="lab">Цена</div><input class="inp err" value="abc"><div class="err-t">Введи число в рублях</div></div>
+<div class="seg"><div>Все</div><div class="on">Актуальные</div><div>Архив</div></div>
+<div class="trow"><div><div class="trow-t">Surprise mode</div><div class="trow-s">Не показывать брони владельцу</div></div><div class="toggle"></div></div>
+<div class="trow"><div><div class="trow-t">Уведомления</div><div class="trow-s">О новых бронях и намёках</div></div><div class="toggle off"></div></div>
+</div>
+</body></html>

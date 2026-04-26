@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:20px;background:var(--wb-bg);font-family:var(--wb-font-sans);color:var(--wb-text)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
+.tile{background:#2F2F38;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:10px 12px;text-align:center}
+.n{font-size:20px;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+.l{font-size:11px;color:#6B7280;margin-top:2px;letter-spacing:.2px}
+.accent{background:linear-gradient(135deg,#2F2F38,rgba(124,106,255,0.04));border-color:rgba(124,106,255,0.25)}
+.accent .n{color:#7C6AFF}
+.success{background:linear-gradient(135deg,#2F2F38,rgba(52,211,153,0.04));border-color:rgba(52,211,153,0.25)}
+.success .n{color:#34D399}
+.warning{background:linear-gradient(135deg,#2F2F38,rgba(251,191,36,0.04));border-color:rgba(251,191,36,0.25)}
+.warning .n{color:#FBBF24}
+.tabs{display:flex;gap:4px;padding:4px;background:#2F2F38;border:1px solid rgba(255,255,255,0.06);border-radius:12px;max-width:340px;margin:0 auto}
+.tab{flex:1;padding:9px 12px;border-radius:10px;text-align:center;font-size:13px;font-weight:600;color:#6B7280;position:relative}
+.tab.active{background:#7C6AFF;color:#fff;box-shadow:0 2px 8px rgba(124,106,255,0.3)}
+.badge{position:absolute;top:-4px;right:4px;width:18px;height:18px;padding:0;border-radius:50%;background:#F87171;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--wb-bg);box-shadow:0 2px 6px rgba(248,113,113,0.45);line-height:1}
+</style></head><body class="wb-dark">
+<div class="tiles">
+  <div class="tile"><div class="n">12</div><div class="l">желаний</div></div>
+  <div class="tile accent"><div class="n">4</div><div class="l">забронировано</div></div>
+  <div class="tile success"><div class="n">2</div><div class="l">подарено</div></div>
+  <div class="tile warning"><div class="n">1</div><div class="l">истекает</div></div>
+</div>
+<div class="tabs">
+  <div class="tab active">Вишлисты</div>
+  <div class="tab">Брони<span class="badge">5</span></div>
+  <div class="tab">Друзья<span class="badge" style="background:#7C6AFF;box-shadow:0 2px 6px rgba(124,106,255,0.3)">2</span></div>
+</div>
+</body></html>

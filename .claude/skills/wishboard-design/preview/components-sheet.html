@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:0;background:var(--wb-bg);font-family:var(--wb-font-sans);color:var(--wb-text);height:460px;position:relative;overflow:hidden}
+.back{position:absolute;inset:0;background:rgba(0,0,0,0.6)}
+.sheet{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:420px;background:#26262C;border-radius:20px 20px 0 0;padding:24px;box-shadow:0 8px 24px rgba(0,0,0,0.35)}
+.handle{width:36px;height:4px;background:rgba(255,255,255,0.15);border-radius:2px;margin:-12px auto 18px}
+.title{font-size:17px;font-weight:700;text-align:center;letter-spacing:-.01em;margin-bottom:6px;color:#F4F4F6}
+.sub{font-size:13px;color:#C7CAD1;text-align:center;margin-bottom:18px;line-height:1.5}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:14px;border:none;font-family:inherit;font-size:15px;font-weight:700;letter-spacing:-.01em;cursor:pointer;min-height:44px;width:100%}
+.primary{background:linear-gradient(135deg,#7C6AFF,#9B8AFF);color:#fff;box-shadow:0 8px 24px rgba(124,106,255,0.40),inset 0 1px 0 rgba(255,255,255,0.20)}
+.ghost{background:transparent;color:#F87171;margin-top:8px}
+</style></head><body class="wb-dark">
+<div class="back"></div>
+<div class="sheet">
+  <div class="handle"></div>
+  <div class="title">🎁 Забронировать подарок?</div>
+  <div class="sub">Хозяин не увидит, что ты забронировал. Снять бронь можно в любой момент из вкладки «Брони».</div>
+  <button class="btn primary">Забронировать тайно</button>
+  <button class="btn ghost">Отмена</button>
+</div>
+</body></html>

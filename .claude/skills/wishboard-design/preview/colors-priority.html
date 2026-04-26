@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:20px;background:var(--wb-bg);font-family:var(--wb-font-sans)}
+.row{display:flex;flex-direction:column;gap:10px}
+.item{display:grid;grid-template-columns:90px 1fr 200px;gap:12px;align-items:center}
+.dot{width:24px;height:24px;border-radius:50%;margin:0 auto}
+.label{font-size:12px;font-weight:700;color:var(--wb-text);text-align:center}
+.label small{display:block;font-weight:500;color:var(--wb-text-muted);font-size:10px;margin-top:2px}
+.bar{height:12px;border-radius:4px}
+.chip{justify-self:start;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700}
+</style></head><body class="wb-dark">
+<div class="row">
+<div class="item">
+  <div><div class="dot" style="background:#6B7FD4"></div><div class="label">low<small>#6B7FD4</small></div></div>
+  <div class="bar" style="background:linear-gradient(90deg,#6B7FD4,#818cf8)"></div>
+  <div><span class="chip" style="background:rgba(107,127,212,0.15);color:#6B7FD4">низкий приоритет</span></div>
+</div>
+<div class="item">
+  <div><div class="dot" style="background:#E8930A"></div><div class="label">medium<small>#E8930A</small></div></div>
+  <div class="bar" style="background:linear-gradient(90deg,#E8930A,#fbbf24)"></div>
+  <div><span class="chip" style="background:rgba(232,147,10,0.15);color:#E8930A">средний приоритет</span></div>
+</div>
+<div class="item">
+  <div><div class="dot" style="background:#F04E6E"></div><div class="label">high<small>#F04E6E</small></div></div>
+  <div class="bar" style="background:linear-gradient(90deg,#F04E6E,#ff6b9d)"></div>
+  <div><span class="chip" style="background:rgba(240,78,110,0.15);color:#F04E6E">высокий приоритет</span></div>
+</div>
+</div>
+</body></html>

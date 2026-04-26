@@ -1,0 +1,328 @@
+/*
+ * WishBoard — canonical color + typography tokens (v2.1).
+ *
+ * Source of truth: docs/design-system/mockups/approved/v2.1-refresh-all-screens.html
+ * (approved 2026-04-21, see DESIGN_DECISIONS.md). Mirrors
+ * packages/ui-tokens/src/{colors,typography,radius,spacing,shadows,motion,gradients}.ts
+ * — those TS modules are the single source of truth; this CSS file
+ * is a drop-in for non-React consumers (HTML mockups, prototypes, preview pages).
+ *
+ * v2.1 highlights:
+ *   - Dark-first, but background dropped to #0F0F12 (was #1B1B1F)
+ *   - Surfaces are translucent glass (rgba 255/255/255 alpha) over a mesh
+ *     gradient backdrop — consumers must apply backdrop-filter: blur(14-16px)
+ *     on glass cards
+ *   - Accent shifted from #7C6AFF → #8B7BFF (cooler violet)
+ *   - Radii bumped: button 14→18, card 16→22, sheet-top 20→28
+ *   - New font weights 550 / 650 (between 500/600 and 600/700)
+ *   - Letter-spacing tightens for display sizes (-0.025 / -0.035em)
+ *
+ * Do NOT introduce raw hex in consumer code — pull from these vars.
+ */
+
+:root {
+  /* ───── Surfaces — dark-first, glass over mesh ───── */
+  --wb-bg:              #0F0F12;
+  --wb-bg-elev:         #15151A;
+  --wb-surface:         rgba(255,255,255,0.035);
+  --wb-surface-hover:   rgba(255,255,255,0.06);
+  --wb-card:            rgba(255,255,255,0.045);
+  --wb-card-strong:     rgba(255,255,255,0.07);
+  --wb-card-elevated:   rgba(255,255,255,0.07); /* @deprecated — use --wb-card-strong */
+  --wb-nav-bg:          rgba(15,15,18,0.72);
+
+  /* ───── Brand — violet (runtime-switchable via [data-accent]) ───── */
+  --wb-accent:          #8B7BFF;
+  --wb-accent-strong:   #B4A6FF;
+  --wb-accent-light:    #C8BDFF;
+  --wb-accent-deep:     #5B48E5;
+  --wb-accent-r:        139;
+  --wb-accent-g:        123;
+  --wb-accent-b:        255;
+  --wb-accent-soft:        rgba(139,123,255,0.14);
+  --wb-accent-soft-strong: rgba(139,123,255,0.30);
+  --wb-accent-glow:        rgba(139,123,255,0.45);
+  --wb-accent-glow-soft:   rgba(139,123,255,0.25);
+
+  /* ───── Semantic states ───── */
+  --wb-success:         #4ADE80;
+  --wb-success-soft:    rgba(74,222,128,0.14);
+  --wb-success-strong:  #10B981;
+  --wb-warning:         #FBBF24;
+  --wb-warning-soft:    rgba(251,191,36,0.14);
+  --wb-warning-strong:  #F59E0B;
+  --wb-danger:          #FB7185;
+  --wb-danger-soft:     rgba(251,113,133,0.14);
+
+  /* ───── Typography colors ───── */
+  --wb-text:            #FFFFFF;
+  --wb-text-secondary:  #C7CAD1;
+  --wb-text-muted:      #8F94A3;
+  --wb-text-on-accent:  #FFFFFF;
+
+  /* ───── Borders / hairlines ───── */
+  --wb-border:          rgba(255,255,255,0.06);
+  --wb-border-light:    rgba(255,255,255,0.10);
+  --wb-border-strong:   rgba(255,255,255,0.12);
+  --wb-hairline:        rgba(255,255,255,0.04);
+
+  /* ───── Priority scale (visual scale, NOT semantic) ───── */
+  --wb-prio-low:        #6B7FD4;
+  --wb-prio-low-soft:   rgba(107,127,212,0.15);
+  --wb-prio-low-end:    #818CF8;
+  --wb-prio-med:        #FBBF24;
+  --wb-prio-med-soft:   rgba(251,191,36,0.18);
+  --wb-prio-med-end:    #F59E0B;
+  --wb-prio-high:       #FB7185;
+  --wb-prio-high-soft:  rgba(251,113,133,0.18);
+  --wb-prio-high-end:   #F06AB4;
+
+  /* ───── Overlays ───── */
+  --wb-backdrop:        rgba(0,0,0,0.6);
+  --wb-backdrop-soft:   rgba(0,0,0,0.35);
+
+  /* ───── Secret Santa (seasonal sub-product — DO NOT mix with brand) ───── */
+  --wb-santa-green-dark: #0F5F3C;
+  --wb-santa-green:      #1A8552;
+  --wb-santa-red:        #D92020;
+
+  /* ───── Gradients ───── */
+  --wb-grad-accent:        linear-gradient(135deg, #8B7BFF 0%, #B4A6FF 100%);
+  --wb-grad-accent-deep:   linear-gradient(135deg, #8B7BFF, #5B48E5);
+  --wb-grad-accent-soft:   linear-gradient(135deg, rgba(139,123,255,0.30), rgba(139,123,255,0.14));
+
+  /** v2.1 mesh gradient — paint as ::before on phone root for chroma-soft backdrop. */
+  --wb-grad-mesh:
+    radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.22), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.10), transparent 55%),
+    radial-gradient(ellipse 100% 70% at 50% 110%, rgba(139,123,255,0.10), transparent 65%);
+  --wb-grad-mesh-black:
+    radial-gradient(ellipse 80% 60% at 12% 0%, rgba(139,123,255,0.18), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 20%, rgba(255,120,180,0.06), transparent 55%);
+
+  /** v2.1 paywall hero — layered radials + diagonal brand. */
+  --wb-grad-paywall-hero:
+    radial-gradient(circle at 20% 10%, rgba(255,255,255,0.25), transparent 45%),
+    radial-gradient(circle at 100% 100%, #5B48E5, transparent 55%),
+    linear-gradient(135deg, #8B7BFF 0%, #B4A6FF 100%);
+  --wb-grad-wishlist-hero: var(--wb-grad-paywall-hero);
+  --wb-grad-profile-hero:
+    radial-gradient(circle at 50% 120%, #5B48E5, transparent 60%),
+    radial-gradient(circle at 100% 0%, #B4A6FF, transparent 50%),
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  --wb-grad-santa-hero:
+    radial-gradient(ellipse at top right, rgba(255,255,255,0.12), transparent 55%),
+    linear-gradient(135deg, #0F5F3C 0%, #1A8552 60%, #D92020 130%);
+
+  --wb-grad-prio-low:    linear-gradient(90deg, #6B7FD4, #818CF8);
+  --wb-grad-prio-med:    linear-gradient(90deg, #FBBF24, #F59E0B);
+  --wb-grad-prio-high:   linear-gradient(90deg, #FB7185, #F06AB4);
+
+  /** Sticky CTA blends into bg. */
+  --wb-grad-fade-from-bg: linear-gradient(180deg, transparent, #0F0F12 40%);
+  /** @deprecated v2.1 — use --wb-grad-fade-from-bg. */
+  --wb-grad-fade-to-bg:   linear-gradient(to top, #0F0F12 65%, transparent);
+
+  /** State tints — layer on top of translucent card surface. */
+  --wb-tint-accent:  linear-gradient(135deg, rgba(255,255,255,0.07), rgba(139,123,255,0.14));
+  --wb-tint-success: linear-gradient(135deg, rgba(255,255,255,0.045), rgba(74,222,128,0.09));
+  --wb-tint-warning: linear-gradient(135deg, rgba(255,255,255,0.045), rgba(251,191,36,0.09));
+  --wb-tint-danger:  linear-gradient(135deg, rgba(255,255,255,0.045), rgba(251,113,133,0.09));
+
+  /** Avatar gradients (identity-preserving). */
+  --wb-avatar-accent: linear-gradient(135deg, #8B7BFF, #B4A6FF);
+  --wb-avatar-amber:  linear-gradient(135deg, #FBBF24, #F59E0B);
+  --wb-avatar-green:  linear-gradient(135deg, #4ADE80, #10B981);
+  --wb-avatar-pink:   linear-gradient(135deg, #F892C9, #F06AB4);
+  --wb-avatar-blue:   linear-gradient(135deg, #86ABF5, #5B8DEF);
+
+  /* ───── Radii (v2.1 — rounder than v2) ───── */
+  --wb-r-none: 0;
+  --wb-r-xs:    4px;
+  --wb-r-sm:    7px;   /* badges, micro chips */
+  --wb-r-md:   11px;   /* status pills */
+  --wb-r-lg:   14px;   /* tabs, inner inline controls, thumbnails */
+  --wb-r-input:16px;   /* form inputs */
+  --wb-r-xl:   18px;   /* PRIMARY — buttons, sheet-inner cards */
+  --wb-r-xxl:  22px;   /* cards on home / list */
+  --wb-r-hero: 26px;   /* hero cards */
+  --wb-r-sheet:28px;   /* bottom-sheet top corners */
+  --wb-r-fab:  20px;   /* FAB — rounded-square, not circle */
+  --wb-r-pill: 9999px;
+  /* Legacy aliases */
+  --wb-r-xxxl: 26px;   /* @deprecated — renamed to --wb-r-hero */
+
+  /* ───── Spacing (4px grid; anchors: 8 / 14 / 16 / 24) ───── */
+  --wb-s-0:    0px;
+  --wb-s-0_5:  2px;
+  --wb-s-1:    4px;
+  --wb-s-1_5:  6px;
+  --wb-s-2:    8px;
+  --wb-s-2_5: 10px;
+  --wb-s-3:   12px;
+  --wb-s-3_5: 14px;
+  --wb-s-4:   16px;
+  --wb-s-5:   20px;
+  --wb-s-6:   24px;
+  --wb-s-8:   32px;
+  --wb-s-10:  40px;
+
+  /* ───── Shadows (v2.1 layered, accent-coloured) ───── */
+  --wb-sh-subtle:           0 1px 3px rgba(0,0,0,0.20);
+  --wb-sh-subtle-stronger:  0 2px 8px rgba(0,0,0,0.30);
+  --wb-sh-elevated:         0 2px 12px rgba(0,0,0,0.18);
+  --wb-sh-deep:             0 8px 24px rgba(0,0,0,0.35);
+  --wb-sh-deep-stronger:    0 8px 32px rgba(0,0,0,0.40);
+  --wb-sh-deep-max:         0 8px 40px rgba(0,0,0,0.40);
+  --wb-sh-overlay:          0 12px 40px rgba(0,0,0,0.60);
+  --wb-sh-overlay-critical: 0 16px 48px rgba(0,0,0,0.60);
+
+  --wb-sh-glow-soft:        0 4px 20px rgba(139,123,255,0.15);
+  --wb-sh-glow-medium:      0 4px 16px rgba(139,123,255,0.25);
+  --wb-sh-glow-strong:      0 4px 16px rgba(139,123,255,0.35);
+  --wb-sh-glow-cta:         0 8px 24px rgba(139,123,255,0.40);
+  --wb-sh-glow-cta-layered: 0 12px 32px rgba(139,123,255,0.45), inset 0 1px 0 rgba(255,255,255,0.22);
+
+  --wb-sh-ring-focus:    0 0 0 4px rgba(139,123,255,0.14);
+  --wb-sh-ring-selected: 0 0 0 2px rgba(139,123,255,0.15);
+
+  --wb-sh-paywall-hero:    0 20px 50px -12px rgba(139,123,255,0.45), inset 0 1px 0 rgba(255,255,255,0.24);
+  --wb-sh-wishlist-hero:   var(--wb-sh-paywall-hero);
+  --wb-sh-santa-hero:      0 16px 40px rgba(0,0,0,0.40);
+  --wb-sh-success-pop:     0 12px 40px rgba(74,222,128,0.40), 0 0 0 4px rgba(74,222,128,0.20);
+
+  /* v2.1 new families */
+  --wb-sh-nav-floating: 0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+  --wb-sh-fab-layered:  0 14px 40px rgba(139,123,255,0.45), inset 0 1px 0 rgba(255,255,255,0.24), 0 1px 2px rgba(0,0,0,0.3);
+  --wb-sh-sheet-up:     0 -20px 60px rgba(0,0,0,0.5);
+  --wb-sh-thumb-inner:  inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.3);
+  --wb-sh-avatar-xl:    0 12px 32px rgba(139,123,255,0.45), inset 0 2px 0 rgba(255,255,255,0.25);
+  --wb-sh-profile-hero: 0 20px 50px -20px rgba(139,123,255,0.45), inset 0 1px 0 rgba(255,255,255,0.08);
+
+  /* ───── Motion ───── */
+  --wb-dur-instant: 0.12s;
+  --wb-dur-fast:    0.15s;
+  --wb-dur-normal:  0.2s;
+  --wb-dur-slow:    0.3s;
+  --wb-dur-slower:  0.4s;
+  --wb-dur-slowest: 1s;
+
+  --wb-ease-std:        ease;
+  --wb-ease-emph:       cubic-bezier(0.4, 0, 0.2, 1);   /* v2.1 default for UI state changes */
+  --wb-ease-decelerate: cubic-bezier(0.25, 0.8, 0.35, 1); /* v2.1 sheets */
+  --wb-ease-spring:     cubic-bezier(0.34, 1.56, 0.64, 1); /* success pops */
+
+  --wb-tx-all:        all 0.15s ease;
+  --wb-tx-all-emph:   all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --wb-tx-sheet:      transform 0.32s cubic-bezier(0.25, 0.8, 0.35, 1);
+
+  /* ───── Type — family + scale ───── */
+  --wb-font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+
+  --wb-fs-micro:      10px;
+  --wb-fs-xs:         11px;
+  --wb-fs-sm:         12px;
+  --wb-fs-base:       13px;
+  --wb-fs-md:         14px;
+  --wb-fs-lg:         15px;   /* body, list-row title */
+  --wb-fs-xl:         16px;
+  --wb-fs-xxl:        17px;   /* card title */
+  --wb-fs-section-lg: 19px;   /* sheet titles, calendar month */
+  --wb-fs-display-sm: 22px;   /* stat-n, profile name */
+  --wb-fs-display-md: 26px;   /* hero title, onboarding h1 */
+  --wb-fs-display-lg: 30px;   /* onboarding top h1 */
+  --wb-fs-hero:       32px;   /* paywall title */
+
+  --wb-fw-regular:     400;
+  --wb-fw-medium:      500;
+  --wb-fw-semi-medium: 550;   /* v2.1 — nav items, meta labels */
+  --wb-fw-semibold:    600;
+  --wb-fw-strong:      650;   /* v2.1 — most UI text (card titles, rows, buttons) */
+  --wb-fw-bold:        700;
+  --wb-fw-extrabold:   800;
+
+  --wb-lh-tight:    1;
+  --wb-lh-snug:     1.05;
+  --wb-lh-normal:   1.25;
+  --wb-lh-relaxed:  1.35;
+  --wb-lh-loose:    1.5;
+
+  --wb-ls-wide:     0.5px;
+  --wb-ls-wider:    0.7px;
+  --wb-ls-micro:    0.3px;
+  --wb-ls-normal:   0;
+  --wb-ls-tight-sm: -0.005em;
+  --wb-ls-tight:    -0.012em;
+  --wb-ls-tighter:  -0.015em;
+  --wb-ls-display:  -0.025em;
+  --wb-ls-hero:     -0.035em;
+
+  /* ───── Sizing ───── */
+  --wb-touch-min: 44px;
+  --wb-btn-sm:    36px;
+  --wb-btn-md:    44px;
+  --wb-btn-lg:    50px;
+  --wb-input-md:  48px;
+}
+
+/* ═══════════ Semantic text roles ═══════════
+ * Prefer these over raw fontSize/fontWeight combos. Mirrors textStyles in
+ * packages/ui-tokens/src/typography.ts.
+ */
+
+.wb-hero-title    { font-family: var(--wb-font-sans); font-size: var(--wb-fs-hero);       font-weight: var(--wb-fw-bold);     line-height: var(--wb-lh-snug);    letter-spacing: var(--wb-ls-hero);     color: var(--wb-text); }
+.wb-display-title { font-family: var(--wb-font-sans); font-size: var(--wb-fs-display-lg); font-weight: var(--wb-fw-bold);     line-height: var(--wb-lh-snug);    letter-spacing: var(--wb-ls-hero);     color: var(--wb-text); }
+.wb-splash-title  { font-family: var(--wb-font-sans); font-size: var(--wb-fs-display-md); font-weight: var(--wb-fw-bold);     line-height: var(--wb-lh-snug);    letter-spacing: var(--wb-ls-hero);     color: var(--wb-text); }
+.wb-stat-number   { font-family: var(--wb-font-sans); font-size: var(--wb-fs-display-sm); font-weight: var(--wb-fw-bold);     line-height: var(--wb-lh-tight);   letter-spacing: var(--wb-ls-display);  color: var(--wb-text); }
+.wb-section-header{ font-family: var(--wb-font-sans); font-size: var(--wb-fs-xs);         font-weight: var(--wb-fw-semibold); line-height: var(--wb-lh-normal);  letter-spacing: var(--wb-ls-wider);    color: var(--wb-text-secondary); text-transform: uppercase; }
+.wb-sheet-title   { font-family: var(--wb-font-sans); font-size: var(--wb-fs-section-lg); font-weight: var(--wb-fw-strong);   line-height: var(--wb-lh-normal);  letter-spacing: var(--wb-ls-display);  color: var(--wb-text); }
+.wb-card-title    { font-family: var(--wb-font-sans); font-size: var(--wb-fs-xxl);        font-weight: var(--wb-fw-strong);   line-height: var(--wb-lh-snug);    letter-spacing: var(--wb-ls-display);  color: var(--wb-text); }
+.wb-list-row-title{ font-family: var(--wb-font-sans); font-size: var(--wb-fs-lg);         font-weight: var(--wb-fw-semibold); line-height: var(--wb-lh-normal);  letter-spacing: var(--wb-ls-tight);    color: var(--wb-text); }
+.wb-body          { font-family: var(--wb-font-sans); font-size: var(--wb-fs-lg);         font-weight: var(--wb-fw-medium);   line-height: var(--wb-lh-relaxed); letter-spacing: var(--wb-ls-tight-sm); color: var(--wb-text); }
+.wb-body-strong   { font-family: var(--wb-font-sans); font-size: var(--wb-fs-lg);         font-weight: var(--wb-fw-semibold); line-height: var(--wb-lh-relaxed); letter-spacing: var(--wb-ls-tight-sm); color: var(--wb-text); }
+.wb-secondary     { font-family: var(--wb-font-sans); font-size: var(--wb-fs-md);         font-weight: var(--wb-fw-semibold); line-height: var(--wb-lh-normal);  letter-spacing: var(--wb-ls-tight-sm); color: var(--wb-text-secondary); }
+.wb-caption       { font-family: var(--wb-font-sans); font-size: var(--wb-fs-base);       font-weight: var(--wb-fw-semi-medium); line-height: var(--wb-lh-relaxed); letter-spacing: var(--wb-ls-tight-sm); color: var(--wb-text-secondary); }
+.wb-label         { font-family: var(--wb-font-sans); font-size: var(--wb-fs-sm);         font-weight: var(--wb-fw-semibold); line-height: var(--wb-lh-snug);    letter-spacing: var(--wb-ls-micro);    color: var(--wb-text-muted); }
+.wb-label-upper   { font-family: var(--wb-font-sans); font-size: var(--wb-fs-xs);         font-weight: var(--wb-fw-semibold); line-height: var(--wb-lh-snug);    letter-spacing: var(--wb-ls-wider);    color: var(--wb-text-muted); text-transform: uppercase; }
+.wb-micro         { font-family: var(--wb-font-sans); font-size: var(--wb-fs-micro);      font-weight: var(--wb-fw-bold);     line-height: var(--wb-lh-tight);   letter-spacing: var(--wb-ls-micro);    color: var(--wb-text-muted); text-transform: uppercase; }
+.wb-button-text   { font-family: var(--wb-font-sans); font-size: var(--wb-fs-lg);         font-weight: var(--wb-fw-strong);   line-height: var(--wb-lh-tight);   letter-spacing: var(--wb-ls-tighter);  color: var(--wb-text); }
+.wb-nav-item      { font-family: var(--wb-font-sans); font-size: var(--wb-fs-micro);      font-weight: var(--wb-fw-semi-medium); line-height: var(--wb-lh-tight); letter-spacing: var(--wb-ls-normal);   color: var(--wb-text-secondary); }
+
+/* ═══════════ Page chrome ═══════════
+ * Dark-first body shell used across design-system previews. Apply
+ * `class="wb-dark"` to <body>. The mesh gradient is painted as a fixed
+ * pseudo-element so it sits behind content.
+ */
+
+body.wb-dark {
+  margin: 0;
+  background: var(--wb-bg);
+  color: var(--wb-text);
+  font-family: var(--wb-font-sans);
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  min-height: 100vh;
+}
+
+body.wb-dark::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: var(--wb-grad-mesh);
+  pointer-events: none;
+  z-index: 0;
+}
+
+body.wb-dark > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Reduced-motion respect — disables non-essential motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

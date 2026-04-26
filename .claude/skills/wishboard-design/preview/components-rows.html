@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:20px;background:var(--wb-bg);font-family:var(--wb-font-sans);color:var(--wb-text)}
+.list{display:flex;flex-direction:column;gap:8px;max-width:420px;margin:0 auto}
+.row{display:flex;gap:14px;align-items:flex-start;padding:14px;border-radius:14px;background:#2F2F38;border:1px solid rgba(255,255,255,0.08)}
+.thumb{width:52px;height:52px;border-radius:14px;background:rgba(124,106,255,0.12);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+.body{flex:1;min-width:0}
+.t{font-size:15px;font-weight:600;letter-spacing:-.01em;color:#F4F4F6}
+.s{font-size:13px;color:#C7CAD1;margin-top:2px}
+.trail{font-size:22px;color:#6B7280;align-self:center}
+/* States use a distinct tint + stronger border + a subtle state chip so each row reads at a glance */
+.current{background:linear-gradient(135deg,#33303F,rgba(124,106,255,0.14));border-color:rgba(124,106,255,0.50)}
+.reservedByMe{background:linear-gradient(135deg,#2E3A35,rgba(52,211,153,0.12));border-color:rgba(52,211,153,0.45)}
+.warning{background:linear-gradient(135deg,#3A3628,rgba(251,191,36,0.12));border-color:rgba(251,191,36,0.50)}
+.done{opacity:.55;background:#26262C;border-color:rgba(255,255,255,0.06)}
+.done .t{text-decoration:line-through;color:#9CA3AF}
+.lbl{font-family:ui-monospace,monospace;font-size:9px;margin-left:8px;padding:2px 6px;border-radius:4px;letter-spacing:.3px;font-weight:600;vertical-align:middle;color:#9CA3AF;background:rgba(255,255,255,0.08)}
+.current .lbl{color:#A78BFA;background:rgba(124,106,255,0.22)}
+.reservedByMe .lbl{color:#34D399;background:rgba(52,211,153,0.22)}
+.warning .lbl{color:#FBBF24;background:rgba(251,191,36,0.22)}
+.done .lbl{color:#9CA3AF;background:rgba(255,255,255,0.06)}
+</style></head><body class="wb-dark">
+<div class="list">
+<div class="row current"><div class="thumb">🎧</div><div class="body"><div class="t">AirPods Pro 2 (2024) <span class="lbl">state: current</span></div><div class="s">24 990 ₽ · высокий приоритет</div></div><div class="trail">›</div></div>
+<div class="row reservedByMe"><div class="thumb" style="background:rgba(52,211,153,0.12)">🧸</div><div class="body"><div class="t">Лабубу коллекционная <span class="lbl">state: reservedByMe</span></div><div class="s">Ты забронировал открыто · 2 890 ₽</div></div><div class="trail">›</div></div>
+<div class="row warning"><div class="thumb" style="background:rgba(251,191,36,0.12)">📚</div><div class="body"><div class="t">Atomic Habits, Clear <span class="lbl">state: warning</span></div><div class="s">Цена выросла на 15% — 690 ₽ → 790 ₽</div></div><div class="trail">›</div></div>
+<div class="row done"><div class="thumb">☕</div><div class="body"><div class="t">Кофеварка Delonghi <span class="lbl">state: done</span></div><div class="s">Подарено 3 янв</div></div><div class="trail">✓</div></div>
+</div>
+</body></html>

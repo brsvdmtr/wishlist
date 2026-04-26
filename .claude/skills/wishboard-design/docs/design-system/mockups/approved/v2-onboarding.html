@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WishBoard — Onboarding · North Star v2</title>
+<style>
+:root{--bg:#1B1B1F;--surface:#26262C;--card:#2F2F38;--accent:#7C6AFF;--accent-soft:rgba(124,106,255,0.12);--accent-light:#A78BFA;--success:#34D399;--success-soft:rgba(52,211,153,0.12);--warning:#FBBF24;--warning-soft:rgba(251,191,36,0.12);--text:#F4F4F6;--text-secondary:#9CA3AF;--text-muted:#6B7280;--border:rgba(255,255,255,0.06);--border-light:rgba(255,255,255,0.10);--gradient-accent:linear-gradient(135deg,#7C6AFF 0%,#9B8AFF 100%);--r-sm:6px;--r-md:10px;--r-lg:12px;--r-xl:14px;--r-xxl:16px;--r-pill:100px;--sh-glow-cta:0 8px 24px rgba(124,106,255,0.40);--font-sans:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:var(--font-sans);background:#0c0c0e;color:var(--text);min-height:100vh;padding:40px 20px;line-height:1.4}
+.page-title{text-align:center;color:var(--text);font-size:20px;font-weight:700;margin:0 auto 8px;letter-spacing:-0.01em}
+.page-subtitle{text-align:center;color:var(--text-secondary);font-size:14px;margin:0 auto 32px;max-width:720px}
+.phones{display:flex;flex-wrap:wrap;gap:32px;justify-content:center;align-items:flex-start}
+.phone{width:375px;min-height:812px;background:var(--bg);border-radius:44px;position:relative;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.6),0 0 0 10px #1a1a1c,0 0 0 12px #0a0a0b;flex-shrink:0}
+.status-bar{height:48px;padding:16px 24px 0;display:flex;align-items:flex-start;justify-content:space-between;font-size:14px;font-weight:600}
+.phone-label{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-size:10px;padding:4px 10px;border-radius:var(--r-pill);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;z-index:10;backdrop-filter:blur(8px);white-space:nowrap}
+.side-note{max-width:none;color:var(--text-secondary);font-size:13px;line-height:1.6}
+.side-note .tag{display:inline-block;font-size:10px;padding:3px 8px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent-light);font-weight:700;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px}
+.side-note h3{color:var(--text);font-size:16px;margin:0 0 12px;letter-spacing:-0.01em}
+.side-note h4{color:var(--accent-light);font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;font-weight:700}
+.side-note p{margin:0 0 10px}
+.side-note ul{margin:0 0 14px;padding-left:18px}
+.side-note li{margin-bottom:4px}
+.side-note b{color:var(--text);font-weight:600}
+.btn{border:none;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:transform 0.15s ease;letter-spacing:-0.01em;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:var(--r-xl);min-height:44px}
+.btn:active{transform:scale(0.98)}
+.btn.full{width:100%}
+.btn.lg{min-height:52px;font-size:16px;padding:16px 24px}
+.btn.primary-gradient{background:var(--gradient-accent);color:#fff;box-shadow:var(--sh-glow-cta),inset 0 1px 0 rgba(255,255,255,0.2)}
+.btn.ghost{background:transparent;color:var(--text-muted);box-shadow:none}
+</style>
+<style>
+  body { padding: 40px 20px; }
+  .ob-phone { min-height: 812px; }
+
+  .ob-dots {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+    padding: 16px 0 0;
+  }
+  .ob-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    transition: all 0.2s;
+  }
+  .ob-dot.active { background: var(--accent); width: 20px; border-radius: var(--r-pill); }
+  .ob-dot.done { background: var(--accent-soft); }
+
+  .ob-skip {
+    position: absolute;
+    top: 56px; right: 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .ob-content {
+    padding: 40px 28px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  /* Screen 1 — hello */
+  .hello-art {
+    width: 180px;
+    height: 180px;
+    margin: 40px auto 28px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .hello-art .gift {
+    font-size: 120px;
+    filter: drop-shadow(0 12px 32px rgba(124,106,255,0.5));
+    animation: float 4s ease-in-out infinite;
+    position: relative;
+    z-index: 2;
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  .hello-art .glow {
+    position: absolute;
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124,106,255,0.3) 0%, transparent 70%);
+    z-index: 1;
+    animation: glow-pulse 3s ease-in-out infinite;
+  }
+  @keyframes glow-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.7; }
+    50% { transform: scale(1.15); opacity: 1; }
+  }
+  .hello-art .snow {
+    position: absolute;
+    font-size: 16px;
+    color: rgba(255,255,255,0.4);
+  }
+
+  .ob-title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin: 0 0 12px;
+  }
+  .ob-title .accent { color: var(--accent); }
+  .ob-sub {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    max-width: 280px;
+    margin: 0 auto;
+  }
+
+  /* Screen 2 — "why" */
+  .value-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 16px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    text-align: left;
+    width: 100%;
+    max-width: 320px;
+  }
+  .value-icon {
+    width: 40px; height: 40px;
+    border-radius: var(--r-md);
+    background: var(--accent-soft);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .value-body { flex: 1; }
+  .value-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 2px;
+  }
+  .value-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+
+  /* Screen 3 — first wishlist */
+  .setup-question {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin: 40px 0 24px;
+    text-align: center;
+  }
+  .occasion-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+    max-width: 320px;
+  }
+  .occasion {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 16px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .occasion:active { transform: scale(0.97); }
+  .occasion.selected {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 2px rgba(124,106,255,0.15);
+  }
+  .occasion-emoji { font-size: 32px; margin-bottom: 6px; display: block; }
+  .occasion-label { font-size: 13px; font-weight: 700; }
+  .occasion.selected .occasion-label { color: var(--accent); }
+
+  /* Screen 4 — success */
+  .success-art {
+    width: 140px; height: 140px;
+    margin: 40px auto 20px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .success-check {
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #34d399, #10b981);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 56px;
+    color: #fff;
+    box-shadow: 0 12px 40px rgba(52,211,153,0.4), 0 0 0 4px rgba(52,211,153,0.2);
+    animation: success-pop 0.6s ease-out;
+  }
+  @keyframes success-pop {
+    0% { transform: scale(0.5); opacity: 0; }
+    60% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .success-sparkle {
+    position: absolute;
+    font-size: 16px;
+    animation: sparkle 1.5s ease-in-out infinite;
+  }
+  @keyframes sparkle {
+    0%, 100% { opacity: 0.4; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.1); }
+  }
+
+  .ob-sticky {
+    position: absolute;
+    bottom: 0;
+    left: 0; right: 0;
+    padding: 24px 20px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Onboarding · North Star v2</h1>
+<p class="page-subtitle">Первая встреча. 4 ключевых экрана: hello → why → first wishlist setup → success. Тёплый, не функциональный. Эмоция «ты пришёл к подаркам, не к формам».</p>
+
+<div class="phones">
+
+<!-- Screen 1: Hello / first-run -->
+<div class="phone ob-phone">
+  <div class="phone-label">OB · 1. Hello</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+
+  <div class="ob-content" style="justify-content: center; min-height: calc(100% - 160px);">
+    <div class="hello-art">
+      <div class="glow"></div>
+      <span class="snow" style="top: 10px; left: 20px; font-size: 14px;">❄</span>
+      <span class="snow" style="top: 30px; right: 15px;">✨</span>
+      <span class="snow" style="bottom: 15px; left: 10px;">✨</span>
+      <span class="snow" style="bottom: 30px; right: 25px; font-size: 14px;">❄</span>
+      <div class="gift">🎁</div>
+    </div>
+
+    <div class="ob-title">Привет!<br>Это <span class="accent">WishBoard</span></div>
+    <p class="ob-sub">Здесь ты говоришь о подарках, которых хочешь — и помогаешь друзьям не ошибиться с твоими.</p>
+  </div>
+
+  <div class="ob-sticky">
+    <div class="ob-dots">
+      <div class="ob-dot active"></div>
+      <div class="ob-dot"></div>
+      <div class="ob-dot"></div>
+      <div class="ob-dot"></div>
+    </div>
+    <div style="height: 8px;"></div>
+    <button class="btn primary-gradient lg full">Дальше</button>
+    <button class="btn ghost" style="margin-top: -2px;">У меня уже есть аккаунт</button>
+  </div>
+</div>
+
+<!-- Screen 2: Why / value -->
+<div class="phone ob-phone">
+  <div class="phone-label">OB · 2. Why</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+  <div class="ob-skip">пропустить</div>
+
+  <div class="ob-content">
+    <div class="ob-title" style="font-size: 26px; margin-top: 20px;">Что WishBoard<br>делает лучше</div>
+    <p class="ob-sub" style="margin-bottom: 28px;">Никаких постов в чатах,<br>никаких «а что тебе подарить?»</p>
+
+    <div class="value-card">
+      <div class="value-icon">🎯</div>
+      <div class="value-body">
+        <div class="value-title">Пойми что хочешь</div>
+        <div class="value-sub">Список с приоритетами — что «очень хочу», что «можно»</div>
+      </div>
+    </div>
+    <div class="value-card">
+      <div class="value-icon" style="background: rgba(52,211,153,0.12);">🎁</div>
+      <div class="value-body">
+        <div class="value-title">Поделись — получи подарки</div>
+        <div class="value-sub">Отправь ссылку. Друзья увидят что именно ты хочешь, забронируют и принесут</div>
+      </div>
+    </div>
+    <div class="value-card">
+      <div class="value-icon" style="background: rgba(251,191,36,0.12);">🤫</div>
+      <div class="value-body">
+        <div class="value-title">Сюрприз не испорчен</div>
+        <div class="value-sub">Ты видишь сколько забронировано, но не кем и что</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ob-sticky">
+    <div class="ob-dots">
+      <div class="ob-dot done"></div>
+      <div class="ob-dot active"></div>
+      <div class="ob-dot"></div>
+      <div class="ob-dot"></div>
+    </div>
+    <div style="height: 8px;"></div>
+    <button class="btn primary-gradient lg full">Создать свой первый</button>
+  </div>
+</div>
+
+<!-- Screen 3: First wishlist setup -->
+<div class="phone ob-phone">
+  <div class="phone-label">OB · 3. First wishlist</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+  <div class="ob-skip">пропустить</div>
+
+  <div class="ob-content">
+    <div style="margin-top: 20px;"></div>
+    <div class="setup-question">К какому событию<br>ты собираешь?</div>
+    <p class="ob-sub" style="margin-bottom: 28px;">Выбери один — потом можно больше</p>
+
+    <div class="occasion-grid">
+      <div class="occasion selected">
+        <span class="occasion-emoji">🎂</span>
+        <div class="occasion-label">День рождения</div>
+      </div>
+      <div class="occasion">
+        <span class="occasion-emoji">🎄</span>
+        <div class="occasion-label">Новый год</div>
+      </div>
+      <div class="occasion">
+        <span class="occasion-emoji">💍</span>
+        <div class="occasion-label">Свадьба</div>
+      </div>
+      <div class="occasion">
+        <span class="occasion-emoji">🎓</span>
+        <div class="occasion-label">Выпуск</div>
+      </div>
+      <div class="occasion">
+        <span class="occasion-emoji">🏡</span>
+        <div class="occasion-label">Новоселье</div>
+      </div>
+      <div class="occasion">
+        <span class="occasion-emoji">🎁</span>
+        <div class="occasion-label">Просто так</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ob-sticky">
+    <div class="ob-dots">
+      <div class="ob-dot done"></div>
+      <div class="ob-dot done"></div>
+      <div class="ob-dot active"></div>
+      <div class="ob-dot"></div>
+    </div>
+    <div style="height: 8px;"></div>
+    <button class="btn primary-gradient lg full">Дальше</button>
+  </div>
+</div>
+
+<!-- Screen 4: Success -->
+<div class="phone ob-phone">
+  <div class="phone-label">OB · 4. Success</div>
+  <div class="status-bar"><span>9:41</span><span>●●●●</span></div>
+
+  <div class="ob-content" style="justify-content: center; min-height: calc(100% - 180px);">
+    <div class="success-art">
+      <span class="success-sparkle" style="top: 0; left: 10px;">✨</span>
+      <span class="success-sparkle" style="top: 20px; right: 0; animation-delay: 0.3s;">✨</span>
+      <span class="success-sparkle" style="bottom: 10px; left: 20px; animation-delay: 0.6s;">✨</span>
+      <div class="success-check">✓</div>
+    </div>
+
+    <div class="ob-title">Готово 🎉</div>
+    <p class="ob-sub" style="margin-bottom: 10px;">
+      Вишлист «🎂 День рождения»<br>создан. Теперь добавь желания —<br>или сразу поделись ссылкой.
+    </p>
+
+    <div class="value-card" style="background: linear-gradient(135deg, rgba(52,211,153,0.1), rgba(124,106,255,0.05)); border-color: rgba(52,211,153,0.2); margin-top: 20px;">
+      <div class="value-icon" style="background: rgba(52,211,153,0.2);">💡</div>
+      <div class="value-body">
+        <div class="value-title">Совет</div>
+        <div class="value-sub">Добавь 3-5 желаний — так друзьям проще выбрать. Ссылку можно отправить прямо в Telegram.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ob-sticky">
+    <button class="btn primary-gradient lg full">+ Добавить желание</button>
+    <button class="btn ghost" style="margin-top: -2px;">Сразу поделиться</button>
+  </div>
+</div>
+
+</div>
+
+<div style="max-width: 1200px; margin: 40px auto 0;">
+  <div class="side-note" style="max-width: none;">
+    <span class="tag">North Star — Onboarding</span>
+    <h3>Первая встреча — эмоция, не форма</h3>
+    <p>Onboarding — самый важный surface для retention. 4 экрана, каждый имеет чёткую роль. Warm, decisive, calm — все 3 principles сразу.</p>
+
+    <h4>Screen 1 — Hello (эмоциональный якорь)</h4>
+    <ul>
+      <li><b>Floating gift emoji</b> 120px с brand-glow radial, animation float — чувственный welcome, не logo</li>
+      <li><b>❄ ✨</b> снежинки/искры по углам — лёгкий seasonal decor</li>
+      <li><b>Title</b>: «Привет! Это <accent>WishBoard</accent>» — 30/800, accent-color на бренде</li>
+      <li><b>Sub</b>: «говоришь о подарках... помогаешь не ошибиться» — объясняет dual-value: обе стороны</li>
+      <li><b>CTA</b>: «Дальше» + ghost «У меня уже есть аккаунт»</li>
+    </ul>
+
+    <h4>Screen 2 — Why (value proposition)</h4>
+    <ul>
+      <li><b>3 value-card</b> с разными accent-tints (purple / green / amber) — emotional range</li>
+      <li><b>Пойми что хочешь · Поделись — получи подарки · Сюрприз не испорчен</b> — 3 benefits с разговорными заголовками (не «feature list»)</li>
+      <li><b>Progress dots</b>: done / active / pending / pending — пользователь видит где в процессе</li>
+    </ul>
+
+    <h4>Screen 3 — First wishlist setup (practical)</h4>
+    <ul>
+      <li><b>Question</b>: «К какому событию ты собираешь?» — не «Create wishlist» form. Разговор, не action.</li>
+      <li><b>6 occasions grid</b> 2×3: 🎂 ДР · 🎄 НГ · 💍 Свадьба · 🎓 Выпуск · 🏡 Новоселье · 🎁 Просто так</li>
+      <li>Selected-state: accent-border + accent-soft bg + 2px ring-shadow</li>
+      <li>Click pattern: сразу автоматически создаёт wishlist и переходит в title-input (не сделан здесь)</li>
+    </ul>
+
+    <h4>Screen 4 — Success (celebration)</h4>
+    <ul>
+      <li><b>Success check</b> 100px green gradient circle с pop-animation + box-shadow ring. Не плоский ✓.</li>
+      <li><b>Sparkle animation</b> вокруг — легкий праздник, не cliché confetti</li>
+      <li><b>Title</b>: «Готово 🎉» — эмодзи рядом</li>
+      <li><b>Tip-card</b>: green/accent gradient, «💡 Совет» — добавь 3-5 желаний, поделись прямо в Telegram</li>
+      <li><b>2 CTA</b>: primary «+ Добавить желание» / ghost «Сразу поделиться» — обе валидны</li>
+    </ul>
+
+    <h4>Общие принципы</h4>
+    <ul>
+      <li><b>Dots pagination</b> поверх sticky footer — compact indicator прогресса</li>
+      <li><b>Skip button</b> (экраны 2-3) в правом углу — always-escape для power users</li>
+      <li><b>Primary-gradient CTA</b> на каждом экране — один main action</li>
+      <li><b>Tone</b>: разговорный русский. «пойми что хочешь», «поделись — получи». Не перевод с английского.</li>
+    </ul>
+
+    <h4>Что лучше current prod</h4>
+    <ul>
+      <li>Hello-экран с floating-gift animation — эмоциональный якорь, не logo-splash</li>
+      <li>Value prop переформулирован в 3 разговорные строки, не list of features</li>
+      <li>First-wishlist — question «к какому событию» вместо pure form</li>
+      <li>Success-экран с pop-animation + tip-card — celebrate a win</li>
+      <li>Tone русский-разговорный, не перевод</li>
+      <li>Progress-dots + skip — контроль для пользователя</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>

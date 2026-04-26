@@ -1,0 +1,33 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:20px;background:var(--wb-bg);font-family:var(--wb-font-sans);color:var(--wb-text)}
+.wrap{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+.av{border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;flex-shrink:0}
+.xs{width:24px;height:24px;font-size:11px}
+.sm{width:32px;height:32px;font-size:12px}
+.md{width:40px;height:40px;font-size:15px}
+.lg{width:52px;height:52px;font-size:18px}
+.xl{width:72px;height:72px;font-size:26px}
+.g1{background:linear-gradient(135deg,#7C6AFF,#A78BFA)}
+.g2{background:linear-gradient(135deg,#fbbf24,#f59e0b)}
+.g3{background:linear-gradient(135deg,#34d399,#10b981)}
+.g4{background:linear-gradient(135deg,#f472b6,#ec4899)}
+.g5{background:linear-gradient(135deg,#60a5fa,#3b82f6)}
+.stack{display:flex;align-items:center}
+.stack .av{border:2px solid #2F2F38}
+.stack .av:not(:first-child){margin-left:-8px}
+.plus{background:#26262C;color:#6B7280}
+.lbl{font-family:ui-monospace,monospace;font-size:10px;color:var(--wb-text-muted);display:block;margin-bottom:6px}
+.col{display:flex;flex-direction:column}
+</style></head><body class="wb-dark">
+<div class="wrap">
+<div class="col"><span class="lbl">sizes (24/32/40/52/72)</span><div style="display:flex;gap:8px;align-items:center">
+  <div class="av xs g1">М</div><div class="av sm g1">М</div><div class="av md g1">М</div><div class="av lg g1">М</div><div class="av xl g1">М</div>
+</div></div>
+<div class="col"><span class="lbl">participant gradients</span><div style="display:flex;gap:8px">
+  <div class="av md g1">А</div><div class="av md g2">Б</div><div class="av md g3">В</div><div class="av md g4">Г</div><div class="av md g5">Д</div>
+</div></div>
+<div class="col"><span class="lbl">stack — max 3 + N</span><div class="stack">
+  <div class="av md g1">А</div><div class="av md g2">Б</div><div class="av md g3">В</div><div class="av md plus">+4</div>
+</div></div>
+</div>
+</body></html>

@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:20px;background:var(--wb-bg);font-family:var(--wb-font-sans);color:var(--wb-text)}
+.list{display:flex;flex-direction:column;gap:10px;max-width:420px;margin:0 auto}
+.b{display:flex;gap:12px;padding:12px 14px;border-radius:14px;font-size:13px;line-height:1.5;align-items:flex-start;color:#F4F4F6}
+.ic{flex-shrink:0;font-size:16px;margin-top:1px}
+.bd{flex:1;color:#FFFFFF}
+.bd > :not(.tt){color:#FFFFFF}
+.tt{font-weight:700;font-size:14px;margin-bottom:2px}
+/* Stronger backgrounds so banners feel like a distinct surface, not a faded wash */
+.info   {background:rgba(124,106,255,0.18);border:1px solid rgba(124,106,255,0.40)}
+.success{background:rgba(52,211,153,0.16);border:1px solid rgba(52,211,153,0.40)}
+.warning{background:rgba(251,191,36,0.14);border:1px solid rgba(251,191,36,0.40)}
+.danger {background:rgba(248,113,113,0.16);border:1px solid rgba(248,113,113,0.42)}
+.info    .ic,.info    .tt{color:#A78BFA}
+.success .ic,.success .tt{color:#34D399}
+.warning .ic,.warning .tt{color:#FBBF24}
+.danger  .ic,.danger  .tt{color:#F87171}
+.promo{background:linear-gradient(135deg,#7C6AFF,#9B8AFF);color:#fff;box-shadow:0 4px 16px rgba(124,106,255,0.25)}
+</style></head><body class="wb-dark">
+<div class="list">
+<div class="b info"><div class="ic">💡</div><div class="bd"><div class="tt">Режим сюрприза</div>Хозяин вишлиста не увидит, что ты забронировал — пока сам не снимешь бронь.</div></div>
+<div class="b success"><div class="ic">🎁</div><div class="bd"><div class="tt">Подарено с любовью</div>Марина отметила подарок как «подарен». Спасибо!</div></div>
+<div class="b warning"><div class="ic">⚠️</div><div class="bd">Твоя PRO‑подписка истекает через 3 дня. Продлить — 100 ⭐/мес.</div></div>
+<div class="b danger"><div class="ic">❌</div><div class="bd"><div class="tt">Этот подарок уже купили открыто</div>Сними тайную бронь, чтобы не задвоить.</div></div>
+<div class="b promo"><div class="ic">⭐</div><div class="bd"><div class="tt">30 дней PRO бесплатно</div>Введи промокод <b>WISHPRO</b> на экране подписки.</div></div>
+</div>
+</body></html>

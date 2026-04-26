@@ -1,0 +1,330 @@
+/* extras.css — styles for ItemDetail, GiftNotes, Santa, GroupGift,
+ * ShowcaseEditor, Edge + Static screens. Loaded after miniapp.css.
+ */
+
+/* ── FORM FIELDS ── */
+.wb-ff { display: flex; flex-direction: column; gap: 6px; padding: 8px 16px; }
+.wb-ff-label { font-size: 11px; font-weight: 600; color: var(--wb-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.wb-ff-input {
+  background: var(--wb-surface); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px; padding: 12px 14px; color: var(--wb-text-primary);
+  font-size: 15px; font-family: inherit; outline: none; width: 100%;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.wb-ff-input:focus { border-color: var(--wb-accent); background: var(--wb-surface-hover); }
+.wb-ff-input::placeholder { color: var(--wb-text-muted); }
+.wb-ff-area { resize: none; min-height: 60px; line-height: 1.4; }
+.wb-ff-hint { font-size: 11px; color: var(--wb-text-muted); }
+.wb-ff-error { font-size: 11px; color: var(--wb-danger); }
+
+/* ── EMPTY STATE ── */
+.wb-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 40px 24px; text-align: center; gap: 10px; color: var(--wb-text-secondary);
+}
+.wb-empty-ic {
+  width: 64px; height: 64px; border-radius: 20px;
+  background: var(--wb-surface); display: grid; place-items: center;
+  font-size: 28px; margin-bottom: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.wb-empty-t { font-size: 17px; font-weight: 700; color: var(--wb-text-primary); letter-spacing: -0.01em; }
+.wb-empty-s { font-size: 13px; line-height: 1.5; max-width: 260px; text-wrap: pretty; }
+.wb-empty .wb-btn { margin-top: 8px; }
+
+/* ── PILL TABS ── */
+.wb-ptabs {
+  display: flex; gap: 6px; padding: 8px 16px 12px; overflow-x: auto; scrollbar-width: none;
+}
+.wb-ptabs::-webkit-scrollbar { display: none; }
+.wb-ptab {
+  flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: var(--wb-surface); color: var(--wb-text-secondary);
+  border: 1px solid transparent; cursor: pointer;
+  transition: all 160ms ease;
+}
+.wb-ptab.on { background: var(--wb-accent-soft); color: var(--wb-accent-light); border-color: rgba(124,106,255,0.3); }
+.wb-ptab-n {
+  font-size: 11px; background: rgba(255,255,255,0.08); padding: 1px 7px; border-radius: 999px;
+  font-weight: 700;
+}
+.wb-ptab.on .wb-ptab-n { background: var(--wb-accent); color: white; }
+
+/* ── LIST ITEM ── */
+.wb-li {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  min-height: 56px; cursor: pointer; transition: background 160ms ease;
+}
+.wb-li:hover { background: var(--wb-surface-hover); }
+.wb-li.on { background: var(--wb-accent-soft); }
+.wb-li.dim { opacity: 0.55; }
+.wb-li-ic {
+  width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--wb-surface); font-size: 16px; flex-shrink: 0;
+}
+.wb-li-body { flex: 1; min-width: 0; }
+.wb-li-t { font-size: 14px; font-weight: 600; color: var(--wb-text-primary); }
+.wb-li-s { font-size: 12px; color: var(--wb-text-muted); margin-top: 2px; line-height: 1.4; }
+.wb-li-trail { font-size: 13px; color: var(--wb-text-muted); flex-shrink: 0; }
+
+/* toggle switch */
+.wb-toggle {
+  width: 44px; height: 26px; border-radius: 999px; background: rgba(255,255,255,0.12);
+  border: none; padding: 2px; cursor: pointer; position: relative; flex-shrink: 0;
+  transition: background 200ms ease;
+}
+.wb-toggle span {
+  display: block; width: 22px; height: 22px; border-radius: 50%;
+  background: white; transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+.wb-toggle.on { background: var(--wb-accent); }
+.wb-toggle.on span { transform: translateX(18px); }
+
+/* ── WishCardTinted ── */
+.wb-wct {
+  display: flex; gap: 12px; padding: 12px 14px; margin: 6px 16px; border-radius: 14px;
+  background: var(--wb-surface); position: relative; overflow: hidden;
+  transition: transform 160ms ease;
+}
+.wb-wct.accent { background: linear-gradient(135deg, rgba(124,106,255,0.12), rgba(124,106,255,0.04)); border: 1px solid rgba(124,106,255,0.2); }
+.wb-wct.success { background: linear-gradient(135deg, rgba(52,211,153,0.12), rgba(52,211,153,0.04)); border: 1px solid rgba(52,211,153,0.2); }
+.wb-wct.warning { background: linear-gradient(135deg, rgba(251,191,36,0.12), rgba(251,191,36,0.04)); border: 1px solid rgba(251,191,36,0.2); }
+.wb-wct-line {
+  position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--wb-accent);
+}
+.wb-wct.success .wb-wct-line { background: var(--wb-success); }
+.wb-wct.warning .wb-wct-line { background: var(--wb-warning); }
+.wb-wct-thumb {
+  width: 44px; height: 44px; border-radius: 12px; background: var(--wb-card);
+  display: grid; place-items: center; font-size: 20px; flex-shrink: 0;
+}
+.wb-wct-body { flex: 1; min-width: 0; }
+.wb-wct-t { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.wb-wct-m { font-size: 12px; color: var(--wb-text-muted); margin-top: 2px; }
+.wb-wct-r { display: flex; align-items: center; flex-shrink: 0; }
+
+/* ── ITEM DETAIL ── */
+.wb-item-hero {
+  position: relative; height: 220px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(124,106,255,0.22), rgba(124,106,255,0.04));
+  display: grid; place-items: center;
+}
+.wb-item-hero-emoji { font-size: 90px; filter: drop-shadow(0 12px 32px rgba(0,0,0,0.4)); z-index: 1; }
+.wb-item-hero-glow {
+  position: absolute; inset: -40%; background: radial-gradient(circle, rgba(124,106,255,0.25), transparent 60%);
+  pointer-events: none;
+}
+.wb-item-body { padding: 16px 20px 100px; display: flex; flex-direction: column; gap: 12px; }
+.wb-item-title { font-size: 22px; font-weight: 750; letter-spacing: -0.025em; line-height: 1.2; margin: 0; }
+.wb-item-price { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; color: var(--wb-text-primary); }
+.wb-item-desc { font-size: 14px; color: var(--wb-text-secondary); line-height: 1.5; text-wrap: pretty; }
+.wb-card-box {
+  background: var(--wb-surface); border-radius: 16px; overflow: hidden;
+}
+.wb-card-box .wb-li { padding: 12px 14px; min-height: 52px; }
+.wb-card-box .wb-li:not(:last-child) { border-bottom: 1px solid rgba(255,255,255,0.04); }
+
+.wb-comment {
+  display: flex; gap: 10px; padding: 8px 2px; font-size: 13px; line-height: 1.45;
+}
+.wb-comment b { font-weight: 700; color: var(--wb-text-primary); }
+.wb-res-box {
+  background: var(--wb-surface); border-radius: 14px; padding: 14px;
+  border: 1px dashed rgba(255,255,255,0.1); font-size: 13px;
+}
+.wb-res-box-sub { font-size: 11px; color: var(--wb-text-muted); margin-top: 3px; }
+
+/* ── GIFT NOTES ── */
+.wb-gn-card {
+  background: var(--wb-surface); margin: 8px 16px; padding: 14px; border-radius: 14px;
+  position: relative;
+}
+.wb-gn-date { font-size: 11px; color: var(--wb-text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.wb-gn-title { font-size: 15px; font-weight: 700; margin-top: 4px; }
+.wb-gn-sub { font-size: 12px; color: var(--wb-text-secondary); margin-top: 2px; margin-bottom: 6px; }
+
+/* ── PAYWALL HERO (re-usable) ── */
+.wb-pw-hero {
+  text-align: center; padding: 20px 20px 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.wb-pw-emoji { font-size: 54px; filter: drop-shadow(0 6px 20px rgba(124,106,255,0.3)); }
+.wb-pw-hero h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; margin: 4px 0 0; }
+.wb-pw-sub { font-size: 13px; color: var(--wb-text-secondary); line-height: 1.5; max-width: 280px; text-wrap: pretty; }
+
+/* ── SANTA FLOWS ── */
+.wb-santa-reveal {
+  margin: 16px; padding: 24px; border-radius: 20px; text-align: center;
+  background: linear-gradient(135deg, rgba(240,78,110,0.18), rgba(124,106,255,0.18));
+  border: 1px solid rgba(240,78,110,0.2);
+}
+.wb-santa-reveal-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--wb-accent-light);
+}
+.wb-santa-reveal-name { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.wb-santa-reveal-sub { font-size: 13px; color: var(--wb-text-secondary); margin-top: 4px; }
+
+.wb-poll-card {
+  background: var(--wb-surface); margin: 8px 16px; padding: 14px; border-radius: 14px;
+}
+.wb-poll-q { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+.wb-poll-opt {
+  position: relative; display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 8px 12px; margin-top: 4px; font-size: 13px; border-radius: 10px;
+  background: var(--wb-card); overflow: hidden;
+}
+.wb-poll-opt span { position: relative; z-index: 1; }
+.wb-poll-opt b { position: relative; z-index: 1; color: var(--wb-text-muted); font-weight: 600; }
+.wb-poll-opt.active { border: 1px solid rgba(124,106,255,0.3); }
+.wb-poll-bar {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, rgba(124,106,255,0.2), rgba(124,106,255,0.08));
+}
+.wb-poll-opt.active .wb-poll-bar { background: linear-gradient(90deg, rgba(124,106,255,0.35), rgba(124,106,255,0.12)); }
+.wb-poll-meta { font-size: 11px; color: var(--wb-text-muted); margin-top: 8px; }
+
+/* Santa / GG join cards */
+.wb-join-card {
+  margin: 12px 16px; padding: 20px; border-radius: 18px; text-align: center;
+  background: linear-gradient(135deg, rgba(124,106,255,0.15), rgba(240,78,110,0.1));
+  border: 1px solid rgba(124,106,255,0.2);
+}
+.wb-join-emoji { font-size: 44px; margin-bottom: 8px; }
+.wb-join-card h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.025em; margin: 4px 0; }
+.wb-join-sub { font-size: 12px; color: var(--wb-text-secondary); }
+
+/* ── GROUP GIFT CHAT ── */
+.wb-gg-hero {
+  background: linear-gradient(135deg, rgba(124,106,255,0.18), rgba(240,78,110,0.1));
+  border: 1px solid rgba(124,106,255,0.2); border-radius: 16px; padding: 16px;
+}
+.wb-gg-msg { display: flex; gap: 8px; padding: 6px 16px; align-items: flex-end; }
+.wb-gg-msg.me { justify-content: flex-end; }
+.wb-gg-author { font-size: 11px; font-weight: 700; color: var(--wb-text-muted); margin-bottom: 3px; margin-left: 2px; }
+.wb-gg-bubble {
+  background: var(--wb-surface); padding: 9px 13px; border-radius: 14px 14px 14px 4px;
+  font-size: 14px; line-height: 1.4; max-width: 260px;
+}
+.wb-gg-msg.me .wb-gg-bubble {
+  background: var(--wb-accent); color: white;
+  border-radius: 14px 14px 4px 14px;
+}
+.wb-gg-pinned {
+  display: flex; gap: 10px; padding: 10px 14px; margin: 8px 16px; border-radius: 12px;
+  background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2);
+  font-size: 12px; line-height: 1.45;
+}
+.wb-gg-pinned b { color: var(--wb-warning); font-weight: 700; }
+.wb-gg-chat-input {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; gap: 8px; padding: 12px 16px 20px; background: var(--wb-bg);
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.wb-gg-input-field {
+  flex: 1; background: var(--wb-surface); border: none; border-radius: 999px;
+  padding: 10px 16px; color: var(--wb-text-primary); font-size: 14px; outline: none;
+}
+.wb-gg-send-btn {
+  width: 40px; height: 40px; border-radius: 50%; background: var(--wb-accent);
+  border: none; color: white; font-size: 18px; font-weight: 700; cursor: pointer;
+}
+
+/* ── SHOWCASE EDITOR ── */
+.wb-cover-picker {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 4px;
+}
+.wb-cov {
+  aspect-ratio: 1; border-radius: 12px; cursor: pointer; position: relative;
+  border: 2px solid transparent;
+}
+.wb-cov.active { border-color: var(--wb-accent); box-shadow: 0 0 0 2px var(--wb-bg); }
+.wb-cov.upload {
+  background: var(--wb-surface); border: 2px dashed rgba(255,255,255,0.15);
+  display: grid; place-items: center; font-size: 24px; color: var(--wb-text-muted);
+}
+
+/* ── EDGE SCREENS ── */
+.wb-share-card {
+  margin: 16px; padding: 24px 20px; border-radius: 20px; text-align: center;
+  background: linear-gradient(180deg, rgba(124,106,255,0.15), var(--wb-surface));
+  border: 1px solid rgba(124,106,255,0.15);
+}
+.wb-share-qr {
+  width: 140px; height: 140px; margin: 0 auto 14px; border-radius: 16px;
+  background: white; color: #111; display: grid; place-items: center;
+  font-family: monospace; font-size: 56px; font-weight: 900; letter-spacing: -4px;
+  line-height: 0.8;
+}
+.wb-share-link {
+  font-family: ui-monospace, SFMono-Regular, monospace; font-size: 13px; font-weight: 600;
+  padding: 8px 14px; background: var(--wb-card); border-radius: 10px;
+  color: var(--wb-accent-light); display: inline-block;
+}
+.wb-share-meta { font-size: 11px; color: var(--wb-text-muted); margin-top: 10px; }
+
+.wb-curated-cover {
+  margin: 12px 16px; padding: 24px 20px; border-radius: 20px;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(240,78,110,0.3), transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(124,106,255,0.3), transparent 50%),
+    linear-gradient(135deg, #2a1e3d, #1a1a24);
+  color: white;
+}
+.wb-curated-title { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; }
+.wb-curated-sub { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 4px; }
+
+/* ── STATIC SCREENS (FAQ, Changelog, Legal) ── */
+.wb-faq-q {
+  margin: 12px 16px 4px; font-size: 14px; font-weight: 700; line-height: 1.4;
+  display: flex; gap: 8px;
+}
+.wb-faq-q::before { content: "Q"; color: var(--wb-accent); font-weight: 800; flex-shrink: 0; }
+.wb-faq-a {
+  margin: 0 16px 12px 34px; font-size: 13px; color: var(--wb-text-secondary);
+  line-height: 1.5; text-wrap: pretty; padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.wb-cl-ver { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 16px 8px; }
+.wb-cl-v { font-size: 16px; font-weight: 750; letter-spacing: -0.02em; }
+.wb-cl-d { font-size: 11px; color: var(--wb-text-muted); font-weight: 600; }
+.wb-cl-ul {
+  margin: 0 16px 12px 32px; padding: 0; font-size: 13px; line-height: 1.6;
+  color: var(--wb-text-secondary);
+}
+.wb-cl-ul li { margin-bottom: 2px; }
+.wb-cl-ul li::marker { color: var(--wb-accent); }
+
+.wb-legal-doc {
+  padding: 8px 20px 30px; font-size: 13px; line-height: 1.55; color: var(--wb-text-secondary);
+}
+.wb-legal-doc h2 {
+  font-size: 14px; font-weight: 700; color: var(--wb-text-primary);
+  margin: 16px 0 6px; letter-spacing: -0.01em;
+}
+.wb-legal-doc p { margin: 0 0 8px; text-wrap: pretty; }
+
+/* ── FIRST-SHARE MODAL ── */
+.wb-modal-backdrop {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+  display: grid; place-items: center; padding: 24px;
+}
+.wb-modal-card {
+  background: var(--wb-bg); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px; padding: 28px 24px; text-align: center;
+  max-width: 320px; display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+}
+.wb-modal-emoji { font-size: 52px; filter: drop-shadow(0 6px 20px rgba(124,106,255,0.4)); }
+.wb-modal-card h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.025em; margin: 4px 0; }
+.wb-modal-sub { font-size: 13px; color: var(--wb-text-secondary); line-height: 1.5; margin-bottom: 6px; text-wrap: pretty; }
+.wb-modal-card .wb-btn { width: 100%; }
+
+/* ── Stats tight variant (used in multiple places) ── */
+.wb-item-body .wb-stats, .wb-scroll > .wb-stats {
+  margin: 4px 0; padding: 0;
+}

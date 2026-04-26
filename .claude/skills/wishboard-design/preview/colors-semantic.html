@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:20px;background:var(--wb-bg);font-family:var(--wb-font-sans)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.col{display:flex;flex-direction:column;gap:8px}
+.sw{border-radius:12px;padding:12px;border:1px solid var(--wb-border)}
+.solid{height:56px;color:#0b0b0d;font-weight:800}
+.soft{border-color:transparent}
+.n{font-size:12px;font-weight:700}
+.h{font-size:10px;opacity:.75;font-family:ui-monospace,monospace;margin-top:4px;font-weight:500}
+</style></head><body class="wb-dark">
+<div class="grid">
+<div class="col">
+  <div class="sw solid" style="background:#34D399"><div class="n">success</div><div class="h">#34D399</div></div>
+  <div class="sw soft" style="background:rgba(52,211,153,0.12);color:#34D399"><div class="n">success-soft</div><div class="h">rgba 0.12</div></div>
+</div>
+<div class="col">
+  <div class="sw solid" style="background:#FBBF24"><div class="n">warning</div><div class="h">#FBBF24</div></div>
+  <div class="sw soft" style="background:rgba(251,191,36,0.12);color:#FBBF24"><div class="n">warning-soft</div><div class="h">rgba 0.12</div></div>
+</div>
+<div class="col">
+  <div class="sw solid" style="background:#F87171;color:#fff"><div class="n">danger</div><div class="h">#F87171</div></div>
+  <div class="sw soft" style="background:rgba(248,113,113,0.12);color:#F87171"><div class="n">danger-soft</div><div class="h">rgba 0.12</div></div>
+</div>
+</div>
+</body></html>

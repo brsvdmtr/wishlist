@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>WishBoard · Подарочный календарь</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="../miniapp.css" />
+  <link rel="stylesheet" href="../extras.css" />
+  <link rel="stylesheet" href="cal.css" />
+  <style>
+    /* page chrome */
+    body {
+      margin: 0;
+      background: #07070A;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+      color: #F4F4F6;
+      background-image:
+        radial-gradient(ellipse 1200px 500px at 30% -10%, rgba(139,123,255,0.10), transparent 60%),
+        radial-gradient(ellipse 800px 400px at 80% 0%, rgba(240,106,180,0.06), transparent 60%);
+    }
+
+    /* ---- Inline copy of wb-cal-* / wb-event-* / wb-cal-today-card / wb-onb / wb-paywall etc.
+       (these live inside a <style> block in ../index.html and aren't reachable from a sibling
+       html file via <link>. We mirror the ones the calendar surface uses.) ---- */
+
+    /* Calendar grid */
+    .wb-cal-header { display:flex; align-items:center; justify-content:space-between; padding:0 20px 12px; }
+    .wb-cal-title { font-size:22px; font-weight:700; letter-spacing:-0.025em; color:var(--wb-text); }
+    .wb-cal-nav { display:flex; gap:6px; }
+    .wb-cal-nav-btn { width:34px; height:34px; border-radius:12px; background:var(--wb-surface); border:1px solid var(--wb-border); color:var(--wb-text-secondary); display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer }
+    .wb-cal-nav-btn:active { transform:scale(.92) }
+    .wb-cal-weekdays { display:grid; grid-template-columns:repeat(7,1fr); padding:0 12px 6px; }
+    .wb-cal-wd { text-align:center; font-size:10px; font-weight:600; color:var(--wb-text-muted); text-transform:uppercase; letter-spacing:0.6px; padding:4px 0 }
+    .wb-cal-wd.we { color:var(--wb-text-muted); opacity:.55 }
+    .wb-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); padding:0 12px 14px; gap:2px }
+    .wb-cal-cell { aspect-ratio:1/1; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:12px; font-size:13px; font-weight:550; color:var(--wb-text-secondary); cursor:pointer }
+    .wb-cal-cell.out { color:var(--wb-text-muted); opacity:.3 }
+    .wb-cal-cell.today { background:var(--wb-surface); color:var(--wb-text); border:1px solid var(--wb-border-strong) }
+    .wb-cal-cell.event { color:var(--wb-text); font-weight:650 }
+    .wb-cal-cell.event::before { content:''; position:absolute; inset:0; border-radius:12px; background:var(--wb-accent-soft); border:1px solid var(--wb-accent-soft-strong); z-index:-1 }
+    .wb-cal-emoji { font-size:10px; line-height:1; margin-top:1px }
+
+    /* event card */
+    .wb-event-card { display:flex; gap:14px; align-items:center; margin:0 16px 10px; padding:14px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:18px; cursor:pointer; backdrop-filter:blur(14px) }
+    .wb-event-card:active { background:var(--wb-card-strong) }
+    .wb-event-date { width:54px; height:54px; border-radius:14px; background:linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); border:1px solid var(--wb-border); display:flex; flex-direction:column; align-items:center; justify-content:center; flex-shrink:0; color:var(--wb-text); }
+    .wb-event-date.accent { background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); border-color:transparent; color:#fff; box-shadow: 0 6px 18px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.22) }
+    .wb-event-date.pink { background:linear-gradient(135deg, #F06AB4, #C53F88); border-color:transparent; color:#fff; box-shadow: 0 6px 18px rgba(240,106,180,0.35), inset 0 1px 0 rgba(255,255,255,0.22) }
+    .wb-event-date.green { background:linear-gradient(135deg, #34C98A, #1E9765); border-color:transparent; color:#fff; box-shadow: 0 6px 18px rgba(52,201,138,0.3), inset 0 1px 0 rgba(255,255,255,0.22) }
+    .wb-event-date.warn { background:linear-gradient(135deg, #FBBF24, #D97706); border-color:transparent; color:#fff }
+    .wb-event-date-d { font-size:22px; font-weight:750; line-height:1; letter-spacing:-0.025em; font-feature-settings:'tnum' }
+    .wb-event-date-m { font-size:9px; font-weight:700; opacity:.85; margin-top:2px; text-transform:uppercase; letter-spacing:0.5px }
+    .wb-event-body { flex:1; min-width:0 }
+    .wb-event-t { font-size:15px; font-weight:650; color:var(--wb-text); letter-spacing:-0.012em; line-height:1.25 }
+    .wb-event-s { font-size:12.5px; color:var(--wb-text-secondary); margin-top:3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap }
+    .wb-event-countdown { font-size:11px; font-weight:700; color:var(--wb-accent-strong); background:var(--wb-accent-soft); padding:2px 7px; border-radius:6px; letter-spacing:0.1px }
+    .wb-event-ic { font-size:20px; margin-right:2px }
+    .wb-event-trail { font-size:18px; color:var(--wb-text-muted); }
+
+    /* calendar v2 */
+    .wb-cal-view-toggle { display:flex; gap:4px; padding:3px; margin:0 16px 14px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:12px; backdrop-filter:blur(12px) }
+    .wb-cal-view-opt { flex:1; padding:8px 10px; border-radius:9px; text-align:center; font-size:12.5px; font-weight:600; color:var(--wb-text-muted); cursor:pointer; letter-spacing:-0.005em }
+    .wb-cal-view-opt.active { background:var(--wb-surface); color:var(--wb-text); box-shadow: 0 2px 6px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08); border:1px solid var(--wb-border-strong) }
+    .wb-cal-filters { display:flex; gap:6px; padding:0 16px 14px; flex-wrap:wrap }
+    .wb-cal-filter { display:flex; align-items:center; gap:5px; padding:6px 10px; background:var(--wb-surface); border:1px solid var(--wb-border); border-radius:100px; font-size:12px; font-weight:600; color:var(--wb-text-muted); cursor:pointer }
+    .wb-cal-filter.on { color:var(--wb-text); border-color:var(--wb-border-strong); background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05) }
+    .wb-cal-filter-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0 }
+    .wb-cal-today-card { margin:0 16px 14px; padding:14px 16px; border-radius:20px; position:relative; overflow:hidden; color:#fff; }
+    .wb-cal-today-card::before { content:''; position:absolute; top:-30%; right:-10%; width:160px; height:160px; background:radial-gradient(circle, rgba(255,255,255,0.18), transparent 70%) }
+    .wb-cal-agenda-date { display:flex; align-items:center; gap:10px; padding:10px 20px 6px; }
+    .wb-cal-agenda-date-d { font-size:22px; font-weight:750; letter-spacing:-0.025em; color:var(--wb-text); font-feature-settings:'tnum' }
+    .wb-cal-agenda-date-m { font-size:12px; color:var(--wb-text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.3px; padding-bottom:3px }
+    .wb-cal-agenda-date-line { flex:1; height:1px; background:linear-gradient(90deg, var(--wb-divider), transparent) }
+
+    /* form bits used in create-event flow */
+    .wb-form-label { font-size:11px; font-weight:600; color:var(--wb-text-muted); text-transform:uppercase; letter-spacing:0.7px; margin:8px 20px 8px; }
+    .wb-input-wrap { margin:0 16px 14px; position:relative; }
+    .wb-input { width:100%; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:16px; padding:14px 16px; font-family:inherit; font-size:15px; font-weight:500; color:var(--wb-text); box-sizing:border-box; backdrop-filter:blur(14px); outline:none }
+    .wb-input::placeholder { color:var(--wb-text-muted); font-weight:450 }
+    .wb-emoji-picker { display:flex; gap:6px; margin:0 16px 14px; flex-wrap:wrap }
+    .wb-emoji-opt { width:44px; height:44px; border-radius:13px; background:var(--wb-card); border:1px solid var(--wb-border); display:flex; align-items:center; justify-content:center; font-size:22px; cursor:pointer; backdrop-filter:blur(10px); transition:all .15s ease }
+    .wb-emoji-opt.active { background:linear-gradient(135deg, var(--wb-accent-soft), var(--wb-card-strong)); border-color:var(--wb-accent-soft-strong); box-shadow: 0 0 0 3px var(--wb-accent-soft) }
+    .wb-date-picker { margin:0 16px 14px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px }
+    .wb-date-cell { padding:12px 8px; border-radius:14px; background:var(--wb-card); border:1px solid var(--wb-border); text-align:center; cursor:pointer; backdrop-filter:blur(10px) }
+    .wb-date-cell-l { font-size:10.5px; color:var(--wb-text-muted); font-weight:600; letter-spacing:0.3px; text-transform:uppercase }
+    .wb-date-cell-v { font-size:17px; font-weight:700; color:var(--wb-text); letter-spacing:-0.02em; margin-top:4px; font-feature-settings:'tnum' }
+    .wb-repeat-row { display:flex; gap:6px; margin:0 16px 14px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none }
+    .wb-repeat-row::-webkit-scrollbar { display:none }
+    .wb-repeat { padding:8px 14px; border-radius:100px; background:var(--wb-card); border:1px solid var(--wb-border); font-size:12.5px; font-weight:600; color:var(--wb-text-secondary); cursor:pointer; white-space:nowrap; backdrop-filter:blur(10px); flex-shrink:0 }
+    .wb-repeat.active { background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)); border-color:var(--wb-border-strong); color:var(--wb-text) }
+    .wb-wishlist-pick { margin:0 16px 14px; padding:14px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:16px; display:flex; align-items:center; gap:12px; cursor:pointer; backdrop-filter:blur(12px) }
+    .wb-wishlist-pick-ic { width:42px; height:42px; border-radius:13px; background:linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft)); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; color:var(--wb-accent-strong); font-weight:700 }
+    .wb-wishlist-pick-body { flex:1; min-width:0 }
+    .wb-wishlist-pick-label { font-size:11px; font-weight:600; color:var(--wb-text-muted); text-transform:uppercase; letter-spacing:0.5px }
+    .wb-wishlist-pick-name { font-size:15px; font-weight:600; color:var(--wb-text); letter-spacing:-0.012em; margin-top:2px }
+    .wb-wishlist-pick-trail { font-size:18px; color:var(--wb-text-muted) }
+
+    /* nav, btn, scroll, sheet, onb, paywall, banner, toggle, status, hero */
+    .wb-nav { position:absolute; left:10px; right:10px; bottom:14px; display:flex; justify-content:space-around; padding:8px 6px 8px; background:var(--wb-nav-bg); backdrop-filter:blur(28px) saturate(180%); border:1px solid var(--wb-border); border-radius:26px; box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08); z-index:7 }
+    .wb-nav-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 4px; color:var(--wb-text-muted); font-size:10px; font-weight:550; cursor:pointer; position:relative; transition:color .2s ease; letter-spacing:0 }
+    .wb-nav-item .wb-nav-ic { font-size:20px; line-height:1; position:relative }
+    .wb-nav-item.active { color:var(--wb-accent-strong); }
+    .wb-nav-item.active::after { content:''; position:absolute; bottom:-3px; left:50%; transform:translateX(-50%); width:14px; height:3px; background:var(--wb-accent); border-radius:100px; box-shadow: 0 0 8px var(--wb-accent-shadow); }
+
+    .wb-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:15px 22px; border-radius:18px; border:none; font-family:inherit; font-size:15px; font-weight:650; letter-spacing:-0.015em; cursor:pointer; min-height:52px; width:100%; transition:all .15s cubic-bezier(.4,0,.2,1); }
+    .wb-btn:active { transform:scale(.98); }
+    .wb-btn.primary { background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color:#fff; box-shadow: 0 12px 32px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.22); }
+    .wb-btn.secondary { background:var(--wb-accent-soft); color:var(--wb-accent-strong); border:1px solid var(--wb-accent-soft-strong); }
+    .wb-btn.surface { background:var(--wb-card-strong); color:var(--wb-text); border:1px solid var(--wb-border-strong); backdrop-filter:blur(14px); }
+    .wb-btn.ghost { background:transparent; color:var(--wb-text-secondary); }
+
+    .wb-scroll { overflow-y:auto; scrollbar-width:none; padding-bottom:120px; height:calc(812px - 52px - 56px); }
+    .wb-scroll::-webkit-scrollbar { display:none; }
+
+    .wb-onb { height:calc(812px - 52px); display:flex; flex-direction:column; padding:24px 28px 40px; }
+    .wb-onb-visual { flex:1; display:flex; align-items:center; justify-content:center; position:relative; }
+    .wb-onb-glow { width:280px; height:280px; border-radius:50%; background: radial-gradient(circle, var(--wb-accent-shadow) 0%, transparent 70%); position:absolute; filter: blur(20px); }
+    .wb-onb-glow::after { content:''; position:absolute; inset:40px; border-radius:50%; background: radial-gradient(circle, var(--wb-accent-strong) 0%, transparent 65%); opacity:.4; filter: blur(30px); }
+    .wb-onb-emoji { font-size:128px; position:relative; filter: drop-shadow(0 20px 40px var(--wb-accent-shadow)); }
+    .wb-onb h1 { font-size:30px; font-weight:700; letter-spacing:-0.035em; margin:0 0 10px; text-align:center; color:var(--wb-text); line-height:1.08; text-wrap:pretty; }
+    .wb-onb p { font-size:15px; color:var(--wb-text-secondary); margin:0 0 28px; text-align:center; line-height:1.5; letter-spacing:-0.005em; text-wrap:pretty; }
+    .wb-onb-dots { display:flex; gap:5px; justify-content:center; margin-bottom:20px; }
+    .wb-onb-dots span { width:6px; height:6px; border-radius:50%; background:var(--wb-text-muted); opacity:.25; transition:all .25s ease; }
+    .wb-onb-dots span.active { background:var(--wb-accent); opacity:1; width:22px; border-radius:3px; }
+
+    .wb-feat { display:flex; align-items:center; gap:14px; padding:14px 16px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:18px; margin:0 16px 8px; backdrop-filter:blur(14px); }
+    .wb-feat-ic { width:42px; height:42px; border-radius:13px; background:linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft)); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08) }
+    .wb-feat-t { font-size:15px; font-weight:600; color:var(--wb-text); letter-spacing:-0.012em }
+    .wb-feat-s { font-size:12.5px; color:var(--wb-text-secondary); margin-top:2px; letter-spacing:-0.003em }
+
+    .wb-toggle { width:46px; height:28px; border-radius:100px; background:rgba(255,255,255,0.08); border:1px solid var(--wb-border); position:relative; flex-shrink:0; transition:all .2s ease; cursor:pointer }
+    .wb-toggle::after { content:''; position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%; background:#fff; transition:all .25s cubic-bezier(.4,0,.2,1); box-shadow: 0 1px 3px rgba(0,0,0,0.3) }
+    .wb-toggle.on { background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); border-color:transparent; box-shadow: 0 0 16px var(--wb-accent-shadow-soft) }
+    .wb-toggle.on::after { left:22px; }
+
+    .wb-sheet-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:10; opacity:0; pointer-events:none; transition:opacity .25s; }
+    .wb-sheet-backdrop.open { opacity:1; pointer-events:auto; }
+    .wb-sheet { position:absolute; left:0; right:0; bottom:0; background:var(--wb-bg-elev); border:1px solid var(--wb-border); border-bottom:none; border-radius:28px 28px 0 0; padding:24px; z-index:11; transform:translateY(100%); transition:transform .32s cubic-bezier(.25,.8,.35,1); box-shadow: 0 -20px 60px rgba(0,0,0,0.5); }
+    .wb-sheet.open { transform:translateY(0); }
+    .wb-sheet-handle { width:40px; height:4px; background:rgba(255,255,255,0.18); border-radius:2px; margin:-10px auto 20px; }
+    .wb-sheet-title { font-size:19px; font-weight:650; text-align:center; letter-spacing:-0.025em; margin-bottom:8px; color:var(--wb-text); text-wrap:pretty; }
+    .wb-sheet-sub { font-size:13.5px; color:var(--wb-text-secondary); text-align:center; margin-bottom:20px; line-height:1.5; text-wrap:pretty; }
+
+    /* avatars stack */
+    .wb-stack { display:flex; align-items:center; }
+    .wb-av { border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:650; flex-shrink:0; width:28px; height:28px; font-size:11px; border:2px solid var(--wb-bg); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+    .wb-av:not(:first-child) { margin-left:-8px; }
+    .wb-av.g1 { background:linear-gradient(135deg,#8B7BFF,#B4A6FF); }
+    .wb-av.g2 { background:linear-gradient(135deg,#FBBF24,#F59E0B); }
+    .wb-av.g3 { background:linear-gradient(135deg,#4ADE80,#10B981); }
+    .wb-av.g4 { background:linear-gradient(135deg,#F892C9,#F06AB4); }
+    .wb-av.g5 { background:linear-gradient(135deg,#86ABF5,#5B8DEF); }
+
+    .wb-chip { display:inline-flex; align-items:center; gap:3px; padding:3px 8px; border-radius:7px; font-size:10px; font-weight:650; white-space:nowrap; line-height:1.4; letter-spacing:0.1px; }
+    .wb-chip.pro { background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color:#fff; border-radius:100px; padding:3px 9px; letter-spacing:0.4px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); }
+
+    /* santa room (used in detail · today) */
+    .wb-santa-room { margin:0 16px 10px; padding:14px 14px 12px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:20px; backdrop-filter:blur(14px); cursor:pointer }
+    .wb-santa-room.assigned { border-color:var(--wb-accent-soft-strong); background:linear-gradient(135deg, var(--wb-accent-soft), var(--wb-card)) }
+    .wb-santa-room-top { display:flex; gap:10px; align-items:center }
+    .wb-santa-room-ic { width:44px; height:44px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; background:linear-gradient(135deg, rgba(232,93,93,0.2), rgba(26,151,85,0.18)); border:1px solid rgba(255,255,255,0.08) }
+    .wb-santa-room-body { flex:1; min-width:0 }
+    .wb-santa-room-t { font-size:15px; font-weight:650; color:var(--wb-text); letter-spacing:-0.012em }
+    .wb-santa-room-s { font-size:12px; color:var(--wb-text-muted); margin-top:2px; display:flex; gap:6px; flex-wrap:wrap; align-items:center }
+    .wb-santa-room-reveal { margin-top:10px; padding:10px 12px; border-radius:14px; background:linear-gradient(135deg, var(--wb-accent), var(--wb-accent-deep)); color:#fff; display:flex; align-items:center; gap:10px; box-shadow: 0 6px 16px var(--wb-accent-shadow-soft), inset 0 1px 0 rgba(255,255,255,0.22) }
+    .wb-santa-room-reveal-t { font-size:11px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; opacity:.85 }
+    .wb-santa-room-reveal-n { font-size:15px; font-weight:700; letter-spacing:-0.015em; margin-top:1px }
+    .wb-santa-room-reveal-btn { padding:7px 12px; border-radius:10px; background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.22); color:#fff; font-family:inherit; font-size:12px; font-weight:650; cursor:pointer; backdrop-filter:blur(6px) }
+
+    /* search (used in list view) */
+    .wb-search-bar { margin:8px 16px 16px; display:flex; align-items:center; gap:10px; padding:0 14px; height:44px; background:var(--wb-card); border:1px solid var(--wb-border); border-radius:14px; backdrop-filter:blur(14px) }
+    .wb-search-ic { font-size:15px; color:var(--wb-text-muted) }
+    .wb-search-input { flex:1; background:transparent; border:none; outline:none; font-family:inherit; font-size:15px; font-weight:500; color:var(--wb-text); letter-spacing:-0.01em }
+    .wb-search-input::placeholder { color:var(--wb-text-muted); font-weight:450 }
+
+    /* phone-wrap label (DesignCanvas already provides chrome, but our local var) */
+    .phone-label { font-size:11px; color:#8F94A3; font-weight:550; letter-spacing:0.3px; margin-top:8px }
+    .phone-wrap { display:flex; flex-direction:column; align-items:center; gap:0 }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="_shell.jsx"></script>
+  <script type="text/babel" src="_intro.jsx"></script>
+  <script type="text/babel" src="_views.jsx"></script>
+  <script type="text/babel" src="_detail.jsx"></script>
+  <script type="text/babel" src="_create.jsx"></script>
+
+  <script type="text/babel">
+    const PHONE_W = 375;
+    const PHONE_H = 812;
+
+    function App() {
+      return (
+        <DesignCanvas>
+          <DCSection
+            id="entry"
+            title="A · Вход в фичу"
+            subtitle="Free user → Paywall → Stars → Onboarding"
+          >
+            <DCArtboard id="locked"   label="01 · Тизер на /events" width={PHONE_W} height={PHONE_H}><CalLocked /></DCArtboard>
+            <DCArtboard id="paywallS" label="02 · Paywall · sheet"   width={PHONE_W} height={PHONE_H}><CalPaywallSheet /></DCArtboard>
+            <DCArtboard id="paywallF" label="03 · Paywall · full"    width={PHONE_W} height={PHONE_H}><CalPaywallFull /></DCArtboard>
+            <DCArtboard id="stars"    label="04 · Telegram Stars"    width={PHONE_W} height={PHONE_H}><CalStarsConfirm /></DCArtboard>
+            <DCPostIt x={PHONE_W * 5 + 280} y={70} rotate={2}>
+              19 ⭐ — единоразово, без подписки. Демо доступно бесплатно перед покупкой.
+            </DCPostIt>
+          </DCSection>
+
+          <DCSection
+            id="onb"
+            title="B · Онбординг"
+            subtitle="4 шага после покупки — что вы получили + первое событие"
+          >
+            <DCArtboard id="onb1" label="01 · Календарь"      width={PHONE_W} height={PHONE_H}><CalOnb step={1} /></DCArtboard>
+            <DCArtboard id="onb2" label="02 · Напоминания"    width={PHONE_W} height={PHONE_H}><CalOnb step={2} /></DCArtboard>
+            <DCArtboard id="onb3" label="03 · Идеи подарков"  width={PHONE_W} height={PHONE_H}><CalOnb step={3} /></DCArtboard>
+            <DCArtboard id="onb4" label="04 · CTA → создать"  width={PHONE_W} height={PHONE_H}><CalOnb step={4} /></DCArtboard>
+          </DCSection>
+
+          <DCSection
+            id="empty"
+            title="C · Первый запуск"
+            subtitle="Календарь куплен, но пока пусто — мягкие подсказки и стартовые идеи"
+          >
+            <DCArtboard id="empty" label="01 · Empty + suggestions" width={PHONE_W} height={PHONE_H}><CalEmpty /></DCArtboard>
+            <DCArtboard id="month" label="02 · Месяц (заполнен)"    width={PHONE_W} height={PHONE_H}><CalMonth /></DCArtboard>
+            <DCArtboard id="list"  label="03 · Список / агенда"     width={PHONE_W} height={PHONE_H}><CalList /></DCArtboard>
+            <DCArtboard id="year"  label="04 · Год · обзор"          width={PHONE_W} height={PHONE_H}><CalYear /></DCArtboard>
+          </DCSection>
+
+          <DCSection
+            id="detail"
+            title="D · Карточка события"
+            subtitle="Разные типы и состояния — друг с вишлистом, своё, сегодня, прошлое"
+          >
+            <DCArtboard id="d-bday"  label="01 · Друг + вишлист"    width={PHONE_W} height={PHONE_H}><CalDetailBdayWithList /></DCArtboard>
+            <DCArtboard id="d-ann"   label="02 · Своё · годовщина"  width={PHONE_W} height={PHONE_H}><CalDetailOwnAnn /></DCArtboard>
+            <DCArtboard id="d-today" label="03 · Сегодня · с Сантой" width={PHONE_W} height={PHONE_H}><CalDetailToday /></DCArtboard>
+            <DCArtboard id="d-past"  label="04 · Прошедшее · спасибо" width={PHONE_W} height={PHONE_H}><CalDetailPast /></DCArtboard>
+            <DCPostIt x={PHONE_W * 4 + 240} y={160} rotate={-1.5}>
+              Hero меняет цвет под тип события: розовый — др, золотой — годовщина, зелёный — праздник.
+            </DCPostIt>
+          </DCSection>
+
+          <DCSection
+            id="create"
+            title="E · Создание события"
+            subtitle="4-шаговый мастер: тип → детали → напоминания → готово"
+          >
+            <DCArtboard id="c-type" label="01 · Тип"               width={PHONE_W} height={PHONE_H}><CalCreateType /></DCArtboard>
+            <DCArtboard id="c-det"  label="02 · Детали + повтор"  width={PHONE_W} height={PHONE_H}><CalCreateDetails /></DCArtboard>
+            <DCArtboard id="c-rem"  label="03 · Напоминания"      width={PHONE_W} height={PHONE_H}><CalCreateReminders /></DCArtboard>
+            <DCArtboard id="c-ok"   label="04 · Готово!"           width={PHONE_W} height={PHONE_H}><CalCreateSuccess /></DCArtboard>
+          </DCSection>
+
+          <DCSection
+            id="notif"
+            title="F · Напоминания"
+            subtitle="Push на лок-экране и in-app inbox"
+          >
+            <DCArtboard id="push"  label="01 · iOS lock screen" width={PHONE_W} height={PHONE_H}><CalPushLock /></DCArtboard>
+            <DCArtboard id="inbox" label="02 · В приложении"     width={PHONE_W} height={PHONE_H}><CalInbox /></DCArtboard>
+            <DCPostIt x={PHONE_W * 2 + 120} y={120} rotate={2}>
+              Push-actions ведут прямо к идеям подарков — снимаем трение с напоминания.
+            </DCPostIt>
+          </DCSection>
+
+          <DCSection
+            id="recap"
+            title="G · Годовой отчёт"
+            subtitle="Конец года — сводка для вовлечения и шеринга"
+          >
+            <DCArtboard id="recap" label="01 · Recap 2025" width={PHONE_W} height={PHONE_H}><CalRecap /></DCArtboard>
+            <DCPostIt x={PHONE_W + 80} y={120} rotate={-2}>
+              Шерим в TG-историю — органический рост.
+            </DCPostIt>
+          </DCSection>
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

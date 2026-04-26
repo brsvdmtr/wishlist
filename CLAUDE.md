@@ -75,7 +75,28 @@ WishBoard has a formal design system. Before touching any UI code:
 
 1. **Read** [docs/design-system/UI_IMPLEMENTATION_RULES.md](docs/design-system/UI_IMPLEMENTATION_RULES.md) — the short, strict contract.
 2. **Check the registry** — [docs/design-system/COMPONENT_REGISTRY.md](docs/design-system/COMPONENT_REGISTRY.md) records the status (`canonical` / `provisional` / `legacy` / `deprecated`) of every primitive and pattern family. Presence in code does **not** mean canonical.
-3. **Look at approved mockups** — only [docs/design-system/mockups/approved/](docs/design-system/mockups/approved) is binding. `mockups/proposed/` is input; `mockups/current-prod/` is reference.
+3. **Look at approved mockups** — only [docs/design-system/mockups/approved/](docs/design-system/mockups/approved) is binding. `v2.1-refresh-all-screens.html` is the current canonical (v2.1, approved 2026-04-21); the `v2-*.html` set is approved-secondary for surfaces where v2.1 hasn't landed yet (Santa, group-gift, etc.). `mockups/proposed/` is input; `mockups/current-prod/` is reference.
+
+### Skill bundle — `.claude/skills/wishboard-design/`
+
+A self-contained mirror of the design system, auto-discovered as a Claude Skill (`name: wishboard-design`). Useful starting points:
+
+- `.claude/skills/wishboard-design/colors_and_type.css` — drop-in CSS variables (v2.1)
+- `.claude/skills/wishboard-design/preview/*.html` — 21 visual reference cards (**v2 archive** — see status notice in the bundle README)
+- `.claude/skills/wishboard-design/ui_kits/miniapp/*` — interactive HTML/JSX prototypes (also v2 archive; `calendar/` sub-kit is a sketch for a not-yet-shipped feature)
+
+**Source-of-truth rule:** the repo wins over the bundle. Tokens in `packages/ui-tokens/src/` and primitives in `packages/ui/src/` are canonical; the bundle mirrors them. If you find a divergence, fix the bundle, not the repo.
+
+### Iron rule for new UI elements
+
+If you need a UI primitive, token, or pattern that **isn't already in the design system**:
+
+1. **Stop.** Do not improvise inline.
+2. Build a mockup in `docs/design-system/mockups/proposed/` (HTML, inline CSS — see `feedback_html_mockups_inline_css.md` memory).
+3. Surface the gap to the human owner and wait for approval.
+4. Only after explicit approval: promote the mockup to `mockups/approved/`, add a `DESIGN_DECISIONS.md` entry, then add the primitive to `packages/ui/` and the token to `packages/ui-tokens/`.
+
+This rule overrides any temptation to "just inline it for now" — there is no "for now" in the design system.
 
 ### Hard rules for UI implementation
 

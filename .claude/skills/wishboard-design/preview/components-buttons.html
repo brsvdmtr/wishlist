@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:20px;background:var(--wb-bg);font-family:var(--wb-font-sans);color:var(--wb-text)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:14px;border:none;font-family:inherit;font-size:15px;font-weight:700;letter-spacing:-0.01em;cursor:pointer;min-height:44px;width:100%}
+.primary{background:#7C6AFF;color:#fff;box-shadow:0 2px 12px rgba(0,0,0,0.18)}
+.primary-gradient{background:linear-gradient(135deg,#7C6AFF,#9B8AFF);color:#fff;box-shadow:0 8px 24px rgba(124,106,255,0.40),inset 0 1px 0 rgba(255,255,255,0.20)}
+.secondary{background:rgba(124,106,255,0.12);color:#7C6AFF}
+.ghost{background:transparent;color:#6B7280}
+.surface{background:#2F2F38;color:#F4F4F6;border:1px solid rgba(255,255,255,0.06)}
+.danger{background:rgba(248,113,113,0.12);color:#F87171}
+.danger-solid{background:#F87171;color:#fff;box-shadow:0 2px 12px rgba(0,0,0,0.18)}
+.disabled{opacity:.55}
+.lbl{font-family:ui-monospace,monospace;font-size:10px;color:var(--wb-text-muted);margin:0 0 4px}
+</style></head><body class="wb-dark">
+<div class="grid">
+<div><div class="lbl">primary-gradient · hero</div><button class="btn primary-gradient">Оформить PRO за 100 ⭐</button></div>
+<div><div class="lbl">primary</div><button class="btn primary">Создать вишлист</button></div>
+<div><div class="lbl">secondary</div><button class="btn secondary">Поделиться</button></div>
+<div><div class="lbl">surface</div><button class="btn surface">Позже</button></div>
+<div><div class="lbl">ghost</div><button class="btn ghost">Отмена</button></div>
+<div><div class="lbl">danger-solid · confirm</div><button class="btn danger-solid">Удалить 5 желаний</button></div>
+<div><div class="lbl">danger · soft inline</div><button class="btn danger">Отменить бронь</button></div>
+<div><div class="lbl">primary · disabled</div><button class="btn primary disabled" disabled>Добавить</button></div>
+</div>
+</body></html>

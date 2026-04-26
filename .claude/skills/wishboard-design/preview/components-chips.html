@@ -1,0 +1,37 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:20px;background:var(--wb-bg);font-family:var(--wb-font-sans);color:var(--wb-text)}
+.group{margin-bottom:14px}
+.group h4{margin:0 0 8px;font-size:10px;color:var(--wb-text-muted);font-weight:700;letter-spacing:.3px;text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap;line-height:1}
+.chip.lg{padding:5px 10px;border-radius:9999px;font-size:12px}
+.accent{background:rgba(124,106,255,0.12);color:#7C6AFF}
+.success{background:rgba(52,211,153,0.12);color:#34D399}
+.warning{background:rgba(251,191,36,0.12);color:#FBBF24}
+.danger{background:rgba(248,113,113,0.12);color:#F87171}
+.surface{background:#26262C;color:#9CA3AF}
+.prio1{background:rgba(107,127,212,0.15);color:#6B7FD4}
+.prio2{background:rgba(232,147,10,0.15);color:#E8930A}
+.prio3{background:rgba(240,78,110,0.15);color:#F04E6E}
+.new{background:#7C6AFF;color:#fff;box-shadow:0 2px 6px rgba(124,106,255,0.3)}
+.pro{background:linear-gradient(135deg,#7C6AFF,#9B8AFF);color:#fff;box-shadow:0 2px 8px rgba(124,106,255,0.25);padding:5px 10px;border-radius:9999px;letter-spacing:.3px}
+</style></head><body class="wb-dark">
+<div class="group"><h4>Semantic</h4><div class="chips">
+  <span class="chip accent">Активен</span>
+  <span class="chip success">Забронировано</span>
+  <span class="chip warning">Истекает 3 дня</span>
+  <span class="chip danger">Конфликт</span>
+  <span class="chip surface">Архив</span>
+</div></div>
+<div class="group"><h4>Priority (wish priority, not semantic)</h4><div class="chips">
+  <span class="chip prio1">• Низкий</span>
+  <span class="chip prio2">• Средний</span>
+  <span class="chip prio3">• Высокий</span>
+</div></div>
+<div class="group"><h4>Identity</h4><div class="chips">
+  <span class="chip new">NEW</span>
+  <span class="chip pro">PRO</span>
+  <span class="chip pro">⭐ 100 Stars</span>
+  <span class="chip lg accent">🎁 Подарок куплен</span>
+</div></div>
+</body></html>
