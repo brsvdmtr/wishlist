@@ -6,8 +6,8 @@ WORKDIR /app
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
 
-# Install OpenSSL for Prisma
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+# Install OpenSSL for Prisma + curl for the IPv6/IPv4 pre-warm in the entrypoint.
+RUN apt-get update -y && apt-get install -y openssl curl && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace config
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
@@ -45,4 +45,11 @@ USER botuser
 
 ENV NODE_ENV=production
 
-CMD ["node", "apps/bot/dist/index.js"]
+# Pre-warm route to api.telegram.org before launching the bot.
+# After `docker-compose up -d` the container's network namespace is fresh —
+# Docker SNAT and the host route table can take a few seconds to settle, and
+# RKN's IPv4 block on Telegram makes that flap visible. A 5s touch primes the
+# route table BEFORE Telegraf's first getMe call, so the bot doesn't burn its
+# first launch attempt on a cold cache. Failures are intentionally swallowed
+# (|| true) — the in-process watchdog handles real network outages.
+CMD ["sh", "-c", "curl -fsS -m 5 https://api.telegram.org/ -o /dev/null 2>&1 || echo 'tg-prewarm: skipped (will rely on watchdog)'; exec node apps/bot/dist/index.js"]

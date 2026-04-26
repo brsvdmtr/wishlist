@@ -5,6 +5,7 @@
 import dotenv from 'dotenv';
 import { Telegraf, Markup, TelegramError } from 'telegraf';
 import fs from 'node:fs';
+import https from 'node:https';
 import path from 'node:path';
 import { prisma, resolveReferralCode, tryCreateAttribution, markFirstBotStart, loadReferralConfig } from '@wishlist/db';
 import { t, detectLocale, resolveEffectiveLocale, type Locale } from '@wishlist/shared';
@@ -71,7 +72,15 @@ if (!token) {
   // Keep process alive so `pnpm dev` can still run web+api without a bot token.
   setInterval(() => {}, 60_000);
 } else {
-  const bot = new Telegraf(token);
+  // Telegram client with explicit keep-alive HTTPS agent.
+  //   • keepAlive: reuse TCP/TLS sockets across calls — cuts ~200ms per request
+  //   • keepAliveMsecs 30s: keep connections warm during quiet periods
+  //   • timeout 60s: socket-level idle timeout (NOT connect timeout — that
+  //     stays at OS default ~75s and dominates ETIMEDOUT during IPv6 flaps).
+  // The connect-timeout class of failure is handled via watchdog's in-process
+  // retry budget (12 attempts × ~75s = ~16 min) plus the Dockerfile pre-warm.
+  const tgAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30_000, timeout: 60_000 });
+  const bot = new Telegraf(token, { telegram: { agent: tgAgent } });
 
   // Catch all unhandled middleware errors — structured pino logging instead of
   // Telegraf's default plain-text "Unhandled error while processing update".
@@ -1640,10 +1649,24 @@ if (!token) {
   });
 
   // Transient error detection — shared by retryTgApi and launchBot.
+  //
+  // node-fetch's FetchError stashes the OS errno in .code/.errno but the
+  // .message field is just `request to ... failed, reason: ` — so a regex
+  // over the message alone misses ETIMEDOUT/ECONNRESET/etc. coming from
+  // FetchError. We MUST check the error's .code and .errno fields too;
+  // otherwise launchBot misclassifies a temp IPv6-route flap as a fatal
+  // error and exits, instead of using the in-process retry budget.
+  // (See incident 2026-04-26 14:30–14:37 UTC: 4 process restarts back-to-
+  // back during a deploy because every ETIMEDOUT was tagged transient:false.)
+  const TRANSIENT_CODE_RE = /^E(TIMEDOUT|CONNRESET|CONNREFUSED|HOSTUNREACH|NETUNREACH|NOTFOUND|AI_AGAIN|PIPE)$/;
   function isTransientError(err: unknown): boolean {
     if (!(err instanceof Error)) return false;
     const msg = err.message;
-    return /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|socket hang up|timeout|network/i.test(msg) ||
+    const code = (err as { code?: unknown }).code;
+    const errno = (err as { errno?: unknown }).errno;
+    if (typeof code === 'string' && TRANSIENT_CODE_RE.test(code)) return true;
+    if (typeof errno === 'string' && TRANSIENT_CODE_RE.test(errno)) return true;
+    return /ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|socket hang up|timeout|network/i.test(msg) ||
       ('code' in err && typeof (err as any).code === 'number' && (err as any).code >= 500);
   }
 
@@ -1741,10 +1764,12 @@ if (!token) {
   // ─── Launch with retry ───────────────────────────────────────────────────
   // bot.launch() resolves when polling STOPS (on SIGTERM), not on start.
   // On transient failures (ETIMEDOUT, ECONNRESET) we retry in-process with
-  // exponential backoff (5s → 10s → 20s → 40s → 60s cap) instead of
-  // process.exit(1) + Docker restart (which adds its own backoff on top).
+  // exponential backoff (1s → 2s → 4s → 8s → 16s → 32s → 60s cap) instead
+  // of process.exit(1) + Docker restart (which adds its own backoff on top).
   // Fatal errors (409 Conflict, 401 Unauthorized) still exit immediately.
-  const MAX_LAUNCH_ATTEMPTS = 10;
+  // Total budget: 12 attempts × (~75s OS-level connect timeout + delay) ≈
+  // 16 min — covers the worst IPv6-flap windows we've seen post-deploy.
+  const MAX_LAUNCH_ATTEMPTS = 12;
   let launchAttempt = 0;
   let shutdownRequested = false;
 
@@ -1767,7 +1792,7 @@ if (!token) {
         const canRetry = transient && launchAttempt < MAX_LAUNCH_ATTEMPTS;
 
         if (canRetry) {
-          const delay = Math.min(5000 * Math.pow(2, launchAttempt - 1), 60_000);
+          const delay = Math.min(1000 * Math.pow(2, launchAttempt - 1), 60_000);
           logger.warn({ err, attempt: launchAttempt, nextRetryMs: delay }, 'bot launch failed, retrying');
           pauseHeartbeat();
           if (launchAttempt === 1) {
