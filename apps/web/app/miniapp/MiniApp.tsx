@@ -19016,9 +19016,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 10 }}>
                   {t('referral_progress_section', locale)}
                 </div>
-                <div
+                <button
+                  type="button"
                   onClick={openReferralHistoryScreen}
-                  style={{ padding: '12px 14px', borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.orange}`, fontSize: 13, color: C.text, display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer' }}>
+                  style={{ width: '100%', padding: '12px 14px', borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.orange}`, fontSize: 13, color: C.text, display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
                   <div style={{ width: 36, height: 36, borderRadius: '50%', background: C.orangeSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>⏳</div>
                   <div style={{ flex: 1, fontSize: 13, color: C.textSec, lineHeight: 1.4 }}>
                     {t('referral_event_pending', locale)}
@@ -19029,7 +19030,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   <div style={{ color: C.accent, fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
                     →
                   </div>
-                </div>
+                </button>
               </div>
             )}
 
