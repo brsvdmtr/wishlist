@@ -797,6 +797,25 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-26',
+    date: '26.04.2026',
+    items: [
+      { ru: '📅 Подарочный календарь — большое обновление: дни рождения, годовщины и праздники в одном месте, с напоминаниями и идеями подарков', en: '📅 Gift Calendar — major update: birthdays, anniversaries and holidays in one place, with reminders and gift ideas' },
+      { ru: '🗓️ 4 режима просмотра: месяц / неделя / список / год — переключай как удобно', en: '🗓️ 4 view modes: month / week / list / year — switch however you like' },
+      { ru: '🎨 Карточки событий с тематическими градиентами — др розовый, годовщина золотой, праздник зелёный', en: '🎨 Event cards with themed gradients — birthdays pink, anniversaries gold, holidays green' },
+      { ru: '🔔 Гибкие напоминания — за 14 / 7 / 3 / 1 день и в день события, отдельно на каждое событие', en: '🔔 Flexible reminders — 14 / 7 / 3 / 1 day before and day-of, configurable per event' },
+      { ru: '✨ Мастер создания события из 4 шагов — тип, детали, напоминания, готово', en: '✨ 4-step event create wizard — type, details, reminders, done' },
+      { ru: '📥 Импорт дней рождения друзей из WishBoard — в один клик', en: '📥 Import friends\' birthdays from WishBoard — in one click' },
+      { ru: '🌍 Календари праздников 6 стран (Россия, США, Китай, Индия, Арабский мир, Испания) — с локализацией под язык приложения', en: '🌍 Country holiday calendars for 6 regions (Russia, USA, China, India, Arab world, Spain) — localized to your app language' },
+      { ru: '🎁 Связь события с другом и его вишлистом — на странице события сразу видно идеи подарков из его списка', en: '🎁 Link an event to a friend and their wishlist — see their gift ideas right on the event page' },
+      { ru: '💝 После события — записывай подарок и сохраняй благодарственные сообщения, попадут в годовой отчёт', en: '💝 After an event — log what you gave and save thank-you messages, all rolled into the year recap' },
+      { ru: '⭐ Годовой отчёт — статистика подарков за год, гистограмма по месяцам, топ-получатель, шеринг в Telegram', en: '⭐ Year recap — annual gift stats, monthly histogram, top recipient, share to Telegram' },
+      { ru: '📨 Inbox уведомлений — вся история напоминаний прямо в приложении', en: '📨 Notification inbox — all reminder history inside the app' },
+      { ru: '🎁 Кнопка «Перейти к желанию» в TG-уведомлениях о подписках — открывает желание сразу из чата', en: '🎁 "Open wish" button on TG subscription notifications — opens the wish directly from chat' },
+      { ru: '🛠️ Множество мелких фиксов — отступы CTA, рендер эмодзи, наложения панелей', en: '🛠️ Many small fixes — CTA spacing, emoji rendering, panel overlap' },
+    ],
+  },
+  {
     id: '2026-04-25',
     date: '25.04.2026',
     items: [
@@ -20236,11 +20255,13 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       )}
 
       {/* ── Bulk action bottom bar ── */}
+      {/* Sits above the floating bottom-nav (which sits at bottom: 14, ~52px tall, z-index 10).
+          Without the offset the bar's lower portion gets visually overlapped by the nav pill. */}
       {bulkSelectionMode && bulkSelectedIds.size > 0 && screen === 'wishlist-detail' && (
         <div style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 60,
+          position: 'fixed', bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0, zIndex: 60,
           background: C.surface, borderTop: `1px solid ${C.border}`,
-          padding: '12px 16px', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))',
+          padding: '12px 16px',
         }}>
           <div style={{ display: 'grid', gridTemplateColumns: hasUserCategories ? '1fr 1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 8 }}>
             <button

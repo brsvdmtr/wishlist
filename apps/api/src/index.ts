@@ -509,6 +509,12 @@ function buildCommentReplyDeepLink(itemId: string, commentId: string): string {
 /**
  * Record unread changes for subscribers of a wishlist and send Telegram notifications.
  * Fire-and-forget — never throws.
+ *
+ * For item_added / item_updated events we attach an inline-keyboard button that
+ * deep-links into the Mini App at the specific item via the existing
+ * `<slug>__item_<itemId>` startapp format (parsed in MiniApp.tsx bootstrap).
+ * Wishlist-only updates currently ship without a button — no slug-only handler
+ * in the bootstrap parser yet.
  */
 async function notifySubscribersOfChange(
   wishlistId: string,
@@ -523,6 +529,17 @@ async function notifySubscribersOfChange(
       select: { id: true, subscriber: { select: { id: true, telegramChatId: true } } },
     });
     if (subs.length === 0) return;
+
+    // Resolve the wishlist slug once for deep-link construction (item events only).
+    const isItemEvent = eventType === 'item_added' || eventType === 'item_updated';
+    let deepLinkUrl: string | null = null;
+    if (isItemEvent) {
+      const wl = await prisma.wishlist.findUnique({ where: { id: wishlistId }, select: { slug: true } });
+      if (wl?.slug) {
+        const miniAppUrl = process.env.MINI_APP_URL ?? (process.env.WEB_ORIGIN ? `${process.env.WEB_ORIGIN}/miniapp` : 'https://wishlistik.ru/miniapp');
+        deepLinkUrl = `${miniAppUrl}?startapp=${encodeURIComponent(wl.slug)}__item_${encodeURIComponent(entityId)}`;
+      }
+    }
 
     const notifLocale: Locale = 'ru';
     await Promise.all(
@@ -559,7 +576,16 @@ async function notifySubscribersOfChange(
             title: meta.wishlistTitle ?? '…',
           });
         }
-        void sendTgNotification(chatId, text);
+
+        if (deepLinkUrl) {
+          // Use sendTgBotMessage (supports reply_markup) instead of sendTgNotification.
+          // Button text "🎁 Перейти к желанию" — same RU-only stance as the message text.
+          void sendTgBotMessage(chatId, text, {
+            inline_keyboard: [[{ text: '🎁 Перейти к желанию', web_app: { url: deepLinkUrl } }]],
+          });
+        } else {
+          void sendTgNotification(chatId, text);
+        }
       }),
     );
   } catch (err) {
