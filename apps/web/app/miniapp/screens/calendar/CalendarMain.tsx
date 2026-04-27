@@ -91,6 +91,14 @@ export function CalendarMain(props: Props) {
         ]} />
       )}
 
+      {!isEmpty && (
+        <ImportPills
+          onImportHolidays={props.onOpenImportHolidays}
+          onImportFriends={props.onOpenImportFriends}
+          locale={locale}
+        />
+      )}
+
       {view === 'month' && (
         <>
           <MonthHeader
@@ -517,6 +525,39 @@ function Stat({ n, label }: { n: string; label: string }) {
     </div>
   );
 }
+
+// ─── Import pills (always visible when calendar has events) ───────────────
+//
+// Empty state surfaces these as primary CTAs (`Empty` below). For a populated
+// calendar we still want one-tap entry to "Import country holidays" / "Import
+// friends' birthdays" — earlier this was only reachable from the empty-state
+// screen, which became unreachable as soon as the user added their first event.
+
+function ImportPills({ onImportHolidays, onImportFriends, locale }: {
+  onImportHolidays: () => void;
+  onImportFriends: () => void;
+  locale: Locale;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px', flexWrap: 'wrap' }}>
+      <button onClick={onImportHolidays} style={pillBtnStyle}>
+        📅 {ct('cal_import_country', locale)}
+      </button>
+      <button onClick={onImportFriends} style={pillBtnStyle}>
+        ↓ {ct('cal_empty_import_friends', locale)}
+      </button>
+    </div>
+  );
+}
+
+const pillBtnStyle: React.CSSProperties = {
+  flex: 1, minWidth: 'fit-content',
+  padding: '10px 14px', borderRadius: 100,
+  background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+  color: 'var(--wb-text)', fontSize: 12.5, fontWeight: 600,
+  cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' as const,
+  WebkitBackdropFilter: 'blur(12px)' as never, backdropFilter: 'blur(12px)' as never,
+};
 
 // ─── Empty state (when no events at all) ──────────────────────────────────
 

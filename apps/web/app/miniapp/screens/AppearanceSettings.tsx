@@ -38,9 +38,9 @@ const defaultLabels = {
   accentTitle: 'Акцентный цвет',
   themeTitle: 'Фон приложения',
   proHint: 'PRO',
-  themeDarkName: 'Тёмный',
+  themeDarkName: 'Тёмная тема',
   themeDarkSub: 'По умолчанию',
-  themeBlackName: 'Чёрный',
+  themeBlackName: 'Чёрная тема',
   themeBlackSub: 'OLED-экономия',
 };
 

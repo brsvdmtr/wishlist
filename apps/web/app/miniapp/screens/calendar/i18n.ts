@@ -227,6 +227,28 @@ const D: Record<string, StringMap> = {
   cal_repeat_label: { ru: 'Повторение', en: 'Repeat', 'zh-CN': '重复', hi: 'दोहराव', es: 'Repetir', ar: 'التكرار' },
   cal_reminders_label: { ru: 'Напоминания', en: 'Reminders', 'zh-CN': '提醒', hi: 'याद-दिलाने', es: 'Recordatorios', ar: 'التذكيرات' },
   cal_ideas_label: { ru: 'Идеи подарков', en: 'Gift ideas', 'zh-CN': '礼物想法', hi: 'उपहार आइडिया', es: 'Ideas de regalo', ar: 'أفكار هدايا' },
+  cal_idea_add: {
+    ru: 'Добавить идею', en: 'Add an idea', 'zh-CN': '添加想法', hi: 'आइडिया जोड़ें', es: 'Añadir idea', ar: 'إضافة فكرة',
+  },
+  cal_idea_placeholder: {
+    ru: 'Например: книга «Думай быстро»',
+    en: 'e.g. “Thinking, Fast and Slow”',
+    'zh-CN': '例如：书《思考，快与慢》',
+    hi: 'जैसे: किताब "Think Fast"',
+    es: 'Ej.: libro «Pensar rápido»',
+    ar: 'مثلاً: كتاب «التفكير السريع»',
+  },
+  cal_idea_link_placeholder: {
+    ru: 'Ссылка (необязательно)',
+    en: 'Link (optional)',
+    'zh-CN': '链接（可选）',
+    hi: 'लिंक (वैकल्पिक)',
+    es: 'Enlace (opcional)',
+    ar: 'رابط (اختياري)',
+  },
+  cal_idea_price_placeholder: {
+    ru: 'Цена', en: 'Price', 'zh-CN': '价格', hi: 'मूल्य', es: 'Precio', ar: 'السعر',
+  },
   cal_ideas_from_wishlist: {
     ru: 'Идеи · из вишлиста {name}',
     en: 'Ideas · from {name}’s wishlist',

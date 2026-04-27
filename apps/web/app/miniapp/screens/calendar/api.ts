@@ -5,12 +5,18 @@
 // here. Each function returns the parsed JSON or throws.
 
 import type {
-  OccasionListItem, OccasionDetail, OccasionReminder,
+  OccasionListItem, OccasionDetail, OccasionReminder, OccasionIdea,
   HolidayItem, FriendBdayItem, CalendarInboxItem, YearRecapData, TodayContext,
   EventType, EventRecurrence,
 } from './types';
 
-export type TgFetch = (path: string, init?: RequestInit & { timeoutMs?: number }) => Promise<Response>;
+export type TgFetch = (
+  path: string,
+  init?: RequestInit & {
+    timeoutMs?: number;
+    idempotency?: string | { action: string };
+  },
+) => Promise<Response>;
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -80,6 +86,50 @@ export async function archiveOccasion(tg: TgFetch, id: string): Promise<{ ok: tr
 
 export async function completeOccasion(tg: TgFetch, id: string): Promise<{ ok: true }> {
   const r = await tg(`/tg/gift-occasions/${id}/complete`, { method: 'POST' });
+  return jsonOrThrow(r);
+}
+
+// ─── Ideas CRUD ────────────────────────────────────────────────────────────
+
+export interface CreateIdeaPayload {
+  text: string;
+  link?: string | null;
+  price?: number | null;
+  currency?: 'RUB' | 'USD' | 'EUR' | 'GBP';
+  note?: string;
+}
+
+export async function createIdea(tg: TgFetch, occasionId: string, data: CreateIdeaPayload): Promise<{ idea: OccasionIdea }> {
+  const r = await tg(`/tg/gift-occasions/${occasionId}/ideas`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    idempotency: { action: `gift-occasion-idea.create:${occasionId}` },
+  });
+  return jsonOrThrow(r);
+}
+
+export async function updateIdea(tg: TgFetch, ideaId: string, data: Partial<CreateIdeaPayload>): Promise<{ idea: OccasionIdea }> {
+  const r = await tg(`/tg/gift-occasion-ideas/${ideaId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+    idempotency: { action: `gift-occasion-idea.update:${ideaId}` },
+  });
+  return jsonOrThrow(r);
+}
+
+export async function deleteIdea(tg: TgFetch, ideaId: string): Promise<{ ok: true }> {
+  const r = await tg(`/tg/gift-occasion-ideas/${ideaId}`, {
+    method: 'DELETE',
+    idempotency: { action: `gift-occasion-idea.delete:${ideaId}` },
+  });
+  return jsonOrThrow(r);
+}
+
+export async function completeIdea(tg: TgFetch, ideaId: string): Promise<{ ok: true }> {
+  const r = await tg(`/tg/gift-occasion-ideas/${ideaId}/complete`, {
+    method: 'POST',
+    idempotency: { action: `gift-occasion-idea.complete:${ideaId}` },
+  });
   return jsonOrThrow(r);
 }
 

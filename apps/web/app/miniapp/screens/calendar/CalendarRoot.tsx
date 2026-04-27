@@ -10,7 +10,7 @@
 
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, type MutableRefObject } from 'react';
 import type { Locale } from '@wishlist/shared';
 import type { TgFetch } from './api';
 import * as api from './api';
@@ -35,6 +35,9 @@ export interface CalendarRootProps {
   onEntitlementMaybeChanged: () => void;
   onBack: () => void;
   onShowToast: (text: string, kind?: 'info' | 'success' | 'error') => void;
+  /** Optional ref provided by MiniApp's navBack so Telegram BackButton can pop
+   * sub-screens (detail / create / etc.) instead of exiting the feature. */
+  subscreenBackRef?: MutableRefObject<(() => boolean) | null>;
 }
 
 type Screen =
@@ -46,7 +49,7 @@ type Screen =
   | { kind: 'import-friends' }
   | { kind: 'import-holidays' };
 
-export function CalendarRoot({ tgFetch, locale, entitlement, onEntitlementMaybeChanged, onBack, onShowToast }: CalendarRootProps) {
+export function CalendarRoot({ tgFetch, locale, entitlement, onEntitlementMaybeChanged, onBack, onShowToast, subscreenBackRef }: CalendarRootProps) {
   // Locked → paywall flow:
   // showLocked: user is on the calendar screen but feature is locked (free user clicked the entry)
   //   → render Locked teaser; CTA opens PaywallSheet (sheet by default; full from "show me everything")
@@ -104,6 +107,41 @@ export function CalendarRoot({ tgFetch, locale, entitlement, onEntitlementMaybeC
   useEffect(() => {
     if (entitlement.unlocked) void reloadOccasions();
   }, [entitlement.unlocked, reloadOccasions]);
+
+  // ─── Telegram BackButton sub-screen interceptor ───
+  // Without this, Telegram BackButton runs MiniApp's navBack which exits the
+  // calendar feature entirely — losing the user's place inside detail / create /
+  // inbox / etc. Populate the parent's ref so navBack can pop the inner stack
+  // first; clearing it on main lets Back exit the feature normally.
+  useEffect(() => {
+    if (!subscreenBackRef) return;
+
+    // Paywall sheet open → close the sheet instead of exiting.
+    if (paywallOpen !== null) {
+      subscreenBackRef.current = () => { setPaywallOpen(null); return true; };
+      return () => { subscreenBackRef.current = null; };
+    }
+
+    // Post-purchase onboarding → skip rather than bouncing to settings.
+    if (showOnboarding) {
+      subscreenBackRef.current = () => { closeOnboarding(false); return true; };
+      return () => { subscreenBackRef.current = null; };
+    }
+
+    // Sub-screens → pop to calendar main.
+    if (screen.kind !== 'main') {
+      subscreenBackRef.current = () => {
+        setActiveDetail(null);
+        setScreen({ kind: 'main' });
+        void reloadOccasions();
+        return true;
+      };
+      return () => { subscreenBackRef.current = null; };
+    }
+
+    // Calendar main → let navBack exit the feature.
+    subscreenBackRef.current = null;
+  }, [screen.kind, paywallOpen, showOnboarding, subscreenBackRef, reloadOccasions, closeOnboarding]);
 
   // ─── Detail loader ───
   useEffect(() => {

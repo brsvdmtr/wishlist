@@ -7715,6 +7715,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     } else if (screen === 'item-unavailable') {
       replyEntryRef.current = null;
       setScreen('my-wishlists');
+    } else if (screen === 'calendar') {
+      // CalendarRoot owns nested screens (detail / create / inbox / etc.) — when
+      // a sub-screen is active it sets calendarSubscreenBackRef to handle the pop
+      // internally. Otherwise we exit the feature back to settings (the entry-point).
+      if (calendarSubscreenBackRef.current && calendarSubscreenBackRef.current()) return;
+      setScreen('settings');
     }
   }, [screen, archiveMode, archiveSelectMode, draftsSelectMode, settingsOriginScreen, loadWishlists, loadAllItems, loadReservations, fromDrafts, fromReservations, homeReturnTab, itemReorderMode, reorderMode, santaWishlistPickerReturnId, tgFetch, setSantaCampaigns, setShowSantaWishlistPicker, onboardingTryResult, onboardingCatalogSelected, firstSharePromptData, guestViewReturnToProfileUsername, checkOnboarding, loadPublicProfile, loadProfileSubscribeStatus, currentWl, secretPhotoOpen, secretConfirmItem, secretCancelItem, secretPromoteItem, secretErrorKind, showSecretOnboarding, secretDetailOrigin, secretPaywallReturnItem]);
 
@@ -7724,6 +7730,12 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   // forcing re-registration on every render — which previously dropped the
   // handler on iOS Telegram.
   const backActionRef = useRef<() => void | Promise<void>>(() => {});
+
+  // Sub-screen back interceptor for CalendarRoot. When user is inside a
+  // calendar sub-screen (detail / create / inbox / recap / import) the
+  // feature populates this ref; navBack consults it before exiting calendar
+  // entirely. Returning `true` means "I handled the back press, stay here".
+  const calendarSubscreenBackRef = useRef<(() => boolean) | null>(null);
 
   useEffect(() => {
     backActionRef.current = async () => {
@@ -28661,6 +28673,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           }}
           onBack={() => setScreen('settings')}
           onShowToast={(text, kind = 'info') => pushToast(text, kind)}
+          subscreenBackRef={calendarSubscreenBackRef}
         />
       )}
 

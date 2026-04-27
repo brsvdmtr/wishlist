@@ -20,10 +20,12 @@ import type { Locale } from '@wishlist/shared';
 import { gradients } from '@wishlist/ui-tokens';
 import type { TgFetch } from './api';
 import * as api from './api';
-import type { OccasionDetail, EventTheme } from './types';
+import type { OccasionDetail, EventTheme, EventRecurrence } from './types';
 import { inferTheme, defaultEmojiForType } from './types';
+import { Sheet } from '@wishlist/ui';
 import {
   CalHeader, CalIconButton, InfoGroup, InfoRow, SectionH, ReminderRow, BannerStrip, CtaBar, Toggle,
+  EmojiPicker, RepeatChips, DayPickerSheet, MonthPickerSheet, YearPickerSheet,
   monthLabelLong, weekdayLabels,
 } from './components';
 import { ct, ctDays, ctDaysAgo } from './i18n';
@@ -42,6 +44,7 @@ export function CalendarDetail({ tgFetch, locale, occasion: o, onBack, onShowToa
   const isPast = (o.daysUntil ?? 0) < 0 || o.status === 'DONE';
   const isToday = o.daysUntil === 0 && !isPast;
   const dateInfo = useMemo(() => formatDate(o.nextDate ?? o.eventDate, locale), [o.nextDate, o.eventDate, locale]);
+  const [editing, setEditing] = useState(false);
   const heroBg = isPast
     ? 'linear-gradient(135deg, rgba(80,80,90,0.6), rgba(40,40,50,0.6))'
     : theme === 'bday' ? gradients.eventBdayHero
@@ -50,10 +53,10 @@ export function CalendarDetail({ tgFetch, locale, occasion: o, onBack, onShowToa
     : gradients.eventTodayHero;
 
   return (
-    <div style={{ minHeight: '100%', color: 'var(--wb-text)', paddingBottom: 'calc(120px + env(safe-area-inset-bottom))' }}>
+    <div style={{ minHeight: '100%', color: 'var(--wb-text)' }}>
       <CalHeader
         onBack={onBack}
-        rightSlot={<CalIconButton label="More">⋯</CalIconButton>}
+        rightSlot={<CalIconButton label={ct('cal_edit', locale)} onClick={() => setEditing(true)}>✎</CalIconButton>}
       />
 
       {/* Hero */}
@@ -176,6 +179,11 @@ export function CalendarDetail({ tgFetch, locale, occasion: o, onBack, onShowToa
         </>
       )}
 
+      {/* User-curated gift ideas attached to this event. Available for both
+          upcoming and past events: past events keep ideas as a record of what
+          was considered, useful when looking back at recurring events. */}
+      <IdeasSection tgFetch={tgFetch} occasion={o} locale={locale} onChanged={onMutated} onShowToast={onShowToast} />
+
       {/* Reminders editor — render when not past */}
       {!isPast && (
         <RemindersEditor tgFetch={tgFetch} occasionId={o.id} locale={locale} reminders={o.reminders} onChanged={onMutated} onShowToast={onShowToast} />
@@ -205,6 +213,7 @@ export function CalendarDetail({ tgFetch, locale, occasion: o, onBack, onShowToa
             await onMutated();
           }} style={surfaceBtnStyle}>{ct('cal_repeat_next_year', locale)}</button>
         )}
+        <button onClick={() => setEditing(true)} style={surfaceBtnStyle}>{ct('cal_edit', locale)}</button>
         <button onClick={async () => {
           if (!confirm(ct('cal_delete', locale) + '?')) return;
           await api.deleteOccasion(tgFetch, o.id);
@@ -212,6 +221,16 @@ export function CalendarDetail({ tgFetch, locale, occasion: o, onBack, onShowToa
           onBack();
         }} style={ghostDangerBtnStyle}>{ct('cal_delete', locale)}</button>
       </CtaBar>
+
+      <EditOccasionSheet
+        open={editing}
+        onClose={() => setEditing(false)}
+        tgFetch={tgFetch}
+        occasion={o}
+        locale={locale}
+        onSaved={async () => { setEditing(false); await onMutated(); }}
+        onShowToast={onShowToast}
+      />
     </div>
   );
 }
@@ -324,6 +343,250 @@ function RemindersEditor({ tgFetch, occasionId, locale, reminders, onChanged, on
   );
 }
 
+// ─── Ideas section ─────────────────────────────────────────────────────────
+//
+// User-curated gift ideas attached to an event. Backend already supports the
+// full lifecycle (POST /tg/gift-occasions/:id/ideas, PATCH/DELETE/complete on
+// /tg/gift-occasion-ideas/:ideaId). Earlier UI versions exposed this; the v2.1
+// rewrite replaced it with the linked-wishlist preview only — losing the
+// option to attach standalone ideas. Restoring it here.
+
+type IdeaCurrency = 'RUB' | 'USD' | 'EUR' | 'GBP';
+const IDEA_CURRENCIES: IdeaCurrency[] = ['RUB', 'USD', 'EUR', 'GBP'];
+
+function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
+  tgFetch: TgFetch; occasion: OccasionDetail; locale: Locale;
+  onChanged: () => Promise<void>;
+  onShowToast: (text: string, kind?: 'info' | 'success' | 'error') => void;
+}) {
+  const visible = useMemo(() => occasion.ideas.filter(i => i.status !== 'ARCHIVED'), [occasion.ideas]);
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState('');
+  const [link, setLink] = useState('');
+  const [price, setPrice] = useState('');
+  const [currency, setCurrency] = useState<IdeaCurrency>('RUB');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => { setText(''); setLink(''); setPrice(''); setCurrency('RUB'); setAdding(false); };
+
+  const submit = async () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    try {
+      const priceNum = price.trim() ? Number(price.replace(/\s/g, '')) : null;
+      await api.createIdea(tgFetch, occasion.id, {
+        text: trimmed,
+        link: link.trim() ? link.trim() : null,
+        price: priceNum != null && Number.isFinite(priceNum) && priceNum >= 0 ? Math.floor(priceNum) : null,
+        currency,
+      });
+      reset();
+      await onChanged();
+    } catch (err) {
+      onShowToast('Не удалось добавить идею', 'error');
+      // eslint-disable-next-line no-console
+      console.error('Idea create failed', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (ideaId: string) => {
+    if (!confirm(ct('cal_delete', locale) + '?')) return;
+    setBusyId(ideaId);
+    try {
+      await api.deleteIdea(tgFetch, ideaId);
+      await onChanged();
+    } catch (err) {
+      onShowToast('Не удалось удалить', 'error');
+      // eslint-disable-next-line no-console
+      console.error('Idea delete failed', err);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const toggleComplete = async (ideaId: string, currentlyDone: boolean) => {
+    setBusyId(ideaId);
+    try {
+      if (currentlyDone) {
+        // No reopen endpoint — flip back via PATCH (treat as text-only no-op:
+        // server accepts partial PATCH; we re-set status via updateOccasion isn't
+        // available, so we just mark via complete which idempotently sets DONE).
+        // Reopening isn't critical for the bug fix; keep as one-way for now.
+        return;
+      }
+      await api.completeIdea(tgFetch, ideaId);
+      await onChanged();
+    } catch (err) {
+      onShowToast('Не удалось обновить', 'error');
+      // eslint-disable-next-line no-console
+      console.error('Idea complete failed', err);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <>
+      <SectionH>{ct('cal_ideas_label', locale)}</SectionH>
+
+      {visible.length > 0 && (
+        <div>
+          {visible.map(idea => {
+            const done = idea.status === 'DONE';
+            const priceText = idea.price != null
+              ? `${idea.price.toLocaleString(locale === 'ru' ? 'ru-RU' : 'en-US')} ${idea.currency ?? ''}`.trim()
+              : null;
+            const linkDomain = idea.link ? safeDomain(idea.link) : null;
+            return (
+              <div key={idea.id} style={{
+                margin: '0 16px 8px', padding: 14, borderRadius: 18,
+                background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+                display: 'flex', gap: 12, alignItems: 'flex-start',
+                opacity: done ? 0.6 : 1,
+                WebkitBackdropFilter: 'blur(12px)' as never, backdropFilter: 'blur(12px)' as never,
+              }}>
+                <button
+                  type="button"
+                  onClick={() => void toggleComplete(idea.id, done)}
+                  disabled={busyId === idea.id || done}
+                  aria-label={done ? 'Отмечено' : 'Отметить выполненным'}
+                  style={{
+                    width: 28, height: 28, borderRadius: 9, flexShrink: 0,
+                    background: done ? 'var(--wb-accent-soft)' : 'var(--wb-surface)',
+                    border: done ? '1px solid var(--wb-accent-soft-strong)' : '1px solid var(--wb-border)',
+                    color: done ? 'var(--wb-accent-strong)' : 'var(--wb-text-muted)',
+                    fontSize: 14, fontWeight: 700, cursor: done ? 'default' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'inherit', padding: 0,
+                  }}
+                >{done ? '✓' : ''}</button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 14, fontWeight: 600, color: 'var(--wb-text)',
+                    letterSpacing: '-0.012em', lineHeight: 1.3,
+                    textDecoration: done ? 'line-through' : 'none',
+                    overflowWrap: 'anywhere',
+                  }}>{idea.text}</div>
+                  {(priceText || linkDomain || idea.note) && (
+                    <div style={{ fontSize: 11.5, color: 'var(--wb-text-muted)', marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {priceText && <span style={{ fontWeight: 700, color: 'var(--wb-text-secondary)', fontFeatureSettings: '"tnum"' }}>{priceText}</span>}
+                      {linkDomain && (
+                        idea.link
+                          ? <a href={idea.link} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--wb-accent-strong)', textDecoration: 'none' }}>↗ {linkDomain}</a>
+                          : <span>· {linkDomain}</span>
+                      )}
+                      {idea.note && <span>· {idea.note}</span>}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void remove(idea.id)}
+                  disabled={busyId === idea.id}
+                  aria-label={ct('cal_delete', locale)}
+                  style={{
+                    width: 28, height: 28, borderRadius: 9, flexShrink: 0,
+                    background: 'transparent', border: 'none',
+                    color: 'var(--wb-text-muted)', fontSize: 16,
+                    cursor: 'pointer', fontFamily: 'inherit', padding: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >×</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {adding ? (
+        <div style={{ padding: '0 16px 14px' }}>
+          <input
+            value={text} onChange={e => setText(e.target.value)}
+            placeholder={ct('cal_idea_placeholder', locale)}
+            maxLength={500}
+            autoFocus
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+              borderRadius: 16, padding: '12px 14px',
+              fontFamily: 'inherit', fontSize: 14, color: 'var(--wb-text)', outline: 'none', marginBottom: 8,
+            }}
+          />
+          <input
+            value={link} onChange={e => setLink(e.target.value)}
+            placeholder={ct('cal_idea_link_placeholder', locale)}
+            inputMode="url" autoCapitalize="none" autoCorrect="off"
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+              borderRadius: 16, padding: '12px 14px',
+              fontFamily: 'inherit', fontSize: 13, color: 'var(--wb-text)', outline: 'none', marginBottom: 8,
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input
+              value={price} onChange={e => setPrice(e.target.value)}
+              placeholder={ct('cal_idea_price_placeholder', locale)}
+              inputMode="numeric"
+              style={{
+                flex: 2, boxSizing: 'border-box',
+                background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+                borderRadius: 16, padding: '12px 14px',
+                fontFamily: 'inherit', fontSize: 14, color: 'var(--wb-text)', outline: 'none',
+              }}
+            />
+            <select
+              value={currency} onChange={e => setCurrency(e.target.value as IdeaCurrency)}
+              style={{
+                flex: 1, boxSizing: 'border-box',
+                background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+                borderRadius: 16, padding: '12px 14px',
+                fontFamily: 'inherit', fontSize: 14, color: 'var(--wb-text)',
+              }}
+            >
+              {IDEA_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={saving || !text.trim()}
+              style={{ ...surfaceBtnStyle, flex: 1, opacity: !text.trim() ? 0.5 : 1 }}
+            >{saving ? '…' : ct('cal_save', locale)}</button>
+            <button
+              type="button"
+              onClick={reset}
+              style={{ ...surfaceBtnStyle, flex: 1 }}
+            >{ct('cal_cancel', locale)}</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ padding: '0 16px 14px' }}>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            style={surfaceBtnStyle}
+          >＋ {ct('cal_idea_add', locale)}</button>
+        </div>
+      )}
+    </>
+  );
+}
+
+function safeDomain(url: string): string | null {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, '');
+  } catch {
+    return url.replace(/^https?:\/\//, '').split('/')[0] || null;
+  }
+}
+
 // ─── Past-event section ────────────────────────────────────────────────────
 
 function PastSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
@@ -423,6 +686,189 @@ function PastSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
     </>
   );
 }
+
+// ─── Edit-occasion sheet ──────────────────────────────────────────────────
+//
+// Lightweight edit form (title / emoji / date / recurrence / location). Uses
+// the existing day/month/year picker sheets so we don't duplicate UI primitives.
+// Wires through `api.updateOccasion` which the create-flow already exercises.
+
+const EMOJI_PALETTE: Record<string, string[]> = {
+  BIRTHDAY:    ['🎂', '🎉', '🎁', '🍰', '🌹', '⭐'],
+  ANNIVERSARY: ['💍', '💐', '💖', '🥂', '🌹', '✨'],
+  HOLIDAY:     ['🎄', '🎃', '🌷', '🛡️', '🇷🇺', '🎊'],
+  OTHER:       ['📅', '🎯', '🚀', '✨', '⭐', '🔔'],
+};
+
+function EditOccasionSheet({ open, onClose, tgFetch, occasion: o, locale, onSaved, onShowToast }: {
+  open: boolean;
+  onClose: () => void;
+  tgFetch: TgFetch;
+  occasion: OccasionDetail;
+  locale: Locale;
+  onSaved: () => Promise<void>;
+  onShowToast: (text: string, kind?: 'info' | 'success' | 'error') => void;
+}) {
+  const initialDate = useMemo(() => {
+    const iso = o.eventDate ?? o.nextDate;
+    if (!iso) {
+      const now = new Date();
+      return { day: now.getUTCDate(), month: now.getUTCMonth(), year: now.getUTCFullYear() };
+    }
+    const d = new Date(iso);
+    return { day: d.getUTCDate(), month: d.getUTCMonth(), year: d.getUTCFullYear() };
+  }, [o.eventDate, o.nextDate]);
+
+  const [title, setTitle] = useState(o.title);
+  const [emoji, setEmoji] = useState<string>(o.emoji ?? defaultEmojiForType(o.type));
+  const [day, setDay] = useState(initialDate.day);
+  const [month, setMonth] = useState(initialDate.month);
+  const [year, setYear] = useState<number>(initialDate.year);
+  const [recurrence, setRecurrence] = useState<EventRecurrence>(o.recurrence);
+  const [location, setLocation] = useState(o.location ?? '');
+  const [saving, setSaving] = useState(false);
+  const [pickOpen, setPickOpen] = useState<'day' | 'month' | 'year' | null>(null);
+
+  // Reset form when sheet re-opens for a new occasion.
+  useEffect(() => {
+    if (!open) return;
+    setTitle(o.title);
+    setEmoji(o.emoji ?? defaultEmojiForType(o.type));
+    setDay(initialDate.day);
+    setMonth(initialDate.month);
+    setYear(initialDate.year);
+    setRecurrence(o.recurrence);
+    setLocation(o.location ?? '');
+  }, [open, o.id, o.title, o.emoji, o.type, o.recurrence, o.location, initialDate.day, initialDate.month, initialDate.year]);
+
+  const daysInMonth = useMemo(() => new Date(Date.UTC(year, month + 1, 0)).getUTCDate(), [year, month]);
+  const safeDay = Math.min(day, daysInMonth);
+
+  const save = async () => {
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      const eventDateIso = `${year}-${String(month + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+      await api.updateOccasion(tgFetch, o.id, {
+        title: title.trim(),
+        emoji,
+        eventDate: eventDateIso,
+        recurrence,
+        location: location.trim() || undefined,
+      });
+      onShowToast(ct('cal_save', locale), 'success');
+      await onSaved();
+    } catch (err) {
+      onShowToast('Не удалось сохранить', 'error');
+      // eslint-disable-next-line no-console
+      console.error('Edit occasion failed', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const palette = EMOJI_PALETTE[o.type] ?? EMOJI_PALETTE.OTHER!;
+
+  return (
+    <Sheet open={open} onClose={onClose} title={ct('cal_edit', locale)}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <div style={editLabelStyle}>{ct('cal_field_name', locale)}</div>
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            maxLength={120}
+            style={editInputStyle}
+          />
+        </div>
+
+        <div>
+          <div style={editLabelStyle}>{ct('cal_field_emoji', locale)}</div>
+          <EmojiPicker value={emoji} options={palette} onChange={setEmoji} locale={locale} />
+        </div>
+
+        <div>
+          <div style={editLabelStyle}>{ct('cal_field_date', locale)}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr', gap: 8 }}>
+            <button type="button" onClick={() => setPickOpen('day')} style={editChipStyle}>{safeDay}</button>
+            <button type="button" onClick={() => setPickOpen('month')} style={editChipStyle}>{monthLabelLong(month, locale)}</button>
+            <button type="button" onClick={() => setPickOpen('year')} style={editChipStyle}>{year}</button>
+          </div>
+        </div>
+
+        <div>
+          <div style={editLabelStyle}>{ct('cal_field_repeat', locale)}</div>
+          <RepeatChips<EventRecurrence>
+            value={recurrence}
+            onChange={setRecurrence}
+            options={[
+              { key: 'NONE',    label: ct('cal_recur_none', locale) },
+              { key: 'YEARLY',  label: ct('cal_recur_yearly', locale) },
+              { key: 'MONTHLY', label: ct('cal_recur_monthly', locale) },
+            ]}
+          />
+        </div>
+
+        <div>
+          <div style={editLabelStyle}>{ct('cal_field_location', locale)}</div>
+          <input
+            value={location}
+            onChange={e => setLocation(e.target.value)}
+            maxLength={200}
+            style={editInputStyle}
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving || !title.trim()}
+          style={{ ...primaryBtnStyle, opacity: !title.trim() ? 0.5 : 1 }}
+        >{saving ? '…' : ct('cal_save', locale)}</button>
+      </div>
+
+      <DayPickerSheet
+        open={pickOpen === 'day'}
+        onClose={() => setPickOpen(null)}
+        value={safeDay}
+        max={daysInMonth}
+        onPick={(d) => { setDay(d); setPickOpen(null); }}
+        locale={locale}
+      />
+      <MonthPickerSheet
+        open={pickOpen === 'month'}
+        onClose={() => setPickOpen(null)}
+        value={month}
+        onPick={(m) => { setMonth(m); setPickOpen(null); }}
+        locale={locale}
+      />
+      <YearPickerSheet
+        open={pickOpen === 'year'}
+        onClose={() => setPickOpen(null)}
+        value={year}
+        onPick={(y) => { setYear(y); setPickOpen(null); }}
+        locale={locale}
+      />
+    </Sheet>
+  );
+}
+
+const editLabelStyle: React.CSSProperties = {
+  fontSize: 11, fontWeight: 600, color: 'var(--wb-text-muted)',
+  textTransform: 'uppercase' as const, letterSpacing: 0.7, marginBottom: 8,
+};
+const editInputStyle: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box',
+  background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+  borderRadius: 14, padding: '12px 14px',
+  fontFamily: 'inherit', fontSize: 15, color: 'var(--wb-text)', outline: 'none',
+};
+const editChipStyle: React.CSSProperties = {
+  padding: '12px 6px', borderRadius: 12,
+  background: 'var(--wb-card)', border: '1px solid var(--wb-border)',
+  color: 'var(--wb-text)', fontSize: 14, fontWeight: 600,
+  cursor: 'pointer', fontFamily: 'inherit', fontFeatureSettings: '"tnum"',
+};
 
 // ─── Date helpers ─────────────────────────────────────────────────────────
 
