@@ -69,6 +69,49 @@ API and bot log to stdout (for `docker logs`) **and** to a rotated JSON file on 
 
 ---
 
+## Security layer — MANDATORY for new state-changing routes
+
+WishBoard ships a security layer for state-changing API routes:
+**Idempotency-Key** + **rate limits** + **IP throttle**. Full contract:
+[docs/API_SECURITY.md](docs/API_SECURITY.md). Wave 1 (P0) is live; Santa /
+Categories / Hints / Subscriptions are deferred to Wave 2.
+
+### Iron rules — apply on every PR that touches API routes or `tgFetch` callers
+
+- **Every new state-changing route** (POST / PATCH / DELETE on `/tg/*`) **must
+  pick a rate-limit category.** Existing categories live in
+  [`apps/api/src/security/rateLimits.ts`](apps/api/src/security/rateLimits.ts);
+  add a new one only when none of the 18 existing ones fit, and document it
+  in `docs/API_SECURITY.md` § 5.
+- **Critical routes** (anything billing-adjacent, account-deleting, or that
+  causes a side effect that's painful to dedupe later) **should use
+  idempotency** with `critical: true`. Soft-require — the middleware doesn't
+  400 on missing header; it logs `api.idem_missing_on_critical_endpoint` so
+  adoption is visible.
+- **Every Mini App caller** of `tgFetch` for a state-changing method **must
+  pass `idempotency: { action: '<name>' }`** unless the call is genuinely
+  fire-and-forget telemetry (mark-as-read, attribution beacon).
+- **Action-key naming:** `domain.verb` for singletons (`wishlist.create`),
+  `domain.verb:${entityId}` for entity-scoped actions, sorted-IDs join for
+  bulk operations. Distinct business operations on the same row need distinct
+  action names — never reuse `me.profile` for an avatar upload.
+- **Never log the raw `Idempotency-Key` or raw client IP.** Use
+  `hashIdempotencyKey` / `hashIp` server-side, `hashKeyForLog` client-side.
+- **Never disable security via code.** Use the env kill switches
+  (`SECURITY_*_ENABLED`) in `/opt/wishlist/.env` — see § 9 of the doc.
+
+### Rollout discipline (lessons from Wave 1)
+
+- Defensive middleware ships **soft-require** first; a hard-require on day 1
+  bricks every cached Mini App version still in Telegram clients.
+- Every new defensive layer ships with an **env kill switch** so a real prod
+  incident can be rolled back without a code redeploy.
+- **No "small refactor along the way"** in `apps/api/src/index.ts` — the
+  monolith is ~20 k lines and any incidental cleanup balloons the diff.
+  Touch only the lines required for the security change.
+
+---
+
 ## Design system — MANDATORY for all UI work
 
 WishBoard has a formal design system. Before touching any UI code:

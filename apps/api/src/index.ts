@@ -31,6 +31,15 @@ import {
   REWARD_CAP_YEARLY_WINDOW_DAYS,
 } from '@wishlist/db';
 import logger from './logger';
+import {
+  createRateLimiter,
+  combineLimiters,
+  createIdempotencyMiddleware,
+  ipThrottleGate,
+  recordIpEvent,
+  startIdempotencyCleanupJob,
+  IDEMPOTENCY_BILLING_TTL_MINUTES,
+} from './security';
 import pinoHttp from 'pino-http';
 import { parseUrl, validateUrl } from './url-parser.js';
 import { t, detectLocale, normalizeLocale, resolveEffectiveLocale, pluralize, type Locale, type LanguageMode, type LanguageSettings, getOnboardingMeta, type OnboardingMeta, type OnboardingVariant, type AcquisitionPath, type CatalogTemplate, getCatalogForSegment, deriveMarketBucket, isSupportedImportRegion, type MarketBucket, MARKET_BUCKET_LABELS, ANALYTICS_EVENTS } from '@wishlist/shared';
@@ -83,7 +92,10 @@ app.use(
       return cb(null, false);
     },
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV', 'X-INTERNAL-KEY'],
+    // Idempotency-Key allows the Mini App to declare retry safety on POST/PATCH/DELETE.
+    // Without it in allowedHeaders, browsers strip the header on preflight and
+    // the security layer never sees it.
+    allowedHeaders: ['Content-Type', 'X-ADMIN-KEY', 'X-TG-INIT-DATA', 'X-TG-DEV', 'X-INTERNAL-KEY', 'Idempotency-Key'],
   }),
 );
 app.use(express.json());
@@ -2443,6 +2455,10 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction) {
   const result = validateTelegramInitData(initData, botToken);
   if ('reason' in result) {
     logger.debug({ reason: result.reason, path: req.path, ip: req.ip, initDataLen: initData.length }, 'auth_rejected');
+    // Feed the IP throttle so repeated failures from the same IP get capped
+    // before they reach the validator. Skipped internally if the kill switch
+    // is off; never throws, so this can't break the auth path.
+    recordIpEvent(req, 'auth_rejected');
     return res.status(401).json({ error: 'Invalid Telegram auth' });
   }
 
@@ -3515,6 +3531,12 @@ async function getItemRole(
   return { role: 'third_party', item, actorHash, user };
 }
 
+// IP-throttle gate: short-circuits with 429 if this IP has tripped the
+// `auth_rejected` threshold (10 failures / 60 s → 5 min cool-off). Runs
+// BEFORE requireTelegramAuth so we don't burn HMAC validation on a known-bad
+// IP. The trigger itself is fed from inside requireTelegramAuth's 401 branch.
+tgRouter.use(ipThrottleGate(['auth_rejected']));
+
 tgRouter.use(requireTelegramAuth);
 
 // Persist raw Telegram language_code + derived segmentation fields on every authenticated request.
@@ -3584,6 +3606,190 @@ tgRouter.use((req, res, next) => {
   });
   next();
 });
+
+// ─── Wave 1 P0 security protections ──────────────────────────────────────────
+// Order on /tg/* state-changing routes:
+//   ipThrottleGate(['auth_rejected'])  ← runs BEFORE auth (registered earlier)
+//   requireTelegramAuth                ← already wired
+//   localeTracking + errorTracking     ← already wired (unchanged)
+//   global.auth limiter                ← THIS BLOCK
+//   state.changing limiter             ← THIS BLOCK
+//   per-endpoint category limiter      ← protectTgRoute(...) entries
+//   idempotency middleware             ← protectTgRoute(...) entries
+//   route handler                      ← unchanged
+//
+// Why it's all here, far above the route declarations: tgRouter middleware
+// runs in registration order. We need every protective layer registered
+// BEFORE the first `tgRouter.post(...)` (which lives ~line 5500+). The
+// monolith file is already 20 k lines — slotting these in here keeps the
+// per-route handlers below untouched.
+
+// Global auth limiter: 300 req / 5 min per actorHash. Catches accidental
+// loops in the Mini App without throttling normal usage (300 req / 5 min ≈
+// 1 req/sec sustained — way above what a human can drive).
+tgRouter.use(createRateLimiter('global.auth'));
+
+// State-changing limiter: 60 POST/PATCH/DELETE / 5 min per actorHash.
+// Read-only paths bypass for free.
+const stateChangingLimiter = createRateLimiter('state.changing');
+tgRouter.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  return stateChangingLimiter(req, res, next);
+});
+
+// protectTgRoute — register a method-and-path-scoped middleware stack on
+// tgRouter using `.all()` (Express runs all matching handlers in registration
+// order). The wrapper short-circuits non-matching methods so a single path
+// pattern can carry protection for one method while leaving others alone.
+type TgMethod = 'POST' | 'PATCH' | 'DELETE';
+function protectTgRoute(method: TgMethod, path: string, ...mws: import('express').RequestHandler[]) {
+  tgRouter.all(path, (req, res, next) => {
+    if (req.method !== method) return next();
+    let i = 0;
+    const runNext = (err?: unknown) => {
+      if (err) return next(err as Error);
+      if (i >= mws.length) return next();
+      const mw = mws[i++]!;
+      try { mw(req, res, runNext); } catch (e) { runNext(e); }
+    };
+    runNext();
+  });
+}
+
+// Convenience builders. `idem(endpointKey, opts?)` defaults the category to
+// the endpointKey (which is unique anyway) so call sites stay short.
+const idem = (endpointKey: string, opts?: { category?: string; noResponseReplay?: boolean; ttlMinutes?: number; critical?: boolean }) =>
+  createIdempotencyMiddleware({
+    endpointKey,
+    category: opts?.category ?? endpointKey,
+    noResponseReplay: opts?.noResponseReplay,
+    ttlMinutes: opts?.ttlMinutes,
+    critical: opts?.critical,
+  });
+
+// Billing/Stars: 7-day TTL + critical=true (logs missing header for monitoring
+// without blocking — soft-require during rollout).
+const billingIdem = (endpointKey: string) =>
+  createIdempotencyMiddleware({
+    endpointKey,
+    category: 'payment',
+    ttlMinutes: IDEMPOTENCY_BILLING_TTL_MINUTES,
+    critical: true,
+  });
+
+// ── Wishlists ────────────────────────────────────────────────────────────────
+protectTgRoute('POST',   '/wishlists',                       createRateLimiter('wishlist.create'), idem('POST /tg/wishlists', { category: 'wishlist.create' }));
+protectTgRoute('PATCH',  '/wishlists/:id',                   idem('PATCH /tg/wishlists/:id', { category: 'wishlist.update' }));
+protectTgRoute('DELETE', '/wishlists/:id',                   idem('DELETE /tg/wishlists/:id', { category: 'wishlist.delete' }));
+protectTgRoute('POST',   '/wishlists/:id/archive',           idem('POST /tg/wishlists/:id/archive', { category: 'wishlist.state' }));
+protectTgRoute('POST',   '/wishlists/:id/unarchive',         idem('POST /tg/wishlists/:id/unarchive', { category: 'wishlist.state' }));
+protectTgRoute('POST',   '/wishlists/:id/transfer-items',    idem('POST /tg/wishlists/:id/transfer-items', { category: 'wishlist.update' }));
+protectTgRoute('POST',   '/wishlists/reorder',               idem('POST /tg/wishlists/reorder', { category: 'wishlist.update' }));
+
+// ── Items (single) ───────────────────────────────────────────────────────────
+protectTgRoute('POST',   '/wishlists/:id/items',             createRateLimiter('item.create'), idem('POST /tg/wishlists/:id/items', { category: 'item.create' }));
+protectTgRoute('PATCH',  '/items/:id',                       idem('PATCH /tg/items/:id', { category: 'item.update' }));
+protectTgRoute('DELETE', '/items/:id',                       idem('DELETE /tg/items/:id', { category: 'item.delete' }));
+protectTgRoute('POST',   '/items/:id/complete',              idem('POST /tg/items/:id/complete', { category: 'item.state' }));
+protectTgRoute('POST',   '/items/:id/restore',               idem('POST /tg/items/:id/restore', { category: 'item.state' }));
+protectTgRoute('POST',   '/items/:id/photo',                 idem('POST /tg/items/:id/photo', { category: 'item.photo', noResponseReplay: true }));
+protectTgRoute('DELETE', '/items/:id/photo',                 idem('DELETE /tg/items/:id/photo', { category: 'item.photo' }));
+protectTgRoute('POST',   '/items/:id/placements',            idem('POST /tg/items/:id/placements', { category: 'item.update' }));
+protectTgRoute('DELETE', '/items/:id/placements/:wishlistId', idem('DELETE /tg/items/:id/placements/:wishlistId', { category: 'item.update' }));
+
+// ── Items (bulk) ─────────────────────────────────────────────────────────────
+// All bulk endpoints share the item.bulk limiter (10 / 10 min) so a single
+// burst can't run several batches in succession.
+protectTgRoute('POST',   '/items/bulk-move',                 createRateLimiter('item.bulk'), idem('POST /tg/items/bulk-move', { category: 'item.bulk' }));
+protectTgRoute('POST',   '/items/bulk-delete',               createRateLimiter('item.bulk'), idem('POST /tg/items/bulk-delete', { category: 'item.bulk' }));
+protectTgRoute('POST',   '/items/bulk-archive',              createRateLimiter('item.bulk'), idem('POST /tg/items/bulk-archive', { category: 'item.bulk' }));
+protectTgRoute('POST',   '/items/bulk-restore',              createRateLimiter('item.bulk'), idem('POST /tg/items/bulk-restore', { category: 'item.bulk' }));
+protectTgRoute('POST',   '/items/bulk-copy',                 createRateLimiter('item.bulk'), idem('POST /tg/items/bulk-copy', { category: 'item.bulk' }));
+protectTgRoute('POST',   '/items/bulk-hard-delete',          createRateLimiter('item.bulk'), idem('POST /tg/items/bulk-hard-delete', { category: 'item.bulk' }));
+
+// ── Reservations ─────────────────────────────────────────────────────────────
+// Reserve gets BOTH limiters (short burst + daily cap). Other reservation
+// actions just get the short-window limiter.
+protectTgRoute('POST',   '/items/:id/reserve',               ...combineLimiters('reservation.short', 'reservation.day'), idem('POST /tg/items/:id/reserve', { category: 'reservation' }));
+protectTgRoute('POST',   '/items/:id/unreserve',             createRateLimiter('reservation.short'), idem('POST /tg/items/:id/unreserve', { category: 'reservation' }));
+protectTgRoute('POST',   '/items/:id/secret-reserve',        createRateLimiter('reservation.short'), idem('POST /tg/items/:id/secret-reserve', { category: 'reservation' }));
+protectTgRoute('POST',   '/items/:id/extend-reservation',    createRateLimiter('reservation.short'), idem('POST /tg/items/:id/extend-reservation', { category: 'reservation' }));
+protectTgRoute('POST',   '/secret-reservations/:id/cancel',      idem('POST /tg/secret-reservations/:id/cancel', { category: 'reservation' }));
+protectTgRoute('POST',   '/secret-reservations/:id/acknowledge', idem('POST /tg/secret-reservations/:id/acknowledge', { category: 'reservation' }));
+protectTgRoute('POST',   '/secret-reservations/:id/promote',     idem('POST /tg/secret-reservations/:id/promote', { category: 'reservation' }));
+protectTgRoute('PATCH',  '/reservations/:itemId/meta',           idem('PATCH /tg/reservations/:itemId/meta', { category: 'reservation' }));
+protectTgRoute('POST',   '/reservations/:itemId/reminder',       idem('POST /tg/reservations/:itemId/reminder', { category: 'reservation' }));
+protectTgRoute('DELETE', '/reservations/:itemId/reminder',       idem('DELETE /tg/reservations/:itemId/reminder', { category: 'reservation' }));
+
+// ── Comments ─────────────────────────────────────────────────────────────────
+// `comment.minute` + `comment.hour` together cap both bursts and totals.
+protectTgRoute('POST',   '/items/:id/comments',                  ...combineLimiters('comment.minute', 'comment.hour'), idem('POST /tg/items/:id/comments', { category: 'comment' }));
+protectTgRoute('DELETE', '/items/:id/comments/:commentId',       idem('DELETE /tg/items/:id/comments/:commentId', { category: 'comment' }));
+
+// ── Share / Selections / Subscriptions ───────────────────────────────────────
+protectTgRoute('POST',   '/wishlists/:id/share-token',           createRateLimiter('share.hour'), idem('POST /tg/wishlists/:id/share-token', { category: 'share' }));
+protectTgRoute('DELETE', '/wishlists/:id/share-token',           idem('DELETE /tg/wishlists/:id/share-token', { category: 'share' }));
+protectTgRoute('POST',   '/wishlists/:id/selections',            createRateLimiter('share.hour'), idem('POST /tg/wishlists/:id/selections', { category: 'share' }));
+protectTgRoute('DELETE', '/selections/:id',                      idem('DELETE /tg/selections/:id', { category: 'share' }));
+protectTgRoute('POST',   '/selections/:id/subscribe',            idem('POST /tg/selections/:id/subscribe', { category: 'subscribe' }));
+protectTgRoute('DELETE', '/selections/:id/subscribe',            idem('DELETE /tg/selections/:id/subscribe', { category: 'subscribe' }));
+protectTgRoute('POST',   '/wishlists/:id/subscribe',             idem('POST /tg/wishlists/:id/subscribe', { category: 'subscribe' }));
+protectTgRoute('DELETE', '/wishlists/:id/subscribe',             idem('DELETE /tg/wishlists/:id/subscribe', { category: 'subscribe' }));
+
+// ── Billing / Stars (7-day TTL, critical=true logs missing key) ──────────────
+// Recovery rule: the rate limiter sits ONLY on /checkout endpoints. /sync
+// stays unlimited so a user who paid but didn't see PRO activate can keep
+// refreshing without hitting 429. Idempotency on /sync replays the same
+// answer for the same key, so retries are cheap and safe.
+protectTgRoute('POST',   '/billing/pro/checkout',                createRateLimiter('payment'), billingIdem('POST /tg/billing/pro/checkout'));
+protectTgRoute('POST',   '/billing/pro/sync',                    billingIdem('POST /tg/billing/pro/sync'));
+protectTgRoute('POST',   '/billing/subscription/cancel',         billingIdem('POST /tg/billing/subscription/cancel'));
+protectTgRoute('POST',   '/billing/subscription/reactivate',     billingIdem('POST /tg/billing/subscription/reactivate'));
+protectTgRoute('POST',   '/billing/addon/checkout',              createRateLimiter('payment'), billingIdem('POST /tg/billing/addon/checkout'));
+protectTgRoute('POST',   '/billing/addon/sync',                  billingIdem('POST /tg/billing/addon/sync'));
+protectTgRoute('POST',   '/billing/gift-notes/checkout',         createRateLimiter('payment'), billingIdem('POST /tg/billing/gift-notes/checkout'));
+protectTgRoute('POST',   '/billing/gift-notes/sync',             billingIdem('POST /tg/billing/gift-notes/sync'));
+
+// ── Onboarding (intentionally NO narrow rate limit) ──────────────────────────
+// Telegram Mini App may re-fire /onboarding/start on bootstrap or reopen.
+// global.auth + state.changing already cover the upper bound — adding a
+// tighter category here would cause spurious 429s on legitimate first-opens.
+// Idempotency alone prevents duplicate demo-item creation, which is the
+// real risk on these endpoints.
+protectTgRoute('POST',   '/onboarding/start',                    idem('POST /tg/onboarding/start', { category: 'onboarding' }));
+protectTgRoute('POST',   '/onboarding/dismiss',                  idem('POST /tg/onboarding/dismiss', { category: 'onboarding' }));
+protectTgRoute('POST',   '/onboarding/complete',                 idem('POST /tg/onboarding/complete', { category: 'onboarding' }));
+protectTgRoute('POST',   '/onboarding/manual-add',               idem('POST /tg/onboarding/manual-add', { category: 'onboarding' }));
+protectTgRoute('POST',   '/onboarding/catalog-select',           idem('POST /tg/onboarding/catalog-select', { category: 'onboarding' }));
+protectTgRoute('POST',   '/onboarding/update-step',              idem('POST /tg/onboarding/update-step', { category: 'onboarding' }));
+protectTgRoute('POST',   '/onboarding/create-wishlist',          idem('POST /tg/onboarding/create-wishlist', { category: 'onboarding' }));
+protectTgRoute('POST',   '/onboarding/try-import',               idem('POST /tg/onboarding/try-import', { category: 'onboarding' }));
+
+// ── Group gifts ──────────────────────────────────────────────────────────────
+protectTgRoute('POST',   '/items/:id/group-gift',                idem('POST /tg/items/:id/group-gift', { category: 'groupgift' }));
+protectTgRoute('POST',   '/group-gifts/:id/join',                idem('POST /tg/group-gifts/:id/join', { category: 'groupgift' }));
+protectTgRoute('PATCH',  '/group-gifts/:id/amount',              idem('PATCH /tg/group-gifts/:id/amount', { category: 'groupgift' }));
+protectTgRoute('POST',   '/group-gifts/:id/leave',               idem('POST /tg/group-gifts/:id/leave', { category: 'groupgift' }));
+protectTgRoute('POST',   '/group-gifts/:id/complete',            idem('POST /tg/group-gifts/:id/complete', { category: 'groupgift' }));
+protectTgRoute('POST',   '/group-gifts/:id/cancel',              idem('POST /tg/group-gifts/:id/cancel', { category: 'groupgift' }));
+protectTgRoute('PATCH',  '/group-gifts/:id/pinned',              idem('PATCH /tg/group-gifts/:id/pinned', { category: 'groupgift' }));
+protectTgRoute('POST',   '/group-gifts/:id/messages',            idem('POST /tg/group-gifts/:id/messages', { category: 'groupgift' }));
+
+// ── Profile / Settings / Showcase / Avatar / Cover ──────────────────────────
+// Avatar/cover use multipart — noResponseReplay=true: we lock the key but
+// don't try to cache the response body. A retry with the same key returns
+// 409 IDEMPOTENCY_RESPONSE_NOT_REPLAYABLE; the client should verify state.
+protectTgRoute('PATCH',  '/me/profile',                          idem('PATCH /tg/me/profile', { category: 'profile.update' }));
+protectTgRoute('POST',   '/me/profile/avatar',                   idem('POST /tg/me/profile/avatar', { category: 'profile.upload', noResponseReplay: true }));
+protectTgRoute('DELETE', '/me/profile/avatar',                   idem('DELETE /tg/me/profile/avatar', { category: 'profile.update' }));
+protectTgRoute('PATCH',  '/me/showcase',                         idem('PATCH /tg/me/showcase', { category: 'profile.update' }));
+protectTgRoute('POST',   '/me/showcase/cover',                   idem('POST /tg/me/showcase/cover', { category: 'profile.upload', noResponseReplay: true }));
+protectTgRoute('DELETE', '/me/showcase/cover',                   idem('DELETE /tg/me/showcase/cover', { category: 'profile.update' }));
+protectTgRoute('PATCH',  '/me/settings',                         idem('PATCH /tg/me/settings', { category: 'profile.update' }));
+
+// ── Account delete (critical=true; logs missing key for monitoring) ──────────
+protectTgRoute('DELETE', '/me/account',                          createIdempotencyMiddleware({ endpointKey: 'DELETE /tg/me/account', category: 'account.delete', critical: true }));
+// ─── /Wave 1 P0 protections ──────────────────────────────────────────────────
 
 /**
  * Attribution: when a user visits, mark their most recent lifecycle touch as "returned".
@@ -19826,6 +20032,10 @@ app.listen(PORT, () => {
   logger.info({ port: PORT }, 'API server listening');
   // Send startup alert to admins (best-effort)
   void sendAdminAlert(`🟢 <b>API started</b>\nPort: ${PORT}\nEnv: ${process.env.NODE_ENV ?? 'development'}`);
+
+  // Hourly cleanup of expired IdempotencyKey rows. No-op in tests (unless
+  // CLEANUP_JOB_IN_TEST=true) and skipped when SECURITY_CLEANUP_JOB_ENABLED=false.
+  startIdempotencyCleanupJob();
 
   // Ensure SantaGlobalConfig singleton exists.
   // This is idempotent — upsert preserves the existing santaEnabled value if already set.

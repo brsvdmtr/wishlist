@@ -21,7 +21,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 |------|-----------|
 | Understand the product | [ARCHITECTURE.md](./ARCHITECTURE.md) → [USER_FLOWS.md](./USER_FLOWS.md) |
 | Monetization / PRO / billing | [MONETIZATION.md](./MONETIZATION.md) → [SETTINGS_AND_PRIVACY.md](./SETTINGS_AND_PRIVACY.md) |
-| Backend / API work | [BACKEND_MAP.md](./BACKEND_MAP.md) → [API_REFERENCE.md](./API_REFERENCE.md) |
+| Backend / API work | [BACKEND_MAP.md](./BACKEND_MAP.md) → [API_REFERENCE.md](./API_REFERENCE.md) → [API_SECURITY.md](./API_SECURITY.md) |
 | Frontend / screens | [FRONTEND_MAP.md](./FRONTEND_MAP.md) |
 | Data model | [DATA_MODEL.md](./DATA_MODEL.md) → [ACCESS_MATRIX.md](./ACCESS_MATRIX.md) |
 | Server recovery | [MASTER_RESTORE_GUIDE.md](./MASTER_RESTORE_GUIDE.md) → [RECOVERY_RUNBOOK.md](./RECOVERY_RUNBOOK.md) |
@@ -46,6 +46,7 @@ WishBoard is a **Telegram Mini App** for managing wishlists. Users create and sh
 |-----|--------|---------------|
 | [BACKEND_MAP.md](./BACKEND_MAP.md) | primary | All API routes, middleware chain, helper functions, PLANS constant, cron jobs |
 | [API_REFERENCE.md](./API_REFERENCE.md) | primary | All endpoints by domain: auth, wishlists, items, billing, subscriptions, public |
+| [API_SECURITY.md](./API_SECURITY.md) | primary | Idempotency-Key, rate limits, IP throttle. Wave-1 protected endpoints, error codes, env flags, runbook |
 | [LINK_IMPORT.md](./LINK_IMPORT.md) | primary | URL import pipeline: domain adapters, browser extraction, caching, PRO gate |
 
 ### Frontend

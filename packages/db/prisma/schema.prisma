@@ -154,6 +154,16 @@ enum ReferralRewardStatus {
   REVOKED
 }
 
+// Lifecycle of an Idempotency-Key record:
+//   processing — handler is running (or crashed before completion); guarded by `lockedUntil`
+//   completed  — handler finished; replay returns the stored response
+//   failed     — handler returned 5xx; same key may retry once `lockedUntil` expires
+enum IdempotencyStatus {
+  processing
+  completed
+  failed
+}
+
 model User {
   id             String   @id @default(cuid())
   email          String?  @unique
@@ -1990,4 +2000,44 @@ model ReferralProgramConfig {
 
   updatedAt        DateTime @updatedAt
   updatedByAdminId String?
+}
+
+// Idempotency-Key store. One row per (key + actor + method + route-pattern).
+// On replay we compare requestHash; matches return stored responseStatus/responseBody,
+// mismatches return 409. Rows are TTL'd (default 24 h, billing endpoints 7 d) and
+// purged by an in-process cleanup job once expiresAt passes.
+//
+// `path` holds the route pattern (e.g. /tg/wishlists/:id/items), not the literal URL.
+// Literal IDs and query params are folded into requestHash so two reservations of
+// different items can't collide on the same key.
+//
+// `responseBody` is capped at ~64 KB; oversized responses are stored with body=null
+// and `responseTruncated=true`. Multipart endpoints opt out of replay and are stored
+// the same way (lock-only).
+model IdempotencyKey {
+  id                String            @id @default(cuid())
+  key               String
+  userId            String?
+  // Logical actor identity (tgActorHash UUID). Null for unauth callers — kept
+  // separate from `actorKey` so audits can tell auth from unauth at a glance.
+  actorHash         String?
+  // Dedup key — never null. Equals `actorHash` for auth'd users, `ip:<hash>`
+  // for unauth. Required because Prisma composite-unique whereUnique inputs
+  // can't carry nulls (Postgres treats NULLs as distinct, defeating dedup).
+  actorKey          String
+  method            String
+  path              String
+  requestHash       String
+  responseStatus    Int?
+  responseBody      Json?
+  responseTruncated Boolean           @default(false)
+  status            IdempotencyStatus
+  lockedUntil       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  expiresAt         DateTime
+
+  @@unique([key, actorKey, method, path])
+  @@index([expiresAt])
+  @@index([actorHash, createdAt])
 }

@@ -20,6 +20,14 @@ import { AppearanceSettings } from './screens/AppearanceSettings';
 import { CalendarRoot } from './screens/calendar/CalendarRoot';
 import { WishlistCardV21 } from './screens/WishlistCardV21';
 import { initSentry, captureException } from './sentry';
+import {
+  getOrCreateActionKey,
+  clearActionKey,
+  hashKeyForLog,
+  KEY_CLEAR_CODES,
+  SECURITY_TOAST_CODES,
+  CLIENT_BUG_CODES,
+} from './idempotency';
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM TYPES
@@ -5350,11 +5358,39 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     growTextarea(descTextareaRef.current);
   }, [editingDescription, descriptionText]);
 
-  const tgFetch = useCallback(async (path: string, init?: RequestInit & { timeoutMs?: number; _retried?: boolean }) => {
+  const tgFetch = useCallback(async (
+    path: string,
+    init?: RequestInit & {
+      timeoutMs?: number;
+      _retried?: boolean;
+      // Activates idempotency for state-changing methods.
+      //   string                → caller-controlled literal key (advanced)
+      //   { action }            → managed lifecycle: getOrCreateActionKey + auto-clear
+      //                           on success / on KEY_CLEAR_CODES error responses
+      // GET/HEAD/OPTIONS ignore this option entirely (no header sent).
+      idempotency?: string | { action: string };
+    },
+  ) => {
     const url = `${apiBase}${path}`;
     const fetchStart = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), init?.timeoutMs ?? 5000);
+
+    // Resolve idempotency key + remember the action so we can clear/keep the
+    // cached key based on the server's response code below.
+    const method = (init?.method || 'GET').toUpperCase();
+    const isStateChanging = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+    let idempotencyKey: string | undefined;
+    let managedAction: string | undefined;
+    if (isStateChanging && init?.idempotency != null) {
+      if (typeof init.idempotency === 'string') {
+        idempotencyKey = init.idempotency;
+      } else {
+        managedAction = init.idempotency.action;
+        idempotencyKey = getOrCreateActionKey(managedAction);
+      }
+    }
+
     try {
       const res = await fetch(url, {
         ...init,
@@ -5363,6 +5399,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         headers: {
           'Content-Type': 'application/json',
           ...(initDataRef.current ? { 'X-TG-INIT-DATA': initDataRef.current } : {}),
+          ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
           ...(init?.headers as Record<string, string> | undefined),
         },
       });
@@ -5377,12 +5414,75 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         err.kind = json.code === 'MAINTENANCE' ? 'maintenance' : 'unavailable';
         throw err;
       }
-      // Auto-retry: GET requests that got 5xx — one retry after 1s delay
-      const method = (init?.method || 'GET').toUpperCase();
+      // Auto-retry: GET requests that got 5xx — one retry after 1s delay.
+      // Note: we never auto-retry POST/PATCH/DELETE — the caller decides, and
+      // idempotency keys only protect manual retries (button mash, pull-to-refresh).
       if (res.status >= 500 && method === 'GET' && !init?._retried) {
         await new Promise(r => setTimeout(r, 1000));
         return tgFetch(path, { ...init, _retried: true });
       }
+
+      // Centralised idempotency / rate-limit response handling.
+      // We peek the body via res.clone() so the caller can still .json() it.
+      // Only applied for state-changing methods that opted into idempotency
+      // OR that hit one of the ambient limiter responses (429, etc).
+      if (res.status >= 400 && (isStateChanging || res.status === 429)) {
+        let errBody: { error?: string; retryAfterSec?: number } | null = null;
+        try {
+          errBody = await res.clone().json();
+        } catch { /* not JSON, skip */ }
+        const code = errBody?.error;
+        if (code) {
+          const keyHash = idempotencyKey ? hashKeyForLog(idempotencyKey) : undefined;
+
+          // Clear/keep the cached action key per code.
+          if (managedAction && KEY_CLEAR_CODES.has(code)) {
+            clearActionKey(managedAction);
+          }
+
+          // Centralised toast — only for codes whose meaning the caller can
+          // NOT convey with its own generic "ошибка попробуй ещё" toast.
+          // Specifically: IDEMPOTENCY_REQUEST_IN_PROGRESS — the action IS
+          // running, not a real error; a generic "ошибка" would mislead.
+          // For RATE_LIMITED / IP_THROTTLED / other IDEMPOTENCY_* codes we
+          // stay silent here so callers' existing `!res.ok` branch shows
+          // their own message without duplication. Callers that want the
+          // precise wording ("Подожди 60с") can opt in by reading
+          // (res as any).__securityCode in their error branch.
+          if (code === 'IDEMPOTENCY_REQUEST_IN_PROGRESS') {
+            pushToast(t('error_action_already_processing', locale), 'info');
+          }
+          // Tag the response so callers that want code-specific behaviour
+          // can branch on it instead of double-toasting.
+          if (SECURITY_TOAST_CODES.has(code)) {
+            (res as { __securityCode?: string }).__securityCode = code;
+          }
+
+          // Telemetry — separate streams so dashboards don't conflate
+          // server-side throttling with client-side bugs.
+          if (code === 'RATE_LIMITED' || code === 'IP_THROTTLED') {
+            trackEvent('miniapp.rate_limited', {
+              path, code, retryAfterSec: errBody?.retryAfterSec ?? null,
+              action: managedAction ?? null,
+            });
+          } else if (CLIENT_BUG_CODES.has(code)) {
+            trackEvent('miniapp.idempotency_error', {
+              path, code, action: managedAction ?? null, keyHash: keyHash ?? null,
+            });
+          } else if (code.startsWith('IDEMPOTENCY_')) {
+            trackEvent('miniapp.action_retryable_error', {
+              path, code, action: managedAction ?? null, keyHash: keyHash ?? null,
+            });
+          }
+        }
+      }
+
+      // Success path: drop the cached action key so the next user attempt
+      // mints a fresh one. Only when the operation was actually accepted.
+      if (managedAction && res.ok) {
+        clearActionKey(managedAction);
+      }
+
       return res;
     } catch (err) {
       clearTimeout(timer);
@@ -5399,7 +5499,6 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       });
 
       // Auto-retry: GET requests that failed with network error/timeout — one retry after 1s delay
-      const method = (init?.method || 'GET').toUpperCase();
       if (method === 'GET' && !init?._retried && !hasKind) {
         await new Promise(r => setTimeout(r, 1000));
         return tgFetch(path, { ...init, _retried: true });
@@ -5412,7 +5511,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       wrapped.kind = 'unavailable';
       throw wrapped;
     }
-  }, [apiBase, trackEvent]);
+  }, [apiBase, trackEvent, pushToast, locale]);
 
   // v2.1 ThemeProvider ↔ backend bridge.
   // (a) Mirror server-stored appearance into the runtime theme context (once).
@@ -5677,6 +5776,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/onboarding/start', {
         method: 'POST',
         body: JSON.stringify({ onboardingKey: 'hello_activation', entryPoint }),
+        idempotency: { action: 'onboarding.start' },
       });
 
       if (res.status === 409) {
@@ -5724,6 +5824,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       await tgFetch('/tg/onboarding/dismiss', {
         method: 'POST',
         body: JSON.stringify({ onboardingKey: 'hello_activation' }),
+        idempotency: { action: 'onboarding.dismiss' },
       });
       setOnboardingState(prev => prev ? { ...prev, status: 'DISMISSED' } : prev);
     } catch {
@@ -5737,6 +5838,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       await tgFetch('/tg/onboarding/complete', {
         method: 'POST',
         body: JSON.stringify({ onboardingKey: 'hello_activation', reason }),
+        idempotency: { action: 'onboarding.complete' },
       });
     } catch {
       // best-effort — don't block user
@@ -5760,6 +5862,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         method: 'POST',
         body: JSON.stringify({ url: url.trim(), onboardingStateId: onboardingState.id }),
         timeoutMs: 15_000, // URL parsing with Chromium can take 6-10s
+        idempotency: { action: 'onboarding.try-import' },
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };
@@ -5812,6 +5915,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           priceText: onboardingManualPrice.trim() || undefined,
           onboardingStateId: onboardingState.id,
         }),
+        idempotency: { action: 'onboarding.manual-add' },
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };
@@ -5835,6 +5939,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/onboarding/catalog-select', {
         method: 'POST',
         body: JSON.stringify({ catalogKeys: onboardingCatalogSelected, onboardingStateId: onboardingState.id }),
+        idempotency: { action: 'onboarding.catalog-select' },
       });
       if (res.ok) {
         const json = await res.json().catch(() => null) as { catalogItemIds?: string[] } | null;
@@ -5863,6 +5968,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           step,
           ...(acquisitionPath ? { acquisitionPath } : {}),
         }),
+        idempotency: { action: `onboarding.update-step:${step}` },
       });
     } catch { /* silent */ }
   }, [onboardingState, tgFetch]);
@@ -5875,6 +5981,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/onboarding/create-wishlist', {
         method: 'POST',
         body: JSON.stringify({ title: title.trim(), onboardingStateId: onboardingState.id }),
+        idempotency: { action: 'onboarding.create-wishlist' },
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };
@@ -5942,7 +6049,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setPublicProfileSubInFlight(true);
     setPublicProfileSubscribed(true); // optimistic
     try {
-      const r = await tgFetch(`/tg/profiles/${encodeURIComponent(username)}/subscribe`, { method: 'POST' });
+      const r = await tgFetch(`/tg/profiles/${encodeURIComponent(username)}/subscribe`, {
+        method: 'POST',
+        idempotency: { action: `profile.subscribe:${username}` },
+      });
       if (!r.ok) {
         setPublicProfileSubscribed(false);
         if (r.status === 403) {
@@ -5967,7 +6077,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setPublicProfileSubInFlight(true);
     setPublicProfileSubscribed(false); // optimistic
     try {
-      const r = await tgFetch(`/tg/profiles/${encodeURIComponent(username)}/subscribe`, { method: 'DELETE' });
+      const r = await tgFetch(`/tg/profiles/${encodeURIComponent(username)}/subscribe`, {
+        method: 'DELETE',
+        idempotency: { action: `profile.unsubscribe:${username}` },
+      });
       if (!r.ok) {
         setPublicProfileSubscribed(true);
         pushToast(t('error_generic', locale), 'error');
@@ -5999,7 +6112,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleSubscribe = useCallback(async (wishlistId: string) => {
     setSubscribing(true);
     try {
-      const res = await tgFetch(`/tg/wishlists/${wishlistId}/subscribe`, { method: 'POST' });
+      const res = await tgFetch(`/tg/wishlists/${wishlistId}/subscribe`, {
+        method: 'POST',
+        idempotency: { action: `wishlist.subscribe:${wishlistId}` },
+      });
       if (res.status === 402) {
         showUpsell('subscription_limit', { auto: true });
         return;
@@ -6027,7 +6143,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleUnsubscribe = useCallback(async (wishlistId: string) => {
     setSubscribing(true);
     try {
-      const res = await tgFetch(`/tg/wishlists/${wishlistId}/subscribe`, { method: 'DELETE' });
+      const res = await tgFetch(`/tg/wishlists/${wishlistId}/subscribe`, {
+        method: 'DELETE',
+        idempotency: { action: `wishlist.unsubscribe:${wishlistId}` },
+      });
       if (!res.ok) return;
       setGuestSubId(null);
       setIsSubscribed(false);
@@ -6201,6 +6320,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
+        idempotency: { action: 'me.showcase' },
       });
       if (res.status === 403) {
         showUpsell('showcase');
@@ -6237,11 +6357,20 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     try {
       const formData = new FormData();
       formData.append('cover', file);
+      // Multipart upload — bypasses tgFetch (FormData needs no Content-Type
+      // header). Idempotency-Key is added manually so a re-tap of the upload
+      // button while the request is in flight gets 409 IN_PROGRESS instead of
+      // double-uploading. Server-side: noResponseReplay=true on this endpoint.
+      const idemKey = getOrCreateActionKey('me.cover.upload');
       const res = await fetch(`${apiBase}/tg/me/showcase/cover`, {
         method: 'POST',
-        headers: { 'X-TG-INIT-DATA': initDataRef.current },
+        headers: {
+          'X-TG-INIT-DATA': initDataRef.current,
+          'Idempotency-Key': idemKey,
+        },
         body: formData,
       });
+      if (res.ok) clearActionKey('me.cover.upload');
       if (res.status === 403) {
         showUpsell('showcase');
         return;
@@ -6260,7 +6389,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   /** Remove showcase cover (PRO-gated) */
   const removeShowcaseCover = useCallback(async () => {
     try {
-      const res = await tgFetch('/tg/me/showcase/cover', { method: 'DELETE' });
+      const res = await tgFetch('/tg/me/showcase/cover', {
+        method: 'DELETE',
+        idempotency: { action: 'me.cover.delete' },
+      });
       if (!res.ok) return;
       setShowcaseData((prev) => prev ? { ...prev, coverUrl: null } : prev);
     } catch {
@@ -6310,11 +6442,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     try {
       const formData = new FormData();
       formData.append('avatar', file);
+      // Multipart — see showcase/cover note above.
+      const idemKey = getOrCreateActionKey('me.avatar.upload');
       const res = await fetch(`${apiBase}/tg/me/profile/avatar`, {
         method: 'POST',
-        headers: { 'X-TG-INIT-DATA': initDataRef.current },
+        headers: {
+          'X-TG-INIT-DATA': initDataRef.current,
+          'Idempotency-Key': idemKey,
+        },
         body: formData,
       });
+      if (res.ok) clearActionKey('me.avatar.upload');
       if (!res.ok) throw new Error();
       const data = await res.json() as { avatarUrl: string; avatarThumbUrl: string; avatarUpdatedAt: string };
       setProfileData(prev => prev ? { ...prev, avatarUrl: data.avatarUrl, avatarThumbUrl: data.avatarThumbUrl, avatarUpdatedAt: data.avatarUpdatedAt } : prev);
@@ -6330,10 +6468,15 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setAvatarUploading(true);
     setShowAvatarSheet(false);
     try {
+      const idemKey = getOrCreateActionKey('me.avatar.delete');
       const res = await fetch(`${apiBase}/tg/me/profile/avatar`, {
         method: 'DELETE',
-        headers: { 'X-TG-INIT-DATA': initDataRef.current },
+        headers: {
+          'X-TG-INIT-DATA': initDataRef.current,
+          'Idempotency-Key': idemKey,
+        },
       });
+      if (res.ok) clearActionKey('me.avatar.delete');
       if (!res.ok) throw new Error();
       setProfileData(prev => prev ? { ...prev, avatarUrl: null, avatarThumbUrl: null, avatarUpdatedAt: null } : prev);
       pushToast(t('profile_avatar_removed', locale), 'success');
@@ -6368,6 +6511,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/me/settings', {
         method: 'PATCH',
         body: JSON.stringify(patch),
+        idempotency: { action: 'me.settings' },
       });
       if (!res.ok) throw new Error();
       const data = await res.json() as SettingsData;
@@ -6521,6 +6665,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/items/${placementsForItem.id}/placements`, {
         method: 'POST',
         body: JSON.stringify({ wishlistId: targetWishlistId }),
+        idempotency: { action: `item.placement.add:${placementsForItem.id}:${targetWishlistId}` },
       });
       if (res.status === 402) {
         setPlacementsList(snapshot);
@@ -6560,7 +6705,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     // Optimistic remove — instantly move row between groups, no network wait.
     setPlacementsList(prev => prev.filter(p => p.wishlistId !== wishlistId));
     try {
-      const res = await tgFetch(`/tg/items/${placementsForItem.id}/placements/${wishlistId}`, { method: 'DELETE' });
+      const res = await tgFetch(`/tg/items/${placementsForItem.id}/placements/${wishlistId}`, {
+        method: 'DELETE',
+        idempotency: { action: `item.placement.remove:${placementsForItem.id}:${wishlistId}` },
+      });
       if (res.status === 409) {
         setPlacementsList(snapshot);
         pushToast(locale === 'ru'
@@ -6592,7 +6740,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   }, [placementsForItem, placementsList, tgFetch, pushToast, locale, currentWl, loadItems]);
 
   const handleArchiveDraft = useCallback(async (item: Item) => {
-    const res = await tgFetch(`/tg/items/${item.id}`, { method: 'DELETE' });
+    const res = await tgFetch(`/tg/items/${item.id}`, {
+      method: 'DELETE',
+      idempotency: { action: `item.delete:${item.id}` },
+    });
     if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
     setDraftsItems(prev => prev.filter(i => i.id !== item.id));
     setDraftsCount(prev => Math.max(0, prev - 1));
@@ -6606,6 +6757,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/items/bulk-move', {
         method: 'POST',
         body: JSON.stringify({ itemIds: draftsSelected, targetWishlistId }),
+        idempotency: { action: `item.bulk-move:${[...draftsSelected].sort().join(',')}:${targetWishlistId}` },
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
@@ -6639,6 +6791,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/items/bulk-delete', {
         method: 'POST',
         body: JSON.stringify({ itemIds: draftsSelected }),
+        idempotency: { action: `item.bulk-delete:${[...draftsSelected].sort().join(',')}` },
       });
       if (!res.ok) {
         pushToast(t('toast_error_generic', locale), 'error');
@@ -6763,6 +6916,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/items/${viewingItem.id}/comments`, {
         method: 'POST',
         body: JSON.stringify(isReply ? { text, parentCommentId } : { text }),
+        idempotency: { action: `comment.add:${viewingItem.id}` },
       });
       if (!res.ok) {
         if (res.status === 402) {
@@ -6802,7 +6956,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const handleDeleteComment = useCallback(async (commentId: string) => {
     if (!viewingItem) return;
-    const res = await tgFetch(`/tg/items/${viewingItem.id}/comments/${commentId}`, { method: 'DELETE' });
+    const res = await tgFetch(`/tg/items/${viewingItem.id}/comments/${commentId}`, {
+      method: 'DELETE',
+      idempotency: { action: `comment.delete:${commentId}` },
+    });
     if (res.ok) {
       setComments(prev => prev.filter(c => c.id !== commentId));
     } else {
@@ -6863,6 +7020,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/items/${viewingItem.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ description: desc }),
+        idempotency: { action: `item.update:${viewingItem.id}:description` },
       });
       if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
       const updated = { ...viewingItem, description: desc };
@@ -6884,6 +7042,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan }),
+        idempotency: { action: `billing.pro.checkout:${plan}` },
       });
       if (res.status === 409) {
         pushToast(t('toast_already_pro', locale), 'success');
@@ -6902,7 +7061,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         setCheckoutLoading(false);
         // Sync latest state
         try {
-          const syncRes = await tgFetch('/tg/billing/pro/sync', { method: 'POST' });
+          const syncRes = await tgFetch('/tg/billing/pro/sync', {
+            method: 'POST',
+            idempotency: { action: 'billing.pro.sync' },
+          });
           if (syncRes.ok) {
             const d = await syncRes.json() as { plan: PlanInfo; subscription: SubscriptionInfo };
             setPlanInfo(d.plan);
@@ -6931,7 +7093,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           for (let attempt = 0; attempt < 6; attempt++) {
             if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
             try {
-              const syncRes = await tgFetch('/tg/billing/pro/sync', { method: 'POST' });
+              const syncRes = await tgFetch('/tg/billing/pro/sync', {
+                method: 'POST',
+                idempotency: { action: 'billing.pro.sync' },
+              });
               if (syncRes.ok) {
                 syncData = await syncRes.json() as { plan: PlanInfo; subscription: SubscriptionInfo };
                 if (syncData.plan.code === 'PRO') break;
@@ -6957,7 +7122,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             // Schedule a delayed retry
             setTimeout(async () => {
               try {
-                const r = await tgFetch('/tg/billing/pro/sync', { method: 'POST' });
+                const r = await tgFetch('/tg/billing/pro/sync', {
+                  method: 'POST',
+                  idempotency: { action: 'billing.pro.sync' },
+                });
                 if (r.ok) {
                   const d = await r.json() as { plan: PlanInfo; subscription: SubscriptionInfo };
                   setPlanInfo(d.plan);
@@ -6985,7 +7153,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleCancelSub = useCallback(async () => {
     setCancelSubLoading(true);
     try {
-      const res = await tgFetch('/tg/billing/subscription/cancel', { method: 'POST' });
+      const res = await tgFetch('/tg/billing/subscription/cancel', {
+        method: 'POST',
+        idempotency: { action: 'billing.subscription.cancel' },
+      });
       if (res.ok) {
         const data = await res.json() as { subscription: { id: string; status: string; periodEnd: string; cancelAtPeriodEnd: boolean; cancelledAt: string | null } };
         setSubscription({
@@ -7015,7 +7186,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleReactivateSub = useCallback(async () => {
     setCancelSubLoading(true);
     try {
-      const res = await tgFetch('/tg/billing/subscription/reactivate', { method: 'POST' });
+      const res = await tgFetch('/tg/billing/subscription/reactivate', {
+        method: 'POST',
+        idempotency: { action: 'billing.subscription.reactivate' },
+      });
       if (res.ok) {
         const data = await res.json() as { subscription: { id: string; status: string; periodEnd: string; cancelAtPeriodEnd: boolean; cancelledAt: string | null } };
         setSubscription({
@@ -7054,6 +7228,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         method: 'POST',
         body: JSON.stringify({ skuCode, targetId }),
         timeoutMs: 15000,
+        idempotency: { action: `billing.addon.checkout:${skuCode}:${targetId ?? '_'}` },
       });
       if (res.status === 409) {
         let errCode = 'cap_reached';
@@ -7128,7 +7303,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           for (let attempt = 0; attempt < 6; attempt++) {
             if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
             try {
-              const syncRes = await tgFetch('/tg/billing/addon/sync', { method: 'POST' });
+              const syncRes = await tgFetch('/tg/billing/addon/sync', {
+                method: 'POST',
+                idempotency: { action: 'billing.addon.sync' },
+              });
               if (syncRes.ok) {
                 const d = await syncRes.json() as { addOns: AddOnsInfo; credits: CreditsInfo; skus: SkuInfo[]; reservationPro?: boolean };
                 setAddOns(d.addOns);
@@ -8642,6 +8820,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/wishlists', {
         method: 'POST',
         body: JSON.stringify({ title: wlTitle.trim(), deadline: wlDeadline ? new Date(wlDeadline).toISOString() : null }),
+        idempotency: { action: 'wishlist.create' },
       });
       if (res.status === 402) {
         if (planInfo.code === 'FREE') {
@@ -8716,6 +8895,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/wishlists/reorder', {
         method: 'POST',
         body: JSON.stringify({ orderedIds: reorderList.map(w => w.id) }),
+        idempotency: { action: `wishlist.reorder:${reorderList.map(w => w.id).join(',')}` },
       });
       if (!res.ok) { pushToast(t('wl_reorder_error', locale), 'error'); return; }
       setWishlists([...reorderList]);
@@ -9287,6 +9467,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, itemIds: [...curatedSelectedIds] }),
+        idempotency: { action: `selection.create:${currentWl.id}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -9306,7 +9487,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const deactivateCuratedSelection = useCallback(async (selectionId: string) => {
     try {
-      const res = await tgFetch(`/tg/selections/${selectionId}`, { method: 'DELETE' });
+      const res = await tgFetch(`/tg/selections/${selectionId}`, {
+        method: 'DELETE',
+        idempotency: { action: `selection.delete:${selectionId}` },
+      });
       if (res.ok) {
         setShowCuratedSuccess(false);
         setCuratedResult(null);
@@ -9320,7 +9504,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     setCuratedSubscribing(true);
     try {
       const method = curatedViewData.isSubscribed ? 'DELETE' : 'POST';
-      const res = await tgFetch(`/tg/selections/${curatedViewData.id}/subscribe`, { method });
+      const res = await tgFetch(`/tg/selections/${curatedViewData.id}/subscribe`, {
+        method,
+        idempotency: { action: `selection.${method === 'POST' ? 'subscribe' : 'unsubscribe'}:${curatedViewData.id}` },
+      });
       if (res.ok) {
         const newSubscribed = !curatedViewData.isSubscribed;
         setCuratedViewData(prev => prev ? { ...prev, isSubscribed: newSubscribed } : prev);
@@ -9350,11 +9537,17 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       let ok = false;
       if (linkMgmtDetailItem.type === 'selection') {
         const sel = linkMgmtDetailItem.data as LinkMgmtSelection;
-        const res = await tgFetch(`/tg/selections/${sel.id}`, { method: 'DELETE' });
+        const res = await tgFetch(`/tg/selections/${sel.id}`, {
+          method: 'DELETE',
+          idempotency: { action: `selection.delete:${sel.id}` },
+        });
         ok = res.ok;
       } else if (linkMgmtDetailItem.type === 'wishlist') {
         const wl = linkMgmtDetailItem.data as LinkMgmtWishlist;
-        const res = await tgFetch(`/tg/wishlists/${wl.id}/share-token`, { method: 'DELETE' });
+        const res = await tgFetch(`/tg/wishlists/${wl.id}/share-token`, {
+          method: 'DELETE',
+          idempotency: { action: `share.delete:${wl.id}` },
+        });
         ok = res.ok;
       } else if (linkMgmtDetailItem.type === 'profile') {
         await patchSettings({ privacy: { ...settingsData!.privacy, profileVisibility: 'NOBODY' } });
@@ -9390,6 +9583,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/wishlists/${currentWl.id}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
+        idempotency: { action: `wishlist.update:${currentWl.id}:rename` },
       });
       if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
       const json = await res.json() as { wishlist: { title: string; emoji: string | null } };
@@ -9539,7 +9733,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       };
 
       if (editingItem) {
-        const res = await tgFetch(`/tg/items/${editingItem.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        const res = await tgFetch(`/tg/items/${editingItem.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+          idempotency: { action: `item.update:${editingItem.id}` },
+        });
         if (!res.ok) { pushToast(t('toast_save_error', locale), 'error'); return; }
         const json = await res.json() as { item: Item };
         let finalItem = json.item;
@@ -9550,7 +9748,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           setPhotoUploading(false);
           if (photoUrl) finalItem = { ...finalItem, imageUrl: photoUrl };
         } else if (itemPhotoDeleted && editingItem.imageUrl) {
-          const delRes = await tgFetch(`/tg/items/${editingItem.id}/photo`, { method: 'DELETE' });
+          const delRes = await tgFetch(`/tg/items/${editingItem.id}/photo`, {
+            method: 'DELETE',
+            idempotency: { action: `item.photo.delete:${editingItem.id}` },
+          });
           if (delRes.ok) finalItem = { ...finalItem, imageUrl: null };
         }
 
@@ -9578,7 +9779,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         // currentWl is guaranteed non-null here: the early return above
         // (`if (!editingItem && !currentWl) return`) ensures this branch is only
         // reached when creating a new item, which requires currentWl to be set.
-        const res = await tgFetch(`/tg/wishlists/${currentWl!.id}/items`, { method: 'POST', body: JSON.stringify(body) });
+        const res = await tgFetch(`/tg/wishlists/${currentWl!.id}/items`, {
+          method: 'POST',
+          body: JSON.stringify(body),
+          idempotency: { action: `item.create:${currentWl!.id}` },
+        });
         if (res.status === 402) {
           if (planInfo.code === 'FREE') {
             showUpsell('item_limit', { auto: true, wishlistId: currentWl!.id });
@@ -9704,7 +9909,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleDeleteItem = async (item: Item) => {
     setLoading(true);
     try {
-      const res = await tgFetch(`/tg/items/${item.id}`, { method: 'DELETE' });
+      const res = await tgFetch(`/tg/items/${item.id}`, {
+        method: 'DELETE',
+        idempotency: { action: `item.delete:${item.id}` },
+      });
       if (!res.ok) { pushToast(t('toast_delete_error', locale), 'error'); return; }
 
       // Determine origin: drafts vs regular wishlist, then update the right state.
@@ -9768,7 +9976,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (!currentWl) return;
     setLoading(true);
     try {
-      const res = await tgFetch(`/tg/items/${item.id}/complete`, { method: 'POST' });
+      const res = await tgFetch(`/tg/items/${item.id}/complete`, {
+        method: 'POST',
+        idempotency: { action: `item.complete:${item.id}` },
+      });
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       setWishlists((prev) => prev.map((wl) => wl.id === currentWl.id ? { ...wl, itemCount: Math.max(0, wl.itemCount - 1) } : wl));
@@ -9783,7 +9994,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleRestoreItem = async (item: Item | GlobalArchiveItem) => {
     setLoading(true);
     try {
-      const res = await tgFetch(`/tg/items/${item.id}/restore`, { method: 'POST' });
+      const res = await tgFetch(`/tg/items/${item.id}/restore`, {
+        method: 'POST',
+        idempotency: { action: `item.restore:${item.id}` },
+      });
       if (!res.ok) { pushToast(t('toast_restore_error', locale), 'error'); return; }
       const json = await res.json() as { item: Item; wishlistId: string; wishlistTitle: string };
 
@@ -9820,6 +10034,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/items/bulk-restore', {
         method: 'POST',
         body: JSON.stringify({ itemIds: archiveSelected }),
+        idempotency: { action: `item.bulk-restore:${[...archiveSelected].sort().join(',')}` },
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
@@ -9865,6 +10080,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch('/tg/items/bulk-hard-delete', {
         method: 'POST',
         body: JSON.stringify({ itemIds: archiveSelected }),
+        idempotency: { action: `item.bulk-hard-delete:${[...archiveSelected].sort().join(',')}` },
       });
       if (!res.ok) {
         pushToast(t('toast_error_generic', locale), 'error');
@@ -9917,7 +10133,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (!currentWl) return;
     setArchivingWl(true);
     try {
-      const res = await tgFetch(`/tg/wishlists/${currentWl.id}/archive`, { method: 'POST' });
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}/archive`, {
+        method: 'POST',
+        idempotency: { action: `wishlist.archive:${currentWl.id}` },
+      });
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setWishlists((prev) => prev.filter((wl) => wl.id !== currentWl.id));
       setShowArchiveWlConfirm(false);
@@ -9947,7 +10166,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
     if (!currentWl || deletingWl) return;
     setDeletingWl(true);
     try {
-      const res = await tgFetch(`/tg/wishlists/${currentWl.id}`, { method: 'DELETE' });
+      const res = await tgFetch(`/tg/wishlists/${currentWl.id}`, {
+        method: 'DELETE',
+        idempotency: { action: `wishlist.delete:${currentWl.id}` },
+      });
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setWishlists((prev) => prev.filter((wl) => wl.id !== currentWl.id));
       setShowDeleteWl2(false);
@@ -9972,6 +10194,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/wishlists/${currentWl.id}/transfer-items`, {
         method: 'POST',
         body: JSON.stringify({ targetWishlistId: transferTargetId }),
+        idempotency: { action: `wishlist.transfer:${currentWl.id}:${transferTargetId}` },
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string; available?: number };
@@ -10015,6 +10238,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           allowSubscriptions: allowSubscriptions.toUpperCase(),
           commentPolicy: commentPolicy.toUpperCase(),
         }),
+        idempotency: { action: `wishlist.update:${currentWl.id}:privacy` },
       });
       if (res.status === 403) {
         const err = await res.json().catch(() => ({})) as { error?: string };
@@ -10051,6 +10275,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/items/${reservingItem.id}/reserve`, {
         method: 'POST',
         body: JSON.stringify({ displayName: guestName.trim() }),
+        idempotency: { action: `item.reserve:${reservingItem.id}` },
       });
       if (res.status === 409) { pushToast(t('toast_already_reserved', locale), 'error'); return; }
       if (res.status === 402) { pushToast(t('toast_max_participants', locale), 'error'); return; }
@@ -10072,7 +10297,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleUnreserve = async (item: GuestItem) => {
     setLoading(true);
     try {
-      const res = await tgFetch(`/tg/items/${item.id}/unreserve`, { method: 'POST', body: '{}' });
+      const res = await tgFetch(`/tg/items/${item.id}/unreserve`, {
+        method: 'POST',
+        body: '{}',
+        idempotency: { action: `item.unreserve:${item.id}` },
+      });
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       const updatedItem = { ...item, status: 'available' as const, reservedByDisplayName: null, reservedByActorHash: null };
       setGuestItems((prev) => prev.map((i) => i.id === item.id ? updatedItem : i));
@@ -10091,7 +10320,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleUnreserveFromReservations = async (item: ReservationItem) => {
     setLoading(true);
     try {
-      const res = await tgFetch(`/tg/items/${item.id}/unreserve`, { method: 'POST', body: '{}' });
+      const res = await tgFetch(`/tg/items/${item.id}/unreserve`, {
+        method: 'POST',
+        body: '{}',
+        idempotency: { action: `item.unreserve:${item.id}` },
+      });
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return; }
       setReservations((prev) => prev.filter((r) => r.id !== item.id));
       setReservationsCount((prev) => Math.max(0, prev - 1));
@@ -10124,6 +10357,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/items/${item.id}/secret-reserve`, {
         method: 'POST',
         body: JSON.stringify({ note: opts?.note ?? null }),
+        idempotency: { action: `item.secret-reserve:${item.id}` },
       });
       if (res.status === 403) {
         const err = await res.json().catch(() => ({ error: 'unknown' }));
@@ -10186,7 +10420,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleSecretReservationCancel = useCallback(async (sr: SecretReservationDTO) => {
     setSecretCancelling(true);
     try {
-      const res = await tgFetch(`/tg/secret-reservations/${sr.id}/cancel`, { method: 'POST', body: '{}' });
+      const res = await tgFetch(`/tg/secret-reservations/${sr.id}/cancel`, {
+        method: 'POST',
+        body: '{}',
+        idempotency: { action: `secret-res.cancel:${sr.id}` },
+      });
       // 409 "Not active" means already cancelled — idempotent success path (clears UI)
       if (!res.ok && res.status !== 409) { pushToast(t('toast_error_generic', locale), 'error'); return false; }
       setSecretReservations((prev) => prev.filter((r) => r.id !== sr.id));
@@ -10219,7 +10457,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const handleSecretReservationAck = useCallback(async (sr: SecretReservationDTO) => {
     try {
-      const res = await tgFetch(`/tg/secret-reservations/${sr.id}/acknowledge`, { method: 'POST', body: '{}' });
+      const res = await tgFetch(`/tg/secret-reservations/${sr.id}/acknowledge`, {
+        method: 'POST',
+        body: '{}',
+        idempotency: { action: `secret-res.ack:${sr.id}` },
+      });
       if (!res.ok) { pushToast(t('toast_error_generic', locale), 'error'); return false; }
       const json = await res.json() as { snapshot: SecretReservationSnapshot; updatesAcknowledgedAt: string };
       // Update list entry and currently-viewing entry
@@ -10242,7 +10484,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
   const handleSecretReservationPromote = useCallback(async (sr: SecretReservationDTO) => {
     setSecretPromoting(true);
     try {
-      const res = await tgFetch(`/tg/secret-reservations/${sr.id}/promote`, { method: 'POST', body: '{}' });
+      const res = await tgFetch(`/tg/secret-reservations/${sr.id}/promote`, {
+        method: 'POST',
+        body: '{}',
+        idempotency: { action: `secret-res.promote:${sr.id}` },
+      });
       if (res.status === 409) {
         // Another user publicly reserved first
         pushToast(t('sr_promote_conflict_title', locale), 'error');
@@ -10367,6 +10613,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/reservations/${itemId}/meta`, {
         method: 'PATCH',
         body: JSON.stringify(data),
+        idempotency: { action: `reservation.meta:${itemId}` },
       });
       if (res.ok) {
         const json = await res.json() as { meta: ReservationMeta };
@@ -10408,6 +10655,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
       const res = await tgFetch(`/tg/reservations/${itemId}/reminder`, {
         method: 'POST',
         body: JSON.stringify({ reminderDates }),
+        idempotency: { action: `reservation.reminder.set:${itemId}:${reminderDates.join(',')}` },
       });
       if (res.ok) {
         const json = await res.json() as { reminderAt: string | null; reminderDates: string[] | null };
@@ -10425,7 +10673,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
 
   const handleResReminderRemove = async (itemId: string) => {
     try {
-      await tgFetch(`/tg/reservations/${itemId}/reminder`, { method: 'DELETE' });
+      await tgFetch(`/tg/reservations/${itemId}/reminder`, {
+        method: 'DELETE',
+        idempotency: { action: `reservation.reminder.delete:${itemId}` },
+      });
       setReservations((prev) => prev.map((r) => r.id === itemId ? {
         ...r,
         meta: r.meta ? { ...r.meta, reminderAt: null, reminderSent: false, reminderDates: null } : r.meta,
@@ -13562,7 +13813,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                         onExtend={item.meta?.isSmartRes && item.meta?.canExtend ? () => {
                           void (async () => {
                             try {
-                              const r = await tgFetch(`/tg/items/${item.id}/extend-reservation`, { method: 'POST' });
+                              const r = await tgFetch(`/tg/items/${item.id}/extend-reservation`, {
+                                method: 'POST',
+                                idempotency: { action: `item.extend-reservation:${item.id}` },
+                              });
                               if (r.ok) {
                                 const data = await r.json();
                                 setReservations(prev => prev.map(ri => ri.id === item.id ? { ...ri, meta: ri.meta ? { ...ri.meta, expiresAt: data.expiresAt, extensionCount: data.extensionCount, canExtend: data.canExtend, isExpiringSoon: data.isExpiringSoon, isExpired: data.isExpired } : ri.meta } : ri));
@@ -17853,6 +18107,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           const res = await tgFetch('/tg/me/profile', {
                             method: 'PATCH',
                             body: JSON.stringify({ hideYear: !profileData.hideYear }),
+                            idempotency: { action: 'me.profile.hide-year' },
                           });
                           if (res.ok) {
                             setProfileData(prev => prev ? { ...prev, hideYear: !prev.hideYear } : prev);
@@ -17887,6 +18142,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           await tgFetch('/tg/me/profile', {
                             method: 'PATCH',
                             body: JSON.stringify({ avatarPublic: next }),
+                            idempotency: { action: 'me.profile.avatar-public' },
                           });
                         } catch {
                           // Revert on error
@@ -20273,7 +20529,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 if (hasReserved && !confirm(t('bulk_confirm_delete_reserved', locale))) return;
                 setBulkActionLoading(true);
                 try {
-                  const r = await tgFetch('/tg/items/bulk-delete', { method: 'POST', body: JSON.stringify({ itemIds: ids }) });
+                  const r = await tgFetch('/tg/items/bulk-delete', {
+                    method: 'POST',
+                    body: JSON.stringify({ itemIds: ids }),
+                    idempotency: { action: `item.bulk-delete:${[...ids].sort().join(',')}` },
+                  });
                   const data = await r.json() as any;
                   pushToast(t('bulk_success_delete', locale, { count: data.deleted ?? ids.length }), 'success');
                   setItems(prev => prev.filter(i => !ids.includes(i.id)));
@@ -20290,7 +20550,11 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 const ids = [...bulkSelectedIds];
                 setBulkActionLoading(true);
                 try {
-                  const r = await tgFetch('/tg/items/bulk-archive', { method: 'POST', body: JSON.stringify({ itemIds: ids }) });
+                  const r = await tgFetch('/tg/items/bulk-archive', {
+                    method: 'POST',
+                    body: JSON.stringify({ itemIds: ids }),
+                    idempotency: { action: `item.bulk-archive:${[...ids].sort().join(',')}` },
+                  });
                   const data = await r.json() as any;
                   if (data.failureCount > 0) pushToast(t('bulk_partial', locale, { success: data.successCount, total: ids.length }), 'info');
                   else pushToast(t('bulk_success_archive', locale, { count: data.successCount }), 'success');
@@ -20642,17 +20906,26 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
         );
         const buyClick = async () => {
           try {
-            const r = await tgFetch('/tg/billing/gift-notes/checkout', { method: 'POST' });
+            const r = await tgFetch('/tg/billing/gift-notes/checkout', {
+              method: 'POST',
+              idempotency: { action: 'billing.gift-notes.checkout' },
+            });
             if (r.ok) {
               const d = await r.json() as { invoiceUrl?: string; alreadyUnlocked?: boolean };
               if (d.alreadyUnlocked) {
-                const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
+                const sr = await tgFetch('/tg/billing/gift-notes/sync', {
+                  method: 'POST',
+                  idempotency: { action: 'billing.gift-notes.sync' },
+                });
                 if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
                 setScreen('gift-notes');
               } else if (d.invoiceUrl) {
                 try { window.Telegram?.WebApp?.openInvoice?.(d.invoiceUrl, async (status: string) => {
                   if (status === 'paid') {
-                    const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
+                    const sr = await tgFetch('/tg/billing/gift-notes/sync', {
+                      method: 'POST',
+                      idempotency: { action: 'billing.gift-notes.sync' },
+                    });
                     if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
                     pushToast(t('gn_access_unlocked', locale), 'success');
                     setGnLoading(true);
@@ -24689,6 +24962,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     bio: editProfileBio.trim() || null,
                     birthday: editProfileBirthday || null,
                   }),
+                  idempotency: { action: 'me.profile.save' },
                 });
                 if (!res.ok) {
                   const body = await res.json().catch(() => ({})) as { error?: string };
@@ -24806,7 +25080,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             style={{ marginTop: 20 }}
             onClick={async () => {
               try {
-                const res = await tgFetch('/tg/me/account', { method: 'DELETE' });
+                const res = await tgFetch('/tg/me/account', {
+                  method: 'DELETE',
+                  idempotency: { action: 'me.account.delete' },
+                });
                 if (res.ok) {
                   try { window.Telegram?.WebApp?.close?.(); } catch { /* ok */ }
                 } else {
@@ -28375,7 +28652,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
           entitlement={gnAccess}
           onEntitlementMaybeChanged={async () => {
             try {
-              const sr = await tgFetch('/tg/billing/gift-notes/sync', { method: 'POST' });
+              const sr = await tgFetch('/tg/billing/gift-notes/sync', {
+                method: 'POST',
+                idempotency: { action: 'billing.gift-notes.sync' },
+              });
               if (sr.ok) { const sd = await sr.json() as { giftNotes: typeof gnAccess }; setGnAccess(sd.giftNotes); }
             } catch { /* ignore */ }
           }}
@@ -28881,6 +29161,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       displayName: tgUser?.first_name,
                       myAmount: ggMyAmount ? Number(ggMyAmount) : 0,
                     }),
+                    idempotency: { action: `gg.create:${groupGiftCreateItemId}` },
                   });
                   if (!r.ok) {
                     const err = await r.json().catch(() => ({})) as { error?: string };
@@ -29036,6 +29317,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           const r = await tgFetch('/tg/group-gifts/' + gg.id + '/amount', {
                             method: 'PATCH',
                             body: JSON.stringify({ amount: Number(newAmt) || 0 }),
+                            idempotency: { action: `gg.amount:${gg.id}` },
                           });
                           if (r.ok) {
                             const updated = await r.json() as GroupGiftData;
@@ -29130,6 +29412,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                           const r = await tgFetch('/tg/group-gifts/' + gg.id + '/pinned', {
                             method: 'PATCH',
                             body: JSON.stringify({ pinnedInfo: newPinned }),
+                            idempotency: { action: `gg.pinned:${gg.id}` },
                           });
                           if (r.ok) {
                             setGroupGiftData(prev => prev ? { ...prev, pinnedInfo: newPinned } : prev);
@@ -29162,7 +29445,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                     if (!confirm(t('gg_complete_confirm', locale))) return;
                     void (async () => {
                       try {
-                        const r = await tgFetch('/tg/group-gifts/' + gg.id + '/complete', { method: 'POST' });
+                        const r = await tgFetch('/tg/group-gifts/' + gg.id + '/complete', {
+                          method: 'POST',
+                          idempotency: { action: `gg.complete:${gg.id}` },
+                        });
                         if (r.ok) {
                           setGroupGiftData(prev => prev ? { ...prev, status: 'COMPLETED' } : prev);
                           pushToast(t('gg_toast_completed', locale), 'success');
@@ -29177,7 +29463,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                   if (!confirm(t('gg_cancel_confirm', locale))) return;
                   void (async () => {
                     try {
-                      const r = await tgFetch('/tg/group-gifts/' + gg.id + '/cancel', { method: 'POST' });
+                      const r = await tgFetch('/tg/group-gifts/' + gg.id + '/cancel', {
+                        method: 'POST',
+                        idempotency: { action: `gg.cancel:${gg.id}` },
+                      });
                       if (r.ok) {
                         setGroupGiftData(null);
                         pushToast(t('gg_toast_cancelled', locale), 'info');
@@ -29200,7 +29489,10 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 if (!confirm(t('gg_leave_confirm', locale))) return;
                 void (async () => {
                   try {
-                    const r = await tgFetch('/tg/group-gifts/' + gg.id + '/leave', { method: 'POST' });
+                    const r = await tgFetch('/tg/group-gifts/' + gg.id + '/leave', {
+                      method: 'POST',
+                      idempotency: { action: `gg.leave:${gg.id}` },
+                    });
                     if (r.ok) {
                       setGroupGiftData(null);
                       pushToast(t('gg_toast_left', locale), 'info');
@@ -29391,6 +29683,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                       amount: Number(joinAmt) || 0,
                       displayName: tgUser?.first_name,
                     }),
+                    idempotency: { action: `gg.join:${gg.id}` },
                   });
                   if (r.status === 409) {
                     const updated = await (await tgFetch('/tg/group-gifts/' + gg.id)).json() as GroupGiftData;
@@ -29585,6 +29878,7 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
             const r = await tgFetch('/tg/group-gifts/' + gg.id + '/messages', {
               method: 'POST',
               body: JSON.stringify({ text: chatMsg.trim() }),
+              idempotency: { action: `gg.message:${gg.id}` },
             });
             if (r.ok) {
               const msg = await r.json() as (typeof groupGiftMessages)[0];
@@ -31008,7 +31302,7 @@ function ReadySharePromptSheet({ data, locale, tgUser, tgFetch, buildTgDeepLink,
   data: { wishlistId: string; wishlistTitle: string; itemsCount: number };
   locale: Locale;
   tgUser: TgUser | null;
-  tgFetch: (path: string, opts?: RequestInit) => Promise<Response>;
+  tgFetch: (path: string, opts?: RequestInit & { idempotency?: string | { action: string } }) => Promise<Response>;
   buildTgDeepLink: (payload?: string) => string | null;
   trackEvent: (event: string, props?: Record<string, unknown>) => void;
   onClose: () => void;
@@ -31029,7 +31323,10 @@ function ReadySharePromptSheet({ data, locale, tgUser, tgFetch, buildTgDeepLink,
     let cancelled = false;
     (async () => {
       try {
-        const r = await tgFetch(`/tg/wishlists/${data.wishlistId}/share-token`, { method: 'POST' });
+        const r = await tgFetch(`/tg/wishlists/${data.wishlistId}/share-token`, {
+          method: 'POST',
+          idempotency: { action: `share.create:${data.wishlistId}` },
+        });
         if (!cancelled && r.ok) {
           const d = await r.json() as { shareToken: string };
           setShareToken(d.shareToken);
@@ -31129,7 +31426,7 @@ function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, build
   shownRef: React.MutableRefObject<boolean>;
   locale: Locale;
   tgUser: TgUser | null;
-  tgFetch: (path: string, opts?: RequestInit) => Promise<Response>;
+  tgFetch: (path: string, opts?: RequestInit & { idempotency?: string | { action: string } }) => Promise<Response>;
   buildTgDeepLink: (payload?: string) => string | null;
   trackEvent: (event: string, props?: Record<string, unknown>) => void;
   onSkip: () => void;
@@ -31150,7 +31447,10 @@ function FirstSharePromptScreen({ data, shownRef, locale, tgUser, tgFetch, build
     let cancelled = false;
     (async () => {
       try {
-        const r = await tgFetch(`/tg/wishlists/${data.wishlistId}/share-token`, { method: 'POST' });
+        const r = await tgFetch(`/tg/wishlists/${data.wishlistId}/share-token`, {
+          method: 'POST',
+          idempotency: { action: `share.create:${data.wishlistId}` },
+        });
         if (!cancelled && r.ok) {
           const d = await r.json() as { shareToken: string };
           setShareToken(d.shareToken);
@@ -31282,7 +31582,7 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
   buildTgDeepLink: (payload?: string) => string | null;
   isPro?: boolean;
   locale: Locale;
-  tgFetch: (path: string, opts?: RequestInit) => Promise<Response>;
+  tgFetch: (path: string, opts?: RequestInit & { idempotency?: string | { action: string } }) => Promise<Response>;
 }) {
   const [copied, setCopied] = useState(false);
   // shareToken is fetched on mount via POST /tg/wishlists/:id/share-token.
@@ -31298,7 +31598,10 @@ function ShareScreen({ wishlist, itemCount, tgUser, ownerName, ownerAvatarUrl, o
     let cancelled = false;
     (async () => {
       try {
-        const r = await tgFetch(`/tg/wishlists/${wishlist.id}/share-token`, { method: 'POST' });
+        const r = await tgFetch(`/tg/wishlists/${wishlist.id}/share-token`, {
+          method: 'POST',
+          idempotency: { action: `share.create:${wishlist.id}` },
+        });
         if (!cancelled && r.ok) {
           const data = await r.json() as { shareToken: string };
           setShareToken(data.shareToken);
