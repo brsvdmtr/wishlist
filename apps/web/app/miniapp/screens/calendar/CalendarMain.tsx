@@ -125,7 +125,16 @@ export function CalendarMain(props: Props) {
 
       {view === 'week' && <WeekView locale={locale} occasions={filtered} onOpen={props.onOpenOccasion} />}
       {view === 'list' && <ListView locale={locale} occasions={filtered} onOpen={props.onOpenOccasion} />}
-      {view === 'year' && <YearView locale={locale} occasions={filtered} year={navYear} onChangeYear={setNavYear} onOpenRecap={() => props.onOpenRecap(navYear - 1)} />}
+      {view === 'year' && (
+        <YearView
+          locale={locale}
+          occasions={filtered}
+          year={navYear}
+          onChangeYear={setNavYear}
+          onOpenRecap={() => props.onOpenRecap(navYear - 1)}
+          onOpenMonth={(y, m) => { setNavYear(y); setNavMonth(m); props.onViewChange('month'); }}
+        />
+      )}
     </div>
   );
 }
@@ -424,7 +433,7 @@ function ListView({ locale, occasions, onOpen }: { locale: Locale; occasions: Oc
 
 // ─── YearView (12 mini grids) ─────────────────────────────────────────────
 
-function YearView({ locale, occasions, year, onChangeYear, onOpenRecap }: { locale: Locale; occasions: OccasionListItem[]; year: number; onChangeYear: (y: number) => void; onOpenRecap: () => void }) {
+function YearView({ locale, occasions, year, onChangeYear, onOpenRecap, onOpenMonth }: { locale: Locale; occasions: OccasionListItem[]; year: number; onChangeYear: (y: number) => void; onOpenRecap: () => void; onOpenMonth: (year: number, monthIdx: number) => void }) {
   // For each month: list of (day, theme) tuples
   const yearMap = useMemo(() => {
     const m: Record<number, Array<{ day: number; theme: ReturnType<typeof inferTheme> }>> = {};
@@ -460,12 +469,14 @@ function YearView({ locale, occasions, year, onChangeYear, onOpenRecap }: { loca
           const isCurrent = mi === new Date().getUTCMonth() && year === new Date().getUTCFullYear();
           const dim = new Date(Date.UTC(year, mi + 1, 0)).getUTCDate();
           return (
-            <div key={mi} style={{
+            <button key={mi} type="button" onClick={() => onOpenMonth(year, mi)} style={{
               padding: '12px 10px 10px', borderRadius: 16, minHeight: 130,
               background: isCurrent ? 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))' : 'var(--wb-card)',
               border: hasEvents ? '1px solid var(--wb-accent-soft-strong)' : isCurrent ? '1px solid var(--wb-border-strong)' : '1px solid var(--wb-border)',
               display: 'flex', flexDirection: 'column', gap: 8,
               WebkitBackdropFilter: 'blur(10px)' as never, backdropFilter: 'blur(10px)' as never,
+              cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' as const,
+              color: 'inherit',
             }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, color: 'var(--wb-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 <span>{monthLabelShort(mi, locale)}</span>
@@ -487,7 +498,7 @@ function YearView({ locale, occasions, year, onChangeYear, onOpenRecap }: { loca
                   return <div key={di} style={{ height: 9, borderRadius: 2, background: bg }} />;
                 })}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

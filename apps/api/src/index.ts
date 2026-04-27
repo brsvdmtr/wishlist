@@ -12994,11 +12994,53 @@ tgRouter.patch('/gift-occasion-ideas/:ideaId', asyncHandler(async (req, res) => 
     price: z.number().int().nonnegative().nullable().optional(),
     currency: z.enum(['RUB', 'USD', 'EUR', 'GBP']).nullable().optional(),
     note: z.string().max(500).nullable().optional(),
+    imageUrl: z.string().nullable().optional(),
   }).safeParse(req.body);
   if (!parsed.success) return zodError(res, parsed.error);
   const updated = await prisma.giftOccasionIdea.update({ where: { id: req.params.ideaId }, data: parsed.data });
   trackEvent('gift_idea_updated', user.id);
   return res.json({ idea: updated });
+}));
+
+// POST /tg/gift-occasion-ideas/:ideaId/photo — upload or replace idea photo.
+// Mirrors the /items/:id/photo handler (sharp processing, /api/uploads, EXIF
+// stripping). Image lives at imageUrl; thumb is returned but not persisted —
+// idea cards use the same URL at smaller render sizes.
+tgRouter.post('/gift-occasion-ideas/:ideaId/photo', upload.single('photo'), asyncHandler(async (req, res) => {
+  const ideaId = req.params.ideaId ?? '';
+  if (!ideaId) return res.status(400).json({ error: 'Missing idea id' });
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const idea = await prisma.giftOccasionIdea.findUnique({ where: { id: ideaId }, select: { id: true, imageUrl: true, ownerUserId: true } });
+  if (!idea || idea.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+
+  const [full, thumb] = await Promise.all([
+    processImage(req.file.buffer, { maxDim: 1600, quality: 80, suffix: 'full' }),
+    processImage(req.file.buffer, { maxDim: 480, quality: 70, suffix: 'thumb' }),
+  ]);
+  deleteUploadFile(idea.imageUrl);
+  const photoUrl = `/api/uploads/${full.filename}`;
+  await prisma.giftOccasionIdea.update({ where: { id: ideaId }, data: { imageUrl: photoUrl } });
+  trackEvent('gift_idea_photo_uploaded', user.id);
+  return res.json({ photoUrl, thumbUrl: `/api/uploads/${thumb.filename}`, width: full.width, height: full.height, sizeBytes: full.sizeBytes });
+}));
+
+tgRouter.delete('/gift-occasion-ideas/:ideaId/photo', asyncHandler(async (req, res) => {
+  const ideaId = req.params.ideaId ?? '';
+  if (!ideaId) return res.status(400).json({ error: 'Missing idea id' });
+
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const idea = await prisma.giftOccasionIdea.findUnique({ where: { id: ideaId }, select: { id: true, imageUrl: true, ownerUserId: true } });
+  if (!idea || idea.ownerUserId !== user.id) return res.status(404).json({ error: 'Not found' });
+
+  deleteUploadFile(idea.imageUrl);
+  await prisma.giftOccasionIdea.update({ where: { id: ideaId }, data: { imageUrl: null } });
+  return res.json({ ok: true });
 }));
 
 tgRouter.delete('/gift-occasion-ideas/:ideaId', asyncHandler(async (req, res) => {

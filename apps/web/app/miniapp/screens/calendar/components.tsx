@@ -24,7 +24,7 @@ import { ct } from './i18n';
  * unnecessary in this state — the floating bottom-nav auto-hides when a
  * field is focused (see `MiniApp.tsx` ~line 30923).
  */
-function useIsKeyboardOpen(): boolean {
+export function useIsKeyboardOpen(): boolean {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;

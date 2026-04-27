@@ -1475,6 +1475,7 @@ model GiftOccasionIdea {
   price       Int?
   currency    String?
   note        String?
+  imageUrl    String?
   status      String    @default("ACTIVE") // ACTIVE, DONE, ARCHIVED
   archivedAt  DateTime?
   completedAt DateTime?

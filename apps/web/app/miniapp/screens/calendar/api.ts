@@ -133,6 +133,29 @@ export async function completeIdea(tg: TgFetch, ideaId: string): Promise<{ ok: t
   return jsonOrThrow(r);
 }
 
+/** Upload a photo for an idea. Server runs sharp compression and returns the
+ * persisted URL. The body must be a `FormData` with field name `photo`. */
+export async function uploadIdeaPhoto(
+  tg: TgFetch,
+  ideaId: string,
+  formData: FormData,
+): Promise<{ photoUrl: string; thumbUrl: string }> {
+  const r = await tg(`/tg/gift-occasion-ideas/${ideaId}/photo`, {
+    method: 'POST',
+    body: formData,
+    idempotency: { action: `gift-occasion-idea.photo:${ideaId}` },
+  });
+  return jsonOrThrow(r);
+}
+
+export async function deleteIdeaPhoto(tg: TgFetch, ideaId: string): Promise<{ ok: true }> {
+  const r = await tg(`/tg/gift-occasion-ideas/${ideaId}/photo`, {
+    method: 'DELETE',
+    idempotency: { action: `gift-occasion-idea.photo-delete:${ideaId}` },
+  });
+  return jsonOrThrow(r);
+}
+
 // ─── Reminders CRUD ────────────────────────────────────────────────────────
 
 export async function createReminder(tg: TgFetch, occasionId: string, data: { offsetDays: number; timeOfDay?: string; enabled?: boolean }): Promise<{ reminder: OccasionReminder }> {

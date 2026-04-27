@@ -26,7 +26,7 @@ import { Sheet } from '@wishlist/ui';
 import {
   CalHeader, CalIconButton, InfoGroup, InfoRow, SectionH, ReminderRow, BannerStrip, CtaBar, Toggle,
   EmojiPicker, RepeatChips, DayPickerSheet, MonthPickerSheet, YearPickerSheet,
-  monthLabelLong, weekdayLabels,
+  monthLabelLong, weekdayLabels, useIsKeyboardOpen,
 } from './components';
 import { ct, ctDays, ctDaysAgo } from './i18n';
 
@@ -45,6 +45,12 @@ export function CalendarDetail({ tgFetch, locale, occasion: o, onBack, onShowToa
   const isToday = o.daysUntil === 0 && !isPast;
   const dateInfo = useMemo(() => formatDate(o.nextDate ?? o.eventDate, locale), [o.nextDate, o.eventDate, locale]);
   const [editing, setEditing] = useState(false);
+  // Hide the sticky CtaBar when the on-screen keyboard is open: the user is
+  // actively typing in an inline form (idea text / thank-you note / edit
+  // sheet), so the bar would just hover over the form content. Each inline
+  // form ships its own Save/Cancel — the global Edit/Delete bar adds nothing
+  // while typing. Re-shows the moment focus leaves and the keyboard collapses.
+  const kbOpen = useIsKeyboardOpen();
   const heroBg = isPast
     ? 'linear-gradient(135deg, rgba(80,80,90,0.6), rgba(40,40,50,0.6))'
     : theme === 'bday' ? gradients.eventBdayHero
@@ -60,14 +66,26 @@ export function CalendarDetail({ tgFetch, locale, occasion: o, onBack, onShowToa
       />
 
       {/* Hero */}
+      {/*
+        WebKit/Safari quirk (W76 — fixed once, regressed): a child with
+        `filter: blur(...)` paints its rectangular bounds OUTSIDE the parent's
+        `border-radius + overflow: hidden` clip path, leaving a faint corner
+        "tail" around the rounded corner. Mitigation:
+          • `isolation: isolate` on the parent — forces a new stacking context
+            so the child filter is composited within the clip mask.
+          • `willChange: transform` on the blurred child — anchors it to that
+            stacking context.
+        Both are required; either one alone is not enough on iOS Telegram.
+      */}
       <div style={{
         margin: '6px 16px 14px', padding: 22, borderRadius: 26,
         color: '#fff', position: 'relative', overflow: 'hidden',
         background: heroBg,
         filter: isPast ? 'saturate(0.8)' : undefined,
         boxShadow: isPast ? 'none' : '0 18px 48px var(--wb-accent-shadow), inset 0 1px 0 rgba(255,255,255,0.22)',
+        isolation: 'isolate',
       }}>
-        <div aria-hidden="true" style={{ position: 'absolute', bottom: '-50%', left: '-20%', width: 280, height: 280, background: 'radial-gradient(circle, rgba(255,255,255,0.18), transparent 65%)', filter: 'blur(8px)' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', bottom: '-50%', left: '-20%', width: 280, height: 280, background: 'radial-gradient(circle, rgba(255,255,255,0.18), transparent 65%)', filter: 'blur(8px)', willChange: 'transform' }} />
 
         {/* Status pill */}
         {(isPast || isToday) && (
@@ -194,33 +212,36 @@ export function CalendarDetail({ tgFetch, locale, occasion: o, onBack, onShowToa
         <PastSection tgFetch={tgFetch} occasion={o} locale={locale} onChanged={onMutated} onShowToast={onShowToast} />
       )}
 
-      <CtaBar>
-        {!isPast && o.linkedSanta && (
-          <button style={primaryBtnStyle}>{`Открыть Тайного Санту`}</button>
-        )}
-        {!isPast && !o.linkedSanta && o.linkedWishlist && (
-          <button style={primaryBtnStyle}>{ct('cal_mark_my_gift', locale)}</button>
-        )}
-        {!isPast && !o.linkedSanta && !o.linkedWishlist && (
-          <button onClick={() => void api.completeOccasion(tgFetch, o.id).then(onBack)} style={primaryBtnStyle}>
-            {ct('cal_done', locale)} ✓
-          </button>
-        )}
-        {isPast && o.recurrence !== 'YEARLY' && (
+      {!kbOpen && (
+        <CtaBar>
+          {/* Contextual primary CTA only — Santa room link or wishlist gift-mark.
+              The "Готово ✓" / mark-as-done button was removed: it called
+              completeOccasion() with no confirmation, dropping the event off the
+              ACTIVE list with no easy way back — users perceived it as an
+              irreversible delete-by-mistake. Marking as completed now happens
+              via the past-event "Что подарили?" log-gift form. */}
+          {!isPast && o.linkedSanta && (
+            <button style={primaryBtnStyle}>{`Открыть Тайного Санту`}</button>
+          )}
+          {!isPast && !o.linkedSanta && o.linkedWishlist && (
+            <button style={primaryBtnStyle}>{ct('cal_mark_my_gift', locale)}</button>
+          )}
+          {isPast && o.recurrence !== 'YEARLY' && (
+            <button onClick={async () => {
+              await api.updateOccasion(tgFetch, o.id, { recurrence: 'YEARLY' });
+              onShowToast(ct('cal_recur_yearly', locale), 'success');
+              await onMutated();
+            }} style={surfaceBtnStyle}>{ct('cal_repeat_next_year', locale)}</button>
+          )}
+          <button onClick={() => setEditing(true)} style={surfaceBtnStyle}>{ct('cal_edit', locale)}</button>
           <button onClick={async () => {
-            await api.updateOccasion(tgFetch, o.id, { recurrence: 'YEARLY' });
-            onShowToast(ct('cal_recur_yearly', locale), 'success');
-            await onMutated();
-          }} style={surfaceBtnStyle}>{ct('cal_repeat_next_year', locale)}</button>
-        )}
-        <button onClick={() => setEditing(true)} style={surfaceBtnStyle}>{ct('cal_edit', locale)}</button>
-        <button onClick={async () => {
-          if (!confirm(ct('cal_delete', locale) + '?')) return;
-          await api.deleteOccasion(tgFetch, o.id);
-          onShowToast(ct('cal_delete', locale), 'success');
-          onBack();
-        }} style={ghostDangerBtnStyle}>{ct('cal_delete', locale)}</button>
-      </CtaBar>
+            if (!confirm(ct('cal_delete', locale) + '?')) return;
+            await api.deleteOccasion(tgFetch, o.id);
+            onShowToast(ct('cal_delete', locale), 'success');
+            onBack();
+          }} style={ghostDangerBtnStyle}>{ct('cal_delete', locale)}</button>
+        </CtaBar>
+      )}
 
       <EditOccasionSheet
         open={editing}
@@ -365,10 +386,24 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
   const [link, setLink] = useState('');
   const [price, setPrice] = useState('');
   const [currency, setCurrency] = useState<IdeaCurrency>('RUB');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const reset = () => { setText(''); setLink(''); setPrice(''); setCurrency('RUB'); setAdding(false); };
+  const reset = () => {
+    setText(''); setLink(''); setPrice(''); setCurrency('RUB'); setAdding(false);
+    setPhotoFile(null);
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview(null);
+  };
+
+  const onPickPhoto = (file: File | null) => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    if (!file) { setPhotoFile(null); setPhotoPreview(null); return; }
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
 
   const submit = async () => {
     const trimmed = text.trim();
@@ -376,12 +411,25 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
     setSaving(true);
     try {
       const priceNum = price.trim() ? Number(price.replace(/\s/g, '')) : null;
-      await api.createIdea(tgFetch, occasion.id, {
+      const created = await api.createIdea(tgFetch, occasion.id, {
         text: trimmed,
         link: link.trim() ? link.trim() : null,
         price: priceNum != null && Number.isFinite(priceNum) && priceNum >= 0 ? Math.floor(priceNum) : null,
         currency,
       });
+      // Upload photo as a follow-up — the create endpoint accepts JSON only;
+      // photos go through a multipart endpoint scoped to the new idea id.
+      if (photoFile) {
+        try {
+          const fd = new FormData();
+          fd.append('photo', photoFile);
+          await api.uploadIdeaPhoto(tgFetch, created.idea.id, fd);
+        } catch (uploadErr) {
+          onShowToast('Идея создана, но фото не загрузилось', 'error');
+          // eslint-disable-next-line no-console
+          console.error('Idea photo upload failed', uploadErr);
+        }
+      }
       reset();
       await onChanged();
     } catch (err) {
@@ -464,6 +512,14 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
                     fontFamily: 'inherit', padding: 0,
                   }}
                 >{done ? '✓' : ''}</button>
+                {idea.imageUrl && (
+                  <div style={{
+                    width: 56, height: 56, borderRadius: 12, flexShrink: 0,
+                    backgroundImage: `url(${idea.imageUrl})`,
+                    backgroundSize: 'cover', backgroundPosition: 'center',
+                    border: '1px solid var(--wb-border)',
+                  }} />
+                )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     fontSize: 14, fontWeight: 600, color: 'var(--wb-text)',
@@ -550,6 +606,44 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
             >
               {IDEA_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            {photoPreview ? (
+              <div style={{
+                width: 56, height: 56, borderRadius: 12, flexShrink: 0,
+                backgroundImage: `url(${photoPreview})`,
+                backgroundSize: 'cover', backgroundPosition: 'center',
+                border: '1px solid var(--wb-border)',
+              }} />
+            ) : null}
+            <label style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '12px 14px', borderRadius: 16,
+              background: 'var(--wb-card)', border: '1px dashed var(--wb-border-strong)',
+              fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+              color: 'var(--wb-text-secondary)', cursor: 'pointer',
+            }}>
+              {photoFile ? `📎 ${photoFile.name.slice(0, 24)}${photoFile.name.length > 24 ? '…' : ''}` : `📷 ${ct('cal_idea_add_photo', locale)}`}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(e) => onPickPhoto(e.target.files?.[0] ?? null)}
+                style={{ display: 'none' }}
+              />
+            </label>
+            {photoFile && (
+              <button
+                type="button"
+                onClick={() => onPickPhoto(null)}
+                aria-label={ct('cal_delete', locale)}
+                style={{
+                  width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                  background: 'transparent', border: '1px solid var(--wb-border)',
+                  color: 'var(--wb-text-muted)', fontSize: 16, cursor: 'pointer',
+                  fontFamily: 'inherit', padding: 0,
+                }}
+              >×</button>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -769,66 +863,78 @@ function EditOccasionSheet({ open, onClose, tgFetch, occasion: o, locale, onSave
 
   const palette = EMOJI_PALETTE[o.type] ?? EMOJI_PALETTE.OTHER!;
 
+  // Picker sheets MUST render as siblings of the parent <Sheet>, NOT as
+  // children. The Sheet primitive sets `willChange: transform` on its content
+  // wrapper, which creates a containing block for descendants with
+  // `position: fixed`. Day/Month/YearPickerSheet are themselves Sheets with
+  // fixed positioning — nested inside the edit sheet, their viewport-relative
+  // anchoring breaks: they get pinned to the bottom of the edit sheet's
+  // scrollable area instead of the visualViewport, where they're invisible
+  // unless something forces them into view (which Year did, via scrollIntoView
+  // on the active year — that's why only year appeared to "work"). Hoisting
+  // the pickers to the fragment level keeps them at viewport scope.
   return (
-    <Sheet open={open} onClose={onClose} title={ct('cal_edit', locale)}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div>
-          <div style={editLabelStyle}>{ct('cal_field_name', locale)}</div>
-          <input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            maxLength={120}
-            style={editInputStyle}
-          />
-        </div>
-
-        <div>
-          <div style={editLabelStyle}>{ct('cal_field_emoji', locale)}</div>
-          <EmojiPicker value={emoji} options={palette} onChange={setEmoji} locale={locale} />
-        </div>
-
-        <div>
-          <div style={editLabelStyle}>{ct('cal_field_date', locale)}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr', gap: 8 }}>
-            <button type="button" onClick={() => setPickOpen('day')} style={editChipStyle}>{safeDay}</button>
-            <button type="button" onClick={() => setPickOpen('month')} style={editChipStyle}>{monthLabelLong(month, locale)}</button>
-            <button type="button" onClick={() => setPickOpen('year')} style={editChipStyle}>{year}</button>
+    <>
+      <Sheet open={open} onClose={onClose} title={ct('cal_edit', locale)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div style={editLabelStyle}>{ct('cal_field_name', locale)}</div>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              maxLength={120}
+              style={editInputStyle}
+            />
           </div>
-        </div>
 
-        <div>
-          <div style={editLabelStyle}>{ct('cal_field_repeat', locale)}</div>
-          <RepeatChips<EventRecurrence>
-            value={recurrence}
-            onChange={setRecurrence}
-            options={[
-              { key: 'NONE',    label: ct('cal_recur_none', locale) },
-              { key: 'YEARLY',  label: ct('cal_recur_yearly', locale) },
-              { key: 'MONTHLY', label: ct('cal_recur_monthly', locale) },
-            ]}
-          />
-        </div>
+          <div>
+            <div style={editLabelStyle}>{ct('cal_field_emoji', locale)}</div>
+            <EmojiPicker value={emoji} options={palette} onChange={setEmoji} locale={locale} />
+          </div>
 
-        <div>
-          <div style={editLabelStyle}>{ct('cal_field_location', locale)}</div>
-          <input
-            value={location}
-            onChange={e => setLocation(e.target.value)}
-            maxLength={200}
-            style={editInputStyle}
-          />
-        </div>
+          <div>
+            <div style={editLabelStyle}>{ct('cal_field_date', locale)}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 1fr', gap: 8 }}>
+              <button type="button" onClick={() => setPickOpen('day')} style={editChipStyle}>{safeDay}</button>
+              <button type="button" onClick={() => setPickOpen('month')} style={editChipStyle}>{monthLabelLong(month, locale)}</button>
+              <button type="button" onClick={() => setPickOpen('year')} style={editChipStyle}>{year}</button>
+            </div>
+          </div>
 
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={saving || !title.trim()}
-          style={{ ...primaryBtnStyle, opacity: !title.trim() ? 0.5 : 1 }}
-        >{saving ? '…' : ct('cal_save', locale)}</button>
-      </div>
+          <div>
+            <div style={editLabelStyle}>{ct('cal_field_repeat', locale)}</div>
+            <RepeatChips<EventRecurrence>
+              value={recurrence}
+              onChange={setRecurrence}
+              options={[
+                { key: 'NONE',    label: ct('cal_recur_none', locale) },
+                { key: 'YEARLY',  label: ct('cal_recur_yearly', locale) },
+                { key: 'MONTHLY', label: ct('cal_recur_monthly', locale) },
+              ]}
+            />
+          </div>
+
+          <div>
+            <div style={editLabelStyle}>{ct('cal_field_location', locale)}</div>
+            <input
+              value={location}
+              onChange={e => setLocation(e.target.value)}
+              maxLength={200}
+              style={editInputStyle}
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={saving || !title.trim()}
+            style={{ ...primaryBtnStyle, opacity: !title.trim() ? 0.5 : 1 }}
+          >{saving ? '…' : ct('cal_save', locale)}</button>
+        </div>
+      </Sheet>
 
       <DayPickerSheet
-        open={pickOpen === 'day'}
+        open={open && pickOpen === 'day'}
         onClose={() => setPickOpen(null)}
         value={safeDay}
         max={daysInMonth}
@@ -836,20 +942,20 @@ function EditOccasionSheet({ open, onClose, tgFetch, occasion: o, locale, onSave
         locale={locale}
       />
       <MonthPickerSheet
-        open={pickOpen === 'month'}
+        open={open && pickOpen === 'month'}
         onClose={() => setPickOpen(null)}
         value={month}
         onPick={(m) => { setMonth(m); setPickOpen(null); }}
         locale={locale}
       />
       <YearPickerSheet
-        open={pickOpen === 'year'}
+        open={open && pickOpen === 'year'}
         onClose={() => setPickOpen(null)}
         value={year}
         onPick={(y) => { setYear(y); setPickOpen(null); }}
         locale={locale}
       />
-    </Sheet>
+    </>
   );
 }
 

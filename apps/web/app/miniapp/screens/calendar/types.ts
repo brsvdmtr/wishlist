@@ -102,6 +102,7 @@ export interface OccasionIdea {
   price: number | null;
   currency: string | null;
   note: string | null;
+  imageUrl: string | null;
   status: EventStatus;
   createdAt: string;
 }
