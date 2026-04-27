@@ -595,11 +595,18 @@ export function RepeatChips<T extends string>({ value, options, onChange }: {
             onClick={() => onChange(o.key)}
             style={{
               padding: '8px 14px', borderRadius: 100, flexShrink: 0,
-              background: active ? 'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))' : 'var(--wb-card)',
-              border: active ? '1px solid var(--wb-border-strong)' : '1px solid var(--wb-border)',
-              fontSize: 12.5, fontWeight: 600,
+              // Selection state mirrors the EmojiPicker / EditOccasionSheet
+              // chip ring (accent-soft gradient + 3px halo) — previously a
+              // very faint white-on-white gradient that was easy to miss.
+              background: active
+                ? 'linear-gradient(135deg, var(--wb-accent-soft), var(--wb-card-strong))'
+                : 'var(--wb-card)',
+              border: active ? '1px solid var(--wb-accent-soft-strong)' : '1px solid var(--wb-border)',
+              boxShadow: active ? '0 0 0 3px var(--wb-accent-soft)' : 'none',
+              fontSize: 12.5, fontWeight: active ? 700 : 600,
               color: active ? 'var(--wb-text)' : 'var(--wb-text-secondary)',
               cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'all .15s ease',
               WebkitBackdropFilter: 'blur(10px)' as never, backdropFilter: 'blur(10px)' as never,
             }}
           >{o.label}</button>

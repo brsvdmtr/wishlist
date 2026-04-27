@@ -289,8 +289,12 @@ function TodayCard({ locale, ctx, onOpen }: { locale: Locale; ctx: TodayContext;
     }}>
       <div style={{ position: 'absolute', top: '-30%', right: '-10%', width: 160, height: 160, background: 'radial-gradient(circle, rgba(255,255,255,0.18), transparent 70%)' }} />
       <div style={{ position: 'relative' }}>
+        {/* Eyebrow follows the actual countdown — earlier this always read
+            "Сегодня" even when the soonest event was 3+ days away (the
+            `getTodayContext` API returns the next upcoming event regardless
+            of distance), which read as a logic bug to the user. */}
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', opacity: 0.85 }}>
-          {ct('cal_today', locale)}
+          {s.daysUntil === 0 ? ct('cal_today', locale) : ct('cal_closest', locale)}
         </div>
         <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 3, lineHeight: 1.3 }}>
           {(s.emoji ?? defaultEmojiForType(s.type))} {s.title} — {ctDays(s.daysUntil, locale)}
@@ -555,7 +559,10 @@ function ImportPills({ onImportHolidays, onImportFriends, locale }: {
         📅 {ct('cal_import_country', locale)}
       </button>
       <button onClick={onImportFriends} style={pillBtnStyle}>
-        ↓ {ct('cal_empty_import_friends', locale)}
+        {/* The i18n string `cal_empty_import_friends` already starts with `↓ `,
+            so we don't add another arrow here — earlier the pill rendered
+            "↓ ↓ Импорт из друзей". */}
+        {ct('cal_empty_import_friends', locale)}
       </button>
     </div>
   );

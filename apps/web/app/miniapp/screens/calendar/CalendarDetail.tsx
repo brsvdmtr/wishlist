@@ -24,7 +24,7 @@ import type { OccasionDetail, EventTheme, EventRecurrence } from './types';
 import { inferTheme, defaultEmojiForType } from './types';
 import { Sheet } from '@wishlist/ui';
 import {
-  CalHeader, CalIconButton, InfoGroup, InfoRow, SectionH, ReminderRow, BannerStrip, CtaBar, Toggle,
+  CalHeader, CalIconButton, InfoGroup, InfoRow, SectionH, ReminderRow, BannerStrip, Toggle,
   EmojiPicker, RepeatChips, DayPickerSheet, MonthPickerSheet, YearPickerSheet,
   monthLabelLong, weekdayLabels, useIsKeyboardOpen,
 } from './components';
@@ -213,7 +213,17 @@ export function CalendarDetail({ tgFetch, locale, occasion: o, onBack, onShowToa
       )}
 
       {!kbOpen && (
-        <CtaBar>
+        // CTA stack — rendered as a normal in-flow block at the end of the
+        // detail body. Earlier this lived inside a sticky CtaBar that floated
+        // above content, which read as the buttons being "nailed in" mid-page
+        // and overlapping the hero whenever the page was scrolled. Now the
+        // user reaches Edit/Delete by scrolling to the bottom of the screen,
+        // matching long-page detail UX in iOS apps. Bottom padding clears the
+        // FloatingNav (~14px from edge, ~52px tall) + safe-area inset.
+        <div style={{
+          padding: 'calc(8px) 16px calc(96px + env(safe-area-inset-bottom))',
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
           {/* Contextual primary CTA only — Santa room link or wishlist gift-mark.
               The "Готово ✓" / mark-as-done button was removed: it called
               completeOccasion() with no confirmation, dropping the event off the
@@ -240,7 +250,7 @@ export function CalendarDetail({ tgFetch, locale, occasion: o, onBack, onShowToa
             onShowToast(ct('cal_delete', locale), 'success');
             onBack();
           }} style={ghostDangerBtnStyle}>{ct('cal_delete', locale)}</button>
-        </CtaBar>
+        </div>
       )}
 
       <EditOccasionSheet
@@ -390,6 +400,7 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
   const reset = () => {
     setText(''); setLink(''); setPrice(''); setCurrency('RUB'); setAdding(false);
@@ -513,12 +524,18 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
                   }}
                 >{done ? '✓' : ''}</button>
                 {idea.imageUrl && (
-                  <div style={{
-                    width: 56, height: 56, borderRadius: 12, flexShrink: 0,
-                    backgroundImage: `url(${idea.imageUrl})`,
-                    backgroundSize: 'cover', backgroundPosition: 'center',
-                    border: '1px solid var(--wb-border)',
-                  }} />
+                  <button
+                    type="button"
+                    onClick={() => setViewingPhoto(idea.imageUrl)}
+                    aria-label="Открыть фото"
+                    style={{
+                      width: 56, height: 56, borderRadius: 12, flexShrink: 0,
+                      padding: 0, fontFamily: 'inherit', cursor: 'pointer',
+                      backgroundImage: `url(${idea.imageUrl})`,
+                      backgroundSize: 'cover', backgroundPosition: 'center',
+                      border: '1px solid var(--wb-border)',
+                    }}
+                  />
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
@@ -668,7 +685,55 @@ function IdeasSection({ tgFetch, occasion, locale, onChanged, onShowToast }: {
           >＋ {ct('cal_idea_add', locale)}</button>
         </div>
       )}
+
+      {viewingPhoto && (
+        <PhotoViewer url={viewingPhoto} onClose={() => setViewingPhoto(null)} />
+      )}
     </>
+  );
+}
+
+// Lightweight full-screen photo viewer. Renders a fixed overlay with the
+// image centered + a close affordance. Tap the backdrop or close button to
+// dismiss; the image itself is non-interactive (no zoom in this pass —
+// adding pinch-zoom would balloon the diff and the bug is just "can't open").
+function PhotoViewer({ url, onClose }: { url: string; onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 200,
+        background: 'rgba(0,0,0,0.92)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 'env(safe-area-inset-top) 16px env(safe-area-inset-bottom)',
+        animation: 'fadeIn 0.18s ease',
+      }}
+    >
+      <img
+        src={url}
+        alt=""
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
+          borderRadius: 12, display: 'block',
+        }}
+      />
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Закрыть"
+        style={{
+          position: 'absolute',
+          top: 'calc(env(safe-area-inset-top) + 12px)',
+          right: 12,
+          width: 40, height: 40, borderRadius: 20,
+          background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.18)',
+          color: '#fff', fontSize: 18, cursor: 'pointer', fontFamily: 'inherit',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          WebkitBackdropFilter: 'blur(10px)' as never, backdropFilter: 'blur(10px)' as never,
+        }}
+      >×</button>
+    </div>
   );
 }
 

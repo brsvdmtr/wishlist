@@ -219,6 +219,12 @@ model User {
   // Validated server-side in PATCH /tg/settings/appearance.
   themePreference  String @default("dark")   // 'dark' | 'black'
   accentPreference String @default("violet") // 'violet' | 'blue' | 'pink' | 'green'
+
+  // Set once when the user dismisses or finishes the calendar 4-step
+  // onboarding. Persisted on the User row so the same account doesn't see
+  // onboarding again when switching devices (was localStorage-only before,
+  // which made every fresh client re-run the flow).
+  calendarOnboardingSeenAt DateTime?
 }
 
 model Wishlist {

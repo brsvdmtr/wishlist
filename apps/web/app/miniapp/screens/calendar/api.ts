@@ -224,6 +224,19 @@ export async function getYearRecap(tg: TgFetch, year: number): Promise<YearRecap
   return jsonOrThrow(r);
 }
 
+/** Marks the calendar onboarding as seen on the server. Idempotent — calling
+ * it for a user who already has the flag set just returns the existing
+ * timestamp without overwriting it. Avoids re-running the flow on a new
+ * device once the user has seen it on any other surface. */
+export async function markCalendarOnboardingSeen(tg: TgFetch): Promise<{ seenAt: string }> {
+  const r = await tg('/tg/calendar/onboarding-seen', {
+    method: 'POST',
+    body: JSON.stringify({}),
+    idempotency: { action: 'calendar.onboarding-seen' },
+  });
+  return jsonOrThrow(r);
+}
+
 // ─── Stars checkout (paywall) ──────────────────────────────────────────────
 
 export interface CheckoutResult {

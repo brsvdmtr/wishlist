@@ -257,6 +257,14 @@ const D: Record<string, StringMap> = {
     es: 'Añadir foto',
     ar: 'إضافة صورة',
   },
+  cal_closest: {
+    ru: 'Ближайшее',
+    en: 'Coming up',
+    'zh-CN': '即将到来',
+    hi: 'जल्द',
+    es: 'Próximo',
+    ar: 'قادم',
+  },
   cal_ideas_from_wishlist: {
     ru: 'Идеи · из вишлиста {name}',
     en: 'Ideas · from {name}’s wishlist',

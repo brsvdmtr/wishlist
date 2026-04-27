@@ -805,6 +805,25 @@ const inputStyle: React.CSSProperties = {
 type ReleaseNote = { id: string; date: string; items: { ru: string; en: string }[] };
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    id: '2026-04-27',
+    date: '27.04.2026',
+    items: [
+      { ru: '📅 Календарь событий — большая серия фиксов и улучшений по обратной связи', en: '📅 Event Calendar — a big batch of fixes and tweaks based on feedback' },
+      { ru: '✏️ Редактирование события — теперь можно менять название, эмодзи, дату, повторение и место прямо из карточки', en: '✏️ Edit an event — change title, emoji, date, recurrence and location right from the detail screen' },
+      { ru: '💡 Идеи подарков к событию — добавляй текст, ссылку, цену и валюту, отмечай купленным или удаляй', en: '💡 Gift ideas attached to an event — add text, link, price and currency, mark as bought or delete' },
+      { ru: '📷 Фото к идее — те же требования, что у желаний; тап по миниатюре открывает фото на весь экран', en: '📷 Photo on an idea — same constraints as wishlist items; tap the thumbnail to open the photo full-screen' },
+      { ru: '🔙 Кнопка «Назад» теперь работает на всех экранах календаря (раньше на главном экране календаря не реагировала)', en: '🔙 Back button now works on every calendar screen (it used to be a no-op on the main calendar screen)' },
+      { ru: '🌍 Импорт праздников страны и дней рождения друзей — кнопки теперь всегда на главной календаря, не только в пустом состоянии', en: '🌍 Import country holidays and friends\' birthdays — buttons are now always visible on the main calendar, not only on the empty state' },
+      { ru: '⏰ Карточка ближайшего события показывает «Ближайшее», если событие не сегодня (раньше всегда писало «Сегодня»)', en: '⏰ Closest-event card now shows "Coming up" when the event isn\'t today (it always read "Today" before)' },
+      { ru: '🎯 Режим «Год» — тап по плитке месяца открывает этот месяц, не нужно переключать вкладки вручную', en: '🎯 Year view — tap a month tile to jump into that month, no manual tab switch needed' },
+      { ru: '🛠 Убрали кнопку «Готово ✓» — она удаляла событие из активных без подтверждения, что воспринималось как потеря данных', en: '🛠 Removed the "Done ✓" button — it dropped events off the active list with no confirmation, reading as accidental data loss' },
+      { ru: '🔁 Онбординг календаря больше не повторяется на новых устройствах, если у аккаунта уже есть события', en: '🔁 Calendar onboarding no longer repeats on new devices when the account already has events' },
+      { ru: '🎨 Настройки → Фон приложения: «Тёмная тема» / «Чёрная тема» (раньше были «Тёмный» / «Чёрный»)', en: '🎨 Settings → App background: "Dark theme" / "Black theme" (previously "Dark" / "Black")' },
+      { ru: '📐 Блок «Календарь событий» в настройках теперь точно по ширине соседних разделов', en: '📐 The "Event calendar" tile in settings now matches the width of neighbouring sections exactly' },
+      { ru: '🔧 Полно мелочей: артефакт-«хвост» в углу карточки события, заметная зелёная подсветка для «Каждый год», убран лишний скролл в редакторе напоминаний, фикс редактирования даты (раньше менялся только год), и многое другое', en: '🔧 Tons of polish: hero corner-tail artifact, stronger green highlight on "Every year", removed extra scroll on the reminders editor, date editing fixed (previously only the year saved), and more' },
+    ],
+  },
+  {
     id: '2026-04-26',
     date: '26.04.2026',
     items: [
@@ -19802,46 +19821,32 @@ function MiniAppInner({ apiBase, botUsername, miniappShortName }: { apiBase: str
                 );
               })()}
 
-              {/* v2.1 stub — Calendar entry (full UI scaffold, backend pending). Locale-aware. */}
+              {/* v2.1 — Calendar entry. Wrapped in SettingsSection so the
+                  card width and chrome match neighbouring "Общее" /
+                  "Уведомления" / "Приватность" sections exactly — earlier
+                  this rendered as a standalone div with slightly different
+                  padding / radius (18px vs SettingsSection's 20px) and read
+                  as visually wider than its siblings. */}
               {(() => {
                 const cal = (() => {
                   switch (locale) {
-                    case 'en':    return { title: 'Event calendar',     sub: 'Birthdays and wishlist deadlines' };
-                    case 'zh-CN': return { title: '事件日历',             sub: '生日和心愿单截止日期' };
-                    case 'hi':    return { title: 'इवेंट कैलेंडर',       sub: 'जन्मदिन और विशलिस्ट डेडलाइन' };
-                    case 'es':    return { title: 'Calendario',         sub: 'Cumpleaños y fechas límite de listas' };
-                    case 'ar':    return { title: 'تقويم الأحداث',      sub: 'أعياد الميلاد ومواعيد قوائم الرغبات' };
-                    default:      return { title: 'Календарь событий',  sub: 'Дни рождения и дедлайны вишлистов' };
+                    case 'en':    return { sectionTitle: 'Event calendar',  rowLabel: 'Calendar',          rowHint: 'Birthdays and wishlist deadlines' };
+                    case 'zh-CN': return { sectionTitle: '事件日历',          rowLabel: '日历',              rowHint: '生日和心愿单截止日期' };
+                    case 'hi':    return { sectionTitle: 'इवेंट कैलेंडर',     rowLabel: 'कैलेंडर',           rowHint: 'जन्मदिन और विशलिस्ट डेडलाइन' };
+                    case 'es':    return { sectionTitle: 'Calendario',      rowLabel: 'Calendario',        rowHint: 'Cumpleaños y fechas límite de listas' };
+                    case 'ar':    return { sectionTitle: 'تقويم الأحداث',   rowLabel: 'التقويم',           rowHint: 'أعياد الميلاد ومواعيد قوائم الرغبات' };
+                    default:      return { sectionTitle: 'Календарь событий', rowLabel: 'Календарь',       rowHint: 'Дни рождения и дедлайны вишлистов' };
                   }
                 })();
                 return (
-                  <div
-                    onClick={() => setScreen('calendar')}
-                    style={{
-                      margin: '0 -16px 16px',
-                      padding: '14px 16px',
-                      background: 'var(--wb-card)',
-                      border: '1px solid var(--wb-border)',
-                      borderRadius: 18,
-                      display: 'flex', alignItems: 'center', gap: 14,
-                      cursor: 'pointer',
-                      WebkitBackdropFilter: 'blur(14px)' as never,
-                      backdropFilter: 'blur(14px)' as never,
-                    }}
-                  >
-                    <div style={{
-                      width: 42, height: 42, borderRadius: 13,
-                      background: 'linear-gradient(135deg, var(--wb-accent-soft-strong), var(--wb-accent-soft))',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-                      flexShrink: 0,
-                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
-                    }}>📅</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--wb-text)', letterSpacing: '-0.012em' }}>{cal.title}</div>
-                      <div style={{ fontSize: 12.5, color: 'var(--wb-text-secondary)', marginTop: 2 }}>{cal.sub}</div>
-                    </div>
-                    <div style={{ fontSize: 18, color: 'var(--wb-text-muted)' }}>›</div>
-                  </div>
+                  <SettingsSection title={cal.sectionTitle}>
+                    <SettingsRow
+                      icon={'\u{1F4C5}'}
+                      label={cal.rowLabel}
+                      hint={cal.rowHint}
+                      onClick={() => setScreen('calendar')}
+                    />
+                  </SettingsSection>
                 );
               })()}
 

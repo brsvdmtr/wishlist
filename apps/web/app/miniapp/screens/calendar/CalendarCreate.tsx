@@ -196,10 +196,13 @@ function Step2Details({ draft, onChange, locale }: { draft: DraftState; onChange
       <EmojiPicker value={draft.emoji} options={EMOJI_BY_TYPE[draft.type]} onChange={(e) => onChange({ emoji: e })} locale={locale} />
 
       <FormLabel>{ct('cal_field_date', locale)}</FormLabel>
+      {/* Day / month / year tiles render flat — none are visually selected.
+          Earlier the month tile carried a permanent accent tint, which read
+          as a "selected" state and confused users looking at the form. */}
       <div style={{ margin: '0 16px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
         <DateCell label={ct('cal_pick_day', locale)} value={String(draft.day)}
           onClick={() => setPicker('day')} />
-        <DateCell label={ct('cal_pick_month', locale)} value={monthLabelLong(draft.month, locale)} highlighted
+        <DateCell label={ct('cal_pick_month', locale)} value={monthLabelLong(draft.month, locale)}
           onClick={() => setPicker('month')} />
         <DateCell label={ct('cal_pick_year', locale)} value={String(year)}
           onClick={() => setPicker('year')} />

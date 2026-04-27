@@ -13332,10 +13332,13 @@ tgRouter.get('/calendar/today-context', asyncHandler(async (req, res) => {
   const user = await getOrCreateTgUser(req.tgUser!);
   const ent = await getEffectiveEntitlements(user.id, user.godMode);
   if (!requireGiftNotes(ent, res)) return;
-  const occasions = await prisma.giftOccasion.findMany({
-    where: { ownerUserId: user.id, status: 'ACTIVE', eventDate: { not: null } },
-    include: { _count: { select: { ideas: { where: { status: 'ACTIVE' } } } } },
-  });
+  const [userRow, occasions] = await Promise.all([
+    prisma.user.findUnique({ where: { id: user.id }, select: { calendarOnboardingSeenAt: true } }),
+    prisma.giftOccasion.findMany({
+      where: { ownerUserId: user.id, status: 'ACTIVE', eventDate: { not: null } },
+      include: { _count: { select: { ideas: { where: { status: 'ACTIVE' } } } } },
+    }),
+  ]);
   type Pick = { id: string; title: string; emoji: string | null; type: string; daysUntil: number; nextDate: string; ideasCount: number };
   let soonest: Pick | null = null;
   for (const o of occasions) {
@@ -13348,7 +13351,30 @@ tgRouter.get('/calendar/today-context', asyncHandler(async (req, res) => {
       soonest = { id: o.id, title: o.title, emoji: o.emoji, type: o.type, daysUntil: days, nextDate: next.toISOString(), ideasCount: o._count.ideas };
     }
   }
-  return res.json({ soonest });
+  return res.json({
+    soonest,
+    // Server-side onboarding flag — replaces the previous localStorage-only
+    // approach so a user who already saw onboarding on iPhone doesn't get
+    // it again when opening the Mini App on macOS / web.
+    onboardingSeenAt: userRow?.calendarOnboardingSeenAt?.toISOString() ?? null,
+  });
+}));
+
+// POST /tg/calendar/onboarding-seen — idempotently mark the calendar
+// onboarding as completed for this user. Called when the 4-step flow is
+// dismissed or finished. Safe to call multiple times.
+tgRouter.post('/calendar/onboarding-seen', asyncHandler(async (req, res) => {
+  const user = await getOrCreateTgUser(req.tgUser!);
+  const ent = await getEffectiveEntitlements(user.id, user.godMode);
+  if (!requireGiftNotes(ent, res)) return;
+  const existing = await prisma.user.findUnique({ where: { id: user.id }, select: { calendarOnboardingSeenAt: true } });
+  if (existing?.calendarOnboardingSeenAt) {
+    return res.json({ seenAt: existing.calendarOnboardingSeenAt.toISOString() });
+  }
+  const now = new Date();
+  await prisma.user.update({ where: { id: user.id }, data: { calendarOnboardingSeenAt: now } });
+  trackEvent('calendar_onboarding_seen', user.id);
+  return res.json({ seenAt: now.toISOString() });
 }));
 
 tgRouter.get('/calendar/year-recap', asyncHandler(async (req, res) => {

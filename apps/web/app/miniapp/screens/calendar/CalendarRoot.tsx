@@ -68,22 +68,58 @@ export function CalendarRoot({ tgFetch, locale, entitlement, onEntitlementMaybeC
     birthdays: true, anniversaries: true, holidays: true, own: true,
   });
 
-  // Onboarding triggers when:
-  // 1. user just unlocked (tracked via local-storage flag), OR
-  // 2. ent.unlocked && first time we see the feature on this device
+  // Onboarding gate.
+  //
+  // Persistence migrated from localStorage-only to a server-side flag
+  // (`User.calendarOnboardingSeenAt`, exposed via /tg/calendar/today-context):
+  // the device-local flag made the 4-step intro repeat on every new surface
+  // (iPhone → Mac → web), even when the same account had already finished
+  // it. The local flag stays as a fallback for offline/loading races.
+  //
+  // Resolution order, checked once todayContext + occasions finish loading:
+  //  1. server seenAt is set       → never onboard (also silence locally)
+  //  2. user already has events    → never onboard (silently mark seen)
+  //  3. local seen flag set        → never onboard
+  //  4. brand-new, empty account   → show the 4-step intro
   const onboardingFlagKey = 'wb_calendar_onb_v1';
   useEffect(() => {
-    if (entitlement.unlocked && typeof window !== 'undefined') {
-      const seen = window.localStorage.getItem(onboardingFlagKey);
-      if (!seen) setShowOnboarding(true);
+    if (!entitlement.unlocked || typeof window === 'undefined') return;
+    // Wait for both initial loads to settle before deciding — otherwise we'd
+    // flash onboarding on accounts that DO have events / DID see it before
+    // simply because the data hasn't arrived yet.
+    if (occasions === null || todayContext === null) return;
+
+    const seenServer = todayContext.onboardingSeenAt ?? null;
+    if (seenServer) {
+      try { window.localStorage.setItem(onboardingFlagKey, '1'); } catch { /* ignore quota */ }
+      setShowOnboarding(false);
+      return;
     }
-  }, [entitlement.unlocked]);
+    if (occasions.length > 0) {
+      try { window.localStorage.setItem(onboardingFlagKey, '1'); } catch { /* ignore quota */ }
+      // Best-effort backfill on the server so OTHER devices skip onboarding
+      // too — this user has clearly used the feature, no need to onboard them
+      // anywhere. Errors are non-fatal: a transient failure just means we'll
+      // try again next session.
+      void api.markCalendarOnboardingSeen(tgFetch).catch(() => { /* ignore */ });
+      setShowOnboarding(false);
+      return;
+    }
+
+    const seen = window.localStorage.getItem(onboardingFlagKey);
+    if (!seen) setShowOnboarding(true);
+  }, [entitlement.unlocked, occasions, todayContext, tgFetch]);
 
   const closeOnboarding = useCallback((openCreate?: boolean) => {
-    if (typeof window !== 'undefined') window.localStorage.setItem(onboardingFlagKey, '1');
+    if (typeof window !== 'undefined') {
+      try { window.localStorage.setItem(onboardingFlagKey, '1'); } catch { /* ignore */ }
+    }
     setShowOnboarding(false);
+    // Persist on the server so future devices skip the intro. Fire-and-forget;
+    // the local flag handles the immediate re-render path.
+    void api.markCalendarOnboardingSeen(tgFetch).catch(() => { /* ignore */ });
     if (openCreate) setScreen({ kind: 'create' });
-  }, []);
+  }, [tgFetch]);
 
   const reloadOccasions = useCallback(async () => {
     if (!entitlement.unlocked) return;

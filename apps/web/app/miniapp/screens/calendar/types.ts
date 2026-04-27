@@ -192,6 +192,10 @@ export interface TodayContext {
     nextDate: string;
     ideasCount: number;
   } | null;
+  /** ISO timestamp when the user finished/dismissed the calendar onboarding,
+   * `null` if they haven't yet. Replaces a localStorage-only flag so the
+   * onboarding doesn't repeat across devices. */
+  onboardingSeenAt?: string | null;
 }
 
 /** Paywall entitlement state from /tg/me */
